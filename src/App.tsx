@@ -1,10 +1,15 @@
-import React from 'react';
+import React, { Fragment } from 'react';
+import { Footer, Navbar } from 'ui/base';
 
 function App() {
   return (
-    <div>
+    <Fragment>
+      <Navbar />
+      <main>
 
-    </div>
+      </main>
+      <Footer />
+    </Fragment>
   );
 }
 
