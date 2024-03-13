@@ -1,54 +1,54 @@
 .terminal {
-    background: #001014;
-    min-height: 200px;
-    max-height: 360px;
-    overflow-y: auto;
-    padding: 35px 45px;
-    font-size: 14px;
-    line-height: 1.42;
-    font-family: 'IBM Plex Mono', Consolas, Menlo, Monaco, 'Courier New', Courier,
+  background: #001014;
+  min-height: 200px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 35px 45px;
+  font-size: 14px;
+  line-height: 1.42;
+  font-family: 'IBM Plex Mono', Consolas, Menlo, Monaco, 'Courier New', Courier,
     monospace;
-    text-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
-    -webkit-box-shadow: 2px 2px 4px 4px rgba(0,0,0,0.5);
--moz-box-shadow: 2px 2px 4px 4px rgba(0,0,0,0.5);
-box-shadow: 2px 2px 4px 4px rgba(0,0,0,0.5);
-    @apply border-2 border-gray-700 text-gray-200;
+  text-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
+  -webkit-box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.5);
+  -moz-box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.5);
+  @apply border-2 border-gray-700 text-gray-200;
 }
 
 .terminal__line {
-    line-height: 2;
-    white-space: pre-wrap;
+  line-height: 2;
+  white-space: pre-wrap;
 }
 
 .terminal__prompt {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .terminal__prompt__label {
-    flex: 0 0 auto;
-    color: #ffb472;
+  flex: 0 0 auto;
+  color: #ffb472;
 }
 
 .terminal__prompt__input {
-    flex: 1;
-    margin-left: 1rem;
-    display: flex;
-    align-items: center;
-    color: white;
+  flex: 1;
+  margin-left: 1rem;
+  display: flex;
+  align-items: center;
+  color: white;
 }
 
 .terminal__prompt__input input {
-    flex: 1;
-    width: 100%;
-    background-color: transparent;
-    color: white;
-    border: 0;
-    outline: none;
-    ring: 0;
-    box-shadow: none !important;
-    font-size: 14px;
-    line-height: 1.42;
-    font-family: 'IBM Plex Mono', Consolas, Menlo, Monaco, 'Courier New', Courier,
+  flex: 1;
+  width: 100%;
+  background-color: transparent;
+  color: white;
+  border: 0;
+  outline: none;
+  ring: 0;
+  box-shadow: none !important;
+  font-size: 14px;
+  line-height: 1.42;
+  font-family: 'IBM Plex Mono', Consolas, Menlo, Monaco, 'Courier New', Courier,
     monospace;
 }

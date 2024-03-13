@@ -1,12 +1,18 @@
-import {useCallback, useEffect, useState} from 'react';
-import {TerminalHistory, TerminalHistoryItem, TerminalPushToHistoryWithDelayProps} from "../types/terminal";
-
+import { useCallback, useEffect, useState } from 'react'
+import {
+  TerminalHistory,
+  TerminalHistoryItem,
+  TerminalPushToHistoryWithDelayProps
+} from '../types/terminal'
 
 export const useTerminal = () => {
-  const [terminalRef, setDomNode] = useState<HTMLDivElement>();
-  const setTerminalRef = useCallback((node: HTMLDivElement) => setDomNode(node), []);
+  const [terminalRef, setDomNode] = useState<HTMLDivElement>()
+  const setTerminalRef = useCallback(
+    (node: HTMLDivElement) => setDomNode(node),
+    []
+  )
 
-  const [history, setHistory] = useState<TerminalHistory>([]);
+  const [history, setHistory] = useState<TerminalHistory>([])
 
   /**
    * Scroll to the bottom of the terminal when window is resized
@@ -15,15 +21,15 @@ export const useTerminal = () => {
     const windowResizeEvent = () => {
       terminalRef?.scrollTo({
         top: terminalRef?.scrollHeight ?? 99999,
-        behavior: 'smooth',
-      });
-    };
-    window.addEventListener('resize', windowResizeEvent);
+        behavior: 'smooth'
+      })
+    }
+    window.addEventListener('resize', windowResizeEvent)
 
     return () => {
-      window.removeEventListener('resize', windowResizeEvent);
-    };
-  }, [terminalRef]);
+      window.removeEventListener('resize', windowResizeEvent)
+    }
+  }, [terminalRef])
 
   /**
    * Scroll to the bottom of the terminal on every new history item
@@ -31,13 +37,13 @@ export const useTerminal = () => {
   useEffect(() => {
     terminalRef?.scrollTo({
       top: terminalRef?.scrollHeight ?? 99999,
-      behavior: 'smooth',
-    });
-  }, [history, terminalRef]);
+      behavior: 'smooth'
+    })
+  }, [history, terminalRef])
 
   const pushToHistory = useCallback((item: TerminalHistoryItem) => {
-    setHistory((old: any) => [...old, item]);
-  }, []);
+    setHistory((old: any) => [...old, item])
+  }, [])
 
   /**
    * Write text to terminal
@@ -47,25 +53,22 @@ export const useTerminal = () => {
    * @param executeAfter The function to be executed after the text is printed
    */
   const pushToHistoryWithDelay = useCallback(
-    ({
-       delay = 0,
-       content,
-     }: TerminalPushToHistoryWithDelayProps) =>
+    ({ delay = 0, content }: TerminalPushToHistoryWithDelayProps) =>
       new Promise((resolve) => {
         setTimeout(() => {
-          pushToHistory(content);
-          return resolve(content);
-        }, delay);
+          pushToHistory(content)
+          return resolve(content)
+        }, delay)
       }),
     [pushToHistory]
-  );
+  )
 
   /**
    * Reset the terminal window
    */
   const resetTerminal = useCallback(() => {
-    setHistory([]);
-  }, []);
+    setHistory([])
+  }, [])
 
   return {
     history,
@@ -75,6 +78,6 @@ export const useTerminal = () => {
     terminalRef,
     setTerminalRef,
 
-    resetTerminal,
-  };
-};
+    resetTerminal
+  }
+}

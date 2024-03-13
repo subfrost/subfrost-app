@@ -1,5 +1,5 @@
-import { ReactElement, useEffect, useMemo } from 'react'
-import { Section } from '../base';
+import { ReactElement } from 'react'
+import { Section } from '../base/section'
 import { CommandTerminal, SignersTerminal } from '../features/terminal'
 
 function Home(): ReactElement {

@@ -12,10 +12,10 @@
   },
   "lint-staged": {
     "*.{js,ts,tsx}": [
-      "eslint --quiet --fix ."
+      "eslint --quiet --fix ./src"
     ],
     "*.{json,js,ts,jsx,tsx,html}": [
-      "prettier --write ."
+      "prettier --write ./src"
     ]
   },
   "dependencies": {
