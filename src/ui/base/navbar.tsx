@@ -25,7 +25,7 @@ export const Navbar = () => {
       <ul className="hidden md:flex gap-2">
         {navItems.map((item) => (
           <li key={item.id}>
-            <a href={item.link} target="_blank" rel="noreferrer noopener">
+            <a href={item.link} target="_blank" rel="noreferrer">
               <Button>{item.text}</Button>
             </a>
           </li>
@@ -53,7 +53,7 @@ export const Navbar = () => {
         {/* Mobile Navigation Items */}
         {navItems.map((item) => (
           <li key={item.id}>
-            <a href={item.link} target="_blank" rel="noreferrer noopener">
+            <a href={item.link} target="_blank" rel="noreferrer">
               <Button>{item.text}</Button>
             </a>
           </li>
