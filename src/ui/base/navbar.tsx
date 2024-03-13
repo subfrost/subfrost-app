@@ -34,15 +34,19 @@ export const Navbar = () => {
 
       {/* Mobile Navigation Icon */}
       <div onClick={handleNav} className="block md:hidden">
-        {nav ? <AiOutlineClose size={20} /> : <AiOutlineMenu size={20} />}
+        {nav ? <AiOutlineClose size={24} /> : <AiOutlineMenu size={24} />}
+        {/* Overlay */}
+        {nav ? (
+          <div className="transition ease-in-out duration-300 absolute left-0 top-0 opacity-20 z-10 bg-black w-screen h-screen" />
+        ) : null}
       </div>
 
       {/* Mobile Navigation Menu */}
       <ul
         className={
           nav
-            ? 'fixed md:hidden left-0 top-0 w-[60%] h-full border-r border-r-gray-900 bg-[#000300] ease-in-out duration-500'
-            : 'ease-in-out w-[60%] duration-500 fixed top-0 bottom-0 left-[-100%]'
+            ? 'fixed md:hidden left-0 top-0 w-[60%] h-full border-r border-r-gray-800 bg-[#0f141c] ease-in-out duration-300'
+            : 'ease-in-out w-[60%] duration-200 fixed top-0 bottom-0 left-[-100%]'
         }
       >
         {/* Mobile Logo */}
@@ -53,7 +57,12 @@ export const Navbar = () => {
         {/* Mobile Navigation Items */}
         {navItems.map((item) => (
           <li key={item.id}>
-            <a href={item.link} target="_blank" rel="noreferrer">
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noreferrer"
+              className="text-2xl"
+            >
               <Button>{item.text}</Button>
             </a>
           </li>

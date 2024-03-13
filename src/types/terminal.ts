@@ -15,4 +15,5 @@ export type TerminalProps = {
   history: TerminalHistory
   promptLabel?: TerminalHistoryItem
   commands: TerminalCommands
+  focus?: boolean
 }

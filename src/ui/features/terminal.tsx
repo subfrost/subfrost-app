@@ -18,7 +18,7 @@ export const Terminal = forwardRef(
     const {
       history = [],
       promptLabel = '>',
-
+      focus = true,
       commands = {}
     } = props
 
@@ -29,11 +29,11 @@ export const Terminal = forwardRef(
      * Focus on the input whenever we render the terminal or click in the terminal
      */
     useEffect(() => {
-      inputRef.current?.focus()
+      focus && inputRef.current?.focus()
     })
 
     const focusInput = useCallback(() => {
-      inputRef.current?.focus()
+      focus && inputRef.current?.focus()
     }, [])
 
     /**
@@ -89,7 +89,7 @@ export const Terminal = forwardRef(
   }
 )
 
-export function CommandTerminal() {
+export function CommandTerminal({ focus = true }: { focus?: boolean }) {
   const { history, pushToHistory, setTerminalRef, resetTerminal } =
     useTerminal()
 
@@ -126,11 +126,12 @@ export function CommandTerminal() {
       ref={setTerminalRef}
       promptLabel={<strong>anon@subfrost.io:</strong>}
       commands={commands}
+      focus={focus}
     />
   )
 }
 
-export function SignersTerminal() {
+export function SignersTerminal({ focus = true }: { focus?: boolean }) {
   const { history, pushToHistory, setTerminalRef, resetTerminal } =
     useTerminal()
 
@@ -142,20 +143,23 @@ export function SignersTerminal() {
         <div className="text-xl break-words">
           Signers: <span className="text-[#ffb472]">213/255</span> online.
         </div>
-        <div className="flex w-full justify-between items-start break-words mb-2 text-gray-400">
-          <h2 className="text-lg">{`Network (${NETWORK})`}</h2>
-          <h5 className="text-xs sm:text-sm leading-0">{VERSION}</h5>
+        <div className="flex w-full justify-between items-start break-words mb-2 text-gray-400 xl:flex-col">
+          <h2 className="!text-md sm:text-lg">
+            <span className="hidden sm:inline-block">Network: </span>
+            <span className="">{`(${NETWORK})`}</span>
+          </h2>
+          <h5 className="!text-xs leading-0 text-[#bdedfa]">{VERSION}</h5>
         </div>
       </>
     )
     ;(async () => {
       const signers = await getSigners()
       await pushToHistory(
-        <div className="break-words">
+        <div className="break-all">
           {(signers as { address: string; value: string }[]).map((signer) => (
-            <div className="flex justify-between">
-              <span>{signer.address}</span>
-              <span>{signer.value} BTC</span>
+            <div className="flex justify-between gap-2">
+              <span className="">{signer.address}</span>
+              <span className="">{signer.value} BTC</span>
             </div>
           ))}
         </div>
@@ -180,5 +184,12 @@ export function SignersTerminal() {
     [pushToHistory]
   )
 
-  return <Terminal history={history} ref={setTerminalRef} commands={commands} />
+  return (
+    <Terminal
+      focus={focus}
+      history={history}
+      ref={setTerminalRef}
+      commands={commands}
+    />
+  )
 }
