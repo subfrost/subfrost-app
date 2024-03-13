@@ -96,10 +96,10 @@ export function CommandTerminal() {
   useEffect(() => {
     resetTerminal()
     pushToHistory(
-      <>
+      <div className="break-words">
         <div>{`To run a command as administrator (user "root"), use "sudo <command>".`}</div>
         <div>{`To view the logs, use the "watch frost" command.`}</div>
-      </>
+      </div>
     )
   }, [])
 
@@ -108,7 +108,7 @@ export function CommandTerminal() {
       'watch frost': async () => {
         await pushToHistory(
           <>
-            <div>
+            <div className="break-words">
               <strong>Connecting</strong> to the server...{' '}
               <span style={{ color: 'green' }}>Done</span>
             </div>
@@ -139,26 +139,26 @@ export function SignersTerminal() {
 
     pushToHistory(
       <>
-        <div className="flex w-full justify-between items-start">
-          <h2 className="text-xl">{`Network (${NETWORK})`}</h2>
-          <h5 className="text-sm leading-0">{VERSION}</h5>
-        </div>
-        <div className="text-lg mb-2">
+        <div className="text-xl break-words">
           Signers: <span className="text-[#ffb472]">213/255</span> online.
+        </div>
+        <div className="flex w-full justify-between items-start break-words mb-2 text-gray-400">
+          <h2 className="text-lg">{`Network (${NETWORK})`}</h2>
+          <h5 className="text-xs sm:text-sm leading-0">{VERSION}</h5>
         </div>
       </>
     )
     ;(async () => {
       const signers = await getSigners()
       await pushToHistory(
-        <>
+        <div className="break-words">
           {(signers as { address: string; value: string }[]).map((signer) => (
             <div className="flex justify-between">
               <span>{signer.address}</span>
               <span>{signer.value} BTC</span>
             </div>
           ))}
-        </>
+        </div>
       )
     })().catch((e) => console.error(e))
   }, [])
