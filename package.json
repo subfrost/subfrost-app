@@ -11,10 +11,10 @@
   },
   "lint-staged": {
     "*.{js,ts,tsx}": [
-      "eslint --quiet --fix ."
+      "yarn eslint --quiet --fix ."
     ],
     "*.{json,js,ts,jsx,tsx,html}": [
-      "prettier --write ."
+      "yarn prettier --write ."
     ]
   },
   "dependencies": {
