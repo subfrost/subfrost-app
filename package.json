@@ -1,5 +1,6 @@
 {
   "name": "subfrost-web-app",
+  "description": "React app for subfrost protocol",
   "version": "0.1.0",
   "scripts": {
     "dev": "vite",
@@ -11,10 +12,10 @@
   },
   "lint-staged": {
     "*.{js,ts,tsx}": [
-      "yarn eslint --quiet --fix ."
+      "eslint --quiet --fix ."
     ],
     "*.{json,js,ts,jsx,tsx,html}": [
-      "yarn prettier --write ."
+      "prettier --write ."
     ]
   },
   "dependencies": {
