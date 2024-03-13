@@ -1,3 +1,3 @@
 # Subfrost
 
-Stay frosty.
+Stay frosty. It's icey out there.
