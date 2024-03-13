@@ -1,7 +1,6 @@
 .terminal {
   background: #0f141c;
   min-height: 200px;
-  max-height: 360px;
   overflow-y: auto;
 
   font-size: 14px;
@@ -9,10 +8,10 @@
   font-family: 'IBM Plex Mono', Consolas, Menlo, Monaco, 'Courier New', Courier,
     monospace;
   text-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
-  -webkit-box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.5);
-  -moz-box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.5);
-  box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.5);
-  @apply border border-gray-800 text-gray-200 p-4 md:py-5 md:px-5 xl:min-w-[500px];
+  -webkit-box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.4);
+  -moz-box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 2px 2px 4px 4px rgba(0, 0, 0, 0.4);
+  @apply border border-gray-900 text-gray-200 p-4 md:py-5 md:px-5 xl:min-w-[500px] rounded max-h-80 xl:max-h-none;
 }
 
 .terminal__line {

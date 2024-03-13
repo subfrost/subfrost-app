@@ -45,7 +45,7 @@ export const Navbar = () => {
       <ul
         className={
           nav
-            ? 'fixed md:hidden left-0 top-0 w-[60%] h-full border-r border-r-gray-800 bg-[#0f141c] ease-in-out duration-300'
+            ? 'fixed z-20 md:hidden left-0 top-0 w-[60%] h-full border-r border-r-gray-800 bg-[#0f141c] ease-in-out duration-300'
             : 'ease-in-out w-[60%] duration-200 fixed top-0 bottom-0 left-[-100%]'
         }
       >
