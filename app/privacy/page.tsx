@@ -8,19 +8,19 @@ export default function PrivacyPolicy() {
       </CardHeader>
       <CardContent className="readable-text text-sm space-y-4">
         <p>
-          Your privacy is important to us. It is Subzero Research Inc&apos;s policy to respect your privacy regarding any information we may collect from you across our website, SUBFROST, and other sites we own and operate.
+          Your privacy is important to us. It is Subzero Research Inc's policy to respect your privacy regarding any information we may collect from you across our website, SUBFROST, and other sites we own and operate.
         </p>
         <h2 className="retro-text text-blue-500 text-lg">1. Information We Collect</h2>
         <p>
-          We only ask for personal information when we truly need it to provide a service to you. We collect it by fair and lawful means, with your knowledge and consent. We also let you know why we&apos;re collecting it and how it will be used.
+          We only ask for personal information when we truly need it to provide a service to you. We collect it by fair and lawful means, with your knowledge and consent. We also let you know why we're collecting it and how it will be used.
         </p>
         <h2 className="retro-text text-blue-500 text-lg">2. Use of Information</h2>
         <p>
-          We only retain collected information for as long as necessary to provide you with your requested service. What data we store, we&apos;ll protect within commercially acceptable means to prevent loss and theft, as well as unauthorized access, disclosure, copying, use or modification.
+          We only retain collected information for as long as necessary to provide you with your requested service. What data we store, we'll protect within commercially acceptable means to prevent loss and theft, as well as unauthorized access, disclosure, copying, use or modification.
         </p>
         <h2 className="retro-text text-blue-500 text-lg">3. Data Sharing</h2>
         <p>
-          We don&apos;t share any personally identifying information publicly or with third-parties, except when required to by law.
+          We don't share any personally identifying information publicly or with third-parties, except when required to by law.
         </p>
         <h2 className="retro-text text-blue-500 text-lg">4. External Links</h2>
         <p>

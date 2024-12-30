@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { FaSnowflake } from 'react-icons/fa'
+import { UnwrapView } from './UnwrapView'
 
 export function WrapView() {
   const [amount, setAmount] = useState('')
@@ -16,7 +17,7 @@ export function WrapView() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <Card className="frost-bg frost-border w-full max-w-md mx-auto">
         <CardHeader>
           <CardTitle className="retro-text text-blue-600 flex items-center">
@@ -45,6 +46,7 @@ export function WrapView() {
           </Button>
         </CardFooter>
       </Card>
+      <UnwrapView />
     </div>
   )
 }
