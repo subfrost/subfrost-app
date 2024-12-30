@@ -30,7 +30,7 @@ export function SnowflakeBackground() {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
 
-      for (let flake of snowflakes) {
+      for (const flake of snowflakes) {
         ctx.beginPath()
         ctx.arc(flake.x, flake.y, flake.radius, 0, Math.PI * 2)
         ctx.fill()

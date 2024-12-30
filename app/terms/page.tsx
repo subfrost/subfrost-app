@@ -20,7 +20,7 @@ export default function TermsOfService() {
         </p>
         <h2 className="retro-text text-blue-500 text-lg">3. Disclaimer</h2>
         <p>
-          Your use of the service is at your sole risk. The service is provided on an "AS IS" and "AS AVAILABLE" basis. The service is provided without warranties of any kind, whether express or implied, including, but not limited to, implied warranties of merchantability, fitness for a particular purpose, non-infringement or course of performance.
+          Your use of the service is at your sole risk. The service is provided on an &quot;AS IS&quot; and &quot;AS AVAILABLE&quot; basis. The service is provided without warranties of any kind, whether express or implied, including, but not limited to, implied warranties of merchantability, fitness for a particular purpose, non-infringement or course of performance.
         </p>
         <h2 className="retro-text text-blue-500 text-lg">4. Governing Law</h2>
         <p>
