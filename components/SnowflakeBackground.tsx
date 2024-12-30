@@ -27,19 +27,19 @@ export function SnowflakeBackground() {
     }
 
     function drawSnowflakes() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height)
+      ctx!.fillStyle = 'rgba(255, 255, 255, 0.1)'
 
       for (let flake of snowflakes) {
-        ctx.beginPath()
-        ctx.arc(flake.x, flake.y, flake.radius, 0, Math.PI * 2)
-        ctx.fill()
+        ctx!.beginPath()
+        ctx!.arc(flake.x, flake.y, flake.radius, 0, Math.PI * 2)
+        ctx!.fill()
 
         flake.y += flake.speed
 
-        if (flake.y > canvas.height) {
+        if (flake.y > canvas!.height) {
           flake.y = 0
-          flake.x = Math.random() * canvas.width
+          flake.x = Math.random() * canvas!.width
         }
       }
 
