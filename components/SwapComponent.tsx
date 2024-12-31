@@ -32,7 +32,7 @@ export function SwapComponent({ slippage, onOpenSettings }: SwapComponentProps) 
     setIsModalOpen(true)
   }
 
-  const AssetSelector = ({ value, onChange }) => (
+  const AssetSelector = ({ value, onChange }: { value: string, onChange: (value: string) => void }) => (
     <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-between cursor-pointer">
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="border-0 bg-transparent text-white p-0 h-auto">
