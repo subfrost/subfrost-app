@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { YieldChart } from './YieldChart'
 import { CapitalAllocationChart } from './CapitalAllocationChart'
 import { FaSnowflake } from 'react-icons/fa'
+import { UnstakeView } from './UnstakeView'
+import { ZapView } from './ZapView'
 
 // Mock data for vaults and strategies
 const vaultStrategies = [
@@ -20,12 +22,18 @@ const reservePercentage = 50
 const deployedPercentage = 100 - reservePercentage
 
 export function StakeView() {
-  const [amount, setAmount] = useState('')
-  const btcBalance = 1.5 // This should be fetched from your state management solution
+  const [frBtcFrostAmount, setFrBtcFrostAmount] = useState('')
+  const frBtcFrostBalance = 1.5 // This should be fetched from your state management solution
 
   const handleStake = () => {
     // Implement staking logic here
-    console.log(`Staking ${amount} BTC to dxBTC`)
+    console.log(`Staking ${frBtcFrostAmount} frBTC/FROST to dxBTC`)
+  }
+
+  const calculateExpectedDxBTC = () => {
+    // Mock calculation - replace with actual logic
+    const frBtcFrostValue = parseFloat(frBtcFrostAmount) || 0
+    return (frBtcFrostValue * 0.95).toFixed(8) // Assuming 5% slippage/fees
   }
 
   const aggregateYield = vaultStrategies.reduce((acc, strategy) => {
@@ -38,30 +46,39 @@ export function StakeView() {
         <CardHeader>
           <CardTitle className="retro-text text-blue-600 flex items-center">
             <FaSnowflake className="mr-2" />
-            Stake BTC to dxBTC
+            Stake frBTC/FROST to dxBTC
           </CardTitle>
-          <CardDescription className="readable-text text-sm">Enter the amount of BTC you want to stake</CardDescription>
+          <CardDescription className="readable-text text-sm">Enter the amount of frBTC/FROST you want to stake</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <label htmlFor="btc-stake-amount" className="readable-text text-sm text-blue-600 block mb-1">Amount of BTC</label>
-            <Input
-              id="btc-stake-amount"
-              type="number"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="readable-text text-sm"
-            />
-            <p className="readable-text text-sm mt-1">Available: {btcBalance} BTC</p>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="btc-frost-stake-amount" className="readable-text text-sm text-blue-600 block mb-1">Amount of frBTC/FROST</label>
+              <Input
+                id="btc-frost-stake-amount"
+                type="number"
+                placeholder="0.00"
+                value={frBtcFrostAmount}
+                onChange={(e) => setFrBtcFrostAmount(e.target.value)}
+                className="readable-text text-sm"
+              />
+              <p className="readable-text text-xs mt-1">Available: {frBtcFrostBalance} frBTC/FROST</p>
+            </div>
+            <div>
+              <p className="readable-text text-sm text-blue-600">Expected dxBTC: {calculateExpectedDxBTC()}</p>
+            </div>
           </div>
         </CardContent>
         <CardFooter>
           <Button onClick={handleStake} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600">
-            Stake BTC
+            Stake to dxBTC
           </Button>
         </CardFooter>
       </Card>
+
+      <UnstakeView />
+
+      <ZapView />
 
       <Card className="frost-bg frost-border">
         <CardHeader>
