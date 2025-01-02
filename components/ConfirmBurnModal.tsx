@@ -3,7 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { FaSnowflake } from 'react-icons/fa'
-import { formatCurrency, assetPrices } from '../utils/priceCalculations'
+import { formatCurrency, assetPrices } from '../app/utils/priceCalculations'
 
 interface ConfirmBurnModalProps {
   isOpen: boolean
