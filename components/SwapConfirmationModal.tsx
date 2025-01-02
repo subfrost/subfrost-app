@@ -3,7 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { FaSnowflake } from 'react-icons/fa'
-import { calculateSwapOutput, formatCurrency, assetPrices } from '../utils/priceCalculations'
+import { calculateSwapOutput, formatCurrency, assetPrices } from '../app/utils/priceCalculations'
 
 interface SwapConfirmationModalProps {
   isOpen: boolean
