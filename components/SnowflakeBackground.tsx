@@ -27,7 +27,6 @@ export function SnowflakeBackground() {
     }
 
     function drawSnowflakes() {
-      if (!ctx || !canvas) return
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
 

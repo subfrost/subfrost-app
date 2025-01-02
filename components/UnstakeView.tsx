@@ -5,14 +5,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
 import { RiCoinsFill } from 'react-icons/ri'
+import { UnstakeConfirmationModal } from './UnstakeConfirmationModal'
 
 export function UnstakeView() {
   const [amount, setAmount] = useState('')
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const dxBTCBalance = 0.75 // This should be fetched from your state management solution
 
   const handleUnstake = () => {
-    // Implement unstaking logic here
-    console.log(`Unstaking ${amount} dxBTC to BTC/FROST`)
+    setIsModalOpen(true)
   }
 
   const calculateExpectedOutput = () => {
@@ -55,6 +56,12 @@ export function UnstakeView() {
           Unstake dxBTC
         </Button>
       </CardFooter>
+      <UnstakeConfirmationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        dxBTCAmount={amount}
+        expectedFrBTCFROST={expectedOutput}
+      />
     </Card>
   )
 }

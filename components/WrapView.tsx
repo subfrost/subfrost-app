@@ -3,17 +3,29 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { FaSnowflake } from 'react-icons/fa'
 import { UnwrapView } from './UnwrapView'
+import { WrapConfirmationModal } from './WrapConfirmationModal'
 
 export function WrapView() {
   const [amount, setAmount] = useState('')
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const btcBalance = 1.5 // This should be fetched from your state management solution
 
   const handleWrap = () => {
-    // Implement wrapping logic here
-    console.log(`Wrapping ${amount} BTC to frBTC`)
+    setIsModalOpen(true)
+  }
+
+  const calculateExpectedFrBTC = () => {
+    // Mock calculation - replace with actual logic
+    const btcValue = parseFloat(amount) || 0
+    return (btcValue * 0.99).toFixed(8) // Assuming 1% fee
+  }
+
+  const handleConfirmWrap = () => {
+    setIsModalOpen(false)
+    setAmount('')
   }
 
   return (
@@ -37,7 +49,10 @@ export function WrapView() {
               onChange={(e) => setAmount(e.target.value)}
               className="readable-text text-sm"
             />
-            <p className="readable-text text-sm mt-1">Available: {btcBalance} BTC</p>
+            <p className="readable-text text-xs mt-1">Available: {btcBalance} BTC</p>
+          </div>
+          <div>
+            <p className="readable-text text-sm text-blue-600">Expected frBTC: {calculateExpectedFrBTC()}</p>
           </div>
         </CardContent>
         <CardFooter>
@@ -47,6 +62,13 @@ export function WrapView() {
         </CardFooter>
       </Card>
       <UnwrapView />
+      <WrapConfirmationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        btcAmount={amount}
+        expectedFrBTC={calculateExpectedFrBTC()}
+        onConfirm={handleConfirmWrap}
+      />
     </div>
   )
 }

@@ -4,30 +4,19 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
-import { YieldChart } from './YieldChart'
-import { CapitalAllocationChart } from './CapitalAllocationChart'
 import { FaSnowflake } from 'react-icons/fa'
 import { UnstakeView } from './UnstakeView'
 import { ZapView } from './ZapView'
-
-// Mock data for vaults and strategies
-const vaultStrategies = [
-  { name: 'BTC Reserve', allocation: 50, yield: 0 },
-  { name: 'Stableswap', allocation: 20, yield: 3.5 },
-  { name: 'Lending Protocol', allocation: 15, yield: 5.2 },
-  { name: 'BTC Yield System', allocation: 15, yield: 4.8 },
-]
-
-const reservePercentage = 50
-const deployedPercentage = 100 - reservePercentage
+import { StakeConfirmationModal } from './StakeConfirmationModal'
+import { CombinedCharts } from './CombinedCharts'
 
 export function StakeView() {
   const [frBtcFrostAmount, setFrBtcFrostAmount] = useState('')
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const frBtcFrostBalance = 1.5 // This should be fetched from your state management solution
 
   const handleStake = () => {
-    // Implement staking logic here
-    console.log(`Staking ${frBtcFrostAmount} frBTC/FROST to dxBTC`)
+    setIsModalOpen(true)
   }
 
   const calculateExpectedDxBTC = () => {
@@ -35,10 +24,6 @@ export function StakeView() {
     const frBtcFrostValue = parseFloat(frBtcFrostAmount) || 0
     return (frBtcFrostValue * 0.95).toFixed(8) // Assuming 5% slippage/fees
   }
-
-  const aggregateYield = vaultStrategies.reduce((acc, strategy) => {
-    return acc + (strategy.allocation / 100) * strategy.yield
-  }, 0)
 
   return (
     <div className="space-y-8">
@@ -80,46 +65,14 @@ export function StakeView() {
 
       <ZapView />
 
-      <Card className="frost-bg frost-border">
-        <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center">
-            <FaSnowflake className="mr-2" />
-            Capital Allocation
-          </CardTitle>
-          <CardDescription className="readable-text text-sm">Breakdown of capital deployment across strategies</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4">
-            <p className="readable-text text-sm">Reserve %: <span className="font-bold">{reservePercentage}%</span></p>
-            <p className="readable-text text-sm">Deployed %: <span className="font-bold">{deployedPercentage}%</span></p>
-          </div>
-          <CapitalAllocationChart data={vaultStrategies} />
-          <div className="mt-4">
-            <h4 className="retro-text text-sm mb-2">Strategy Breakdown:</h4>
-            {vaultStrategies.map((strategy, index) => (
-              <div key={index} className="readable-text text-sm mb-1">
-                <span className="font-bold">{strategy.name}:</span> {strategy.allocation}% (Yield: {strategy.yield}%)
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <CombinedCharts />
 
-      <Card className="frost-bg frost-border">
-        <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center">
-            <FaSnowflake className="mr-2" />
-            Yield Performance
-          </CardTitle>
-          <CardDescription className="readable-text text-sm">Historical yield performance and aggregate yield</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <YieldChart />
-          <div className="mt-4 text-center">
-            <p className="readable-text text-lg">Aggregate Yield: <span className="font-bold">{aggregateYield.toFixed(2)}%</span></p>
-          </div>
-        </CardContent>
-      </Card>
+      <StakeConfirmationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        frBTCFROSTAmount={frBtcFrostAmount}
+        expectedDxBTC={calculateExpectedDxBTC()}
+      />
     </div>
   )
 }
