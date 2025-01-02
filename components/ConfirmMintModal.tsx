@@ -13,6 +13,7 @@ interface ConfirmMintModalProps {
   amount2: string
   expectedLPTokens: string
   slippage: number
+  onConfirm: () => void
 }
 
 export function ConfirmMintModal({
@@ -23,11 +24,11 @@ export function ConfirmMintModal({
   amount1,
   amount2,
   expectedLPTokens,
-  slippage
+  slippage,
+  onConfirm
 }: ConfirmMintModalProps) {
   const handleConfirm = () => {
-    // Implement mint confirmation logic here
-    console.log(`Confirming mint: ${amount1} ${asset1} and ${amount2} ${asset2} for ${expectedLPTokens} LP tokens with ${slippage}% slippage`)
+    onConfirm()
     onClose()
   }
 

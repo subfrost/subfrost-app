@@ -64,8 +64,9 @@ export function SnowflakeWatermark() {
     }
 
     function animate() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      if (!ctx || !canvas) return
 
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
       particles.forEach(particle => {
         if (particle.type === 'snowflake') {
           drawSnowflake(ctx, particle.x, particle.y, particle.radius, particle.opacity)

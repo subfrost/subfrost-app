@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { SwapComponent } from './SwapComponent'
-import { LPComponent } from './LPComponent'
+import { SwapComponent } from '../app/components/SwapComponent'
+import { LPComponent } from '../app/components/LPComponent'
 import { Button } from "@/components/ui/button"
 import { Settings } from 'lucide-react'
 import { SwapSettingsModal } from './SwapSettingsModal'

@@ -38,10 +38,10 @@ export function SwapView() {
           <Separator className="my-2" />
           <CardContent>
             <TabsContent value="swap">
-              <SwapComponent slippage={slippage} onOpenSettings={() => setIsSettingsOpen(true)} />
+              <SwapComponent slippage={slippage} onOpenSettings={() => setIsSettingsOpen(true)} onSwapConfirm={() => {}} />
             </TabsContent>
             <TabsContent value="lp">
-              <LPComponent slippage={slippage} onOpenSettings={() => setIsSettingsOpen(true)} />
+              <LPComponent slippage={slippage} onOpenSettings={() => setIsSettingsOpen(true)} onBurnConfirm={() => {}} />
             </TabsContent>
           </CardContent>
         </Tabs>
