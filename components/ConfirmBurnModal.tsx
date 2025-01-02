@@ -12,7 +12,7 @@ interface ConfirmBurnModalProps {
   burnAmount: string
   expectedBTC: string
   expectedPaired: string
-  pairedAsset: string
+  pairedAsset: keyof typeof assetPrices
   slippage: number
   onConfirm: () => void
 }

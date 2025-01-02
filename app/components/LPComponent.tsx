@@ -9,7 +9,9 @@ import { ConfirmMintModal } from '../../components/ConfirmMintModal'
 import { ConfirmBurnModal } from '../../components/ConfirmBurnModal'
 import { calculateSwapOutput, calculateDollarValue, formatCurrency, SUBFROST_FEE, assetPrices } from '../utils/priceCalculations'
 import { FaExchangeAlt } from 'react-icons/fa'
-const nonFrBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'FROST', 'zkBTC']
+
+type NonFrBTCAsset = Exclude<keyof typeof assetPrices, 'frBTC'>
+const nonFrBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'FROST', 'zkBTC'] as const
 
 interface LPComponentProps {
   slippage: number
@@ -31,7 +33,7 @@ interface ConfirmMintModalProps {
 
 export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPComponentProps) {
   const [isMintMode, setIsMintMode] = useState(true)
-  const [pairedAsset, setPairedAsset] = useState(nonFrBTCAssets[0])
+  const [pairedAsset, setPairedAsset] = useState<NonFrBTCAsset>(nonFrBTCAssets[0])
   const [frBTCAmount, setFrBTCAmount] = useState('')
   const [pairedAmount, setPairedAmount] = useState('')
   const [burnAmount, setBurnAmount] = useState('')
@@ -134,14 +136,14 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
 
   const calculateDollarValueSafe = (asset: string, amount: number): string => {
     try {
-      return formatCurrency(calculateDollarValue(asset, amount))
+      return formatCurrency(calculateDollarValue(asset as keyof typeof assetPrices, amount))
     } catch (error) {
       console.error(`Error calculating dollar value for ${asset}:`, error)
       return 'N/A'
     }
   }
 
-  const AssetSelector = ({ value, onChange }: { value: string, onChange: (value: string) => void }) => (
+  const AssetSelector = ({ value, onChange }: { value: NonFrBTCAsset, onChange: (value: NonFrBTCAsset) => void }) => (
     <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-between cursor-pointer">
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="border-0 bg-transparent text-white p-0 h-auto">

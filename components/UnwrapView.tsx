@@ -3,12 +3,12 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
+import { CardContent, CardTitle, CardDescription } from '@/components/ui/card'
 import { RiExchangeDollarFill } from 'react-icons/ri'
 import { Zap } from 'lucide-react'
 import { UnwrapConfirmationModal } from './UnwrapConfirmationModal'
 import { UnwrapTransactionTable } from './UnwrapTransactionTable'
-import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
+import { useSubfrostP2P } from '@/contexts/SubfrostP2PContext'
 
 export function UnwrapView() {
   const [amount, setAmount] = useState('')
@@ -16,7 +16,7 @@ export function UnwrapView() {
   const [onlineCount, setOnlineCount] = useState(246)
   const [currentBlock, setCurrentBlock] = useState(700000)
   const frBTCBalance = 0.5 // This should be fetched from your state management solution
-  const { addTransaction, updateTransaction } = useSubfrostP2P()
+  const { addOrder, fillOrder } = useSubfrostP2P()
 
   const handleUnwrap = () => {
     setIsModalOpen(true)
@@ -29,27 +29,20 @@ export function UnwrapView() {
   }
 
   const handleConfirmUnwrap = () => {
-    const newTransaction = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      amount: calculateExpectedBTC(),
-      status: 'Pending',
-      blockNumber: currentBlock,
+    const order = {
+      maker: '0x' + Math.random().toString(16).slice(2, 42),
+      amount: parseFloat(calculateExpectedBTC()),
+      price: 100888, // Example price
+      status: 'open' as const
     }
-    addTransaction(newTransaction)
+    const newOrder = addOrder(order)
     setIsModalOpen(false)
     setAmount('')
 
-    // Simulate transaction phases
+    // Simulate order being filled
     setTimeout(() => {
-      updateTransaction({ ...newTransaction, status: 'Broadcast', blockNumber: currentBlock + 1 })
-      setTimeout(() => {
-        updateTransaction({ 
-          ...newTransaction, 
-          status: 'Complete', 
-          txid: Math.random().toString(16).slice(2, 10) 
-        })
-      }, 10000)
-    }, 10000)
+      fillOrder(newOrder.id)
+    }, 20000)
   }
 
   useEffect(() => {
@@ -73,56 +66,57 @@ export function UnwrapView() {
   }, [])
 
   return (
-    <Card className="bg-blue-700 border-blue-600 w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle className="retro-text text-white flex items-center">
+    <div className="space-y-4">
+      <div>
+        <CardTitle className="retro-text text-blue-600 flex items-center mt-4">
           <RiExchangeDollarFill className="mr-2 text-blue-200" />
-          <span className="text-blue-200 font-bold">Unwrap</span>{' '}
-          <span className="ml-2">frBTC</span>
+          Unwrap frBTC to BTC
         </CardTitle>
-        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of frBTC you want to unwrap</CardDescription>
-      </CardHeader>
-      <CardContent>
+        <CardDescription className="readable-text text-sm">
+          Convert your frBTC back to BTC
+        </CardDescription>
+      </div>
+      <CardContent className="px-0">
         <div className="mb-4">
-          <label htmlFor="frbtc-amount" className="readable-text text-sm text-blue-100 block mb-1">Amount of frBTC</label>
+          <label htmlFor="frbtc-amount" className="readable-text text-sm text-blue-600 block mb-1">Amount of frBTC</label>
           <Input
             id="frbtc-amount"
             type="number"
             placeholder="0.00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="readable-text text-sm bg-blue-600 text-white placeholder-white border-blue-500"
+            className="readable-text text-sm"
           />
-          <p className="readable-text text-sm mt-1 text-blue-200">Available: {frBTCBalance} frBTC</p>
+          <p className="readable-text text-sm mt-1">Available: {frBTCBalance} frBTC</p>
         </div>
-        <div>
-          <p className="readable-text text-sm text-blue-100">Expected BTC: {calculateExpectedBTC()}</p>
+        <div className="mb-4">
+          <p className="readable-text text-sm">Expected BTC: {calculateExpectedBTC()} BTC</p>
+          <p className="readable-text text-xs text-blue-400">Fee: 1%</p>
         </div>
-      </CardContent>
-      <CardFooter className="flex-col items-stretch space-y-6">
-        <Button onClick={handleUnwrap} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600 text-white">
+        <Button onClick={handleUnwrap} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600">
           Unwrap frBTC
         </Button>
-        <div className="w-full border-t border-blue-500 opacity-50"></div>
-        <div className="bg-blue-800 bg-opacity-50 rounded-lg p-4"> {/* Reverted p-2 to p-4 */}
-          <div className="flex justify-between items-center mb-2"> {/* Changed mb-1 to mb-2 */}
+        <div className="w-full border-t border-blue-500 opacity-50 my-6"></div>
+        <div className="bg-blue-800 bg-opacity-50 rounded-lg p-4">
+          <div className="flex justify-between items-center mb-2">
             <h3 className="retro-text text-xs text-blue-300">SUBFROST P2P</h3>
-            <div className="flex items-center retro-text text-xs text-yellow-300"> {/* Reverted text-[8px] to text-xs */}
+            <div className="flex items-center retro-text text-xs text-yellow-300">
               <Zap size={10} className="mr-1" />
               <span>{onlineCount}/255 Online</span>
             </div>
           </div>
           <UnwrapTransactionTable currentBlock={currentBlock} />
         </div>
-      </CardFooter>
+      </CardContent>
+
       <UnwrapConfirmationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        frBTCAmount={amount}
+        amount={amount}
         expectedBTC={calculateExpectedBTC()}
         onConfirm={handleConfirmUnwrap}
       />
-    </Card>
+    </div>
   )
 }
 

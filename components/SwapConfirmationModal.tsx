@@ -8,8 +8,8 @@ import { calculateSwapOutput, formatCurrency, assetPrices } from '../app/utils/p
 interface SwapConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
-  fromAsset: string
-  toAsset: string
+  fromAsset: keyof typeof assetPrices
+  toAsset: keyof typeof assetPrices
   fromAmount: string
   toAmount: string
   fromDollarValue: string

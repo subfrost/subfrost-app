@@ -9,17 +9,20 @@ interface WrapConfirmationModalProps {
   onClose: () => void
   btcAmount: string
   expectedFrBTC: string
+  onConfirm: () => void
 }
 
 export function WrapConfirmationModal({
   isOpen,
   onClose,
   btcAmount,
-  expectedFrBTC
+  expectedFrBTC,
+  onConfirm
 }: WrapConfirmationModalProps) {
   const handleConfirm = () => {
     // Implement wrap confirmation logic here
     console.log(`Confirming wrap: ${btcAmount} BTC to ${expectedFrBTC} frBTC`)
+    onConfirm()
     onClose()
   }
 
@@ -48,8 +51,8 @@ export function WrapConfirmationModal({
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>
             <ul className="readable-text text-xs">
-              <li>Output 1 (frBTC): {expectedFrBTC} frBTC</li>
-              <li>Output 2 (Change): {(parseFloat(btcAmount) - parseFloat(expectedFrBTC)).toFixed(8)} BTC</li>
+              <li>Output 1 (Success): {expectedFrBTC} frBTC</li>
+              <li>Output 2 (Refund): {btcAmount} BTC</li>
             </ul>
           </div>
         </div>
