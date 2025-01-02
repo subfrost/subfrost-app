@@ -8,7 +8,7 @@ export const assetPrices = {
   frBTC: 100888, // Adding frBTC with the same price as BTC
 };
 
-export function calculateSwapOutput(fromAsset: string, toAsset: string, amount: number): number {
+export function calculateSwapOutput(fromAsset: keyof typeof assetPrices, toAsset: keyof typeof assetPrices, amount: number): number {
   const fromPrice = assetPrices[fromAsset];
   const toPrice = assetPrices[toAsset];
   
@@ -20,7 +20,7 @@ export function calculateSwapOutput(fromAsset: string, toAsset: string, amount: 
   return Number(outputAmount.toFixed(8)); // Round to 8 decimal places
 }
 
-export function calculateDollarValue(asset: string, amount: number): number {
+export function calculateDollarValue(asset: keyof typeof assetPrices, amount: number): number {
   const assetPrice = assetPrices[asset];
   if (!assetPrice) {
     throw new Error("Invalid asset");
