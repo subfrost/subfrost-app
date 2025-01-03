@@ -4,31 +4,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { FaSnowflake } from 'react-icons/fa'
 
-interface ConfirmMintModalProps {
+interface WrapConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
-  asset1: string
-  asset2: string
-  amount1: string
-  amount2: string
-  expectedLPTokens: string
-  slippage: number
-  onConfirm: () => void
+  btcAmount: string
+  expectedFrBTC: string
 }
 
-export function ConfirmMintModal({
+export function WrapConfirmationModal({
   isOpen,
   onClose,
-  asset1,
-  asset2,
-  amount1,
-  amount2,
-  expectedLPTokens,
-  slippage,
-  onConfirm
-}: ConfirmMintModalProps) {
+  btcAmount,
+  expectedFrBTC
+}: WrapConfirmationModalProps) {
   const handleConfirm = () => {
-    onConfirm()
+    // Implement wrap confirmation logic here
+    console.log(`Confirming wrap: ${btcAmount} BTC to ${expectedFrBTC} frBTC`)
     onClose()
   }
 
@@ -38,16 +29,14 @@ export function ConfirmMintModal({
         <DialogHeader>
           <DialogTitle className="retro-text text-blue-300 flex items-center">
             <FaSnowflake className="mr-2" />
-            Confirm Mint
+            Confirm Wrap
           </DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4 text-white">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs">Asset 1: {amount1} {asset1}</p>
-            <p className="readable-text text-xs">Asset 2: {amount2} {asset2}</p>
-            <p className="readable-text text-xs">Expected LP Tokens: {expectedLPTokens}</p>
-            <p className="readable-text text-xs">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+            <p className="readable-text text-xs">From: {btcAmount} BTC</p>
+            <p className="readable-text text-xs">To: {expectedFrBTC} frBTC</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Bitcoin Outpoints</h3>
@@ -59,10 +48,8 @@ export function ConfirmMintModal({
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>
             <ul className="readable-text text-xs">
-              <li>Output 1 (LP Tokens): {expectedLPTokens} LP-{asset1}-{asset2}</li>
-              <li>Output 2 (Refund 1): {amount1} {asset1}</li>
-              <li>Output 3 (Refund 2): {amount2} {asset2}</li>
-              <li>Output 4 (Change): 0.4 BTC</li>
+              <li>Output 1 (frBTC): {expectedFrBTC} frBTC</li>
+              <li>Output 2 (Change): {(parseFloat(btcAmount) - parseFloat(expectedFrBTC)).toFixed(8)} BTC</li>
             </ul>
           </div>
         </div>
@@ -71,7 +58,7 @@ export function ConfirmMintModal({
             Cancel
           </Button>
           <Button onClick={handleConfirm} className="retro-text text-sm bg-blue-500 hover:bg-blue-600">
-            Confirm Mint
+            Confirm Wrap
           </Button>
         </DialogFooter>
       </DialogContent>

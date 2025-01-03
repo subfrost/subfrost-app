@@ -3,27 +3,34 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { FaSnowflake } from 'react-icons/fa'
+import { formatCurrency, assetPrices } from '../utils/priceCalculations'
 
-interface WrapConfirmationModalProps {
+interface ConfirmBurnModalProps {
   isOpen: boolean
   onClose: () => void
-  btcAmount: string
-  expectedFrBTC: string
+  lpPair: string
+  burnAmount: string
+  expectedBTC: string
+  expectedPaired: string
+  pairedAsset: string
+  slippage: number
   onConfirm: () => void
 }
 
-export function WrapConfirmationModal({
+export function ConfirmBurnModal({
   isOpen,
   onClose,
-  btcAmount,
-  expectedFrBTC,
+  lpPair,
+  burnAmount,
+  expectedBTC,
+  expectedPaired,
+  pairedAsset,
+  slippage,
   onConfirm
-}: WrapConfirmationModalProps) {
+}: ConfirmBurnModalProps) {
   const handleConfirm = () => {
-    // Implement wrap confirmation logic here
-    console.log(`Confirming wrap: ${btcAmount} BTC to ${expectedFrBTC} frBTC`)
+    console.log(`Confirming burn: ${burnAmount} ${lpPair} LP tokens`)
     onConfirm()
-    onClose()
   }
 
   return (
@@ -32,27 +39,22 @@ export function WrapConfirmationModal({
         <DialogHeader>
           <DialogTitle className="retro-text text-blue-300 flex items-center">
             <FaSnowflake className="mr-2" />
-            Confirm Wrap
+            Confirm Burn
           </DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4 text-white">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs">From: {btcAmount} BTC</p>
-            <p className="readable-text text-xs">To: {expectedFrBTC} frBTC</p>
-          </div>
-          <div className="space-y-2">
-            <h3 className="retro-text text-sm">Bitcoin Outpoints</h3>
-            <ul className="readable-text text-xs">
-              <li>txid:vout1 - 0.5 BTC</li>
-              <li>txid:vout2 - 1.0 BTC</li>
-            </ul>
+            <p className="readable-text text-xs">Burn Amount: {burnAmount} {lpPair} LP</p>
+            <p className="readable-text text-xs">Expected BTC: {expectedBTC} BTC ({formatCurrency(parseFloat(expectedBTC) * assetPrices['BTC'])})</p>
+            <p className="readable-text text-xs">Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({formatCurrency(parseFloat(expectedPaired) * assetPrices[pairedAsset])})</p>
+            <p className="readable-text text-xs">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>
             <ul className="readable-text text-xs">
-              <li>Output 1 (Success): {expectedFrBTC} frBTC</li>
-              <li>Output 2 (Refund): {btcAmount} BTC</li>
+              <li>Output 1 (BTC): {expectedBTC} BTC</li>
+              <li>Output 2 ({pairedAsset}): {expectedPaired} {pairedAsset}</li>
             </ul>
           </div>
         </div>
@@ -61,7 +63,7 @@ export function WrapConfirmationModal({
             Cancel
           </Button>
           <Button onClick={handleConfirm} className="retro-text text-sm bg-blue-500 hover:bg-blue-600">
-            Confirm Wrap
+            Confirm Burn
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -26,12 +26,13 @@ export function BitcoinFeeWidget() {
   if (!fees) return null
 
   return (
-    <div className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-md p-2">
+    <div className="flex items-center space-x-2 bg-blue-800 bg-opacity-70 rounded-md p-2 h-10">
       <FaBitcoin className="text-yellow-400" />
-      <div className="flex space-x-1 text-xs">
+      <div className="flex items-center space-x-1 text-xs retro-text">
         <span className="text-green-400">{fees.fast}</span>
         <span className="text-yellow-400">{fees.medium}</span>
         <span className="text-red-400">{fees.slow}</span>
+        <span className="text-white ml-1">sat/vbyte</span>
       </div>
     </div>
   )

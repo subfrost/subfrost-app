@@ -4,10 +4,11 @@ import './globals.css'
 import { Navbar } from './components/Navbar'
 import { MobileNavigation } from './components/MobileNavigation'
 import { UserBalances } from './components/UserBalances'
-import { SnowflakeBackground } from '@/components/SnowflakeBackground'
-import { SnowflakeWatermark } from '@/components/SnowflakeWatermark'
+import { SnowflakeBackground } from './components/SnowflakeBackground'
+import { SnowflakeWatermark } from './components/SnowflakeWatermark'
 import { Footer } from './components/Footer'
 import { Toaster } from "@/components/ui/toaster"
+import { SubfrostP2PProvider } from './contexts/SubfrostP2PContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -24,18 +25,20 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen flex flex-col`}>
-        <SnowflakeBackground />
-        <SnowflakeWatermark />
-        <div className="flex flex-col min-h-screen">
-          <Navbar />
-          <UserBalances />
-          <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
-            {children}
-          </main>
-          <MobileNavigation />
-          <Footer />
-          <Toaster />
-        </div>
+        <SubfrostP2PProvider>
+          <SnowflakeBackground />
+          <SnowflakeWatermark />
+          <div className="flex flex-col min-h-screen">
+            <Navbar />
+            <UserBalances />
+            <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
+              {children}
+            </main>
+            <MobileNavigation />
+            <Footer />
+            <Toaster />
+          </div>
+        </SubfrostP2PProvider>
       </body>
     </html>
   )

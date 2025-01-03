@@ -5,14 +5,14 @@ import { ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { RiExchangeDollarFill } from 'react-icons/ri'
 import { FaBitcoin } from 'react-icons/fa'
-import { useSubfrostP2P } from '@/contexts/SubfrostP2PContext'
+import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 
 interface UnwrapTransactionTableProps {
   currentBlock: number
 }
 
 export function UnwrapTransactionTable({ currentBlock }: UnwrapTransactionTableProps) {
-  const { orders } = useSubfrostP2P()
+  const { transactions } = useSubfrostP2P()
 
   return (
     <Table className="text-[8px]">
@@ -24,35 +24,36 @@ export function UnwrapTransactionTable({ currentBlock }: UnwrapTransactionTableP
         </TableRow>
       </TableHeader>
       <TableBody>
-        {orders.length === 0 ? (
+        {transactions.length === 0 ? (
           <TableRow>
             <TableCell colSpan={3} className="text-center retro-text text-white text-[8px]">
               No recent unwrap transactions yet!
             </TableCell>
           </TableRow>
         ) : (
-          orders.map((order) => (
-            <TableRow key={order.id}>
+          transactions.map((tx) => (
+            <TableRow key={tx.id}>
               <TableCell className="font-medium retro-text text-white text-[8px] whitespace-nowrap">
                 <span className="flex items-center">
-                  {order.amount.toFixed(8)} BTC <FaBitcoin className="ml-1 text-blue-300" size={8} />
+                  {tx.amount} BTC <FaBitcoin className="ml-1 text-blue-300" size={8} />
                 </span>
               </TableCell>
               <TableCell className="retro-text text-white text-[8px]">
-                {order.status === 'open' && 'Queued'}
-                {order.status === 'filled' && 'Complete'}
-                {order.status === 'cancelled' && 'Cancelled'}
+                {tx.status === 'Pending' && 'Queued'}
+                {tx.status === 'Broadcast' && 'Broadcast'}
+                {tx.status === 'Complete' && 'Complete'}
               </TableCell>
               <TableCell className="retro-text text-white text-[8px]">
-                {order.status === 'open' && `${currentBlock}`}
-                {order.status === 'filled' && (
+                {tx.status === 'Pending' && `${currentBlock}`}
+                {tx.status === 'Broadcast' && `${tx.blockNumber}`}
+                {tx.status === 'Complete' && (
                   <Link 
-                    href={`https://mempool.space/address/${order.maker}`}
+                    href={`https://mempool.space/tx/${tx.txid}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-300 hover:text-blue-100 transition-colors duration-200 flex items-center justify-start"
                   >
-                    <span className="mr-1">{order.maker.slice(0, 4)}</span>
+                    <span className="mr-1">{tx.txid?.slice(0, 4)}</span>
                     <ExternalLink size={8} />
                   </Link>
                 )}

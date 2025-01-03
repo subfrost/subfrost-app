@@ -6,11 +6,10 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FaExchangeAlt, FaSnowflake } from 'react-icons/fa'
 import { Settings } from 'lucide-react'
-import { SwapConfirmationModal } from '../../components/SwapConfirmationModal'
+import { SwapConfirmationModal } from './SwapConfirmationModal'
 import { calculateSwapOutput, calculateDollarValue, formatCurrency, SUBFROST_FEE, assetPrices } from '../utils/priceCalculations'
 
-type NonBTCAsset = Exclude<keyof typeof assetPrices, 'BTC'>
-const nonBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'FROST', 'zkBTC'] as const
+const nonBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'FROST', 'zkBTC']
 
 interface SwapComponentProps {
   slippage: number
@@ -20,7 +19,7 @@ interface SwapComponentProps {
 
 export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapComponentProps) {
   const [isBTCFrom, setIsBTCFrom] = useState(true)
-  const [nonBTCAsset, setNonBTCAsset] = useState<NonBTCAsset>(nonBTCAssets[0])
+  const [nonBTCAsset, setNonBTCAsset] = useState(nonBTCAssets[0])
   const [fromAmount, setFromAmount] = useState('')
   const [toAmount, setToAmount] = useState('')
   const [fromDollarValue, setFromDollarValue] = useState('$0.00')
@@ -39,11 +38,11 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
     const toAsset = isFromBTC ? nonBTCAsset : 'BTC'
     const numAmount = parseFloat(amount) || 0
 
-    const fromValue = calculateDollarValue(fromAsset as keyof typeof assetPrices, numAmount)
+    const fromValue = calculateDollarValue(fromAsset, numAmount)
     setFromDollarValue(formatCurrency(fromValue))
 
-    const toAmount = calculateSwapOutput(fromAsset as keyof typeof assetPrices, toAsset as keyof typeof assetPrices, numAmount * (1 - SUBFROST_FEE))
-    const toValue = calculateDollarValue(toAsset as keyof typeof assetPrices, toAmount)
+    const toAmount = calculateSwapOutput(fromAsset, toAsset, numAmount * (1 - SUBFROST_FEE))
+    const toValue = calculateDollarValue(toAsset, toAmount)
     setToDollarValue(formatCurrency(toValue))
     setToAmount(toAmount.toFixed(8))
   }
@@ -69,7 +68,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
     setToDollarValue('$0.00')
   }
 
-  const AssetSelector = ({ value, onChange }: { value: NonBTCAsset, onChange: (value: NonBTCAsset) => void }) => (
+  const AssetSelector = ({ value, onChange }) => (
     <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-between cursor-pointer">
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="border-0 bg-transparent text-white p-0 h-auto">
@@ -108,9 +107,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
           />
           {isBTCFrom ? <BTCDisplay /> : <AssetSelector value={nonBTCAsset} onChange={setNonBTCAsset} />}
         </div>
-        <p className="readable-text text-xs">
-          {fromDollarValue} (1 {isBTCFrom ? 'BTC' : nonBTCAsset} = {formatCurrency(assetPrices[(isBTCFrom ? 'BTC' : nonBTCAsset) as keyof typeof assetPrices] as number)})
-        </p>
+        <p className="readable-text text-xs">{fromDollarValue} (1 {isBTCFrom ? 'BTC' : nonBTCAsset} = {formatCurrency(assetPrices[isBTCFrom ? 'BTC' : nonBTCAsset])})</p>
       </div>
       <div className="flex items-center justify-center">
         <div className="border-t border-blue-300 flex-grow"></div>
@@ -129,9 +126,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
           />
           {isBTCFrom ? <AssetSelector value={nonBTCAsset} onChange={setNonBTCAsset} /> : <BTCDisplay />}
         </div>
-        <p className="readable-text text-xs">
-          {toDollarValue} (1 {isBTCFrom ? nonBTCAsset : 'BTC'} = {formatCurrency(assetPrices[(isBTCFrom ? nonBTCAsset : 'BTC') as keyof typeof assetPrices] as number)})
-        </p>
+        <p className="readable-text text-xs">{toDollarValue} (1 {isBTCFrom ? nonBTCAsset : 'BTC'} = {formatCurrency(assetPrices[isBTCFrom ? nonBTCAsset : 'BTC'])})</p>
       </div>
 
       <div className="space-y-2">

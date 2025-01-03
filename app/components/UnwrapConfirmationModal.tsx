@@ -7,7 +7,7 @@ import { FaSnowflake } from 'react-icons/fa'
 interface UnwrapConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
-  amount: string
+  frBTCAmount: string
   expectedBTC: string
   onConfirm: () => void
 }
@@ -15,13 +15,13 @@ interface UnwrapConfirmationModalProps {
 export function UnwrapConfirmationModal({
   isOpen,
   onClose,
-  amount,
+  frBTCAmount,
   expectedBTC,
   onConfirm
 }: UnwrapConfirmationModalProps) {
   const handleConfirm = () => {
     // Implement unwrap confirmation logic here
-    console.log(`Confirming unwrap: ${amount} frBTC to ${expectedBTC} BTC`)
+    console.log(`Confirming unwrap: ${frBTCAmount} frBTC to ${expectedBTC} BTC`)
     onConfirm()
     onClose()
   }
@@ -38,7 +38,7 @@ export function UnwrapConfirmationModal({
         <div className="grid gap-4 py-4 text-white">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs">From: {amount} frBTC</p>
+            <p className="readable-text text-xs">From: {frBTCAmount} frBTC</p>
             <p className="readable-text text-xs">To: {expectedBTC} BTC</p>
           </div>
           <div className="space-y-2">
@@ -51,8 +51,7 @@ export function UnwrapConfirmationModal({
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>
             <ul className="readable-text text-xs">
-              <li>Output 1 (Success): {expectedBTC} BTC</li>
-              <li>Output 2 (Refund): {amount} frBTC</li>
+              <li>Output 1 (BTC): {expectedBTC} BTC</li>
             </ul>
           </div>
         </div>

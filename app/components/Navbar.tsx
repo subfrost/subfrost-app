@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { FaSnowflake, FaTwitter, FaGithub } from 'react-icons/fa'
-import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { PixelSprite } from './PixelSprite'
@@ -29,10 +28,10 @@ export function Navbar() {
     <nav className="bg-blue-800 bg-opacity-70 backdrop-filter backdrop-blur-lg p-4 mb-4 frost-border">
       <div className="container mx-auto flex flex-col md:flex-row justify-between items-center">
         <div className="flex items-center justify-between w-full md:w-auto">
-          <h1 className="text-2xl font-bold retro-text text-white flex items-center">
+          <Link href="/" className="text-2xl font-bold retro-text text-white flex items-center">
             <FaSnowflake className="mr-2" />
             SUBFROST
-          </h1>
+          </Link>
         </div>
         <div className="hidden md:flex items-center space-x-8">
           <div className="flex space-x-4">
@@ -42,7 +41,6 @@ export function Navbar() {
             <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           </div>
           <div className="flex items-center space-x-4">
-            <BitcoinFeeWidget />
             <a href="https://x.com/bc1SUBFROST" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
               <FaTwitter size={20} />
             </a>

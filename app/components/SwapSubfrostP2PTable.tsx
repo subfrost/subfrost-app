@@ -6,7 +6,7 @@ import { ExternalLink, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { FaBitcoin } from 'react-icons/fa'
 import { Button } from "@/components/ui/button"
-import { useSubfrostP2P } from '@/contexts/SubfrostP2PContext'
+import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 
 interface SwapSubfrostP2PTableProps {
   currentBlock: number
@@ -14,7 +14,7 @@ interface SwapSubfrostP2PTableProps {
 
 export function SwapSubfrostP2PTable({ currentBlock }: SwapSubfrostP2PTableProps) {
   const [onlineCount, setOnlineCount] = useState(246)
-  const { orders } = useSubfrostP2P()
+  const { transactions } = useSubfrostP2P()
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -42,39 +42,43 @@ export function SwapSubfrostP2PTable({ currentBlock }: SwapSubfrostP2PTableProps
           <TableRow>
             <TableHead className="w-[120px] retro-text text-blue-200 text-[8px]">Amount</TableHead>
             <TableHead className="w-[80px] retro-text text-blue-200 text-[8px]">Status</TableHead>
-            <TableHead className="retro-text text-blue-200 text-[8px]">Maker</TableHead>
+            <TableHead className="retro-text text-blue-200 text-[8px]">Tx</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {orders.length === 0 ? (
+          {transactions.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="text-center text-gray-400">
-                No active orders
+              <TableCell colSpan={3} className="text-center retro-text text-white text-[8px]">
+                No recent transactions yet!
               </TableCell>
             </TableRow>
           ) : (
-            orders.map((order) => (
-              <TableRow key={order.id}>
-                <TableCell className="readable-text">
-                  <div className="flex items-center">
-                    <FaBitcoin className="text-yellow-500 mr-1" />
-                    {order.amount.toFixed(8)}
-                  </div>
-                </TableCell>
-                <TableCell className="readable-text">
-                  <span className={`px-2 py-1 rounded ${
-                    order.status === 'open' ? 'bg-green-500' :
-                    order.status === 'filled' ? 'bg-blue-500' :
-                    'bg-red-500'
-                  }`}>
-                    {order.status}
+            transactions.map((tx) => (
+              <TableRow key={tx.id}>
+                <TableCell className="font-medium retro-text text-white text-[8px] whitespace-nowrap">
+                  <span className="flex items-center">
+                    {tx.amount} BTC <FaBitcoin className="ml-1 text-blue-300" size={8} />
                   </span>
                 </TableCell>
-                <TableCell className="readable-text">
-                  <Link href={`https://mempool.space/address/${order.maker}`} target="_blank" className="flex items-center hover:text-blue-300">
-                    {order.maker.slice(0, 8)}...
-                    <ExternalLink size={8} className="ml-1" />
-                  </Link>
+                <TableCell className="retro-text text-white text-[8px]">
+                  {tx.status === 'Pending' && 'Queued'}
+                  {tx.status === 'Broadcast' && 'Broadcast'}
+                  {tx.status === 'Complete' && 'Complete'}
+                </TableCell>
+                <TableCell className="retro-text text-white text-[8px]">
+                  {tx.status === 'Pending' && `${currentBlock}`}
+                  {tx.status === 'Broadcast' && `${tx.blockNumber}`}
+                  {tx.status === 'Complete' && (
+                    <Link 
+                      href={`https://mempool.space/tx/${tx.txid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-300 hover:text-blue-100 transition-colors duration-200 flex items-center justify-start"
+                    >
+                      <span className="mr-1">{tx.txid?.slice(0, 4)}</span>
+                      <ExternalLink size={8} />
+                    </Link>
+                  )}
                 </TableCell>
               </TableRow>
             ))
