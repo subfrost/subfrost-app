@@ -8,18 +8,18 @@ interface ZapConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
   btcAmount: string
-  expectedDxBTC: string
+  expecteddxFROST: string
 }
 
 export function ZapConfirmationModal({
   isOpen,
   onClose,
   btcAmount,
-  expectedDxBTC
+  expecteddxFROST
 }: ZapConfirmationModalProps) {
   const handleConfirm = () => {
     // Implement zap confirmation logic here
-    console.log(`Confirming zap: ${btcAmount} BTC to ${expectedDxBTC} dxBTC`)
+    console.log(`Confirming zap: ${btcAmount} BTC to ${expecteddxFROST} dxFROST`)
     onClose()
   }
 
@@ -36,7 +36,7 @@ export function ZapConfirmationModal({
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
             <p className="readable-text text-xs">From: {btcAmount} BTC</p>
-            <p className="readable-text text-xs">To: {expectedDxBTC} dxBTC</p>
+            <p className="readable-text text-xs">To: {expecteddxFROST} dxFROST</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Bitcoin Outpoints</h3>
@@ -48,8 +48,8 @@ export function ZapConfirmationModal({
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>
             <ul className="readable-text text-xs">
-              <li>Output 1 (dxBTC): {expectedDxBTC} dxBTC</li>
-              <li>Output 2 (Change): {(parseFloat(btcAmount) - parseFloat(expectedDxBTC)).toFixed(8)} BTC</li>
+              <li>Output 1 (dxFROST): {expecteddxFROST} dxFROST</li>
+              <li>Output 2 (Change): {(parseFloat(btcAmount) - parseFloat(expecteddxFROST)).toFixed(8)} BTC</li>
             </ul>
           </div>
         </div>

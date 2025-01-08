@@ -52,12 +52,17 @@ export function TradeVolumeChart() {
             />
             <Tooltip 
               contentStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.8)', color: '#fff' }}
-              formatter={(value) => `$${Number(value).toLocaleString()}`}
+              formatter={(value, name) => {
+                if (name === "dxFROST (0.7%)") {
+                  return [`$${Number(value).toLocaleString()}`, "dxFROST (0.7%)"];
+                }
+                return `$${Number(value).toLocaleString()}`;
+              }}
             />
             <Legend />
             <Bar dataKey="execution" stackId="a" name="Execution (99%)" fill="#8884d8" />
             <Bar dataKey="oyl" stackId="a" name="OYL (0.3%)" fill="#82ca9d" />
-            <Bar dataKey="frost" stackId="a" name="FROST (0.7%)" fill="#ffc658" />
+            <Bar dataKey="frost" stackId="a" name="dxFROST (0.7%)" fill="#ffc658" />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

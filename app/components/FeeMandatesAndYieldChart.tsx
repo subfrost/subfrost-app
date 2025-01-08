@@ -91,7 +91,7 @@ export function FeeMandatesAndYieldChart() {
           </ResponsiveContainer>
         </div>
         <div>
-          <h3 className="retro-text text-sm text-blue-400 mb-2">dxBTC Yield Performance</h3>
+          <h3 className="retro-text text-sm text-blue-400 mb-2">dxFROST Yield Performance</h3>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={yieldData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
@@ -99,7 +99,7 @@ export function FeeMandatesAndYieldChart() {
               <YAxis domain={[13, 22]} stroke="#fff" tickFormatter={(value) => `${value}%`} />
               <Tooltip contentStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.8)', color: '#fff' }} />
               <Legend />
-              <Line type="monotone" dataKey="yield" name="APY (%)" stroke="#8884d8" activeDot={{ r: 8 }} />
+              <Line type="monotone" dataKey="yield" name="dxFROST APY (%)" stroke="#8884d8" activeDot={{ r: 8 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>

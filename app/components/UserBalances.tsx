@@ -10,7 +10,7 @@ export function UserBalances() {
   const balances = {
     btc: 1.5,
     frBTC: 0.5,
-    dxBTC: 0.75,
+    dxFROST: 0.75,
     FROST: 1000,
   }
 
@@ -19,7 +19,7 @@ export function UserBalances() {
       <CardContent className="flex flex-wrap justify-center items-center gap-4 p-4">
         <BalanceItem icon={FaBitcoin} label="BTC" amount={balances.btc} />
         <BalanceItem icon={RiExchangeDollarFill} label="frBTC" amount={balances.frBTC} />
-        <BalanceItem icon={RiCoinsFill} label="dxBTC" amount={balances.dxBTC} />
+        <BalanceItem icon={RiCoinsFill} label="dxFROST" amount={balances.dxFROST} />
         <BalanceItem icon={FaSnowflake} label="FROST" amount={balances.FROST} />
         <BitcoinFeeWidget />
       </CardContent>

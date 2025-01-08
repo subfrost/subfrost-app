@@ -8,18 +8,18 @@ interface StakeConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
   frBTCFROSTAmount: string
-  expectedDxBTC: string
+  expecteddxFROST: string
 }
 
 export function StakeConfirmationModal({
   isOpen,
   onClose,
   frBTCFROSTAmount,
-  expectedDxBTC
+  expecteddxFROST
 }: StakeConfirmationModalProps) {
   const handleConfirm = () => {
     // Implement stake confirmation logic here
-    console.log(`Confirming stake: ${frBTCFROSTAmount} frBTC/FROST to ${expectedDxBTC} dxBTC`)
+    console.log(`Confirming stake: ${frBTCFROSTAmount} frBTC/FROST to ${expecteddxFROST} dxFROST`)
     onClose()
   }
 
@@ -36,7 +36,7 @@ export function StakeConfirmationModal({
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
             <p className="readable-text text-xs">From: {frBTCFROSTAmount} frBTC/FROST</p>
-            <p className="readable-text text-xs">To: {expectedDxBTC} dxBTC</p>
+            <p className="readable-text text-xs">To: {expecteddxFROST} dxFROST</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">frBTC/FROST Outpoints</h3>
@@ -48,7 +48,7 @@ export function StakeConfirmationModal({
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>
             <ul className="readable-text text-xs">
-              <li>Output 1 (dxBTC): {expectedDxBTC} dxBTC</li>
+              <li>Output 1 (dxFROST): {expecteddxFROST} dxFROST</li>
             </ul>
           </div>
         </div>

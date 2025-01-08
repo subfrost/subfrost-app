@@ -19,7 +19,7 @@ export function StakeView() {
     setIsModalOpen(true)
   }
 
-  const calculateExpectedDxBTC = () => {
+  const calculateExpecteddxFROST = () => {
     // Mock calculation - replace with actual logic
     const frBtcFrostValue = parseFloat(frBtcFrostAmount) || 0
     return (frBtcFrostValue * 0.95).toFixed(8) // Assuming 5% slippage/fees
@@ -31,7 +31,7 @@ export function StakeView() {
         <CardHeader>
           <CardTitle className="retro-text text-blue-600 flex items-center">
             <FaSnowflake className="mr-2" />
-            Stake frBTC/FROST to dxBTC
+            Stake frBTC/FROST to dxFROST
           </CardTitle>
           <CardDescription className="readable-text text-sm">Enter the amount of frBTC/FROST you want to stake</CardDescription>
         </CardHeader>
@@ -50,13 +50,13 @@ export function StakeView() {
               <p className="readable-text text-xs mt-1">Available: {frBtcFrostBalance} frBTC/FROST</p>
             </div>
             <div>
-              <p className="readable-text text-sm text-blue-600">Expected dxBTC: {calculateExpectedDxBTC()}</p>
+              <p className="readable-text text-sm text-blue-600">Expected dxFROST: {calculateExpecteddxFROST()}</p>
             </div>
           </div>
         </CardContent>
         <CardFooter>
           <Button onClick={handleStake} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600">
-            Stake to dxBTC
+            Stake to dxFROST
           </Button>
         </CardFooter>
       </Card>
@@ -71,7 +71,7 @@ export function StakeView() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         frBTCFROSTAmount={frBtcFrostAmount}
-        expectedDxBTC={calculateExpectedDxBTC()}
+        expecteddxFROST={calculateExpecteddxFROST()}
       />
     </div>
   )

@@ -16,7 +16,7 @@ export function ZapView() {
     setIsModalOpen(true)
   }
 
-  const calculateExpectedDxBTC = () => {
+  const calculateExpecteddxFROST = () => {
     // Mock calculation - replace with actual logic
     const btcValue = parseFloat(amount) || 0
     return (btcValue * 0.90).toFixed(8) // Assuming 10% total slippage/fees for all steps
@@ -28,9 +28,9 @@ export function ZapView() {
         <CardTitle className="retro-text text-white flex items-center">
           <FaBolt className="mr-2 text-yellow-300" />
           <span className="text-yellow-300 font-bold">Zap</span>{' '}
-          <span className="ml-2">BTC to dxBTC</span>
+          <span className="ml-2">BTC to dxFROST</span>
         </CardTitle>
-        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of BTC you want to zap to dxBTC</CardDescription>
+        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of BTC you want to zap to dxFROST</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
@@ -46,19 +46,19 @@ export function ZapView() {
           <p className="readable-text text-sm mt-1 text-blue-200">Available: {btcBalance} BTC</p>
         </div>
         <div className="space-y-2 text-blue-100">
-          <p className="readable-text text-sm">Expected dxBTC: {calculateExpectedDxBTC()} dxBTC</p>
+          <p className="readable-text text-sm">Expected dxFROST: {calculateExpecteddxFROST()} dxFROST</p>
         </div>
       </CardContent>
       <CardFooter>
         <Button onClick={handleZap} className="w-full retro-text text-sm bg-yellow-500 hover:bg-yellow-600 text-black">
-          Zap to dxBTC
+          Zap to dxFROST
         </Button>
       </CardFooter>
       <ZapConfirmationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         btcAmount={amount}
-        expectedDxBTC={calculateExpectedDxBTC()}
+        expecteddxFROST={calculateExpecteddxFROST()}
       />
     </Card>
   )

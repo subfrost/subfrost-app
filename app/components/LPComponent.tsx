@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client"
 
 import { useState, useEffect } from 'react'
@@ -256,7 +255,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
           amount2={pairedAmount}
           expectedLPTokens={calculateLPTokens().toFixed(8)}
           slippage={slippage}
-          onConfirm={handleConfirm as any}
+          onConfirm={handleConfirm}
         />
       ) : (
         <ConfirmBurnModal
@@ -268,7 +267,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
           expectedPaired={expectedPaired}
           pairedAsset={pairedAsset}
           slippage={slippage}
-          onConfirm={handleConfirm as any}
+          onConfirm={handleConfirm}
         />
       )}
     </div>
