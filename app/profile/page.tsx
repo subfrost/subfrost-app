@@ -8,14 +8,20 @@ import { TransactionHistory } from '../components/TransactionHistory'
 import { ProposalList } from '../components/ProposalList'
 import { Copy, ExternalLink } from 'lucide-react'
 import { useToast } from "@/components/ui/use-toast"
+import { useLaserEyes } from '@omnisat/lasereyes'
+import { useRouter } from 'next/navigation'
 
 export default function Profile() {
-  const [walletAddress, setWalletAddress] = useState('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2')
+  const { address, disconnect } = useLaserEyes()
   const { toast } = useToast()
+  const router = useRouter()
 
   const handleDisconnect = () => {
     // Implement wallet disconnection logic here
+    disconnect()
+    router.push('/')
     console.log('Disconnecting wallet')
+
   }
 
   const handleSwitchWallet = () => {
@@ -24,7 +30,7 @@ export default function Profile() {
   }
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(walletAddress).then(() => {
+    navigator.clipboard.writeText(address).then(() => {
       toast({
         title: "Copied!",
         description: "Wallet address copied to clipboard.",
@@ -59,30 +65,30 @@ export default function Profile() {
           <div className="bg-blue-900 bg-opacity-30 rounded-lg flex flex-col sm:flex-row">
             <div className="flex-shrink-0 p-4 flex items-center justify-center">
               <div className="w-16 h-16">
-                <PixelSprite address={walletAddress} size={64} />
+                <PixelSprite address={address} size={64} />
               </div>
             </div>
             <div className="flex-grow p-4">
               <div className="flex flex-col space-y-2">
                 <span className="retro-text text-xs text-blue-100">Wallet Address</span>
                 <div className="flex items-center space-x-2">
-                  <span className="retro-text text-sm break-all bg-blue-800 bg-opacity-20 p-2 rounded">{walletAddress}</span>
+                  <span className="retro-text text-sm break-all bg-blue-800 bg-opacity-20 p-2 rounded">{address}</span>
                   <div className="flex space-x-1">
-                    <Button 
-                      onClick={copyToClipboard} 
-                      variant="ghost" 
+                    <Button
+                      onClick={copyToClipboard}
+                      variant="ghost"
                       size="icon"
                       className="h-8 w-8 p-0 bg-blue-700 bg-opacity-50 hover:bg-opacity-75"
                     >
                       <Copy className="h-4 w-4 text-blue-200" />
                       <span className="sr-only">Copy address to clipboard</span>
                     </Button>
-                    <Button 
+                    <Button
                       as="a"
                       href="#"
                       target="_blank"
                       rel="noopener noreferrer"
-                      variant="ghost" 
+                      variant="ghost"
                       size="icon"
                       className="h-8 w-8 p-0 bg-blue-700 bg-opacity-50 hover:bg-opacity-75"
                     >
