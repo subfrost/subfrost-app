@@ -6,7 +6,7 @@ import { FaSnowflake, FaTwitter, FaGithub } from 'react-icons/fa'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { PixelSprite } from './PixelSprite'
-import { ConnectWalletModal } from './ConnectWalletModal'
+import ConnectWalletModal from './ConnectWalletModal'
 
 export function Navbar() {
   const pathname = usePathname()
@@ -53,9 +53,7 @@ export function Navbar() {
                 <span className="retro-text text-xs text-white truncate w-24">{walletAddress}</span>
               </Link>
             ) : (
-              <Button onClick={handleConnectWallet} className="retro-text text-xs bg-blue-500 hover:bg-blue-600">
-                Connect Wallet
-              </Button>
+              <ConnectWalletModal />
             )}
           </div>
         </div>
@@ -70,21 +68,18 @@ export function Navbar() {
               <span className="retro-text text-xs text-white truncate w-24">{walletAddress}</span>
             </Link>
           ) : (
-            <Button onClick={handleConnectWallet} className="retro-text text-xs bg-blue-500 hover:bg-blue-600 w-full">
-              Connect Wallet
-            </Button>
+            <ConnectWalletModal />
           )}
         </div>
       </div>
-      <ConnectWalletModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConnect={handleWalletConnected} />
     </nav>
   )
 }
 
 function NavLink({ href, children, active }: { href: string; children: React.ReactNode; active: boolean }) {
   return (
-    <Link 
-      href={href} 
+    <Link
+      href={href}
       className={`
         ${active ? 'text-blue-300' : 'text-white'} 
         hover:text-blue-200 
