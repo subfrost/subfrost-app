@@ -351,10 +351,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@omnisat/lasereyes-core@0.0.54":
-  version "0.0.54"
-  resolved "https://registry.yarnpkg.com/@omnisat/lasereyes-core/-/lasereyes-core-0.0.54.tgz#22cae5ea1616e5a68e6b2abe9cc28e0539cd580b"
-  integrity sha512-QRDokn0byTuSnGVsHcwFjjK/89smsBooBYwyj1DnfWOuF7SyvABTzKxpd40F4PC9zgUai6dvq5P09sj0QFxWXg==
+"@omnisat/lasereyes-core@0.0.55":
+  version "0.0.55"
+  resolved "https://registry.yarnpkg.com/@omnisat/lasereyes-core/-/lasereyes-core-0.0.55.tgz#eb52a761f7c72e28e94f1745cfdd70bc0086b6a5"
+  integrity sha512-+KKJhcWXoH2Dk9ub/GAB1A0K5A2aQZpt20GdZfMGeyOzCPQrLZRgteOtasHlPOtpRBdiuNXf88yQaSfvDhlv1Q==
   dependencies:
     "@bitcoinerlab/secp256k1" "^1.1.1"
     "@cmdcode/crypto-utils" "^2.4.6"
@@ -369,24 +369,24 @@
     nanostores "^0.11.3"
     sats-connect "^2.8.0"
 
-"@omnisat/lasereyes-react@0.0.49":
-  version "0.0.49"
-  resolved "https://registry.yarnpkg.com/@omnisat/lasereyes-react/-/lasereyes-react-0.0.49.tgz#7f8a20adbdd8589cbf66320c0c0d53a29459ad5e"
-  integrity sha512-3N/eum13HGkv/8N9znd+kLNODG2SUH5yNWMdE2meypjvkFDflDj4adgGBOW/4LaSSaadzKYs8GE7ltEY6FOj+Q==
+"@omnisat/lasereyes-react@0.0.50":
+  version "0.0.50"
+  resolved "https://registry.yarnpkg.com/@omnisat/lasereyes-react/-/lasereyes-react-0.0.50.tgz#92b79e24aace420432c4cd54a931ca6c27285633"
+  integrity sha512-CFwVYF56L0LI3FdxF5MLXCxhyOm6VEhhJTtdWcMmkLNQdzBSAt89dnBhWe6VA52+9G1G0/343N2viwd57YaJrA==
   dependencies:
     "@nanostores/react" "^0.7.3"
-    "@omnisat/lasereyes-core" "0.0.54"
+    "@omnisat/lasereyes-core" "0.0.55"
     bootstrap "^5.3.3"
     nanostores "^0.11.3"
     vite-plugin-ssr "^0.4.142"
 
-"@omnisat/lasereyes@^0.0.132":
-  version "0.0.132"
-  resolved "https://registry.yarnpkg.com/@omnisat/lasereyes/-/lasereyes-0.0.132.tgz#c104eac7252cac1a48450d93e526958ca61a409a"
-  integrity sha512-21Gr34LiOvm0hGKWSZItBJ2ENVIrE5ldLxMdhz9AtVHVkvvKEknVAYpFh41g++aVUgy9V5HGpngKDOMP5iFnhg==
+"@omnisat/lasereyes@^0.0.133":
+  version "0.0.133"
+  resolved "https://registry.yarnpkg.com/@omnisat/lasereyes/-/lasereyes-0.0.133.tgz#b9817b595417504b72b9293e56d0ac8a20a82154"
+  integrity sha512-IXDzr6gg4gBBJTMHwTWtO2peyY8LRYbZlx3vIJ+DQLh1qiN8XojlFKgDIZA9wgKWmPivCzmLc0QfDhp7pj7p5w==
   dependencies:
-    "@omnisat/lasereyes-core" "0.0.54"
-    "@omnisat/lasereyes-react" "0.0.49"
+    "@omnisat/lasereyes-core" "0.0.55"
+    "@omnisat/lasereyes-react" "0.0.50"
     bip39 "^3.1.0"
 
 "@orangecrypto/orange-connect@^1.2.2":

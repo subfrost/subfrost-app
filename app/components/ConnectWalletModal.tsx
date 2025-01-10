@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { PixelSprite } from "./PixelSprite";
 import Image from "next/image";
+import { FaSnowflake } from "react-icons/fa";
+import { DialogClose } from "@radix-ui/react-dialog";
 
 export default function ConnectWalletModal({ className }: { className?: string }) {
   const {
@@ -100,21 +102,24 @@ export default function ConnectWalletModal({ className }: { className?: string }
       <DialogContent
         className={cn(
           "readable-text",
-          "text-white",
+          "text-black",
           "rounded-3xl mx-auto",
           "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
           "w-[480px] max-h-[660px]",
           "flex flex-col overflow-hidden p-0",
-          " bg-blue-200 backdrop-blur-lg"
+          "bg-gradient-to-b from-blue-100 to-blue-200"
         )}
       >
         <DialogHeader className="px-6 pt-5 pb-3">
-          <DialogTitle className="text-center text-[22px] font-medium text-blue-800">
+          <DialogTitle className="text-center flex flex-row gap-3 items-center justify-center font-regular text-[22px] font-medium text-blue-800">
+            <FaSnowflake className="text-blue-300" />
             Connect Wallet
+
+            <FaSnowflake className="text-blue-300" />
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide px-6">
+        <div className="flex-1 overflow-y-auto scrollbar-hide px-6 relative">
           <DialogDescription className="flex flex-col gap-2 w-full">
             {Object.values(SUPPORTED_WALLETS).map((wallet) => {
               // @ts-ignore
@@ -133,7 +138,7 @@ export default function ConnectWalletModal({ className }: { className?: string }
                     "font-normal justify-between",
                     "h-[60px] text-base rounded-xl px-4",
                     "transition-colors duration-200",
-                    "bg-blue-800",
+                    "bg-blue-500",
                     "group"
                   )}
                 >
@@ -145,7 +150,7 @@ export default function ConnectWalletModal({ className }: { className?: string }
                         className="!w-[32px] !h-[32px]"
                       />
                     </div>
-                    <span className="text-lg">
+                    <span className="text-sm retro-text">
                       {wallet.name
                         .replace(/[-_]/g, " ")
                         .split(" ")
@@ -158,25 +163,27 @@ export default function ConnectWalletModal({ className }: { className?: string }
                     </span>
                   </div>
                   {hasWallet[wallet.name] ? (
-                    <div className="flex items-center">
+                    <div className="flex items-center justify-center">
                       <div className="flex items-center gap-2 group-hover:hidden">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <div className="w-2 h-2 rounded-full bg-blue-200"></div>
                         <span className="text-sm text-blue-200 dark:text-gray-400">
                           Installed
                         </span>
                       </div>
-                      <ChevronRight className="w-5 h-5 text-gray-400 hidden group-hover:block" />
+                      <div className="text-black hidden group-hover:block">Connnect</div>
+                      <ChevronRight className="w-12 h-12 text-black hidden group-hover:block" />
                     </div>
                   ) : (
                     <a
                       href={wallet.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-blue-500 hover:text-blue-600"
+                      className="flex items-center gap-2 text-blue-800 hover:text-blue-600"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <ChevronRight className="w-4 h-4" />
                       <span className="text-sm">Install</span>
+
+                      <ChevronRight className="w-4 h-4" />
                     </a>
                   )}
                 </Button>
@@ -185,11 +192,8 @@ export default function ConnectWalletModal({ className }: { className?: string }
           </DialogDescription>
         </div>
 
-        <div className="w-full bg-gray-50 dark:bg-gray-900 p-4 pt-7 mt-4  border-t border-gray-200 dark:border-gray-800 group relative">
-          <Image src="/snowman.png" className="absolute left-2 grayscale bottom-6" height={30} width={30} alt="snowman" />
-
-          <Image src="/snowman.png" className="absolute right-2 grayscale top-6 scale-x-[-1]" height={30} width={30} alt="snowman" />
-          <div className="text-blue-500 dark:text-gray-400 text-sm text-center transition-opacity duration-300 ease-in-out opacity-100 group-hover:opacity-0">
+        <div className="w-full flex flex-col h-full items-center justify-center py-2 fixed bottom-0 text-[8px] dark:bg-gray-900  dark:border-gray-800 group relative">
+          <div className="text-blue-500 dark:text-gray-400 text-center retro-text absolute bottom-2 transition-opacity duration-300 ease-in-out opacity-100 group-hover:opacity-0">
             <a
               href="https://www.lasereyes.build/"
               target="_blank"
@@ -198,18 +202,19 @@ export default function ConnectWalletModal({ className }: { className?: string }
               Powered by LaserEyes
             </a>
           </div>
-          <div className="absolute top-5 left-0 right-0 transition-opacity duration-500 ease-in-out opacity-0 group-hover:opacity-100">
+          <div className=" transition-opacity bottom-1 duration-500 ease-in-out absolute opacity-0 group-hover:opacity-100">
             <a
               href="https://www.lasereyes.build/"
               target="_blank"
               rel="noopener noreferrer"
               className="flex justify-center"
             >
-              <LaserEyesLogo width={48} color={"blue"} />
+              <LaserEyesLogo width={48} color={"darkBlue"} />
             </a>
           </div>
         </div>
       </DialogContent>
+
     </Dialog>
   );
 }
