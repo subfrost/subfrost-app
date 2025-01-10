@@ -9,6 +9,7 @@ import { SnowflakeWatermark } from './components/SnowflakeWatermark'
 import { Footer } from './components/Footer'
 import { Toaster } from "@/components/ui/toaster"
 import { SubfrostP2PProvider } from './contexts/SubfrostP2PContext'
+import * as regtest from "./lib/regtest";
 
 const inter = Inter({ subsets: ['latin'] })
 
