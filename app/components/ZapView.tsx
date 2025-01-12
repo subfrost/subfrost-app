@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
 import { FaBolt } from 'react-icons/fa'
 import { ZapConfirmationModal } from './ZapConfirmationModal'
+import { useBalances } from "../contexts/BalancesContext";
 
 export function ZapView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const btcBalance = 1.5 // This should be fetched from your state management solution
+  const { btc: btcBalance } = useBalances();
 
   const handleZap = () => {
     setIsModalOpen(true)

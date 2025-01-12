@@ -6,6 +6,7 @@ interface Balances {
   btc: number;
   frBTC: number;
   dxFROST: number;
+  frBTCFROST: number;
   FROST: number;
 }
 
@@ -14,6 +15,7 @@ const defaultBalances: Balances = {
   frBTC: 0,
   dxFROST: 0,
   FROST: 0,
+  frBTCFROST: 0
 };
 
 interface BalancesContextType {

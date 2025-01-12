@@ -9,11 +9,12 @@ import { UnstakeView } from './UnstakeView'
 import { ZapView } from './ZapView'
 import { StakeConfirmationModal } from './StakeConfirmationModal'
 import { CombinedCharts } from './CombinedCharts'
+import { useBalances } from "../contexts/BalancesContext";
 
 export function StakeView() {
   const [frBtcFrostAmount, setFrBtcFrostAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const frBtcFrostBalance = 1.5 // This should be fetched from your state management solution
+  const { frBTCFROST } = useBalances(); // This should be fetched from your state management solution
 
   const handleStake = () => {
     setIsModalOpen(true)

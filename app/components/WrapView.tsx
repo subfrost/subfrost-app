@@ -7,11 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { FaSnowflake } from 'react-icons/fa'
 import { UnwrapView } from './UnwrapView'
 import { WrapConfirmationModal } from './WrapConfirmationModal'
+import { useBalances } from "../contexts/BalancesContext";
 
 export function WrapView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const btcBalance = 1.5 // This should be fetched from your state management solution
+  const { btc: btcBalance } = useBalances(); // This should be fetched from your state management solution
 
   const handleWrap = () => {
     setIsModalOpen(true)
