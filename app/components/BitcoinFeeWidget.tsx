@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { provider } from "../contexts/regtest";
 import { FaBitcoin } from 'react-icons/fa'
 
 export function BitcoinFeeWidget() {
@@ -8,12 +9,11 @@ export function BitcoinFeeWidget() {
 
   useEffect(() => {
     const fetchFees = async () => {
-      // In a real application, you would fetch this data from a Bitcoin fee estimation API
-      // For this example, we'll use mock data
+      const mempoolFees = await provider.call("esplora_fee-estimates", []);
       setFees({
-        fast: 20,
-        medium: 10,
-        slow: 5
+        fast: mempoolFees.results["1"],
+        medium: mempoolFees.results["15"],
+        slow: mempoolFees.results["25"]
       })
     }
 
