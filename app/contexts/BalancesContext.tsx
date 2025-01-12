@@ -3,19 +3,19 @@
 import { createContext, useContext, ReactNode, useState } from "react";
 
 interface Balances {
-  btc: number;
-  frBTC: number;
-  dxFROST: number;
-  frBTCFROST: number;
-  FROST: number;
+  btc: string;
+  frBTC: string;
+  dxFROST: string;
+  frBTCFROST: string;
+  frost: string;
 }
 
 const defaultBalances: Balances = {
-  btc: 0,
-  frBTC: 0,
-  dxFROST: 0,
-  FROST: 0,
-  frBTCFROST: 0
+  btc: "0.00000000",
+  frBTC: "0.00000000",
+  dxFROST: "0.00000000",
+  frost: "0.00000000",
+  frBTCFROST: "0.00000000"
 };
 
 interface BalancesContextType {

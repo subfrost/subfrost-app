@@ -2,14 +2,37 @@ import { SandshrewProvider } from "./sandshrew-provider";
 import * as authTokenBinary from "raw-loader!./alkanes_std_auth_token.wasm.gz";
 import * as frbtcBinary from "raw-loader!./fr_btc.wasm.gz";
 import * as frostBinary from "raw-loader!./frost.wasm.gz";
+import { hex } from "@scure/base";
+import * as btc from "@scure/btc-signer";
+import { encodeRunestoneProtostone } from "alkanes/lib/esm/protorune/proto_runestone_upgrade.js";
+import { encipher } from "alkanes/lib/esm/bytes.js";
+import { ProtoStone } from "alkanes/lib/esm/protorune/protostone.js";
+import { schnorr as secp256k1_schnorr } from "@noble/curves/secp256k1";
+import * as envelope from "alkanes/lib/esm/envelope";
+import bip39 = require("bip39");
+import BIP32Factory from "bip32";
+import bitcoin = require("bitcoinjs-lib");
+import { getLogger } from "./logger";
+
+export const REGTEST_PARAMS = {
+  bech32: "bcrt",
+  pubKeyHash: 0,
+  scriptHash: 5,
+  wif: 128,
+};
+
+const logger = getLogger("alkanes:run");
 
 export const setupEnvironment = async function setupEnvironment(): Promise<void> {
+  logger.info("Starting environment setup...");
+  
   const privKey = hex.decode(
     "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
   );
   const pubKey = secp256k1_schnorr.getPublicKey(privKey);
   const customScripts = [envelope.OutOrdinalReveal];
   
+  logger.info("Deploying auth token contract...");
   const authPayload = {
     body: authTokenBinary,
     cursed: false,
@@ -28,8 +51,10 @@ export const setupEnvironment = async function setupEnvironment(): Promise<void>
     ],
   }).encodedRunestone;
   
-  await deployContract(privKey, pubKey, authPayload, authScript);
+  await deployContract(authPayload, authScript);
+  logger.info("Auth token contract deployed successfully");
   
+  logger.info("Deploying FRBTC contract...");
   const frbtcPayload = {
     body: frbtcBinary,
     cursed: false,
@@ -48,9 +73,10 @@ export const setupEnvironment = async function setupEnvironment(): Promise<void>
     ],
   }).encodedRunestone;
   
-  await deployContract(privKey, pubKey, frbtcPayload, frbtcScript);
+  await deployContract(frbtcPayload, frbtcScript);
+  logger.info("FRBTC contract deployed successfully");
   
-  // Set signer
+  logger.info("Setting up contract signer...");
   const setSignerScript = encodeRunestoneProtostone({
     protostones: [
       ProtoStone.message({
@@ -64,9 +90,63 @@ export const setupEnvironment = async function setupEnvironment(): Promise<void>
   }).encodedRunestone;
   
   await setContractSigner(privKey, "bcrt1pys2f8u8yx7nu08txn9kzrstrmlmpvfprdazz9se5qr5rgtuz8htsaz3chd", setSignerScript);
+  logger.info("Contract signer set successfully");
+  
+  logger.info("Environment setup completed successfully");
 }
 
-export async function deployContract(privKey: Uint8Array, pubKey: Uint8Array, payload: any, script: Uint8Array): Promise<void> {
+export const REGTEST_FAUCET = {
+  mnemonic:
+    "hub dinosaur mammal approve riot rebel library legal sick discover loop alter",
+  nativeSegwit: {
+    address: "bcrt1qzr9vhs60g6qlmk7x3dd7g3ja30wyts48sxuemv",
+    publicKey:
+      "03d3af89f242cc0df1d7142e9a354a59b1cd119c12c31ff226b32fb77fa12acce2",
+  },
+  taproot: {
+    address: "bcrt1p45un5d47hvfhx6mfezr6x0htpanw23tgll7ppn6hj6gfzu3x3dnsaegh8d",
+    publicKey:
+      "022ffc336daa8196f1aa796135a568b1125ba08c2879c22468effea8e4a0c4c8b9",
+    publicKeyXonly:
+      "2ffc336daa8196f1aa796135a568b1125ba08c2879c22468effea8e4a0c4c8b9",
+  },
+  privateKey: "bc1p45un5d47hvfhx6mfezr6x0htpanw23tgll7ppn6hj6gfzu3x3dns8g57gc",
+  publicKey:
+    "03d3af89f242cc0df1d7142e9a354a59b1cd119c12c31ff226b32fb77fa12acce2",
+  wif: "cTBsa8seu4xA7EZ7N2AXeq2qUfrVsD2KS3F7Tj72WKaXF15hp7Vq",
+};
+
+const getAddress = (node) => {
+  return bitcoin.payments.p2wpkh({
+    pubkey: node.publicKey,
+    network: bitcoin.networks.regtest,
+  }).address;
+};
+
+const getPrivate = async (mnemonic) => {
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const bip32 = BIP32Factory(await import("tiny-secp256k1"));
+  const root = bip32.fromSeed(seed, bitcoin.networks.regtest);
+  return root.derivePath("m/84'/0'/0'/0/0");
+};
+
+export async function getRegtestWallet() {
+  const privKey = hex.decode(
+    "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+  );
+  const faucetPrivate = await getPrivate(REGTEST_FAUCET.mnemonic);
+  const faucetAddress = getAddress(faucetPrivate);
+  const pubKey = secp256k1_schnorr.getPublicKey(privKey);
+  return {
+    privKey,
+    faucetPrivate,
+    faucetAddress,
+    pubKey
+  };
+}
+
+export async function deployContract(payload: any, script: Uint8Array): Promise<void> {
+  const { faucetPrivate, faucetAddress, pubKey, privKey } = await getRegtestWallet();
   const revealPayment = btc.p2tr(
     undefined,
     envelope.p2tr_ord_reveal(pubKey, [payload]),
@@ -74,8 +154,6 @@ export async function deployContract(privKey: Uint8Array, pubKey: Uint8Array, pa
     false,
     [envelope.OutOrdinalReveal],
   );
-
-  const faucetAddress = (await provider.call("getnewaddress", [])).toString(); 
   
   await provider.call("generatetoaddress", [faucetAddress, 200]);
   
@@ -84,14 +162,15 @@ export async function deployContract(privKey: Uint8Array, pubKey: Uint8Array, pa
   
   const fundingTx = new btc.Transaction({allowLegacyWitnessUtxo: true, allowUnknownOutputs: true});
   
-  const unspent = await provider.call("listunspent", []);
-  const input = unspent[0];
+  const unspent = await provider.call("alkanes_spendablesbyaddress", [{ address: faucetAddress, protocolTag: '1' }]);
+  logger.info(unspent);
+  const input = unspent[0].outpoint;
   
   fundingTx.addInput({
     txid: input.txid,
     index: input.vout,
     witnessUtxo: {
-      script: btc.Address.toScriptPubKey(input.address),
+      script: btc.Address.toScriptPubKey(faucetAddress),
       amount: BigInt(Math.round(input.amount * 100000000))
     },
   });
@@ -101,8 +180,7 @@ export async function deployContract(privKey: Uint8Array, pubKey: Uint8Array, pa
     amount: fundingAmount,
   });
   
-  const privKeyWIF = await provider.call("dumpprivkey", [input.address]);
-  fundingTx.sign(btc.ECPair.fromWIF(privKeyWIF).privateKey!, [btc.SigHash.ALL]);
+  fundingTx.sign(privKey, [btc.SigHash.ALL]);
   fundingTx.finalize();
   
   const fundingTxHex = hex.encode(fundingTx.extract());
@@ -128,11 +206,16 @@ export async function deployContract(privKey: Uint8Array, pubKey: Uint8Array, pa
   tx.finalize();
   
   const txHex = hex.encode(tx.extract());
-  await provider.call("sendrawtransaction", [txHex]);
+  const txhash = await provider.call("sendrawtransaction", [txHex]);
+  console.log(txhash);
   await provider.call("generatetoaddress", [faucetAddress, 1]);
+  console.log(await provider.call("alkanes_trace", [{
+    txid: txhash,
+    vout: 3
+  }]));
 }
 
-export async function setContractSigner(privKey: Uint8Array, multisigAddress: string, script: Uint8Array): Promise<void> {
+export async function setContractSigner(multisigAddress: string, script: Uint8Array): Promise<void> {
   const fee = 30000n;
   const dustLimit = 546n;
   
@@ -164,8 +247,8 @@ export async function setContractSigner(privKey: Uint8Array, multisigAddress: st
   });
 
   // Get private key and sign
-  const privKeyWIF = await provider.call("dumpprivkey", [input.address]);
-  tx.sign(btc.ECPair.fromWIF(privKeyWIF).privateKey!, [btc.SigHash.ALL]);
+  
+  tx.sign(privKey, [btc.SigHash.ALL]);
   tx.finalize();
 
   // Send transaction

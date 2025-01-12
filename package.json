@@ -65,6 +65,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "alkanes": "github:kungfuflex/alkanes",
+    "eslint": "^9.18.0",
     "ethers": "^6.13.5",
     "postcss": "^8",
     "raw-loader": "^4.0.2",

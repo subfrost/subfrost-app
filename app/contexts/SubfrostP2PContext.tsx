@@ -20,9 +20,6 @@ interface SubfrostP2PContextType {
 const SubfrostP2PContext = createContext<SubfrostP2PContextType | undefined>(undefined)
 
 export const useSubfrostP2P = () => {
-  useEffect(() => {
-    window.regtest = regtest;
-  }, []);
   const context = useContext(SubfrostP2PContext)
   if (!context) {
     throw new Error('useSubfrostP2P must be used within a SubfrostP2PProvider')

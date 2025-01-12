@@ -12,6 +12,7 @@ import { SubfrostP2PProvider } from "./contexts/SubfrostP2PContext";
 import { BalancesProvider } from "./contexts/BalancesContext";
 import * as regtest from "./lib/regtest";
 import { LaserEyesProvider } from "@omnisat/lasereyes";
+import { RegtestProvider } from "./contexts/RegtestContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body
         className={`${inter.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen flex flex-col`}
       >
+        <RegtestProvider>
         <LaserEyesProvider>
           {" "}
           <BalancesProvider>
@@ -49,6 +51,7 @@ export default function RootLayout({
             </SubfrostP2PProvider>
           </BalancesProvider>
         </LaserEyesProvider>
+        </RegtestProvider>
       </body>
     </html>
   );
