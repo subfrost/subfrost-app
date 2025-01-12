@@ -8,13 +8,73 @@ import { FaSnowflake } from 'react-icons/fa'
 import { UnwrapView } from './UnwrapView'
 import { WrapConfirmationModal } from './WrapConfirmationModal'
 import { useBalances } from "../contexts/BalancesContext";
+import { getLogger } from "../contexts/logger";
+import { REGTEST_PARAMS } from "../contexts/regtest";
 
-const ln = (v) => ((console.log(v)), v);
+const logger = getLogger("subfrost:wrap");
+
+class TransactionBuilder {
+  public address: string;
+  public fee: bigint;
+  public change: bigint;
+  public provider: SandshrewProvider;
+  constructor() {
+    this.provider = new SandshrewProvider("http://localhost:18888");
+    this.transaction = new btc.Transaction({
+      allowLegacyWitnessUtxo: true,
+      allowUnknownOutputs: true,
+    });
+    this.address = '';
+    this.fee = 0n;
+    this.change = 0n;
+  }
+  setProvider(provider: SandshrewProvider): TransactionBuilder {
+    this.provider = provider;
+    return this;
+  }
+  setAddress(address: string): TransactionBuilder {
+    this.address = address;
+    return this;
+  }
+  setSigner(signer: Signer): TransactionBuilder {
+    this.signer = signer;
+    return this;
+  }
+  async addBitcoin(sats: bigint) {
+    const spendables = await this.getBTCOnlyUTXOs(this.address);
+    for (const spendable of spendables) {
+      this.transaction.addInput({
+        txid: spendable.outpoint.txid,
+        witnessUtxo: spendable.output,
+        index: spendable.outpoint.vout,
+        sighashType: btc.SigHash.ALL
+      });
+      this.fee += BigInt(spendable.output.value);
+      if (this.fee >= sats) {
+        this.change = this.fee - sats;
+        break;
+      }
+    }
+  }
+  finalize(): TransactionBuilder {
+    this.transaction.addOutputAddress(this.address, this.change, REGTEST_PARAMS);
+    return this;
+  }
+  addOutput(v: any): TransactionBuilder {
+    this.transaction.addOutput(v);
+    return this;
+  }
+  addInput(v: any): TransactionBuilder {
+    this.transaction.addInput(v);
+    return this;
+  }
+}
+
 
 export function WrapView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { balances: { btc: btcBalance } } = ln(useBalances()); // This should be fetched from your state management solution
+  const { balances: { btc: btcBalance } } = useBalances(); // This should be fetched from your state management solution
 
   const handleWrap = () => {
     setIsModalOpen(true)
@@ -27,8 +87,10 @@ export function WrapView() {
   }
 
   const handleConfirmWrap = () => {
-    setIsModalOpen(false)
-    setAmount('')
+    (async () => {
+      setIsModalOpen(false)
+      setAmount('')
+    })().catch((err) => logger.error(err));
   }
 
   return (
