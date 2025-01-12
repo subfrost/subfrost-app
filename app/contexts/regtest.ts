@@ -155,14 +155,15 @@ export async function deployContract(payload: any, script: Uint8Array): Promise<
     [envelope.OutOrdinalReveal],
   );
   
-  await provider.call("generatetoaddress", [faucetAddress, 200]);
+  await provider.call("generatetoaddress", [200, faucetAddress]);
   
   const fundingAmount = 100000000n;
   const fee = 30000n;
   
   const fundingTx = new btc.Transaction({allowLegacyWitnessUtxo: true, allowUnknownOutputs: true});
   
-  const unspent = await provider.call("alkanes_spendablesbyaddress", [{ address: faucetAddress, protocolTag: '1' }]);
+  logger.info('get unspent');
+  const unspent = await provider.getUTXOs(faucetAddress);
   logger.info(unspent);
   const input = unspent[0].outpoint;
   
@@ -186,7 +187,7 @@ export async function deployContract(payload: any, script: Uint8Array): Promise<
   const fundingTxHex = hex.encode(fundingTx.extract());
   const fundingTxid = await provider.call("sendrawtransaction", [fundingTxHex]);
   
-  await provider.call("generatetoaddress", [faucetAddress, 1]);
+  await provider.call("generatetoaddress", [1, faucetAddress]);
   
   const tx = new btc.Transaction({ allowUnknownOutputs: true, customScripts: [envelope.OutOrdinalReveal] });
   tx.addInput({
@@ -208,7 +209,7 @@ export async function deployContract(payload: any, script: Uint8Array): Promise<
   const txHex = hex.encode(tx.extract());
   const txhash = await provider.call("sendrawtransaction", [txHex]);
   console.log(txhash);
-  await provider.call("generatetoaddress", [faucetAddress, 1]);
+  await provider.call("generatetoaddress", [1, faucetAddress]);
   console.log(await provider.call("alkanes_trace", [{
     txid: txhash,
     vout: 3
@@ -254,7 +255,7 @@ export async function setContractSigner(multisigAddress: string, script: Uint8Ar
   // Send transaction
   const txHex = hex.encode(tx.extract());
   await provider.call("sendrawtransaction", [txHex]);
-  await provider.call("generatetoaddress", [input.address, 1]);
+  await provider.call("generatetoaddress", [1, input.address]);
 }
   
 
