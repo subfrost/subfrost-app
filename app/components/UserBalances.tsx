@@ -23,11 +23,13 @@ export function UserBalances() {
       const frost = Number(0n);
       const dxFROST = Number(0n);
       const frBTC = Number(0n);
+      const frBTCFROST = Number(0n);
       setBalances(mapValues({
         btc,
         frost,
         dxFROST,
         frBTC,
+        frBTCFROST
       }, (v) => ethers.formatUnits(v, 8)));
     })().catch((err) => console.error(err));
   }, [address]);
@@ -46,7 +48,7 @@ export function UserBalances() {
           label="dxFROST"
           amount={balances.dxFROST}
         />
-        <BalanceItem icon={FaSnowflake} label="FROST" amount={balances.FROST} />
+        <BalanceItem icon={FaSnowflake} label="FROST" amount={balances.frost} />
         <BitcoinFeeWidget />
       </CardContent>
     </Card>

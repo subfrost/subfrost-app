@@ -9,10 +9,12 @@ import { UnwrapView } from './UnwrapView'
 import { WrapConfirmationModal } from './WrapConfirmationModal'
 import { useBalances } from "../contexts/BalancesContext";
 
+const ln = (v) => ((console.log(v)), v);
+
 export function WrapView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { btc: btcBalance } = useBalances(); // This should be fetched from your state management solution
+  const { balances: { btc: btcBalance } } = ln(useBalances()); // This should be fetched from your state management solution
 
   const handleWrap = () => {
     setIsModalOpen(true)

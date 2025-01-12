@@ -14,7 +14,7 @@ import { useBalances } from "../contexts/BalancesContext";
 export function StakeView() {
   const [frBtcFrostAmount, setFrBtcFrostAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { frBTCFROST } = useBalances(); // This should be fetched from your state management solution
+  const { balances } = useBalances(); // This should be fetched from your state management solution
 
   const handleStake = () => {
     setIsModalOpen(true)
@@ -48,7 +48,7 @@ export function StakeView() {
                 onChange={(e) => setFrBtcFrostAmount(e.target.value)}
                 className="readable-text text-sm"
               />
-              <p className="readable-text text-xs mt-1">Available: {frBtcFrostBalance} frBTC/FROST</p>
+              <p className="readable-text text-xs mt-1">Available: {balances.frBTCFROST} frBTC/FROST</p>
             </div>
             <div>
               <p className="readable-text text-sm text-blue-600">Expected dxFROST: {calculateExpecteddxFROST()}</p>

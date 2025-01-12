@@ -11,7 +11,7 @@ import { useBalances } from "../contexts/BalancesContext";
 export function ZapView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { btc: btcBalance } = useBalances();
+  const { balances: { btc: btcBalance } } = useBalances();
 
   const handleZap = () => {
     setIsModalOpen(true)

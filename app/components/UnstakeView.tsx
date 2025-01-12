@@ -6,11 +6,13 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
 import { RiCoinsFill } from 'react-icons/ri'
 import { UnstakeConfirmationModal } from './UnstakeConfirmationModal'
+import { useBalances } from "../contexts/BalancesContext";
 
 export function UnstakeView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const dxFROSTBalance = 0.75 // This should be fetched from your state management solution
+  const { balances } = useBalances();
+  const dxFROSTBalance = balances.dxFROST; // This should be fetched from your state management solution
 
   const handleUnstake = () => {
     setIsModalOpen(true)
