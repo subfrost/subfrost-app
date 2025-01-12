@@ -86,4 +86,22 @@ export class SandshrewProvider extends AbstractProvider {
       throw err;
     }
   }
+  async enrichOutput({
+    vout,
+    txid
+  }: {
+    vout: number,
+    txid: string
+  }): Promise<any> {
+    return await this.call('ord_output', [`${txid}:${vout}`]);
+  }
+  async getBTCOnlyUTXOs(address: string): Promise<GetUTXOsResponse> {
+    const utxos = await this.getUTXOs(address);
+    const { inscriptions } = await this.call('ord_address', [ address ]);
+    const map = zipObject(inscriptions, inscriptions);
+    return utxos.filter((v) => !map[`${v.outpoint.txid}:${v.outpoint.vout}`] && v.runes.length === 0);
+  }
+  async getUTXOs(address: string): Promise<GetUTXOsResponse> {
+    return (await this.call('alkanes_spendablesbyaddress', [{ address, protocolTag: '1' }])).outpoints;
+  }
 }
