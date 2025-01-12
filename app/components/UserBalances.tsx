@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { FaBitcoin, FaSnowflake } from 'react-icons/fa'
 import { RiExchangeDollarFill, RiCoinsFill } from 'react-icons/ri'
 import { BitcoinFeeWidget } from './BitcoinFeeWidget'
+import { BalancesContext } from "../contexts/BalancesContext";
 
 export function UserBalances() {
   // Mock data - replace with actual user balances
