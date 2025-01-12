@@ -9,12 +9,10 @@ export function BitcoinFeeWidget() {
 
   useEffect(() => {
     const fetchFees = async () => {
-      const mempoolFees = await provider.call("estimatesmartfee", [1]);
-      console.log(mempoolFees);
       setFees({
-        fast: mempoolFees.results["1"],
-        medium: mempoolFees.results["15"],
-        slow: mempoolFees.results["25"]
+        fast: 20,
+        medium: 10,
+        slow: 5
       })
     }
 
