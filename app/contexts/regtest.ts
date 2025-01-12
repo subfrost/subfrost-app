@@ -1,4 +1,4 @@
-import { SandshrewProvider } from "alkanes/lib/provider/sandshrew-provider";
+import { SandshrewProvider } from "./sandshrew-provider";
 import * as authTokenBinary from "raw-loader!./alkanes_std_auth_token.wasm.gz";
 import * as frbtcBinary from "raw-loader!./fr_btc.wasm.gz";
 import * as frostBinary from "raw-loader!./frost.wasm.gz";
@@ -178,5 +178,5 @@ export async function setContractSigner(privKey: Uint8Array, multisigAddress: st
 export let provider = new SandshrewProvider("http://localhost:18888");
 
 export const mineBTC = async function mineBTC(address, sats): Promise<void> {
-  await provider.call("generatetoaddress", [address, sats]);
+  await provider.call("generatetoaddress", [sats, address]);
 }

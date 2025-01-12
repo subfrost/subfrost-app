@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
+import { lasereyesMiddleware } from "../middleware";
 
 import {
   MAGIC_EDEN,
@@ -43,7 +44,7 @@ export default function ConnectWalletModal({ className }: { className?: string }
     hasWizz,
     hasOrange,
     hasOpNet,
-  } = useLaserEyes();
+  } = lasereyesMiddleware(useLaserEyes());
   const [isOpen, setIsOpen] = useState(false);
 
   const hasWallet = {
