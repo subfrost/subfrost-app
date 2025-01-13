@@ -13,6 +13,7 @@ import bip39 = require("bip39");
 import BIP32Factory from "bip32";
 import bitcoin = require("bitcoinjs-lib");
 import { getLogger } from "./logger";
+import { TransactionBuilder } from "./TransactionBuilder";
 
 export const REGTEST_PARAMS = {
   bech32: "bcrt",
@@ -137,6 +138,7 @@ export async function getRegtestWallet() {
   const faucetPrivate = await getPrivate(REGTEST_FAUCET.mnemonic);
   const faucetAddress = getAddress(faucetPrivate);
   const pubKey = secp256k1_schnorr.getPublicKey(privKey);
+  logger.info("faucet address: " + faucetAddress);
   return {
     privKey,
     faucetPrivate,
@@ -156,45 +158,36 @@ export async function deployContract(payload: any, script: Uint8Array): Promise<
   );
   
   await provider.call("generatetoaddress", [200, faucetAddress]);
+  await provider.waitForIndex();
   
   const fundingAmount = 100000000n;
   const fee = 30000n;
   
-  const fundingTx = new btc.Transaction({allowLegacyWitnessUtxo: true, allowUnknownOutputs: true});
-  
-  logger.info('get unspent');
-  const unspent = await provider.getUTXOs(faucetAddress);
-  logger.info(unspent);
-  const input = unspent[0].outpoint;
-  
-  fundingTx.addInput({
-    txid: input.txid,
-    index: input.vout,
-    witnessUtxo: {
-      script: btc.Address.toScriptPubKey(faucetAddress),
-      amount: BigInt(Math.round(input.amount * 100000000))
-    },
-  });
+  const fundingTx = await (new TransactionBuilder()
+    .setProvider(provider)
+    .setAddress(faucetAddress))
+    .addBitcoin(10000000);
   
   fundingTx.addOutput({
     script: revealPayment.script,
     amount: fundingAmount,
   });
   
-  fundingTx.sign(privKey, [btc.SigHash.ALL]);
   fundingTx.finalize();
+  fundingTx.sign(privKey);
   
   const fundingTxHex = hex.encode(fundingTx.extract());
   const fundingTxid = await provider.call("sendrawtransaction", [fundingTxHex]);
   
   await provider.call("generatetoaddress", [1, faucetAddress]);
+  await provider.waitForIndex();
   
   const tx = new btc.Transaction({ allowUnknownOutputs: true, customScripts: [envelope.OutOrdinalReveal] });
   tx.addInput({
     ...revealPayment,
     txid: fundingTxid,
     index: 0,
-    witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
+    //witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
   });
   
   tx.addOutputAddress(revealPayment.address, fundingAmount - fee, REGTEST_PARAMS);
@@ -208,13 +201,18 @@ export async function deployContract(payload: any, script: Uint8Array): Promise<
   
   const txHex = hex.encode(tx.extract());
   const txhash = await provider.call("sendrawtransaction", [txHex]);
-  console.log(txhash);
+  logger.info(txhash);
   await provider.call("generatetoaddress", [1, faucetAddress]);
-  console.log(await provider.call("alkanes_trace", [{
+  await provider.waitForIndex();
+  logger.info(await provider.call("alkanes_trace", [{
     txid: txhash,
     vout: 3
   }]));
 }
+
+const POLL_INTERVAL = 3000;
+
+
 
 export async function setContractSigner(multisigAddress: string, script: Uint8Array): Promise<void> {
   const fee = 30000n;
@@ -229,10 +227,12 @@ export async function setContractSigner(multisigAddress: string, script: Uint8Ar
   tx.addInput({
     txid: input.txid,
     index: input.vout,
+/*
     witnessUtxo: {
       script: btc.Address.toScriptPubKey(input.address),
       amount: inputAmount
     },
+*/
   });
 
   // Add dust output to multisig address
@@ -256,11 +256,13 @@ export async function setContractSigner(multisigAddress: string, script: Uint8Ar
   const txHex = hex.encode(tx.extract());
   await provider.call("sendrawtransaction", [txHex]);
   await provider.call("generatetoaddress", [1, input.address]);
+  await provider.waitForIndex();
 }
   
 
 export let provider = new SandshrewProvider("http://localhost:18888");
 
-export const mineBTC = async function mineBTC(address, sats): Promise<void> {
-  await provider.call("generatetoaddress", [sats, address]);
+export const mineBTC = async function mineBTC(address: string, blocks: number): Promise<void> {
+  await provider.call("generatetoaddress", [blocks, address]);
+  await provider.waitForIndex();
 }
