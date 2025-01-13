@@ -1,7 +1,5 @@
-import { WrapView } from './components/WrapView'
-import * as regtest from "./lib/regtest";
+import { WrapView } from "./components/WrapView";
 
 export default () => {
   return <WrapView />;
 };
-
