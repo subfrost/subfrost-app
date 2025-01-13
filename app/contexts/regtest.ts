@@ -190,17 +190,31 @@ export async function deployContract(
   const fundingTxHex = fundingTx.extract();
   const fundingTxid = await provider.call("sendrawtransaction", [fundingTxHex]);
 
+
   await provider.call("generatetoaddress", [1, faucetAddress]);
   await provider.waitForIndex();
   const tx = new TransactionBuilder([envelope.OutOrdinalReveal])
     .setProvider(provider)
     .setAddress(revealPayment.address || "");
+  
+    console.log(fundingTxid)
+  console.log("revealPayment", revealPayment);
+
   tx.addInput({
-    ...revealPayment,
-    txid: fundingTxid,
+    txid: hex.encode(Buffer.from(Array.from(Buffer.from(fundingTxid, 'hex')).reverse())),
     index: 0,
-    //witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
+    witnessUtxo: {
+      script: revealPayment.script,
+      amount: fundingAmount,
+    },
+    
   });
+  // tx.addInput({
+  //   ...revealPayment,
+  //   txid: fundingTxid,
+  //   index: 0,
+  //   //witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
+  // });
   tx.fee += fundingAmount;
 
   tx.addOutputAddress(
@@ -214,7 +228,7 @@ export async function deployContract(
   });
 
   tx.finalize(1000n);
-  tx.sign(privKey);
+  tx.transaction.signIdx(faucetPrivate.privateKey as Signer, 0);
 
   const txHex = tx.extract();
   const txhash = await provider.call("sendrawtransaction", [txHex]);
