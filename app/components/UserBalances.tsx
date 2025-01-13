@@ -18,19 +18,28 @@ export function UserBalances() {
   const { address } = lasereyesMiddleware(useLaserEyes());
   useEffect(() => {
     (async () => {
-      const spendables = await provider.getUTXOs(address);
-      const btc = Number(spendables.reduce((r, v) => r + BigInt(v.output.value), 0n));
-      const frost = Number(0n);
-      const dxFROST = Number(0n);
-      const frBTC = Number(0n);
-      const frBTCFROST = Number(0n);
-      setBalances(mapValues({
-        btc,
-        frost,
-        dxFROST,
-        frBTC,
-        frBTCFROST
-      }, (v) => ethers.formatUnits(v, 8)));
+      if (address !== "") {
+        const spendables = await provider.getUTXOs(address);
+        const btc = Number(
+          spendables.reduce((r, v) => r + BigInt(v.output.value), 0n),
+        );
+        const frost = Number(0n);
+        const dxFROST = Number(0n);
+        const frBTC = Number(0n);
+        const frBTCFROST = Number(0n);
+        setBalances(
+          mapValues(
+            {
+              btc,
+              frost,
+              dxFROST,
+              frBTC,
+              frBTCFROST,
+            },
+            (v) => ethers.formatUnits(v, 8),
+          ),
+        );
+      }
     })().catch((err) => console.error(err));
   }, [address]);
 

@@ -84,9 +84,6 @@ export class SandshrewProvider extends AbstractProvider {
       });
 
       const responseText = await response.text();
-      console.log(responseText); // Keeping console.log for backwards compatibility
-
-      logger.debug("Received RPC response", { method, responseText });
 
       const parsed = JSON.parse(responseText);
 
@@ -97,6 +94,8 @@ export class SandshrewProvider extends AbstractProvider {
           params,
         });
         throw new Error(`RPC error: ${JSON.stringify(parsed.error)}`);
+      } else {
+        logger.info("Received RPC response", { method, responseText });
       }
 
       return parsed.result;
