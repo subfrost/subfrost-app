@@ -51,7 +51,7 @@ export class SandshrewProvider extends AbstractProvider {
     super();
     this.url = url;
   }
-  async waitForIndex(provider: SandshrewProvider): Promise<void> {
+  async waitForIndex(): Promise<void> {
     while (true) {
       const bitcoinHeight = Number(await this.call("getblockcount", []));
       const metashrewHeight = Number(await this.call("metashrew_height", []));
