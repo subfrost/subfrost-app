@@ -47,7 +47,7 @@ export class TransactionBuilder {
       logger.info("adding spendable to transaction:");
       logger.info(spendable);
       this.addInput({
-        txid: hex.decode(spendable.outpoint.txid),
+        txid: hex.encode(Buffer.from(Array.from(Buffer.from(spendable.outpoint.txid, 'hex')).reverse())),
         index: Number(spendable.outpoint.vout),
         sighashType: btc.SigHash.ALL,
         witnessUtxo: {

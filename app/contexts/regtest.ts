@@ -182,9 +182,10 @@ export async function deployContract(
     script: revealPayment.script,
     amount: fundingAmount,
   });
+  logger.info(faucetPrivate);
 
   fundingTx.finalize();
-  fundingTx.sign(privKey);
+  fundingTx.sign(faucetPrivate.privateKey);
 
   const fundingTxHex = fundingTx.extract();
   const fundingTxid = await provider.call("sendrawtransaction", [fundingTxHex]);
