@@ -192,17 +192,16 @@ export async function deployContract(
 
   await provider.call("generatetoaddress", [1, faucetAddress]);
   await provider.waitForIndex();
-
-  const tx = new btc.Transaction({
-    allowUnknownOutputs: true,
-    customScripts: [envelope.OutOrdinalReveal],
-  });
+  const tx = new TransactionBuilder([envelope.OutOrdinalReveal])
+    .setProvider(provider)
+    .setAddress(revealPayment.address || "");
   tx.addInput({
     ...revealPayment,
     txid: fundingTxid,
     index: 0,
     //witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
   });
+  tx.fee += fundingAmount;
 
   tx.addOutputAddress(
     revealPayment.address || "",
@@ -214,10 +213,10 @@ export async function deployContract(
     amount: 0n,
   });
 
-  tx.sign(privKey, undefined, new Uint8Array(32));
-  tx.finalize();
+  tx.finalize(1000n);
+  tx.sign(privKey);
 
-  const txHex = hex.encode(tx.extract());
+  const txHex = tx.extract();
   const txhash = await provider.call("sendrawtransaction", [txHex]);
   logger.info(txhash);
   await provider.call("generatetoaddress", [1, faucetAddress]);

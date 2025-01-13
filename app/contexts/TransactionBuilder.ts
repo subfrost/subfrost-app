@@ -19,11 +19,12 @@ export class TransactionBuilder {
   public provider: SandshrewProvider;
   public transaction: btc.Transaction;
   public signer?: Signer;
-  constructor() {
+  constructor(customScripts: any) {
     this.provider = new SandshrewProvider("http://localhost:18888");
     this.transaction = new btc.Transaction({
       allowLegacyWitnessUtxo: true,
       allowUnknownOutputs: true,
+      customScripts
     });
     this.address = "";
     this.fee = BigInt(0);
@@ -91,12 +92,21 @@ export class TransactionBuilder {
   extract(): string {
     return hex.encode(this.transaction.extract());
   }
+  _clock(v: number): TransactionBuilder {
+    this.fee = max(0n, BigInt(this.fee) - BigInt(v));
+    this.change = max(0n, BigInt(this.change) - BigInt(v));
+    return this;
+  }
   addOutput(v: any): TransactionBuilder {
-    this.fee = max(0n, BigInt(this.fee) - BigInt(v.amount));
-    this.change = max(0n, BigInt(this.change) - BigInt(v.amount));
+    this._clock(v.amount);
     this.transaction.addOutput(v);
     return this;
   }
+  addOutputAddress(address: string, amount: number, params: any): TransactionBuilder {
+    this._clock(amount);
+    this.transaction.addOutputAddress(address, amount, params);
+    return this;
+  } 
   addInput(v: any): TransactionBuilder {
     this.transaction.addInput(v);
     return this;
