@@ -10,7 +10,7 @@ import { Footer } from "./components/Footer";
 import { Toaster } from "@/components/ui/toaster";
 import { SubfrostP2PProvider } from "./contexts/SubfrostP2PContext";
 import { BalancesProvider } from "./contexts/BalancesContext";
-import * as regtest from "./lib/regtest";
+// import * as regtest from "./lib/rtest";
 import { LaserEyesProvider } from "@omnisat/lasereyes";
 import { RegtestProvider } from "./contexts/RegtestContext";
 
@@ -32,25 +32,25 @@ export default function RootLayout({
         className={`${inter.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen flex flex-col`}
       >
         <RegtestProvider>
-        <LaserEyesProvider>
-          {" "}
-          <BalancesProvider>
-            <SubfrostP2PProvider>
-              <SnowflakeBackground />
-              <SnowflakeWatermark />
-              <div className="flex flex-col min-h-screen">
-                <Navbar />
-                <UserBalances />
-                <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
-                  {children}
-                </main>
-                <MobileNavigation />
-                <Footer />
-                <Toaster />
-              </div>
-            </SubfrostP2PProvider>
-          </BalancesProvider>
-        </LaserEyesProvider>
+          <LaserEyesProvider>
+            {" "}
+            <BalancesProvider>
+              <SubfrostP2PProvider>
+                <SnowflakeBackground />
+                <SnowflakeWatermark />
+                <div className="flex flex-col min-h-screen">
+                  <Navbar />
+                  <UserBalances />
+                  <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
+                    {children}
+                  </main>
+                  <MobileNavigation />
+                  <Footer />
+                  <Toaster />
+                </div>
+              </SubfrostP2PProvider>
+            </BalancesProvider>
+          </LaserEyesProvider>
         </RegtestProvider>
       </body>
     </html>
