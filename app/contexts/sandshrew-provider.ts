@@ -1,6 +1,6 @@
 import { AbstractProvider } from "./abstract-provider";
 import { zipObject } from "lodash";
-import { getLogger } from "./logger";
+import { getLogger, LEVELS } from "./logger";
 
 let id = 0;
 
@@ -37,11 +37,34 @@ export type BalanceSheetItem = {
 
 export type GetUTXOsResponse = OutPointResponse[];
 
+export async function timeout(n: number): Promise<void> {
+  return await new Promise((resolve) => {
+    setTimeout(resolve, n);
+  });
+}
+
+const POLL_INTERVAL = 3000;
+
 export class SandshrewProvider extends AbstractProvider {
   public url: string;
   constructor(url: string) {
     super();
     this.url = url;
+  }
+  async waitForIndex(provider: SandshrewProvider): Promise<void> {
+    while (true) {
+      const bitcoinHeight = Number(await this.call("getblockcount", []));
+      const metashrewHeight = Number(await this.call("metashrew_height", []));
+      logger.info("bitcoin height: " + bitcoinHeight);
+      logger.info("metashrew height: " + metashrewHeight);
+      if (metashrewHeight >= bitcoinHeight) {
+        logger.info("indexer caught up");
+        break;
+      } else {
+        await timeout(POLL_INTERVAL);
+        logger.info("retry poll");
+      }
+    }
   }
   async call(method: string, params: any[]): Promise<any> {
     logger.info(`Making RPC call to ${this.url}`, { method, params });
@@ -88,20 +111,27 @@ export class SandshrewProvider extends AbstractProvider {
   }
   async enrichOutput({
     vout,
-    txid
+    txid,
   }: {
-    vout: number,
-    txid: string
+    vout: number;
+    txid: string;
   }): Promise<any> {
-    return await this.call('ord_output', [`${txid}:${vout}`]);
+    return await this.call("ord_output", [`${txid}:${vout}`]);
   }
   async getBTCOnlyUTXOs(address: string): Promise<GetUTXOsResponse> {
     const utxos = await this.getUTXOs(address);
-    const { inscriptions } = await this.call('ord_address', [ address ]);
+    const { inscriptions } = await this.call("ord_address", [address]);
     const map = zipObject(inscriptions, inscriptions);
-    return utxos.filter((v) => !map[`${v.outpoint.txid}:${v.outpoint.vout}`] && v.runes.length === 0);
+    return utxos.filter(
+      (v) =>
+        !map[`${v.outpoint.txid}:${v.outpoint.vout}`] && v.runes.length === 0,
+    );
   }
   async getUTXOs(address: string): Promise<GetUTXOsResponse> {
-    return (await this.call('alkanes_spendablesbyaddress', [{ address, protocolTag: '1' }])).outpoints;
+    return (
+      await this.call("alkanes_spendablesbyaddress", [
+        { address, protocolTag: "1" },
+      ])
+    ).outpoints;
   }
 }

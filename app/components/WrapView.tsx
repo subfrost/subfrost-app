@@ -13,62 +13,6 @@ import { REGTEST_PARAMS } from "../contexts/regtest";
 
 const logger = getLogger("subfrost:wrap");
 
-class TransactionBuilder {
-  public address: string;
-  public fee: bigint;
-  public change: bigint;
-  public provider: SandshrewProvider;
-  constructor() {
-    this.provider = new SandshrewProvider("http://localhost:18888");
-    this.transaction = new btc.Transaction({
-      allowLegacyWitnessUtxo: true,
-      allowUnknownOutputs: true,
-    });
-    this.address = '';
-    this.fee = 0n;
-    this.change = 0n;
-  }
-  setProvider(provider: SandshrewProvider): TransactionBuilder {
-    this.provider = provider;
-    return this;
-  }
-  setAddress(address: string): TransactionBuilder {
-    this.address = address;
-    return this;
-  }
-  setSigner(signer: Signer): TransactionBuilder {
-    this.signer = signer;
-    return this;
-  }
-  async addBitcoin(sats: bigint) {
-    const spendables = await this.getBTCOnlyUTXOs(this.address);
-    for (const spendable of spendables) {
-      this.transaction.addInput({
-        txid: spendable.outpoint.txid,
-        witnessUtxo: spendable.output,
-        index: spendable.outpoint.vout,
-        sighashType: btc.SigHash.ALL
-      });
-      this.fee += BigInt(spendable.output.value);
-      if (this.fee >= sats) {
-        this.change = this.fee - sats;
-        break;
-      }
-    }
-  }
-  finalize(): TransactionBuilder {
-    this.transaction.addOutputAddress(this.address, this.change, REGTEST_PARAMS);
-    return this;
-  }
-  addOutput(v: any): TransactionBuilder {
-    this.transaction.addOutput(v);
-    return this;
-  }
-  addInput(v: any): TransactionBuilder {
-    this.transaction.addInput(v);
-    return this;
-  }
-}
 
 
 export function WrapView() {
