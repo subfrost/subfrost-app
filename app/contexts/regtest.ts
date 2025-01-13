@@ -25,82 +25,81 @@ export const REGTEST_PARAMS = {
 
 const logger = getLogger("alkanes:run");
 
-export const setupEnvironment =
-  async function setupEnvironment(): Promise<void> {
-    logger.info("Starting environment setup...");
+export async function setupEnvironment(): Promise<void> {
+  logger.info("Starting environment setup...");
 
-    const privKey = hex.decode(
-      "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
-    );
-    const pubKey = secp256k1_schnorr.getPublicKey(privKey);
-    const customScripts = [envelope.OutOrdinalReveal];
+  const privKey = hex.decode(
+    "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+  );
+  const pubKey = secp256k1_schnorr.getPublicKey(privKey);
+  const customScripts = [envelope.OutOrdinalReveal];
 
-    logger.info("Deploying auth token contract...");
-    const authPayload = {
-      body: authTokenBinary,
-      cursed: false,
-      tags: { contentType: "" },
-    };
-
-    const authScript = encodeRunestoneProtostone({
-      protostones: [
-        ProtoStone.message({
-          protocolTag: 1n,
-          edicts: [],
-          pointer: 0,
-          refundPointer: 0,
-          calldata: encipher([3n, 0xffeen, 100n]),
-        }),
-      ],
-    }).encodedRunestone;
-
-    await deployContract(authPayload, authScript);
-    logger.info("Auth token contract deployed successfully");
-
-    logger.info("Deploying FRBTC contract...");
-    const frbtcPayload = {
-      body: frbtcBinary,
-      cursed: false,
-      tags: { contentType: "" },
-    };
-
-    const frbtcScript = encodeRunestoneProtostone({
-      protostones: [
-        ProtoStone.message({
-          protocolTag: 1n,
-          edicts: [],
-          pointer: 0,
-          refundPointer: 0,
-          calldata: encipher([3n, 0n, 0n, 1n]),
-        }),
-      ],
-    }).encodedRunestone;
-
-    await deployContract(frbtcPayload, frbtcScript);
-    logger.info("FRBTC contract deployed successfully");
-
-    logger.info("Setting up contract signer...");
-    const setSignerScript = encodeRunestoneProtostone({
-      protostones: [
-        ProtoStone.message({
-          protocolTag: 1n,
-          edicts: [],
-          pointer: 1,
-          refundPointer: 1,
-          calldata: encipher([4n, 0n, 1n, 0n]),
-        }),
-      ],
-    }).encodedRunestone;
-
-    await setContractSigner(
-      privKey,
-      "bcrt1pys2f8u8yx7nu08txn9kzrstrmlmpvfprdazz9se5qr5rgtuz8htsaz3chd",
-      setSignerScript,
-    );
-    logger.info("Contract signer set successfully");
-
-    logger.info("Environment setup completed successfully");
+  logger.info("Deploying auth token contract...");
+  const authPayload = {
+    body: authTokenBinary,
+    cursed: false,
+    tags: { contentType: "" },
   };
+
+  const authScript = encodeRunestoneProtostone({
+    protostones: [
+      ProtoStone.message({
+        protocolTag: 1n,
+        edicts: [],
+        pointer: 0,
+        refundPointer: 0,
+        calldata: encipher([3n, 0xffeen, 100n]),
+      }),
+    ],
+  }).encodedRunestone;
+
+  await deployContract(authPayload, authScript);
+  logger.info("Auth token contract deployed successfully");
+
+  logger.info("Deploying FRBTC contract...");
+  const frbtcPayload = {
+    body: frbtcBinary,
+    cursed: false,
+    tags: { contentType: "" },
+  };
+
+  const frbtcScript = encodeRunestoneProtostone({
+    protostones: [
+      ProtoStone.message({
+        protocolTag: 1n,
+        edicts: [],
+        pointer: 0,
+        refundPointer: 0,
+        calldata: encipher([3n, 0n, 0n, 1n]),
+      }),
+    ],
+  }).encodedRunestone;
+
+  await deployContract(frbtcPayload, frbtcScript);
+  logger.info("FRBTC contract deployed successfully");
+
+  logger.info("Setting up contract signer...");
+  const setSignerScript = encodeRunestoneProtostone({
+    protostones: [
+      ProtoStone.message({
+        protocolTag: 1n,
+        edicts: [],
+        pointer: 1,
+        refundPointer: 1,
+        calldata: encipher([4n, 0n, 1n, 0n]),
+      }),
+    ],
+  }).encodedRunestone;
+
+  await setContractSigner(
+    privKey,
+    "bcrt1pys2f8u8yx7nu08txn9kzrstrmlmpvfprdazz9se5qr5rgtuz8htsaz3chd",
+    setSignerScript,
+  );
+  logger.info("Contract signer set successfully");
+
+  logger.info("Environment setup completed successfully");
+}
 
 export const REGTEST_FAUCET = {
   mnemonic:
@@ -172,12 +171,11 @@ export async function deployContract(
 
   const fundingAmount = 100000000n;
   const fee = 30000n;
-
-  const fundingTx = await new TransactionBuilder()
+  logger.info("faucetAddress: " + faucetAddress);
+  const fundingTx = await new TransactionBuilder(undefined)
     .setProvider(provider)
     .setAddress(faucetAddress || "")
     .addBitcoin(1000000000n);
-
   fundingTx.addOutput({
     script: revealPayment.script,
     amount: fundingAmount,
@@ -185,21 +183,22 @@ export async function deployContract(
   logger.info(faucetPrivate);
 
   fundingTx.finalize(1000n);
-  fundingTx.sign(faucetPrivate.privateKey);
+  fundingTx.sign(faucetPrivate.privateKey || Uint8Array.from([]));
 
   const fundingTxHex = fundingTx.extract();
   const fundingTxid = await provider.call("sendrawtransaction", [fundingTxHex]);
 
   await provider.call("generatetoaddress", [1, faucetAddress]);
   await provider.waitForIndex();
+  logger.info("fundingtx signed");
   const tx = new TransactionBuilder([envelope.OutOrdinalReveal])
     .setProvider(provider)
     .setAddress(revealPayment.address || "");
   tx.addInput({
     ...revealPayment,
-    txid: fundingTxid,
+    txid: fundingTx.transaction.id,
     index: 0,
-    //witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
+    witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
   });
   tx.fee += fundingAmount;
 
@@ -214,7 +213,7 @@ export async function deployContract(
   });
 
   tx.finalize(1000n);
-  tx.sign(privKey);
+  tx.sign(privKey, true, new Uint8Array(32));
 
   const txHex = tx.extract();
   const txhash = await provider.call("sendrawtransaction", [txHex]);
