@@ -176,7 +176,7 @@ export async function deployContract(
   const fundingTx = await new TransactionBuilder()
     .setProvider(provider)
     .setAddress(faucetAddress || "")
-    .addBitcoin(10000000n);
+    .addBitcoin(1000000000n);
 
   fundingTx.addOutput({
     script: revealPayment.script,
@@ -184,7 +184,7 @@ export async function deployContract(
   });
   logger.info(faucetPrivate);
 
-  fundingTx.finalize();
+  fundingTx.finalize(1000n);
   fundingTx.sign(faucetPrivate.privateKey);
 
   const fundingTxHex = fundingTx.extract();

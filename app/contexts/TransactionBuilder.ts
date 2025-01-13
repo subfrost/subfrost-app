@@ -69,14 +69,18 @@ export class TransactionBuilder {
         break;
       }
     }
+    logger.info(this);
     return this;
   }
-  finalize(): TransactionBuilder {
+  finalize(fee: bigint): TransactionBuilder {
+    this.change = this.fee - fee;
+    this.fee = fee;
     this.transaction.addOutputAddress(
       this.address,
       this.change,
       REGTEST_PARAMS,
     );
+    logger.info(this);
     return this;
   }
   sign(privKey: Uint8Array): TransactionBuilder {
