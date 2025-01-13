@@ -21,7 +21,7 @@ export class TransactionBuilder {
       allowLegacyWitnessUtxo: true,
       allowUnknownOutputs: true,
     });
-    this.address = '';
+    this.address = "";
     this.fee = 0n;
     this.change = 0n;
   }
@@ -40,34 +40,43 @@ export class TransactionBuilder {
   async addBitcoin(sats: bigint) {
     const spendables = await this.provider.getBTCOnlyUTXOs(this.address);
     for (const spendable of spendables) {
-      this.transaction.addInput({
-        txid: spendable.outpoint.txid,
-        witnessUtxo: spendable.output,
-        index: spendable.outpoint.vout,
-        sighashType: btc.SigHash.ALL
+      logger.info("adding spendable to transaction:");
+      logger.info(spendable);
+      this.addInput({
+        txid: hex.decode(spendable.outpoint.txid),
+        index: Number(spendable.outpoint.vout),
+        sighashType: btc.SigHash.ALL,
+        witnessUtxo: {
+          script: hex.decode(spendable.output.script),
+          amount: BigInt(spendable.output.value),
+        },
       });
       this.fee += BigInt(spendable.output.value);
       if (this.fee >= sats) {
-        this.change = this.fee - sats;
+        this.change = this.fee - BigInt(sats);
         break;
       }
     }
     return this;
   }
   finalize(): TransactionBuilder {
-    this.transaction.addOutputAddress(this.address, this.change, REGTEST_PARAMS);
+    this.transaction.addOutputAddress(
+      this.address,
+      this.change,
+      REGTEST_PARAMS,
+    );
     return this;
   }
   sign(privKey: Uint8Array): TransactionBuilder {
-    this.transaction.sign(privKey, [ btc.SigHash.ALL ]);
+    this.transaction.sign(privKey, [btc.SigHash.ALL]);
     this.transaction.finalize();
   }
   extract(): string {
     hex.encode(this.transaction.extract());
   }
   addOutput(v: any): TransactionBuilder {
-    this.fee = max(0n, BigInt(this.fee) - BigInt(v.amount));
-    this.change = max(0n, BigInt(this.change) - BigInt(sats))
+    this.fee = max(0n, BigInt(this.fee) - BigInt(v.value));
+    this.change = max(0n, BigInt(this.change) - BigInt(v.value));
     this.transaction.addOutput(v);
     return this;
   }
