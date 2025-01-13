@@ -47,15 +47,19 @@ export class TransactionBuilder {
       logger.info("adding spendable to transaction:");
       logger.info(spendable);
       this.addInput({
-        txid: hex.decode(spendable.outpoint.txid),
+        txid: hex.decode(
+          Buffer.from(
+            Array.from(Buffer.from(spendable.outpoint.txid, "hex").reverse()),
+          ).toString("hex"),
+        ),
         index: Number(spendable.outpoint.vout),
         sighashType: btc.SigHash.ALL,
         witnessUtxo: {
           script: hex.decode(spendable.output.script),
           amount: BigInt(spendable.output.value),
-        }
+        },
       });
-/*
+      /*
       this.transaction.addInput({
         txid: spendable.outpoint.txid,
         witnessUtxo: spendable.output as any,
@@ -80,7 +84,7 @@ export class TransactionBuilder {
     return this;
   }
   sign(privKey: Uint8Array): TransactionBuilder {
-    this.transaction.sign(privKey, [btc.SigHash.ALL]);
+    this.transaction.sign(privKey, [btc.SigHash.ALL], new Uint8Array(0x20));
     this.transaction.finalize();
     return this;
   }
@@ -88,8 +92,8 @@ export class TransactionBuilder {
     return hex.encode(this.transaction.extract());
   }
   addOutput(v: any): TransactionBuilder {
-    this.fee = max(0n, BigInt(this.fee) - BigInt(v.value));
-    this.change = max(0n, BigInt(this.change) - BigInt(v.value));
+    this.fee = max(0n, BigInt(this.fee) - BigInt(v.amount));
+    this.change = max(0n, BigInt(this.change) - BigInt(v.amount));
     this.transaction.addOutput(v);
     return this;
   }
