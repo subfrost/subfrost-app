@@ -51,7 +51,7 @@ export class SandshrewProvider extends AbstractProvider {
     super();
     this.url = url;
   }
-  async waitForIndex(provider: SandshrewProvider): Promise<void> {
+  async waitForIndex(): Promise<void> {
     while (true) {
       const bitcoinHeight = Number(await this.call("getblockcount", []));
       const metashrewHeight = Number(await this.call("metashrew_height", []));
@@ -84,9 +84,6 @@ export class SandshrewProvider extends AbstractProvider {
       });
 
       const responseText = await response.text();
-      console.log(responseText); // Keeping console.log for backwards compatibility
-
-      logger.debug("Received RPC response", { method, responseText });
 
       const parsed = JSON.parse(responseText);
 
@@ -97,6 +94,8 @@ export class SandshrewProvider extends AbstractProvider {
           params,
         });
         throw new Error(`RPC error: ${JSON.stringify(parsed.error)}`);
+      } else {
+        logger.info("Received RPC response", { method, responseText });
       }
 
       return parsed.result;
