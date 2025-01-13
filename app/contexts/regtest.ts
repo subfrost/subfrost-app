@@ -9,7 +9,7 @@ import { encipher } from "alkanes/lib/bytes";
 import { ProtoStone } from "alkanes/lib/protorune/protostone";
 import { schnorr as secp256k1_schnorr } from "@noble/curves/secp256k1";
 import * as envelope from "alkanes/lib/envelope";
-import bip39 from "bip39";
+import * as bip39 from "bip39";
 import BIP32Factory from "bip32";
 import * as bitcoin from "bitcoinjs-lib";
 import { getLogger } from "./logger";
