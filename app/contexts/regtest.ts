@@ -36,7 +36,7 @@ export async function setupEnvironment(): Promise<void> {
 
   logger.info("Deploying auth token contract...");
   const authPayload = {
-    body: authTokenBinary,
+    body: authTokenBinary.default,
     cursed: false,
     tags: { contentType: "" },
   };
@@ -58,7 +58,7 @@ export async function setupEnvironment(): Promise<void> {
 
   logger.info("Deploying FRBTC contract...");
   const frbtcPayload = {
-    body: frbtcBinary,
+    body: frbtcBinary.default,
     cursed: false,
     tags: { contentType: "" },
   };
@@ -158,6 +158,9 @@ export async function deployContract(
 ): Promise<void> {
   const { faucetPrivate, faucetAddress, pubKey, privKey } =
     await getRegtestWallet();
+  payload.body = Buffer.from(payload.body);
+  logger.info("payload");
+  logger.info(payload);
   const revealPayment = btc.p2tr(
     undefined,
     envelope.p2tr_ord_reveal(pubKey, [payload]),
@@ -170,19 +173,20 @@ export async function deployContract(
   await provider.waitForIndex();
 
   const fundingAmount = 100000000n;
-  const fee = 30000n;
+  const fee = 60000n;
   logger.info("faucetAddress: " + faucetAddress);
   const fundingTx = await new TransactionBuilder(undefined)
     .setProvider(provider)
     .setAddress(faucetAddress || "")
     .addBitcoin(1000000000n);
+  let vout = fundingTx.transaction.outputs.length;
   fundingTx.addOutput({
     script: revealPayment.script,
     amount: fundingAmount,
   });
   logger.info(faucetPrivate);
 
-  fundingTx.finalize(1000n);
+  fundingTx.finalize(30000n);
   fundingTx.sign(faucetPrivate.privateKey || Uint8Array.from([]));
 
   const fundingTxHex = fundingTx.extract();
@@ -197,13 +201,13 @@ export async function deployContract(
   tx.addInput({
     ...revealPayment,
     txid: fundingTx.transaction.id,
-    index: 0,
+    index: vout,
     witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
   });
   tx.fee += fundingAmount;
 
   tx.addOutputAddress(
-    revealPayment.address || "",
+    faucetAddress || "",
     fundingAmount - fee,
     REGTEST_PARAMS,
   );
@@ -212,8 +216,8 @@ export async function deployContract(
     amount: 0n,
   });
 
-  tx.finalize(1000n);
-  tx.sign(privKey, true, new Uint8Array(32));
+  tx.finalize(30000n);
+  tx.sign(privKey, [btc.SigHash.ALL], new Uint8Array(32));
 
   const txHex = tx.extract();
   const txhash = await provider.call("sendrawtransaction", [txHex]);
@@ -224,7 +228,7 @@ export async function deployContract(
     await provider.call("alkanes_trace", [
       {
         txid: txhash,
-        vout: 3,
+        vout: tx.transaction.outputs.length + 1,
       },
     ]),
   );
@@ -237,7 +241,7 @@ export async function setContractSigner(
   multisigAddress: string,
   script: Uint8Array,
 ): Promise<void> {
-  const fee = 30000n;
+  const fee = 60000n;
   const dustLimit = 546n;
 
   const unspent = await provider.call("listunspent", []);
