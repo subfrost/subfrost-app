@@ -209,12 +209,12 @@ export async function deployContract(
     },
     
   });
-  // tx.addInput({
-  //   ...revealPayment,
-  //   txid: fundingTxid,
-  //   index: 0,
-  //   //witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
-  // });
+  tx.addInput({
+    ...revealPayment,
+    txid: fundingTxid,
+    index: 0,
+    witnessUtxo: { script: revealPayment.script, amount: fundingAmount },
+  });
   tx.fee += fundingAmount;
 
   tx.addOutputAddress(
