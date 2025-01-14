@@ -4,6 +4,7 @@ import { getLogger } from "./logger";
 import * as btc from "@scure/btc-signer";
 import { hex } from "@scure/base";
 import { Signer } from "@scure/btc-signer/transaction";
+import { Transaction } from "bitcoinjs-lib";
 
 const logger = getLogger("alkanes:transaction");
 
@@ -24,7 +25,7 @@ export class TransactionBuilder {
     this.transaction = new btc.Transaction({
       allowLegacyWitnessUtxo: true,
       allowUnknownOutputs: true,
-      customScripts
+      customScripts,
     });
     this.address = "";
     this.fee = BigInt(0);
@@ -47,14 +48,26 @@ export class TransactionBuilder {
     for (const spendable of spendables) {
       logger.info("adding spendable to transaction:");
       logger.info(spendable);
+      const spendableTxid = Buffer.from(
+        Array.from(Buffer.from(spendable.outpoint.txid, "hex")).reverse(),
+      ).toString("hex");
+      console.log(spendable.outpoint.vout);
+      const coinbaseTransaction = btc.Transaction.fromRaw(
+        Buffer.from(
+          await this.provider.call("getrawtransaction", [spendableTxid]),
+          "hex",
+        ),
+        { allowUnknownOutputs: true },
+      );
+      logger.info("coinbase");
+      logger.info(coinbaseTransaction);
       this.addInput({
-        txid: hex.encode(Buffer.from(Array.from(Buffer.from(spendable.outpoint.txid, 'hex')).reverse())),
+        txid: coinbaseTransaction.id,
         index: Number(spendable.outpoint.vout),
         sighashType: btc.SigHash.ALL,
-        witnessUtxo: {
-          script: hex.decode(spendable.output.script),
-          amount: BigInt(spendable.output.value),
-        },
+        witnessUtxo: (coinbaseTransaction as any).outputs[
+          Number(spendable.outpoint.vout)
+        ],
       });
       /*
       this.transaction.addInput({
@@ -84,15 +97,23 @@ export class TransactionBuilder {
     logger.info(this);
     return this;
   }
-  sign(privKey: Uint8Array): TransactionBuilder {
-    this.transaction.sign(privKey, [btc.SigHash.ALL], new Uint8Array(0x20));
+  sign(
+    privKey: Uint8Array,
+    nullify = false,
+    auxRand = new Uint8Array(0x20),
+  ): TransactionBuilder {
+    this.transaction.sign(
+      privKey,
+      nullify ? undefined : [btc.SigHash.ALL],
+      auxRand,
+    );
     this.transaction.finalize();
     return this;
   }
   extract(): string {
     return hex.encode(this.transaction.extract());
   }
-  _clock(v: number): TransactionBuilder {
+  _clock(v: bigint): TransactionBuilder {
     this.fee = max(0n, BigInt(this.fee) - BigInt(v));
     this.change = max(0n, BigInt(this.change) - BigInt(v));
     return this;
@@ -102,11 +123,15 @@ export class TransactionBuilder {
     this.transaction.addOutput(v);
     return this;
   }
-  addOutputAddress(address: string, amount: number, params: any): TransactionBuilder {
+  addOutputAddress(
+    address: string,
+    amount: bigint,
+    params: any,
+  ): TransactionBuilder {
     this._clock(amount);
     this.transaction.addOutputAddress(address, amount, params);
     return this;
-  } 
+  }
   addInput(v: any): TransactionBuilder {
     this.transaction.addInput(v);
     return this;
