@@ -15,6 +15,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import { getLogger } from "./logger";
 import { TransactionBuilder } from "./TransactionBuilder";
 import { Signer } from "@scure/btc-signer/transaction";
+import { contractDeployer } from "./deployer";
 
 export const REGTEST_PARAMS = {
   bech32: "bcrt",
@@ -40,20 +41,26 @@ export async function setupEnvironment(): Promise<void> {
     cursed: false,
     tags: { contentType: "" },
   };
+  await contractDeployer({
+    contract: 'auth_token',
+    mnemonic: REGTEST_FAUCET.mnemonic,
+    payload: authPayload,
+  });
 
-  const authScript = encodeRunestoneProtostone({
-    protostones: [
-      ProtoStone.message({
-        protocolTag: 1n,
-        edicts: [],
-        pointer: 0,
-        refundPointer: 0,
-        calldata: encipher([3n, 0xffeen, 100n]),
-      }),
-    ],
-  }).encodedRunestone;
+  // const authScript = encodeRunestoneProtostone({
+  //   protostones: [
+  //     ProtoStone.message({
+  //       protocolTag: 1n,
+  //       edicts: [],
+  //       pointer: 0,
+  //       refundPointer: 0,
+  //       calldata: encipher([3n, 0xffeen, 100n]),
+  //     }),
+  //   ],
+  // }).encodedRunestone;
 
-  await deployContract(authPayload, authScript);
+  // await deployContract(authPayload, authScript);
+  
   logger.info("Auth token contract deployed successfully");
 
   logger.info("Deploying FRBTC contract...");
@@ -62,20 +69,25 @@ export async function setupEnvironment(): Promise<void> {
     cursed: false,
     tags: { contentType: "" },
   };
+  await contractDeployer({
+    contract: 'FRBTC',
+    mnemonic: REGTEST_FAUCET.mnemonic,
+    payload: frbtcPayload,
+  });
 
-  const frbtcScript = encodeRunestoneProtostone({
-    protostones: [
-      ProtoStone.message({
-        protocolTag: 1n,
-        edicts: [],
-        pointer: 0,
-        refundPointer: 0,
-        calldata: encipher([3n, 0n, 0n, 1n]),
-      }),
-    ],
-  }).encodedRunestone;
+  // const frbtcScript = encodeRunestoneProtostone({
+  //   protostones: [
+  //     ProtoStone.message({
+  //       protocolTag: 1n,
+  //       edicts: [],
+  //       pointer: 0,
+  //       refundPointer: 0,
+  //       calldata: encipher([3n, 0n, 0n, 1n]),
+  //     }),
+  //   ],
+  // }).encodedRunestone;
 
-  await deployContract(frbtcPayload, frbtcScript);
+  // await deployContract(frbtcPayload, frbtcScript);
   logger.info("FRBTC contract deployed successfully");
 
   logger.info("Setting up contract signer...");
@@ -91,11 +103,11 @@ export async function setupEnvironment(): Promise<void> {
     ],
   }).encodedRunestone;
 
-  await setContractSigner(
-    privKey,
-    "bcrt1pys2f8u8yx7nu08txn9kzrstrmlmpvfprdazz9se5qr5rgtuz8htsaz3chd",
-    setSignerScript,
-  );
+  // await setContractSigner(
+  //   privKey,
+  //   "bcrt1pys2f8u8yx7nu08txn9kzrstrmlmpvfprdazz9se5qr5rgtuz8htsaz3chd",
+  //   setSignerScript,
+  // );
   logger.info("Contract signer set successfully");
 
   logger.info("Environment setup completed successfully");
@@ -292,7 +304,7 @@ export async function setContractSigner(
   await provider.waitForIndex();
 }
 
-export let provider = new SandshrewProvider("http://localhost:18888");
+export let provider = new SandshrewProvider("http://localhost:3000");
 
 export const mineBTC = async function mineBTC(
   address: string,

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@oyl/sdk": "git@github.com:Oyl-Wallet/oyl-sdk.git#import-sdk-subfrost",
     "@omnisat/lasereyes": "^0.0.133",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -77,5 +78,8 @@
     "tailwindcss": "^3.4.17",
     "the-global-object": "^1.0.2",
     "typescript": "^5"
+  },
+  "resolutions": {
+    "cbor-x": "1.5.3"
   }
 }
