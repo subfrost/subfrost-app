@@ -5,13 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3001",
     "lint": "next lint"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
-    "@oyl/sdk": "git@github.com:Oyl-Wallet/oyl-sdk.git#import-sdk-subfrost",
     "@omnisat/lasereyes": "^0.0.133",
+    "@oyl/sdk": "git@github.com:Oyl-Wallet/oyl-sdk.git#import-sdk-subfrost",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
     "@radix-ui/react-aspect-ratio": "^1.1.1",
@@ -47,10 +47,10 @@
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
-    "next": "14.2.16",
+    "next": "15.1.4",
     "next-themes": "^0.4.4",
-    "react": "^18",
-    "react-dom": "^18",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "react-hook-form": "^7.54.1",
     "react-icons": "latest",
     "react-resizable-panels": "^2.1.7",
@@ -65,8 +65,8 @@
   "devDependencies": {
     "@types/lodash": "^4.17.14",
     "@types/node": "^22",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
     "@typescript-eslint/eslint-plugin": "^8.19.1",
     "@typescript-eslint/parser": "^8.19.1",
     "alkanes": "github:kungfuflex/alkanes",
@@ -81,5 +81,9 @@
   },
   "resolutions": {
     "cbor-x": "1.5.3"
+  },
+  "overrides": {
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3"
   }
 }

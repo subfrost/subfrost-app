@@ -1,35 +1,17 @@
 {
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
-    "module": "commonjs",
-    "moduleResolution": "Node",
-    "resolveJsonModule": true,
-    "importHelpers": true,
-    "removeComments": true,
-    "preserveConstEnums": true,
-    "strict": true,
-    "alwaysStrict": true,
-    "strictNullChecks": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitAny": true,
-    "noImplicitReturns": true,
-    "noImplicitThis": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "allowUnreachableCode": false,
-    "noFallthroughCasesInSwitch": true,
-    "target": "es2022",
-    "outDir": "out",
-    "declaration": true,
-    "sourceMap": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
     "allowJs": true,
+    "target": "ES6",
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "jsx": "preserve",
+    "strict": true,
     "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "isolatedModules": true,
+    "jsx": "preserve",
     "incremental": true,
     "plugins": [
       {
@@ -40,12 +22,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": [
-    "raw-loader.d.ts",
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
 }
