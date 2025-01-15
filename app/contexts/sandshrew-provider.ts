@@ -121,6 +121,8 @@ export class SandshrewProvider extends AbstractProvider {
     const utxos = await this.getUTXOs(address);
     const { inscriptions } = await this.call("ord_address", [address]);
     const map = zipObject(inscriptions, inscriptions);
+    logger.info("utxos");
+    logger.info(utxos);
     return utxos.filter(
       (v) =>
         !map[`${v.outpoint.txid}:${v.outpoint.vout}`] && v.runes.length === 0,
