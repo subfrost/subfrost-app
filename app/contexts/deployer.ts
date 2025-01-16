@@ -30,8 +30,14 @@ export async function contractDeployer(options: any) {
     });
 
     const payload = options.payload
-
-    const tx = await wallet.provider.sandshrew._call('generatetoaddress', [200, wallet.account.nativeSegwit.address])
+    if (options.contract === 'auth_token') {
+    const tx = await wallet.provider.sandshrew._call('generatetoaddress', [250, wallet.account.nativeSegwit.address])
+    console.log('tx: ', tx)
+    } else {
+      const tx = await wallet.provider.sandshrew._call('generatetoaddress', [100, wallet.account.nativeSegwit.address])
+    console.log('tx: ', tx)
+    }
+    await waitForIndex(wallet.provider)
    
    
 
@@ -57,16 +63,17 @@ export async function contractDeployer(options: any) {
       })
   
     
-      const mempool = await wallet.provider.sandshrew._call('getrawmempool', [true])
-      const mempoolTxs = Object.keys(mempool)
-      console.log('mempool transactions: ', mempoolTxs)
+      // const mempool = await wallet.provider.sandshrew._call('getrawmempool', [true])
+      // const mempoolTxs = Object.keys(mempool)
+      // console.log('mempool transactions: ', mempoolTxs)
   
-      const blockHash = await wallet.provider.sandshrew._call('generateblock', [
-        wallet.account.nativeSegwit.address,
-        mempoolTxs
-      ])
+      // const blockHash = await wallet.provider.sandshrew._call('generateblock', [
+      //   wallet.account.nativeSegwit.address,
+      //   mempoolTxs
+      // ])
   
-      console.log('Block hash: ', blockHash)
+      // console.log('Block hash: ', blockHash)
+      console.log('commit txid: ', commitTxId)
       
       await timeout(5000)
   
@@ -76,7 +83,7 @@ export async function contractDeployer(options: any) {
         script: script,
         account: wallet.account,
         provider: wallet.provider,
-        feeRate: 50,
+        feeRate: wallet.feeRate,
         signer: wallet.signer,
       })
   
@@ -91,6 +98,7 @@ export async function contractDeployer(options: any) {
         mempoolTxs2
       ])
       console.log('Block hash: ', blockHash2)
+
       await waitForIndex(wallet.provider)
   
       const contractTrace = await wallet.provider.alkanes.trace({

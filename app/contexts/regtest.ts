@@ -42,9 +42,11 @@ export async function setupEnvironment(): Promise<void> {
   const pubKey = secp256k1_schnorr.getPublicKey(privKey);
   const customScripts = [envelope.OutOrdinalReveal];
 
+  console.log("authTokenBinary: ", authTokenBinary)
+
   logger.info("Deploying auth token contract...");
   const authPayload = {
-    body: Buffer.from(authTokenBinary.default),
+    body: Buffer.from(authTokenBinary.default, 'hex'),
     cursed: false,
     tags: { contentType: "" },
   };
@@ -59,6 +61,23 @@ export async function setupEnvironment(): Promise<void> {
     mnemonic: REGTEST_FAUCET.mnemonic,
     payload: authPayload,
   });
+  console.log("auth token contract deployed");
+
+logger.info("Deploying FRBTC contract...");
+  const frbtcPayload = {
+    body: Buffer.from(frbtcBinary.default, 'hex'),
+    cursed: false,
+    tags: { contentType: "" },
+  };
+
+  await contractDeployer({
+    contract: 'frbtc',
+    mnemonic: REGTEST_FAUCET.mnemonic,
+    payload: frbtcPayload,
+  });
+
+  console.log("frbtc contract deployed");
+
 
   // const authScript = encodeRunestoneProtostone({
   //   protostones: [

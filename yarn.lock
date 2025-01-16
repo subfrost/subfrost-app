@@ -485,7 +485,7 @@
 
 "@oyl/sdk@git@github.com:Oyl-Wallet/oyl-sdk.git#jonatns/fix-cbor-x-dep":
   version "1.12.3"
-  resolved "git+ssh://git@github.com/Oyl-Wallet/oyl-sdk.git#75af834c715469f780d196ef3ccf7cdb77847779"
+  resolved "git+ssh://git@github.com/Oyl-Wallet/oyl-sdk.git#438c2f772194b7e44d0d062ccefe2a3ca6107365"
   dependencies:
     "@bitcoinerlab/secp256k1" "1.0.2"
     "@cmdcode/crypto-utils" "2.4.6"
