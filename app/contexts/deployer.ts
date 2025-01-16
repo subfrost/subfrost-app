@@ -11,8 +11,6 @@ async function waitForIndex(provider: Provider): Promise<void> {
     while (true) {
       const bitcoinHeight = Number(await provider.sandshrew._call("getblockcount", []));
       const metashrewHeight = Number(await provider.sandshrew._call("metashrew_height", []));
-      console.log("bitcoin height: " + bitcoinHeight);
-      console.log("metashrew height: " + metashrewHeight);
       if (metashrewHeight >= bitcoinHeight) {
         console.log("indexer caught up");
         break;
@@ -63,16 +61,7 @@ export async function contractDeployer(options: any) {
       })
   
     
-      // const mempool = await wallet.provider.sandshrew._call('getrawmempool', [true])
-      // const mempoolTxs = Object.keys(mempool)
-      // console.log('mempool transactions: ', mempoolTxs)
-  
-      // const blockHash = await wallet.provider.sandshrew._call('generateblock', [
-      //   wallet.account.nativeSegwit.address,
-      //   mempoolTxs
-      // ])
-  
-      // console.log('Block hash: ', blockHash)
+    
       console.log('commit txid: ', commitTxId)
       
       await timeout(5000)
@@ -92,7 +81,7 @@ export async function contractDeployer(options: any) {
 
       const mempool2 = await wallet.provider.sandshrew._call('getrawmempool', [true])
       const mempoolTxs2 = Object.keys(mempool2)
-      console.log('mempool transactions: ', mempoolTxs2)
+    
       const blockHash2 = await wallet.provider.sandshrew._call('generateblock', [
         wallet.account.nativeSegwit.address,
         mempoolTxs2

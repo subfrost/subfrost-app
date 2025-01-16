@@ -28,13 +28,11 @@ export const REGTEST_PARAMS = {
 const logger = getLogger("alkanes:run");
 
 export async function setupEnvironment(): Promise<void> {
-  console.log("typeof window");
-  console.log(typeof window);
-
   const isServer = typeof window !== "undefined";
 
   if (isServer) {
   logger.info("Starting environment setup...");
+  const { contractDeployer } = require("./deployer");
 
   const privKey = hex.decode(
     "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
@@ -42,26 +40,22 @@ export async function setupEnvironment(): Promise<void> {
   const pubKey = secp256k1_schnorr.getPublicKey(privKey);
   const customScripts = [envelope.OutOrdinalReveal];
 
-  console.log("authTokenBinary: ", authTokenBinary)
-
   logger.info("Deploying auth token contract...");
   const authPayload = {
     body: Buffer.from(authTokenBinary.default, 'hex'),
     cursed: false,
     tags: { contentType: "" },
   };
-
- 
-    const { contractDeployer } = require("./deployer");
-    // Use the imported function here
-
-
+  
   await contractDeployer({
     contract: 'auth_token',
     mnemonic: REGTEST_FAUCET.mnemonic,
     payload: authPayload,
   });
   console.log("auth token contract deployed");
+
+
+  
 
 logger.info("Deploying FRBTC contract...");
   const frbtcPayload = {
