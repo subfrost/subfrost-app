@@ -9,9 +9,9 @@ import {
     TEST_WALLET,
     DEFAULT_PROVIDER
   } from './constants'
+
   
-  
-  export type NetworkType = 'mainnet' | 'regtest'
+  export type NetworkType = 'mainnet' | 'regtest' | 'alkanes'
   
   export interface WalletOptions {
     mnemonic?: string
@@ -31,7 +31,7 @@ import {
   
       this.mnemonic = options?.mnemonic || TEST_WALLET.mnemonic;
       this.networkType = options?.networkType || 'regtest';
-      this.provider = DEFAULT_PROVIDER[this.networkType as keyof typeof DEFAULT_PROVIDER];
+      this.provider = DEFAULT_PROVIDER[this.networkType as keyof typeof DEFAULT_PROVIDER]
   
       this.account = mnemonicToAccount({
         mnemonic: this.mnemonic,

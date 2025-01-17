@@ -1,4 +1,4 @@
-import { SandshrewProvider } from "./sandshrew-provider";
+import { SandshrewProvider, timeout } from "./sandshrew-provider";
 import * as authTokenBinary from "raw-loader!./alkanes_std_auth_token.wasm.gz";
 import * as frbtcBinary from "raw-loader!./fr_btc.wasm.gz";
 import * as frostBinary from "raw-loader!./frost.wasm.gz";
@@ -16,7 +16,8 @@ import * as bitcoin from "bitcoinjs-lib";
 import { getLogger } from "./logger";
 import { TransactionBuilder } from "./TransactionBuilder";
 import { Signer } from "@scure/btc-signer/transaction";
-
+import { Wallet } from "./wallet";
+import { totalBlockCount, faucetBlockCount, addressBlockCount } from "./constants";
 
 export const REGTEST_PARAMS = {
   bech32: "bcrt",
@@ -27,11 +28,66 @@ export const REGTEST_PARAMS = {
 
 const logger = getLogger("alkanes:run");
 
+
+async function mineBlocks(wallet: Wallet) {
+
+  const RANDOM_ADDRESS = 'bcrt1qz3y37epk6hqlul2pt09hrwgj0s09u5g6kzrkm2'
+
+  const provider = wallet.provider
+  const address = wallet.account.nativeSegwit.address
+
+  const currentBlockCount =
+      Number(await provider.sandshrew._call('getblockcount', []))
+
+    if (currentBlockCount > 250) {
+      console.log('Blockchain already initialized')
+      console.log('Block count: ', currentBlockCount)
+      return
+    }
+
+    console.log('Generating blocks...')
+
+  await provider.sandshrew._call('generatetoaddress', [
+    faucetBlockCount,
+    REGTEST_FAUCET.nativeSegwit.address
+  ])
+
+  await provider.sandshrew._call('generatetoaddress', [
+    addressBlockCount,
+    address
+  ])
+
+  const transaction = await provider.sandshrew._call('generatetoaddress', [
+    totalBlockCount - faucetBlockCount - addressBlockCount,
+    RANDOM_ADDRESS
+  ])
+
+  await timeout(8000)
+  const newBlockCount = await provider.sandshrew._call('getblockcount', [])
+    console.log(transaction)
+    console.log('Blockchain initialized')
+    console.log('Block count: ', newBlockCount)
+    console.log('Faucet address: ', REGTEST_FAUCET.nativeSegwit.address)
+    console.log(`${address} has been funded with ${addressBlockCount} utxos`)
+
+}
+
 export async function setupEnvironment(): Promise<void> {
   const isServer = typeof window !== "undefined";
 
   if (isServer) {
   logger.info("Starting environment setup...");
+
+  const wallet: Wallet = new Wallet({
+    mnemonic: REGTEST_FAUCET.walletMnemonic,
+    feeRate: 2,
+    networkType: 'alkanes'
+  });
+
+  await mineBlocks(wallet)
+
+  
+
   const { contractDeployer } = require("./deployer");
 
   const privKey = hex.decode(
@@ -42,7 +98,7 @@ export async function setupEnvironment(): Promise<void> {
 
   logger.info("Deploying auth token contract...");
   const authPayload = {
-    body: Buffer.from(authTokenBinary.default, 'hex'),
+    body: Buffer.from(authTokenBinary.default),
     cursed: false,
     tags: { contentType: "" },
   };
@@ -51,6 +107,8 @@ export async function setupEnvironment(): Promise<void> {
     contract: 'auth_token',
     mnemonic: REGTEST_FAUCET.mnemonic,
     payload: authPayload,
+    reserveNumber: "3",
+    wallet: wallet
   });
   console.log("auth token contract deployed");
 
@@ -59,7 +117,7 @@ export async function setupEnvironment(): Promise<void> {
 
 logger.info("Deploying FRBTC contract...");
   const frbtcPayload = {
-    body: Buffer.from(frbtcBinary.default, 'hex'),
+    body: Buffer.from(frbtcBinary.default),
     cursed: false,
     tags: { contentType: "" },
   };
@@ -68,6 +126,8 @@ logger.info("Deploying FRBTC contract...");
     contract: 'frbtc',
     mnemonic: REGTEST_FAUCET.mnemonic,
     payload: frbtcPayload,
+    reserveNumber: "4",
+    wallet: wallet
   });
 
   console.log("frbtc contract deployed");
@@ -140,6 +200,7 @@ logger.info("Deploying FRBTC contract...");
 export const REGTEST_FAUCET = {
   mnemonic:
     "hub dinosaur mammal approve riot rebel library legal sick discover loop alter",
+  walletMnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
   nativeSegwit: {
     address: "bcrt1qzr9vhs60g6qlmk7x3dd7g3ja30wyts48sxuemv",
     publicKey:
@@ -328,7 +389,9 @@ export async function setContractSigner(
   await provider.waitForIndex();
 }
 
-export let provider = new SandshrewProvider("http://localhost:3000");
+
+export let provider = new SandshrewProvider("http://localhost:18888");
+
 
 export const mineBTC = async function mineBTC(
   address: string,
@@ -337,3 +400,4 @@ export const mineBTC = async function mineBTC(
   await provider.call("generatetoaddress", [blocks, address]);
   await provider.waitForIndex();
 };
+

@@ -3,19 +3,26 @@ import * as bitcoin from 'bitcoinjs-lib'
 import { Provider } from '@oyl/sdk'
 
 export const DEFAULT_PROVIDER = {
-  "bitcoin": new Provider({
+  bitcoin: new Provider({
     url: 'https://mainnet.sandshrew.io',
     version: 'v2',
     projectId: process.env.SANDSHREW_PROJECT_ID!,
     network: bitcoin.networks.bitcoin,
     networkType: 'mainnet',
   }),
-  "regtest": new Provider({
+  regtest: new Provider({
     url: 'http://localhost:3000',
     projectId: 'regtest',
     network: bitcoin.networks.regtest,
     networkType: 'regtest',
   }),
+  alkanes: new Provider({
+    url: 'http://localhost:18888',
+    projectId: '',
+    version: '',
+    network: bitcoin.networks.regtest,
+    networkType: 'regtest'
+  })
 }
 
 export const REGTEST_FAUCET = {
@@ -41,3 +48,7 @@ export const TEST_WALLET = {
     publicKey: '',
   }
 }
+
+export const faucetBlockCount = 60
+export const totalBlockCount = 260
+export const addressBlockCount = 5
