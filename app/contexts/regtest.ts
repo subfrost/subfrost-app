@@ -192,12 +192,26 @@ export async function deployContract(
   const fundingTxHex = fundingTx.extract();
   const fundingTxid = await provider.call("sendrawtransaction", [fundingTxHex]);
 
+
   await provider.call("generatetoaddress", [1, faucetAddress]);
   await provider.waitForIndex();
   logger.info("fundingtx signed");
   const tx = new TransactionBuilder([envelope.OutOrdinalReveal])
     .setProvider(provider)
     .setAddress(revealPayment.address || "");
+  
+    console.log(fundingTxid)
+  console.log("revealPayment", revealPayment);
+
+  tx.addInput({
+    txid: hex.encode(Buffer.from(Array.from(Buffer.from(fundingTxid, 'hex')).reverse())),
+    index: 0,
+    witnessUtxo: {
+      script: revealPayment.script,
+      amount: fundingAmount,
+    },
+    
+  });
   tx.addInput({
     ...revealPayment,
     txid: fundingTx.transaction.id,
