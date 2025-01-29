@@ -1,10 +1,12 @@
-import { SandshrewProvider } from "./sandshrew-provider";
-import { REGTEST_PARAMS } from "./regtest";
+import { Provider } from "@oyl/sdk";
+import { REGTEST_PARAMS, DEFAULT_PROVIDER } from "./constants";
 import { getLogger } from "./logger";
 import * as btc from "@scure/btc-signer";
 import { hex } from "@scure/base";
 import { Signer } from "@scure/btc-signer/transaction";
 import { Transaction } from "bitcoinjs-lib";
+import { GetUTXOsResponse } from "./sandshrew-provider";
+import { zipObject } from "lodash";
 
 const logger = getLogger("alkanes:transaction");
 
@@ -17,11 +19,11 @@ export class TransactionBuilder {
   public address: string;
   public fee: bigint;
   public change: bigint;
-  public provider: SandshrewProvider;
+  public provider: Provider;
   public transaction: btc.Transaction;
   public signer?: Signer;
   constructor(customScripts: any) {
-    this.provider = new SandshrewProvider("http://localhost:18888");
+    this.provider = DEFAULT_PROVIDER["alkanes"];
     this.transaction = new btc.Transaction({
       allowLegacyWitnessUtxo: true,
       allowUnknownOutputs: true,
@@ -31,7 +33,7 @@ export class TransactionBuilder {
     this.fee = BigInt(0);
     this.change = BigInt(0);
   }
-  setProvider(provider: SandshrewProvider): TransactionBuilder {
+  setProvider(provider: Provider): TransactionBuilder {
     this.provider = provider;
     return this;
   }
@@ -43,21 +45,37 @@ export class TransactionBuilder {
     this.signer = signer;
     return this;
   }
+  async call(method: string, params: any[]): Promise<any> {
+    return await this.provider.sandshrew._call(method, params);
+  }
+  async spendables(address: string): Promise<GetUTXOsResponse> {
+    const utxos = (
+      await this.call("alkanes_spendablesbyaddress", [
+        { address, protocolTag: "1" },
+      ])
+    ).outpoints;
+    const { inscriptions } = await this.call("ord_address", [address]);
+    const map = zipObject(inscriptions, inscriptions);
+    return utxos.filter(
+      (v: any) =>
+        !map[`${v.outpoint.txid}:${v.outpoint.vout}`] && v.runes.length === 0
+    );
+  }
   async addBitcoin(sats: bigint) {
-    const spendables = await this.provider.getBTCOnlyUTXOs(this.address);
+    const spendables = await this.spendables(this.address);
     for (const spendable of spendables) {
       logger.info("adding spendable to transaction:");
       logger.info(spendable);
       const spendableTxid = Buffer.from(
-        Array.from(Buffer.from(spendable.outpoint.txid, "hex")).reverse(),
+        Array.from(Buffer.from(spendable.outpoint.txid, "hex")).reverse()
       ).toString("hex");
       console.log(spendable.outpoint.vout);
       const coinbaseTransaction = btc.Transaction.fromRaw(
         Buffer.from(
-          await this.provider.call("getrawtransaction", [spendableTxid]),
-          "hex",
+          await this.call("getrawtransaction", [spendableTxid]),
+          "hex"
         ),
-        { allowUnknownOutputs: true },
+        { allowUnknownOutputs: true }
       );
       logger.info("coinbase");
       logger.info(coinbaseTransaction);
@@ -92,7 +110,7 @@ export class TransactionBuilder {
     this.transaction.addOutputAddress(
       this.address,
       this.change,
-      REGTEST_PARAMS,
+      REGTEST_PARAMS
     );
     logger.info(this);
     return this;
@@ -100,12 +118,12 @@ export class TransactionBuilder {
   sign(
     privKey: Uint8Array,
     nullify = false,
-    auxRand = new Uint8Array(0x20),
+    auxRand = new Uint8Array(0x20)
   ): TransactionBuilder {
     this.transaction.sign(
       privKey,
       nullify ? undefined : [btc.SigHash.ALL],
-      auxRand,
+      auxRand
     );
     this.transaction.finalize();
     return this;
@@ -126,7 +144,7 @@ export class TransactionBuilder {
   addOutputAddress(
     address: string,
     amount: bigint,
-    params: any,
+    params: any
   ): TransactionBuilder {
     this._clock(amount);
     this.transaction.addOutputAddress(address, amount, params);

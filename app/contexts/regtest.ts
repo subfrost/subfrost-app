@@ -1,7 +1,7 @@
 import { SandshrewProvider } from "./sandshrew-provider";
-import * as authTokenBinary from "raw-loader!./alkanes_std_auth_token.wasm.gz";
-import * as frbtcBinary from "raw-loader!./fr_btc.wasm.gz";
-import * as frostBinary from "raw-loader!./frost.wasm.gz";
+import authTokenBinary from "raw-loader!./alkanes_std_auth_token.wasm.gz";
+import frbtcBinary from "raw-loader!./fr_btc.wasm.gz";
+import frostBinary from "raw-loader!./frost.wasm.gz";
 import { hex } from "@scure/base";
 import * as btc from "@scure/btc-signer";
 import { encodeRunestoneProtostone } from "alkanes/lib/protorune/proto_runestone_upgrade";
@@ -15,13 +15,8 @@ import * as bitcoin from "bitcoinjs-lib";
 import { getLogger } from "./logger";
 import { TransactionBuilder } from "./TransactionBuilder";
 import { Signer } from "@scure/btc-signer/transaction";
-
-export const REGTEST_PARAMS = {
-  bech32: "bcrt",
-  pubKeyHash: 0,
-  scriptHash: 5,
-  wif: 128,
-};
+import { REGTEST_FAUCET, REGTEST_PARAMS, DEFAULT_PROVIDER } from "./constants";
+import { waitForIndex } from "./provider_util";
 
 const logger = getLogger("alkanes:run");
 
@@ -29,14 +24,14 @@ export async function setupEnvironment(): Promise<void> {
   logger.info("Starting environment setup...");
 
   const privKey = hex.decode(
-    "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
   );
   const pubKey = secp256k1_schnorr.getPublicKey(privKey);
   const customScripts = [envelope.OutOrdinalReveal];
 
   logger.info("Deploying auth token contract...");
   const authPayload = {
-    body: authTokenBinary.default,
+    body: authTokenBinary,
     cursed: false,
     tags: { contentType: "" },
   };
@@ -94,37 +89,17 @@ export async function setupEnvironment(): Promise<void> {
   await setContractSigner(
     privKey,
     "bcrt1pys2f8u8yx7nu08txn9kzrstrmlmpvfprdazz9se5qr5rgtuz8htsaz3chd",
-    setSignerScript,
+    setSignerScript
   );
   logger.info("Contract signer set successfully");
 
   logger.info("Environment setup completed successfully");
 }
 
-export const REGTEST_FAUCET = {
-  mnemonic:
-    "hub dinosaur mammal approve riot rebel library legal sick discover loop alter",
-  nativeSegwit: {
-    address: "bcrt1qzr9vhs60g6qlmk7x3dd7g3ja30wyts48sxuemv",
-    publicKey:
-      "03d3af89f242cc0df1d7142e9a354a59b1cd119c12c31ff226b32fb77fa12acce2",
-  },
-  taproot: {
-    address: "bcrt1p45un5d47hvfhx6mfezr6x0htpanw23tgll7ppn6hj6gfzu3x3dnsaegh8d",
-    publicKey:
-      "022ffc336daa8196f1aa796135a568b1125ba08c2879c22468effea8e4a0c4c8b9",
-    publicKeyXonly:
-      "2ffc336daa8196f1aa796135a568b1125ba08c2879c22468effea8e4a0c4c8b9",
-  },
-  privateKey: "bc1p45un5d47hvfhx6mfezr6x0htpanw23tgll7ppn6hj6gfzu3x3dns8g57gc",
-  publicKey:
-    "03d3af89f242cc0df1d7142e9a354a59b1cd119c12c31ff226b32fb77fa12acce2",
-  wif: "cTBsa8seu4xA7EZ7N2AXeq2qUfrVsD2KS3F7Tj72WKaXF15hp7Vq",
-};
-
 const getAddress = (node: { publicKey: Uint8Array }) => {
+  console.log(node.publicKey);
   return bitcoin.payments.p2wpkh({
-    pubkey: node.publicKey,
+    pubkey: Buffer.from(node.publicKey),
     network: bitcoin.networks.regtest,
   }).address;
 };
@@ -138,7 +113,7 @@ const getPrivate = async (mnemonic: string) => {
 
 export async function getRegtestWallet() {
   const privKey = hex.decode(
-    "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
   );
   const faucetPrivate = await getPrivate(REGTEST_FAUCET.mnemonic);
   const faucetAddress = getAddress(faucetPrivate);
@@ -154,10 +129,11 @@ export async function getRegtestWallet() {
 
 export async function deployContract(
   payload: any,
-  script: Uint8Array,
+  script: Uint8Array
 ): Promise<void> {
   const { faucetPrivate, faucetAddress, pubKey, privKey } =
     await getRegtestWallet();
+  console.log(faucetPrivate, faucetAddress, pubKey, privKey);
   payload.body = Buffer.from(payload.body);
   logger.info("payload");
   logger.info(payload);
@@ -166,11 +142,11 @@ export async function deployContract(
     envelope.p2tr_ord_reveal(pubKey, [payload]),
     REGTEST_PARAMS,
     false,
-    [envelope.OutOrdinalReveal],
+    [envelope.OutOrdinalReveal]
   );
 
-  await provider.call("generatetoaddress", [200, faucetAddress]);
-  await provider.waitForIndex();
+  await provider.sandshrew._call("generatetoaddress", [200, faucetAddress]);
+  await waitForIndex(provider);
 
   const fundingAmount = 100000000n;
   const fee = 60000n;
@@ -190,27 +166,29 @@ export async function deployContract(
   fundingTx.sign(faucetPrivate.privateKey || Uint8Array.from([]));
 
   const fundingTxHex = fundingTx.extract();
-  const fundingTxid = await provider.call("sendrawtransaction", [fundingTxHex]);
+  const fundingTxid = await provider.sandshrew._call("sendrawtransaction", [
+    fundingTxHex,
+  ]);
 
-
-  await provider.call("generatetoaddress", [1, faucetAddress]);
-  await provider.waitForIndex();
+  await provider.sandshrew._call("generatetoaddress", [1, faucetAddress]);
+  await waitForIndex(provider);
   logger.info("fundingtx signed");
   const tx = new TransactionBuilder([envelope.OutOrdinalReveal])
     .setProvider(provider)
     .setAddress(revealPayment.address || "");
-  
-    console.log(fundingTxid)
+
+  console.log(fundingTxid);
   console.log("revealPayment", revealPayment);
 
   tx.addInput({
-    txid: hex.encode(Buffer.from(Array.from(Buffer.from(fundingTxid, 'hex')).reverse())),
+    txid: hex.encode(
+      Buffer.from(Array.from(Buffer.from(fundingTxid, "hex")).reverse())
+    ),
     index: 0,
     witnessUtxo: {
       script: revealPayment.script,
       amount: fundingAmount,
     },
-    
   });
   tx.addInput({
     ...revealPayment,
@@ -220,31 +198,27 @@ export async function deployContract(
   });
   tx.fee += fundingAmount;
 
-  tx.addOutputAddress(
-    faucetAddress || "",
-    fundingAmount - fee,
-    REGTEST_PARAMS,
-  );
+  tx.addOutputAddress(faucetAddress || "", fundingAmount - fee, REGTEST_PARAMS);
   tx.addOutput({
     script,
     amount: 0n,
   });
 
   tx.finalize(30000n);
-  tx.sign(privKey, [btc.SigHash.ALL], new Uint8Array(32));
+  tx.sign(privKey, true, new Uint8Array(32));
 
   const txHex = tx.extract();
-  const txhash = await provider.call("sendrawtransaction", [txHex]);
+  const txhash = await provider.sandshrew._call("sendrawtransaction", [txHex]);
   logger.info(txhash);
-  await provider.call("generatetoaddress", [1, faucetAddress]);
-  await provider.waitForIndex();
+  await provider.sandshrew._call("generatetoaddress", [1, faucetAddress]);
+  await waitForIndex(provider);
   logger.info(
-    await provider.call("alkanes_trace", [
+    await provider.sandshrew._call("alkanes_trace", [
       {
         txid: txhash,
         vout: tx.transaction.outputs.length + 1,
       },
-    ]),
+    ])
   );
 }
 
@@ -253,12 +227,12 @@ const POLL_INTERVAL = 3000;
 export async function setContractSigner(
   privKey: Signer,
   multisigAddress: string,
-  script: Uint8Array,
+  script: Uint8Array
 ): Promise<void> {
   const fee = 60000n;
   const dustLimit = 546n;
 
-  const unspent = await provider.call("listunspent", []);
+  const unspent = await provider.sandshrew._call("listunspent", []);
   const input = unspent[0];
   const inputAmount = BigInt(Math.round(input.amount * 100000000));
 
@@ -285,7 +259,7 @@ export async function setContractSigner(
   tx.addOutputAddress(
     input.address,
     inputAmount - fee - dustLimit,
-    REGTEST_PARAMS,
+    REGTEST_PARAMS
   );
 
   // Add protocol message output
@@ -301,17 +275,17 @@ export async function setContractSigner(
 
   // Send transaction
   const txHex = hex.encode(tx.extract());
-  await provider.call("sendrawtransaction", [txHex]);
-  await provider.call("generatetoaddress", [1, input.address]);
-  await provider.waitForIndex();
+  await provider.sandshrew._call("sendrawtransaction", [txHex]);
+  await provider.sandshrew._call("generatetoaddress", [1, input.address]);
+  await waitForIndex(provider);
 }
 
-export let provider = new SandshrewProvider("http://localhost:18888");
+export let provider = DEFAULT_PROVIDER["alkanes"];
 
 export const mineBTC = async function mineBTC(
   address: string,
-  blocks: number,
+  blocks: number
 ): Promise<void> {
-  await provider.call("generatetoaddress", [blocks, address]);
-  await provider.waitForIndex();
+  await provider.sandshrew._call("generatetoaddress", [blocks, address]);
+  await waitForIndex(provider);
 };

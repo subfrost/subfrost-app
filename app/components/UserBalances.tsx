@@ -11,6 +11,7 @@ import { useLaserEyes } from "@omnisat/lasereyes";
 import { useEffect } from "react";
 import { ethers } from "ethers";
 import { mapValues } from "lodash";
+import { getUTXOS } from "../contexts/provider_util";
 
 export function UserBalances() {
   // Mock data - replace with actual user balances
@@ -19,9 +20,9 @@ export function UserBalances() {
   useEffect(() => {
     (async () => {
       if (address !== "") {
-        const spendables = await provider.getUTXOs(address);
+        const spendables = await getUTXOS(provider, address);
         const btc = Number(
-          spendables.reduce((r, v) => r + BigInt(v.output.value), 0n),
+          spendables.reduce((r, v) => r + BigInt(v.output.value), 0n)
         );
         const frost = Number(0n);
         const dxFROST = Number(0n);
@@ -36,8 +37,8 @@ export function UserBalances() {
               frBTC,
               frBTCFROST,
             },
-            (v) => ethers.formatUnits(v, 8),
-          ),
+            (v) => ethers.formatUnits(v, 8)
+          )
         );
       }
     })().catch((err) => console.error(err));
