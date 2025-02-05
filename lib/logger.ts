@@ -3,14 +3,14 @@ interface LoggerOptions {
   format?: string;
 }
 
-export const LEVELS = {
+export const LEVELS: Record<string, number> = {
   error: 0,
   warn: 1,
   info: 2,
   debug: 3,
 };
 
-const COLORS = {
+const COLORS: Record<string, string> = {
   error: "#FF6B6B",
   warn: "#FFD93D",
   info: "#4ECDC4",
@@ -39,14 +39,14 @@ export class Logger {
 	      border-radius: 3px;
 	    `;
 
-    console[level](
+    (console as any)[level](
       `%c${this.namespace}%c ${timestamp} %c${level}%c`,
       namespaceStyling,
       "color: #666",
       `color: ${COLORS[level]}; font-weight: bold`,
       "color: inherit",
       message,
-      ...args,
+      ...args
     );
   }
 

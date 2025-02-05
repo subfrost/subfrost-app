@@ -20,7 +20,7 @@ export function UserBalances() {
   useEffect(() => {
     (async () => {
       if (address !== "") {
-        const spendables = await getUTXOS(provider, address);
+        const spendables = await provider.getUTXOS(address);
         const btc = Number(
           spendables.reduce((r, v) => r + BigInt(v.output.value), 0n)
         );

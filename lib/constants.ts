@@ -1,5 +1,5 @@
 import * as bitcoin from "bitcoinjs-lib";
-import { Provider } from "@oyl/sdk";
+import { Provider } from "@/lib/provider";
 
 export const DEFAULT_PROVIDER = {
   bitcoin: new Provider({
