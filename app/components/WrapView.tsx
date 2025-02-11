@@ -15,8 +15,8 @@ import { FaSnowflake } from "react-icons/fa";
 import { UnwrapView } from "./UnwrapView";
 import { WrapConfirmationModal } from "./WrapConfirmationModal";
 import { useBalances } from "../contexts/BalancesContext";
-import { getLogger } from "../contexts/logger";
-import { REGTEST_PARAMS, setupEnvironment } from "../contexts/regtest";
+import { getLogger } from "@/lib/logger";
+import { setupEnvironment } from "../contexts/regtest";
 
 const logger = getLogger("subfrost:wrap");
 

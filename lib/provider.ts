@@ -44,13 +44,14 @@ export async function timeout(n: number): Promise<void> {
 
 export class Provider extends BaseProvider {
   async call<T = any>(method: string, ...params: any[]): Promise<T> {
-    return this.sandshrew._call(method, params);
+    console.log(method, params);
+    return this.sandshrew._call(method, params || []);
   }
 
   async waitForIndex() {
     while (true) {
-      const bitcoinHeight = Number(await this.call("getblockcount", []));
-      const metashrewHeight = Number(await this.call("metashrew_height", []));
+      const bitcoinHeight = Number(await this.call("getblockcount"));
+      const metashrewHeight = Number(await this.call("metashrew_height"));
       logger.info("bitcoin height: " + bitcoinHeight);
       logger.info("metashrew height: " + metashrewHeight);
       if (metashrewHeight >= bitcoinHeight) {
@@ -63,11 +64,11 @@ export class Provider extends BaseProvider {
     }
   }
   async getUTXOS(address: any): Promise<GetUTXOsResponse> {
-    return (
-      await this.call("alkanes_spendablesbyaddress", [
-        { address, protocolTag: "1" },
-      ])
-    ).outpoints;
+    const utxos = await this.call("alkanes_spendablesbyaddress", {
+      address,
+      protocolTag: "1",
+    });
+    return utxos.outpoints;
   }
   async enrichOutput({
     vout,
@@ -76,11 +77,11 @@ export class Provider extends BaseProvider {
     vout: number;
     txid: string;
   }): Promise<any> {
-    return await this.call("ord_output", [`${txid}:${vout}`]);
+    return await this.call("ord_output", `${txid}:${vout}`);
   }
   async getBTCOnlyUTXOs(address: string): Promise<GetUTXOsResponse> {
     const utxos = await this.getUTXOS(address);
-    const { inscriptions } = await this.call("ord_address", [address]);
+    const { inscriptions } = await this.call("ord_address", address);
     const map = zipObject(inscriptions, inscriptions);
     return utxos.filter(
       (v) =>

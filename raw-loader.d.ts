@@ -1,6 +1,4 @@
 declare module "raw-loader!*" {
-  const contents: string;
-  export = {
-    default: contents,
-  };
+  const contents: Promise<string>;
+  export default contents;
 }

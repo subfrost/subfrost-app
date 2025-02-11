@@ -10,8 +10,7 @@ import { DEFAULT_PROVIDER } from "./constants";
 import { Provider } from "./provider";
 import { getWalletPrivateKeys, mnemonicToAccount } from "@oyl/sdk/lib/account";
 import { accountUtxos } from "@oyl/sdk/lib/utxo";
-import { deployCommit, createDeployReveal } from "@oyl/sdk/lib/alkanes";
-import { actualDeployRevealFee } from "@oyl/sdk/lib/alkanes/contract";
+import { deployCommit, execute } from "@oyl/sdk/lib/alkanes";
 import { encodeRunestoneProtostone } from "alkanes/lib/protorune/proto_runestone_upgrade";
 import { ProtoStone } from "alkanes/lib/protorune/protostone";
 import { encipher } from "alkanes/lib/bytes";
@@ -23,11 +22,12 @@ export class Signer extends BaseSigner {
   account: Account;
   constructor(network: any, opts: any, mnemonic: string) {
     super(network, opts);
-    this.provider = (DEFAULT_PROVIDER as any)[network];
+    this.provider = (DEFAULT_PROVIDER as any)["alkanes"];
+    console.log(this);
     this.account = mnemonicToAccount({
       mnemonic,
       opts: {
-        network: (networks as any)[network],
+        network: network,
       },
     });
   }
@@ -39,7 +39,16 @@ export class Signer extends BaseSigner {
         network: (networks as any)[network],
       },
     });
-    return new Signer((networks as any)[network], opts, mnemonic);
+    return new Signer(
+      (networks as any)[network],
+      {
+        taprootPrivateKey: opts.taproot.privateKey,
+        segwitPrivateKey: opts.nativeSegwit.privateKey,
+        nestedSegwitPrivateKey: opts.nestedSegwit.privateKey,
+        legacyPrivateKey: opts.legacy.privateKey,
+      },
+      mnemonic
+    );
   }
 
   async getUTXOS() {
@@ -169,7 +178,32 @@ export class Signer extends BaseSigner {
     }
   }
 
+  async execute(script: bigint[], outputAddress?: string) {
+    const utxos = await this.getUTXOS();
+    const gatheredUtxos = {
+      utxos: utxos.accountSpendableTotalUtxos,
+      totalAmount: utxos.accountSpendableTotalBalance,
+    };
+    return await execute({
+      gatheredUtxos,
+      account: {
+        ...this.account,
+        taproot: {
+          ...this.account.taproot,
+          address: outputAddress || this.account.taproot.address,
+        },
+      },
+      calldata: script,
+      provider: this.provider,
+      feeRate: 2,
+      signer: this,
+    });
+  }
+
   async deployContract(payload: any, script: bigint | bigint[]) {
+    const tweakedTaprootKeyPair = tweakSigner(this.taprootKeyPair, {
+      network: this.network,
+    });
     const utxos = await this.getUTXOS();
     const gatheredUtxos = {
       utxos: utxos.accountSpendableTotalUtxos,
@@ -177,17 +211,14 @@ export class Signer extends BaseSigner {
     };
     const res = await deployCommit({
       payload,
-      gatheredUtxos,
-      account: this.account,
-      provider: this.provider,
       feeRate: 2,
+      account: this.account,
+      gatheredUtxos,
+      provider: this.provider,
       signer: this,
     });
     let final_script: bigint[] =
       typeof script == "bigint" ? [3n, script, 100n] : script;
-    const tweakedTaprootKeyPair = tweakSigner(this.taprootKeyPair, {
-      network: this.network,
-    });
     return await this.deployReveal(
       final_script,
       res.script,
