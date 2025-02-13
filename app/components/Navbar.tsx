@@ -41,7 +41,7 @@ export function Navbar() {
             <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           </div>
           <div className="flex items-center space-x-4">
-            <a href="https://x.com/bc1SUBFROST" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
+            <a href="https://x.com/SUBFROSTio" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
               <FaTwitter size={20} />
             </a>
             <a href="https://github.com/subfrost/frBTC" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
