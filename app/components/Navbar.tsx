@@ -44,7 +44,7 @@ export function Navbar() {
             <a href="https://x.com/SUBFROSTio" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
               <FaTwitter size={20} />
             </a>
-            <a href="https://github.com/subfrost/frBTC" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
+            <a href="https://github.com/subfrost" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
               <FaGithub size={20} />
             </a>
             {isWalletConnected ? (
