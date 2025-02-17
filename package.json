@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "subfrost-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,6 +11,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
     "@omnisat/lasereyes": "^0.0.133",
+    "@oyl/sdk": "git+https://github.com/Oyl-Wallet/Oyl-sdk",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
     "@radix-ui/react-aspect-ratio": "^1.1.1",
@@ -49,7 +50,6 @@
     "next": "14.2.16",
     "next-themes": "^0.4.4",
     "react": "^18",
-    "react-day-picker": "8.10.1",
     "react-dom": "^18",
     "react-hook-form": "^7.54.1",
     "react-icons": "latest",
@@ -58,15 +58,25 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "tiny-secp256k1": "^2.2.3",
     "vaul": "^0.9.6",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.14",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "alkanes": "github:kungfuflex/alkanes",
+    "eslint": "^9.18.0",
+    "ethers": "^6.13.5",
     "postcss": "^8",
+    "raw-loader": "^4.0.2",
+    "react-day-picker": "^9.5.0",
     "tailwindcss": "^3.4.17",
+    "the-global-object": "^1.0.2",
     "typescript": "^5"
   }
 }

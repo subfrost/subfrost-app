@@ -1,4 +1,8 @@
-export const assetPrices = {
+export type AssetPrices = {
+  [key: string]: number;
+};
+
+export const assetPrices: AssetPrices = {
   BTC: 100888,
   bUSD: 1,
   DIESEL: 3594.30,

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import * as regtest from "./regtest";
 
 export interface Transaction {
   id: string

@@ -1,6 +1,5 @@
-import { WrapView } from './components/WrapView'
+import { WrapView } from "./components/WrapView";
 
-export default function Home() {
-  return <WrapView />
-}
-
+export default () => {
+  return <WrapView />;
+};
