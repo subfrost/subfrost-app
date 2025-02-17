@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@bitcoinerlab/secp256k1':
+        specifier: ^1.2.0
+        version: 1.2.0
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.54.2(react@18.3.1))
@@ -1785,8 +1788,8 @@ packages:
     version: 0.1.0
     hasBin: true
 
-  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/34b8752814fca3be0f67f972694e89b824c3bc5f:
-    resolution: {tarball: https://codeload.github.com/kungfuflex/alkanes/tar.gz/34b8752814fca3be0f67f972694e89b824c3bc5f}
+  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674:
+    resolution: {tarball: https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674}
     version: 0.1.0
     hasBin: true
 
@@ -4435,7 +4438,7 @@ snapshots:
       '@magiceden-oss/runestone-lib': 1.0.2
       '@sadoprotocol/ordit-sdk': 3.0.0
       '@scure/btc-signer': 1.5.0
-      alkanes: https://codeload.github.com/kungfuflex/alkanes/tar.gz/34b8752814fca3be0f67f972694e89b824c3bc5f(typescript@5.7.3)
+      alkanes: https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674(typescript@5.7.3)
       bignumber.js: 9.1.2
       bip32: 4.0.0
       bip322-js: 2.0.0
@@ -5540,7 +5543,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/34b8752814fca3be0f67f972694e89b824c3bc5f(typescript@5.7.3):
+  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674(typescript@5.7.3):
     dependencies:
       '@magiceden-oss/runestone-lib': 1.0.2
       '@protobuf-ts/protoc': 2.9.4

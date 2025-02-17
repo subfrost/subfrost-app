@@ -5,7 +5,7 @@ import {
   getOutputValueByVOutIndex,
 } from "@oyl/sdk";
 import { minimumFee } from "@oyl/sdk/lib/btc";
-import { networks, Psbt, payments } from "bitcoinjs-lib";
+import { networks, Psbt, payments, initEccLib } from "bitcoinjs-lib";
 import { DEFAULT_PROVIDER } from "./constants";
 import { Provider } from "./provider";
 import { getWalletPrivateKeys, mnemonicToAccount } from "@oyl/sdk/lib/account";
@@ -16,6 +16,9 @@ import { ProtoStone } from "alkanes/lib/protorune/protostone";
 import { encipher } from "alkanes/lib/bytes";
 import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
 import { LEAF_VERSION_TAPSCRIPT } from "bitcoinjs-lib/src/payments/bip341";
+import ecc from "@bitcoinerlab/secp256k1";
+
+initEccLib(ecc);
 
 export class Signer extends BaseSigner {
   provider: Provider;
@@ -95,15 +98,19 @@ export class Signer extends BaseSigner {
         ],
       }).encodedRunestone;
 
-      const p2pk_redeem: any = { output: prev_script };
-
+      const p2pk_redeem = { output: Buffer.from(prev_script, "hex") };
+      console.log(
+        "before p2tr_redeem",
+        p2pk_redeem,
+        toXOnly(tweakedTaprootKeyPair.publicKey)
+      );
       const { output, witness } = payments.p2tr({
         internalPubkey: toXOnly(tweakedTaprootKeyPair.publicKey),
         scriptTree: p2pk_redeem,
         redeem: p2pk_redeem,
         network: this.network,
       });
-
+      console.log("after p2tr_redeem", output, witness);
       psbt.addInput({
         hash: commitTxId,
         index: 0,
@@ -148,10 +155,14 @@ export class Signer extends BaseSigner {
       estimatePsbt = Psbt.fromBase64(psbt.toBase64(), {
         network: this.network,
       });
-      estimatePsbt.addOutput({
-        value: revealTxBaseFee - correctFee,
-        address: this.account.taproot.address,
-      });
+      console.log("taproot => ", this.account.taproot);
+      let revealTxChange = revealTxBaseFee - correctFee;
+      if (revealTxChange > 546) {
+        estimatePsbt.addOutput({
+          value: revealTxChange,
+          address: this.account.taproot.address,
+        });
+      }
       estimatePsbt.signInput(0, tweakedTaprootKeyPair);
       estimatePsbt.finalizeInput(0);
       signed = estimatePsbt.extractTransaction().toHex();
@@ -162,10 +173,13 @@ export class Signer extends BaseSigner {
         ])
       )[0].vsize;
       correctFee = vsize * feeRate;
-      psbt.addOutput({
-        value: revealTxBaseFee - correctFee,
-        address: this.account.taproot.address,
-      });
+      revealTxChange = revealTxBaseFee - correctFee;
+      if (revealTxChange > 546) {
+        psbt.addOutput({
+          value: revealTxChange,
+          address: this.account.taproot.address,
+        });
+      }
 
       psbt.signInput(0, tweakedTaprootKeyPair);
       psbt.finalizeInput(0);

@@ -1,3 +1,4 @@
+"use client";
 import authTokenBinary from "raw-loader!./alkanes_std_auth_token.wasm.gz";
 import frbtcBinary from "raw-loader!./fr_btc.wasm.gz";
 import frostBinary from "raw-loader!./frost.wasm.gz";
