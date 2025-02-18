@@ -26,10 +26,13 @@ export function ZapView() {
   return (
     <Card className="bg-blue-700 border-blue-600 w-full max-w-md mx-auto">
       <CardHeader>
-        <CardTitle className="retro-text text-white flex items-center">
-          <FaBolt className="mr-2 text-yellow-300" />
-          <span className="text-yellow-300 font-bold">Zap</span>{' '}
-          <span className="ml-2">BTC to dxFROST</span>
+        <CardTitle className="retro-text text-white flex flex-col items-center justify-center text-center">
+          <span className="text-yellow-300 font-bold text-2xl mb-2">Zap</span>
+          <div className="flex items-center whitespace-nowrap">
+            <FaBolt className="mr-2 text-yellow-300" size={36} />
+            <span className="mx-2 text-xl">BTC to dxFROST</span>
+            <FaBolt className="ml-2 text-yellow-300" size={36} />
+          </div>
         </CardTitle>
         <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of BTC you want to zap to dxFROST</CardDescription>
       </CardHeader>
