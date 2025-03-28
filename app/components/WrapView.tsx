@@ -20,7 +20,10 @@ import { setupEnvironment } from "../contexts/regtest";
 
 const logger = getLogger("subfrost:wrap");
 
-(window as any).setupEnvironment = setupEnvironment;
+// Only access window object in the browser
+if (typeof window !== 'undefined') {
+  (window as any).setupEnvironment = setupEnvironment;
+}
 
 export function WrapView() {
   const [amount, setAmount] = useState("");
@@ -48,17 +51,18 @@ export function WrapView() {
 
   return (
     <div className="space-y-8">
-      <Card className="frost-bg frost-border w-full max-w-md mx-auto">
+      <Card className="frost-bg frost-border w-full max-w-md mx-auto flex flex-col">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center">
-            <FaSnowflake className="mr-2" />
+          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-xl">
+            <FaSnowflake className="mr-2" size={20} />
             Wrap BTC to frBTC
+            <FaSnowflake className="ml-2" size={20} />
           </CardTitle>
           <CardDescription className="readable-text text-sm">
             Enter the amount of BTC you want to wrap
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-grow">
           <div className="mb-4">
             <label
               htmlFor="btc-amount"
@@ -84,7 +88,7 @@ export function WrapView() {
             </p>
           </div>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="mt-auto">
           <Button
             onClick={handleWrap}
             className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600"
@@ -96,10 +100,12 @@ export function WrapView() {
       <UnwrapView />
       <WrapConfirmationModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          handleConfirmWrap();
+        }}
         btcAmount={amount}
         expectedFrBTC={calculateExpectedFrBTC()}
-        onConfirm={handleConfirmWrap}
       />
     </div>
   );

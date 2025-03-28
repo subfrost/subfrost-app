@@ -77,10 +77,11 @@ export function UnwrapView() {
   return (
     <Card className="bg-blue-700 border-blue-600 w-full max-w-md mx-auto">
       <CardHeader>
-        <CardTitle className="retro-text text-white flex items-center">
+        <CardTitle className="retro-text text-white flex items-center justify-center">
           <RiExchangeDollarFill className="mr-2 text-blue-200" />
           <span className="text-blue-200 font-bold">Unwrap</span>{' '}
           <span className="ml-2">frBTC</span>
+          <RiExchangeDollarFill className="ml-2 text-blue-200" />
         </CardTitle>
         <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of frBTC you want to unwrap</CardDescription>
       </CardHeader>
