@@ -2,6 +2,18 @@
 
 import { createContext, useContext, ReactNode, useState } from "react";
 
+// Utility function to format balances
+export const formatBalance = (balance: string, token: string, decimals?: number) => {
+  // Format dxFROST and frost to 4 decimals, others to 8 decimals
+  const decimalPlaces = (token === 'dxFROST' || token === 'frost') ? 4 : (decimals || 8);
+  
+  // Parse the balance as a float and format it with the specified number of decimal places
+  const value = parseFloat(balance);
+  if (isNaN(value)) return '0.' + '0'.repeat(decimalPlaces);
+  
+  return value.toFixed(decimalPlaces);
+};
+
 interface Balances {
   btc: string;
   frBTC: string;
@@ -42,5 +54,18 @@ export function useBalances() {
   if (context === undefined) {
     throw new Error("useBalances must be used within a BalancesProvider");
   }
-  return context;
+  
+  // Add formatted balances to the context
+  const formattedBalances = {
+    btc: formatBalance(context.balances.btc, 'btc'),
+    frBTC: formatBalance(context.balances.frBTC, 'frBTC'),
+    dxFROST: formatBalance(context.balances.dxFROST, 'dxFROST'),
+    frost: formatBalance(context.balances.frost, 'frost'),
+    frBTCFROST: formatBalance(context.balances.frBTCFROST, 'frBTCFROST'),
+  };
+  
+  return {
+    ...context,
+    formattedBalances
+  };
 }

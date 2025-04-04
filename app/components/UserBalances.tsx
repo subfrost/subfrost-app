@@ -15,7 +15,7 @@ import { getUTXOS } from "../contexts/provider_util";
 
 export function UserBalances() {
   // Mock data - replace with actual user balances
-  const { setBalances, balances } = useBalances();
+  const { setBalances, balances, formattedBalances } = useBalances();
   const { address } = lasereyesMiddleware(useLaserEyes());
   useEffect(() => {
     (async () => {
@@ -47,18 +47,18 @@ export function UserBalances() {
   return (
     <Card className="frost-bg frost-border mb-4 mx-auto max-w-4xl">
       <CardContent className="flex flex-wrap justify-center items-center gap-4 p-4">
-        <BalanceItem icon={FaBitcoin} label="BTC" amount={balances.btc} />
+        <BalanceItem icon={FaBitcoin} label="BTC" amount={formattedBalances.btc} />
         <BalanceItem
           icon={RiExchangeDollarFill}
           label="frBTC"
-          amount={balances.frBTC}
+          amount={formattedBalances.frBTC}
         />
         <BalanceItem
           icon={RiCoinsFill}
           label="dxFROST"
-          amount={balances.dxFROST}
+          amount={formattedBalances.dxFROST}
         />
-        <BalanceItem icon={FaSnowflake} label="FROST" amount={balances.frost} />
+        <BalanceItem icon={FaSnowflake} label="dxFROST" amount={formattedBalances.frost} />
         <BitcoinFeeWidget />
       </CardContent>
     </Card>
@@ -72,7 +72,7 @@ function BalanceItem({
 }: {
   icon: React.ElementType;
   label: string;
-  amount: number;
+  amount: string | number;
 }) {
   return (
     <div className="flex items-center bg-blue-800 bg-opacity-20 rounded-lg px-4 py-2 h-10">

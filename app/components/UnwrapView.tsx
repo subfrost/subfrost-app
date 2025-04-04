@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
-import { RiExchangeDollarFill } from 'react-icons/ri'
+import { RiCoinsFill } from 'react-icons/ri'
 import { Zap } from 'lucide-react'
 import { UnwrapConfirmationModal } from './UnwrapConfirmationModal'
 import { UnwrapTransactionTable } from './UnwrapTransactionTable'
@@ -34,7 +34,7 @@ export function UnwrapView() {
     const newTransaction = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       amount: calculateExpectedBTC(),
-      status: 'Pending',
+      status: 'Pending' as 'Pending',
       blockNumber: currentBlock,
     }
     addTransaction(newTransaction)
@@ -77,13 +77,20 @@ export function UnwrapView() {
   return (
     <Card className="bg-blue-700 border-blue-600 w-full max-w-md mx-auto">
       <CardHeader>
-        <CardTitle className="retro-text text-white flex items-center justify-center">
-          <RiExchangeDollarFill className="mr-2 text-blue-200" />
-          <span className="text-blue-200 font-bold">Unwrap</span>{' '}
-          <span className="ml-2">frBTC</span>
-          <RiExchangeDollarFill className="ml-2 text-blue-200" />
+        <CardTitle className="retro-text text-white flex items-center justify-center text-xl h-20">
+          <RiCoinsFill className="mx-4 text-blue-200" size={29} />
+          <div className="flex flex-col">
+            <div className="flex items-center justify-center w-full">
+              <span className="text-blue-200 font-bold text-xl">Unwrap</span>{' '}
+              <span className="ml-2 text-blue-200">frBTC</span>
+            </div>
+            <div className="mt-1 font-bold flex items-center justify-center">
+              <span className="text-xl text-blue-200">to BTC</span>
+            </div>
+          </div>
+          <RiCoinsFill className="mx-4 text-blue-200" size={29} />
         </CardTitle>
-        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of frBTC you want to unwrap</CardDescription>
+        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of frBTC you want to unwrap.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">

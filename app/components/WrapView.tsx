@@ -53,13 +53,20 @@ export function WrapView() {
     <div className="space-y-8">
       <Card className="frost-bg frost-border w-full max-w-md mx-auto flex flex-col">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-xl">
-            <FaSnowflake className="mr-2" size={20} />
-            Wrap BTC to frBTC
-            <FaSnowflake className="ml-2" size={20} />
+          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-xl h-20">
+            <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
+            <div className="flex flex-col">
+              <div className="flex items-center justify-center w-full">
+                <span className="text-xl">Wrap BTC</span>
+              </div>
+              <div className="mt-1 font-bold flex items-center justify-center">
+                <span className="text-xl">to frBTC</span>
+              </div>
+            </div>
+            <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
           </CardTitle>
           <CardDescription className="readable-text text-sm">
-            Enter the amount of BTC you want to wrap
+            Enter the amount of BTC you want to wrap.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-grow">

@@ -35,8 +35,8 @@ export function Navbar() {
         </div>
         <div className="hidden md:flex items-center space-x-8">
           <div className="flex space-x-4">
-            <NavLink href="/" active={pathname === '/'}>Wrap</NavLink>
             <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
+            <NavLink href="/" active={pathname === '/'}>Wrap</NavLink>
             <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
             <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           </div>
@@ -58,8 +58,8 @@ export function Navbar() {
           </div>
         </div>
         <div className="md:hidden w-full mt-4 flex flex-col items-center space-y-4">
-          <NavLink href="/" active={pathname === '/'}>Wrap</NavLink>
           <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
+          <NavLink href="/" active={pathname === '/'}>Wrap</NavLink>
           <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
           <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           {isWalletConnected ? (
