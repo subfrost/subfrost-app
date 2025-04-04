@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { PixelSprite } from './PixelSprite'
 import ConnectWalletModal from './ConnectWalletModal'
+import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 
 export function Navbar() {
   const pathname = usePathname()
@@ -36,7 +37,7 @@ export function Navbar() {
         <div className="hidden md:flex items-center space-x-8">
           <div className="flex space-x-4">
             <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
-            <NavLink href="/" active={pathname === '/'}>Wrap</NavLink>
+            <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
             <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
             <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           </div>
@@ -47,6 +48,7 @@ export function Navbar() {
             <a href="https://github.com/subfrost" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
               <FaGithub size={20} />
             </a>
+            <BitcoinFeeWidget />
             {isWalletConnected ? (
               <Link href="/profile" className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-full px-3 py-1">
                 <PixelSprite address={walletAddress} size={24} />
@@ -59,7 +61,7 @@ export function Navbar() {
         </div>
         <div className="md:hidden w-full mt-4 flex flex-col items-center space-y-4">
           <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
-          <NavLink href="/" active={pathname === '/'}>Wrap</NavLink>
+          <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
           <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
           <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           {isWalletConnected ? (

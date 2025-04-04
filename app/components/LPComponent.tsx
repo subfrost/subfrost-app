@@ -9,7 +9,7 @@ import { ConfirmMintModal } from './ConfirmMintModal'
 import { ConfirmBurnModal } from './ConfirmBurnModal'
 import { calculateSwapOutput, calculateDollarValue, formatCurrency, SUBFROST_FEE, assetPrices } from '../utils/priceCalculations'
 import { FaExchangeAlt } from 'react-icons/fa'
-const nonFrBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'FROST', 'zkBTC']
+const nonFrBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'METHANE', 'WATER', 'FROST', 'zkBTC']
 
 interface LPComponentProps {
   slippage: number
@@ -129,7 +129,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
     }
   }
 
-  const AssetSelector = ({ value, onChange }) => (
+  const AssetSelector = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-between cursor-pointer">
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="border-0 bg-transparent text-white p-0 h-auto">
@@ -146,13 +146,20 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
 
   return (
     <div className="space-y-4">
-      <Button 
-        onClick={() => setIsMintMode(!isMintMode)} 
-        className="w-full mb-4 retro-text text-xs bg-blue-600 hover:bg-blue-700"
-      >
-        <FaExchangeAlt className="mr-2" />
-        {isMintMode ? "Switch to Burn" : "Switch to Mint"}
-      </Button>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <Button
+          onClick={() => setIsMintMode(true)}
+          className={`retro-text text-xs ${isMintMode ? 'bg-blue-800 text-white' : 'bg-blue-200 text-blue-800 hover:bg-blue-300'}`}
+        >
+          Add
+        </Button>
+        <Button
+          onClick={() => setIsMintMode(false)}
+          className={`retro-text text-xs ${!isMintMode ? 'bg-blue-800 text-white' : 'bg-blue-200 text-blue-800 hover:bg-blue-300'}`}
+        >
+          Remove
+        </Button>
+      </div>
 
       {isMintMode ? (
         <>

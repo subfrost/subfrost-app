@@ -40,8 +40,9 @@ export function StakeView() {
   }
 
   return (
-    <div className="space-y-8">
-      <Card className="frost-bg frost-border w-full max-w-md mx-auto">
+    <div className="space-y-8 flex flex-col items-center">
+      <div className="w-full max-w-md">
+        <Card className="frost-bg frost-border w-full">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <CardHeader className="pb-0">
             <TabsList className="grid w-full grid-cols-3">
@@ -67,30 +68,32 @@ export function StakeView() {
           </CardHeader>
           <Separator className="my-2" />
         </Tabs>
-      </Card>
+        </Card>
+      </div>
       {/* Staking Widgets Section */}
-      <div className="flex flex-col md:flex-row gap-4 justify-center">
+      <div className="w-full max-w-md">
+        <div className="flex flex-col md:flex-row gap-4 justify-center w-full">
         {/* BTC Staking Section - Show when BTC or BOTH is selected */}
         {(activeTab === "btc" || activeTab === "both") && (
           <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
             <CardHeader className="pb-2">
-              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-xl h-20">
-                <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
+              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20">
+                <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
                 <div className="flex flex-col">
-                  <div className="flex items-center justify-center w-full">
-                    <span className="text-xl">Stake</span>{' '}
+                  <div className="flex items-center justify-center w-full whitespace-nowrap">
+                    <span className="text-sm md:text-xl">Stake</span>{' '}
                     <button
                       onClick={() => setDxBTCInputToken(dxBTCInputToken === "BTC" ? "frBTC" : "BTC")}
-                      className="text-white hover:text-blue-200 underline bg-blue-600 px-2 py-1 rounded-md text-xl ml-1"
+                      className="text-white hover:text-blue-200 underline bg-blue-600 px-1 md:px-2 py-0 md:py-1 rounded-md text-sm md:text-xl ml-1"
                     >
                       {dxBTCInputToken}
                     </button>
                   </div>
-                  <div className="mt-1 font-bold flex items-center justify-center">
-                    <span className="text-xl">to dxBTC</span>
+                  <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
+                    <span className="text-sm md:text-xl">to dxBTC</span>
                   </div>
                 </div>
-                <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
+                <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
               </CardTitle>
               <CardDescription className="readable-text text-sm">Enter the amount of {dxBTCInputToken} you want to stake to dxBTC (yield-earning BTC).</CardDescription>
             </CardHeader>
@@ -124,23 +127,23 @@ export function StakeView() {
         {(activeTab === "frost" || activeTab === "both") && (
           <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
             <CardHeader className="pb-2">
-              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-xl h-20">
-                <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
+              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20">
+                <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
                 <div className="flex flex-col">
-                  <div className="flex items-center justify-center w-full">
-                    <span className="text-xl">Stake</span>{' '}
+                  <div className="flex items-center justify-center w-full whitespace-nowrap">
+                    <span className="text-sm md:text-xl">Stake</span>{' '}
                     <button
                       onClick={() => setDxFROSTInputToken(dxFROSTInputToken === "BTC" ? "LP" : "BTC")}
-                      className="text-white hover:text-blue-200 underline bg-blue-600 px-2 py-1 rounded-md text-xl ml-1"
+                      className="text-white hover:text-blue-200 underline bg-blue-600 px-1 md:px-2 py-0 md:py-1 rounded-md text-sm md:text-xl ml-1"
                     >
                       {dxFROSTInputToken === "BTC" ? "BTC" : "frBTC/FROST"}
                     </button>
                   </div>
-                  <div className="mt-1 font-bold flex items-center justify-center">
-                    <span className="text-xl">to dxFROST</span>
+                  <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
+                    <span className="text-sm md:text-xl">to dxFROST</span>
                   </div>
                 </div>
-                <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
+                <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
               </CardTitle>
               <CardDescription className="readable-text text-sm">Enter the amount of {dxFROSTInputToken === "BTC" ? "BTC" : "frBTC/FROST LP"} you want to stake to dxFROST.</CardDescription>
             </CardHeader>
@@ -173,14 +176,16 @@ export function StakeView() {
             </CardFooter>
           </Card>
         )}
+        </div>
       </div>
       {/* UnstakeView - Show based on active tab */}
-      {activeTab === "btc" && <UnstakeView showBtcOnly={true} />}
-      {activeTab === "frost" && <UnstakeView showFrostOnly={true} />}
-      {activeTab === "both" && <UnstakeView />}
+      <div className="w-full max-w-md">
+        <UnstakeView showBtcOnly={activeTab === "btc"} showFrostOnly={activeTab === "frost"} />
+      </div>
 
-
-      <CombinedCharts />
+      <div className="w-full max-w-2xl md:max-w-4xl lg:max-w-5xl">
+        <CombinedCharts />
+      </div>
 
       <StakeConfirmationModal
         isOpen={isModalOpen}

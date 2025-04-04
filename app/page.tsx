@@ -1,5 +1,5 @@
-import { WrapView } from "./components/WrapView";
+import { StakeView } from "./components/StakeView";
 
 export default () => {
-  return <WrapView />;
+  return <StakeView />;
 };

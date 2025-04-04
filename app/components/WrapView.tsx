@@ -50,20 +50,20 @@ export function WrapView() {
   };
 
   return (
-    <div className="space-y-8">
-      <Card className="frost-bg frost-border w-full max-w-md mx-auto flex flex-col">
+    <div className="space-y-8 flex flex-col items-center">
+      <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-xl h-20">
-            <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
+          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20">
+            <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
             <div className="flex flex-col">
-              <div className="flex items-center justify-center w-full">
-                <span className="text-xl">Wrap BTC</span>
+              <div className="flex items-center justify-center w-full whitespace-nowrap">
+                <span className="text-sm md:text-xl">Wrap BTC</span>
               </div>
-              <div className="mt-1 font-bold flex items-center justify-center">
-                <span className="text-xl">to frBTC</span>
+              <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
+                <span className="text-sm md:text-xl">to frBTC</span>
               </div>
             </div>
-            <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
+            <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
           </CardTitle>
           <CardDescription className="readable-text text-sm">
             Enter the amount of BTC you want to wrap.

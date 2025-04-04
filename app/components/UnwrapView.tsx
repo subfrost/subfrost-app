@@ -75,20 +75,20 @@ export function UnwrapView() {
   }, [])
 
   return (
-    <Card className="bg-blue-700 border-blue-600 w-full max-w-md mx-auto">
+    <Card className="bg-blue-700 border-blue-600 w-full max-w-md">
       <CardHeader>
-        <CardTitle className="retro-text text-white flex items-center justify-center text-xl h-20">
-          <RiCoinsFill className="mx-4 text-blue-200" size={29} />
+        <CardTitle className="retro-text text-white flex items-center justify-center text-lg md:text-xl h-20">
+          <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
           <div className="flex flex-col">
-            <div className="flex items-center justify-center w-full">
-              <span className="text-blue-200 font-bold text-xl">Unwrap</span>{' '}
-              <span className="ml-2 text-blue-200">frBTC</span>
+            <div className="flex items-center justify-center w-full whitespace-nowrap">
+              <span className="text-blue-200 font-bold text-sm md:text-xl">Unwrap</span>{' '}
+              <span className="ml-1 md:ml-2 text-blue-200 text-sm md:text-xl">frBTC</span>
             </div>
-            <div className="mt-1 font-bold flex items-center justify-center">
-              <span className="text-xl text-blue-200">to BTC</span>
+            <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
+              <span className="text-sm md:text-xl text-blue-200">to BTC</span>
             </div>
           </div>
-          <RiCoinsFill className="mx-4 text-blue-200" size={29} />
+          <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
         </CardTitle>
         <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of frBTC you want to unwrap.</CardDescription>
       </CardHeader>

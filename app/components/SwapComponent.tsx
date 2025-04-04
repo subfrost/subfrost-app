@@ -9,7 +9,7 @@ import { Settings } from 'lucide-react'
 import { SwapConfirmationModal } from './SwapConfirmationModal'
 import { calculateSwapOutput, calculateDollarValue, formatCurrency, SUBFROST_FEE, assetPrices } from '../utils/priceCalculations'
 
-const nonBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'FROST', 'zkBTC']
+const nonBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'METHANE', 'WATER', 'FROST', 'zkBTC']
 
 interface SwapComponentProps {
   slippage: number
@@ -68,7 +68,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
     setToDollarValue('$0.00')
   }
 
-  const AssetSelector = ({ value, onChange }) => (
+  const AssetSelector = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-between cursor-pointer">
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="border-0 bg-transparent text-white p-0 h-auto">
@@ -130,7 +130,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
       </div>
 
       <div className="space-y-2">
-        <p className="readable-text text-sm">Subfrost Fee: {SUBFROST_FEE * 100}%</p>
+        <p className="readable-text text-sm">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
         <div className="flex items-center justify-between">
           <p className="readable-text text-sm">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           <Button
