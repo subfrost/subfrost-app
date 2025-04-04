@@ -179,51 +179,6 @@ export function StakeView() {
       {activeTab === "frost" && <UnstakeView showFrostOnly={true} />}
       {activeTab === "both" && <UnstakeView />}
 
-      {/* Stake frBTC/FROST to dxFROST - Show when FROST or BOTH is selected */}
-      {(activeTab === "frost" || activeTab === "both") && (
-      <Card className="frost-bg frost-border w-full max-w-md mx-auto flex flex-col">
-        <CardHeader className="pb-2">
-          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-xl h-20">
-            <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
-            <div className="flex flex-col">
-              <div className="flex items-center justify-center w-full">
-                <span className="text-xl">Stake</span>{' '}
-                <span className="bg-blue-600 px-2 py-1 rounded-md text-white text-xl ml-1">frBTC/FROST LP</span>
-              </div>
-              <div className="mt-1 font-bold flex items-center justify-center">
-                <span className="text-xl">to dxFROST</span>
-              </div>
-            </div>
-            <FaSnowflake className="mx-4 flex-shrink-0 text-blue-500" size={29} />
-          </CardTitle>
-          <CardDescription className="readable-text text-sm">Enter the amount of frBTC/FROST LP you want to stake.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex-grow pt-4">
-          <div className="h-full flex flex-col">
-            <div className="mb-4">
-              <label htmlFor="frbtc-frost-stake-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">Amount of frBTC/FROST LP</label>
-              <Input
-                id="frbtc-frost-stake-amount"
-                type="number"
-                placeholder="0.00"
-                value={frBtcFrostAmount}
-                onChange={(e) => setFrBtcFrostAmount(e.target.value)}
-                className="readable-text text-sm h-10"
-              />
-              <p className="readable-text text-xs mt-2 h-4">Available: {formattedBalances.frBTCFROST} frBTC/FROST LP</p>
-            </div>
-            <div className="mt-4">
-              <p className="readable-text text-sm text-blue-600 h-5">Expected dxFROST: {calculateExpecteddxFROST()}</p>
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter className="mt-auto">
-          <Button onClick={handleStake} className="w-full retro-text text-sm bg-blue-700 hover:bg-blue-800">
-            Stake frBTC/FROST LP
-          </Button>
-        </CardFooter>
-      </Card>
-      )}
 
       <CombinedCharts />
 
