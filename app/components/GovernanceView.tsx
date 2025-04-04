@@ -34,7 +34,7 @@ export function GovernanceView() {
             <FaSnowflake className="mr-2" />
             Active Proposals
           </CardTitle>
-          <CardDescription className="readable-text text-sm">Vote on existing governance proposals</CardDescription>
+          <CardDescription className="readable-text text-sm">Vote on existing governance proposals.</CardDescription>
         </CardHeader>
         <CardContent>
           {mockProposals.map((proposal) => (
