@@ -177,7 +177,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
                 frBTC
               </div>
             </div>
-            <p className="readable-text text-xs">{calculateDollarValueSafe('frBTC', parseFloat(frBTCAmount) || 0)}</p>
+            <p className="readable-text text-xs mt-2 h-4">{calculateDollarValueSafe('frBTC', parseFloat(frBTCAmount) || 0)}</p>
           </div>
 
           <div className="space-y-2">
@@ -192,11 +192,11 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
               />
               <AssetSelector value={pairedAsset} onChange={setPairedAsset} />
             </div>
-            <p className="readable-text text-xs">{calculateDollarValueSafe(pairedAsset, parseFloat(pairedAmount) || 0)}</p>
+            <p className="readable-text text-xs mt-2 h-4">{calculateDollarValueSafe(pairedAsset, parseFloat(pairedAmount) || 0)}</p>
           </div>
 
           <div className="space-y-2">
-            <p className="readable-text text-sm">Expected LP Tokens: {calculateLPTokens().toFixed(8)}</p>
+            <p className="readable-text text-sm text-blue-600">Expected LP Tokens: {calculateLPTokens().toFixed(8)}</p>
           </div>
         </>
       ) : (
@@ -221,14 +221,14 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
               placeholder="0.00"
               className="flex-grow"
             />
-            <p className="readable-text text-xs">Your Balance: {lpBalance} frBTC/{pairedAsset} LP ({(userLPProportion * 100).toFixed(2)}% of total supply)</p>
+            <p className="readable-text text-xs mt-2 h-4">Your Balance: {lpBalance} frBTC/{pairedAsset} LP ({(userLPProportion * 100).toFixed(2)}% of total supply)</p>
           </div>
 
           <div className="space-y-2">
-            <p className="readable-text text-sm">
+            <p className="readable-text text-sm text-blue-600">
               Expected BTC: {expectedBTC} BTC ({calculateDollarValueSafe('BTC', parseFloat(expectedBTC))})
             </p>
-            <p className="readable-text text-sm">
+            <p className="readable-text text-sm text-blue-600">
               Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({calculateDollarValueSafe(pairedAsset, parseFloat(expectedPaired))})
             </p>
           </div>
@@ -237,7 +237,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="readable-text text-sm">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+          <p className="readable-text text-sm text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           <Button
             variant="ghost"
             size="icon"

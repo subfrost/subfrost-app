@@ -107,7 +107,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
           />
           {isBTCFrom ? <BTCDisplay /> : <AssetSelector value={nonBTCAsset} onChange={setNonBTCAsset} />}
         </div>
-        <p className="readable-text text-xs">{fromDollarValue} (1 {isBTCFrom ? 'BTC' : nonBTCAsset} = {formatCurrency(assetPrices[isBTCFrom ? 'BTC' : nonBTCAsset])})</p>
+        <p className="readable-text text-xs mt-2 h-4">{fromDollarValue} (1 {isBTCFrom ? 'BTC' : nonBTCAsset} = {formatCurrency(assetPrices[isBTCFrom ? 'BTC' : nonBTCAsset])})</p>
       </div>
       <div className="flex items-center justify-center">
         <div className="border-t border-blue-300 flex-grow"></div>
@@ -126,13 +126,13 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
           />
           {isBTCFrom ? <AssetSelector value={nonBTCAsset} onChange={setNonBTCAsset} /> : <BTCDisplay />}
         </div>
-        <p className="readable-text text-xs">{toDollarValue} (1 {isBTCFrom ? nonBTCAsset : 'BTC'} = {formatCurrency(assetPrices[isBTCFrom ? nonBTCAsset : 'BTC'])})</p>
+        <p className="readable-text text-xs mt-2 h-4">{toDollarValue} (1 {isBTCFrom ? nonBTCAsset : 'BTC'} = {formatCurrency(assetPrices[isBTCFrom ? nonBTCAsset : 'BTC'])})</p>
       </div>
 
       <div className="space-y-2">
-        <p className="readable-text text-sm">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
+        <p className="readable-text text-sm text-blue-600">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
         <div className="flex items-center justify-between">
-          <p className="readable-text text-sm">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+          <p className="readable-text text-sm text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           <Button
             variant="ghost"
             size="icon"

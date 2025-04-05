@@ -7,6 +7,7 @@ import { UserBalances } from "./components/UserBalances";
 import { SnowflakeBackground } from "./components/SnowflakeBackground";
 import { SnowflakeWatermark } from "./components/SnowflakeWatermark";
 import { Footer } from "./components/Footer";
+import { SocialIcons } from "./components/SocialIcons";
 import { Toaster } from "@/components/ui/toaster";
 import { SubfrostP2PProvider } from "./contexts/SubfrostP2PContext";
 import { BalancesProvider } from "./contexts/BalancesContext";
@@ -46,6 +47,7 @@ export default function RootLayout({
                   </main>
                   <MobileNavigation />
                   <Footer />
+                  <SocialIcons />
                   <Toaster />
                 </div>
               </SubfrostP2PProvider>

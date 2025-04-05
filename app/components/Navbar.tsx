@@ -2,9 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FaSnowflake, FaTwitter, FaGithub } from 'react-icons/fa'
+import { FaSnowflake } from 'react-icons/fa'
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { PixelSprite } from './PixelSprite'
 import ConnectWalletModal from './ConnectWalletModal'
 import { BitcoinFeeWidget } from './BitcoinFeeWidget'
@@ -14,6 +14,79 @@ export function Navbar() {
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  // Always show the fee widget by default
+  const [showFeeWidget, setShowFeeWidget] = useState(true)
+  const [showFeeWidgetText, setShowFeeWidgetText] = useState(true)
+  
+  const navbarRef = useRef<HTMLDivElement>(null)
+  const navLinksRef = useRef<HTMLDivElement>(null)
+  const walletRef = useRef<HTMLDivElement>(null)
+  const logoRef = useRef<HTMLAnchorElement>(null)
+  
+  // Debounce function to limit how often the resize handler fires
+  const debounce = (func: Function, delay: number) => {
+    let timeoutId: NodeJS.Timeout;
+    return (...args: any[]) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => func(...args), delay);
+    };
+  };
+
+  useEffect(() => {
+    // Keep track of previous state to implement hysteresis
+    let previouslyShown = true;
+    
+    // The actual space checking function
+    const checkSpace = () => {
+      if (navbarRef.current && navLinksRef.current && walletRef.current && logoRef.current) {
+        const navbarWidth = navbarRef.current.offsetWidth
+        const navLinksWidth = navLinksRef.current.offsetWidth
+        const walletWidth = walletRef.current.offsetWidth
+        const logoWidth = logoRef.current.offsetWidth
+        
+        // Calculate available space - more precise calculation
+        const availableSpace = navbarWidth - logoWidth - navLinksWidth - walletWidth - 40 // 40px buffer
+        
+        // Implement hysteresis to prevent flickering
+        // If it was previously shown, use a lower threshold to hide it
+        // If it was previously hidden, use a higher threshold to show it
+        const showThreshold = previouslyShown ? 80 : 100;
+        
+        // Only update if we're crossing the threshold
+        // Make sure it's visible on larger screens
+        const shouldShow = (availableSpace > showThreshold && window.innerWidth >= 768) || window.innerWidth >= 1024;
+        
+        if (shouldShow !== previouslyShown) {
+          // When hiding, first hide text, then hide widget
+          if (!shouldShow) {
+            setShowFeeWidgetText(false);
+            setTimeout(() => {
+              setShowFeeWidget(false);
+            }, 300); // Wait for text to fade out
+          } else {
+            // When showing, first show widget, then show text
+            setShowFeeWidget(true);
+            setTimeout(() => {
+              setShowFeeWidgetText(true);
+            }, 200); // Wait for widget to appear
+          }
+          previouslyShown = shouldShow;
+        }
+      }
+    }
+    
+    // Initial check
+    checkSpace()
+    
+    // Create debounced version of the check function
+    const debouncedCheckSpace = debounce(checkSpace, 100);
+    
+    // Add event listener for window resize with debounced handler
+    window.addEventListener('resize', debouncedCheckSpace)
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', debouncedCheckSpace)
+  }, [])
 
   const handleConnectWallet = () => {
     setIsModalOpen(true)
@@ -27,31 +100,31 @@ export function Navbar() {
 
   return (
     <nav className="bg-blue-800 bg-opacity-70 backdrop-filter backdrop-blur-lg p-4 mb-4 frost-border">
-      <div className="container mx-auto flex flex-col md:flex-row justify-between items-center">
-        <div className="flex items-center justify-between w-full md:w-auto">
-          <Link href="/" className="text-2xl font-bold retro-text text-white flex items-center">
-            <FaSnowflake className="mr-2" />
-            SUBFROST
-          </Link>
-        </div>
-        <div className="hidden md:flex items-center space-x-8">
+      <div ref={navbarRef} className="container mx-auto flex flex-col md:flex-row items-center transition-all duration-300 ease-in-out">
+        <Link ref={logoRef} href="/" className="text-2xl font-bold retro-text text-white flex items-center transition-all duration-300 ease-in-out">
+          <FaSnowflake className="mr-2" />
+          SUBFROST
+        </Link>
+        <div className="hidden md:flex items-center flex-grow justify-center transition-all duration-300 ease-in-out" ref={navLinksRef}>
           <div className="flex space-x-4">
             <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
             <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
             <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
             <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           </div>
-          <div className="flex items-center space-x-4">
-            {/* Social icons - hide first on smaller screens */}
-            <a href="https://x.com/SUBFROSTio" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300 hidden lg:block">
-              <FaTwitter size={20} />
-            </a>
-            <a href="https://github.com/subfrost" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300 hidden lg:block">
-              <FaGithub size={20} />
-            </a>
-            {/* Bitcoin Fee Widget - hide on medium screens */}
-            <div className="hidden xl:block">
-              <BitcoinFeeWidget />
+        </div>
+        <div className="hidden md:flex items-center space-x-4 transition-all duration-300 ease-in-out" ref={walletRef}>
+            {/* Bitcoin Fee Widget - show based on available space with staggered fade animation */}
+            <div
+              className={`
+                transition-all duration-500 ease-in-out
+                ${showFeeWidget
+                  ? 'opacity-100 max-w-[200px] mr-2 scale-100'
+                  : 'opacity-0 max-w-0 mr-0 scale-95 transform'
+                }
+              `}
+            >
+              <BitcoinFeeWidget textVisible={showFeeWidgetText} />
             </div>
             {/* Connect Wallet - always visible */}
             {isWalletConnected ? (
@@ -63,7 +136,6 @@ export function Navbar() {
               <ConnectWalletModal />
             )}
           </div>
-        </div>
         <div className="md:hidden w-full mt-4 flex flex-col items-center space-y-4">
           <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
           <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>

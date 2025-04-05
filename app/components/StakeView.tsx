@@ -164,7 +164,7 @@ export function StakeView() {
                 <div className="mt-4">
                   <p className="readable-text text-sm text-blue-600 h-5">Expected dxFROST: {calculateExpecteddxFROST()}</p>
                   {dxFROSTInputToken !== "BTC" && (
-                    <p className="readable-text text-xs mt-2 text-gray-500 uppercase font-bold">NOTE THAT THIS WILL UNSTAKE TO frBTC/FROST LP, NOT TO NATIVE BTC LIKE WHEN UNSTAKING dxBTC.</p>
+                    <p className="readable-text text-sm text-blue-100">NOTE THAT THIS WILL UNSTAKE TO frBTC/FROST LP, NOT TO NATIVE BTC LIKE WHEN UNSTAKING dxBTC.</p>
                   )}
                 </div>
               </div>

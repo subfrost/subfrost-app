@@ -31,19 +31,19 @@ export function SwapView() {
     const newTransaction = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       amount,
-      status: 'Pending',
+      status: 'Pending' as 'Pending' | 'Broadcast' | 'Complete',
       blockNumber: currentBlock,
     }
     addTransaction(newTransaction)
 
     // Simulate transaction phases
     setTimeout(() => {
-      updateTransaction({ ...newTransaction, status: 'Broadcast', blockNumber: currentBlock + 1 })
+      updateTransaction({ ...newTransaction, status: 'Broadcast' as 'Broadcast', blockNumber: currentBlock + 1 })
       setTimeout(() => {
         updateTransaction({ 
-          ...newTransaction, 
-          status: 'Complete', 
-          txid: Math.random().toString(16).slice(2, 10) 
+          ...newTransaction,
+          status: 'Complete' as 'Complete',
+          txid: Math.random().toString(16).slice(2, 10)
         })
       }, 10000)
     }, 10000)
@@ -69,7 +69,7 @@ export function SwapView() {
                 value="lp" 
                 className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
               >
-                <span className="text-xs px-1">Liquidity (LP)</span>
+                <span className="text-[10px] sm:text-xs px-0.5 sm:px-1 whitespace-nowrap">LP</span>
               </TabsTrigger>
             </TabsList>
           </CardHeader>
