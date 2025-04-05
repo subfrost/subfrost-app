@@ -42,13 +42,18 @@ export function Navbar() {
             <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
           </div>
           <div className="flex items-center space-x-4">
-            <a href="https://x.com/SUBFROSTio" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
+            {/* Social icons - hide first on smaller screens */}
+            <a href="https://x.com/SUBFROSTio" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300 hidden lg:block">
               <FaTwitter size={20} />
             </a>
-            <a href="https://github.com/subfrost" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
+            <a href="https://github.com/subfrost" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300 hidden lg:block">
               <FaGithub size={20} />
             </a>
-            <BitcoinFeeWidget />
+            {/* Bitcoin Fee Widget - hide on medium screens */}
+            <div className="hidden xl:block">
+              <BitcoinFeeWidget />
+            </div>
+            {/* Connect Wallet - always visible */}
             {isWalletConnected ? (
               <Link href="/profile" className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-full px-3 py-1">
                 <PixelSprite address={walletAddress} size={24} />

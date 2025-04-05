@@ -136,3 +136,11 @@ Each major feature has its own view component and related subcomponents:
 3. Other users can view and vote on proposals
 4. Votes are tallied on-chain
 5. Proposal status is updated based on votes
+
+## Development Workflow Guidelines
+
+### Version Control Approach
+- Git is used for version control but should not be automatically invoked
+- Git commands (add, commit, push) should only be used when explicitly requested by the user
+- Code changes should be made and explained without automatic git operations
+- Version control operations are separate from code editing tasks

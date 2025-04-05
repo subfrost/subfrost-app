@@ -106,21 +106,19 @@ export default function ConnectWalletModal({ className }: { className?: string }
           "text-black",
           "rounded-3xl mx-auto",
           "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
-          "w-[480px] max-h-[660px]",
+          "w-[300px] max-h-[413px]",
           "flex flex-col overflow-hidden p-0",
           "bg-gradient-to-b from-blue-100 to-blue-200"
         )}
       >
-        <DialogHeader className="px-6 pt-5 pb-3">
-          <DialogTitle className="text-center flex flex-row gap-3 items-center justify-center font-regular text-[22px] font-medium text-blue-800">
-            <FaSnowflake className="text-blue-300" />
+        <DialogHeader className="px-4 pt-4 pb-3">
+          <DialogTitle className="text-center flex flex-row gap-3 items-center justify-center font-regular text-[20px] font-medium text-blue-800">
+            <FaSnowflake className="text-blue-300" size={18} />
             Connect Wallet
-
-            <FaSnowflake className="text-blue-300" />
+            <FaSnowflake className="text-blue-300" size={18} />
           </DialogTitle>
         </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto scrollbar-hide px-6 relative">
+        <div className="flex-1 overflow-y-auto scrollbar-hide px-4 relative">
           <DialogDescription className="flex flex-col gap-2 w-full">
             {Object.values(SUPPORTED_WALLETS).map((wallet) => {
               // @ts-ignore
@@ -137,21 +135,21 @@ export default function ConnectWalletModal({ className }: { className?: string }
                   className={cn(
                     'text-white',
                     "font-normal justify-between",
-                    "h-[60px] text-base rounded-xl px-4",
+                    "h-[50px] text-sm rounded-xl px-4",
                     "transition-colors duration-200",
                     "bg-blue-500",
                     "group"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="min-w-[32px] min-h-[32px] w-[32px] h-[32px] flex items-center justify-center">
+                    <div className="min-w-[25px] min-h-[25px] w-[25px] h-[25px] flex items-center justify-center">
                       <WalletIcon
-                        size={32}
+                        size={25}
                         walletName={wallet.name}
-                        className="!w-[32px] !h-[32px]"
+                        className="!w-[25px] !h-[25px]"
                       />
                     </div>
-                    <span className="text-sm retro-text">
+                    <span className="text-xs retro-text">
                       {wallet.name
                         .replace(/[-_]/g, " ")
                         .split(" ")
@@ -167,12 +165,12 @@ export default function ConnectWalletModal({ className }: { className?: string }
                     <div className="flex items-center justify-center">
                       <div className="flex items-center gap-2 group-hover:hidden">
                         <div className="w-2 h-2 rounded-full bg-blue-200"></div>
-                        <span className="text-sm text-blue-200 dark:text-gray-400">
+                        <span className="text-xs text-blue-200 dark:text-gray-400">
                           Installed
                         </span>
                       </div>
-                      <div className="text-black hidden group-hover:block">Connnect</div>
-                      <ChevronRight className="w-12 h-12 text-black hidden group-hover:block" />
+                      <div className="text-black hidden group-hover:block text-xs">Connect</div>
+                      <ChevronRight className="w-8 h-8 text-black hidden group-hover:block" />
                     </div>
                   ) : (
                     <a
@@ -182,8 +180,7 @@ export default function ConnectWalletModal({ className }: { className?: string }
                       className="flex items-center gap-2 text-blue-800 hover:text-blue-600"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <span className="text-sm">Install</span>
-
+                      <span className="text-xs">Install</span>
                       <ChevronRight className="w-4 h-4" />
                     </a>
                   )}
@@ -193,7 +190,7 @@ export default function ConnectWalletModal({ className }: { className?: string }
           </DialogDescription>
         </div>
 
-        <div className="w-full flex flex-col h-full items-center justify-center py-2 fixed bottom-0 text-[8px] dark:bg-gray-900  dark:border-gray-800 group relative">
+        <div className="w-full flex flex-col h-full items-center justify-center py-3 fixed bottom-0 text-[10px] dark:bg-gray-900  dark:border-gray-800 group relative">
           <div className="text-blue-500 dark:text-gray-400 text-center retro-text absolute bottom-2 transition-opacity duration-300 ease-in-out opacity-100 group-hover:opacity-0">
             <a
               href="https://www.lasereyes.build/"
@@ -210,7 +207,7 @@ export default function ConnectWalletModal({ className }: { className?: string }
               rel="noopener noreferrer"
               className="flex justify-center"
             >
-              <LaserEyesLogo width={48} color={"darkBlue"} />
+              <LaserEyesLogo width={30} color={"darkBlue"} />
             </a>
           </div>
         </div>

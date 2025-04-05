@@ -74,6 +74,11 @@ subfrost-app/
 - **Start**: `npm run start` - Starts production server
 - **Lint**: `npm run lint` - Runs ESLint
 
+### Version Control
+- Git is used for version control
+- Git commands should only be executed when explicitly requested by the user
+- Do not automatically commit or push changes after completing tasks
+
 ## Technical Constraints
 
 ### Browser Compatibility
