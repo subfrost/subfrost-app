@@ -18,6 +18,7 @@ import { WrapConfirmationModal } from "./WrapConfirmationModal";
 import { useBalances } from "../contexts/BalancesContext";
 import { getLogger } from "@/lib/logger";
 import { setupEnvironment } from "../contexts/regtest";
+import { FrBTC } from "./TokenNames";
 
 const logger = getLogger("subfrost:wrap");
 
@@ -58,10 +59,10 @@ export function WrapView() {
             <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
             <div className="flex flex-col">
               <div className="flex items-center justify-center w-full whitespace-nowrap">
-                <span className="text-sm md:text-xl">Wrap BTC</span>
+                <span className="text-2xl md:text-4xl font-bold">Wrap BTC</span>
               </div>
-              <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
-                <span className="text-sm md:text-xl">to frBTC</span>
+              <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
+                <span className="text-2xl md:text-4xl font-bold">to <FrBTC /></span>
               </div>
             </div>
             <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
@@ -95,14 +96,14 @@ export function WrapView() {
               <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
             </div>
             <p className="readable-text text-sm text-blue-600">
-              Expected frBTC: {calculateExpectedFrBTC()}
+              Expected <FrBTC />: {calculateExpectedFrBTC()}
             </p>
           </div>
         </CardContent>
         <CardFooter className="mt-auto">
           <Button
             onClick={handleWrap}
-            className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600"
+            className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size"
           >
             Wrap BTC
           </Button>

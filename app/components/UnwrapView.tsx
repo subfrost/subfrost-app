@@ -11,6 +11,7 @@ import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { UnwrapTransactionTable } from './UnwrapTransactionTable'
 import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 import { useBalances } from "../contexts/BalancesContext";
+import { FrBTC } from './TokenNames'
 
 export function UnwrapView() {
   const [amount, setAmount] = useState('')
@@ -82,29 +83,29 @@ export function UnwrapView() {
           <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
           <div className="flex flex-col">
             <div className="flex items-center justify-center w-full whitespace-nowrap">
-              <span className="text-blue-200 font-bold text-sm md:text-xl">Unwrap</span>{' '}
-              <span className="ml-1 md:ml-2 text-blue-200 text-sm md:text-xl">frBTC</span>
+              <span className="text-blue-200 font-bold text-2xl md:text-4xl">Unwrap</span>{' '}
+              <span className="ml-1 md:ml-2 text-blue-200 text-2xl md:text-4xl font-bold"><FrBTC /></span>
             </div>
-            <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
-              <span className="text-sm md:text-xl text-blue-200">to BTC</span>
+            <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
+              <span className="text-2xl md:text-4xl text-blue-200 font-bold">to BTC</span>
             </div>
           </div>
           <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
         </CardTitle>
-        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of frBTC you want to unwrap.</CardDescription>
+        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of <FrBTC /> you want to unwrap.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
-          <label htmlFor="frbtc-amount" className="readable-text text-sm text-blue-100 block mb-1">Amount of frBTC</label>
+          <label htmlFor="frbtc-amount" className="readable-text text-sm text-blue-100 block mb-1">Amount of <FrBTC /></label>
           <Input
             id="frbtc-amount"
             type="number"
             placeholder="0.00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="readable-text text-sm bg-blue-600 text-white placeholder-blue-300 border-blue-500"
+            className="readable-text text-sm bg-blue-600 text-white placeholder-white border-blue-500"
           />
-          <p className="readable-text text-sm mt-1 text-blue-200">Available: {frBTCBalance} frBTC</p>
+          <p className="readable-text text-sm mt-1 text-blue-200">Available: {frBTCBalance} <FrBTC /></p>
         </div>
         <div>
           <div className="flex items-center mb-2">
@@ -114,8 +115,8 @@ export function UnwrapView() {
         </div>
       </CardContent>
       <CardFooter className="flex-col items-stretch space-y-6">
-        <Button onClick={handleUnwrap} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600 text-white">
-          Unwrap frBTC
+        <Button onClick={handleUnwrap} className="w-full retro-text text-base font-bold bg-blue-600 hover:bg-blue-700 text-white navbar-size">
+          Unwrap <FrBTC />
         </Button>
         <div className="w-full border-t border-blue-500 opacity-50"></div>
         <div className="bg-blue-800 bg-opacity-50 rounded-lg p-4"> {/* Reverted p-2 to p-4 */}

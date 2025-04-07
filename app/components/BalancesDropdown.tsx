@@ -7,6 +7,7 @@ import { FaWallet } from 'react-icons/fa'
 import { useBalances } from "../contexts/BalancesContext"
 import { FaBitcoin, FaSnowflake } from "react-icons/fa"
 import { RiExchangeDollarFill, RiCoinsFill } from "react-icons/ri"
+import { FrBTC, DxBTC, DxFROST } from './TokenNames'
 
 interface BalancesDropdownProps {
   isMobile?: boolean;
@@ -104,12 +105,12 @@ export function BalancesDropdown({ isMobile = false }: BalancesDropdownProps) {
             <div className="space-y-2">
               <div className="flex flex-wrap gap-2">
                 <BalanceItem icon={FaBitcoin} label="BTC" amount={formattedBalances.btc} />
-                <BalanceItem icon={RiExchangeDollarFill} label="frBTC" amount={formattedBalances.frBTC} />
-                <BalanceItem icon={RiCoinsFill} label="dxBTC" amount={parseFloat(formattedBalances.dxFROST).toFixed(8)} />
+                <BalanceItem icon={RiExchangeDollarFill} label={<FrBTC />} amount={formattedBalances.frBTC} />
+                <BalanceItem icon={RiCoinsFill} label={<DxBTC />} amount={parseFloat(formattedBalances.dxFROST).toFixed(8)} />
               </div>
               <div className="flex flex-wrap gap-2">
                 <BalanceItem icon={FaSnowflake} label="FROST" amount={formattedBalances.frost} />
-                <BalanceItem icon={RiCoinsFill} label="dxFROST" amount={formattedBalances.dxFROST} />
+                <BalanceItem icon={RiCoinsFill} label={<DxFROST />} amount={formattedBalances.dxFROST} />
               </div>
             </div>
           </div>
@@ -126,14 +127,14 @@ function BalanceItem({
   amount,
 }: {
   icon: React.ElementType;
-  label: string;
+  label: string | React.ReactNode;
   amount: string | number;
 }) {
   return (
     <div className="flex items-center bg-blue-700 bg-opacity-50 rounded-lg px-2 py-1 h-8">
       <Icon className="text-blue-300 text-sm mr-1" />
       <div className="flex items-center space-x-1">
-        <span className="retro-text text-[10px] text-white">{label}:</span>
+        <span className="retro-text text-[10px] text-white">{typeof label === 'string' ? label : label}:</span>
         <span className="font-bold retro-text text-[10px] text-white">{amount}</span>
       </div>
     </div>

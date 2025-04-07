@@ -88,7 +88,7 @@ export function Navbar() {
   return (
     <nav className="bg-blue-800 bg-opacity-70 backdrop-filter backdrop-blur-lg p-4 mb-4 frost-border">
       <div ref={navbarRef} className="container mx-auto flex flex-col md:flex-row items-center transition-all duration-300 ease-in-out">
-        <Link ref={logoRef} href="/" className="text-2xl font-bold retro-text text-white flex items-center transition-all duration-300 ease-in-out">
+        <Link ref={logoRef} href="/" className="text-4xl font-extrabold retro-text text-white flex items-center transition-all duration-300 ease-in-out">
           <FaSnowflake className="mr-2" />
           SUBFROST
         </Link>
@@ -151,14 +151,15 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
     <Link
       href={href}
       className={`
-        ${active ? 'text-blue-300' : 'text-white'} 
-        hover:text-blue-200 
-        retro-text 
-        text-xs 
-        px-2 
-        py-1 
-        rounded 
-        transition-colors 
+        ${active ? 'text-blue-300' : 'text-white'}
+        hover:text-blue-200
+        retro-text
+        text-base
+        font-bold
+        px-3
+        py-2
+        rounded
+        transition-colors
         duration-200
         ${active ? 'bg-blue-700 bg-opacity-50' : 'hover:bg-blue-700 hover:bg-opacity-30'}
         md:inline-block w-full md:w-auto text-center

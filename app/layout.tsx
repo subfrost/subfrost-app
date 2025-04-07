@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Nunito } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "./components/Navbar";
 import { MobileNavigation } from "./components/MobileNavigation";
@@ -14,7 +14,7 @@ import { BalancesProvider } from "./contexts/BalancesContext";
 import { LaserEyesProvider } from "@omnisat/lasereyes";
 import { RegtestProvider } from "./contexts/RegtestContext";
 
-const inter = Inter({ subsets: ["latin"] });
+const nunito = Nunito({ weight: ["300", "400", "700"], subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "SUBFROST",
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen h-screen flex flex-col m-0 p-0 overflow-x-hidden`}
+        className={`${nunito.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen h-screen flex flex-col m-0 p-0 overflow-x-hidden`}
       >
         <RegtestProvider>
           <LaserEyesProvider>

@@ -76,7 +76,7 @@ export function SwapConfirmationModal({
           <Button onClick={onClose} variant="outline" className="retro-text text-xs">
             Cancel
           </Button>
-          <Button onClick={onConfirm} className="retro-text text-sm bg-blue-500 hover:bg-blue-600">
+          <Button onClick={onConfirm} className="retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
             Confirm Swap
           </Button>
         </DialogFooter>

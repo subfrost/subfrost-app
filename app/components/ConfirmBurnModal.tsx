@@ -39,13 +39,13 @@ export function ConfirmBurnModal({
         <DialogHeader>
           <DialogTitle className="retro-text text-blue-300 flex items-center">
             <FaSnowflake className="mr-2" />
-            Confirm Burn
+            Confirm Melt
           </DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4 text-white">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs">Burn Amount: {burnAmount} {lpPair} LP</p>
+            <p className="readable-text text-xs">Melt Amount: {burnAmount} {lpPair} LP</p>
             <p className="readable-text text-xs">Expected BTC: {expectedBTC} BTC ({formatCurrency(parseFloat(expectedBTC) * assetPrices['BTC'])})</p>
             <p className="readable-text text-xs">Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({formatCurrency(parseFloat(expectedPaired) * assetPrices[pairedAsset])})</p>
             <p className="readable-text text-xs">Slippage Tolerance: {slippage.toFixed(1)}%</p>
@@ -62,8 +62,8 @@ export function ConfirmBurnModal({
           <Button onClick={onClose} variant="outline" className="retro-text text-xs">
             Cancel
           </Button>
-          <Button onClick={handleConfirm} className="retro-text text-sm bg-blue-500 hover:bg-blue-600">
-            Confirm Burn
+          <Button onClick={handleConfirm} className="retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
+            Confirm Melt
           </Button>
         </DialogFooter>
       </DialogContent>

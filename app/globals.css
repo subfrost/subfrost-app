@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -94,13 +93,160 @@ body {
 }
 
 .retro-text {
-  font-family: 'Press Start 2P', cursive;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
+/* Preserve case for specific tokens */
+.retro-text:not(.preserve-case) span:not(.token-name) {
+  text-transform: uppercase;
+}
+
+/* Token names that should preserve their case */
+.token-name {
+  text-transform: none;
+}
+
+/* Token name styling */
+.token-name {
+  font-family: 'Nunito', sans-serif !important;
+  text-transform: none !important;
+}
 .readable-text {
-  font-family: 'Roboto Mono', monospace;
-  font-weight: 300;
-  letter-spacing: -0.25px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+/* Make card titles larger and bold */
+.card-title, h1, h2, h3, [class*="CardTitle"] {
+  font-size: 1.5em !important;
+  font-weight: 700 !important;
+}
+
+/* Target specific widget headers */
+div[class*="CardHeader"] [class*="CardTitle"] span,
+.CardTitle .flex-col span,
+.text-sm.md\:text-xl,
+span.text-sm.md\:text-xl,
+.whitespace-nowrap .text-sm.md\:text-xl,
+.flex-col .flex .text-sm.md\:text-xl,
+.flex-col .flex .whitespace-nowrap .text-sm.md\:text-xl {
+  font-size: 1.5em !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+/* Specifically target "Earn Yield with dxBTC" type headers */
+.flex-col div span.text-sm.md\:text-xl {
+  font-size: 1.5em !important;
+  font-weight: 700 !important;
+}
+
+/* Increase size and make bold the SUBFROST title in the header */
+a[href="/"].text-3xl {
+  font-size: 2.5rem !important;
+  font-weight: 900 !important;
+}
+
+/* Increase size and make bold specific widget titles */
+/* Target all card titles to ensure we catch the specific ones */
+.CardTitle .flex-col div span {
+  font-size: 1.75em !important;
+  font-weight: 800 !important;
+}
+
+/* Protocol Metrics */
+.FeeMandatesAndYieldChart .CardTitle {
+  font-size: 2em !important;
+  font-weight: 800 !important;
+}
+
+/* Specific targeting for StakeView, WrapView, and UnwrapView */
+.StakeView .CardTitle,
+.WrapView .CardTitle,
+.UnwrapView .CardTitle {
+  font-size: 1.75em !important;
+  font-weight: 800 !important;
+}
+
+/* Direct targeting for specific components */
+.retro-text.text-blue-600 {
+  font-size: 2em !important;
+  font-weight: 800 !important;
+}
+
+/* Increase icon sizes in headers */
+.CardTitle svg,
+.card-title svg,
+h1 svg, h2 svg, h3 svg {
+  transform: scale(1.5);
+}
+
+/* Make mobile navigation text larger and bold */
+.md\:hidden a,
+.md\:hidden button,
+.md\:hidden .retro-text {
+  font-size: 1.25em !important;
+  font-weight: 700 !important;
+}
+
+/* Set all buttons to the same size as BALANCES and CONNECT WALLET */
+button,
+.button,
+[class*="Button"],
+button.retro-text:not(.md\:hidden *):not(.navbar-size) {
+  font-size: 0.75rem !important; /* text-xs */
+}
+
+/* Make bottom action buttons match navbar link size */
+.navbar-size {
+  font-size: 1rem !important; /* text-base */
+}
+
+/* Make placeholder text white in the unwrap widget */
+.bg-blue-600::placeholder {
+  color: white !important;
+  opacity: 1 !important;
+}
+
+/* Make token button text match the size of non-adjustable token buttons */
+.token-button-text {
+  font-size: 1rem !important; /* text-base */
+}
+/* BitcoinFeeWidget should match the size of "Bitcoin Network Fee:" */
+.BitcoinFeeWidget,
+span[style*="font-size: 0.65rem"] {
+  font-size: 0.75rem !important; /* text-xs */
+}
+
+/* Remove outline from buttons when focused/selected */
+button:focus,
+.button:focus,
+[class*="Button"]:focus,
+button.retro-text:focus,
+[role="button"]:focus,
+a[role="button"]:focus,
+a.button:focus,
+.select-trigger:focus,
+[class*="SelectTrigger"]:focus,
+[data-state="open"],
+[data-state="focused"],
+[data-state="active"] {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+  ring-width: 0 !important;
+  ring-offset-width: 0 !important;
+}
+
+/* Remove ring from all interactive elements */
+*:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+  ring-width: 0 !important;
+  ring-offset-width: 0 !important;
 }
 
 .frost-bg {

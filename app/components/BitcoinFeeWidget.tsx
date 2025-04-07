@@ -36,7 +36,7 @@ export function BitcoinFeeWidget({
 
   if (noBackground) {
     return (
-      <span className={`retro-text ${textColor}`} style={{ fontSize: '0.65rem' }}>
+      <span className={`readable-text ${textColor} text-xs`}>
         5 sat/vbyte
       </span>
     );
@@ -44,10 +44,10 @@ export function BitcoinFeeWidget({
 
   return (
     <div className="flex flex-col justify-center bg-blue-800 bg-opacity-70 rounded-md p-2 h-10 transition-all duration-500 ease-in-out">
-      <span className={`text-[10px] retro-text text-white leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <span className={`text-[10px] readable-text text-white leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
         BTC Network Fee
       </span>
-      <span className={`text-[10px] retro-text text-white leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <span className={`text-[10px] readable-text text-white leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
         5 sat/vbyte
       </span>
     </div>

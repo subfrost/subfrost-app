@@ -70,22 +70,22 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
   }
 
   const AssetSelector = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
-    <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-between cursor-pointer">
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="border-0 bg-transparent text-white p-0 h-auto">
-          <SelectValue placeholder="Select asset" />
-        </SelectTrigger>
-        <SelectContent>
-          {nonBTCAssets.map((asset) => (
-            <SelectItem key={asset} value={asset}>{asset}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
+        <div className="flex items-center justify-center w-full h-full">
+          <span>{value}</span>
+        </div>
+      </SelectTrigger>
+      <SelectContent>
+        {nonBTCAssets.map((asset) => (
+          <SelectItem key={asset} value={asset}>{asset}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 
   const BTCDisplay = () => (
-    <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-center">
+    <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 flex items-center justify-center token-button-text">
       BTC
     </div>
   )
@@ -144,7 +144,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
             <Settings className="h-4 w-4" />
           </Button>
         </div>
-        <Button onClick={handleSwap} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600">
+        <Button onClick={handleSwap} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
           Swap
         </Button>
       </div>

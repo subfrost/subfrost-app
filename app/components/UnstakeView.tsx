@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { RiCoinsFill } from 'react-icons/ri'
 import { UnstakeConfirmationModal } from './UnstakeConfirmationModal'
 import { useBalances } from "../contexts/BalancesContext";
+import { FrBTC, DxBTC, DxFROST } from './TokenNames'
 
 interface UnstakeViewProps {
   showBtcOnly?: boolean;
@@ -59,7 +60,7 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
             <div className="flex flex-col">
               <div className="flex items-center justify-center w-full whitespace-nowrap">
                 <span className="text-blue-200 font-bold text-sm md:text-xl">Unstake</span>{' '}
-                <span className="ml-1 md:ml-2 text-blue-200 text-sm md:text-xl">dxBTC</span>
+                <span className="ml-1 md:ml-2 text-blue-200 text-sm md:text-xl"><DxBTC /></span>
               </div>
               <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
                 <span className="text-sm md:text-xl text-blue-200">to</span>{' '}
@@ -67,18 +68,18 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
                 onClick={() => setDxBTCOutputToken(dxBTCOutputToken === "BTC" ? "frBTC" : "BTC")}
                 className="text-white hover:text-blue-200 underline bg-blue-800 px-1 md:px-2 py-0 md:py-1 rounded-md text-sm md:text-xl ml-1"
               >
-                {dxBTCOutputToken}
+                {dxBTCOutputToken === "frBTC" ? <FrBTC /> : "BTC"}
               </button>
               </div>
             </div>
             <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
           </CardTitle>
-          <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of dxBTC you want to unstake back to {dxBTCOutputToken}.</CardDescription>
+          <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of <DxBTC /> you want to unstake back to {dxBTCOutputToken === "frBTC" ? <FrBTC /> : "BTC"}.</CardDescription>
         </CardHeader>
         <CardContent className="flex-grow pt-4">
           <div className="h-full flex flex-col">
             <div className="mb-4">
-              <label htmlFor="dxbtc-amount" className="readable-text text-sm text-blue-100 block mb-2 h-5">Amount of dxBTC</label>
+              <label htmlFor="dxbtc-amount" className="readable-text text-sm text-blue-100 block mb-2 h-5">Amount of <DxBTC /></label>
               <Input
                 id="dxbtc-amount"
                 type="number"
@@ -88,16 +89,16 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
                 className="readable-text text-sm bg-blue-600 text-white border-blue-500 h-10"
                 style={{ WebkitTextFillColor: 'white' }}
               />
-              <p className="readable-text text-xs mt-2 text-blue-200 h-4">Available: {dxBTCBalance} dxBTC</p>
+              <p className="readable-text text-xs mt-2 text-blue-200 h-4">Available: {dxBTCBalance} <DxBTC /></p>
             </div>
             <div className="mt-4">
-              <p className="readable-text text-sm text-blue-100 h-5">Expected {dxBTCOutputToken}: {expectedBTC}</p>
+              <p className="readable-text text-sm text-blue-100 h-5">Expected {dxBTCOutputToken === "frBTC" ? <FrBTC /> : "BTC"}: {expectedBTC}</p>
             </div>
           </div>
         </CardContent>
         <CardFooter className="mt-auto flex flex-col">
           <Button onClick={handleDxBTCUnstake} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600 text-white">
-            Unstake dxBTC
+            Unstake <DxBTC />
           </Button>
           <div className="h-6"></div> {/* Spacer to keep alignment with the other card */}
         </CardFooter>
@@ -119,21 +120,21 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
             <div className="flex flex-col">
               <div className="flex items-center justify-center w-full whitespace-nowrap">
                 <span className="text-blue-200 font-bold text-sm md:text-xl">Unstake</span>{' '}
-                <span className="ml-1 md:ml-2 text-blue-200 text-sm md:text-xl">dxFROST</span>
+                <span className="ml-1 md:ml-2 text-blue-200 text-sm md:text-xl"><DxFROST /></span>
               </div>
               <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
                 <span className="text-sm md:text-xl text-blue-200">to</span>{' '}
-              <span className="text-white text-sm md:text-xl ml-1">frBTC/FROST</span>
+              <span className="text-white text-sm md:text-xl ml-1"><span className="token-name">frBTC/FROST</span></span>
               </div>
             </div>
             <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
           </CardTitle>
-          <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of dxFROST you want to unstake to frBTC/FROST LP.</CardDescription>
+          <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of <DxFROST /> you want to unstake to <span className="token-name">frBTC/FROST</span> LP.</CardDescription>
         </CardHeader>
         <CardContent className="flex-grow pt-4">
           <div className="h-full flex flex-col">
             <div className="mb-4">
-              <label htmlFor="dxfrost-amount" className="readable-text text-sm text-blue-100 block mb-2 h-5">Amount of dxFROST</label>
+              <label htmlFor="dxfrost-amount" className="readable-text text-sm text-blue-100 block mb-2 h-5">Amount of <DxFROST /></label>
               <Input
                 id="dxfrost-amount"
                 type="number"
@@ -143,17 +144,17 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
                 className="readable-text text-sm bg-blue-600 text-white border-blue-500 h-10"
                 style={{ WebkitTextFillColor: 'white' }}
               />
-              <p className="readable-text text-xs mt-2 text-blue-200 h-4">Available: {dxFROSTBalance} dxFROST</p>
+              <p className="readable-text text-xs mt-2 text-blue-200 h-4">Available: {dxFROSTBalance} <DxFROST /></p>
             </div>
             <div className="mt-4">
-              <p className="readable-text text-sm text-blue-100 h-5">Expected frBTC/FROST: {expectedOutput}</p>
-              <p className="readable-text text-xs mt-2 text-blue-200 uppercase font-bold">YOU CAN SEPARATE THESE TOKENS ON THE SWAP PAGE.</p>
+              <p className="readable-text text-sm text-blue-100 h-5">Expected <span className="token-name">frBTC/FROST</span>: {expectedOutput}</p>
+              <p className="readable-text text-xs mt-2 text-blue-200">YOU CAN SEPARATE THESE TOKENS ON THE SWAP PAGE.</p>
             </div>
           </div>
         </CardContent>
         <CardFooter className="mt-auto flex flex-col">
           <Button onClick={handleUnstake} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600 text-white">
-            Unstake dxFROST
+            Unstake <DxFROST />
           </Button>
         </CardFooter>
         <UnstakeConfirmationModal

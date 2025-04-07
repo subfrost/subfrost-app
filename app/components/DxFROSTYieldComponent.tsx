@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { DxFROST } from './TokenNames'
 
 export function DxFROSTYieldComponent() {
   const [data, setData] = useState([
@@ -29,7 +30,7 @@ export function DxFROSTYieldComponent() {
   return (
     <Card className="frost-bg frost-border">
       <CardHeader>
-        <CardTitle className="retro-text text-blue-600">dxFROST Yield Performance</CardTitle>
+        <CardTitle className="retro-text text-blue-600"><DxFROST /> Yield Performance</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>

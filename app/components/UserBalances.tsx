@@ -8,6 +8,7 @@ import { lasereyesMiddleware } from "../middleware";
 import { provider } from "../contexts/regtest";
 import { useLaserEyes } from "@omnisat/lasereyes";
 import { useEffect } from "react";
+import { FrBTC, DxBTC, DxFROST } from "./TokenNames";
 import { ethers } from "ethers";
 import { mapValues } from "lodash";
 
@@ -49,12 +50,12 @@ export function UserBalances() {
           <BalanceItem icon={FaBitcoin} label="BTC" amount={formattedBalances.btc} />
           <BalanceItem
             icon={RiExchangeDollarFill}
-            label="frBTC"
+            label={<FrBTC />}
             amount={formattedBalances.frBTC}
           />
           <BalanceItem
             icon={RiCoinsFill}
-            label="dxBTC"
+            label={<DxBTC />}
             amount={formattedBalances.dxFROST}
           />
         </div>
@@ -62,7 +63,7 @@ export function UserBalances() {
           <BalanceItem icon={FaSnowflake} label="FROST" amount={formattedBalances.frost} />
           <BalanceItem
             icon={RiCoinsFill}
-            label="dxFROST"
+            label={<DxFROST />}
             amount={formattedBalances.dxFROST}
           />
         </div>
@@ -77,14 +78,14 @@ function BalanceItem({
   amount,
 }: {
   icon: React.ElementType;
-  label: string;
+  label: string | React.ReactNode;
   amount: string | number;
 }) {
   return (
     <div className="flex items-center bg-blue-800 bg-opacity-20 rounded-lg px-2 py-1 h-8">
       <Icon className="text-blue-500 text-sm mr-1" />
       <div className="flex items-center space-x-1">
-        <span className="retro-text text-[10px]">{label}:</span>
+        <span className="retro-text text-[10px]">{typeof label === 'string' ? label : label}:</span>
         <span className="font-bold retro-text text-[10px]">{amount}</span>
       </div>
     </div>

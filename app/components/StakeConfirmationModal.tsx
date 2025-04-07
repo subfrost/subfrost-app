@@ -56,7 +56,7 @@ export function StakeConfirmationModal({
           <Button onClick={onClose} variant="outline" className="retro-text text-xs">
             Cancel
           </Button>
-          <Button onClick={handleConfirm} className="retro-text text-sm bg-blue-500 hover:bg-blue-600">
+          <Button onClick={handleConfirm} className="retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
             Confirm Stake
           </Button>
         </DialogFooter>

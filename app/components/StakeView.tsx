@@ -16,6 +16,7 @@ import { CombinedCharts } from './CombinedCharts'
 import { useBalances } from "../contexts/BalancesContext"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { FrBTC, DxBTC, DxFROST } from './TokenNames'
 
 export function StakeView() {
   const [frBtcFrostAmount, setFrBtcFrostAmount] = useState('')
@@ -112,10 +113,10 @@ export function StakeView() {
                 )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-center w-full whitespace-nowrap">
-                    <span className="text-sm md:text-xl">Earn Yield</span>
+                    <span className="text-2xl md:text-4xl font-bold">Earn Yield</span>
                   </div>
-                  <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
-                    <span className="text-sm md:text-xl">with dxBTC</span>
+                  <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
+                    <span className="text-2xl md:text-4xl font-bold">with <DxBTC /></span>
                   </div>
                 </div>
                 {isStaking ? (
@@ -158,14 +159,14 @@ export function StakeView() {
                       <label htmlFor="btc-stake-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You're Staking:</label>
                       <div className="flex items-center space-x-2">
                         <Select value={dxBTCInputToken} onValueChange={setDxBTCInputToken}>
-                          <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
+                          <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
                             <div className="flex items-center justify-center w-full h-full">
                               <span>{dxBTCInputToken}</span>
                             </div>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="BTC">BTC</SelectItem>
-                            <SelectItem value="frBTC">frBTC</SelectItem>
+                            <SelectItem value="frBTC"><FrBTC /></SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
@@ -188,7 +189,7 @@ export function StakeView() {
                         <div className="flex items-center space-x-2">
                           <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                             <div className="flex items-center justify-center w-full h-full">
-                              <span>dxBTC</span>
+                              <DxBTC />
                             </div>
                           </div>
                           <div className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center">
@@ -205,7 +206,7 @@ export function StakeView() {
                       <div className="flex items-center space-x-2">
                         <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                           <div className="flex items-center justify-center w-full h-full">
-                            <span>dxBTC</span>
+                            <DxBTC />
                           </div>
                         </div>
                         <Input
@@ -217,7 +218,7 @@ export function StakeView() {
                           className="readable-text text-sm h-10 flex-1"
                         />
                       </div>
-                      <p className="readable-text text-xs mt-2 h-4">Available: {dxBTCBalance} dxBTC</p>
+                      <p className="readable-text text-xs mt-2 h-4">Available: {dxBTCBalance} <DxBTC /></p>
                     </div>
                     <div className="mt-4">
                       <div className="flex items-center mb-2">
@@ -227,14 +228,14 @@ export function StakeView() {
                         <label htmlFor="btc-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
                         <div className="flex items-center space-x-2">
                           <Select value={dxBTCOutputToken} onValueChange={setDxBTCOutputToken}>
-                            <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
+                            <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
                               <div className="flex items-center justify-center w-full h-full">
                                 <span>{dxBTCOutputToken}</span>
                               </div>
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="BTC">BTC</SelectItem>
-                              <SelectItem value="frBTC">frBTC</SelectItem>
+                              <SelectItem value="frBTC"><FrBTC /></SelectItem>
                             </SelectContent>
                           </Select>
                           <div className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center">
@@ -249,12 +250,12 @@ export function StakeView() {
             </CardContent>
             <CardFooter className="mt-auto">
               {isStaking ? (
-                <Button onClick={handleStake} className="w-full retro-text text-sm bg-blue-700 hover:bg-blue-800">
+                <Button onClick={handleStake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
                   Stake {dxBTCInputToken}
                 </Button>
               ) : (
-                <Button onClick={handleUnstake} className="w-full retro-text text-sm bg-blue-700 hover:bg-blue-800">
-                  Unstake dxBTC
+                <Button onClick={handleUnstake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
+                  Unstake <DxBTC />
                 </Button>
               )}
             </CardFooter>
@@ -272,10 +273,10 @@ export function StakeView() {
                 )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-center w-full whitespace-nowrap">
-                    <span className="text-sm md:text-xl">Earn Yield</span>
+                    <span className="text-2xl md:text-4xl font-bold">Earn Yield</span>
                   </div>
-                  <div className="mt-1 font-bold flex items-center justify-center whitespace-nowrap">
-                    <span className="text-sm md:text-xl">with dxFROST</span>
+                  <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
+                    <span className="text-2xl md:text-4xl font-bold">with <DxFROST /></span>
                   </div>
                 </div>
                 {isStaking ? (
@@ -304,10 +305,15 @@ export function StakeView() {
               </div>
               
               <CardDescription className="readable-text text-sm">
-                {isStaking
-                  ? `Enter the amount of ${dxFROSTInputToken === "BTC" ? "BTC" : "frBTC/FROST LP"} you want to stake to dxFROST.`
-                  : `Enter the amount of dxFROST you want to unstake to frBTC/FROST LP.`
-                }
+                {isStaking ? (
+                  <span>
+                    Enter the amount of {dxFROSTInputToken === "BTC" ? "BTC" : <span className="token-name">frBTC/FROST LP</span>} you want to stake to <DxFROST />.
+                  </span>
+                ) : (
+                  <span>
+                    Enter the amount of <DxFROST /> you want to unstake to <span className="token-name">frBTC/FROST LP</span>.
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow pt-4">
@@ -318,14 +324,14 @@ export function StakeView() {
                       <label htmlFor="btc-frost-stake-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You're Staking:</label>
                       <div className="flex items-center space-x-2">
                         <Select value={dxFROSTInputToken} onValueChange={setDxFROSTInputToken}>
-                          <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
+                          <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
                             <div className="flex items-center justify-center w-full h-full">
                               <span>{dxFROSTInputToken === "BTC" ? "BTC" : "frBTC/FROST"}</span>
                             </div>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="BTC">BTC</SelectItem>
-                            <SelectItem value="LP">frBTC/FROST</SelectItem>
+                            <SelectItem value="LP"><span className="token-name">frBTC/FROST</span></SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
@@ -348,7 +354,7 @@ export function StakeView() {
                         <div className="flex items-center space-x-2">
                           <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                             <div className="flex items-center justify-center w-full h-full">
-                              <span>dxFROST</span>
+                              <DxFROST />
                             </div>
                           </div>
                           <div className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center">
@@ -357,7 +363,7 @@ export function StakeView() {
                         </div>
                       </div>
                       {/* Show note for both BTC and frBTC/FROST staking options */}
-                      <p className="readable-text text-sm">NOTE THAT THIS WILL UNSTAKE TO frBTC/FROST LP, NOT TO NATIVE BTC LIKE WHEN UNSTAKING dxBTC.</p>
+                      <p className="readable-text text-xs">NOTE THAT THIS WILL UNSTAKE TO <span className="token-name">frBTC/FROST</span> LP, NOT TO NATIVE BTC LIKE WHEN UNSTAKING <DxBTC />.</p>
                     </div>
                   </>
                 ) : (
@@ -367,7 +373,7 @@ export function StakeView() {
                       <div className="flex items-center space-x-2">
                         <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                           <div className="flex items-center justify-center w-full h-full">
-                            <span>dxFROST</span>
+                            <DxFROST />
                           </div>
                         </div>
                         <Input
@@ -379,7 +385,7 @@ export function StakeView() {
                           className="readable-text text-sm h-10 flex-1"
                         />
                       </div>
-                      <p className="readable-text text-xs mt-2 h-4">Available: {dxFROSTBalance} dxFROST</p>
+                      <p className="readable-text text-xs mt-2 h-4">Available: {dxFROSTBalance} <DxFROST /></p>
                     </div>
                     <div className="mt-4">
                       <div className="flex items-center mb-2">
@@ -390,7 +396,7 @@ export function StakeView() {
                         <div className="flex items-center space-x-2">
                           <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                             <div className="flex items-center justify-center w-full h-full">
-                              <span>frBTC/FROST</span>
+                              <span className="token-name">frBTC/FROST</span>
                             </div>
                           </div>
                           <div className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center">
@@ -398,7 +404,7 @@ export function StakeView() {
                           </div>
                         </div>
                       </div>
-                      <p className="readable-text text-sm">YOU CAN SEPARATE THESE TOKENS ON THE SWAP PAGE. SELECT "LP" AND THEN "REMOVE".</p>
+                      <p className="readable-text text-xs">YOU CAN SEPARATE THESE TOKENS ON THE SWAP PAGE. SELECT "LP" AND THEN "REMOVE".</p>
                     </div>
                   </>
                 )}
@@ -406,12 +412,12 @@ export function StakeView() {
             </CardContent>
             <CardFooter className="mt-auto">
               {isStaking ? (
-                <Button onClick={handleStake} className="w-full retro-text text-sm bg-blue-700 hover:bg-blue-800">
+                <Button onClick={handleStake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
                   Stake {dxFROSTInputToken === "BTC" ? "BTC" : "frBTC/FROST LP"}
                 </Button>
               ) : (
-                <Button onClick={handleUnstake} className="w-full retro-text text-sm bg-blue-700 hover:bg-blue-800">
-                  Unstake dxFROST
+                <Button onClick={handleUnstake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
+                  Unstake <DxFROST />
                 </Button>
               )}
             </CardFooter>

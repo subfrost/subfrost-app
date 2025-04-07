@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { DxBTC } from './TokenNames'
 
 export function DxBTCYieldComponent() {
   const [data, setData] = useState([
@@ -29,7 +30,7 @@ export function DxBTCYieldComponent() {
   return (
     <Card className="frost-bg frost-border">
       <CardHeader>
-        <CardTitle className="retro-text text-blue-600">dxBTC Yield Performance</CardTitle>
+        <CardTitle className="retro-text text-blue-600"><DxBTC /> Yield Performance</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>

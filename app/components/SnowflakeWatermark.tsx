@@ -56,7 +56,7 @@ export function SnowflakeWatermark() {
       ctx.stroke()
 
       // Draw the Bitcoin 'B' symbol
-      ctx.font = `${radius}px Arial`
+      ctx.font = `${radius}px Nunito`
       ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'

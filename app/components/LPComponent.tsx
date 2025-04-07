@@ -9,6 +9,7 @@ import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { ConfirmMintModal } from './ConfirmMintModal'
 import { ConfirmBurnModal } from './ConfirmBurnModal'
 import { calculateDollarValue, formatCurrency, assetPrices } from '../utils/priceCalculations'
+import { FrBTC } from './TokenNames'
 const nonFrBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'METHANE', 'WATER', 'FROST', 'zkBTC']
 
 interface LPComponentProps {
@@ -132,18 +133,18 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
   }
 
   const AssetSelector = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
-    <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-between cursor-pointer">
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="border-0 bg-transparent text-white p-0 h-auto">
-          <SelectValue placeholder="Select asset" />
-        </SelectTrigger>
-        <SelectContent>
-          {nonFrBTCAssets.map((asset) => (
-            <SelectItem key={asset} value={asset}>{asset}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
+        <div className="flex items-center justify-center w-full h-full">
+          <span>{value}</span>
+        </div>
+      </SelectTrigger>
+      <SelectContent>
+        {nonFrBTCAssets.map((asset) => (
+          <SelectItem key={asset} value={asset}>{asset}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 
   return (
@@ -166,7 +167,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
       {isMintMode ? (
         <>
           <div className="space-y-2">
-            <label className="retro-text text-sm text-blue-600">frBTC Amount</label>
+            <label className="retro-text text-sm text-blue-600"><FrBTC /> Amount</label>
             <div className="flex space-x-2">
               <Input
                 type="number"
@@ -175,8 +176,8 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
                 placeholder="0.00"
                 className="flex-grow"
               />
-              <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-center">
-                frBTC
+              <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 flex items-center justify-center token-button-text">
+                <FrBTC />
               </div>
             </div>
             <p className="readable-text text-xs mt-2 h-4">{calculateDollarValueSafe('frBTC', parseFloat(frBTCAmount) || 0)}</p>
@@ -206,8 +207,8 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
           <div className="space-y-2">
             <label className="retro-text text-sm text-blue-600">LP Token Pair</label>
             <div className="flex items-center space-x-2">
-              <div className="w-[120px] h-10 rounded-md border border-input bg-blue-500 text-white px-3 py-2 text-sm retro-text flex items-center justify-center">
-                frBTC
+              <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 flex items-center justify-center token-button-text">
+                <FrBTC />
               </div>
               <span className="text-blue-600">/</span>
               <AssetSelector value={pairedAsset} onChange={setPairedAsset} />
@@ -250,8 +251,8 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
             <Settings className="h-4 w-4" />
           </Button>
         </div>
-        <Button onClick={handleMintOrBurn} className="w-full retro-text text-sm bg-blue-500 hover:bg-blue-600">
-          {isMintMode ? "Mint" : "Burn"}
+        <Button onClick={handleMintOrBurn} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
+          {isMintMode ? "Mint" : "Melt"}
         </Button>
       </div>
 
