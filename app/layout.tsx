@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen flex flex-col m-0 p-0`}
+        className={`${inter.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen h-screen flex flex-col m-0 p-0 overflow-x-hidden`}
       >
         <RegtestProvider>
           <LaserEyesProvider>
@@ -38,7 +38,7 @@ export default function RootLayout({
               <SubfrostP2PProvider>
                 <SnowflakeBackground />
                 <SnowflakeWatermark />
-                <div className="flex flex-col min-h-screen h-screen">
+                <div className="flex flex-col min-h-screen h-screen w-full">
                   <Navbar />
                   <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
                     {children}

@@ -20,11 +20,30 @@ export function BalancesDropdown({ isMobile = false }: BalancesDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { formattedBalances } = useBalances()
 
-  // Handle mounting for client-side rendering
+  // Handle mounting for client-side rendering and track window width
+  const [windowWidth, setWindowWidth] = useState(0);
+  
   useEffect(() => {
-    setMounted(true)
-    return () => setMounted(false)
-  }, [])
+    setMounted(true);
+    
+    // Set initial window width
+    if (typeof window !== 'undefined') {
+      setWindowWidth(window.innerWidth);
+      
+      // Update window width on resize
+      const handleResize = () => {
+        setWindowWidth(window.innerWidth);
+      };
+      
+      window.addEventListener('resize', handleResize);
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        setMounted(false);
+      };
+    }
+    
+    return () => setMounted(false);
+  }, []);
 
   // Calculate button position when opening dropdown
   const handleOpenDropdown = () => {
@@ -71,11 +90,11 @@ export function BalancesDropdown({ isMobile = false }: BalancesDropdownProps) {
         <div
           style={{
             position: 'fixed',
-            top: isMobile ? '50%' : buttonPosition.top + 'px', // Position below the button
-            left: isMobile ? '50%' : buttonPosition.left + 'px',
+            top: isMobile ? (windowWidth < 768 ? buttonPosition.top + 'px' : '50%') : buttonPosition.top + 'px',
+            left: isMobile ? (windowWidth < 768 ? buttonPosition.left + 'px' : '50%') : buttonPosition.left + 'px',
             right: isMobile ? 'auto' : 'auto',
-            minWidth: isMobile ? '64%' : Math.max(buttonPosition.width, 200) + 'px',
-            transform: isMobile ? 'translate(-50%, -50%)' : 'none',
+            minWidth: isMobile ? (windowWidth < 768 ? Math.max(buttonPosition.width, 200) + 'px' : '80%') : Math.max(buttonPosition.width, 200) + 'px',
+            transform: isMobile ? (windowWidth < 768 ? 'none' : 'translate(-50%, -50%)') : 'none',
             zIndex: 9999,
           }}
           className="w-64 bg-blue-800 bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-md shadow-lg frost-border"

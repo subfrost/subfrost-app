@@ -124,6 +124,10 @@ export function Navbar() {
             )}
           </div>
         <div className="md:hidden w-full mt-4 flex flex-col items-center space-y-4">
+          {/* Add Balances Dropdown at the top for mobile */}
+          <div className="w-full flex justify-center mb-4">
+            <BalancesDropdown isMobile={true} />
+          </div>
           <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
           <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
           <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
