@@ -7,16 +7,14 @@ import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef } from 'react'
 import { PixelSprite } from './PixelSprite'
 import ConnectWalletModal from './ConnectWalletModal'
-import { BitcoinFeeWidget } from './BitcoinFeeWidget'
+import { BalancesDropdown } from './BalancesDropdown'
 
 export function Navbar() {
   const pathname = usePathname()
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState('')
+  const [showBalancesButton, setShowBalancesButton] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  // Always show the fee widget by default
-  const [showFeeWidget, setShowFeeWidget] = useState(true)
-  const [showFeeWidgetText, setShowFeeWidgetText] = useState(true)
   
   const navbarRef = useRef<HTMLDivElement>(null)
   const navLinksRef = useRef<HTMLDivElement>(null)
@@ -32,6 +30,7 @@ export function Navbar() {
     };
   };
 
+  // Effect to handle showing/hiding the balances button based on available space
   useEffect(() => {
     // Keep track of previous state to implement hysteresis
     let previouslyShown = true;
@@ -57,19 +56,7 @@ export function Navbar() {
         const shouldShow = (availableSpace > showThreshold && window.innerWidth >= 768) || window.innerWidth >= 1024;
         
         if (shouldShow !== previouslyShown) {
-          // When hiding, first hide text, then hide widget
-          if (!shouldShow) {
-            setShowFeeWidgetText(false);
-            setTimeout(() => {
-              setShowFeeWidget(false);
-            }, 300); // Wait for text to fade out
-          } else {
-            // When showing, first show widget, then show text
-            setShowFeeWidget(true);
-            setTimeout(() => {
-              setShowFeeWidgetText(true);
-            }, 200); // Wait for widget to appear
-          }
+          setShowBalancesButton(shouldShow);
           previouslyShown = shouldShow;
         }
       }
@@ -114,17 +101,17 @@ export function Navbar() {
           </div>
         </div>
         <div className="hidden md:flex items-center space-x-4 transition-all duration-300 ease-in-out" ref={walletRef}>
-            {/* Bitcoin Fee Widget - show based on available space with staggered fade animation */}
+            {/* Balances Dropdown - show based on available space with animation */}
             <div
               className={`
                 transition-all duration-500 ease-in-out
-                ${showFeeWidget
+                ${showBalancesButton
                   ? 'opacity-100 max-w-[200px] mr-2 scale-100'
                   : 'opacity-0 max-w-0 mr-0 scale-95 transform'
                 }
               `}
             >
-              <BitcoinFeeWidget textVisible={showFeeWidgetText} />
+              <BalancesDropdown />
             </div>
             {/* Connect Wallet - always visible */}
             {isWalletConnected ? (

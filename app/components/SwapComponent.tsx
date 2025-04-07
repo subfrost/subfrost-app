@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FaExchangeAlt, FaSnowflake } from 'react-icons/fa'
+import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { Settings } from 'lucide-react'
 import { SwapConfirmationModal } from './SwapConfirmationModal'
 import { calculateSwapOutput, calculateDollarValue, formatCurrency, SUBFROST_FEE, assetPrices } from '../utils/priceCalculations'
@@ -131,6 +132,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
 
       <div className="space-y-2">
         <p className="readable-text text-sm text-blue-600">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
+        <p className="readable-text text-sm text-blue-600">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
         <div className="flex items-center justify-between">
           <p className="readable-text text-sm text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           <Button

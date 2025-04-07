@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Settings } from 'lucide-react'
+import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { ConfirmMintModal } from './ConfirmMintModal'
 import { ConfirmBurnModal } from './ConfirmBurnModal'
-import { calculateSwapOutput, calculateDollarValue, formatCurrency, SUBFROST_FEE, assetPrices } from '../utils/priceCalculations'
-import { FaExchangeAlt } from 'react-icons/fa'
+import { calculateDollarValue, formatCurrency, assetPrices } from '../utils/priceCalculations'
 const nonFrBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'METHANE', 'WATER', 'FROST', 'zkBTC']
 
 interface LPComponentProps {
@@ -43,8 +43,8 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
     setLpBalance(userLPTokens.toFixed(4))
   }, [pairedAsset])
 
-  const handleModeToggle = () => {
-    setIsMintMode(!isMintMode)
+  const handleModeToggle = (mode: boolean) => {
+    setIsMintMode(mode)
     resetInputs()
   }
 
@@ -93,7 +93,9 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
     const totalLPTokens = Math.sqrt(totalLPValue)
     
     // Calculate the bUSD value of the burned LP tokens
-    const burnedLPValue = (burnAmountNum / (totalLPTokens * userLPProportion)) * totalLPValue
+    // Add safety check to prevent division by zero
+    const denominator = totalLPTokens * userLPProportion;
+    const burnedLPValue = denominator > 0 ? (burnAmountNum / denominator) * totalLPValue : 0;
     
     // Calculate the bUSD value for each side of the pair
     const sideValue = burnedLPValue / 2
@@ -148,13 +150,13 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 mb-4">
         <Button
-          onClick={() => setIsMintMode(true)}
+          onClick={() => handleModeToggle(true)}
           className={`retro-text text-xs ${isMintMode ? 'bg-blue-800 text-white' : 'bg-blue-200 text-blue-800 hover:bg-blue-300'}`}
         >
           Add
         </Button>
         <Button
-          onClick={() => setIsMintMode(false)}
+          onClick={() => handleModeToggle(false)}
           className={`retro-text text-xs ${!isMintMode ? 'bg-blue-800 text-white' : 'bg-blue-200 text-blue-800 hover:bg-blue-300'}`}
         >
           Remove
@@ -213,7 +215,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
           </div>
 
           <div className="space-y-2">
-            <label className="retro-text text-sm text-blue-600">Burn Amount</label>
+            <label className="retro-text text-sm text-blue-600">Melt Amount</label>
             <Input
               type="number"
               value={burnAmount}
@@ -221,7 +223,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
               placeholder="0.00"
               className="flex-grow"
             />
-            <p className="readable-text text-xs mt-2 h-4">Your Balance: {lpBalance} frBTC/{pairedAsset} LP ({(userLPProportion * 100).toFixed(2)}% of total supply)</p>
+            <p className="readable-text text-xs mt-2 h-4">Available: {lpBalance} frBTC/{pairedAsset} LP ({(userLPProportion * 100).toFixed(2)}% of total supply)</p>
           </div>
 
           <div className="space-y-2">
@@ -236,6 +238,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
       )}
 
       <div className="space-y-2">
+        <p className="readable-text text-sm text-blue-600">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
         <div className="flex items-center justify-between">
           <p className="readable-text text-sm text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           <Button

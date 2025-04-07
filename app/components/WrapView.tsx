@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { FaSnowflake } from "react-icons/fa";
 import { UnwrapView } from "./UnwrapView";
+import { BitcoinFeeWidget } from "./BitcoinFeeWidget";
 import { WrapConfirmationModal } from "./WrapConfirmationModal";
 import { useBalances } from "../contexts/BalancesContext";
 import { getLogger } from "@/lib/logger";
@@ -90,6 +91,9 @@ export function WrapView() {
             </p>
           </div>
           <div>
+            <div className="flex items-center mb-2">
+              <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
+            </div>
             <p className="readable-text text-sm text-blue-600">
               Expected frBTC: {calculateExpectedFrBTC()}
             </p>

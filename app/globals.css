@@ -71,6 +71,8 @@ html, body {
   height: 100%;
   width: 100%;
   overflow-x: hidden;
+  margin: 0;
+  padding: 0;
 }
 
 body {
@@ -117,7 +119,7 @@ body {
 /* Add padding to the bottom of the page on mobile to prevent content from being obscured by OS gesture widgets */
 @media (max-width: 768px) {
   .mobile-bottom-padding {
-    padding-bottom: 5rem; /* Adjust this value as needed */
+    padding-bottom: 3rem; /* Reduced padding to minimize space */
   }
 }
 

@@ -7,6 +7,8 @@ export const assetPrices: AssetPrices = {
   bUSD: 1,
   DIESEL: 3594.30,
   OYL: 1.83,
+  METHANE: 2.45,
+  WATER: 0.75,
   FROST: 4.38,
   zkBTC: 100888,
   frBTC: 100888, // Adding frBTC with the same price as BTC

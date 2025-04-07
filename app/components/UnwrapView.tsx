@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { RiCoinsFill } from 'react-icons/ri'
 import { Zap } from 'lucide-react'
 import { UnwrapConfirmationModal } from './UnwrapConfirmationModal'
+import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { UnwrapTransactionTable } from './UnwrapTransactionTable'
 import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 import { useBalances } from "../contexts/BalancesContext";
@@ -106,6 +107,9 @@ export function UnwrapView() {
           <p className="readable-text text-sm mt-1 text-blue-200">Available: {frBTCBalance} frBTC</p>
         </div>
         <div>
+          <div className="flex items-center mb-2">
+            <p className="readable-text text-xs text-blue-200 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-200" /></p>
+          </div>
           <p className="readable-text text-sm text-blue-100">Expected BTC: {calculateExpectedBTC()}</p>
         </div>
       </CardContent>

@@ -25,7 +25,7 @@ export function Footer() {
     }
   }, [])
   return (
-    <footer className="bg-blue-800 bg-opacity-70 text-white py-1 h-6">
+    <footer className="bg-blue-800 bg-opacity-70 text-white py-1 h-6 w-full mt-auto">
       <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center h-full">
         <div className="mb-1 md:mb-0">
           <p className="retro-text text-[10px]">
