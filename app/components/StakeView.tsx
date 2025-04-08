@@ -84,13 +84,13 @@ export function StakeView() {
                 value="btc"
                 className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
               >
-                BTC
+                BTC (Coming!)
               </TabsTrigger>
               <TabsTrigger
                 value="frost"
                 className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
               >
-                FROST
+                FROST (~12% APY)
               </TabsTrigger>
             </TabsList>
           </CardHeader>
@@ -184,6 +184,9 @@ export function StakeView() {
                       <div className="flex items-center mb-2">
                         <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
                       </div>
+                      <div className="flex items-center mb-2">
+                        <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0% - always 0% to stake!</p>
+                      </div>
                       <div className="mb-4">
                         <label htmlFor="btc-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
                         <div className="flex items-center space-x-2">
@@ -223,6 +226,9 @@ export function StakeView() {
                     <div className="mt-4">
                       <div className="flex items-center mb-2">
                         <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
+                      </div>
+                      <div className="flex items-center mb-2">
+                        <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0.1%</p>
                       </div>
                       <div className="mb-4">
                         <label htmlFor="btc-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
@@ -349,6 +355,9 @@ export function StakeView() {
                       <div className="flex items-center mb-2">
                         <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
                       </div>
+                      <div className="flex items-center mb-2">
+                        <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0% - always 0% to stake!</p>
+                      </div>
                       <div className="mb-4">
                         <label htmlFor="frost-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
                         <div className="flex items-center space-x-2">
@@ -390,6 +399,9 @@ export function StakeView() {
                     <div className="mt-4">
                       <div className="flex items-center mb-2">
                         <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
+                      </div>
+                      <div className="flex items-center mb-2">
+                        <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0.1%</p>
                       </div>
                       <div className="mb-4">
                         <label htmlFor="frost-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>

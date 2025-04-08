@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Nunito } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Navbar } from "./components/Navbar";
 import { MobileNavigation } from "./components/MobileNavigation";
@@ -14,7 +14,26 @@ import { BalancesProvider } from "./contexts/BalancesContext";
 import { LaserEyesProvider } from "@omnisat/lasereyes";
 import { RegtestProvider } from "./contexts/RegtestContext";
 
-const nunito = Nunito({ weight: ["300", "400", "700"], subsets: ["latin"] });
+const satoshi = localFont({
+  src: [
+    {
+      path: './fonts/Satoshi-Light.woff2',
+      weight: '300',
+      style: 'normal',
+    },
+    {
+      path: './fonts/Satoshi-Regular.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: './fonts/Satoshi-Bold.woff2',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-satoshi',
+});
 
 export const metadata: Metadata = {
   title: "SUBFROST",
@@ -29,7 +48,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${nunito.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen h-screen flex flex-col m-0 p-0 overflow-x-hidden`}
+        className={`${satoshi.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen h-screen flex flex-col m-0 p-0 overflow-x-hidden`}
       >
         <RegtestProvider>
           <LaserEyesProvider>

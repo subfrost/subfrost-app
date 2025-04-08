@@ -131,10 +131,8 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
       </div>
 
       <div className="space-y-2">
-        <p className="readable-text text-sm text-blue-600">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
-        <p className="readable-text text-sm text-blue-600">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
-        <div className="flex items-center justify-between">
-          <p className="readable-text text-sm text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="readable-text text-xs text-blue-600 h-5">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           <Button
             variant="ghost"
             size="icon"
@@ -144,6 +142,15 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
             <Settings className="h-4 w-4" />
           </Button>
         </div>
+        <div className="flex items-center mb-2">
+          <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
+        </div>
+        <div className="flex items-center mb-2">
+          <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
+        </div>
+        <p className="readable-text text-sm text-blue-600 mb-2">
+          Expected {isBTCFrom ? nonBTCAsset : 'BTC'}: {toAmount}
+        </p>
         <Button onClick={handleSwap} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
           Swap
         </Button>

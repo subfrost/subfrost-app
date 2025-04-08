@@ -1,5 +1,5 @@
-import { WrapView } from "../components/WrapView";
+import { WrapPage } from "../components/WrapPage";
 
 export default () => {
-  return <WrapView />;
+  return <WrapPage />;
 };

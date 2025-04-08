@@ -111,6 +111,9 @@ export function UnwrapView() {
           <div className="flex items-center mb-2">
             <p className="readable-text text-xs text-blue-200 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-200" /></p>
           </div>
+          <div className="flex items-center mb-2">
+            <p className="readable-text text-xs text-blue-200 h-5">SUBFROST Fee: 0.1%</p>
+          </div>
           <p className="readable-text text-sm text-blue-100">Expected BTC: {calculateExpectedBTC()}</p>
         </div>
       </CardContent>

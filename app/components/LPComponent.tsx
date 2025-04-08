@@ -167,7 +167,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
       {isMintMode ? (
         <>
           <div className="space-y-2">
-            <label className="retro-text text-sm text-blue-600"><FrBTC /> Amount</label>
+            <label className="retro-text font-normal text-sm text-blue-600"><FrBTC /></label>
             <div className="flex space-x-2">
               <Input
                 type="number"
@@ -184,7 +184,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
           </div>
 
           <div className="space-y-2">
-            <label className="retro-text text-sm text-blue-600">Paired Asset Amount</label>
+            <label className="retro-text font-normal text-sm text-blue-600">Paired Asset</label>
             <div className="flex space-x-2">
               <Input
                 type="number"
@@ -198,9 +198,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
             <p className="readable-text text-xs mt-2 h-4">{calculateDollarValueSafe(pairedAsset, parseFloat(pairedAmount) || 0)}</p>
           </div>
 
-          <div className="space-y-2">
-            <p className="readable-text text-sm text-blue-600">Expected LP Tokens: {calculateLPTokens().toFixed(8)}</p>
-          </div>
+          {/* Expected LP Tokens will be moved to just above the button */}
         </>
       ) : (
         <>
@@ -227,21 +225,13 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
             <p className="readable-text text-xs mt-2 h-4">Available: {lpBalance} frBTC/{pairedAsset} LP ({(userLPProportion * 100).toFixed(2)}% of total supply)</p>
           </div>
 
-          <div className="space-y-2">
-            <p className="readable-text text-sm text-blue-600">
-              Expected BTC: {expectedBTC} BTC ({calculateDollarValueSafe('BTC', parseFloat(expectedBTC))})
-            </p>
-            <p className="readable-text text-sm text-blue-600">
-              Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({calculateDollarValueSafe(pairedAsset, parseFloat(expectedPaired))})
-            </p>
-          </div>
+          {/* Expected outputs will be moved to just above the button */}
         </>
       )}
 
       <div className="space-y-2">
-        <p className="readable-text text-sm text-blue-600">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
-        <div className="flex items-center justify-between">
-          <p className="readable-text text-sm text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="readable-text text-xs text-blue-600 h-5">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           <Button
             variant="ghost"
             size="icon"
@@ -251,6 +241,26 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
             <Settings className="h-4 w-4" />
           </Button>
         </div>
+        <div className="flex items-center mb-2">
+          <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
+        </div>
+        <div className="flex items-center mb-2">
+          <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0.1%</p>
+        </div>
+        {isMintMode ? (
+          <p className="readable-text text-sm text-blue-600 mb-2">
+            Expected LP Tokens: {calculateLPTokens().toFixed(8)}
+          </p>
+        ) : (
+          <>
+            <p className="readable-text text-sm text-blue-600 mb-1">
+              Expected BTC: {expectedBTC} BTC ({calculateDollarValueSafe('BTC', parseFloat(expectedBTC))})
+            </p>
+            <p className="readable-text text-sm text-blue-600 mb-2">
+              Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({calculateDollarValueSafe(pairedAsset, parseFloat(expectedPaired))})
+            </p>
+          </>
+        )}
         <Button onClick={handleMintOrBurn} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
           {isMintMode ? "Mint" : "Melt"}
         </Button>

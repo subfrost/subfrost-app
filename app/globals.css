@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap');
+/* Satoshi font is loaded locally via next/font/local in layout.tsx */
 
 @tailwind base;
 @tailwind components;
@@ -93,7 +93,7 @@ body {
 }
 
 .retro-text {
-  font-family: 'Nunito', sans-serif;
+  font-family: 'Satoshi', sans-serif;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -110,18 +110,18 @@ body {
 
 /* Token name styling */
 .token-name {
-  font-family: 'Nunito', sans-serif !important;
+  font-family: 'Satoshi', sans-serif !important;
   text-transform: none !important;
 }
 .readable-text {
-  font-family: 'Nunito', sans-serif;
+  font-family: 'Satoshi', sans-serif;
   font-weight: 400;
   letter-spacing: normal;
 }
 /* Make card titles larger and bold */
 .card-title, h1, h2, h3, [class*="CardTitle"] {
   font-size: 1.5em !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
 }
 
 /* Target specific widget headers */
@@ -133,14 +133,14 @@ span.text-sm.md\:text-xl,
 .flex-col .flex .text-sm.md\:text-xl,
 .flex-col .flex .whitespace-nowrap .text-sm.md\:text-xl {
   font-size: 1.5em !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   line-height: 1.2 !important;
 }
 
 /* Specifically target "Earn Yield with dxBTC" type headers */
 .flex-col div span.text-sm.md\:text-xl {
   font-size: 1.5em !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
 }
 
 /* Increase size and make bold the SUBFROST title in the header */
@@ -153,13 +153,13 @@ a[href="/"].text-3xl {
 /* Target all card titles to ensure we catch the specific ones */
 .CardTitle .flex-col div span {
   font-size: 1.75em !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
 }
 
 /* Protocol Metrics */
 .FeeMandatesAndYieldChart .CardTitle {
   font-size: 2em !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
 }
 
 /* Specific targeting for StakeView, WrapView, and UnwrapView */
@@ -167,13 +167,13 @@ a[href="/"].text-3xl {
 .WrapView .CardTitle,
 .UnwrapView .CardTitle {
   font-size: 1.75em !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
 }
 
 /* Direct targeting for specific components */
 .retro-text.text-blue-600 {
   font-size: 2em !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
 }
 
 /* Increase icon sizes in headers */

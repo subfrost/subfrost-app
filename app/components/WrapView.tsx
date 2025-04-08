@@ -12,7 +12,6 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { FaSnowflake } from "react-icons/fa";
-import { UnwrapView } from "./UnwrapView";
 import { BitcoinFeeWidget } from "./BitcoinFeeWidget";
 import { WrapConfirmationModal } from "./WrapConfirmationModal";
 import { useBalances } from "../contexts/BalancesContext";
@@ -95,6 +94,9 @@ export function WrapView() {
             <div className="flex items-center mb-2">
               <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
             </div>
+            <div className="flex items-center mb-2">
+              <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0.1%</p>
+            </div>
             <p className="readable-text text-sm text-blue-600">
               Expected <FrBTC />: {calculateExpectedFrBTC()}
             </p>
@@ -109,7 +111,6 @@ export function WrapView() {
           </Button>
         </CardFooter>
       </Card>
-      <UnwrapView />
       <WrapConfirmationModal
         isOpen={isModalOpen}
         onClose={() => {
