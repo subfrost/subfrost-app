@@ -18,8 +18,8 @@ importers:
         specifier: ^0.0.133
         version: 0.0.133(@popperjs/core@2.11.8)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.7.3)(vite@6.0.7(@types/node@22.10.6)(jiti@1.21.7)(terser@5.37.0)(yaml@2.7.0))
       '@oyl/sdk':
-        specifier: git+https://github.com/Oyl-Wallet/Oyl-sdk
-        version: https://codeload.github.com/Oyl-Wallet/Oyl-sdk/tar.gz/853f0ed0e595b2dc2d2698e5cad0df2ee2a573ed(@types/node@22.10.6)(typescript@5.7.3)
+        specifier: git+https://github.com/Oyl-Wallet/oyl-sdk
+        version: https://codeload.github.com/Oyl-Wallet/oyl-sdk/tar.gz/fce8f882ff46e2ca68126529e11f757da510dd7e(@types/node@22.10.6)(typescript@5.7.3)
       '@radix-ui/react-accordion':
         specifier: ^1.2.2
         version: 1.2.2(@types/react-dom@18.3.5(@types/react@18.3.18))(@types/react@18.3.18)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -186,9 +186,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.19.1
         version: 8.20.0(eslint@9.18.0(jiti@1.21.7))(typescript@5.7.3)
-      alkanes:
-        specifier: github:kungfuflex/alkanes
-        version: https://codeload.github.com/kungfuflex/alkanes/tar.gz/211fc5457bf6d4cd9ddafbc75eb7668a22039a93(typescript@5.7.3)
+      bitcoinjs-lib:
+        specifier: ^6.1.7
+        version: 6.1.7
       eslint:
         specifier: ^9.18.0
         version: 9.18.0(jiti@1.21.7)
@@ -812,9 +812,9 @@ packages:
   '@orangecrypto/orange-connect@1.2.2':
     resolution: {integrity: sha512-cv1TP+pan+Zx5yKuQHQsTIhABi2YlyTUZbzJgLbIB7fT1cA4plZiIS9GEJN7eD7wc60Fr/yumMV3zTIL5eSZ8w==}
 
-  '@oyl/sdk@https://codeload.github.com/Oyl-Wallet/Oyl-sdk/tar.gz/853f0ed0e595b2dc2d2698e5cad0df2ee2a573ed':
-    resolution: {tarball: https://codeload.github.com/Oyl-Wallet/Oyl-sdk/tar.gz/853f0ed0e595b2dc2d2698e5cad0df2ee2a573ed}
-    version: 1.13.0
+  '@oyl/sdk@https://codeload.github.com/Oyl-Wallet/oyl-sdk/tar.gz/fce8f882ff46e2ca68126529e11f757da510dd7e':
+    resolution: {tarball: https://codeload.github.com/Oyl-Wallet/oyl-sdk/tar.gz/fce8f882ff46e2ca68126529e11f757da510dd7e}
+    version: 1.16.0
     hasBin: true
 
   '@pkgjs/parseargs@0.11.0':
@@ -1783,13 +1783,8 @@ packages:
   ajv@8.17.1:
     resolution: {integrity: sha512-B/gBuNg5SiMTrPkC+A2+cW0RszwxYmn6VYxB/inlBStS5nx6xHIt/ehKRhIMhqusl7a8LjQoZnjCs5vhwxOQ1g==}
 
-  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/211fc5457bf6d4cd9ddafbc75eb7668a22039a93:
-    resolution: {tarball: https://codeload.github.com/kungfuflex/alkanes/tar.gz/211fc5457bf6d4cd9ddafbc75eb7668a22039a93}
-    version: 0.1.0
-    hasBin: true
-
-  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674:
-    resolution: {tarball: https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674}
+  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/7374128eab4244a9a6ccb9e802fb4e6b4b08f1a7:
+    resolution: {tarball: https://codeload.github.com/kungfuflex/alkanes/tar.gz/7374128eab4244a9a6ccb9e802fb4e6b4b08f1a7}
     version: 0.1.0
     hasBin: true
 
@@ -4432,13 +4427,13 @@ snapshots:
       process: 0.11.10
       util: 0.12.5
 
-  '@oyl/sdk@https://codeload.github.com/Oyl-Wallet/Oyl-sdk/tar.gz/853f0ed0e595b2dc2d2698e5cad0df2ee2a573ed(@types/node@22.10.6)(typescript@5.7.3)':
+  '@oyl/sdk@https://codeload.github.com/Oyl-Wallet/oyl-sdk/tar.gz/fce8f882ff46e2ca68126529e11f757da510dd7e(@types/node@22.10.6)(typescript@5.7.3)':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.0.2
       '@magiceden-oss/runestone-lib': 1.0.2
       '@sadoprotocol/ordit-sdk': 3.0.0
       '@scure/btc-signer': 1.5.0
-      alkanes: https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674(typescript@5.7.3)
+      alkanes: https://codeload.github.com/kungfuflex/alkanes/tar.gz/7374128eab4244a9a6ccb9e802fb4e6b4b08f1a7(typescript@5.7.3)
       bignumber.js: 9.1.2
       bip32: 4.0.0
       bip322-js: 2.0.0
@@ -5518,32 +5513,7 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/211fc5457bf6d4cd9ddafbc75eb7668a22039a93(typescript@5.7.3):
-    dependencies:
-      '@magiceden-oss/runestone-lib': 1.0.2
-      '@protobuf-ts/protoc': 2.9.4
-      '@protobuf-ts/runtime': 2.9.4
-      '@scure/base': 1.1.9
-      '@scure/btc-signer': 1.5.0
-      binaryen: 118.0.0
-      bip32: 5.0.0-rc.0(typescript@5.7.3)
-      bip39: 3.1.0
-      body-parser: 1.20.3
-      cors: 2.8.5
-      enquirer: 2.4.1
-      ethers: 6.13.5
-      express: 4.21.2
-      google-protobuf: 3.21.4
-      lodash: 4.17.21
-      micro-packed: 0.6.3
-      postinstall: 0.10.3
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - typescript
-      - utf-8-validate
-
-  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/c957207534ede47c8ae2618fc7ee5c0a70ec8674(typescript@5.7.3):
+  alkanes@https://codeload.github.com/kungfuflex/alkanes/tar.gz/7374128eab4244a9a6ccb9e802fb4e6b4b08f1a7(typescript@5.7.3):
     dependencies:
       '@magiceden-oss/runestone-lib': 1.0.2
       '@protobuf-ts/protoc': 2.9.4
