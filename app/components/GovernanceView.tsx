@@ -27,7 +27,7 @@ export function GovernanceView() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <Card className="frost-bg frost-border">
         <CardHeader>
           <CardTitle className="retro-text text-blue-600 flex items-center">

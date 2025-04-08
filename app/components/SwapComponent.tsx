@@ -104,7 +104,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
             value={fromAmount}
             onChange={handleFromAmountChange}
             placeholder="0.00"
-            className="flex-grow"
+            className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
           />
           {isBTCFrom ? <BTCDisplay /> : <AssetSelector value={nonBTCAsset} onChange={setNonBTCAsset} />}
         </div>
@@ -123,7 +123,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
             value={toAmount}
             readOnly
             placeholder="0.00"
-            className="flex-grow"
+            className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
           />
           {isBTCFrom ? <AssetSelector value={nonBTCAsset} onChange={setNonBTCAsset} /> : <BTCDisplay />}
         </div>
@@ -149,7 +149,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
           <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
         </div>
         <p className="readable-text text-sm text-blue-600 mb-2">
-          Expected {isBTCFrom ? nonBTCAsset : 'BTC'}: {toAmount}
+          Expected {isBTCFrom ? nonBTCAsset : 'BTC'}: {toAmount || "0.00"}
         </p>
         <Button onClick={handleSwap} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
           Swap

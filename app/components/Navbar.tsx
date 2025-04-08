@@ -88,7 +88,7 @@ export function Navbar() {
   return (
     <nav className="bg-blue-800 bg-opacity-70 backdrop-filter backdrop-blur-lg p-4 mb-4 frost-border">
       <div ref={navbarRef} className="container mx-auto flex flex-col md:flex-row items-center transition-all duration-300 ease-in-out">
-        <Link ref={logoRef} href="/" className="text-4xl font-extrabold retro-text text-white flex items-center transition-all duration-300 ease-in-out">
+        <Link ref={logoRef} href="https://subfrost.io/" className="text-4xl font-extrabold retro-text text-white flex items-center transition-all duration-300 ease-in-out">
           <FaSnowflake className="mr-2" />
           SUBFROST
         </Link>

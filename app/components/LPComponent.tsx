@@ -174,7 +174,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
                 value={frBTCAmount}
                 onChange={(e) => setFrBTCAmount(e.target.value)}
                 placeholder="0.00"
-                className="flex-grow"
+                className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
               />
               <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 flex items-center justify-center token-button-text">
                 <FrBTC />
@@ -191,7 +191,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
                 value={pairedAmount}
                 onChange={(e) => setPairedAmount(e.target.value)}
                 placeholder="0.00"
-                className="flex-grow"
+                className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
               />
               <AssetSelector value={pairedAsset} onChange={setPairedAsset} />
             </div>
@@ -220,7 +220,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
               value={burnAmount}
               onChange={handleBurnAmountChange}
               placeholder="0.00"
-              className="flex-grow"
+              className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
             />
             <p className="readable-text text-xs mt-2 h-4">Available: {lpBalance} frBTC/{pairedAsset} LP ({(userLPProportion * 100).toFixed(2)}% of total supply)</p>
           </div>

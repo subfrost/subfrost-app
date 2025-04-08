@@ -54,7 +54,7 @@ export function SwapView() {
   }
 
   return (
-    <div className="space-y-8 flex flex-col items-center">
+    <div className="space-y-6 flex flex-col items-center">
       <Card className="frost-bg frost-border w-full max-w-md relative">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-grow">
           <CardHeader className="pb-0">

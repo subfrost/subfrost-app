@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
@@ -15,13 +15,7 @@ import { UnstakeConfirmationModal } from './UnstakeConfirmationModal'
 import { CombinedCharts } from './CombinedCharts'
 import { useBalances } from "../contexts/BalancesContext"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { Separator } from "@/components/ui/separator"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { FrBTC, DxBTC, DxFROST } from './TokenNames'
 
 export function StakeView() {
@@ -32,23 +26,7 @@ export function StakeView() {
   const [dxFROSTInputToken, setDxFROSTInputToken] = useState("BTC") // Toggle between BTC and LP
   const [isStaking, setIsStaking] = useState(true) // Toggle between Stake and Unstake
   const [dxBTCOutputToken, setDxBTCOutputToken] = useState("BTC") // Toggle between BTC and frBTC for unstaking
-  const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false) // Track dropdown state
   const { balances, formattedBalances } = useBalances(); // This should be fetched from your state management solution
-  const isMobile = useIsMobile(); // Use the mobile hook
-  
-  // Track screen width for pinch detection
-  const [screenWidth, setScreenWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
-  const isCondensedView = isMobile || screenWidth < 768;
-  
-  // Listen for resize events to detect pinch zoom
-  useEffect(() => {
-    const handleResize = () => {
-      setScreenWidth(window.innerWidth);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const handleStake = () => {
     setIsModalOpen(true)
@@ -96,62 +74,29 @@ export function StakeView() {
   }
 
   return (
-    <div className="space-y-8 flex flex-col items-center">
+    <div className="space-y-6 flex flex-col items-center">
       <div className="w-full max-w-md">
-        {isCondensedView ? (
-          <Card className="frost-bg frost-border w-full">
-            <CardHeader className="pb-2">
-              <DropdownMenu open={isHeaderDropdownOpen} onOpenChange={setIsHeaderDropdownOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="w-full flex justify-between items-center retro-text text-blue-600">
-                    <span className="text-xl font-bold">Stake</span>
-                    <ChevronDown className={`transition-transform duration-200 ${isHeaderDropdownOpen ? 'rotate-180' : ''}`} />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-full frost-bg frost-border" align="start">
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger
-                        value="btc"
-                        className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
-                      >
-                        BTC (Coming!)
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="frost"
-                        className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
-                      >
-                        FROST (~12% APY)
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </CardHeader>
-          </Card>
-        ) : (
-          <Card className="frost-bg frost-border w-full">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <CardHeader className="pb-0">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger
-                    value="btc"
-                    className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
-                  >
-                    BTC (Coming!)
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="frost"
-                    className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
-                  >
-                    FROST (~12% APY)
-                  </TabsTrigger>
-                </TabsList>
-              </CardHeader>
-              <Separator className="my-2" />
-            </Tabs>
-          </Card>
-        )}
+        <Card className="frost-bg frost-border w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <CardHeader className="pb-0">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger
+                value="btc"
+                className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
+              >
+                BTC (Coming!)
+              </TabsTrigger>
+              <TabsTrigger
+                value="frost"
+                className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
+              >
+                FROST (~12% APY)
+              </TabsTrigger>
+            </TabsList>
+          </CardHeader>
+          <Separator className="my-2" />
+        </Tabs>
+        </Card>
       </div>
       {/* Staking Widgets Section */}
       <div className="w-full max-w-md">
@@ -230,7 +175,7 @@ export function StakeView() {
                           placeholder="0.00"
                           value={btcAmount}
                           onChange={(e) => setBtcAmount(e.target.value)}
-                          className="readable-text text-sm h-10 flex-1"
+                          className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
                         />
                       </div>
                       <p className="readable-text text-xs mt-2 h-4">Available: {dxBTCInputToken === "BTC" ? formattedBalances.btc + " BTC" : formattedBalances.frBTC + " frBTC"}</p>
@@ -273,7 +218,7 @@ export function StakeView() {
                           placeholder="0.00"
                           value={btcAmount}
                           onChange={(e) => setBtcAmount(e.target.value)}
-                          className="readable-text text-sm h-10 flex-1"
+                          className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
                         />
                       </div>
                       <p className="readable-text text-xs mt-2 h-4">Available: {dxBTCBalance} <DxBTC /></p>
@@ -312,7 +257,7 @@ export function StakeView() {
             <CardFooter className="mt-auto">
               {isStaking ? (
                 <Button onClick={handleStake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
-                  Stake {dxBTCInputToken}
+                  Stake {dxBTCInputToken === "BTC" ? "BTC" : <FrBTC />}
                 </Button>
               ) : (
                 <Button onClick={handleUnstake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
@@ -401,7 +346,7 @@ export function StakeView() {
                           placeholder="0.00"
                           value={frBtcFrostAmount}
                           onChange={(e) => setFrBtcFrostAmount(e.target.value)}
-                          className="readable-text text-sm h-10 flex-1"
+                          className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
                         />
                       </div>
                       <p className="readable-text text-xs mt-2 h-4">Available: {dxFROSTInputToken === "BTC" ? formattedBalances.btc + " BTC" : formattedBalances.frBTCFROST + " frBTC/FROST LP"}</p>
@@ -446,7 +391,7 @@ export function StakeView() {
                           placeholder="0.00"
                           value={frBtcFrostAmount}
                           onChange={(e) => setFrBtcFrostAmount(e.target.value)}
-                          className="readable-text text-sm h-10 flex-1"
+                          className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
                         />
                       </div>
                       <p className="readable-text text-xs mt-2 h-4">Available: {dxFROSTBalance} <DxFROST /></p>
@@ -480,7 +425,7 @@ export function StakeView() {
             <CardFooter className="mt-auto">
               {isStaking ? (
                 <Button onClick={handleStake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
-                  Stake {dxFROSTInputToken === "BTC" ? "BTC" : "frBTC/FROST LP"}
+                  Stake {dxFROSTInputToken === "BTC" ? "BTC" : <><FrBTC /> / FROST LP</>}
                 </Button>
               ) : (
                 <Button onClick={handleUnstake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">

@@ -13,12 +13,12 @@ import {
 import { contractDeployment } from "@oyl/sdk/lib/alkanes/contract";
 
 const logger = getLogger("alkanes:run");
+export let provider = DEFAULT_PROVIDER["alkanes"];
 
 export async function setupEnvironment(): Promise<void> {
   logger.info("Starting environment setup...");
   const signer = Signer.fromMnemonic(TEST_WALLET.mnemonic, "regtest");
   logger.info("Deploying auth token contract...");
-  console.log(provider);
   await provider.regtestInit();
   const authTokenReserve = 0xffeen;
   const authTokenPayload = {
@@ -54,8 +54,6 @@ export async function setupEnvironment(): Promise<void> {
 
   logger.info("Environment setup completed successfully");
 }
-
-export let provider = DEFAULT_PROVIDER["alkanes"];
 
 export const mineBTC = async function mineBTC(
   address: string,

@@ -1,7 +1,8 @@
 "use client"
 
 import Link from 'next/link'
-import { FaTwitter, FaGithub } from 'react-icons/fa'
+import { FaGithub } from 'react-icons/fa'
+import { FaXTwitter } from 'react-icons/fa6'
 import { useEffect, useState } from 'react'
 
 export function Footer() {
@@ -44,7 +45,7 @@ export function Footer() {
           {isMobile && (
             <div className="flex space-x-2">
               <a href="https://x.com/SUBFROSTio" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
-                <FaTwitter size={14} />
+                <FaXTwitter size={14} />
               </a>
               <a href="https://github.com/subfrost" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-300">
                 <FaGithub size={14} />

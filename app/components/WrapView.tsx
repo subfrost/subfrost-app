@@ -51,7 +51,7 @@ export function WrapView() {
   };
 
   return (
-    <div className="space-y-8 flex flex-col items-center">
+    <>
       <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
         <CardHeader>
           <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20">
@@ -84,7 +84,7 @@ export function WrapView() {
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="readable-text text-sm"
+              className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
             />
             <p className="readable-text text-xs mt-1">
               Available: {btcBalance} BTC
@@ -120,6 +120,6 @@ export function WrapView() {
         btcAmount={amount}
         expectedFrBTC={calculateExpectedFrBTC()}
       />
-    </div>
+    </>
   );
 }

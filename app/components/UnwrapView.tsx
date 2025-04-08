@@ -105,7 +105,7 @@ export function UnwrapView() {
             onChange={(e) => setAmount(e.target.value)}
             className="readable-text text-sm bg-blue-600 text-white placeholder-white border-blue-500"
           />
-          <p className="readable-text text-sm mt-1 text-blue-200">Available: {frBTCBalance} <FrBTC /></p>
+          <p className="readable-text text-xs mt-1 text-blue-200">Available: {frBTCBalance} <FrBTC /></p>
         </div>
         <div>
           <div className="flex items-center mb-2">

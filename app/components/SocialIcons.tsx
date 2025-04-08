@@ -1,6 +1,7 @@
 "use client"
 
-import { FaTwitter, FaGithub } from 'react-icons/fa'
+import { FaGithub } from 'react-icons/fa'
+import { FaXTwitter } from 'react-icons/fa6'
 import { useEffect, useState } from 'react'
 
 export function SocialIcons() {
@@ -37,7 +38,7 @@ export function SocialIcons() {
         rel="noopener noreferrer" 
         className="bg-blue-800 bg-opacity-70 text-white hover:text-blue-300 p-2 rounded-full transition-colors duration-200"
       >
-        <FaTwitter size={20} />
+        <FaXTwitter size={20} />
       </a>
       <a 
         href="https://github.com/subfrost" 

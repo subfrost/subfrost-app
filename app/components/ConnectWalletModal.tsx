@@ -111,14 +111,14 @@ export default function ConnectWalletModal({ className }: { className?: string }
           "bg-gradient-to-b from-blue-100 to-blue-200"
         )}
       >
-        <DialogHeader className="px-4 pt-4 pb-3">
+        <DialogHeader className="px-4 pt-4 pb-1.5">
           <DialogTitle className="text-center flex flex-row gap-3 items-center justify-center font-regular text-[20px] font-medium text-blue-800">
             <FaSnowflake className="text-blue-300" size={18} />
             Connect Wallet
             <FaSnowflake className="text-blue-300" size={18} />
           </DialogTitle>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto scrollbar-hide px-4 relative">
+        <div className="flex-1 overflow-y-auto scrollbar-hide px-4 relative -mt-1">
           <DialogDescription className="flex flex-col gap-2 w-full">
             {Object.values(SUPPORTED_WALLETS).map((wallet) => {
               // @ts-ignore
