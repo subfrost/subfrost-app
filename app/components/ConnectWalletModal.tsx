@@ -108,7 +108,7 @@ export default function ConnectWalletModal({ className }: { className?: string }
           "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
           "w-[300px] max-h-[413px]",
           "flex flex-col overflow-hidden p-0",
-          "bg-gradient-to-b from-blue-100 to-blue-200"
+          "bg-gradient-to-b from-blue-200 to-blue-50"
         )}
       >
         <DialogHeader className="px-4 pt-4 pb-1.5">

@@ -33,7 +33,7 @@ export function SnowflakeWatermark() {
         radius: Math.random() * 4 + 2,
         speed: Math.random() * 0.5 + 0.1,
         opacity: Math.random() * 0.7 + 0.3,
-        type: Math.random() < 0.9 ? 'snowflake' : 'bitcoin' // 10% chance of being a Bitcoin logo
+        type: Math.random() < 0.8 ? 'snowflake' : 'bitcoin' // 20% chance of being a Bitcoin logo
       })
     }
 

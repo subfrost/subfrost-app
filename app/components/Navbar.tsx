@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FaSnowflake } from 'react-icons/fa'
+import { FaSnowflake, FaChevronDown } from 'react-icons/fa'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef } from 'react'
 import { PixelSprite } from './PixelSprite'
@@ -15,6 +15,8 @@ export function Navbar() {
   const [walletAddress, setWalletAddress] = useState('')
   const [showBalancesButton, setShowBalancesButton] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false)
+  const [selectedNavLink, setSelectedNavLink] = useState('Stake')
   
   const navbarRef = useRef<HTMLDivElement>(null)
   const navLinksRef = useRef<HTMLDivElement>(null)
@@ -92,6 +94,7 @@ export function Navbar() {
           <FaSnowflake className="mr-2" />
           SUBFROST
         </Link>
+        {/* Desktop Navigation */}
         <div className="hidden md:flex items-center flex-grow justify-center transition-all duration-300 ease-in-out" ref={navLinksRef}>
           <div className="flex space-x-4">
             <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
@@ -123,22 +126,69 @@ export function Navbar() {
               <ConnectWalletModal />
             )}
           </div>
-        <div className="md:hidden w-full mt-4 flex flex-col items-center space-y-4">
-          {/* Add Balances Dropdown at the top for mobile */}
-          <div className="w-full flex justify-center mb-4">
-            <BalancesDropdown isMobile={true} />
+        
+        {/* Mobile Navigation - Vertically aligned */}
+        <div className="md:hidden w-full mt-4">
+          <div className="flex flex-col items-center space-y-4">
+            {/* SUBFROST logo is already at the top */}
+            
+            {/* Connect Wallet */}
+            <div className="w-full flex justify-center">
+              {isWalletConnected ? (
+                <Link href="/profile" className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-full px-3 py-1">
+                  <PixelSprite address={walletAddress} size={24} />
+                  <span className="retro-text text-xs text-white truncate w-24">{walletAddress}</span>
+                </Link>
+              ) : (
+                <ConnectWalletModal />
+              )}
+            </div>
+            
+            {/* BALANCES button */}
+            <div className="w-full flex justify-center">
+              <BalancesDropdown isMobile={true} />
+            </div>
+            
+            {/* Selected link that toggles dropdown when clicked */}
+            <div className="w-full flex justify-center">
+              <Button
+                variant="ghost"
+                className={`
+                  ${pathname === `/${selectedNavLink.toLowerCase()}` ? 'text-white scale-[1.25]' : 'text-white hover:scale-[1.25]'}
+                  retro-text text-base font-bold px-3 py-2 rounded transition-all duration-200 flex items-center
+                  w-full justify-center
+                `}
+                onClick={() => setMobileDropdownOpen(!mobileDropdownOpen)}
+              >
+                {selectedNavLink}
+                <FaChevronDown className={`ml-1 transition-transform duration-300 ${mobileDropdownOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </div>
           </div>
-          <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
-          <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
-          <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
-          <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
-          {isWalletConnected ? (
-            <Link href="/profile" className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-full px-3 py-1">
-              <PixelSprite address={walletAddress} size={24} />
-              <span className="retro-text text-xs text-white truncate w-24">{walletAddress}</span>
-            </Link>
-          ) : (
-            <ConnectWalletModal />
+          
+          {/* Dropdown menu */}
+          {mobileDropdownOpen && (
+            <div className="bg-blue-800 bg-opacity-80 backdrop-filter backdrop-blur-lg rounded-md p-2 mt-2 mb-4 frost-border">
+              <div className="flex flex-col space-y-2">
+                {['Stake', 'Wrap', 'Swap', 'Governance'].map((link) => (
+                  <Link
+                    key={link}
+                    href={`/${link.toLowerCase()}`}
+                    className={`
+                      w-full text-left flex items-center justify-center
+                      ${link === selectedNavLink ? 'text-white scale-[1.25]' : 'text-white hover:scale-[1.25]'}
+                      retro-text text-base font-bold px-3 py-2 rounded transition-all duration-200
+                    `}
+                    onClick={() => {
+                      setSelectedNavLink(link);
+                      setMobileDropdownOpen(false);
+                    }}
+                  >
+                    {link}
+                  </Link>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -151,17 +201,15 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
     <Link
       href={href}
       className={`
-        ${active ? 'text-blue-300' : 'text-white'}
-        hover:text-blue-200
+        ${active ? 'text-white scale-[1.3]' : 'text-white hover:scale-[1.3]'}
         retro-text
         text-base
         font-bold
         px-3
         py-2
         rounded
-        transition-colors
+        transition-all
         duration-200
-        ${active ? 'bg-blue-700 bg-opacity-50' : 'hover:bg-blue-700 hover:bg-opacity-30'}
         md:inline-block w-full md:w-auto text-center
       `}
     >

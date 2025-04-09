@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Navbar } from "./components/Navbar";
-import { MobileNavigation } from "./components/MobileNavigation";
 import { SnowflakeBackground } from "./components/SnowflakeBackground";
 import { SnowflakeWatermark } from "./components/SnowflakeWatermark";
 import { Footer } from "./components/Footer";
@@ -48,7 +47,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${satoshi.className} bg-gradient-to-b from-blue-100 to-blue-200 min-h-screen h-screen flex flex-col m-0 p-0 overflow-x-hidden`}
+        className={`${satoshi.className} bg-gradient-to-b from-blue-200 to-blue-50 min-h-screen h-screen flex flex-col m-0 p-0 overflow-x-hidden`}
       >
         <RegtestProvider>
           <LaserEyesProvider>
@@ -62,7 +61,6 @@ export default function RootLayout({
                   <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
                     {children}
                   </main>
-                  <MobileNavigation />
                   <Footer />
                   <SocialIcons />
                   <Toaster />
