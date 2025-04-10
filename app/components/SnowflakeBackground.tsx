@@ -34,13 +34,16 @@ export function SnowflakeBackground() {
     canvas.width = window.innerWidth
     canvas.height = window.innerHeight
 
+    // Create more snowflakes on mobile for better visibility
+    const snowflakeCount = isMobile ? 150 : 100
+
     const snowflakes: { x: number; y: number; radius: number; speed: number }[] = []
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < snowflakeCount; i++) {
       snowflakes.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        radius: Math.random() * 2 + 1,
+        radius: Math.random() * (isMobile ? 3 : 2) + 1, // Slightly larger snowflakes on mobile
         speed: Math.random() * 0.5 + 0.1
       })
     }
@@ -80,18 +83,27 @@ export function SnowflakeBackground() {
     return () => {
       window.removeEventListener('resize', handleResize)
     }
-  }, [])
+  }, [isMobile])
 
-  // Apply the blue gradient background directly to the body element for mobile
+  // Ensure the blue gradient background is applied on mobile
   useEffect(() => {
-    if (isMobile) {
-      document.body.style.background = 'linear-gradient(to bottom, #bfdbfe, #eff6ff)';
-    } else {
-      document.body.style.background = '';
+    // Remove any inline styles that might be overriding the background
+    if (typeof document !== 'undefined') {
+      document.body.style.removeProperty('background');
+      document.body.style.removeProperty('background-color');
+      
+      // Add a class to ensure the gradient is visible on mobile
+      if (isMobile) {
+        document.body.classList.add('mobile-gradient-bg');
+      } else {
+        document.body.classList.remove('mobile-gradient-bg');
+      }
     }
     
     return () => {
-      document.body.style.background = '';
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('mobile-gradient-bg');
+      }
     }
   }, [isMobile]);
 
@@ -105,7 +117,10 @@ export function SnowflakeBackground() {
         top: 0,
         left: 0,
         width: '100%',
-        height: '100%'
+        height: '100%',
+        display: 'block',
+        visibility: 'visible',
+        opacity: 1
       }}
     />
   )

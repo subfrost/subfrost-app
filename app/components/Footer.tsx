@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { FaGithub } from 'react-icons/fa'
 import { FaXTwitter } from 'react-icons/fa6'
 import { useEffect, useState } from 'react'
+import { getFrostBgStyle } from '../utils/styleUtils'
 
 export function Footer() {
   const [isMobile, setIsMobile] = useState(false)
@@ -26,7 +27,7 @@ export function Footer() {
     }
   }, [])
   return (
-    <footer className="frost-bg text-[#284372] py-1 h-6 w-full mt-auto sticky bottom-0 left-0 right-0">
+    <footer className="frost-bg text-[#284372] py-1 h-6 w-full mt-auto sticky bottom-0 left-0 right-0" style={getFrostBgStyle()}>
       <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center h-full">
         <div className="mb-1 md:mb-0">
           <p className="retro-text text-[10px]">

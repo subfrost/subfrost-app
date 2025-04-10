@@ -249,9 +249,17 @@ a.button:focus,
   ring-width: 0 !important;
   ring-offset-width: 0 !important;
 }
-
 .frost-bg {
   @apply bg-white bg-opacity-20 backdrop-filter backdrop-blur-lg;
+}
+
+/* Ensure frost-bg works properly on mobile devices */
+@media (max-width: 768px) {
+  .frost-bg {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
 }
 
 .frost-border {
@@ -507,4 +515,24 @@ button[class*="bg-transparent"] {
     background-color: inherit !important;
     color: #284372 !important;
   }
+  
+  /* Ensure the gradient background is visible on mobile */
+  .mobile-gradient-bg {
+    background: linear-gradient(to bottom, #bfdbfe, #eff6ff) !important;
+    background-color: #bfdbfe !important;
+  }
+  
+  /* Ensure the canvas is visible on mobile */
+  canvas.fixed {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: -1 !important;
+  }
+}
+
+/* Mobile gradient background class */
+.mobile-gradient-bg {
+  background: linear-gradient(to bottom, #bfdbfe, #eff6ff) !important;
+  background-color: #bfdbfe !important;
 }

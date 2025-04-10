@@ -9,6 +9,7 @@ import { PixelSprite } from './PixelSprite'
 import ConnectWalletModal from './ConnectWalletModal'
 import { BalancesDropdown } from './BalancesDropdown'
 import { useBalancesVisibility } from '../hooks/useBalancesVisibility'
+import { getFrostBgStyle } from '../utils/styleUtils'
 
 export function Navbar() {
   const pathname = usePathname()
@@ -48,7 +49,7 @@ export function Navbar() {
   }
 
   return (
-    <div className="frost-bg p-4 mb-4 relative">
+    <div className="frost-bg p-4 mb-4 relative" style={getFrostBgStyle()}>
       {/* Desktop Layout */}
       <div className="hidden md:flex justify-between items-center w-full">
         {/* Left side: Logo - fixed position with buffer */}
@@ -161,7 +162,7 @@ export function Navbar() {
         
         {/* Dropdown menu */}
         {mobileDropdownOpen && (
-          <div className="frost-bg rounded-md p-2 mt-2 mb-4">
+          <div className="frost-bg rounded-md p-2 mt-2 mb-4" style={getFrostBgStyle()}>
             <div className="flex flex-col space-y-2" style={{ fontSize: '0.75rem' }}>
               {['Stake', 'Wrap', 'Swap', 'Governance'].map((link) => (
                 <Link
