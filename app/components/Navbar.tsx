@@ -8,12 +8,13 @@ import { useState, useEffect, useRef } from 'react'
 import { PixelSprite } from './PixelSprite'
 import ConnectWalletModal from './ConnectWalletModal'
 import { BalancesDropdown } from './BalancesDropdown'
+import { useBalancesVisibility } from '../hooks/useBalancesVisibility'
 
 export function Navbar() {
   const pathname = usePathname()
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState('')
-  const [showBalancesButton, setShowBalancesButton] = useState(true)
+  const { showBalancesButton, setShowBalancesButton } = useBalancesVisibility()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false)
   const [selectedNavLink, setSelectedNavLink] = useState('Stake')
@@ -21,6 +22,7 @@ export function Navbar() {
   const navbarRef = useRef<HTMLDivElement>(null)
   const navLinksRef = useRef<HTMLDivElement>(null)
   const walletRef = useRef<HTMLDivElement>(null)
+  const connectWalletRef = useRef<HTMLDivElement>(null)
   const logoRef = useRef<HTMLAnchorElement>(null)
   
   // Debounce function to limit how often the resize handler fires
@@ -32,32 +34,36 @@ export function Navbar() {
     };
   };
 
-  // Effect to handle showing/hiding the balances button based on available space
+  // Effect to handle showing/hiding the balances button based on navbar links needing space
   useEffect(() => {
     // Keep track of previous state to implement hysteresis
     let previouslyShown = true;
     
     // The actual space checking function
     const checkSpace = () => {
-      if (navbarRef.current && navLinksRef.current && walletRef.current && logoRef.current) {
-        const navbarWidth = navbarRef.current.offsetWidth
+      if (navbarRef.current && navLinksRef.current && connectWalletRef.current) {
+        const containerWidth = navbarRef.current.offsetWidth
         const navLinksWidth = navLinksRef.current.offsetWidth
-        const walletWidth = walletRef.current.offsetWidth
-        const logoWidth = logoRef.current.offsetWidth
+        const balancesButtonWidth = 128 // Approximate width of balances button
+        const bufferWidth = 25 // Total width of buffer elements (20px for logo + 5px for connect wallet)
         
-        // Calculate available space - more precise calculation
-        const availableSpace = navbarWidth - logoWidth - navLinksWidth - walletWidth - 40 // 40px buffer
+        // Calculate the minimum space needed for the navigation links
+        const minSpaceForNavLinks = navLinksWidth + 20 // 20px buffer
         
-        // Implement hysteresis to prevent flickering
-        // If it was previously shown, use a lower threshold to hide it
-        // If it was previously hidden, use a higher threshold to show it
-        const showThreshold = previouslyShown ? 80 : 100;
+        // Calculate the available space in the middle section
+        // The middle section has flex-grow, so it gets all the space between the fixed-width logo and connect wallet sections
+        // We need to account for the buffer elements on both sides
+        const availableSpace = containerWidth - bufferWidth
         
-        // Only update if we're crossing the threshold
-        // Make sure it's visible on larger screens
-        const shouldShow = (availableSpace > showThreshold && window.innerWidth >= 768) || window.innerWidth >= 1024;
+        // Check if there's enough space for both the navbar links and balances button
+        // If not, hide the balances button to give more space to the links
+        const shouldShow = (availableSpace >= minSpaceForNavLinks + balancesButtonWidth && window.innerWidth >= 768) || window.innerWidth >= 950;
+        
+        // Debug log
+        console.log("Navbar - shouldShow:", shouldShow, "availableSpace:", availableSpace, "minSpaceForNavLinks:", minSpaceForNavLinks, "balancesButtonWidth:", balancesButtonWidth, "windowWidth:", window.innerWidth);
         
         if (shouldShow !== previouslyShown) {
+          console.log("Navbar - Updating showBalancesButton from", previouslyShown, "to", shouldShow);
           setShowBalancesButton(shouldShow);
           previouslyShown = shouldShow;
         }
@@ -75,7 +81,7 @@ export function Navbar() {
     
     // Cleanup
     return () => window.removeEventListener('resize', debouncedCheckSpace)
-  }, [])
+  }, [setShowBalancesButton])
 
   const handleConnectWallet = () => {
     setIsModalOpen(true)
@@ -88,75 +94,109 @@ export function Navbar() {
   }
 
   return (
-    <nav className="bg-blue-800 bg-opacity-70 backdrop-filter backdrop-blur-lg p-4 mb-4 frost-border">
-      <div ref={navbarRef} className="container mx-auto flex flex-col md:flex-row items-center transition-all duration-300 ease-in-out">
-        <Link ref={logoRef} href="https://subfrost.io/" className="text-4xl font-extrabold retro-text text-white flex items-center transition-all duration-300 ease-in-out">
-          <FaSnowflake className="mr-2" />
-          SUBFROST
-        </Link>
-        {/* Desktop Navigation */}
-        <div className="hidden md:flex items-center flex-grow justify-center transition-all duration-300 ease-in-out" ref={navLinksRef}>
-          <div className="flex space-x-4">
-            <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
-            <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
-            <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
-            <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
-          </div>
+    <div className="frost-bg p-4 mb-4 relative">
+      {/* Desktop Layout */}
+      <div className="hidden md:flex justify-between items-center w-full">
+        {/* Left side: Logo - fixed position with buffer */}
+        <div className="w-[200px] flex-shrink-0">
+          <Link ref={logoRef} href="https://subfrost.io/" className="text-4xl font-extrabold retro-text text-[#284372] flex items-center transition-all duration-300 ease-in-out nav-link">
+            <FaSnowflake className="mr-2" />
+            SUBFROST
+          </Link>
         </div>
-        <div className="hidden md:flex items-center space-x-4 transition-all duration-300 ease-in-out" ref={walletRef}>
-            {/* Balances Dropdown - show based on available space with animation */}
-            <div
-              className={`
-                transition-all duration-500 ease-in-out
-                ${showBalancesButton
-                  ? 'opacity-100 max-w-[200px] mr-2 scale-100'
-                  : 'opacity-0 max-w-0 mr-0 scale-95 transform'
-                }
-              `}
-            >
-              <BalancesDropdown />
+        
+        {/* Buffer space between logo and navbar */}
+        <div className="w-[20px] flex-shrink-0"></div>
+        
+        {/* Container for the middle content - this will be responsive */}
+        <div ref={navbarRef} className="flex-grow flex items-center justify-center transition-all duration-300 ease-in-out">
+          {/* Middle: Navigation Links - centered */}
+          <div className="flex items-center justify-center transition-all duration-300 ease-in-out" ref={navLinksRef}>
+            <div className="flex space-x-4">
+              <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
+              <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
+              <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
+              <NavLink href="/governance" active={pathname === '/governance'}>Governance</NavLink>
             </div>
-            {/* Connect Wallet - always visible */}
-            {isWalletConnected ? (
-              <Link href="/profile" className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-full px-3 py-1">
-                <PixelSprite address={walletAddress} size={24} />
-                <span className="retro-text text-xs text-white truncate w-24">{walletAddress}</span>
-              </Link>
-            ) : (
-              <ConnectWalletModal />
+          </div>
+          
+          {/* Balances button - moves with the container */}
+          <div className="flex items-center transition-all duration-300 ease-in-out ml-4" ref={walletRef}>
+            {showBalancesButton && (
+              <div className="transition-all duration-500 ease-in-out opacity-100 scale-100">
+                <BalancesDropdown />
+              </div>
             )}
           </div>
+        </div>
         
-        {/* Mobile Navigation - Vertically aligned */}
-        <div className="md:hidden w-full mt-4">
-          <div className="flex flex-col items-center space-y-4">
-            {/* SUBFROST logo is already at the top */}
-            
-            {/* Connect Wallet */}
-            <div className="w-full flex justify-center">
-              {isWalletConnected ? (
-                <Link href="/profile" className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-full px-3 py-1">
-                  <PixelSprite address={walletAddress} size={24} />
-                  <span className="retro-text text-xs text-white truncate w-24">{walletAddress}</span>
-                </Link>
-              ) : (
-                <ConnectWalletModal />
-              )}
+        {/* Buffer space between navbar and connect wallet */}
+        <div className="w-[5px] flex-shrink-0"></div>
+        
+        {/* Right side: Connect Wallet - fixed width */}
+        <div className="w-[150px] flex-shrink-0 flex justify-end">
+          {/* Connect Wallet - always visible */}
+          {isWalletConnected ? (
+            <Link href="/profile" className="flex items-center space-x-2 bg-blue-100 hover:bg-blue-50 rounded-full px-3 py-1 nav-link">
+              <PixelSprite address={walletAddress} size={24} />
+              <span className="retro-text text-xs text-[#284372] truncate w-24">{walletAddress}</span>
+            </Link>
+          ) : (
+            <div ref={connectWalletRef}>
+              <ConnectWalletModal />
             </div>
-            
-            {/* BALANCES button */}
-            <div className="w-full flex justify-center">
-              <BalancesDropdown isMobile={true} />
+          )}
+        </div>
+      </div>
+      
+      {/* Mobile Navigation - Vertically aligned */}
+      <div className="md:hidden w-full">
+        {/* Mobile Logo - Centered at the top */}
+        <div className="flex justify-center mb-4">
+          <Link
+            href="https://subfrost.io/"
+            className="font-extrabold retro-text text-[#284372] flex items-center nav-link"
+          >
+            <FaSnowflake className="mr-2" />
+            <span style={{ fontSize: '2rem' }}>SUBFROST</span>
+          </Link>
+        </div>
+        
+        <div className="flex flex-col items-center space-y-4">
+          {/* Connect Wallet */}
+          <div className="w-full flex justify-center px-4">
+            {isWalletConnected ? (
+              <Link href="/profile" className="flex items-center space-x-2 bg-blue-100 hover:bg-blue-50 rounded-full px-3 py-1 nav-link">
+                <PixelSprite address={walletAddress} size={24} />
+                <span className="retro-text text-xs text-[#284372] truncate w-24" style={{ fontSize: '0.75rem' }}>{walletAddress}</span>
+              </Link>
+            ) : (
+              <div style={{ width: '209px' }}>
+                <div style={{ fontSize: '0.75rem' }}>
+                  <ConnectWalletModal isMobile={true} />
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* BALANCES button - with font size override */}
+          <div className="w-full flex justify-center px-4">
+            <div style={{ width: '209px' }}>
+              <div style={{ fontSize: '0.75rem' }}>
+                <BalancesDropdown isMobile={true} />
+              </div>
             </div>
-            
-            {/* Selected link that toggles dropdown when clicked */}
-            <div className="w-full flex justify-center">
+          </div>
+          
+          {/* Selected link that toggles dropdown when clicked */}
+          <div className="w-full flex justify-center">
+            <div style={{ fontSize: '0.75rem' }}>
               <Button
                 variant="ghost"
                 className={`
-                  ${pathname === `/${selectedNavLink.toLowerCase()}` ? 'text-white scale-[1.25]' : 'text-white hover:scale-[1.25]'}
+                  ${pathname === `/${selectedNavLink.toLowerCase()}` ? 'text-[#284372]' : 'text-[#284372] hover:scale-[1.125]'}
                   retro-text text-base font-bold px-3 py-2 rounded transition-all duration-200 flex items-center
-                  w-full justify-center
+                  w-full justify-center nav-link active:text-white active:shadow-[0_0_8px_rgba(255,255,255,0.5)]
                 `}
                 onClick={() => setMobileDropdownOpen(!mobileDropdownOpen)}
               >
@@ -165,34 +205,34 @@ export function Navbar() {
               </Button>
             </div>
           </div>
-          
-          {/* Dropdown menu */}
-          {mobileDropdownOpen && (
-            <div className="bg-blue-800 bg-opacity-80 backdrop-filter backdrop-blur-lg rounded-md p-2 mt-2 mb-4 frost-border">
-              <div className="flex flex-col space-y-2">
-                {['Stake', 'Wrap', 'Swap', 'Governance'].map((link) => (
-                  <Link
-                    key={link}
-                    href={`/${link.toLowerCase()}`}
-                    className={`
-                      w-full text-left flex items-center justify-center
-                      ${link === selectedNavLink ? 'text-white scale-[1.25]' : 'text-white hover:scale-[1.25]'}
-                      retro-text text-base font-bold px-3 py-2 rounded transition-all duration-200
-                    `}
-                    onClick={() => {
-                      setSelectedNavLink(link);
-                      setMobileDropdownOpen(false);
-                    }}
-                  >
-                    {link}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
+        
+        {/* Dropdown menu */}
+        {mobileDropdownOpen && (
+          <div className="frost-bg rounded-md p-2 mt-2 mb-4">
+            <div className="flex flex-col space-y-2" style={{ fontSize: '0.75rem' }}>
+              {['Stake', 'Wrap', 'Swap', 'Governance'].map((link) => (
+                <Link
+                  key={link}
+                  href={`/${link.toLowerCase()}`}
+                  className={`
+                    w-full text-left flex items-center justify-center
+                    ${link === selectedNavLink ? 'text-[#284372]' : 'text-[#284372] hover:scale-[1.125]'}
+                    retro-text text-base font-bold px-3 py-2 rounded transition-all duration-200 nav-link active:text-white active:shadow-[0_0_8px_rgba(255,255,255,0.5)]
+                  `}
+                  onClick={() => {
+                    setSelectedNavLink(link);
+                    setMobileDropdownOpen(false);
+                  }}
+                >
+                  {link}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-    </nav>
+    </div>
   )
 }
 
@@ -201,7 +241,8 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
     <Link
       href={href}
       className={`
-        ${active ? 'text-white scale-[1.3]' : 'text-white hover:scale-[1.3]'}
+        nav-link
+        ${active ? 'text-[#284372]' : 'text-[#284372] hover:scale-[1.15]'}
         retro-text
         text-base
         font-bold
@@ -211,10 +252,10 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
         transition-all
         duration-200
         md:inline-block w-full md:w-auto text-center
+        active:text-white active:shadow-[0_0_8px_rgba(255,255,255,0.5)]
       `}
     >
       {children}
     </Link>
   )
 }
-

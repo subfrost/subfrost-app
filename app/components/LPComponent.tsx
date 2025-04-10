@@ -149,19 +149,23 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        <Button
-          onClick={() => handleModeToggle(true)}
-          className={`retro-text text-xs ${isMintMode ? 'bg-blue-800 text-white' : 'bg-blue-200 text-blue-800 hover:bg-blue-300'}`}
-        >
-          Add
-        </Button>
-        <Button
-          onClick={() => handleModeToggle(false)}
-          className={`retro-text text-xs ${!isMintMode ? 'bg-blue-800 text-white' : 'bg-blue-200 text-blue-800 hover:bg-blue-300'}`}
-        >
-          Remove
-        </Button>
+      <div className="flex justify-center mb-4">
+        <div className="grid grid-cols-2 gap-1 bg-blue-200 rounded-md p-1 w-52">
+          <button
+            onClick={() => handleModeToggle(true)}
+            className={`retro-text text-xs px-2 py-1 rounded-md ${isMintMode ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
+            style={!isMintMode ? {background: 'transparent !important'} : {}}
+          >
+            Add
+          </button>
+          <button
+            onClick={() => handleModeToggle(false)}
+            className={`retro-text text-xs px-2 py-1 rounded-md ${!isMintMode ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
+            style={isMintMode ? {background: 'transparent !important'} : {}}
+          >
+            Remove
+          </button>
+        </div>
       </div>
 
       {isMintMode ? (

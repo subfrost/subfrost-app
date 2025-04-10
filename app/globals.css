@@ -257,13 +257,12 @@ a.button:focus,
 .frost-border {
   @apply border border-white border-opacity-30;
 }
-
 .nav-link {
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.25);
 }
 
 .nav-link:hover {
-  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.7);
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 /* Ensure content doesn't overflow on small screens */
@@ -283,7 +282,7 @@ a.button:focus,
   nav a:hover,
   nav button:hover {
     transform: none !important;
-    background-color: transparent !important;
+    /* Allow background color changes for blue-100 and blue-50 */
     color: inherit !important;
   }
   
@@ -292,10 +291,88 @@ a.button:focus,
     transform: none !important;
   }
   
-  /* Ensure no background color changes on hover for mobile */
-  [class*="hover\:bg"]:hover {
+  /* Allow background color changes for blue-100 and blue-50 on hover */
+  [class*="hover\:bg-blue-50"]:hover,
+  [class*="hover\:bg-blue-100"]:hover {
+    background-color: inherit !important;
+  }
+  
+  /* Disable background color changes for other hover states */
+  [class*="hover\:bg-blue-200"]:hover,
+  [class*="hover\:bg-blue-300"]:hover,
+  [class*="hover\:bg-blue-400"]:hover,
+  [class*="hover\:bg-blue-500"]:hover,
+  [class*="hover\:bg-blue-600"]:hover,
+  [class*="hover\:bg-blue-700"]:hover,
+  [class*="hover\:bg-blue-800"]:hover,
+  [class*="hover\:bg-blue-900"]:hover {
     background-color: transparent !important;
   }
+}
+
+/* Override SVG icon colors */
+svg.text-blue-100,
+svg.text-blue-200,
+svg.text-blue-300,
+svg.text-blue-400,
+svg.text-blue-500,
+svg.text-blue-600,
+svg.text-blue-700,
+svg.text-blue-800,
+svg.text-blue-900,
+[class*="text-blue"] svg {
+  color: #284372 !important;
+  fill: #284372 !important;
+}
+
+/* Override hover states for links and buttons */
+.hover\:text-blue-100:hover,
+.hover\:text-blue-200:hover,
+.hover\:text-blue-300:hover,
+.hover\:text-blue-400:hover,
+.hover\:text-blue-500:hover,
+.hover\:text-blue-600:hover,
+.hover\:text-blue-700:hover,
+.hover\:text-blue-800:hover,
+.hover\:text-blue-900:hover {
+  color: #284372 !important;
+}
+
+/* Override background colors with blue tones - except for blue-100 and blue-50 */
+.bg-blue-200,
+.bg-blue-300,
+.bg-blue-400,
+.bg-blue-500,
+.bg-blue-600,
+.bg-blue-700,
+.bg-blue-800,
+.bg-blue-900 {
+  background-color: rgba(40, 67, 114, var(--tw-bg-opacity)) !important;
+}
+
+/* Override hover background colors - except for blue-100 and blue-50 */
+.hover\:bg-blue-200:hover,
+.hover\:bg-blue-300:hover,
+.hover\:bg-blue-400:hover,
+.hover\:bg-blue-500:hover,
+.hover\:bg-blue-600:hover,
+.hover\:bg-blue-700:hover,
+.hover\:bg-blue-800:hover,
+.hover\:bg-blue-900:hover {
+  background-color: rgba(40, 67, 114, var(--tw-bg-opacity)) !important;
+}
+
+/* Override border colors with blue tones */
+.border-blue-100,
+.border-blue-200,
+.border-blue-300,
+.border-blue-400,
+.border-blue-500,
+.border-blue-600,
+.border-blue-700,
+.border-blue-800,
+.border-blue-900 {
+  border-color: rgba(40, 67, 114, var(--tw-border-opacity)) !important;
 }
 
 /* Add padding to the bottom of the page on mobile to prevent content from being obscured by OS gesture widgets */
@@ -304,4 +381,39 @@ a.button:focus,
     padding-bottom: 3rem; /* Reduced padding to minimize space */
   }
 }
+/* Override all blue text colors to #284372 */
+.text-blue-100,
+.text-blue-200,
+.text-blue-300,
+.text-blue-400,
+.text-blue-500,
+.text-blue-600,
+.text-blue-700,
+.text-blue-800,
+.text-blue-900 {
+  color: #284372 !important;
+}
 
+/* Override any inline styles with blue colors */
+[style*="color: blue"],
+[style*="color:#"],
+[class*="text-blue"] {
+  color: #284372 !important;
+}
+
+/* Override TabsTrigger active state background color */
+[data-state=active].data-\[state\=active\]\:bg-blue-800 {
+  background-color: #284372 !important;
+}
+
+/* Ensure transparent background for unselected options in sliding buttons */
+button.bg-transparent.text-\[\#284372\] {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Override any background color for buttons with bg-transparent class */
+button[class*="bg-transparent"] {
+  background-color: transparent !important;
+  background: transparent !important;
+}

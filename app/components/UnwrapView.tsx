@@ -80,52 +80,52 @@ export function UnwrapView() {
     <Card className="bg-blue-700 border-blue-600 w-full max-w-md">
       <CardHeader>
         <CardTitle className="retro-text text-white flex items-center justify-center text-lg md:text-xl h-20">
-          <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
+          <RiCoinsFill className="mx-2 md:mx-4 text-white" size={29} />
           <div className="flex flex-col">
             <div className="flex items-center justify-center w-full whitespace-nowrap">
-              <span className="text-blue-200 font-bold text-2xl md:text-4xl">Unwrap</span>{' '}
-              <span className="ml-1 md:ml-2 text-blue-200 text-2xl md:text-4xl font-bold"><FrBTC /></span>
+              <span className="text-white font-bold text-2xl md:text-4xl">Unwrap</span>{' '}
+              <span className="ml-1 md:ml-2 text-white text-2xl md:text-4xl font-bold"><FrBTC /></span>
             </div>
             <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
-              <span className="text-2xl md:text-4xl text-blue-200 font-bold">to BTC</span>
+              <span className="text-2xl md:text-4xl text-white font-bold">to BTC</span>
             </div>
           </div>
-          <RiCoinsFill className="mx-2 md:mx-4 text-blue-200" size={29} />
+          <RiCoinsFill className="mx-2 md:mx-4 text-white" size={29} />
         </CardTitle>
-        <CardDescription className="readable-text text-sm text-blue-100">Enter the amount of <FrBTC /> you want to unwrap.</CardDescription>
+        <CardDescription className="readable-text text-sm text-white">Enter the amount of <FrBTC /> you want to unwrap.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
-          <label htmlFor="frbtc-amount" className="readable-text text-sm text-blue-100 block mb-1">Amount of <FrBTC /></label>
+          <label htmlFor="frbtc-amount" className="readable-text text-sm text-white block mb-1">Amount of <FrBTC /></label>
           <Input
             id="frbtc-amount"
             type="number"
             placeholder="0.00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="readable-text text-sm bg-blue-600 text-white placeholder-white border-blue-500"
+            className="readable-text text-sm bg-white text-[#284372] placeholder-[#284372] border-white"
           />
-          <p className="readable-text text-xs mt-1 text-blue-200">Available: {frBTCBalance} <FrBTC /></p>
+          <p className="readable-text text-xs mt-1 text-white">Available: {frBTCBalance} <FrBTC /></p>
         </div>
         <div>
           <div className="flex items-center mb-2">
-            <p className="readable-text text-xs text-blue-200 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-200" /></p>
+            <p className="readable-text text-xs text-white h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-white" /></p>
           </div>
           <div className="flex items-center mb-2">
-            <p className="readable-text text-xs text-blue-200 h-5">SUBFROST Fee: 0.1%</p>
+            <p className="readable-text text-xs text-white h-5">SUBFROST Fee: 0.1%</p>
           </div>
-          <p className="readable-text text-sm text-blue-100">Expected BTC: {calculateExpectedBTC()}</p>
+          <p className="readable-text text-sm text-white">Expected BTC: {calculateExpectedBTC()}</p>
         </div>
       </CardContent>
       <CardFooter className="flex-col items-stretch space-y-6">
-        <Button onClick={handleUnwrap} className="w-full retro-text text-base font-bold bg-blue-600 hover:bg-blue-700 text-white navbar-size">
+        <Button onClick={handleUnwrap} className="w-full retro-text text-base font-bold bg-white hover:bg-white text-[#284372] navbar-size">
           Unwrap <FrBTC />
         </Button>
         <div className="w-full border-t border-blue-500 opacity-50"></div>
         <div className="bg-blue-800 bg-opacity-50 rounded-lg p-4"> {/* Reverted p-2 to p-4 */}
           <div className="flex justify-between items-center mb-2"> {/* Changed mb-1 to mb-2 */}
-            <h3 className="retro-text text-xs text-blue-300">SUBFROST P2P</h3>
-            <div className="flex items-center retro-text text-xs text-yellow-300"> {/* Reverted text-[8px] to text-xs */}
+            <h3 className="retro-text text-xs text-white">SUBFROST P2P</h3>
+            <div className="flex items-center retro-text text-xs text-white"> {/* Reverted text-[8px] to text-xs */}
               <Zap size={10} className="mr-1" />
               <span>{onlineCount}/255 Online</span>
             </div>

@@ -30,7 +30,7 @@ export function UnwrapConfirmationModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px] frost-bg frost-border">
         <DialogHeader>
-          <DialogTitle className="retro-text text-blue-300 flex items-center">
+          <DialogTitle className="retro-text text-white flex items-center">
             <FaSnowflake className="mr-2" />
             Confirm Unwrap
           </DialogTitle>

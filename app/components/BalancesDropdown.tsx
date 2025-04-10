@@ -11,9 +11,10 @@ import { FrBTC, DxBTC, DxFROST } from './TokenNames'
 
 interface BalancesDropdownProps {
   isMobile?: boolean;
+  isFloating?: boolean; // New prop to indicate if this is being used in the floating social icons
 }
 
-export function BalancesDropdown({ isMobile = false }: BalancesDropdownProps) {
+export function BalancesDropdown({ isMobile = false, isFloating = false }: BalancesDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [buttonPosition, setButtonPosition] = useState({ top: 0, left: 0, width: 0 })
@@ -75,16 +76,33 @@ export function BalancesDropdown({ isMobile = false }: BalancesDropdownProps) {
     }
   }, [isOpen])
 
+  // If this is being used in the floating social icons, don't render the button
+  if (isFloating) {
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <BalanceItem icon={FaBitcoin} label="BTC" amount={formattedBalances.btc} />
+          <BalanceItem icon={RiExchangeDollarFill} label={<FrBTC />} amount={formattedBalances.frBTC} />
+          <BalanceItem icon={RiCoinsFill} label={<DxBTC />} amount={parseFloat(formattedBalances.dxFROST).toFixed(8)} />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <BalanceItem icon={FaSnowflake} label="FROST" amount={formattedBalances.frost} />
+          <BalanceItem icon={RiCoinsFill} label={<DxFROST />} amount={formattedBalances.dxFROST} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative" ref={dropdownRef}>
       <Button
         ref={buttonRef}
         onClick={isOpen ? () => setIsOpen(false) : handleOpenDropdown}
-        variant="ghost" 
-        className="flex items-center bg-blue-800 bg-opacity-70 rounded-md px-3 py-1 h-10 text-white hover:bg-blue-700"
+        variant="ghost"
+        className={`flex items-center bg-blue-100 rounded-md px-3 py-1 h-10 text-[#284372] hover:bg-blue-50 ${isMobile ? 'w-full justify-center' : 'w-32 justify-center'}`}
       >
-        <FaWallet className="mr-2" />
-        <span className="retro-text text-xs">Balances</span>
+        {!isMobile && <FaWallet className="mr-2" />}
+        <span className="retro-text text-xs text-[#284372]">Balances</span>
       </Button>
 
       {isOpen && mounted && createPortal(
@@ -98,10 +116,10 @@ export function BalancesDropdown({ isMobile = false }: BalancesDropdownProps) {
             transform: isMobile ? (windowWidth < 768 ? 'none' : 'translate(-50%, -50%)') : 'none',
             zIndex: 9999,
           }}
-          className="w-64 bg-blue-800 bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-md shadow-lg frost-border"
+          className="w-64 frost-bg rounded-md shadow-lg frost-border"
         >
           <div className="p-3">
-            <h3 className="retro-text text-white text-sm mb-2">Your Balances</h3>
+            <h3 className="retro-text text-[#284372] text-sm mb-2">Your Balances</h3>
             <div className="space-y-2">
               <div className="flex flex-wrap gap-2">
                 <BalanceItem icon={FaBitcoin} label="BTC" amount={formattedBalances.btc} />
@@ -131,11 +149,11 @@ function BalanceItem({
   amount: string | number;
 }) {
   return (
-    <div className="flex items-center bg-blue-700 bg-opacity-50 rounded-lg px-2 py-1 h-8">
-      <Icon className="text-blue-300 text-sm mr-1" />
+    <div className="flex items-center bg-blue-100 rounded-lg px-2 py-1 h-8">
+      <Icon className="text-[#284372] text-sm mr-1" />
       <div className="flex items-center space-x-1">
-        <span className="retro-text text-[10px] text-white">{typeof label === 'string' ? label : label}:</span>
-        <span className="font-bold retro-text text-[10px] text-white">{amount}</span>
+        <span className="retro-text text-[10px] text-[#284372]">{typeof label === 'string' ? label : label}:</span>
+        <span className="font-bold retro-text text-[10px] text-[#284372]">{amount}</span>
       </div>
     </div>
   )

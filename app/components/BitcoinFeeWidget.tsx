@@ -13,7 +13,7 @@ export interface BitcoinFeeWidgetProps {
 export function BitcoinFeeWidget({
   textVisible = true,
   noBackground = false,
-  textColor = "text-white"
+  textColor = "text-[#284372]"
 }: BitcoinFeeWidgetProps) {
   const [fees, setFees] = useState<{ fast: number; medium: number; slow: number } | null>(null)
 
@@ -44,10 +44,10 @@ export function BitcoinFeeWidget({
 
   return (
     <div className="flex flex-col justify-center bg-blue-800 bg-opacity-70 rounded-md p-2 h-10 transition-all duration-500 ease-in-out">
-      <span className={`text-[10px] readable-text text-white leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <span className={`text-[10px] readable-text text-[#284372] leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
         BTC Network Fee
       </span>
-      <span className={`text-[10px] readable-text text-white leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <span className={`text-[10px] readable-text text-[#284372] leading-tight text-center whitespace-nowrap transition-opacity duration-300 ease-in-out ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
         5 sat/vbyte
       </span>
     </div>

@@ -27,7 +27,7 @@ import Image from "next/image";
 import { FaSnowflake } from "react-icons/fa";
 import { DialogClose } from "@radix-ui/react-dialog";
 
-export default function ConnectWalletModal({ className }: { className?: string }) {
+export default function ConnectWalletModal({ className, isMobile = false }: { className?: string, isMobile?: boolean }) {
   const {
     connect,
     disconnect,
@@ -84,15 +84,16 @@ export default function ConnectWalletModal({ className }: { className?: string }
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {address ? (
-        <Link href="/profile" className="flex items-center space-x-2 bg-blue-700 bg-opacity-50 rounded-full px-3 py-1">
+        <Link href="/profile" className="flex items-center space-x-2 bg-blue-100 hover:bg-blue-50 rounded-full px-3 py-1">
           <PixelSprite address={address} size={24} />
-          <span className="retro-text text-xs text-white truncate w-24">{address}</span>
+          <span className="retro-text text-xs text-[#284372] truncate w-24">{address}</span>
         </Link>
       ) : (
         <DialogTrigger asChild>
           <Button
             className={cn(
-              "retro-text text-xs bg-blue-500 hover:bg-blue-600",
+              "retro-text text-xs bg-blue-100 hover:bg-blue-50 text-[#284372]",
+              isMobile ? "w-full justify-center" : "w-32 justify-center",
               className
             )}
           >

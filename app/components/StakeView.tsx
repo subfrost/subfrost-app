@@ -82,13 +82,13 @@ export function StakeView() {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger
                 value="btc"
-                className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
+                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white"
               >
                 BTC (Coming!)
               </TabsTrigger>
               <TabsTrigger
                 value="frost"
-                className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
+                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white"
               >
                 FROST (~12% APY)
               </TabsTrigger>
@@ -131,13 +131,15 @@ export function StakeView() {
                 <div className="grid grid-cols-2 gap-1 bg-blue-200 rounded-md p-1 w-52">
                   <button
                     onClick={() => setIsStaking(true)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${isStaking ? 'bg-blue-800 text-white' : 'bg-transparent text-blue-800'}`}
+                    className={`retro-text text-xs px-2 py-1 rounded-md ${isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
+                    style={!isStaking ? {background: 'transparent !important'} : {}}
                   >
                     Stake
                   </button>
                   <button
                     onClick={() => setIsStaking(false)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${!isStaking ? 'bg-blue-800 text-white' : 'bg-transparent text-blue-800'}`}
+                    className={`retro-text text-xs px-2 py-1 rounded-md ${!isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
+                    style={isStaking ? {background: 'transparent !important'} : {}}
                   >
                     Unstake
                   </button>
@@ -297,13 +299,15 @@ export function StakeView() {
                 <div className="grid grid-cols-2 gap-1 bg-blue-200 rounded-md p-1 w-52">
                   <button
                     onClick={() => setIsStaking(true)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${isStaking ? 'bg-blue-800 text-white' : 'bg-transparent text-blue-800'}`}
+                    className={`retro-text text-xs px-2 py-1 rounded-md ${isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
+                    style={!isStaking ? {background: 'transparent !important'} : {}}
                   >
                     Stake
                   </button>
                   <button
                     onClick={() => setIsStaking(false)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${!isStaking ? 'bg-blue-800 text-white' : 'bg-transparent text-blue-800'}`}
+                    className={`retro-text text-xs px-2 py-1 rounded-md ${!isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
+                    style={isStaking ? {background: 'transparent !important'} : {}}
                   >
                     Unstake
                   </button>

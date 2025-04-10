@@ -61,13 +61,13 @@ export function SwapView() {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger 
                 value="swap" 
-                className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
+                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white"
               >
                 Swap
               </TabsTrigger>
               <TabsTrigger 
                 value="lp" 
-                className="retro-text data-[state=active]:bg-blue-800 data-[state=active]:text-white"
+                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white"
               >
                 <span className="text-[10px] sm:text-xs px-0.5 sm:px-1 whitespace-nowrap">LP</span>
               </TabsTrigger>

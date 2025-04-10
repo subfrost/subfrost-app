@@ -9,6 +9,7 @@ import { SocialIcons } from "./components/SocialIcons";
 import { Toaster } from "@/components/ui/toaster";
 import { SubfrostP2PProvider } from "./contexts/SubfrostP2PContext";
 import { BalancesProvider } from "./contexts/BalancesContext";
+import { BalancesVisibilityProvider } from "./contexts/BalancesVisibilityContext";
 // import * as regtest from "./lib/rtest";
 import { LaserEyesProvider } from "@omnisat/lasereyes";
 import { RegtestProvider } from "./contexts/RegtestContext";
@@ -51,21 +52,22 @@ export default function RootLayout({
       >
         <RegtestProvider>
           <LaserEyesProvider>
-            {" "}
             <BalancesProvider>
-              <SubfrostP2PProvider>
-                <SnowflakeBackground />
-                <SnowflakeWatermark />
-                <div className="flex flex-col min-h-screen h-screen w-full">
-                  <Navbar />
-                  <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
-                    {children}
-                  </main>
-                  <Footer />
-                  <SocialIcons />
-                  <Toaster />
-                </div>
-              </SubfrostP2PProvider>
+              <BalancesVisibilityProvider>
+                <SubfrostP2PProvider>
+                  <SnowflakeBackground />
+                  <SnowflakeWatermark />
+                  <div className="flex flex-col min-h-screen h-screen w-full">
+                    <Navbar />
+                    <main className="flex-grow container mx-auto p-4 mobile-bottom-padding">
+                      {children}
+                    </main>
+                    <Footer />
+                    <SocialIcons />
+                    <Toaster />
+                  </div>
+                </SubfrostP2PProvider>
+              </BalancesVisibilityProvider>
             </BalancesProvider>
           </LaserEyesProvider>
         </RegtestProvider>
