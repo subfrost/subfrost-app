@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
 import { RiCoinsFill } from 'react-icons/ri'
+import { FaSnowflake } from 'react-icons/fa'
 import { Zap } from 'lucide-react'
 import { UnwrapConfirmationModal } from './UnwrapConfirmationModal'
 import { BitcoinFeeWidget } from './BitcoinFeeWidget'
@@ -122,10 +123,15 @@ export function UnwrapView() {
           Unwrap <FrBTC />
         </Button>
         <div className="w-full border-t border-blue-500 opacity-50"></div>
+        <div className="flex items-center justify-center">
+          <div className="border-t border-white flex-grow"></div>
+          <FaSnowflake className="text-white mx-2" />
+          <div className="border-t border-white flex-grow"></div>
+        </div>
         <div className="bg-blue-800 bg-opacity-50 rounded-lg p-4"> {/* Reverted p-2 to p-4 */}
           <div className="flex justify-between items-center mb-2"> {/* Changed mb-1 to mb-2 */}
             <h3 className="retro-text text-xs text-white">SUBFROST P2P</h3>
-            <div className="flex items-center retro-text text-xs text-white"> {/* Reverted text-[8px] to text-xs */}
+            <div className="flex items-center retro-text text-xs text-yellow-300"> {/* Changed text-white to text-yellow-300 */}
               <Zap size={10} className="mr-1" />
               <span>{onlineCount}/255 Online</span>
             </div>

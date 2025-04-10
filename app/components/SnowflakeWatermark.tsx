@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Particle {
   x: number
@@ -13,6 +13,25 @@ interface Particle {
 
 export function SnowflakeWatermark() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    // Check if window is defined (client-side)
+    if (typeof window !== 'undefined') {
+      const checkMobile = () => {
+        setIsMobile(window.innerWidth < 768)
+      }
+      
+      // Initial check
+      checkMobile()
+      
+      // Add event listener for window resize
+      window.addEventListener('resize', checkMobile)
+      
+      // Cleanup
+      return () => window.removeEventListener('resize', checkMobile)
+    }
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -64,6 +83,8 @@ export function SnowflakeWatermark() {
     }
 
     function animate() {
+      if (!ctx || !canvas) return;
+      
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       particles.forEach(particle => {
@@ -87,6 +108,7 @@ export function SnowflakeWatermark() {
     animate()
 
     const handleResize = () => {
+      if (!canvas) return;
       canvas.width = window.innerWidth
       canvas.height = window.innerHeight
     }
@@ -101,7 +123,15 @@ export function SnowflakeWatermark() {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed top-0 left-0 w-full h-full pointer-events-none z-[-1]"
+      className="fixed top-0 left-0 w-full h-full pointer-events-none"
+      style={{
+        zIndex: -1,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%'
+      }}
     />
   )
 }

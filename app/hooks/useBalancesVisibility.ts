@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 
 // Create a global variable to store the state
-let globalShowBalancesButton = true
+// Initialize to false to hide the button in desktop view by default
+let globalShowBalancesButton = false
 let listeners: Array<(show: boolean) => void> = []
 
 // Function to update all listeners
@@ -13,6 +14,34 @@ const notifyListeners = (value: boolean) => {
 
 export function useBalancesVisibility() {
   const [showBalancesButton, setLocalShowBalancesButton] = useState(globalShowBalancesButton)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Check if we're on mobile
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkMobile = () => {
+        const isMobileView = window.innerWidth < 768
+        setIsMobile(isMobileView)
+        
+        // On mobile, we want to show the balances button in the navbar
+        // On desktop, we want to hide it (it will be in the bottom right corner)
+        if (isMobileView && !globalShowBalancesButton) {
+          setShowBalancesButton(true)
+        } else if (!isMobileView && globalShowBalancesButton) {
+          setShowBalancesButton(false)
+        }
+      }
+      
+      // Initial check
+      checkMobile()
+      
+      // Add event listener for window resize
+      window.addEventListener('resize', checkMobile)
+      
+      // Cleanup
+      return () => window.removeEventListener('resize', checkMobile)
+    }
+  }, [])
 
   // Update local state when global state changes
   useEffect(() => {
@@ -35,5 +64,5 @@ export function useBalancesVisibility() {
     notifyListeners(value)
   }
 
-  return { showBalancesButton, setShowBalancesButton }
+  return { showBalancesButton, setShowBalancesButton, isMobile }
 }

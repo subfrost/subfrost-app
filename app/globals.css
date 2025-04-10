@@ -274,21 +274,22 @@ a.button:focus,
   }
 }
 
-/* Disable hover effects on mobile devices or when screen is pinched */
+/* Mobile-specific styles */
 @media (max-width: 768px) {
-  /* Target navbar links and buttons to disable hover scaling */
-  .md\:hidden a:hover,
-  .md\:hidden button:hover,
-  nav a:hover,
-  nav button:hover {
-    transform: none !important;
-    /* Allow background color changes for blue-100 and blue-50 */
-    color: inherit !important;
+  /* Allow hover effects for navbar links */
+  .nav-link:hover {
+    transform: scale(1.125) !important;
+    color: white !important;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.5) !important;
   }
   
-  /* Override any hover scale transforms */
-  [class*="hover\:scale"]:hover {
+  /* Special hover effect for dropdown button - only text color changes */
+  .nav-link-dropdown:hover {
     transform: none !important;
+    color: white !important;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.5) !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
   }
   
   /* Allow background color changes for blue-100 and blue-50 on hover */
@@ -308,6 +309,38 @@ a.button:focus,
   [class*="hover\:bg-blue-900"]:hover {
     background-color: transparent !important;
   }
+  
+  /* Active state for navbar links */
+  .nav-link.active,
+  .nav-link[aria-current="page"] {
+    transform: scale(1.05) !important;
+    animation: whiteFlash 1s ease-out;
+  }
+  
+  /* Special styling for the dropdown button - no scaling, shadow, or animation */
+  .nav-link-dropdown.active,
+  .nav-link-dropdown[aria-current="page"] {
+    transform: none !important;
+    /* No animation */
+  }
+  
+  .nav-link-dropdown:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  
+  /* Animation for the white flash effect */
+  @keyframes whiteFlash {
+    0% {
+      color: white;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+    }
+    100% {
+      color: #284372;
+      text-shadow: none;
+    }
+  }
+  
 }
 
 /* Override SVG icon colors */
@@ -412,8 +445,66 @@ button.bg-transparent.text-\[\#284372\] {
   background: transparent !important;
 }
 
+/* Force visibility for the snowflake icon */
+.force-visible {
+  color: #284372 !important;
+  fill: #284372 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: inline-block !important;
+  z-index: 100 !important;
+  position: relative !important;
+}
+
+/* Ensure snowflake is visible on desktop screens */
+@media (min-width: 768px) {
+  .force-visible {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  svg.force-visible {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+}
+
+/* Override any SVG color rules for the force-visible class */
+svg.force-visible {
+  color: #284372 !important;
+  fill: #284372 !important;
+  display: inline-block !important;
+  visibility: visible !important;
+}
+
+/* Specifically target the snowflake in the navbar */
+.hidden.md\:flex .force-visible {
+  display: inline-block !important;
+  visibility: visible !important;
+}
+
 /* Override any background color for buttons with bg-transparent class */
 button[class*="bg-transparent"] {
   background-color: transparent !important;
   background: transparent !important;
+}
+
+/* Ensure the FROST hover effect works properly */
+.frost-hover-effect {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.frost-hover-effect:hover {
+  color: #284372 !important;
+}
+
+/* Override any mobile-specific rules that might disable hover effects */
+@media (max-width: 768px) {
+  .frost-hover-effect:hover {
+    background-color: inherit !important;
+    color: #284372 !important;
+  }
 }

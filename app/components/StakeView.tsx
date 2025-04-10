@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
@@ -88,7 +88,19 @@ export function StakeView() {
               </TabsTrigger>
               <TabsTrigger
                 value="frost"
-                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white"
+                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white frost-hover-effect"
+                onMouseEnter={(e) => {
+                  const element = e.currentTarget;
+                  element.setAttribute('data-original-text', element.innerText);
+                  element.innerText = "JK, also coming soon!";
+                }}
+                onMouseLeave={(e) => {
+                  const element = e.currentTarget;
+                  const originalText = element.getAttribute('data-original-text');
+                  if (originalText) {
+                    element.innerText = originalText;
+                  }
+                }}
               >
                 FROST (~12% APY)
               </TabsTrigger>

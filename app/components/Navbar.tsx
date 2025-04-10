@@ -14,7 +14,7 @@ export function Navbar() {
   const pathname = usePathname()
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState('')
-  const { showBalancesButton, setShowBalancesButton } = useBalancesVisibility()
+  const { showBalancesButton, setShowBalancesButton, isMobile } = useBalancesVisibility()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false)
   const [selectedNavLink, setSelectedNavLink] = useState('Stake')
@@ -34,54 +34,8 @@ export function Navbar() {
     };
   };
 
-  // Effect to handle showing/hiding the balances button based on navbar links needing space
-  useEffect(() => {
-    // Keep track of previous state to implement hysteresis
-    let previouslyShown = true;
-    
-    // The actual space checking function
-    const checkSpace = () => {
-      if (navbarRef.current && navLinksRef.current && connectWalletRef.current) {
-        const containerWidth = navbarRef.current.offsetWidth
-        const navLinksWidth = navLinksRef.current.offsetWidth
-        const balancesButtonWidth = 128 // Approximate width of balances button
-        const bufferWidth = 25 // Total width of buffer elements (20px for logo + 5px for connect wallet)
-        
-        // Calculate the minimum space needed for the navigation links
-        const minSpaceForNavLinks = navLinksWidth + 20 // 20px buffer
-        
-        // Calculate the available space in the middle section
-        // The middle section has flex-grow, so it gets all the space between the fixed-width logo and connect wallet sections
-        // We need to account for the buffer elements on both sides
-        const availableSpace = containerWidth - bufferWidth
-        
-        // Check if there's enough space for both the navbar links and balances button
-        // If not, hide the balances button to give more space to the links
-        const shouldShow = (availableSpace >= minSpaceForNavLinks + balancesButtonWidth && window.innerWidth >= 768) || window.innerWidth >= 950;
-        
-        // Debug log
-        console.log("Navbar - shouldShow:", shouldShow, "availableSpace:", availableSpace, "minSpaceForNavLinks:", minSpaceForNavLinks, "balancesButtonWidth:", balancesButtonWidth, "windowWidth:", window.innerWidth);
-        
-        if (shouldShow !== previouslyShown) {
-          console.log("Navbar - Updating showBalancesButton from", previouslyShown, "to", shouldShow);
-          setShowBalancesButton(shouldShow);
-          previouslyShown = shouldShow;
-        }
-      }
-    }
-    
-    // Initial check
-    checkSpace()
-    
-    // Create debounced version of the check function
-    const debouncedCheckSpace = debounce(checkSpace, 100);
-    
-    // Add event listener for window resize with debounced handler
-    window.addEventListener('resize', debouncedCheckSpace)
-    
-    // Cleanup
-    return () => window.removeEventListener('resize', debouncedCheckSpace)
-  }, [setShowBalancesButton])
+  // We no longer need the effect to handle showing/hiding the balances button
+  // as this is now handled in the useBalancesVisibility hook
 
   const handleConnectWallet = () => {
     setIsModalOpen(true)
@@ -98,21 +52,23 @@ export function Navbar() {
       {/* Desktop Layout */}
       <div className="hidden md:flex justify-between items-center w-full">
         {/* Left side: Logo - fixed position with buffer */}
-        <div className="w-[200px] flex-shrink-0">
+        <div className="w-[200px] md:w-[220px] lg:w-[250px] flex-shrink-0">
           <Link ref={logoRef} href="https://subfrost.io/" className="text-4xl font-extrabold retro-text text-[#284372] flex items-center transition-all duration-300 ease-in-out nav-link">
-            <FaSnowflake className="mr-2" />
+            <span className="inline-block mr-2" style={{ display: 'inline-block !important' }}>
+              <FaSnowflake size={24} color="#284372" />
+            </span>
             SUBFROST
           </Link>
         </div>
-        
         {/* Buffer space between logo and navbar */}
-        <div className="w-[20px] flex-shrink-0"></div>
+        <div className="w-[40px] flex-shrink-0"></div>
+        
         
         {/* Container for the middle content - this will be responsive */}
         <div ref={navbarRef} className="flex-grow flex items-center justify-center transition-all duration-300 ease-in-out">
           {/* Middle: Navigation Links - centered */}
           <div className="flex items-center justify-center transition-all duration-300 ease-in-out" ref={navLinksRef}>
-            <div className="flex space-x-4">
+            <div className="flex space-x-4 md:space-x-6 lg:space-x-8">
               <NavLink href="/stake" active={pathname === '/stake'}>Stake</NavLink>
               <NavLink href="/wrap" active={pathname === '/wrap'}>Wrap</NavLink>
               <NavLink href="/swap" active={pathname === '/swap'}>Swap</NavLink>
@@ -120,14 +76,7 @@ export function Navbar() {
             </div>
           </div>
           
-          {/* Balances button - moves with the container */}
-          <div className="flex items-center transition-all duration-300 ease-in-out ml-4" ref={walletRef}>
-            {showBalancesButton && (
-              <div className="transition-all duration-500 ease-in-out opacity-100 scale-100">
-                <BalancesDropdown />
-              </div>
-            )}
-          </div>
+          {/* Balances button removed from desktop view */}
         </div>
         
         {/* Buffer space between navbar and connect wallet */}
@@ -157,7 +106,9 @@ export function Navbar() {
             href="https://subfrost.io/"
             className="font-extrabold retro-text text-[#284372] flex items-center nav-link"
           >
-            <FaSnowflake className="mr-2" />
+            <span className="inline-block mr-2" style={{ display: 'inline-block !important' }}>
+              <FaSnowflake size={24} color="#284372" />
+            </span>
             <span style={{ fontSize: '2rem' }}>SUBFROST</span>
           </Link>
         </div>
@@ -179,7 +130,7 @@ export function Navbar() {
             )}
           </div>
           
-          {/* BALANCES button - with font size override */}
+          {/* BALANCES button - always show on mobile */}
           <div className="w-full flex justify-center px-4">
             <div style={{ width: '209px' }}>
               <div style={{ fontSize: '0.75rem' }}>
@@ -194,10 +145,11 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 className={`
-                  ${pathname === `/${selectedNavLink.toLowerCase()}` ? 'text-[#284372]' : 'text-[#284372] hover:scale-[1.125]'}
+                  text-[#284372] hover:text-white
                   retro-text text-base font-bold px-3 py-2 rounded transition-all duration-200 flex items-center
-                  w-full justify-center nav-link active:text-white active:shadow-[0_0_8px_rgba(255,255,255,0.5)]
+                  w-full justify-center nav-link-dropdown active:text-white
                 `}
+                aria-current={pathname === `/${selectedNavLink.toLowerCase()}` ? 'page' : undefined}
                 onClick={() => setMobileDropdownOpen(!mobileDropdownOpen)}
               >
                 {selectedNavLink}
@@ -217,9 +169,11 @@ export function Navbar() {
                   href={`/${link.toLowerCase()}`}
                   className={`
                     w-full text-left flex items-center justify-center
-                    ${link === selectedNavLink ? 'text-[#284372]' : 'text-[#284372] hover:scale-[1.125]'}
+                    text-[#284372] hover:scale-[1.125] hover:text-white hover:shadow-[0_0_8px_rgba(255,255,255,0.5)]
                     retro-text text-base font-bold px-3 py-2 rounded transition-all duration-200 nav-link active:text-white active:shadow-[0_0_8px_rgba(255,255,255,0.5)]
+                    ${link === selectedNavLink ? 'scale-[1.05] active' : ''}
                   `}
+                  aria-current={link === selectedNavLink ? 'page' : undefined}
                   onClick={() => {
                     setSelectedNavLink(link);
                     setMobileDropdownOpen(false);
@@ -242,7 +196,7 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
       href={href}
       className={`
         nav-link
-        ${active ? 'text-[#284372]' : 'text-[#284372] hover:scale-[1.15]'}
+        text-[#284372] hover:scale-[1.15] hover:text-white hover:shadow-[0_0_8px_rgba(255,255,255,0.5)]
         retro-text
         text-base
         font-bold
@@ -253,7 +207,9 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
         duration-200
         md:inline-block w-full md:w-auto text-center
         active:text-white active:shadow-[0_0_8px_rgba(255,255,255,0.5)]
+        ${active ? 'scale-[1.05] active' : ''}
       `}
+      aria-current={active ? 'page' : undefined}
     >
       {children}
     </Link>
