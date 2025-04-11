@@ -6,6 +6,7 @@ import { SnowflakeBackground } from "./components/SnowflakeBackground";
 import { SnowflakeWatermark } from "./components/SnowflakeWatermark";
 import { Footer } from "./components/Footer";
 import { SocialIcons } from "./components/SocialIcons";
+import { MobileWalletButton } from "./components/MobileWalletButton";
 import { Toaster } from "@/components/ui/toaster";
 import { SubfrostP2PProvider } from "./contexts/SubfrostP2PContext";
 import { BalancesProvider } from "./contexts/BalancesContext";
@@ -64,6 +65,7 @@ export default function RootLayout({
                     </main>
                     <Footer />
                     <SocialIcons />
+                    <MobileWalletButton />
                     <Toaster />
                   </div>
                 </SubfrostP2PProvider>

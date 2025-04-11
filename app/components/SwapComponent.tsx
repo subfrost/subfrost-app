@@ -9,6 +9,7 @@ import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { Settings } from 'lucide-react'
 import { SwapConfirmationModal } from './SwapConfirmationModal'
 import { calculateSwapOutput, calculateDollarValue, formatCurrency, SUBFROST_FEE, assetPrices } from '../utils/priceCalculations'
+import { getTextOutlineStyle } from '../utils/styleUtils'
 
 const nonBTCAssets = ['bUSD', 'DIESEL', 'OYL', 'METHANE', 'WATER', 'FROST', 'zkBTC']
 
@@ -92,12 +93,12 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
 
   return (
     <div className="space-y-4">
-      <Button onClick={handleSwapDirection} className="w-full retro-text text-xs bg-blue-600 hover:bg-blue-700">
+      <Button onClick={handleSwapDirection} className="w-full retro-text text-xs bg-blue-600 hover:bg-blue-700 relative z-10">
         <FaExchangeAlt className="mr-2" />
         Switch Direction
       </Button>
       <div className="space-y-2">
-        <label className="retro-text text-sm text-blue-600">From</label>
+        <label className="retro-text text-sm text-blue-600 relative z-10"><span className="white-outline-text">From</span></label>
         <div className="flex space-x-2">
           <Input
             type="number"
@@ -116,7 +117,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
         <div className="border-t border-blue-300 flex-grow"></div>
       </div>
       <div className="space-y-2">
-        <label className="retro-text text-sm text-blue-600">To</label>
+        <label className="retro-text text-sm text-blue-600 relative z-10"><span className="white-outline-text">To</span></label>
         <div className="flex space-x-2">
           <Input
             type="number"
@@ -132,7 +133,7 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
 
       <div className="space-y-2">
         <div className="flex items-center justify-between mb-2">
-          <p className="readable-text text-xs text-blue-600 h-5">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+          <p className="readable-text text-xs text-blue-600 h-5 relative z-10"><span>Slippage Tolerance: {slippage.toFixed(1)}%</span></p>
           <Button
             variant="ghost"
             size="icon"
@@ -143,15 +144,15 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
           </Button>
         </div>
         <div className="flex items-center mb-2">
-          <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
+          <p className="readable-text text-xs text-blue-600 h-5 relative z-10"><span>Bitcoin Network Fee: </span><BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
         </div>
         <div className="flex items-center mb-2">
-          <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: {SUBFROST_FEE * 100}%</p>
+          <p className="readable-text text-xs text-blue-600 h-5 relative z-10"><span>SUBFROST Fee: {SUBFROST_FEE * 100}%</span></p>
         </div>
-        <p className="readable-text text-sm text-blue-600 mb-2">
-          Expected {isBTCFrom ? nonBTCAsset : 'BTC'}: {toAmount || "0.00"}
+        <p className="readable-text text-sm text-blue-600 mb-2 relative z-10">
+          <span>Expected {isBTCFrom ? nonBTCAsset : 'BTC'}: {toAmount || "0.00"}</span>
         </p>
-        <Button onClick={handleSwap} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
+        <Button onClick={handleSwap} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size relative z-10">
           Swap
         </Button>
       </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Settings } from 'lucide-react'
 import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { ConfirmMintModal } from './ConfirmMintModal'
@@ -150,28 +151,28 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
   return (
     <div className="space-y-4">
       <div className="flex justify-center mb-4">
-        <div className="grid grid-cols-2 gap-1 bg-blue-200 rounded-md p-1 w-52">
-          <button
-            onClick={() => handleModeToggle(true)}
-            className={`retro-text text-xs px-2 py-1 rounded-md ${isMintMode ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
-            style={!isMintMode ? {background: 'transparent !important'} : {}}
-          >
-            Add
-          </button>
-          <button
-            onClick={() => handleModeToggle(false)}
-            className={`retro-text text-xs px-2 py-1 rounded-md ${!isMintMode ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
-            style={isMintMode ? {background: 'transparent !important'} : {}}
-          >
-            Remove
-          </button>
-        </div>
+        <Tabs value={isMintMode ? "add" : "remove"} onValueChange={(value) => handleModeToggle(value === "add")}>
+          <TabsList className="grid w-full grid-cols-2 w-52 h-8">
+            <TabsTrigger
+              value="add"
+              className="retro-text text-xs data-[state=active]:bg-[#284372] data-[state=active]:text-white"
+            >
+              Add
+            </TabsTrigger>
+            <TabsTrigger
+              value="remove"
+              className="retro-text text-xs data-[state=active]:bg-[#284372] data-[state=active]:text-white"
+            >
+              Remove
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {isMintMode ? (
         <>
           <div className="space-y-2">
-            <label className="retro-text font-normal text-sm text-blue-600"><FrBTC /></label>
+            <label className="retro-text font-normal text-sm text-blue-600 relative z-10"><span className="white-outline-text"><FrBTC /></span></label>
             <div className="flex space-x-2">
               <Input
                 type="number"
@@ -188,7 +189,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
           </div>
 
           <div className="space-y-2">
-            <label className="retro-text font-normal text-sm text-blue-600">Paired Asset</label>
+            <label className="retro-text font-normal text-sm text-blue-600 relative z-10"><span className="white-outline-text">Paired Asset</span></label>
             <div className="flex space-x-2">
               <Input
                 type="number"
@@ -207,7 +208,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
       ) : (
         <>
           <div className="space-y-2">
-            <label className="retro-text text-sm text-blue-600">LP Token Pair</label>
+            <label className="retro-text text-sm text-blue-600 relative z-10"><span className="white-outline-text">LP Token Pair</span></label>
             <div className="flex items-center space-x-2">
               <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 flex items-center justify-center token-button-text">
                 <FrBTC />
@@ -218,7 +219,7 @@ export function LPComponent({ slippage, onOpenSettings, onBurnConfirm }: LPCompo
           </div>
 
           <div className="space-y-2">
-            <label className="retro-text text-sm text-blue-600">Melt Amount</label>
+            <label className="retro-text text-sm text-blue-600 relative z-10"><span className="white-outline-text">Melt Amount</span></label>
             <Input
               type="number"
               value={burnAmount}

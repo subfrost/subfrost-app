@@ -49,8 +49,8 @@ export function ZapView() {
           />
           <p className="readable-text text-sm mt-1 text-blue-200">Available: {btcBalance} BTC</p>
         </div>
-        <div className="space-y-2 text-blue-100">
-          <p className="readable-text text-sm">Expected dxFROST: {calculateExpecteddxFROST()} dxFROST</p>
+        <div className="space-y-2">
+          <p className="readable-text text-sm text-blue-600">Expected dxFROST: {calculateExpecteddxFROST()} dxFROST</p>
         </div>
       </CardContent>
       <CardFooter>

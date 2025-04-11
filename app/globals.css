@@ -270,7 +270,7 @@ a.button:focus,
 }
 
 .nav-link:hover {
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.35);
+  /* Remove shadow for sharper appearance */
 }
 
 /* Ensure content doesn't overflow on small screens */
@@ -284,7 +284,7 @@ a.button:focus,
 
 /* Mobile-specific styles */
 @media (max-width: 768px) {
-  /* Allow hover effects for navbar links */
+  /* Allow hover effects for navbar links and Connect Wallet button */
   .nav-link:hover {
     transform: scale(1.125) !important;
     color: white !important;
@@ -300,22 +300,28 @@ a.button:focus,
     background-color: transparent !important;
   }
   
-  /* Allow background color changes for blue-100 and blue-50 on hover */
-  [class*="hover\:bg-blue-50"]:hover,
-  [class*="hover\:bg-blue-100"]:hover {
-    background-color: inherit !important;
+  /* Prevent background color changes for navbar elements on hover, except for Connect Wallet button */
+  .nav-link[class*="hover\:bg-blue-50"]:hover:not(button),
+  .nav-link[class*="hover\:bg-blue-100"]:hover:not(button),
+  button[class*="hover\:scale"]:hover:not([class*="hover\:bg-\[\#284372\]"]) {
+    background-color: transparent !important;
   }
   
-  /* Disable background color changes for other hover states */
-  [class*="hover\:bg-blue-200"]:hover,
-  [class*="hover\:bg-blue-300"]:hover,
-  [class*="hover\:bg-blue-400"]:hover,
-  [class*="hover\:bg-blue-500"]:hover,
-  [class*="hover\:bg-blue-600"]:hover,
-  [class*="hover\:bg-blue-700"]:hover,
-  [class*="hover\:bg-blue-800"]:hover,
-  [class*="hover\:bg-blue-900"]:hover {
+  /* Disable background color changes for other hover states, except for Connect Wallet button */
+  [class*="hover\:bg-blue-200"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
+  [class*="hover\:bg-blue-300"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
+  [class*="hover\:bg-blue-400"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
+  [class*="hover\:bg-blue-500"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
+  [class*="hover\:bg-blue-600"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
+  [class*="hover\:bg-blue-700"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
+  [class*="hover\:bg-blue-800"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
+  [class*="hover\:bg-blue-900"]:hover:not([class*="hover\:bg-\[\#284372\]"]) {
     background-color: transparent !important;
+  }
+  
+  /* Ensure Connect Wallet button background color works on mobile */
+  button.nav-link[class*="hover\:bg-\[\#284372\]"]:hover {
+    background-color: #284372 !important;
   }
   
   /* Active state for navbar links */
@@ -366,16 +372,16 @@ svg.text-blue-900,
   fill: #284372 !important;
 }
 
-/* Override hover states for links and buttons */
-.hover\:text-blue-100:hover,
-.hover\:text-blue-200:hover,
-.hover\:text-blue-300:hover,
-.hover\:text-blue-400:hover,
-.hover\:text-blue-500:hover,
-.hover\:text-blue-600:hover,
-.hover\:text-blue-700:hover,
-.hover\:text-blue-800:hover,
-.hover\:text-blue-900:hover {
+/* Override hover states for links and buttons - except for navbar elements */
+.hover\:text-blue-100:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-200:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-300:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-400:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-500:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-600:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-700:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-800:hover:not(.nav-link):not(.nav-link *),
+.hover\:text-blue-900:hover:not(.nav-link):not(.nav-link *) {
   color: #284372 !important;
 }
 
@@ -441,17 +447,42 @@ svg.text-blue-900,
 [class*="text-blue"] {
   color: #284372 !important;
 }
-
 /* Override TabsTrigger active state background color */
-[data-state=active].data-\[state\=active\]\:bg-blue-800 {
+[data-state=active].data-\[state\=active\]\:bg-blue-800,
+[data-state=active].data-\[state\=active\]\:bg-\[\#284372\] {
   background-color: #284372 !important;
 }
 
-/* Ensure transparent background for unselected options in sliding buttons */
-button.bg-transparent.text-\[\#284372\] {
-  background-color: transparent !important;
-  background: transparent !important;
+/* Style for unselected options in sliding buttons */
+button.text-\[\#284372\],
+[data-state=inactive].retro-text {
+  color: #284372 !important;
+  background-color: white !important;
 }
+
+/* Style for stake/unstake and add/remove toggle buttons */
+.w-52.h-8 {
+  background-color: hsl(var(--muted)) !important; /* bg-muted - same as WRAP/UNWRAP and SWAP/LP buttons */
+  border-radius: 0.375rem !important; /* rounded-md */
+  padding: 0.25rem !important; /* p-1 */
+  gap: 0.25rem !important; /* gap-1 */
+  height: 2rem !important; /* h-8 */
+}
+
+/* Ensure TabsTrigger has correct styling */
+[role="tab"] {
+  border-radius: 0.375rem !important; /* rounded-md */
+  font-size: 0.75rem !important; /* text-xs */
+  padding: 0.25rem 0.5rem !important; /* px-2 py-1 */
+  min-height: unset !important;
+  height: 1.5rem !important;
+}
+
+/* Fix background color for inactive tabs */
+[data-state=inactive] {
+  background-color: white !important;
+}
+
 
 /* Force visibility for the snowflake icon */
 .force-visible {
@@ -493,8 +524,8 @@ svg.force-visible {
   visibility: visible !important;
 }
 
-/* Override any background color for buttons with bg-transparent class */
-button[class*="bg-transparent"] {
+/* Style for buttons with bg-transparent class, except for toggle buttons */
+button[class*="bg-transparent"]:not([class*="text-[#284372]"]) {
   background-color: transparent !important;
   background: transparent !important;
 }
@@ -535,4 +566,64 @@ button[class*="bg-transparent"] {
 .mobile-gradient-bg {
   background: linear-gradient(to bottom, #bfdbfe, #eff6ff) !important;
   background-color: #bfdbfe !important;
+}
+
+/* Ensure white outline is visible on text */
+.white-outline-text {
+  text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+/* Ensure white outline is visible on icons */
+.white-outline-icon {
+  filter: drop-shadow(0 0 2px #ffffff) drop-shadow(0 0 6px rgba(255, 255, 255, 0.8)) !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+/* Override any conflicting text-shadow styles */
+.nav-link.white-outline-text,
+.retro-text.white-outline-text,
+.readable-text.white-outline-text,
+[class*="CardTitle"].white-outline-text,
+h1.white-outline-text,
+h2.white-outline-text,
+h3.white-outline-text,
+label.white-outline-text,
+span.white-outline-text,
+p.white-outline-text {
+  text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Override hover states */
+.white-outline-text:hover,
+.nav-link.white-outline-text:hover,
+.retro-text.white-outline-text:hover {
+  text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Mobile-specific overrides */
+@media (max-width: 768px) {
+  .white-outline-text,
+  .nav-link.white-outline-text,
+  .retro-text.white-outline-text,
+  .white-outline-text:hover,
+  .nav-link.white-outline-text:hover,
+  .retro-text.white-outline-text:hover {
+    text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
+  }
+}
+
+/* Specific styling for Connect Wallet button to ensure hover animation works */
+.connect-wallet-btn:hover {
+  background-color: transparent !important;
+  transform: scale(1.15) !important;
+  color: white !important;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Override any conflicting rules for Connect Wallet button */
+button[class*="hover\\:scale"].connect-wallet-btn:hover {
+  background-color: transparent !important;
 }

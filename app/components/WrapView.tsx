@@ -54,17 +54,17 @@ export function WrapView() {
     <>
       <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20">
-            <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+          <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20 relative z-10">
+            <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
             <div className="flex flex-col">
               <div className="flex items-center justify-center w-full whitespace-nowrap">
-                <span className="text-2xl md:text-4xl font-bold">Wrap BTC</span>
+                <span className="text-2xl md:text-4xl font-bold white-outline-text">Wrap BTC</span>
               </div>
               <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
-                <span className="text-2xl md:text-4xl font-bold">to <FrBTC /></span>
+                <span className="text-2xl md:text-4xl font-bold white-outline-text">to <FrBTC /></span>
               </div>
             </div>
-            <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+            <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
           </CardTitle>
           <CardDescription className="readable-text text-sm">
             Enter the amount of BTC you want to wrap.
@@ -74,9 +74,9 @@ export function WrapView() {
           <div className="mb-4">
             <label
               htmlFor="btc-amount"
-              className="readable-text text-sm text-blue-600 block mb-1"
+              className="readable-text text-sm text-blue-600 block mb-1 relative z-10"
             >
-              Amount of BTC
+              <span className="white-outline-text">Amount of BTC</span>
             </label>
             <Input
               id="btc-amount"
@@ -92,20 +92,20 @@ export function WrapView() {
           </div>
           <div>
             <div className="flex items-center mb-2">
-              <p className="readable-text text-xs text-blue-600 h-5">Bitcoin Network Fee: <BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
+              <p className="readable-text text-xs text-blue-600 h-5 relative z-10"><span>Bitcoin Network Fee: </span><BitcoinFeeWidget noBackground={true} textColor="text-blue-600" /></p>
             </div>
             <div className="flex items-center mb-2">
-              <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0.1%</p>
+              <p className="readable-text text-xs text-blue-600 h-5 relative z-10"><span>SUBFROST Fee: 0.1%</span></p>
             </div>
-            <p className="readable-text text-sm text-blue-600">
-              Expected <FrBTC />: {calculateExpectedFrBTC()}
+            <p className="readable-text text-sm text-blue-600 relative z-10">
+              <span>Expected <FrBTC />: {calculateExpectedFrBTC()}</span>
             </p>
           </div>
         </CardContent>
         <CardFooter className="mt-auto">
           <Button
             onClick={handleWrap}
-            className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size"
+            className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size relative z-10"
           >
             Wrap BTC
           </Button>

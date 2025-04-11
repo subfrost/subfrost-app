@@ -60,23 +60,23 @@ export function TradeVolumeChart() {
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2563eb" opacity={0.7} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#284372" opacity={0.7} />
             <XAxis
               dataKey="block"
-              stroke="#2563eb"
+              stroke="#284372"
               tickFormatter={(value) => {
                 const date = new Date(value * 1000);
                 return `${date.getMonth() + 1}/${date.getFullYear()}`;
               }}
-              tick={{ fill: '#2563eb' }}
+              tick={{ fill: '#284372' }}
             />
             <YAxis
-              stroke="#2563eb"
-              tick={{ fill: '#2563eb' }}
+              stroke="#284372"
+              tick={{ fill: '#284372' }}
               tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
             />
             <Tooltip
-              contentStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.8)', color: '#fff' }}
+              contentStyle={{ backgroundColor: 'rgba(128, 128, 128, 0.8)', color: '#fff' }}
               labelStyle={{ color: '#fff' }}
               labelFormatter={(value) => {
                 const date = new Date(value * 1000);
@@ -90,8 +90,8 @@ export function TradeVolumeChart() {
               }}
             />
             <Legend />
-            <Bar dataKey="execution" stackId="a" name="Execution (99%)" fill="#8884d8" />
-            <Bar dataKey="oyl" stackId="a" name="OYL (0.3%)" fill="#82ca9d" />
+            <Bar dataKey="execution" stackId="a" name="Execution (99%)" fill="#284372" />
+            <Bar dataKey="oyl" stackId="a" name="OYL (0.3%)" fill="#bfdbfe" />
             <Bar dataKey="frost" stackId="a" name="dxFROST (0.7%)" fill="#ffc658" />
           </BarChart>
         </ResponsiveContainer>

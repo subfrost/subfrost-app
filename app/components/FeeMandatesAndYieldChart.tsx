@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts'
 import { DxFROST } from './TokenNames'
+import { getTextOutlineStyle } from '../utils/styleUtils'
 
-const COLORS = ['#0088FE', '#00C49F']
+const COLORS = ['#284372', '#ffc658'] // Changed blue to #284372 and LP to match dxFROST color
 
 const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
   const RADIAN = Math.PI / 180
@@ -76,11 +77,11 @@ export function FeeMandatesAndYieldChart() {
   return (
     <Card className="frost-bg frost-border">
       <CardHeader>
-        <CardTitle className="retro-text text-blue-600 text-2xl md:text-3xl font-extrabold">Protocol Metrics</CardTitle>
+        <CardTitle className="retro-text text-blue-600 text-2xl md:text-3xl font-extrabold relative z-10"><span className="white-outline-text">Protocol Metrics</span></CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <h3 className="retro-text text-sm text-blue-400 mb-2">Fee Mandates</h3>
+          <h3 className="retro-text text-sm text-blue-400 mb-2 relative z-10"><span className="white-outline-text">Fee Mandates</span></h3>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -99,7 +100,7 @@ export function FeeMandatesAndYieldChart() {
               </Pie>
               <Tooltip
                 formatter={(value, name) => [`${Number(value).toFixed(2)}%`, name]}
-                contentStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.8)', color: '#fff' }}
+                contentStyle={{ backgroundColor: 'rgba(128, 128, 128, 0.8)', color: '#fff' }}
                 labelStyle={{ color: '#fff' }}
                 itemStyle={{ color: '#fff' }}
                 labelFormatter={() => {
@@ -112,22 +113,22 @@ export function FeeMandatesAndYieldChart() {
           </ResponsiveContainer>
         </div>
         <div>
-          <h3 className="retro-text preserve-case text-sm text-blue-400 mb-2"><DxFROST /> Yield Performance</h3>
+          <h3 className="retro-text preserve-case text-sm text-blue-400 mb-2 relative z-10"><span className="white-outline-text"><DxFROST /> Yield Performance</span></h3>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={yieldData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2563eb" opacity={0.7} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#284372" opacity={0.7} />
               <XAxis
                 dataKey="block"
-                stroke="#2563eb"
+                stroke="#284372"
                 tickFormatter={(value) => {
                   const date = new Date(value * 1000);
                   return `${date.getMonth() + 1}/${date.getFullYear()}`;
                 }}
-                tick={{ fill: '#2563eb' }}
+                tick={{ fill: '#284372' }}
               />
-              <YAxis domain={[13, 22]} stroke="#2563eb" tickFormatter={(value) => `${value}%`} tick={{ fill: '#2563eb' }} />
+              <YAxis domain={[13, 22]} stroke="#284372" tickFormatter={(value) => `${value}%`} tick={{ fill: '#284372' }} />
               <Tooltip
-                contentStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.8)', color: '#fff' }}
+                contentStyle={{ backgroundColor: 'rgba(128, 128, 128, 0.8)', color: '#fff' }}
                 labelStyle={{ color: '#fff' }}
                 formatter={(value) => {
                   // We can't use JSX here, so we'll keep the string format
@@ -140,7 +141,7 @@ export function FeeMandatesAndYieldChart() {
               />
               <Legend />
               {/* We can't use JSX in the name prop, so we'll keep the string format */}
-              <Line type="monotone" dataKey="yield" name="dxFROST APY (%)" stroke="#8884d8" activeDot={{ r: 8 }} />
+              <Line type="monotone" dataKey="yield" name="dxFROST APY (%)" stroke="#284372" activeDot={{ r: 8 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>

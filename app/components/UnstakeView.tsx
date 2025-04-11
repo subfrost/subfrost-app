@@ -92,7 +92,7 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
               <p className="readable-text text-xs mt-2 text-blue-200 h-4">Available: {dxBTCBalance} <DxBTC /></p>
             </div>
             <div className="mt-4">
-              <p className="readable-text text-sm text-blue-100 h-5">Expected {dxBTCOutputToken === "frBTC" ? <FrBTC /> : "BTC"}: {expectedBTC}</p>
+              <p className="readable-text text-sm text-blue-600 h-5">Expected {dxBTCOutputToken === "frBTC" ? <FrBTC /> : "BTC"}: {expectedBTC}</p>
             </div>
           </div>
         </CardContent>
@@ -147,8 +147,8 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
               <p className="readable-text text-xs mt-2 text-blue-200 h-4">Available: {dxFROSTBalance} <DxFROST /></p>
             </div>
             <div className="mt-4">
-              <p className="readable-text text-sm text-blue-100 h-5">Expected <span className="token-name">frBTC/FROST</span>: {expectedOutput}</p>
-              <p className="readable-text text-xs mt-2 text-blue-200">YOU CAN SEPARATE THESE TOKENS ON THE SWAP PAGE.</p>
+              <p className="readable-text text-sm text-blue-600 h-5">Expected <span className="token-name">frBTC/FROST</span>: {expectedOutput}</p>
+              <p className="readable-text text-xs mt-2 text-blue-600">YOU CAN SEPARATE THESE TOKENS ON THE SWAP PAGE.</p>
             </div>
           </div>
         </CardContent>

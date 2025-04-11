@@ -50,7 +50,7 @@ export function SwapSettingsModal({
           <DialogTitle className="retro-text text-white">Swap Settings</DialogTitle>
         </DialogHeader>
         <div className="py-4">
-          <h3 className="retro-text text-sm mb-2 text-white">Slippage Tolerance</h3>
+          <h3 className="readable-text text-sm mb-2 text-blue-600">Slippage Tolerance</h3>
           <Slider
             value={[localSlippage]}
             onValueChange={handleSlippageChange}

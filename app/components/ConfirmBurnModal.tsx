@@ -45,10 +45,10 @@ export function ConfirmBurnModal({
         <div className="grid gap-4 py-4 text-white">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs">Melt Amount: {burnAmount} {lpPair} LP</p>
-            <p className="readable-text text-xs">Expected BTC: {expectedBTC} BTC ({formatCurrency(parseFloat(expectedBTC) * assetPrices['BTC'])})</p>
-            <p className="readable-text text-xs">Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({formatCurrency(parseFloat(expectedPaired) * assetPrices[pairedAsset])})</p>
-            <p className="readable-text text-xs">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+            <p className="readable-text text-xs text-blue-600">Melt Amount: {burnAmount} {lpPair} LP</p>
+            <p className="readable-text text-xs text-blue-600">Expected BTC: {expectedBTC} BTC ({formatCurrency(parseFloat(expectedBTC) * assetPrices['BTC'])})</p>
+            <p className="readable-text text-xs text-blue-600">Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({formatCurrency(parseFloat(expectedPaired) * assetPrices[pairedAsset])})</p>
+            <p className="readable-text text-xs text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>

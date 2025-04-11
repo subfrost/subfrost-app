@@ -53,8 +53,8 @@ export function SwapConfirmationModal({
             <p className="readable-text text-xs">Rate: 1 {fromAsset} = {calculateSwapOutput(fromAsset, toAsset, 1).toFixed(8)} {toAsset}</p>
             <p className="readable-text text-xs">1 {fromAsset} = {formatCurrency(assetPrices[fromAsset])}</p>
             <p className="readable-text text-xs">1 {toAsset} = {formatCurrency(assetPrices[toAsset])}</p>
-            <p className="readable-text text-xs">Fee: 0.1%</p>
-            <p className="readable-text text-xs">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+            <p className="readable-text text-xs text-blue-600">Fee: 0.1%</p>
+            <p className="readable-text text-xs text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Bitcoin Outpoints</h3>

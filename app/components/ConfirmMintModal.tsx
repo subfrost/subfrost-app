@@ -45,10 +45,10 @@ export function ConfirmMintModal({
         <div className="grid gap-4 py-4 text-white">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs">Asset 1: {amount1} {asset1}</p>
-            <p className="readable-text text-xs">Asset 2: {amount2} {asset2}</p>
-            <p className="readable-text text-xs">Expected LP Tokens: {expectedLPTokens}</p>
-            <p className="readable-text text-xs">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+            <p className="readable-text text-xs text-blue-600">Asset 1: {amount1} {asset1}</p>
+            <p className="readable-text text-xs text-blue-600">Asset 2: {amount2} {asset2}</p>
+            <p className="readable-text text-xs text-blue-600">Expected LP Tokens: {expectedLPTokens}</p>
+            <p className="readable-text text-xs text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Bitcoin Outpoints</h3>

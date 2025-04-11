@@ -88,7 +88,7 @@ export function StakeView() {
               </TabsTrigger>
               <TabsTrigger
                 value="frost"
-                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white frost-hover-effect"
+                className="retro-text data-[state=active]:bg-[#284372] data-[state=active]:text-white"
                 onMouseEnter={(e) => {
                   const element = e.currentTarget;
                   element.setAttribute('data-original-text', element.innerText);
@@ -101,6 +101,7 @@ export function StakeView() {
                     element.innerText = originalText;
                   }
                 }}
+                style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
               >
                 FROST (~12% APY)
               </TabsTrigger>
@@ -117,45 +118,45 @@ export function StakeView() {
         {(activeTab === "btc") && (
           <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
             <CardHeader className="pb-2">
-              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20">
+              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20 relative z-10">
                 {isStaking ? (
-                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 ) : (
-                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-center w-full whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold">Earn Yield</span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">Earn Yield</span>
                   </div>
                   <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold">with <DxBTC /></span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">with <DxBTC /></span>
                   </div>
                 </div>
                 {isStaking ? (
-                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 ) : (
-                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 )}
               </CardTitle>
               
               {/* Stake/Unstake toggle button */}
               <div className="flex justify-center mt-2 mb-2">
-                <div className="grid grid-cols-2 gap-1 bg-blue-200 rounded-md p-1 w-52">
-                  <button
-                    onClick={() => setIsStaking(true)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
-                    style={!isStaking ? {background: 'transparent !important'} : {}}
-                  >
-                    Stake
-                  </button>
-                  <button
-                    onClick={() => setIsStaking(false)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${!isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
-                    style={isStaking ? {background: 'transparent !important'} : {}}
-                  >
-                    Unstake
-                  </button>
-                </div>
+                <Tabs value={isStaking ? "stake" : "unstake"} onValueChange={(value) => setIsStaking(value === "stake")}>
+                  <TabsList className="grid w-full grid-cols-2 w-52 h-8">
+                    <TabsTrigger
+                      value="stake"
+                      className="retro-text text-xs data-[state=active]:bg-[#284372] data-[state=active]:text-white"
+                    >
+                      Stake
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="unstake"
+                      className="retro-text text-xs data-[state=active]:bg-[#284372] data-[state=active]:text-white"
+                    >
+                      Unstake
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
               
               <CardDescription className="readable-text text-sm">
@@ -285,45 +286,45 @@ export function StakeView() {
         {(activeTab === "frost") && (
           <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
             <CardHeader className="pb-2">
-              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20">
+              <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20 relative z-10">
                 {isStaking ? (
-                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 ) : (
-                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-center w-full whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold">Earn Yield</span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">Earn Yield</span>
                   </div>
                   <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold">with <DxFROST /></span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">with <DxFROST /></span>
                   </div>
                 </div>
                 {isStaking ? (
-                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 ) : (
-                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500" size={29} />
+                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
                 )}
               </CardTitle>
               
               {/* Stake/Unstake toggle button */}
               <div className="flex justify-center mt-2 mb-2">
-                <div className="grid grid-cols-2 gap-1 bg-blue-200 rounded-md p-1 w-52">
-                  <button
-                    onClick={() => setIsStaking(true)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
-                    style={!isStaking ? {background: 'transparent !important'} : {}}
-                  >
-                    Stake
-                  </button>
-                  <button
-                    onClick={() => setIsStaking(false)}
-                    className={`retro-text text-xs px-2 py-1 rounded-md ${!isStaking ? 'bg-[#284372] text-white' : 'bg-transparent text-[#284372]'}`}
-                    style={isStaking ? {background: 'transparent !important'} : {}}
-                  >
-                    Unstake
-                  </button>
-                </div>
+                <Tabs value={isStaking ? "stake" : "unstake"} onValueChange={(value) => setIsStaking(value === "stake")}>
+                  <TabsList className="grid w-full grid-cols-2 w-52 h-8">
+                    <TabsTrigger
+                      value="stake"
+                      className="retro-text text-xs data-[state=active]:bg-[#284372] data-[state=active]:text-white"
+                    >
+                      Stake
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="unstake"
+                      className="retro-text text-xs data-[state=active]:bg-[#284372] data-[state=active]:text-white"
+                    >
+                      Unstake
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
               </div>
               
               <CardDescription className="readable-text text-sm">

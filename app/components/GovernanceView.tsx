@@ -30,16 +30,16 @@ export function GovernanceView() {
     <div className="space-y-6">
       <Card className="frost-bg frost-border">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center">
-            <FaSnowflake className="mr-2" />
-            Active Proposals
+          <CardTitle className="retro-text text-blue-600 flex items-center relative z-10">
+            <FaSnowflake className="mr-2 white-outline-icon" />
+            <span className="white-outline-text">Active Proposals</span>
           </CardTitle>
           <CardDescription className="readable-text text-sm">Vote on existing governance proposals.</CardDescription>
         </CardHeader>
         <CardContent>
           {mockProposals.map((proposal) => (
             <div key={proposal.id} className="mb-4 p-4 border rounded frost-bg frost-border">
-              <h3 className="text-lg font-semibold retro-text text-blue-500">{proposal.title}</h3>
+              <h3 className="text-lg font-semibold retro-text text-blue-500 relative z-10"><span className="white-outline-text">{proposal.title}</span></h3>
               <p className="readable-text text-sm text-gray-600 mb-2">{proposal.description}</p>
               <div className="space-x-2">
                 <Button onClick={() => handleVote(proposal.id, 'yes')} className="readable-text text-sm bg-green-500 hover:bg-green-600">Vote Yes</Button>
@@ -51,9 +51,9 @@ export function GovernanceView() {
       </Card>
       <Card className="frost-bg frost-border">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-600 flex items-center">
-            <FaSnowflake className="mr-2" />
-            Create New Proposal
+          <CardTitle className="retro-text text-blue-600 flex items-center relative z-10">
+            <FaSnowflake className="mr-2 white-outline-icon" />
+            <span className="white-outline-text">Create New Proposal</span>
           </CardTitle>
           <CardDescription className="readable-text text-sm">Submit a new governance proposal using your FROST tokens</CardDescription>
         </CardHeader>

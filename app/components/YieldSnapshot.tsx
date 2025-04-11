@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { getTextOutlineStyle } from '../utils/styleUtils'
 
 export function YieldSnapshot() {
   const [frostYield, setFrostYield] = useState(0)
@@ -20,7 +21,7 @@ export function YieldSnapshot() {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Card className="bg-blue-900 text-white">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-300">FROST Yield</CardTitle>
+          <CardTitle className="retro-text text-blue-300 relative z-10"><span className="white-outline-text">FROST Yield</span></CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">{frostYield.toFixed(2)}%</p>
@@ -29,7 +30,7 @@ export function YieldSnapshot() {
       </Card>
       <Card className="bg-blue-900 text-white">
         <CardHeader>
-          <CardTitle className="retro-text text-blue-300">dxFROST Yield</CardTitle>
+          <CardTitle className="retro-text text-blue-300 relative z-10"><span className="white-outline-text">dxFROST Yield</span></CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">{dxFROSTYield.toFixed(2)}%</p>

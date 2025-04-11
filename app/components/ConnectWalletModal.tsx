@@ -92,12 +92,14 @@ export default function ConnectWalletModal({ className, isMobile = false }: { cl
         <DialogTrigger asChild>
           <Button
             className={cn(
-              "retro-text text-xs bg-blue-100 hover:bg-blue-50 text-[#284372]",
+              "retro-text text-xs text-[#284372] hover:text-white transition-all duration-200 hover:scale-[1.15] nav-link relative z-20 connect-wallet-btn",
               isMobile ? "w-full justify-center" : "w-32 justify-center",
               className
             )}
           >
-            {isConnecting ? "Connecting..." : "Connect Wallet"}
+            <span className="white-outline-text">
+              {isConnecting ? "Connecting..." : "Connect Wallet"}
+            </span>
           </Button>
         </DialogTrigger>
       )}
