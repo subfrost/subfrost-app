@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef } from 'react'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
@@ -19,6 +20,7 @@ import { Separator } from "@/components/ui/separator"
 import { FrBTC, DxBTC, DxFROST } from './TokenNames'
 
 export function StakeView() {
+  const isMobile = useIsMobile()
   const [frBtcFrostAmount, setFrBtcFrostAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("btc") // Default to BTC tab
@@ -92,7 +94,16 @@ export function StakeView() {
                 onMouseEnter={(e) => {
                   const element = e.currentTarget;
                   element.setAttribute('data-original-text', element.innerText);
-                  element.innerText = "JK, also coming soon!";
+                  
+                  // Use different text based on mobile/desktop
+                  if (isMobile) {
+                    // Shorter text for mobile with smaller font size
+                    // Force rebuild with the same content
+                    element.innerHTML = '<span class="text-xs">JK, ALSO SOON!</span>';
+                  } else {
+                    // Regular text for desktop
+                    element.innerText = "JK, also coming soon!";
+                  }
                 }}
                 onMouseLeave={(e) => {
                   const element = e.currentTarget;
@@ -126,10 +137,10 @@ export function StakeView() {
                 )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-center w-full whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold white-outline-text">Earn Yield</span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">Earn Yield In</span>
                   </div>
                   <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold white-outline-text">with <DxBTC /></span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">BTC</span>
                   </div>
                 </div>
                 {isStaking ? (
@@ -161,7 +172,7 @@ export function StakeView() {
               
               <CardDescription className="readable-text text-sm">
                 {isStaking
-                  ? `Enter the amount of ${dxBTCInputToken} you want to stake to dxBTC (yield-earning BTC).`
+                  ? `Enter the amount of ${dxBTCInputToken} you want to stake to dxBTC. This is pegged 1:1 with BTC and earns yield in BTC.`
                   : `Enter the amount of dxBTC you want to unstake back to ${dxBTCOutputToken}.`
                 }
               </CardDescription>
@@ -294,10 +305,10 @@ export function StakeView() {
                 )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-center w-full whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold white-outline-text">Earn Yield</span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">Earn Yield in</span>
                   </div>
                   <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold white-outline-text">with <DxFROST /></span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">BTC + FROST</span>
                   </div>
                 </div>
                 {isStaking ? (
@@ -330,7 +341,7 @@ export function StakeView() {
               <CardDescription className="readable-text text-sm">
                 {isStaking ? (
                   <span>
-                    Enter the amount of {dxFROSTInputToken === "BTC" ? "BTC" : <span className="token-name">frBTC/FROST LP</span>} you want to stake to <DxFROST />.
+                    Enter the amount of {dxFROSTInputToken === "BTC" ? "BTC" : <span className="token-name">frBTC/FROST LP</span>} you want to stake to <DxFROST />. This token earns yield in both BTC & FROST.
                   </span>
                 ) : (
                   <span>
