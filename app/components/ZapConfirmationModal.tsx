@@ -27,12 +27,12 @@ export function ZapConfirmationModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px] frost-bg frost-border">
         <DialogHeader>
-          <DialogTitle className="retro-text text-blue-300 flex items-center">
+          <DialogTitle className="retro-text text-blue-50 flex items-center">
             <FaSnowflake className="mr-2" />
             Confirm Zap
           </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4 text-white">
+        <div className="grid gap-4 py-4 text-blue-50">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
             <p className="readable-text text-xs">From: {btcAmount} BTC</p>

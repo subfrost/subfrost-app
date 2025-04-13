@@ -357,7 +357,7 @@ a.button:focus,
   
 }
 
-/* Override SVG icon colors */
+/* Override SVG icon colors except for text-blue-50 */
 svg.text-blue-100,
 svg.text-blue-200,
 svg.text-blue-300,
@@ -367,9 +367,15 @@ svg.text-blue-600,
 svg.text-blue-700,
 svg.text-blue-800,
 svg.text-blue-900,
-[class*="text-blue"] svg {
+[class*="text-blue"]:not(.text-blue-50) svg {
   color: #284372 !important;
   fill: #284372 !important;
+}
+
+/* Ensure SVG icons in text-blue-50 elements are properly displayed */
+.text-blue-50 svg {
+  color: rgb(239 246 255) !important;
+  fill: rgb(239 246 255) !important;
 }
 
 /* Override hover states for links and buttons - except for navbar elements */
@@ -428,7 +434,7 @@ svg.text-blue-900,
     padding-bottom: 3rem; /* Reduced padding to minimize space */
   }
 }
-/* Override all blue text colors to #284372 */
+/* Override all blue text colors to #284372 except text-blue-50 */
 .text-blue-100,
 .text-blue-200,
 .text-blue-300,
@@ -441,11 +447,16 @@ svg.text-blue-900,
   color: #284372 !important;
 }
 
-/* Override any inline styles with blue colors */
+/* Override any inline styles with blue colors except text-blue-50 */
 [style*="color: blue"],
 [style*="color:#"],
-[class*="text-blue"] {
+[class*="text-blue"]:not(.text-blue-50) {
   color: #284372 !important;
+}
+
+/* Ensure text-blue-50 is properly displayed */
+.text-blue-50 {
+  color: rgb(239 246 255) !important; /* This is the blue-50 color value */
 }
 /* Override TabsTrigger active state background color */
 [data-state=active].data-\[state\=active\]\:bg-blue-800,
@@ -559,6 +570,68 @@ button[class*="bg-transparent"]:not([class*="text-[#284372]"]) {
     visibility: visible !important;
     opacity: 1 !important;
     z-index: -1 !important;
+  }
+  
+  /* Remove animation on token buttons when clicked on mobile */
+  .text-white.bg-blue-600.hover\:bg-blue-700,
+  .text-white.bg-blue-600.hover\:bg-blue-700:active,
+  .text-white.bg-blue-600.hover\:bg-blue-700:focus,
+  .text-white.bg-blue-600.hover\:bg-blue-700:hover {
+    background-color: #284372 !important;
+    color: white !important;
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  /* Specifically target SelectTrigger buttons in stake and swap widgets */
+  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700,
+  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700:active,
+  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700:focus,
+  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700:hover {
+    background-color: #284372 !important;
+    color: white !important;
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  /* Target non-SelectTrigger token buttons in the "You'll Receive:" section */
+  div.text-white.bg-blue-600.hover\:bg-blue-700,
+  div.text-white.bg-blue-600.hover\:bg-blue-700:active,
+  div.text-white.bg-blue-600.hover\:bg-blue-700:focus,
+  div.text-white.bg-blue-600.hover\:bg-blue-700:hover {
+    background-color: #284372 !important;
+    color: white !important;
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  /* Ensure buttons maintain color when pressed (active/focus-visible states) */
+  @media (max-width: 768px) {
+    /* Target the "Switch Direction" button on the swap widget */
+    button.retro-text.bg-blue-600.hover\:bg-blue-700,
+    button.retro-text.bg-blue-600.hover\:bg-blue-700:active,
+    button.retro-text.bg-blue-600.hover\:bg-blue-700:focus,
+    button.retro-text.bg-blue-600.hover\:bg-blue-700:hover {
+      background-color: #284372 !important;
+      color: white !important;
+      transition: none !important;
+      animation: none !important;
+    }
+    
+    .text-white.bg-blue-600:active,
+    .text-white.bg-blue-600:focus-visible,
+    .text-white.bg-blue-600.hover\:bg-blue-700:active,
+    .text-white.bg-blue-600.hover\:bg-blue-700:focus-visible,
+    button.retro-text.bg-blue-600:active,
+    button.retro-text.bg-blue-600:focus-visible,
+    button.retro-text.bg-blue-600.hover\:bg-blue-700:active,
+    button.retro-text.bg-blue-600.hover\:bg-blue-700:focus-visible {
+      background-color: #284372 !important;
+      color: white !important;
+      transition: none !important;
+      animation: none !important;
+      -webkit-tap-highlight-color: transparent !important;
+    }
   }
 }
 

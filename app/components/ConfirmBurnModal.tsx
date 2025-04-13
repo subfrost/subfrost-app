@@ -37,18 +37,18 @@ export function ConfirmBurnModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px] frost-bg frost-border">
         <DialogHeader>
-          <DialogTitle className="retro-text text-blue-300 flex items-center">
+          <DialogTitle className="retro-text text-blue-50 flex items-center">
             <FaSnowflake className="mr-2" />
             Confirm Melt
           </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4 text-white">
+        <div className="grid gap-4 py-4 text-blue-50">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs text-blue-600">Melt Amount: {burnAmount} {lpPair} LP</p>
-            <p className="readable-text text-xs text-blue-600">Expected BTC: {expectedBTC} BTC ({formatCurrency(parseFloat(expectedBTC) * assetPrices['BTC'])})</p>
-            <p className="readable-text text-xs text-blue-600">Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({formatCurrency(parseFloat(expectedPaired) * assetPrices[pairedAsset])})</p>
-            <p className="readable-text text-xs text-blue-600">Slippage Tolerance: {slippage.toFixed(1)}%</p>
+            <p className="readable-text text-xs text-blue-50">Melt Amount: {burnAmount} {lpPair} LP</p>
+            <p className="readable-text text-xs text-blue-50">Expected BTC: {expectedBTC} BTC ({formatCurrency(parseFloat(expectedBTC) * assetPrices['BTC'])})</p>
+            <p className="readable-text text-xs text-blue-50">Expected {pairedAsset}: {expectedPaired} {pairedAsset} ({formatCurrency(parseFloat(expectedPaired) * assetPrices[pairedAsset])})</p>
+            <p className="readable-text text-xs text-blue-50">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           </div>
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Outputs</h3>

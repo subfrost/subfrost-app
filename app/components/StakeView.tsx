@@ -400,7 +400,7 @@ export function StakeView() {
                         </div>
                       </div>
                       {/* Show note for both BTC and frBTC/FROST staking options */}
-                      <p className="readable-text text-xs">NOTE THAT THIS WILL UNSTAKE TO <span className="token-name">frBTC/FROST</span> LP, NOT TO NATIVE BTC LIKE WHEN UNSTAKING <DxBTC />.</p>
+                      <p className="readable-text text-xs">NOTE THAT THIS WILL UNSTAKE TO <span className="token-name">frBTC/FROST</span> LP, NOT TO BTC. YOU CAN SWAP THESE TO BTC ON THE SWAP PAGE.</p>
                     </div>
                   </>
                 ) : (
