@@ -182,7 +182,7 @@ export function StakeView() {
                 {isStaking ? (
                   <>
                     <div className="mb-4">
-                      <label htmlFor="btc-stake-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You're Staking:</label>
+                      <label htmlFor="btc-stake-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You're Staking:</label>
                       <div className="flex items-center space-x-2">
                         <Select value={dxBTCInputToken} onValueChange={setDxBTCInputToken}>
                           <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
@@ -214,7 +214,7 @@ export function StakeView() {
                         <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0% - always 0% to stake!</p>
                       </div>
                       <div className="mb-4">
-                        <label htmlFor="btc-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
+                        <label htmlFor="btc-receive-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You'll Receive:</label>
                         <div className="flex items-center space-x-2">
                           <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                             <div className="flex items-center justify-center w-full h-full">
@@ -231,7 +231,7 @@ export function StakeView() {
                 ) : (
                   <>
                     <div className="mb-4">
-                      <label htmlFor="dxbtc-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You're Unstaking:</label>
+                      <label htmlFor="dxbtc-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You're Unstaking:</label>
                       <div className="flex items-center space-x-2">
                         <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                           <div className="flex items-center justify-center w-full h-full">
@@ -257,7 +257,7 @@ export function StakeView() {
                         <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0.1%</p>
                       </div>
                       <div className="mb-4">
-                        <label htmlFor="btc-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
+                        <label htmlFor="btc-receive-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You'll Receive:</label>
                         <div className="flex items-center space-x-2">
                           <Select value={dxBTCOutputToken} onValueChange={setDxBTCOutputToken}>
                             <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
@@ -355,7 +355,7 @@ export function StakeView() {
                 {isStaking ? (
                   <>
                     <div className="mb-4">
-                      <label htmlFor="btc-frost-stake-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You're Staking:</label>
+                      <label htmlFor="btc-frost-stake-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You're Staking:</label>
                       <div className="flex items-center space-x-2">
                         <Select value={dxFROSTInputToken} onValueChange={setDxFROSTInputToken}>
                           <SelectTrigger className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32 token-button-text">
@@ -387,7 +387,7 @@ export function StakeView() {
                         <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0% - always 0% to stake!</p>
                       </div>
                       <div className="mb-4">
-                        <label htmlFor="frost-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
+                        <label htmlFor="frost-receive-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You'll Receive:</label>
                         <div className="flex items-center space-x-2">
                           <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                             <div className="flex items-center justify-center w-full h-full">
@@ -406,7 +406,7 @@ export function StakeView() {
                 ) : (
                   <>
                     <div className="mb-4">
-                      <label htmlFor="dxfrost-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You're Unstaking:</label>
+                      <label htmlFor="dxfrost-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You're Unstaking:</label>
                       <div className="flex items-center space-x-2">
                         <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                           <div className="flex items-center justify-center w-full h-full">
@@ -432,7 +432,7 @@ export function StakeView() {
                         <p className="readable-text text-xs text-blue-600 h-5">SUBFROST Fee: 0.1%</p>
                       </div>
                       <div className="mb-4">
-                        <label htmlFor="frost-receive-amount" className="readable-text text-sm text-blue-600 block mb-2 h-5">You'll Receive:</label>
+                        <label htmlFor="frost-receive-amount" className="readable-text text-xs text-blue-600 block mb-2 h-5">You'll Receive:</label>
                         <div className="flex items-center space-x-2">
                           <div className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-32">
                             <div className="flex items-center justify-center w-full h-full">
