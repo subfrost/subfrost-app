@@ -49,14 +49,14 @@ export function Navbar() {
   }
 
   return (
-    <div className="frost-bg p-4 mb-4 relative z-10" style={getFrostBgStyle()}>
+    <div className="frost-bg p-4 pl-6 mb-4 relative z-10" style={getFrostBgStyle()}>
       {/* Desktop Layout */}
       <div className="hidden md:flex justify-between items-center w-full">
         {/* Left side: Logo - fixed position with buffer */}
-        <div className="w-[200px] md:w-[220px] lg:w-[250px] flex-shrink-0">
-          <Link ref={logoRef} href="https://subfrost.io/" className="text-4xl font-extrabold retro-text text-[#284372] flex items-center transition-all duration-200 nav-link relative z-20 hover:scale-[1.15] hover:text-white">
-            <span className="inline-block mr-2" style={{ display: 'inline-block !important' }}>
-              <FaSnowflake size={24} color="#284372" className="white-outline-icon" />
+        <div className="w-[200px] md:w-[220px] lg:w-[250px] flex-shrink-0 pl-1">
+          <Link ref={logoRef} href="https://subfrost.io/" className="text-4xl font-extrabold retro-text text-[#284372] flex items-center transition-all duration-200 nav-link relative z-20 hover:scale-[1.15] hover:text-white group">
+            <span className="inline-block mr-2 transition-all duration-200" style={{ display: 'inline-block !important' }}>
+              <FaSnowflake size={24} className="white-outline-icon text-[#284372] group-hover:text-white transition-colors duration-200" />
             </span>
             <span className="white-outline-text">SUBFROST</span>
           </Link>
@@ -102,13 +102,13 @@ export function Navbar() {
       {/* Mobile Navigation - Vertically aligned */}
       <div className="md:hidden w-full">
         {/* Mobile Logo - Centered at the top */}
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center mb-4 pl-1">
           <Link
             href="https://subfrost.io/"
-            className="font-extrabold retro-text text-[#284372] flex items-center nav-link relative z-20"
+            className="font-extrabold retro-text text-[#284372] flex items-center nav-link relative z-20 hover:scale-[1.15] hover:text-white transition-all duration-200 group"
           >
-            <span className="inline-block mr-2" style={{ display: 'inline-block !important' }}>
-              <FaSnowflake size={24} color="#284372" className="white-outline-icon" />
+            <span className="inline-block mr-2 transition-all duration-200" style={{ display: 'inline-block !important' }}>
+              <FaSnowflake size={24} className="white-outline-icon text-[#284372] group-hover:text-white transition-colors duration-200" />
             </span>
             <span style={{ fontSize: '2rem' }} className="white-outline-text">SUBFROST</span>
           </Link>
