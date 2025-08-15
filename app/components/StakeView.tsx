@@ -1,3 +1,17 @@
+/*
+  Chadson's Journal:
+  - 2025-08-14:
+    - Received request to update text on the stake page.
+    - The file to modify is app/components/StakeView.tsx.
+    - Changes:
+      1. Header change from "EARN YIELD IN BTC" to "STAKE BTC, EARN YIELD IN BTC".
+      2. Description change to explain staking to SUBFROST Yield Vault and receiving dxBTC.
+      3. Add informational text below the "STAKE BTC" button explaining yield strategies.
+    - 2025-08-14 (Follow-up):
+      - User requested style changes for the text under the "STAKE BTC" button.
+      - Changed the text to use the `CardDescription` component for consistent styling.
+      - Added three line breaks for visual spacing above the text.
+*/
 "use client"
 
 import { useState, useRef } from 'react'
@@ -77,7 +91,7 @@ export function StakeView() {
 
   return (
     <div className="space-y-6 flex flex-col items-center">
-      <div className="w-full max-w-md">
+      {/* <div className="w-full max-w-md">
         <Card className="frost-bg frost-border w-full">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <CardHeader className="pb-0">
@@ -99,7 +113,7 @@ export function StakeView() {
                   if (isMobile) {
                     // Shorter text for mobile with smaller font size
                     // Force rebuild with the same content
-                    element.innerHTML = '<span class="text-xs">JK, ALSO SOON!</span>';
+                    element.innerHTML = '<span className="text-xs">JK, ALSO SOON!</span>';
                   } else {
                     // Regular text for desktop
                     element.innerText = "JK, also coming soon!";
@@ -121,7 +135,7 @@ export function StakeView() {
           <Separator className="my-2" />
         </Tabs>
         </Card>
-      </div>
+      </div> */}
       {/* Staking Widgets Section */}
       <div className="w-full max-w-md">
         <div className="flex flex-col md:flex-row gap-4 justify-center w-full">
@@ -130,24 +144,14 @@ export function StakeView() {
           <Card className="frost-bg frost-border w-full max-w-md flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="retro-text text-blue-600 flex items-center justify-center text-center text-lg md:text-xl h-20 relative z-10">
-                {isStaking ? (
-                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
-                ) : (
-                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
-                )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-center w-full whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold white-outline-text">Earn Yield In</span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">STAKE BTC,</span>
                   </div>
                   <div className="mt-0.5 font-bold flex items-center justify-center whitespace-nowrap">
-                    <span className="text-2xl md:text-4xl font-bold white-outline-text">BTC</span>
+                    <span className="text-2xl md:text-4xl font-bold white-outline-text">EARN YIELD IN BTC</span>
                   </div>
                 </div>
-                {isStaking ? (
-                  <FaSnowflake className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
-                ) : (
-                  <RiCoinsFill className="mx-2 md:mx-4 flex-shrink-0 text-blue-500 white-outline-icon" size={29} />
-                )}
               </CardTitle>
               
               {/* Stake/Unstake toggle button */}
@@ -172,7 +176,13 @@ export function StakeView() {
               
               <CardDescription className="readable-text text-sm">
                 {isStaking
-                  ? `Enter the amount of ${dxBTCInputToken} you want to stake to dxBTC. This is pegged 1:1 with BTC and earns yield in BTC.`
+                  ? (
+                    <span>
+                      Enter the amount of BTC you want to stake to the SUBFROST Yield Vault.
+                      <br /><br />
+                      You will recieve dxBTC, which is always redeemable 1:1 for your staked BTC + BTC Earnings.
+                    </span>
+                  )
                   : `Enter the amount of dxBTC you want to unstake back to ${dxBTCOutputToken}.`
                 }
               </CardDescription>
@@ -280,11 +290,23 @@ export function StakeView() {
                 )}
               </div>
             </CardContent>
-            <CardFooter className="mt-auto">
+            <CardFooter className="mt-auto flex-col">
               {isStaking ? (
-                <Button onClick={handleStake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
-                  Stake {dxBTCInputToken === "BTC" ? "BTC" : <FrBTC />}
-                </Button>
+                <>
+                  <Button onClick={handleStake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
+                    Stake {dxBTCInputToken === "BTC" ? "BTC" : <FrBTC />}
+                  </Button>
+                  <div className="w-full text-center">
+                    <br />
+                    <br />
+                    <br />
+                    <CardDescription className="readable-text text-sm">
+                      Your BTC will be deployed into the safest yield-bearing strategies (market neutral LPs and over-collateralized lending). We then supplement this conservative, low-risk yield with no additional risk to you.
+                      <br /><br />
+                      How do we supplement these yields? SUBFROST aquires tokens from partner protocols across Bitcoin DeFi will supplement these conservative yields with no additional risk to the staker.
+                    </CardDescription>
+                  </div>
+                </>
               ) : (
                 <Button onClick={handleUnstake} className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size">
                   Unstake <DxBTC />
