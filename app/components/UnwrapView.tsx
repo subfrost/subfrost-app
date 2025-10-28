@@ -11,7 +11,6 @@ import { UnwrapConfirmationModal } from './UnwrapConfirmationModal'
 import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { UnwrapTransactionTable } from './UnwrapTransactionTable'
 import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
-import { useBalances } from "../contexts/BalancesContext";
 import { FrBTC } from './TokenNames'
 
 export function UnwrapView() {
@@ -19,8 +18,7 @@ export function UnwrapView() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [onlineCount, setOnlineCount] = useState(246)
   const [currentBlock, setCurrentBlock] = useState(700000)
-  const { balances } = useBalances();
-  const frBTCBalance = balances.frBTC; // This should be fetched from your state management solution
+  const frBTCBalance = "0.00000000";
   const { addTransaction, updateTransaction } = useSubfrostP2P()
 
   const handleUnwrap = () => {

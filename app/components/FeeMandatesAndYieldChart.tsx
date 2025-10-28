@@ -93,6 +93,7 @@ export function FeeMandatesAndYieldChart() {
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"
+                isAnimationActive={false}
               >
                 {feeMandatesData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -141,7 +142,7 @@ export function FeeMandatesAndYieldChart() {
               />
               <Legend />
               {/* We can't use JSX in the name prop, so we'll keep the string format */}
-              <Line type="monotone" dataKey="yield" name="dxFROST APY (%)" stroke="#284372" activeDot={{ r: 8 }} />
+              <Line type="monotone" dataKey="yield" name="dxFROST APY (%)" stroke="#284372" activeDot={{ r: 8 }} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>

@@ -6,14 +6,13 @@ import { Button } from "@/components/ui/button";
 import { PixelSprite } from "../components/PixelSprite";
 import { TransactionHistory } from "../components/TransactionHistory";
 import { ProposalList } from "../components/ProposalList";
-import { lasereyesMiddleware } from "../middleware";
+import { useWallet } from "../contexts/WalletContext";
 import { Copy, ExternalLink } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { useLaserEyes } from "@omnisat/lasereyes";
 import { useRouter } from "next/navigation";
 
 export default function Profile() {
-  const { address, disconnect } = lasereyesMiddleware(useLaserEyes());
+  const { address, disconnect } = useWallet() as any;
   const { toast } = useToast();
   const router = useRouter();
 

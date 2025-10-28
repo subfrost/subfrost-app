@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { FaWallet } from 'react-icons/fa'
-import { useBalances } from "../contexts/BalancesContext"
+import { useBtcBalance } from "../hooks/useBtcBalance"
 import { FaBitcoin, FaSnowflake } from "react-icons/fa"
 import { RiExchangeDollarFill, RiCoinsFill } from "react-icons/ri"
 import { FrBTC, DxBTC, DxFROST } from './TokenNames'
@@ -20,7 +20,13 @@ export function BalancesDropdown({ isMobile = false, isFloating = false }: Balan
   const [buttonPosition, setButtonPosition] = useState({ top: 0, left: 0, width: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const { formattedBalances } = useBalances()
+  const { data: btcBalance } = useBtcBalance()
+  const formattedBalances = {
+    btc: ((btcBalance ?? 0) / 1e8).toFixed(8),
+    frBTC: (0).toFixed(8),
+    dxFROST: (0).toFixed(8),
+    frost: (0).toFixed(8),
+  }
 
   // Handle mounting for client-side rendering and track window width
   const [windowWidth, setWindowWidth] = useState(0);
