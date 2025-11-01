@@ -12,13 +12,15 @@ import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { UnwrapTransactionTable } from './UnwrapTransactionTable'
 import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 import { FrBTC } from './TokenNames'
+import { useFrBtcBalance } from '../hooks/useAlkaneBalance'
 
 export function UnwrapView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [onlineCount, setOnlineCount] = useState(246)
   const [currentBlock, setCurrentBlock] = useState(700000)
-  const frBTCBalance = "0.00000000";
+  const frBtc = useFrBtcBalance()
+  const frBTCBalance = (frBtc ?? 0).toFixed(8)
   const { addTransaction, updateTransaction } = useSubfrostP2P()
 
   const handleUnwrap = () => {
