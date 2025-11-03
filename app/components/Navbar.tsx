@@ -71,7 +71,6 @@ export function Navbar() {
           <div className="flex items-center justify-center transition-all duration-300 ease-in-out" ref={navLinksRef}>
             <div className="flex space-x-4 md:space-x-6 lg:space-x-8">
               <NavLink href="/earn" active={pathname === '/earn'} useOutline={true}>Earn</NavLink>
-              <NavLink href="/wrap" active={pathname === '/wrap'} useOutline={true}>Wrap</NavLink>
               <NavLink href="/swap" active={pathname === '/swap'} useOutline={true}>Swap</NavLink>
               <NavLink href="/governance" active={pathname === '/governance'} useOutline={true}>Governance</NavLink>
             </div>
@@ -166,7 +165,7 @@ export function Navbar() {
         {mobileDropdownOpen && (
           <div className="frost-bg rounded-md p-2 mt-2 mb-4" style={getFrostBgStyle()}>
             <div className="flex flex-col space-y-2" style={{ fontSize: '0.75rem' }}>
-              {['Earn', 'Wrap', 'Swap', 'Governance'].map((link) => (
+              {['Earn', 'Swap', 'Governance'].map((link) => (
                 <Link
                   key={link}
                   href={`/${link.toLowerCase()}`}
