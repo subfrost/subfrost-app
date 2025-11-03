@@ -1,4 +1,4 @@
-import { OylApiClient } from '@oyl/api-provider';
+import { OylApiClient } from '../api-provider';
 import { Provider } from '@oyl/sdk';
 import type { Network } from './constants';
 import { NetworkMap, SandshrewUrlMap } from './constants';
