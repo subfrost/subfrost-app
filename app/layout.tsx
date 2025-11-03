@@ -8,7 +8,6 @@ import { Footer } from "./components/Footer";
 import { SocialIcons } from "./components/SocialIcons";
 import { MobileWalletButton } from "./components/MobileWalletButton";
 import { Toaster } from "@/components/ui/toaster";
-import { SubfrostP2PProvider } from "./contexts/SubfrostP2PContext";
 import { BalancesVisibilityProvider } from "./contexts/BalancesVisibilityContext";
 // import * as regtest from "./lib/rtest";
 import { LaserEyesProvider } from "@omnisat/lasereyes-react";
@@ -53,7 +52,6 @@ export default function RootLayout({
         <LaserEyesProvider>
           <Providers>
             <BalancesVisibilityProvider>
-              <SubfrostP2PProvider>
                 <SnowflakeBackground />
                 <SnowflakeWatermark />
                 <div className="flex flex-col min-h-screen h-screen w-full">
@@ -66,7 +64,6 @@ export default function RootLayout({
                   <MobileWalletButton />
                   <Toaster />
                 </div>
-              </SubfrostP2PProvider>
             </BalancesVisibilityProvider>
           </Providers>
         </LaserEyesProvider>

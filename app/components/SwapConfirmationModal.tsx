@@ -3,7 +3,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { FaSnowflake } from 'react-icons/fa'
-import { calculateSwapOutput, formatCurrency, assetPrices } from '../utils/priceCalculations'
 
 interface SwapConfirmationModalProps {
   isOpen: boolean
@@ -30,6 +29,12 @@ export function SwapConfirmationModal({
   slippage,
   onConfirm
 }: SwapConfirmationModalProps) {
+  const safeRate = (fromAmt: string, toAmt: string) => {
+    const f = parseFloat(fromAmt || '0')
+    const t = parseFloat(toAmt || '0')
+    if (!isFinite(f) || f <= 0 || !isFinite(t) || t <= 0) return '0'
+    return (t / f).toFixed(8)
+  }
   const handleConfirm = () => {
     // Implement swap confirmation logic here
     console.log(`Confirming swap: ${fromAmount} ${fromAsset} to ${toAmount} ${toAsset} with ${slippage}% slippage`)
@@ -48,11 +53,11 @@ export function SwapConfirmationModal({
         <div className="grid gap-4 py-4 text-blue-50">
           <div className="space-y-2">
             <h3 className="retro-text text-sm">Transaction Details</h3>
-            <p className="readable-text text-xs">From: {fromAmount} {fromAsset} ({fromDollarValue})</p>
-            <p className="readable-text text-xs">To: {toAmount} {toAsset} ({toDollarValue})</p>
-            <p className="readable-text text-xs">Rate: 1 {fromAsset} = {calculateSwapOutput(fromAsset, toAsset, 1).toFixed(8)} {toAsset}</p>
-            <p className="readable-text text-xs">1 {fromAsset} = {formatCurrency(assetPrices[fromAsset])}</p>
-            <p className="readable-text text-xs">1 {toAsset} = {formatCurrency(assetPrices[toAsset])}</p>
+            <p className="readable-text text-xs">From: {fromAmount || '0'} {fromAsset} {fromDollarValue ? `(${fromDollarValue})` : ''}</p>
+            <p className="readable-text text-xs">To: {toAmount || '0'} {toAsset} {toDollarValue ? `(${toDollarValue})` : ''}</p>
+            <p className="readable-text text-xs">
+              Rate: 1 {fromAsset} = {safeRate(fromAmount, toAmount)} {toAsset}
+            </p>
             <p className="readable-text text-xs text-blue-50">Fee: 0.1%</p>
             <p className="readable-text text-xs text-blue-50">Slippage Tolerance: {slippage.toFixed(1)}%</p>
           </div>

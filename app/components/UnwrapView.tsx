@@ -10,7 +10,6 @@ import { Zap } from 'lucide-react'
 import { UnwrapConfirmationModal } from './UnwrapConfirmationModal'
 import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { UnwrapTransactionTable } from './UnwrapTransactionTable'
-import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 import { FrBTC } from './TokenNames'
 import { useFrBtcBalance } from '../hooks/useAlkaneBalance'
 
@@ -21,7 +20,6 @@ export function UnwrapView() {
   const [currentBlock, setCurrentBlock] = useState(700000)
   const frBtc = useFrBtcBalance()
   const frBTCBalance = (frBtc ?? 0).toFixed(8)
-  const { addTransaction, updateTransaction } = useSubfrostP2P()
 
   const handleUnwrap = () => {
     setIsModalOpen(true)
@@ -34,27 +32,9 @@ export function UnwrapView() {
   }
 
   const handleConfirmUnwrap = () => {
-    const newTransaction = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      amount: calculateExpectedBTC(),
-      status: 'Pending' as 'Pending',
-      blockNumber: currentBlock,
-    }
-    addTransaction(newTransaction)
+    // TODO: wire real unwrap mutation ala @oyl.io when ready
     setIsModalOpen(false)
     setAmount('')
-
-    // Simulate transaction phases
-    setTimeout(() => {
-      updateTransaction({ ...newTransaction, status: 'Broadcast', blockNumber: currentBlock + 1 })
-      setTimeout(() => {
-        updateTransaction({ 
-          ...newTransaction, 
-          status: 'Complete', 
-          txid: Math.random().toString(16).slice(2, 10) 
-        })
-      }, 10000)
-    }, 10000)
   }
 
   useEffect(() => {

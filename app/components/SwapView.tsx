@@ -2,55 +2,35 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { SwapComponent } from './SwapComponent'
+// Lazy load SwapComponent to avoid loading heavy code until needed
+import dynamic from 'next/dynamic'
+const LazySwapComponent = dynamic(() => import('./SwapComponent').then(m => m.SwapComponent), { ssr: false, loading: () => <div className="flex items-center justify-center py-10"><span className="retro-text">Loading swap…</span></div> })
 import { LPComponent } from './LPComponent'
 import { Button } from "@/components/ui/button"
 import { Settings } from 'lucide-react'
 import { SwapSettingsModal } from './SwapSettingsModal'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { SwapSubfrostP2PTable } from './SwapSubfrostP2PTable'
-import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
+import ConnectWalletModal from './ConnectWalletModal'
+import { useWallet } from '../contexts/WalletContext'
 
 export function SwapView() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [slippage, setSlippage] = useState(5) // Default 5%
   const [activeTab, setActiveTab] = useState("swap")
-  const [currentBlock, setCurrentBlock] = useState(700000)
-  const { addTransaction, updateTransaction } = useSubfrostP2P()
+ 
+  const { isConnected } = useWallet()
+  const [started, setStarted] = useState(false)
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentBlock(prev => prev + 1)
-    }, 10000) // Increment block number every 10 seconds
 
-    return () => clearInterval(timer)
-  }, [])
+ 
 
-  const handleSwapConfirm = (amount: string) => {
-    const newTransaction = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      amount,
-      status: 'Pending' as 'Pending' | 'Broadcast' | 'Complete',
-      blockNumber: currentBlock,
-    }
-    addTransaction(newTransaction)
-
-    // Simulate transaction phases
-    setTimeout(() => {
-      updateTransaction({ ...newTransaction, status: 'Broadcast' as 'Broadcast', blockNumber: currentBlock + 1 })
-      setTimeout(() => {
-        updateTransaction({ 
-          ...newTransaction,
-          status: 'Complete' as 'Complete',
-          txid: Math.random().toString(16).slice(2, 10)
-        })
-      }, 10000)
-    }, 10000)
+  const handleSwapConfirm = (_amount: string) => {
+    // no-op: real mutation wired in later tasks
   }
 
-  const handleBurnConfirm = (amount: string) => {
-    handleSwapConfirm(amount) // Reuse the same logic for BTC output from LP burning
+  const handleBurnConfirm = (_amount: string) => {
+    // no-op
   }
 
   return (
@@ -75,24 +55,58 @@ export function SwapView() {
           </CardHeader>
           <Separator className="my-2" />
           <CardContent>
+            {!isConnected ? (
+              <div className="flex items-center justify-center py-6">
+                <ConnectWalletModal />
+              </div>
+            ) : null}
             <TabsContent value="swap">
-              <SwapComponent 
-                slippage={slippage} 
-                onOpenSettings={() => setIsSettingsOpen(true)} 
-                onSwapConfirm={handleSwapConfirm}
-              />
+              {isConnected && !started && (
+                <div className="flex items-center justify-center py-10">
+                  <Button className="retro-text" onClick={() => setStarted(true)}>Start Swap</Button>
+                </div>
+              )}
+              {isConnected && started && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="retro-text text-sm text-blue-600 relative z-10"><span className="white-outline-text">From</span></label>
+                    <div className="flex space-x-2">
+                      <input className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
+                        placeholder="0.00" />
+                      <button className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-40">Select</button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="retro-text text-sm text-blue-600 relative z-10"><span className="white-outline-text">To</span></label>
+                    <div className="flex space-x-2">
+                      <input className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
+                        placeholder="0.00" readOnly />
+                      <button className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-40">Select</button>
+                    </div>
+                  </div>
+                  <div>
+                    <Button className="w-full retro-text text-base font-bold bg-blue-700 hover:bg-blue-800 navbar-size relative z-10">Swap</Button>
+                  </div>
+                </div>
+              )}
             </TabsContent>
             <TabsContent value="lp">
-              <LPComponent 
-                slippage={slippage} 
-                onOpenSettings={() => setIsSettingsOpen(true)}
-                onBurnConfirm={handleBurnConfirm}
-              />
+              {isConnected && started && (
+                <LPComponent 
+                  slippage={slippage} 
+                  onOpenSettings={() => setIsSettingsOpen(true)}
+                  onBurnConfirm={handleBurnConfirm}
+                />
+              )}
+              {isConnected && !started && (
+                <div className="flex items-center justify-center py-10">
+                  <Button className="retro-text" onClick={() => setStarted(true)}>Start LP</Button>
+                </div>
+              )}
             </TabsContent>
           </CardContent>
         </Tabs>
       </Card>
-      <SwapSubfrostP2PTable currentBlock={currentBlock} />
       <SwapSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

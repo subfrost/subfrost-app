@@ -6,7 +6,6 @@ import { ExternalLink, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { FaBitcoin } from 'react-icons/fa'
 import { Button } from "@/components/ui/button"
-import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 
 interface SwapSubfrostP2PTableProps {
   currentBlock: number
@@ -14,7 +13,7 @@ interface SwapSubfrostP2PTableProps {
 
 export function SwapSubfrostP2PTable({ currentBlock }: SwapSubfrostP2PTableProps) {
   const [onlineCount, setOnlineCount] = useState(246)
-  const { transactions } = useSubfrostP2P()
+  const transactions: Array<{ id: string; amount: string; status: 'Pending'|'Broadcast'|'Complete'; blockNumber: number; txid?: string; }> = []
 
   useEffect(() => {
     const interval = setInterval(() => {

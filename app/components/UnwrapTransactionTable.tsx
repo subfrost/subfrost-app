@@ -5,14 +5,14 @@ import { ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { RiExchangeDollarFill } from 'react-icons/ri'
 import { FaBitcoin } from 'react-icons/fa'
-import { useSubfrostP2P } from '../contexts/SubfrostP2PContext'
 
 interface UnwrapTransactionTableProps {
   currentBlock: number
 }
 
 export function UnwrapTransactionTable({ currentBlock }: UnwrapTransactionTableProps) {
-  const { transactions } = useSubfrostP2P()
+  // P2P context removed; show an empty recent list for now (production-safe)
+  const transactions: Array<{ id: string; amount: string; status: 'Pending'|'Broadcast'|'Complete'; blockNumber: number; txid?: string; }> = []
 
   return (
     <Table className="text-[8px]">
