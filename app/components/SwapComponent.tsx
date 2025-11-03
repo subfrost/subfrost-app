@@ -8,9 +8,6 @@ import { FaSnowflake } from 'react-icons/fa'
 // Keep this component LIGHT: no provider/API/SDK imports
 import { Settings } from 'lucide-react'
 import { SwapConfirmationModal } from './SwapConfirmationModal'
-import { useApiProvider } from '../hooks/useApiProvider'
-import { getConfig } from '../utils/getConfig'
-import { getApiProvider } from '../utils/oylProvider'
 import { getConfig } from '../utils/getConfig'
 import { useApiProvider } from '../hooks/useApiProvider'
 
@@ -61,8 +58,8 @@ export function SwapComponent({ slippage, onOpenSettings, onSwapConfirm }: SwapC
         if (!direct) { setQuotedOut('0.00'); setIsQuoting(false); return }
         const id0 = `${direct.token0.alkaneId.block}:${direct.token0.alkaneId.tx}`
         const isSell0 = id0 === sellToken
-        const reserveIn = Number(isSell0 ? direct.token0Amount : direct.token1Amount)
-        const reserveOut = Number(isSell0 ? direct.token1Amount : direct.token0Amount)
+        const reserveIn = Number(isSell0 ? direct.token0.token0Amount : direct.token1.token0Amount)
+        const reserveOut = Number(isSell0 ? direct.token1.token0Amount : direct.token0.token0Amount)
         const DEC = 8
         const toAlks = (v: number) => Math.floor(v * Math.pow(10, DEC))
         const fromAlks = (v: number) => (v / Math.pow(10, DEC)).toFixed(8)
