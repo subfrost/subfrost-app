@@ -11,7 +11,9 @@
   "dependencies": {
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@hookform/resolvers": "^3.9.1",
+    "@okxweb3/coin-bitcoin": "^2.4.0",
     "@omnisat/lasereyes": "^0.0.133",
+    "@omnisat/lasereyes-react": "^0.0.78",
     "@oyl/sdk": "git+https://github.com/Oyl-Wallet/oyl-sdk",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -46,6 +48,7 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
+    "framer-motion": "^12.23.24",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "14.2.16",

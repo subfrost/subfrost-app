@@ -1,0 +1,9 @@
+The current task is to refactor the `subfrost-app` to match the `oyl.io` structure.
+The build is failing with "Module not found" errors.
+The next steps are to fix the "Module not found" errors.
+
+Specifically, the following modules are not found:
+- `../fonts/Satoshi-Light.woff2`
+- `framer-motion`
+- `@omnisat/lasereyes-react`
+- `@oyl/api-provider`
