@@ -12,8 +12,6 @@
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@hookform/resolvers": "^3.9.1",
     "@okxweb3/coin-bitcoin": "^2.4.0",
-    "@omnisat/lasereyes": "^0.0.133",
-    "@omnisat/lasereyes-react": "^0.0.78",
     "@oyl/sdk": "git+https://github.com/Oyl-Wallet/oyl-sdk",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -67,6 +65,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@omnisat/lasereyes": "^0.0.161",
+    "@omnisat/lasereyes-react": "^0.0.78",
     "@types/lodash": "^4.17.14",
     "@types/node": "^22",
     "@types/react": "^18",
