@@ -10,6 +10,7 @@ import ConnectWalletModal from './ConnectWalletModal'
 import { useWallet } from '../contexts/WalletContext'
 import { SwapHeader } from './swap/SwapHeader'
 import { SwapPoolsList } from './swap/SwapPoolsList'
+import { PoolStats } from './swap/PoolStats'
 import { getConfig } from '@/app/utils/getConfig'
 
 export function SwapView() {
@@ -52,7 +53,8 @@ export function SwapView() {
             ) : null}
             <TabsContent value="swap">
               <div className="space-y-6">
-                <SwapHeader slippage={slippage} onOpenSettings={() => setIsSettingsOpen(true)} presetPair={selectedPair} />
+                <SwapHeader slippage={slippage} onOpenSettings={() => setIsSettingsOpen(true)} presetPair={selectedPair} onPairChange={(sell, buy) => setSelectedPair({ sell, buy })} />
+                <PoolStats sellId={selectedPair?.sell} buyId={selectedPair?.buy} />
                 <div>
                   <h3 className="retro-text text-sm text-blue-600 mb-2"><span className="white-outline-text">Markets</span></h3>
                   <SwapPoolsList onSelectPair={(token0Id, token1Id) => setSelectedPair({ sell: token0Id, buy: token1Id })} />

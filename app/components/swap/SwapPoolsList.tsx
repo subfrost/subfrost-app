@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { usePools } from '@/app/hooks/usePools';
 import { cn } from '@/lib/utils';
+import { PairIcon } from './PairIcon';
 
 export function SwapPoolsList({
   className,
@@ -32,9 +33,9 @@ export function SwapPoolsList({
   return (
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between px-2 text-xs text-muted-foreground">
-        <div className="w-1/3">Pair</div>
-        <div className="w-1/4 text-right">TVL</div>
-        <div className="w-1/4 text-right">24h Vol</div>
+        <div className="w-2/5">Pair</div>
+        <div className="w-1/5 text-right">TVL</div>
+        <div className="w-1/5 text-right">24h Vol</div>
         <div className="w-1/6 text-right">APR</div>
       </div>
       <div className="rounded-md border border-white/10 divide-y divide-white/10 overflow-hidden">
@@ -44,9 +45,12 @@ export function SwapPoolsList({
             className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 text-sm text-left"
             onClick={() => onSelectPair(r.token0Id, r.token1Id)}
           >
-            <div className="w-1/3 truncate">{r.name}</div>
-            <div className="w-1/4 text-right">${Number(r.tvl).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-            <div className="w-1/4 text-right">${Number(r.volume1d).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+            <div className="w-2/5 flex items-center gap-3 truncate">
+              <PairIcon left={{ id: r.token0Id, name: r.name.split(' / ')[0] || '' }} right={{ id: r.token1Id, name: r.name.split(' / ')[1] || '' }} size="sm" />
+              <span className="truncate">{r.name}</span>
+            </div>
+            <div className="w-1/5 text-right">${Number(r.tvl).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+            <div className="w-1/5 text-right">${Number(r.volume1d).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
             <div className="w-1/6 text-right">{r.apr != null ? `${(r.apr * 100).toFixed(2)}%` : '-'}</div>
           </button>
         ))}

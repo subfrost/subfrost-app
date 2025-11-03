@@ -17,10 +17,12 @@ import { useSwapMutation } from '@/app/hooks/useSwapMutation';
 export function SwapHeader({
   slippage,
   onOpenSettings,
+  onPairChange,
   presetPair,
 }: {
   slippage: number; // percentage (e.g., 5)
   onOpenSettings: () => void;
+  onPairChange?: (sell: string, buy: string) => void;
   presetPair?: { sell: string; buy: string } | null;
 }) {
   const { isConnected, address, network } = useWallet();
@@ -99,6 +101,13 @@ export function SwapHeader({
     if (presetPair?.buy) controller.setBuyCurrency(presetPair.buy);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetPair?.sell, presetPair?.buy]);
+
+  // Notify parent when pair changes
+  useEffect(() => {
+    if (onPairChange && controller.state.sellCurrency && controller.state.buyCurrency) {
+      onPairChange(controller.state.sellCurrency, controller.state.buyCurrency);
+    }
+  }, [controller.state.sellCurrency, controller.state.buyCurrency]);
 
   const { mutate: swap, isPending } = useSwapMutation();
 

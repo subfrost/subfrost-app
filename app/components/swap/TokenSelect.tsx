@@ -1,6 +1,7 @@
 'use client';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlkaneImage } from './AlkaneImage';
 
 export type TokenOption = {
   id: string;
@@ -21,15 +22,26 @@ export function TokenSelect({
   placeholder?: string;
   className?: string;
 }) {
+  const selected = options.find((o) => o.id === value);
   return (
     <Select value={value ?? ''} onValueChange={onChange}>
       <SelectTrigger className={className}>
-        <SelectValue placeholder={placeholder} />
+        {selected ? (
+          <div className="flex items-center gap-2">
+            <AlkaneImage id={selected.id} name={selected.name} size="sm" />
+            <span>{selected.symbol ? `${selected.symbol} • ${selected.name}` : selected.name}</span>
+          </div>
+        ) : (
+          <SelectValue placeholder={placeholder} />
+        )}
       </SelectTrigger>
       <SelectContent>
         {options.map((opt) => (
           <SelectItem key={opt.id} value={opt.id}>
-            {opt.symbol ? `${opt.symbol} • ${opt.name}` : opt.name}
+            <div className="flex items-center gap-2">
+              <AlkaneImage id={opt.id} name={opt.name} size="sm" />
+              <span>{opt.symbol ? `${opt.symbol} • ${opt.name}` : opt.name}</span>
+            </div>
           </SelectItem>
         ))}
       </SelectContent>
