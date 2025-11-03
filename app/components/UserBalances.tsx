@@ -3,45 +3,18 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { FaBitcoin, FaSnowflake } from "react-icons/fa";
 import { RiExchangeDollarFill, RiCoinsFill } from "react-icons/ri";
-import { useBalances } from "../contexts/BalancesContext";
-import { lasereyesMiddleware } from "../middleware";
-import { provider } from "../contexts/regtest";
-import { useLaserEyes } from "@omnisat/lasereyes";
-import { useEffect } from "react";
+import { useBtcBalance } from "../hooks/useBtcBalance";
 import { FrBTC, DxBTC, DxFROST } from "./TokenNames";
-import { ethers } from "ethers";
-import { mapValues } from "lodash";
 
 export function UserBalances() {
-  // Mock data - replace with actual user balances
-  const { setBalances, balances, formattedBalances } = useBalances();
-  const { address } = lasereyesMiddleware(useLaserEyes());
-  useEffect(() => {
-    (async () => {
-      if (address !== "") {
-        const spendables = await provider.getUTXOS(address);
-        const btc = Number(
-          spendables.reduce((r, v) => r + BigInt(v.output.value), 0n)
-        );
-        const frost = Number(0n);
-        const dxFROST = Number(0n);
-        const frBTC = Number(0n);
-        const frBTCFROST = Number(0n);
-        setBalances(
-          mapValues(
-            {
-              btc,
-              frost,
-              dxFROST,
-              frBTC,
-              frBTCFROST,
-            },
-            (v) => ethers.formatUnits(v, 8)
-          )
-        );
-      }
-    })().catch((err) => console.error(err));
-  }, [address]);
+  const { data: btcBalance } = useBtcBalance();
+  const formattedBalances = {
+    btc: ((btcBalance ?? 0) / 1e8).toFixed(8),
+    frBTC: (0).toFixed(8),
+    dxFROST: (0).toFixed(8),
+    frost: (0).toFixed(8),
+    frBTCFROST: (0).toFixed(8)
+  };
 
   return (
     <Card className="frost-bg frost-border mb-2 mx-auto max-w-4xl">

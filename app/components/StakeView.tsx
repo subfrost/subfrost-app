@@ -27,8 +27,8 @@ import { BitcoinFeeWidget } from './BitcoinFeeWidget'
 import { ZapView } from './ZapView'
 import { StakeConfirmationModal } from './StakeConfirmationModal'
 import { UnstakeConfirmationModal } from './UnstakeConfirmationModal'
-import { CombinedCharts } from './CombinedCharts'
-import { useBalances } from "../contexts/BalancesContext"
+// Charts temporarily disabled to fix page freeze; re-enable after isolating Recharts loop
+import { useBtcBalance } from "../hooks/useBtcBalance"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { FrBTC, DxBTC, DxFROST } from './TokenNames'
@@ -42,7 +42,13 @@ export function StakeView() {
   const [dxFROSTInputToken, setDxFROSTInputToken] = useState("BTC") // Toggle between BTC and LP
   const [isStaking, setIsStaking] = useState(true) // Toggle between Stake and Unstake
   const [dxBTCOutputToken, setDxBTCOutputToken] = useState("BTC") // Toggle between BTC and frBTC for unstaking
-  const { balances, formattedBalances } = useBalances(); // This should be fetched from your state management solution
+  const { data: btcBalance } = useBtcBalance();
+  const formattedBalances = {
+    btc: ((btcBalance ?? 0) / 1e8).toFixed(8),
+    frBTC: (0).toFixed(8),
+    dxFROST: (0).toFixed(8),
+    frBTCFROST: (0).toFixed(8),
+  } as const;
 
   const handleStake = () => {
     setIsModalOpen(true)
@@ -487,11 +493,7 @@ export function StakeView() {
         )}
         </div>
       </div>
-      {/* Charts Section */}
-
-      <div className="w-full max-w-2xl md:max-w-4xl lg:max-w-5xl">
-        <CombinedCharts />
-      </div>
+      {/* Charts Section temporarily disabled */}
 
       <StakeConfirmationModal
         isOpen={isModalOpen}

@@ -6,12 +6,13 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
 import { FaBolt } from 'react-icons/fa'
 import { ZapConfirmationModal } from './ZapConfirmationModal'
-import { useBalances } from "../contexts/BalancesContext";
+import { useBtcBalance } from "../hooks/useBtcBalance";
 
 export function ZapView() {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { balances: { btc: btcBalance } } = useBalances();
+  const { data: btcBalance } = useBtcBalance();
+  const btcBalanceStr = ((btcBalance ?? 0) / 1e8).toFixed(8);
 
   const handleZap = () => {
     setIsModalOpen(true)
@@ -47,7 +48,7 @@ export function ZapView() {
             onChange={(e) => setAmount(e.target.value)}
             className="readable-text text-sm bg-blue-600 text-white placeholder-white border-blue-500"
           />
-          <p className="readable-text text-sm mt-1 text-blue-200">Available: {btcBalance} BTC</p>
+          <p className="readable-text text-sm mt-1 text-blue-200">Available: {btcBalanceStr} BTC</p>
         </div>
         <div className="space-y-2">
           <p className="readable-text text-sm text-blue-600">Expected dxFROST: {calculateExpecteddxFROST()} dxFROST</p>

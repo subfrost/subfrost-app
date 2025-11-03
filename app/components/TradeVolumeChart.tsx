@@ -90,9 +90,9 @@ export function TradeVolumeChart() {
               }}
             />
             <Legend />
-            <Bar dataKey="execution" stackId="a" name="Execution (99%)" fill="#284372" />
-            <Bar dataKey="oyl" stackId="a" name="OYL (0.3%)" fill="#bfdbfe" />
-            <Bar dataKey="frost" stackId="a" name="dxFROST (0.7%)" fill="#ffc658" />
+            <Bar dataKey="execution" stackId="a" name="Execution (99%)" fill="#284372" isAnimationActive={false} />
+            <Bar dataKey="oyl" stackId="a" name="OYL (0.3%)" fill="#bfdbfe" isAnimationActive={false} />
+            <Bar dataKey="frost" stackId="a" name="dxFROST (0.7%)" fill="#ffc658" isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

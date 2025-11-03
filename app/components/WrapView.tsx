@@ -14,24 +14,19 @@ import {
 import { FaSnowflake } from "react-icons/fa";
 import { BitcoinFeeWidget } from "./BitcoinFeeWidget";
 import { WrapConfirmationModal } from "./WrapConfirmationModal";
-import { useBalances } from "../contexts/BalancesContext";
+import { useBtcBalance } from "../hooks/useBtcBalance";
 import { getLogger } from "@/lib/logger";
-import { setupEnvironment } from "../contexts/regtest";
 import { FrBTC } from "./TokenNames";
 
 const logger = getLogger("subfrost:wrap");
 
-// Only access window object in the browser
-if (typeof window !== 'undefined') {
-  (window as any).setupEnvironment = setupEnvironment;
-}
+// regtest setup removed
 
 export function WrapView() {
   const [amount, setAmount] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const {
-    balances: { btc: btcBalance },
-  } = useBalances(); // This should be fetched from your state management solution
+  const { data: btcBalance } = useBtcBalance();
+  const btcBalanceStr = ((btcBalance ?? 0) / 1e8).toFixed(8);
 
   const handleWrap = () => {
     setIsModalOpen(true);
@@ -87,7 +82,7 @@ export function WrapView() {
               className="border border-input bg-background rounded-md px-3 py-2 text-sm h-10 flex-1 flex items-center"
             />
             <p className="readable-text text-xs mt-1">
-              Available: {btcBalance} BTC
+              Available: {btcBalanceStr} BTC
             </p>
           </div>
           <div>

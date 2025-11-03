@@ -2,16 +2,15 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
-import { lasereyesMiddleware } from "../middleware";
 
 import {
   MAGIC_EDEN,
-  useLaserEyes,
   WalletIcon,
   SUPPORTED_WALLETS,
   LaserEyesLogo,
   ProviderType,
-} from "@omnisat/lasereyes";
+} from "@omnisat/lasereyes-react";
+import { useWallet } from "../contexts/WalletContext";
 import {
   Dialog,
   DialogContent,
@@ -29,22 +28,35 @@ import { DialogClose } from "@radix-ui/react-dialog";
 
 export default function ConnectWalletModal({ className, isMobile = false }: { className?: string, isMobile?: boolean }) {
   const {
-    connect,
+    finalizeConnect,
     disconnect,
+    // @ts-ignore – provided by spread laserEyes context
     isConnecting,
+    // @ts-ignore – provided by spread laserEyes context
     address,
+    // @ts-ignore – provided by spread laserEyes context
     provider,
+    // @ts-ignore – provided by spread laserEyes context
     hasUnisat,
+    // @ts-ignore – provided by spread laserEyes context
     hasXverse,
+    // @ts-ignore – provided by spread laserEyes context
     hasOyl,
+    // @ts-ignore – provided by spread laserEyes context
     hasMagicEden,
+    // @ts-ignore – provided by spread laserEyes context
     hasOkx,
+    // @ts-ignore – provided by spread laserEyes context
     hasLeather,
+    // @ts-ignore – provided by spread laserEyes context
     hasPhantom,
+    // @ts-ignore – provided by spread laserEyes context
     hasWizz,
+    // @ts-ignore – provided by spread laserEyes context
     hasOrange,
+    // @ts-ignore – provided by spread laserEyes context
     hasOpNet,
-  } = lasereyesMiddleware(useLaserEyes());
+  } = useWallet() as any;
   const [isOpen, setIsOpen] = useState(false);
 
   const hasWallet = {
@@ -63,12 +75,8 @@ export default function ConnectWalletModal({ className, isMobile = false }: { cl
   const handleConnect = async (
     walletName: ProviderType
   ) => {
-    if (provider === walletName) {
-      await disconnect();
-    } else {
-      setIsOpen(false);
-      await connect(walletName as never);
-    }
+    setIsOpen(false);
+    await finalizeConnect(walletName);
   };
 
 

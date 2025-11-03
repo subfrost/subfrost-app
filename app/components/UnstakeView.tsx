@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card'
 import { RiCoinsFill } from 'react-icons/ri'
 import { UnstakeConfirmationModal } from './UnstakeConfirmationModal'
-import { useBalances } from "../contexts/BalancesContext";
 import { FrBTC, DxBTC, DxFROST } from './TokenNames'
 
 interface UnstakeViewProps {
@@ -18,13 +17,12 @@ export function UnstakeView({ showBtcOnly, showFrostOnly }: UnstakeViewProps = {
   const [amount, setAmount] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [dxBTCOutputToken, setDxBTCOutputToken] = useState("BTC") // Toggle between BTC and frBTC
-  const { balances, formattedBalances } = useBalances();
-  const dxFROSTBalance = formattedBalances.dxFROST; // This should be fetched from your state management solution
+  const dxFROSTBalance = "0.0000";
 
   // New state for dxBTC unstaking
   const [dxBTCAmount, setDxBTCAmount] = useState('')
   const [isDxBTCModalOpen, setIsDxBTCModalOpen] = useState(false)
-  const dxBTCBalance = formattedBalances.dxFROST || "0.0000"; // Using dxFROST as placeholder, should be dxBTC
+  const dxBTCBalance = "0.00000000"; // placeholder until dxBTC hook
 
   const handleUnstake = () => {
     setIsModalOpen(true)

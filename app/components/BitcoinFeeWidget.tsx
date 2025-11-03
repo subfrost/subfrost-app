@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { provider } from "../contexts/regtest";
 import { FaBitcoin } from 'react-icons/fa'
 import { getTextOutlineStyle } from '../utils/styleUtils'
 
