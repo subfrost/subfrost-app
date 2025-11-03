@@ -19,6 +19,11 @@ const nextConfig = {
       type: 'webassembly/async',
     })
 
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+    };
+
     return config
   },
 }
