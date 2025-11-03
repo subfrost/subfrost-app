@@ -15,16 +15,18 @@ export function TokenSelect({
   onChange,
   placeholder = 'Select token',
   className,
+  onOpenChange,
 }: {
   value: string | null;
   options: TokenOption[];
   onChange: (id: string) => void;
   placeholder?: string;
   className?: string;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const selected = options.find((o) => o.id === value);
   return (
-    <Select value={value ?? ''} onValueChange={onChange}>
+    <Select value={value ?? ''} onValueChange={onChange} onOpenChange={onOpenChange}>
       <SelectTrigger className={className}>
         {selected ? (
           <div className="flex items-center gap-2">

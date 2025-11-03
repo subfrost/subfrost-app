@@ -12,6 +12,17 @@ export function PoolStats({ sellId, buyId }: { sellId?: string | null; buyId?: s
   const { data: btc } = useBtcPrice();
 
   if (!sellId || !buyId) return null;
+  if (!poolId) {
+    return (
+      <div className="rounded-md border border-white/10 p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <Skeleton className="h-4 w-full" />
+      </div>
+    );
+  }
 
   if (isLoading || !details) {
     return (

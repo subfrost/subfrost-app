@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowUpDown, Settings } from 'lucide-react';
@@ -60,7 +60,8 @@ export function SwapHeader({
 
   // Buy options derive from pairs against current sell token (or FRBTC when selling BTC)
   const sellIdForPairs = controller.state.sellCurrency === 'btc' ? FRBTC_ALKANE_ID : (controller.state.sellCurrency ?? '');
-  const { data: pairs } = useAlkanesTokenPairs(sellIdForPairs, 100, 0, undefined, undefined);
+  const [isBuyOpen, setIsBuyOpen] = useState(false);
+  const { data: pairs } = useAlkanesTokenPairs(sellIdForPairs, 100, 0, undefined, undefined, isBuyOpen);
   const buyOptions: TokenOption[] = useMemo(() => {
     const opts: TokenOption[] = [];
     if (!pairs) return opts;
@@ -97,16 +98,25 @@ export function SwapHeader({
 
   // Apply externally selected pair
   useEffect(() => {
-    if (presetPair?.sell) controller.setSellCurrency(presetPair.sell);
-    if (presetPair?.buy) controller.setBuyCurrency(presetPair.buy);
+    if (presetPair?.sell && presetPair.sell !== controller.state.sellCurrency) {
+      controller.setSellCurrency(presetPair.sell);
+    }
+    if (presetPair?.buy && presetPair.buy !== controller.state.buyCurrency) {
+      controller.setBuyCurrency(presetPair.buy);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetPair?.sell, presetPair?.buy]);
 
   // Notify parent when pair changes
+  const lastEmitted = useRef<string | null>(null);
   useEffect(() => {
-    if (onPairChange && controller.state.sellCurrency && controller.state.buyCurrency) {
-      onPairChange(controller.state.sellCurrency, controller.state.buyCurrency);
-    }
+    const sell = controller.state.sellCurrency;
+    const buy = controller.state.buyCurrency;
+    if (!sell || !buy || !onPairChange) return;
+    const key = `${sell}->${buy}`;
+    if (lastEmitted.current === key) return;
+    lastEmitted.current = key;
+    onPairChange(sell, buy);
   }, [controller.state.sellCurrency, controller.state.buyCurrency]);
 
   const { mutate: swap, isPending } = useSwapMutation();
@@ -155,6 +165,7 @@ export function SwapHeader({
             value={st.buyCurrency ?? ''}
             options={buyOptions}
             onChange={(id) => controller.setBuyCurrency(id)}
+            onOpenChange={(open) => setIsBuyOpen(open)}
             className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md text-sm h-10 w-44 token-button-text"
           />
         </div>

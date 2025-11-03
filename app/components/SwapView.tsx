@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { LPComponent } from './LPComponent'
+import dynamic from 'next/dynamic'
+const LazyLPComponent = dynamic(() => import('./LPComponent').then(m => m.LPComponent), { ssr: false, loading: () => <div className="py-8 text-center text-sm text-muted-foreground">Loading LP…</div> })
 import { SwapSettingsModal } from './SwapSettingsModal'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
@@ -53,7 +54,16 @@ export function SwapView() {
             ) : null}
             <TabsContent value="swap">
               <div className="space-y-6">
-                <SwapHeader slippage={slippage} onOpenSettings={() => setIsSettingsOpen(true)} presetPair={selectedPair} onPairChange={(sell, buy) => setSelectedPair({ sell, buy })} />
+                <SwapHeader 
+                  slippage={slippage} 
+                  onOpenSettings={() => setIsSettingsOpen(true)} 
+                  presetPair={selectedPair} 
+                  onPairChange={(sell, buy) => {
+                    if (!selectedPair || selectedPair.sell !== sell || selectedPair.buy !== buy) {
+                      setSelectedPair({ sell, buy })
+                    }
+                  }}
+                />
                 <PoolStats sellId={selectedPair?.sell} buyId={selectedPair?.buy} />
                 <div>
                   <h3 className="retro-text text-sm text-blue-600 mb-2"><span className="white-outline-text">Markets</span></h3>
@@ -63,7 +73,7 @@ export function SwapView() {
             </TabsContent>
             <TabsContent value="lp">
               {isConnected && (
-                <LPComponent 
+                <LazyLPComponent 
                   slippage={slippage} 
                   onOpenSettings={() => setIsSettingsOpen(true)}
                   onBurnConfirm={handleBurnConfirm}

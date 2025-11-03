@@ -23,12 +23,13 @@ export function useAlkanesTokenPairs(
   offset?: number,
   sortBy?: 'tvl' | undefined,
   searchQuery?: string,
+  enabled: boolean = true,
 ) {
   const api = useApiProvider();
   const { network } = useWallet();
   const { ALKANE_FACTORY_ID } = getConfig(network);
   return useQuery({
-    enabled: !!alkaneId,
+    enabled: !!alkaneId && enabled,
     queryKey: ['alkanesTokenPairs', alkaneId, limit, offset, sortBy, searchQuery, network],
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
