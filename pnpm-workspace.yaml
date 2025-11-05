@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - cbor-extract
+  - esbuild
+  - secp256k1
+  - sharp
+  - unrs-resolver
