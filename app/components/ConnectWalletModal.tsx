@@ -1,65 +1,52 @@
-"use client";
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ChevronRight } from "lucide-react";
+'use client';
 
+import { ChevronRight } from 'lucide-react';
 import {
-  MAGIC_EDEN,
-  WalletIcon,
-  SUPPORTED_WALLETS,
   LaserEyesLogo,
-  ProviderType,
-} from "@omnisat/lasereyes-react";
-import { useWallet } from "../contexts/WalletContext";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-import Link from "next/link";
-import { PixelSprite } from "./PixelSprite";
-import Image from "next/image";
-import { FaSnowflake } from "react-icons/fa";
-import { DialogClose } from "@radix-ui/react-dialog";
+  MAGIC_EDEN,
+  SUPPORTED_WALLETS,
+  WalletIcon,
+} from '@omnisat/lasereyes-react';
+import type { Network } from '@oyl/sdk';
 
-export default function ConnectWalletModal({ className, isMobile = false }: { className?: string, isMobile?: boolean }) {
+import { useWallet } from '@/context/WalletContext';
+
+type WalletMap = typeof SUPPORTED_WALLETS;
+type OptionalWalletMap = { [K in keyof WalletMap]?: WalletMap[K] };
+
+function getWallets(network: Network): Partial<WalletMap> {
+  const { oyl, ...others } = SUPPORTED_WALLETS;
+  const filtered: OptionalWalletMap = { ...others };
+  delete filtered.phantom;
+  delete filtered.wizz;
+  delete filtered.orange;
+  delete filtered.sparrow;
+  delete filtered.op_net;
+  delete filtered.leather;
+  return network === 'oylnet' ? { oyl } : { oyl, ...filtered };
+}
+
+export default function ConnectWalletModal() {
   const {
+    network,
+    isConnectModalOpen,
+    onConnectModalOpenChange,
     finalizeConnect,
-    disconnect,
-    // @ts-ignore – provided by spread laserEyes context
-    isConnecting,
-    // @ts-ignore – provided by spread laserEyes context
-    address,
-    // @ts-ignore – provided by spread laserEyes context
-    provider,
-    // @ts-ignore – provided by spread laserEyes context
     hasUnisat,
-    // @ts-ignore – provided by spread laserEyes context
     hasXverse,
-    // @ts-ignore – provided by spread laserEyes context
     hasOyl,
-    // @ts-ignore – provided by spread laserEyes context
     hasMagicEden,
-    // @ts-ignore – provided by spread laserEyes context
     hasOkx,
-    // @ts-ignore – provided by spread laserEyes context
-    hasLeather,
-    // @ts-ignore – provided by spread laserEyes context
-    hasPhantom,
-    // @ts-ignore – provided by spread laserEyes context
-    hasWizz,
-    // @ts-ignore – provided by spread laserEyes context
-    hasOrange,
-    // @ts-ignore – provided by spread laserEyes context
     hasOpNet,
-  } = useWallet() as any;
-  const [isOpen, setIsOpen] = useState(false);
+    hasLeather,
+    hasPhantom,
+    hasWizz,
+    hasOrange,
+  } = useWallet();
 
-  const hasWallet = {
+  if (!isConnectModalOpen) return null;
+
+  const hasWallet: any = {
     unisat: hasUnisat,
     xverse: hasXverse,
     oyl: hasOyl,
@@ -70,160 +57,103 @@ export default function ConnectWalletModal({ className, isMobile = false }: { cl
     phantom: hasPhantom,
     wizz: hasWizz,
     orange: hasOrange,
-  } as any
-
-  const handleConnect = async (
-    walletName: ProviderType
-  ) => {
-    setIsOpen(false);
-    await finalizeConnect(walletName);
   };
 
-
-
-  const [isMounted, setIsMounted] = useState<boolean>(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) return null;
+  const WALLETS = getWallets(network);
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      {address ? (
-        <Link href="/profile" className="flex items-center space-x-2 bg-blue-100 hover:bg-blue-50 rounded-full px-3 py-1">
-          <PixelSprite address={address} size={24} />
-          <span className="retro-text text-xs text-[#284372] truncate w-24">{address}</span>
-        </Link>
-      ) : (
-        <DialogTrigger asChild>
-          <Button
-            className={cn(
-              "retro-text text-xs text-[#284372] hover:text-white transition-all duration-200 hover:scale-[1.15] nav-link relative z-20 connect-wallet-btn",
-              isMobile ? "w-full justify-center" : "w-32 justify-center",
-              className
-            )}
-          >
-            <span className="white-outline-text">
-              {isConnecting ? "Connecting..." : "Connect Wallet"}
-            </span>
-          </Button>
-        </DialogTrigger>
-      )}
-      <DialogContent
-        className={cn(
-          "readable-text",
-          "text-black",
-          "rounded-3xl mx-auto",
-          "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
-          "w-[300px] max-h-[413px]",
-          "flex flex-col overflow-hidden p-0",
-          "bg-gradient-to-b from-blue-200 to-blue-50"
-        )}
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4"
+      onClick={() => onConnectModalOpenChange(false)}
+    >
+      <div
+        className="h-[80vh] max-h-[720px] w-[560px] max-w-[92vw] overflow-hidden rounded-3xl border border-white/10 bg-background"
+        onClick={(e) => e.stopPropagation()}
       >
-        <DialogHeader className="px-4 pt-4 pb-1.5">
-          <DialogTitle className="text-center flex flex-row gap-3 items-center justify-center font-regular text-[20px] font-medium text-blue-800">
-            <FaSnowflake className="text-blue-300" size={18} />
-            Connect Wallet
-            <FaSnowflake className="text-blue-300" size={18} />
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto scrollbar-hide px-4 relative -mt-1">
-          <DialogDescription className="flex flex-col gap-2 w-full">
-            {Object.values(SUPPORTED_WALLETS).map((wallet) => {
+        <div className="px-6 pt-4 pb-2">
+          <div className="ml-1 text-center text-xl font-medium leading-10">
+            Select your wallet
+          </div>
+        </div>
+
+        <div className="scrollbar-hide relative z-0 h-[calc(80vh-96px)] w-full overflow-y-auto px-6 pb-20">
+          <div className="flex w-full flex-col gap-2">
+            {Object.values(WALLETS).map((wallet) => {
               // @ts-ignore
               const isMissingWallet = !hasWallet[wallet.name];
               return (
-                <Button
+                <button
                   key={wallet.name}
                   onClick={
-                    isMissingWallet
-                      ? () => null
-                      : () => handleConnect(wallet.name)
+                    isMissingWallet ? undefined : () => finalizeConnect(wallet.name)
                   }
-                  variant="ghost"
-                  className={cn(
-                    'text-white',
-                    "font-normal justify-between",
-                    "h-[50px] text-sm rounded-xl px-4",
-                    "transition-colors duration-200",
-                    "bg-blue-500",
-                    "group"
-                  )}
+                  className="group flex w-full items-center justify-between rounded-md border border-white/10 bg-white/5 px-4 py-4 text-left transition-colors hover:bg-white/10"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="min-w-[25px] min-h-[25px] w-[25px] h-[25px] flex items-center justify-center">
+                    <div className="flex size-[32px] min-h-[32px] min-w-[32px] items-center justify-center">
                       <WalletIcon
-                        size={25}
+                        size={32}
+                        // @ts-ignore
                         walletName={wallet.name}
-                        className="!w-[25px] !h-[25px]"
+                        className="!h-[32px] !w-[32px]"
                       />
                     </div>
-                    <span className="text-xs retro-text">
-                      {wallet.name
-                        .replace(/[-_]/g, " ")
-                        .split(" ")
-                        .map(
-                          (word) =>
-                            word.charAt(0).toUpperCase() +
-                            word.slice(1).toLowerCase()
-                        )
-                        .join(" ")}
+                    <span className="retro-text text-sm">
+                      {
+                        // @ts-ignore
+                        String(wallet.name)
+                          .replace(/[-_]/g, ' ')
+                          .split(' ')
+                          .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                          .join(' ')
+                      }
                     </span>
                   </div>
-                  {hasWallet[wallet.name] ? (
-                    <div className="flex items-center justify-center">
-                      <div className="flex items-center gap-2 group-hover:hidden">
-                        <div className="w-2 h-2 rounded-full bg-blue-200"></div>
-                        <span className="text-xs text-blue-200 dark:text-gray-400">
-                          Installed
-                        </span>
-                      </div>
-                      <div className="text-black hidden group-hover:block text-xs">Connect</div>
-                      <ChevronRight className="w-8 h-8 text-black hidden group-hover:block" />
-                    </div>
-                  ) : (
+
+                  {isMissingWallet ? (
                     <a
+                      // @ts-ignore
                       href={wallet.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 text-blue-800 hover:text-blue-600"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <span className="text-xs">Install</span>
-                      <ChevronRight className="w-4 h-4" />
+                      <span className="text-sm">Install</span>
+                      <ChevronRight className="size-4" />
                     </a>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Connect</span>
+                      <ChevronRight className="size-4" />
+                    </div>
                   )}
-                </Button>
+                </button>
               );
             })}
-          </DialogDescription>
+          </div>
         </div>
 
-        <div className="w-full flex flex-col h-full items-center justify-center py-3 fixed bottom-0 text-[10px] dark:bg-gray-900  dark:border-gray-800 group relative">
-          <div className="text-blue-500 dark:text-gray-400 text-center retro-text absolute bottom-2 transition-opacity duration-300 ease-in-out opacity-100 group-hover:opacity-0">
-            <a
-              href="https://www.lasereyes.build/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+        <div className="group fixed bottom-3 left-1/2 -translate-x-1/2 text-[8px]">
+          <div className="retro-text text-center text-xs text-blue-500 opacity-100 transition-opacity duration-300 ease-in-out group-hover:opacity-0 dark:text-gray-400">
+            <a href="https://www.lasereyes.build/" target="_blank" rel="noopener noreferrer">
               Powered by LaserEyes
             </a>
           </div>
-          <div className=" transition-opacity bottom-1 duration-500 ease-in-out absolute opacity-0 group-hover:opacity-100">
+          <div className="absolute left-1/2 mt-1 -translate-x-1/2 opacity-0 transition-opacity duration-500 ease-in-out group-hover:opacity-100">
             <a
               href="https://www.lasereyes.build/"
               target="_blank"
               rel="noopener noreferrer"
               className="flex justify-center"
             >
-              <LaserEyesLogo width={30} color={"darkBlue"} />
+              <LaserEyesLogo width={48} color={'darkBlue'} />
             </a>
           </div>
         </div>
-      </DialogContent>
-
-    </Dialog>
+      </div>
+    </div>
   );
 }
+
+

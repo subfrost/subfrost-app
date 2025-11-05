@@ -1,5 +1,5 @@
-import { StakeView } from "./components/StakeView";
+import { redirect } from "next/navigation";
 
-export default () => {
-  return <StakeView />;
-};
+export default function Home() {
+  redirect("/earn");
+}

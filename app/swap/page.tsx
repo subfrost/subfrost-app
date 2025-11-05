@@ -1,6 +1,17 @@
-import { SwapView } from '../components/SwapView'
+import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
+import PageContent from '@/app/components/PageContent';
+import SwapShell from './SwapShell';
 
-export default function Swap() {
-  return <SwapView />
+export const metadata = { title: 'Swap' };
+
+export default function SwapPage() {
+  return (
+    <PageContent>
+      <AlkanesMainWrapper>
+        <SwapShell />
+      </AlkanesMainWrapper>
+    </PageContent>
+  );
 }
+
 

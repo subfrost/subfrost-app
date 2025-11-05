@@ -1,0 +1,7 @@
+import type { ReactNode } from 'react';
+
+export default function PageContent({ children }: { children: ReactNode }) {
+  return <div className="mx-auto w-full max-w-6xl px-2 sm:px-4 lg:px-0">{children}</div>;
+}
+
+
