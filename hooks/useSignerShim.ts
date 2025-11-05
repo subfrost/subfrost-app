@@ -1,0 +1,46 @@
+import { useWallet } from '@/context/WalletContext';
+import * as bitcoin from 'bitcoinjs-lib';
+import { ECPairFactory } from 'ecpair';
+import * as ecc from '@bitcoinerlab/secp256k1';
+import { useSandshrewProvider } from './useSandshrewProvider';
+
+const ECPair = ECPairFactory(ecc);
+bitcoin.initEccLib(ecc);
+
+export function useSignerShim() {
+  const { signPsbt, signPsbts } = useWallet();
+  const provider = useSandshrewProvider();
+
+  const finalizePsbt = (signedPsbtBase64: string | undefined) => {
+    if (!signedPsbtBase64) throw new Error('Failed to sign PSBT');
+    let psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: provider.network });
+    for (let i = 0; i < psbt.inputCount; i++) {
+      const input = psbt.data.inputs[i];
+      if (!input) throw new Error('input is undefined');
+      if (input.finalScriptWitness || input.finalScriptSig) continue;
+      psbt.finalizeInput(i);
+    }
+    return { signedPsbt: psbt.toBase64(), signedHexPsbt: psbt.toHex() };
+  };
+
+  const signerShim = {
+    signAllInputs: async ({ rawPsbt }: { rawPsbt: string }) => {
+      const signedPsbtResponse = await signPsbt(rawPsbt);
+      return finalizePsbt(signedPsbtResponse?.signedPsbtBase64);
+    },
+    signAllInputsMultiplePsbts: async ({ rawPsbts, rawPsbtsHex }: { rawPsbts?: string[]; rawPsbtsHex?: string[] }) => {
+      if (!rawPsbtsHex) {
+        if (!rawPsbts) throw new Error('Either rawPsbts or rawPsbtsHex must be provided');
+        rawPsbtsHex = rawPsbts.map((psbt) => Buffer.from(psbt, 'base64').toString('hex'));
+      }
+      const signedPsbtResponse = await signPsbts({ psbts: rawPsbtsHex });
+      const finalizedPsbts = signedPsbtResponse?.signedPsbts.map((res: any) => finalizePsbt(res.signedPsbtBase64));
+      return finalizedPsbts;
+    },
+    taprootKeyPair: ECPair.makeRandom({ network: provider.network }),
+  } as any;
+
+  return signerShim;
+}
+
+

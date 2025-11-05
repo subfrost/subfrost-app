@@ -1,702 +1,139 @@
-/* Satoshi font is loaded locally via next/font/local in layout.tsx */
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
-  --background: 220 100% 97%;
-  --foreground: 222.2 84% 4.9%;
-
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-
-  --primary: 201 96% 32%;
-  --primary-foreground: 210 40% 98%;
-
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
-
-  --radius: 0.5rem;
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
-.dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-satoshi);
+  --font-mono: var(--font-geist-mono);
 }
 
-html, body {
-  height: 100%;
-  width: 100%;
-  overflow-x: hidden;
-  margin: 0;
-  padding: 0;
-  position: relative;
-}
-
-/* Ensure the footer sticks to the bottom */
-html {
-  position: relative;
-  min-height: 100%;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
 }
 
 body {
-  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-satoshi), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Apple Color Emoji",
+    "Segoe UI Emoji";
 }
 
-body {
-  @apply bg-gradient-to-b from-blue-200 to-blue-50;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+/* Subfrost brand tokens */
+:root {
+  /* Background gradient tuned to match reference */
+  --sf-bg-start: #CDE2FF; /* slightly richer top blue */
+  --sf-bg-end: #F2F7FF;   /* very light bottom blue */
+
+  --sf-surface: #FFFFFF;  /* card surface */
+  --sf-text: #284372;     /* primary text */
+  --sf-muted: #6B7280;    /* captions */
+  --sf-primary: #284372;  /* CTA primary */
+  --sf-primary-pressed: #1f3a66;
+  --sf-outline: #D5DEF0;  /* borders/focus */
+
+  /* Glass variables (soft white/blue tint) */
+  --sf-glass-bg: rgba(240, 247, 255, 0.82);
+  --sf-glass-border: rgba(255, 255, 255, 0.55);
 }
 
-.retro-text {
-  font-family: 'Satoshi', sans-serif;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em; /* Stretch text horizontally by 5% */
+@theme inline {
+  --color-primary: var(--sf-primary);
+  --color-muted: var(--sf-muted);
+  --color-text: var(--sf-text);
+  --color-surface: var(--sf-surface);
+  --radius-lg: 14px;
 }
 
-/* Preserve case for specific tokens */
-.retro-text:not(.preserve-case) span:not(.token-name) {
-  text-transform: uppercase;
+/* Background gradient utility */
+.sf-bg {
+  background: linear-gradient(180deg, var(--sf-bg-start), var(--sf-bg-end));
 }
 
-/* Token names that should preserve their case */
-.token-name {
-  text-transform: none;
+/* Lightweight CSS stars overlay */
+.sf-stars {
+  background:
+    radial-gradient(1px 1px at 20% 30%, rgba(255, 255, 255, 0.9) 99%, transparent 100%),
+    radial-gradient(1px 1px at 60% 70%, rgba(255, 255, 255, 0.7) 99%, transparent 100%),
+    radial-gradient(1px 1px at 80% 20%, rgba(255, 255, 255, 0.6) 99%, transparent 100%),
+    radial-gradient(1px 1px at 35% 80%, rgba(255, 255, 255, 0.8) 99%, transparent 100%),
+    radial-gradient(1px 1px at 10% 60%, rgba(255, 255, 255, 0.7) 99%, transparent 100%),
+    radial-gradient(1px 1px at 45% 15%, rgba(255, 255, 255, 0.9) 99%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.6) 99%, transparent 100%),
+    radial-gradient(1px 1px at 25% 10%, rgba(255, 255, 255, 0.8) 99%, transparent 100%);
+  animation: sfDrift 36s linear infinite;
+  opacity: 0.7;
 }
 
-/* Token name styling */
-.token-name {
-  font-family: 'Satoshi', sans-serif !important;
-  text-transform: none !important;
-}
-.readable-text {
-  font-family: 'Satoshi', sans-serif;
-  font-weight: 400;
-  letter-spacing: normal;
-}
-/* Make card titles larger and bold */
-.card-title, h1, h2, h3, [class*="CardTitle"] {
-  font-size: 1.5em !important;
-  font-weight: 600 !important;
-}
-
-/* Target specific widget headers */
-div[class*="CardHeader"] [class*="CardTitle"] span,
-.CardTitle .flex-col span,
-.text-sm.md\:text-xl,
-span.text-sm.md\:text-xl,
-.whitespace-nowrap .text-sm.md\:text-xl,
-.flex-col .flex .text-sm.md\:text-xl,
-.flex-col .flex .whitespace-nowrap .text-sm.md\:text-xl {
-  font-size: 1.5em !important;
-  font-weight: 600 !important;
-  line-height: 1.2 !important;
-}
-
-/* Specifically target "Earn Yield with dxBTC" type headers */
-.flex-col div span.text-sm.md\:text-xl {
-  font-size: 1.5em !important;
-  font-weight: 600 !important;
-}
-
-/* Increase size and make bold the SUBFROST title in the header */
-a[href="/"].text-3xl {
-  font-size: 2.5rem !important;
-  font-weight: 900 !important;
-}
-
-/* Increase size and make bold specific widget titles */
-/* Target all card titles to ensure we catch the specific ones */
-.CardTitle .flex-col div span {
-  font-size: 1.75em !important;
-  font-weight: 600 !important;
-}
-
-/* Protocol Metrics */
-.FeeMandatesAndYieldChart .CardTitle {
-  font-size: 2em !important;
-  font-weight: 600 !important;
-}
-
-/* Specific targeting for StakeView, WrapView, and UnwrapView */
-.StakeView .CardTitle,
-.WrapView .CardTitle,
-.UnwrapView .CardTitle {
-  font-size: 1.75em !important;
-  font-weight: 600 !important;
-}
-
-/* Direct targeting for specific components */
-.retro-text.text-blue-600 {
-  font-size: 2em !important;
-  font-weight: 600 !important;
-}
-
-/* Increase icon sizes in headers */
-.CardTitle svg,
-.card-title svg,
-h1 svg, h2 svg, h3 svg {
-  transform: scale(1.5);
-}
-
-/* Make mobile navigation text larger and bold */
-.md\:hidden a,
-.md\:hidden button,
-.md\:hidden .retro-text {
-  font-size: 1.25em !important;
-  font-weight: 700 !important;
-}
-
-/* Set all buttons to the same size as BALANCES and CONNECT WALLET */
-button,
-.button,
-[class*="Button"],
-button.retro-text:not(.md\:hidden *):not(.navbar-size) {
-  font-size: 0.75rem !important; /* text-xs */
-}
-
-/* Make bottom action buttons match navbar link size */
-.navbar-size {
-  font-size: 1rem !important; /* text-base */
-}
-
-/* Make placeholder text white in the unwrap widget */
-.bg-blue-600::placeholder {
-  color: white !important;
-  opacity: 1 !important;
-}
-
-/* Make token button text match the size of non-adjustable token buttons */
-.token-button-text {
-  font-size: 1rem !important; /* text-base */
-}
-/* BitcoinFeeWidget should match the size of "Bitcoin Network Fee:" */
-.BitcoinFeeWidget,
-span[style*="font-size: 0.65rem"] {
-  font-size: 0.75rem !important; /* text-xs */
-}
-
-/* Remove outline from buttons when focused/selected */
-button:focus,
-.button:focus,
-[class*="Button"]:focus,
-button.retro-text:focus,
-[role="button"]:focus,
-a[role="button"]:focus,
-a.button:focus,
-.select-trigger:focus,
-[class*="SelectTrigger"]:focus,
-[data-state="open"],
-[data-state="focused"],
-[data-state="active"] {
-  outline: none !important;
-  box-shadow: none !important;
-  border-color: transparent !important;
-  ring-width: 0 !important;
-  ring-offset-width: 0 !important;
-}
-
-/* Remove ring from all interactive elements */
-*:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-  border-color: transparent !important;
-  ring-width: 0 !important;
-  ring-offset-width: 0 !important;
-}
-.frost-bg {
-  @apply bg-white bg-opacity-20 backdrop-filter backdrop-blur-lg;
-}
-
-/* Ensure frost-bg works properly on mobile devices */
-@media (max-width: 768px) {
-  .frost-bg {
-    background-color: rgba(255, 255, 255, 0.2) !important;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+@keyframes sfDrift {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0;
+  }
+  to {
+    background-position: 0 300px, 0 200px, 0 250px, 0 180px;
   }
 }
 
-.frost-border {
-  @apply border border-white border-opacity-30;
-}
-.nav-link {
-  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.25);
-}
-
-.nav-link:hover {
-  /* Remove shadow for sharper appearance */
+/* Focus ring helper */
+.sf-focus-ring:focus {
+  outline: 2px solid var(--sf-outline);
+  outline-offset: 2px;
 }
 
-/* Ensure content doesn't overflow on small screens */
-@media (max-width: 640px) {
-  .container {
-    width: 100%;
-    padding-left: 1rem;
-    padding-right: 1rem;
+/* Watermark background (SVG) */
+.sf-watermark {
+  background: url('/background/watermark-bg.svg') center -120px / 1200px auto no-repeat;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+/* CSS-only snow: three parallax layers using a tiled SVG */
+.sf-snow,
+.sf-snow::before,
+.sf-snow::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background-image: url('/background/snowflakes-bg.svg');
+  background-repeat: repeat;
+  background-size: 640px auto;
+  animation: sfSnow 60s linear infinite;
+}
+
+.sf-snow::before {
+  opacity: 0.55;
+  background-size: 520px auto;
+  animation-duration: 90s;
+}
+
+.sf-snow::after {
+  opacity: 0.35;
+  background-size: 420px auto;
+  animation-duration: 120s;
+}
+
+@keyframes sfSnow {
+  from {
+    background-position: 0 -320px;
+  }
+  to {
+    background-position: 0 960px;
   }
 }
 
-/* Mobile-specific styles */
-@media (max-width: 768px) {
-  /* Allow hover effects for navbar links and Connect Wallet button */
-  .nav-link:hover {
-    transform: scale(1.125) !important;
-    color: white !important;
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.5) !important;
+@media (prefers-reduced-motion: reduce) {
+  .sf-snow,
+  .sf-snow::before,
+  .sf-snow::after {
+    animation: none;
   }
-  
-  /* Special hover effect for dropdown button - only text color changes */
-  .nav-link-dropdown:hover {
-    transform: none !important;
-    color: white !important;
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.5) !important;
-    box-shadow: none !important;
-    background-color: transparent !important;
-  }
-  
-  /* Prevent background color changes for navbar elements on hover, except for Connect Wallet button */
-  .nav-link[class*="hover\:bg-blue-50"]:hover:not(button),
-  .nav-link[class*="hover\:bg-blue-100"]:hover:not(button),
-  button[class*="hover\:scale"]:hover:not([class*="hover\:bg-\[\#284372\]"]) {
-    background-color: transparent !important;
-  }
-  
-  /* Disable background color changes for other hover states, except for Connect Wallet button */
-  [class*="hover\:bg-blue-200"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
-  [class*="hover\:bg-blue-300"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
-  [class*="hover\:bg-blue-400"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
-  [class*="hover\:bg-blue-500"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
-  [class*="hover\:bg-blue-600"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
-  [class*="hover\:bg-blue-700"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
-  [class*="hover\:bg-blue-800"]:hover:not([class*="hover\:bg-\[\#284372\]"]),
-  [class*="hover\:bg-blue-900"]:hover:not([class*="hover\:bg-\[\#284372\]"]) {
-    background-color: transparent !important;
-  }
-  
-  /* Ensure Connect Wallet button background color works on mobile */
-  button.nav-link[class*="hover\:bg-\[\#284372\]"]:hover {
-    background-color: #284372 !important;
-  }
-  
-  /* Active state for navbar links */
-  .nav-link.active,
-  .nav-link[aria-current="page"] {
-    transform: scale(1.05) !important;
-    animation: whiteFlash 1s ease-out;
-  }
-  
-  /* Special styling for the dropdown button - no scaling, shadow, or animation */
-  .nav-link-dropdown.active,
-  .nav-link-dropdown[aria-current="page"] {
-    transform: none !important;
-    /* No animation */
-  }
-  
-  .nav-link-dropdown:hover {
-    transform: none !important;
-    box-shadow: none !important;
-  }
-  
-  /* Animation for the white flash effect */
-  @keyframes whiteFlash {
-    0% {
-      color: white;
-      text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
-    }
-    100% {
-      color: #284372;
-      text-shadow: none;
-    }
-  }
-  
-}
-
-/* Override SVG icon colors except for text-blue-50 */
-svg.text-blue-100,
-svg.text-blue-200,
-svg.text-blue-300,
-svg.text-blue-400,
-svg.text-blue-500,
-svg.text-blue-600,
-svg.text-blue-700,
-svg.text-blue-800,
-svg.text-blue-900,
-[class*="text-blue"]:not(.text-blue-50) svg {
-  color: #284372 !important;
-  fill: #284372 !important;
-}
-
-/* Ensure SVG icons in text-blue-50 elements are properly displayed */
-.text-blue-50 svg {
-  color: rgb(239 246 255) !important;
-  fill: rgb(239 246 255) !important;
-}
-
-/* Override hover states for links and buttons - except for navbar elements */
-.hover\:text-blue-100:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-200:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-300:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-400:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-500:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-600:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-700:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-800:hover:not(.nav-link):not(.nav-link *),
-.hover\:text-blue-900:hover:not(.nav-link):not(.nav-link *) {
-  color: #284372 !important;
-}
-
-/* Override background colors with blue tones - except for blue-100 and blue-50 */
-.bg-blue-200,
-.bg-blue-300,
-.bg-blue-400,
-.bg-blue-500,
-.bg-blue-600,
-.bg-blue-700,
-.bg-blue-800,
-.bg-blue-900 {
-  background-color: rgba(40, 67, 114, var(--tw-bg-opacity)) !important;
-}
-
-/* Override hover background colors - except for blue-100 and blue-50 */
-.hover\:bg-blue-200:hover,
-.hover\:bg-blue-300:hover,
-.hover\:bg-blue-400:hover,
-.hover\:bg-blue-500:hover,
-.hover\:bg-blue-600:hover,
-.hover\:bg-blue-700:hover,
-.hover\:bg-blue-800:hover,
-.hover\:bg-blue-900:hover {
-  background-color: rgba(40, 67, 114, var(--tw-bg-opacity)) !important;
-}
-
-/* Override border colors with blue tones */
-.border-blue-100,
-.border-blue-200,
-.border-blue-300,
-.border-blue-400,
-.border-blue-500,
-.border-blue-600,
-.border-blue-700,
-.border-blue-800,
-.border-blue-900 {
-  border-color: rgba(40, 67, 114, var(--tw-border-opacity)) !important;
-}
-
-/* Add padding to the bottom of the page on mobile to prevent content from being obscured by OS gesture widgets */
-@media (max-width: 768px) {
-  .mobile-bottom-padding {
-    padding-bottom: 3rem; /* Reduced padding to minimize space */
-  }
-}
-/* Override all blue text colors to #284372 except text-blue-50 */
-.text-blue-100,
-.text-blue-200,
-.text-blue-300,
-.text-blue-400,
-.text-blue-500,
-.text-blue-600,
-.text-blue-700,
-.text-blue-800,
-.text-blue-900 {
-  color: #284372 !important;
-}
-
-/* Override any inline styles with blue colors except text-blue-50 */
-[style*="color: blue"],
-[style*="color:#"],
-[class*="text-blue"]:not(.text-blue-50) {
-  color: #284372 !important;
-}
-
-/* Ensure text-blue-50 is properly displayed */
-.text-blue-50 {
-  color: rgb(239 246 255) !important; /* This is the blue-50 color value */
-}
-/* Override TabsTrigger active state background color */
-[data-state=active].data-\[state\=active\]\:bg-blue-800,
-[data-state=active].data-\[state\=active\]\:bg-\[\#284372\] {
-  background-color: #284372 !important;
-}
-
-/* Style for unselected options in sliding buttons */
-button.text-\[\#284372\],
-[data-state=inactive].retro-text {
-  color: #284372 !important;
-  background-color: white !important;
-}
-
-/* Style for stake/unstake and add/remove toggle buttons */
-.w-52.h-8 {
-  background-color: hsl(var(--muted)) !important; /* bg-muted - same as WRAP/UNWRAP and SWAP/LP buttons */
-  border-radius: 0.375rem !important; /* rounded-md */
-  padding: 0.25rem !important; /* p-1 */
-  gap: 0.25rem !important; /* gap-1 */
-  height: 2rem !important; /* h-8 */
-}
-
-/* Ensure TabsTrigger has correct styling */
-[role="tab"] {
-  border-radius: 0.375rem !important; /* rounded-md */
-  font-size: 0.75rem !important; /* text-xs */
-  padding: 0.25rem 0.5rem !important; /* px-2 py-1 */
-  min-height: unset !important;
-  height: 1.5rem !important;
-}
-
-/* Fix background color for inactive tabs */
-[data-state=inactive] {
-  background-color: white !important;
-}
-
-
-/* Force visibility for the snowflake icon */
-.force-visible {
-  color: #284372 !important;
-  fill: #284372 !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  display: inline-block !important;
-  z-index: 100 !important;
-  position: relative !important;
-}
-
-/* Ensure snowflake is visible on desktop screens */
-@media (min-width: 768px) {
-  .force-visible {
-    display: inline-block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-  }
-  
-  svg.force-visible {
-    display: inline-block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-  }
-}
-
-/* Override any SVG color rules for the force-visible class */
-svg.force-visible {
-  color: #284372 !important;
-  fill: #284372 !important;
-  display: inline-block !important;
-  visibility: visible !important;
-}
-
-/* Specifically target the snowflake in the navbar */
-.hidden.md\:flex .force-visible {
-  display: inline-block !important;
-  visibility: visible !important;
-}
-
-/* Style for buttons with bg-transparent class, except for toggle buttons */
-button[class*="bg-transparent"]:not([class*="text-[#284372]"]) {
-  background-color: transparent !important;
-  background: transparent !important;
-}
-
-/* Ensure the FROST hover effect works properly */
-.frost-hover-effect {
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.frost-hover-effect:hover {
-  color: #284372 !important;
-}
-
-/* Override any mobile-specific rules that might disable hover effects */
-@media (max-width: 768px) {
-  .frost-hover-effect:hover {
-    background-color: inherit !important;
-    color: #284372 !important;
-  }
-  
-  /* Ensure the gradient background is visible on mobile */
-  .mobile-gradient-bg {
-    background: linear-gradient(to bottom, #bfdbfe, #eff6ff) !important;
-    background-color: #bfdbfe !important;
-  }
-  
-  /* Ensure the canvas is visible on mobile */
-  canvas.fixed {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    z-index: -1 !important;
-  }
-  
-  /* Remove animation on token buttons when clicked on mobile */
-  .text-white.bg-blue-600.hover\:bg-blue-700,
-  .text-white.bg-blue-600.hover\:bg-blue-700:active,
-  .text-white.bg-blue-600.hover\:bg-blue-700:focus,
-  .text-white.bg-blue-600.hover\:bg-blue-700:hover {
-    background-color: #284372 !important;
-    color: white !important;
-    transition: none !important;
-    animation: none !important;
-  }
-  
-  /* Specifically target SelectTrigger buttons in stake and swap widgets */
-  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700,
-  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700:active,
-  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700:focus,
-  [class*="SelectTrigger"].text-white.bg-blue-600.hover\:bg-blue-700:hover {
-    background-color: #284372 !important;
-    color: white !important;
-    transition: none !important;
-    animation: none !important;
-  }
-  
-  /* Target non-SelectTrigger token buttons in the "You'll Receive:" section */
-  div.text-white.bg-blue-600.hover\:bg-blue-700,
-  div.text-white.bg-blue-600.hover\:bg-blue-700:active,
-  div.text-white.bg-blue-600.hover\:bg-blue-700:focus,
-  div.text-white.bg-blue-600.hover\:bg-blue-700:hover {
-    background-color: #284372 !important;
-    color: white !important;
-    transition: none !important;
-    animation: none !important;
-  }
-  
-  /* Ensure buttons maintain color when pressed (active/focus-visible states) */
-  @media (max-width: 768px) {
-    /* Target the "Switch Direction" button on the swap widget */
-    button.retro-text.bg-blue-600.hover\:bg-blue-700,
-    button.retro-text.bg-blue-600.hover\:bg-blue-700:active,
-    button.retro-text.bg-blue-600.hover\:bg-blue-700:focus,
-    button.retro-text.bg-blue-600.hover\:bg-blue-700:hover {
-      background-color: #284372 !important;
-      color: white !important;
-      transition: none !important;
-      animation: none !important;
-    }
-    
-    .text-white.bg-blue-600:active,
-    .text-white.bg-blue-600:focus-visible,
-    .text-white.bg-blue-600.hover\:bg-blue-700:active,
-    .text-white.bg-blue-600.hover\:bg-blue-700:focus-visible,
-    button.retro-text.bg-blue-600:active,
-    button.retro-text.bg-blue-600:focus-visible,
-    button.retro-text.bg-blue-600.hover\:bg-blue-700:active,
-    button.retro-text.bg-blue-600.hover\:bg-blue-700:focus-visible {
-      background-color: #284372 !important;
-      color: white !important;
-      transition: none !important;
-      animation: none !important;
-      -webkit-tap-highlight-color: transparent !important;
-    }
-  }
-}
-
-/* Mobile gradient background class */
-.mobile-gradient-bg {
-  background: linear-gradient(to bottom, #bfdbfe, #eff6ff) !important;
-  background-color: #bfdbfe !important;
-}
-
-/* Ensure white outline is visible on text */
-.white-outline-text {
-  text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
-  position: relative !important;
-  z-index: 10 !important;
-}
-
-/* Ensure white outline is visible on icons */
-.white-outline-icon {
-  filter: drop-shadow(0 0 2px #ffffff) drop-shadow(0 0 6px rgba(255, 255, 255, 0.8)) !important;
-  position: relative !important;
-  z-index: 10 !important;
-}
-
-/* Override any conflicting text-shadow styles */
-.nav-link.white-outline-text,
-.retro-text.white-outline-text,
-.readable-text.white-outline-text,
-[class*="CardTitle"].white-outline-text,
-h1.white-outline-text,
-h2.white-outline-text,
-h3.white-outline-text,
-label.white-outline-text,
-span.white-outline-text,
-p.white-outline-text {
-  text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
-}
-
-/* Override hover states */
-.white-outline-text:hover,
-.nav-link.white-outline-text:hover,
-.retro-text.white-outline-text:hover {
-  text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
-}
-
-/* Mobile-specific overrides */
-@media (max-width: 768px) {
-  .white-outline-text,
-  .nav-link.white-outline-text,
-  .retro-text.white-outline-text,
-  .white-outline-text:hover,
-  .nav-link.white-outline-text:hover,
-  .retro-text.white-outline-text:hover {
-    text-shadow: 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 2px #ffffff, 0 0 10px rgba(255, 255, 255, 0.8) !important;
-  }
-}
-
-/* Specific styling for Connect Wallet button to ensure hover animation works */
-.connect-wallet-btn:hover {
-  background-color: transparent !important;
-  transform: scale(1.15) !important;
-  color: white !important;
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.5) !important;
-}
-
-/* Override any conflicting rules for Connect Wallet button */
-button[class*="hover\\:scale"].connect-wallet-btn:hover {
-  background-color: transparent !important;
 }
