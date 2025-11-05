@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { AlkanesTokenPairsResult } from '@oyl/api-provider/lib/apiclient/types';
+import type { AlkanesTokenPairsResult } from '@/lib/api-provider/apiclient/types';
 
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { getConfig } from '@/utils/getConfig';

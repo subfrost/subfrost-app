@@ -25,6 +25,9 @@
     "use-debounce": "^10.0.6"
   },
   "devDependencies": {
+    "@noble/curves": "^2.0.1",
+    "@scure/base": "^2.0.0",
+    "@scure/btc-signer": "^2.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

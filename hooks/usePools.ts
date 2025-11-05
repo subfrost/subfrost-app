@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { AllPoolsDetailsResult } from '@oyl/api-provider/lib/apiclient/types';
+import type { AllPoolsDetailsResult } from '@/lib/api-provider/apiclient/types';
 
 import { useWallet } from '@/context/WalletContext';
 import { useApiProvider } from '@/hooks/useApiProvider';

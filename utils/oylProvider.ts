@@ -1,4 +1,4 @@
-import { OylApiClient } from '@oyl/api-provider';
+import { OylApiClient } from '@/lib/api-provider';
 import type { Network } from '@oyl/sdk';
 import { Provider } from '@oyl/sdk';
 
