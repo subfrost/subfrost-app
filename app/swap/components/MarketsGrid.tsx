@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { PoolSummary } from "../types";
 
 type Props = {
@@ -6,11 +7,15 @@ type Props = {
 };
 
 export default function MarketsGrid({ pools, onSelect }: Props) {
+  const [showAll, setShowAll] = useState(false);
+  const displayedPools = showAll ? pools : pools.slice(0, 9);
+  const hasMore = pools.length > 9;
+
   return (
     <div className="mt-6">
       <h2 className="mb-3 text-2xl font-extrabold tracking-wide text-[color:var(--sf-text)]">MARKETS</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {pools.map((p) => (
+        {displayedPools.map((p) => (
           <button
             key={p.id}
             onClick={() => onSelect(p)}
@@ -27,6 +32,16 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
           </button>
         ))}
       </div>
+      {hasMore && !showAll && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={() => setShowAll(true)}
+            className="rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] px-6 py-2 font-semibold text-[color:var(--sf-text)] transition hover:bg-white/10 sf-focus-ring"
+          >
+            See More
+          </button>
+        </div>
+      )}
     </div>
   );
 }
