@@ -58,17 +58,17 @@ export default function SwapShell() {
     return map;
   }, [userCurrencies]);
 
-  // Default from/to tokens
+  // Default from/to tokens: BTC → frBTC
   useEffect(() => {
     if (!fromToken) setFromToken({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
   }, [fromToken]);
   const toInitializedRef = useRef(false);
   useEffect(() => {
     if (!toInitializedRef.current && !toToken) {
-      setToToken({ id: BUSD_ALKANE_ID, symbol: 'bUSD', name: 'bUSD' });
+      setToToken({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
       toInitializedRef.current = true;
     }
-  }, [toToken, BUSD_ALKANE_ID]);
+  }, [toToken, FRBTC_ALKANE_ID]);
 
   // Build FROM options: BTC + all user-held tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
@@ -191,10 +191,10 @@ export default function SwapShell() {
   };
 
   return (
-    <div className="flex w-full flex-col gap-6">
-      <section className="relative mx-auto w-full max-w-[520px] rounded-[22px] border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-8 shadow-[0_8px_36px_rgba(40,67,114,0.14)] backdrop-blur-md">
+    <div className="flex w-full flex-col gap-8">
+      <section className="relative mx-auto w-full max-w-[540px] rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
         {isBalancesLoading && <LoadingOverlay />}
-        <div className="mb-4 flex w-full items-center justify-center">
+        <div className="mb-6 flex w-full items-center justify-center">
           <SwapHeaderTabs />
         </div>
         <SwapInputs

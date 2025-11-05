@@ -46,12 +46,16 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   }
 
   return (
-    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 text-sm text-[color:var(--sf-text)]">
+    <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-4 text-sm backdrop-blur-sm transition-all">
       {isCalculating ? (
         <SkeletonLines />
       ) : quote ? (
         <>
-          <Row label="Exchange Rate" value={`1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate)} ${buyName ?? buyId}`} />
+          <Row 
+            label="Exchange Rate" 
+            value={`1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate)} ${buyName ?? buyId}`}
+            highlight
+          />
           {direction === 'sell' ? (
             <Row label="Minimum Received" value={`${formatAlks(quote.minimumReceived)} ${buyName ?? buyId}`} />
           ) : (
@@ -65,21 +69,25 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-[color:var(--sf-text)]/70">{label}</span>
-      <span className="text-[color:var(--sf-text)]">{value}</span>
+      <span className={`text-xs font-semibold uppercase tracking-wider ${highlight ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/60'}`}>
+        {label}
+      </span>
+      <span className={`font-semibold ${highlight ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}>
+        {value}
+      </span>
     </div>
   );
 }
 
 function SkeletonLines() {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="h-4 w-full animate-pulse rounded bg-white/10" />
-      <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
-      <div className="h-4 w-1/2 animate-pulse rounded bg-white/10" />
+    <div className="flex flex-col gap-2.5 animate-in fade-in duration-300">
+      <div className="h-4 w-full animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
+      <div className="h-4 w-3/4 animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
+      <div className="h-4 w-2/3 animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
     </div>
   );
 }

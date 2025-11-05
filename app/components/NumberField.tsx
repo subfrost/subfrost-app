@@ -8,7 +8,7 @@ export default function NumberField({ placeholder = "0.00", disabled = false, al
       disabled={disabled}
       value={value}
       onChange={(e) => onChange?.(e.target.value)}
-      className={`h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 ${alignClass} text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] disabled:opacity-60 sf-focus-ring`}
+      className={`h-11 w-full rounded-lg border-0 bg-transparent px-0 ${alignClass} text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/20 disabled:opacity-60 focus:outline-none transition-all`}
     />
   );
 }
