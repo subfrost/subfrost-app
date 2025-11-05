@@ -27,9 +27,9 @@ export default function PoolDetailsCard({ pool }: { pool?: PoolSummary }) {
             {formatUsd(pool.tvlUsd)}
           </div>
           <div className="mt-1.5 inline-flex items-center gap-2 text-sm font-bold text-[color:var(--sf-text)]">
-            <TokenIcon symbol={pool.token0.symbol} id={pool.token0.id} size="sm" network={network} />
+            <TokenIcon symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="sm" network={network} />
             <span>/</span>
-            <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} size="sm" network={network} />
+            <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="sm" network={network} />
             <span>{pool.pairLabel}</span>
           </div>
         </div>

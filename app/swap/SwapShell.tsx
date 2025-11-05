@@ -72,13 +72,25 @@ export default function SwapShell() {
 
   // Build FROM options: BTC + all user-held tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
-    const opts: TokenMeta[] = [{ id: 'btc', symbol: 'BTC', name: 'Bitcoin' }];
+    const opts: TokenMeta[] = [{ id: 'btc', symbol: 'BTC', name: 'Bitcoin' }]; // BTC uses local icon
     userCurrencies.forEach((c: any) => {
-      opts.push({ id: c.id, symbol: c.symbol || (c.name ?? c.id), name: c.name || c.symbol || c.id });
+      // Generate Oyl asset URL for alkane tokens (note: asset.oyl.gg, not assets)
+      let iconUrl: string | undefined;
+      if (/^\d+:\d+/.test(c.id)) {
+        const urlSafeId = c.id.replace(/:/g, '-');
+        iconUrl = `https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`;
+      }
+      
+      opts.push({ 
+        id: c.id, 
+        symbol: c.symbol || (c.name ?? c.id), 
+        name: c.name || c.symbol || c.id,
+        iconUrl
+      });
     });
     const seen = new Set<string>();
     return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
-  }, [userCurrencies]);
+  }, [userCurrencies, network]);
 
   // Build TO options based on selected FROM: tokens that have pool with FROM
   const normalizedFromId = useMemo(() =>
@@ -102,14 +114,30 @@ export default function SwapShell() {
       const fetched = tokenDisplayMap?.[other];
       const symbol = userMeta?.symbol || fetched?.symbol || fetched?.name || other;
       const name = userMeta?.name || fetched?.name || symbol;
-      opts.push({ id: other, symbol, name });
+      
+      // Generate Oyl asset URL for alkane tokens (note: asset.oyl.gg, not assets)
+      let iconUrl: string | undefined;
+      if (/^\d+:\d+/.test(other)) {
+        const urlSafeId = other.replace(/:/g, '-');
+        iconUrl = `https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`;
+      }
+      
+      opts.push({ id: other, symbol, name, iconUrl });
     });
     // Ensure bUSD is included initially when no FROM chosen; otherwise rely on pools list
-    if (!fromToken) opts.unshift({ id: BUSD_ALKANE_ID, symbol: 'bUSD', name: 'bUSD' });
+    if (!fromToken) {
+      const busdUrlSafe = BUSD_ALKANE_ID.replace(/:/g, '-');
+      opts.unshift({ 
+        id: BUSD_ALKANE_ID, 
+        symbol: 'bUSD', 
+        name: 'bUSD',
+        iconUrl: `https://asset.oyl.gg/alkanes/${network}/${busdUrlSafe}.png`
+      });
+    }
     // Unique by id
     const seen = new Set<string>();
     return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
-  }, [fromPairs, idToUserCurrency, normalizedFromId, fromToken, BUSD_ALKANE_ID, tokenDisplayMap]);
+  }, [fromPairs, idToUserCurrency, normalizedFromId, fromToken, BUSD_ALKANE_ID, tokenDisplayMap, network]);
 
   // Balances
   const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
@@ -190,6 +218,42 @@ export default function SwapShell() {
     });
   };
 
+  // Handle max balance click
+  const handleMaxFrom = () => {
+    if (!fromToken) return;
+    if (fromToken.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = sats / 1e8;
+      setDirection('sell');
+      setFromAmount(btc.toFixed(8));
+    } else {
+      const cur = idToUserCurrency.get(fromToken.id);
+      if (cur?.balance) {
+        const amt = Number(cur.balance) / 1e8;
+        setDirection('sell');
+        setFromAmount(amt.toFixed(8));
+      }
+    }
+  };
+
+  // Handle percentage of balance click
+  const handlePercentFrom = (percent: number) => {
+    if (!fromToken) return;
+    if (fromToken.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = (sats * percent) / 1e8;
+      setDirection('sell');
+      setFromAmount(btc.toFixed(8));
+    } else {
+      const cur = idToUserCurrency.get(fromToken.id);
+      if (cur?.balance) {
+        const amt = (Number(cur.balance) * percent) / 1e8;
+        setDirection('sell');
+        setFromAmount(amt.toFixed(8));
+      }
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-8">
       <section className="relative mx-auto w-full max-w-[540px] rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
@@ -230,7 +294,8 @@ export default function SwapShell() {
           toBalanceText={formatBalance(toToken?.id)}
           fromFiatText={"$0.00"}
           toFiatText={"$0.00"}
-          onMaxFrom={selectedPool ? () => {} : undefined}
+          onMaxFrom={fromToken ? handleMaxFrom : undefined}
+          onPercentFrom={fromToken ? handlePercentFrom : undefined}
           summary={
             <SwapSummary
               sellId={fromToken?.id ?? ''}
