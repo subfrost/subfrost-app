@@ -280,7 +280,7 @@ export class OylApiClient {
     return res.data;
   }
 
-  async getTaprootTxHistory(taprootAddress, totalTxs): Promise<any> {
+  async getTaprootTxHistory(taprootAddress: string, totalTxs: number): Promise<any> {
     const res = await this._call("/get-taproot-history", "post", {
       taprootAddress: taprootAddress,
       totalTxs: totalTxs,

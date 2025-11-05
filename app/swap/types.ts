@@ -15,4 +15,14 @@ export type PoolSummary = {
   apr?: number;
 };
 
+export type SwapQuote = {
+  sellAmount: string;
+  buyAmount: string;
+  displaySellAmount: string;
+  displayBuyAmount: string;
+  exchangeRate: string;
+  minimumReceived: string;
+  maximumSent: string;
+};
+
 

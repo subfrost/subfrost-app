@@ -14,44 +14,36 @@ import { processMagicEdenOffer } from './magic-eden'
 
 
 export async function processOffer (options: ProcessOfferOptions): Promise<ProcessOfferResponse>{
-    let swapResponse: ProcessOfferResponse
-    switch (marketplaceName[options.offer.marketplace]){
+    const marketplace = marketplaceName[options.offer.marketplace as keyof typeof marketplaceName]
+    switch (marketplace){
         case Marketplaces.UNISAT:
-            swapResponse = await processUnisatOffer(options);
-            break;
+            return await processUnisatOffer(options);
         case Marketplaces.ORDINALS_WALLET:
-            swapResponse = await processOrdinalsWalletOffer(options);
-            break
-        
+            return await processOrdinalsWalletOffer(options);
         case Marketplaces.MAGISAT:
-            swapResponse = await processMagisatOffer(options);
-            break;
+            return await processMagisatOffer(options);
         case Marketplaces.MAGIC_EDEN:
-            swapResponse = await processMagicEdenOffer(options);
-            break;
+            return await processMagicEdenOffer(options);
+        default:
+            throw new Error(`Unsupported marketplace: ${marketplace}`);
     }
-
-    return swapResponse
 }
 
 
 export async function processListing (options: ProcessListingOptions): Promise<ProcessListingResponse>{
-    let listingResponse: ProcessListingResponse
     switch (options.listing.marketplace){
         case Marketplaces.UNISAT:
-            listingResponse = await processUnisatListing(options);
-            break;
+            return await processUnisatListing(options);
         case Marketplaces.ORDINALS_WALLET:
             //swapResponse = await ordinalWalletSwap(options);
-            break
-        
+            throw new Error('Ordinals Wallet listing not implemented');
         case Marketplaces.MAGISAT:
             //swapResponse = await magisatSwap(options);
-            break;
+            throw new Error('Magisat listing not implemented');
         case Marketplaces.MAGIC_EDEN:
             //swapResponse = await magicEdenSwap(options);
-            break;
+            throw new Error('Magic Eden listing not implemented');
+        default:
+            throw new Error(`Unsupported marketplace: ${options.listing.marketplace}`);
     }
-
-    return listingResponse
 }

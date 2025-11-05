@@ -23,7 +23,7 @@ export async function processMagicEdenOffer({
     let dummyTxId: string | null = null;
     let purchaseTxId: string | null = null;
     const addressType = getAddressType(address);
-    const marketplaceType = marketplaceName[offer.marketplace]
+    const marketplaceType = marketplaceName[offer.marketplace as keyof typeof marketplaceName]
 
     const diffReceiveAddress = receiveAddress != address
 
@@ -37,23 +37,32 @@ export async function processMagicEdenOffer({
     if (Array.isArray(offer.offerId)) {
         nUtxos = offer.offerId.length + 1
         for (let i = 0; i < offer.offerId.length; i++) {
+            const price = Array.isArray(offer.totalPrice) ? (offer.totalPrice[i] || 0) : 0
+            const rawAmount = Array.isArray(offer.amount) ? offer.amount[i] : 1
+            const amount = typeof rawAmount === 'string' ? parseInt(rawAmount) : (typeof rawAmount === 'number' ? rawAmount : 1)
             orders.push({
                 orderId: offer.offerId[i],
-                price: offer.totalPrice[i],
-                amount: offer.amount[i],
+                price,
+                amount,
                 feeRate
             })
         }
     } else {
         nUtxos = 2;
+        const price = typeof offer.totalPrice === 'number' ? offer.totalPrice : 0
+        const rawAmount = offer.amount
+        const amount = typeof rawAmount === 'string' ? parseInt(rawAmount) : (typeof rawAmount === 'number' ? rawAmount : 1)
         orders.push({
             orderId: offer.offerId,
-            price: offer.totalPrice,
-            amount: offer.amount,
+            price,
+            amount,
             feeRate
         })
     }
 
+    if (!addressType) {
+        throw new Error('Invalid address type');
+    }
     const psbtForDummyUtxos =
         (assetType != AssetType.RUNES)
             ?
@@ -120,8 +129,11 @@ export async function processMagicEdenOffer({
     }
     const submitBuyerPsbt: SubmitBuyerPsbtResponse = submitBuyerPsbtResponse.data;
     purchaseTxId = submitBuyerPsbt.txid;
+    if (!purchaseTxId) {
+        throw new Error('Purchase transaction ID is missing');
+    }
     return {
-        dummyTxId,
+        dummyTxId: dummyTxId || '',
         purchaseTxId
     }
 }

@@ -4,8 +4,6 @@ import PageHeader from '@/app/components/PageHeader';
 import PageContent from '@/app/components/PageContent';
 import { useGlobalStore } from '@/stores/global';
 
-export const metadata = { title: 'Settings' };
-
 export default function SettingsPage() {
   const { maxSlippage, setMaxSlippage, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
 

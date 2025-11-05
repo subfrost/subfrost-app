@@ -142,7 +142,7 @@ export function getUTXOsToCoverAmount({
     }
     return []
   } catch (err) {
-    throw new Error(err)
+    throw new Error(String(err))
   }
 }
 
@@ -181,9 +181,9 @@ export function getBidCostEstimate(
 ): number {
   let costEstimate = 0
   for (let i = 0; i < offers?.length; i++) {
-    let offerPrice = offers[i]?.price ? offers[i].price : offers[i]?.totalPrice
+    const offerPrice = offers[i]?.price ? offers[i].price : offers[i]?.totalPrice
     costEstimate +=
-      offerPrice + parseInt((maxTxSizeForOffers * feeRate).toFixed(0))
+      (offerPrice || 0) + parseInt((maxTxSizeForOffers * feeRate).toFixed(0))
   }
   const totalCost = costEstimate
   return totalCost
@@ -202,7 +202,9 @@ export async function canAddressAffordBid({
 }: BidAffordabilityCheck): Promise<BidAffordabilityCheckResponse> {
   let insistConfirmedUtxos: boolean = true
   for (let i = 0; i < offers.length; i++) {
-    const mktPlace = marketplaceName[offers[i]?.marketplace]
+    const marketplace = offers[i]?.marketplace
+    if (!marketplace) continue
+    const mktPlace = marketplaceName[marketplace as keyof typeof marketplaceName]
     if (!CONFIRMED_UTXO_ENFORCED_MARKETPLACES.includes(mktPlace)) {
       insistConfirmedUtxos = false
       break
@@ -259,6 +261,9 @@ export async function selectSpendAddress({
         const selectedSpendAddress = address
         const selectedSpendPubkey = pubkey
         const addressType = getAddressType(selectedSpendAddress)
+        if (!addressType) {
+          throw new Error('Invalid address type')
+        }
         return {
           address: selectedSpendAddress,
           pubKey: selectedSpendPubkey,
@@ -268,22 +273,12 @@ export async function selectSpendAddress({
         }
       }
     }
-    if (i === account.spendStrategy.addressOrder.length - 1) {
-      throw new Error(
-        'Not enough (confirmed) satoshis available to buy marketplace offers, need  ' +
-          estimatedCost +
-          ' sats'
-      )
-    }
-
-    if (i === account.spendStrategy.addressOrder.length - 1) {
-      throw new Error(
-        'Not enough (confirmed) satoshis available to buy marketplace offers, need  ' +
-          estimatedCost +
-          ' sats'
-      )
-    }
   }
+  throw new Error(
+    'Not enough (confirmed) satoshis available to buy marketplace offers, need  ' +
+      estimatedCost +
+      ' sats'
+  )
 }
 
 export async function sanitizeFeeRate(
@@ -320,8 +315,9 @@ export async function prepareAddressForDummyUtxos({
     }
     return null
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
     throw new Error(
-      `An error occured while preparing address for dummy utxos ${err.message}`
+      `An error occured while preparing address for dummy utxos ${message}`
     )
   }
 }
@@ -353,7 +349,7 @@ export function dummyUtxosPsbt({
         hash: utxo.txId,
         index: utxo.outputIndex,
         witnessUtxo: {
-          value: utxo.satoshis,
+          value: BigInt(utxo.satoshis),
           script: Buffer.from(utxo.scriptPk, 'hex'),
         },
       },
@@ -370,10 +366,10 @@ export function dummyUtxosPsbt({
   for (let i = 0; i < nUtxos; i++) {
     txOutputs.push({
       address,
-      value: 600,
+      value: BigInt(600),
     })
   }
-  if (changeAmount > 0) changeOutput = { address, value: changeAmount }
+  if (changeAmount > 0) changeOutput = { address, value: BigInt(changeAmount) }
 
   return buildPsbtWithFee({
     inputTemplate: txInputs,
@@ -430,6 +426,9 @@ export async function updateUtxos({
         scriptPk: output.scriptpubkey,
         address: output.scriptpubkey_address,
         inscriptions: [],
+        runes: [],
+        alkanes: {},
+        indexed: true,
         confirmations: txInfo.status.confirmed ? 1 : 0,
       }
       updatedUtxos.push(newUtxo)
@@ -541,11 +540,17 @@ export function psbtTxAddressTypes({
       throw new Error('Invalid script')
     }
 
-    inputAddressTypes.push(getOutputFormat(witnessScript, network))
+    const inputType = getOutputFormat(Buffer.from(witnessScript), network)
+    if (inputType) {
+      inputAddressTypes.push(inputType)
+    }
   })
 
   psbtOutputs.forEach((output) => {
-    outputAddressTypes.push(getOutputFormat(output.script, network))
+    const outputType = getOutputFormat(Buffer.from(output.script), network)
+    if (outputType) {
+      outputAddressTypes.push(outputType)
+    }
   })
 
   return {
@@ -630,14 +635,18 @@ export function buildPsbtWithFee({
   const inputAddressTypes: AddressType[] = []
   const outputAddressTypes: AddressType[] = []
 
-  inputTemplate.forEach((input) =>
-    inputAddressTypes.push(getOutputFormat(input.witnessUtxo.script, network))
-  )
-  outputTemplate.forEach((output) =>
-    outputAddressTypes.push(getAddressType(output.address))
-  )
-  if (changeOutput != null)
-    outputAddressTypes.push(getAddressType(changeOutput.address))
+  inputTemplate.forEach((input) => {
+    const inputType = getOutputFormat(Buffer.from(input.witnessUtxo.script), network)
+    if (inputType) inputAddressTypes.push(inputType)
+  })
+  outputTemplate.forEach((output) => {
+    const outputType = getAddressType(output.address)
+    if (outputType) outputAddressTypes.push(outputType)
+  })
+  if (changeOutput != null) {
+    const changeType = getAddressType(changeOutput.address)
+    if (changeType) outputAddressTypes.push(changeType)
+  }
 
   const txAddressTypes = { inputAddressTypes, outputAddressTypes }
   const finalTxSize = estimatePsbtFee({ txAddressTypes })
@@ -662,7 +671,7 @@ export function buildPsbtWithFee({
             hash: utxo.txId,
             index: utxo.outputIndex,
             witnessUtxo: {
-              value: utxo.satoshis,
+              value: BigInt(utxo.satoshis),
               script: Buffer.from(utxo.scriptPk, 'hex'),
             },
           },
@@ -675,7 +684,7 @@ export function buildPsbtWithFee({
       amountRetrieved = calculateAmountGathered(retrievedUtxos)
       changeAmount = amountRetrieved - newAmountNeeded
       if (changeAmount > 0)
-        changeOutput = { address: spendAddress, value: changeAmount }
+        changeOutput = { address: spendAddress, value: BigInt(changeAmount) }
 
       return buildPsbtWithFee({
         spendAddress,
@@ -698,7 +707,7 @@ export function buildPsbtWithFee({
     }
   } else {
     if (changeAmount > 0)
-      outputTemplate.push({ address: spendAddress, value: changeAmount })
+      outputTemplate.push({ address: spendAddress, value: BigInt(changeAmount) })
 
     const finalPsbtTx = new bitcoin.Psbt({ network })
 

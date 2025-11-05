@@ -90,7 +90,7 @@ export async function processUnisatOffer({
   const unsignedBid: UnsignedUnisatBid = {
     address,
     auctionId: offer.offerId,
-    bidPrice: offer.totalPrice,
+    bidPrice: offer.totalPrice || 0,
     pubKey,
     receiveAddress,
     feerate: feeRate,
@@ -104,7 +104,7 @@ export async function processUnisatOffer({
       receiveAddress,
       signer,
     });
-    unsignedBid["signature"] = signature;
+    (unsignedBid as any)["signature"] = signature;
   }
   const psbt_ = await getSellerPsbt(unsignedBid);
 
@@ -135,8 +135,11 @@ export async function processUnisatOffer({
     purchaseTxId = data.txid;
   }
 
+  if (!purchaseTxId) {
+    throw new Error('Purchase transaction ID is missing');
+  }
   return {
-    dummyTxId,
+    dummyTxId: dummyTxId || '',
     purchaseTxId,
   };
 }
@@ -178,6 +181,9 @@ export async function processUnisatListing({
   }
 
   const listingPsbt: GetListingPsbtResponse = listingPsbtResponse.data;
+  if (!listingPsbt.additionalData) {
+    throw new Error('Listing PSBT additional data is missing');
+  }
   const listingId = listingPsbt.additionalData.auctionId;
   const { signedHexPsbt } = await signer.signAllInputs({
     rawPsbtHex: listingPsbt.psbt,

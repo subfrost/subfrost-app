@@ -13,7 +13,7 @@ import {
 export interface ConditionalInput {
   hash: string
   index: number
-  witnessUtxo: { value: number; script: Buffer }
+  witnessUtxo: { value: bigint; script: Buffer }
   tapInternalKey?: Buffer
   segwitInternalKey?: Buffer
 }
@@ -295,7 +295,7 @@ export interface ProcessOfferResponse {
 
 export interface OutputTxTemplate {
   address: string
-  value: number
+  value: bigint
 }
 
 export interface SwapPayload {

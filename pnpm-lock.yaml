@@ -26,9 +26,15 @@ importers:
       bignumber.js:
         specifier: ^9.3.1
         version: 9.3.1
+      bitcoin-address-validation:
+        specifier: ^3.0.0
+        version: 3.0.0
       bitcoinjs-lib:
         specifier: ^7.0.0
         version: 7.0.0(typescript@5.9.3)
+      bitcoinjs-message:
+        specifier: ^2.2.0
+        version: 2.2.0
       ecpair:
         specifier: ^3.0.0
         version: 3.0.0(typescript@5.9.3)
@@ -50,6 +56,9 @@ importers:
       use-debounce:
         specifier: ^10.0.6
         version: 10.0.6(react@18.3.1)
+      varuint-bitcoin:
+        specifier: ^2.0.0
+        version: 2.0.0
     devDependencies:
       '@noble/curves':
         specifier: ^2.0.1
@@ -1494,6 +1503,10 @@ packages:
     resolution: {integrity: sha512-LkkAPP8Zu+c0SVNRTRVDyMfKVORThX+rCViget00xdgLRrKkClCTz1T7cIrpr69ShwV5XJuuoZvMvJ43yURwkA==}
     engines: {node: '>= 8'}
 
+  base58-js@3.0.3:
+    resolution: {integrity: sha512-3hf42BysHnUqmZO7mK6e5X/hs1AvyEJIhdVLbG/Mxn/fhFnhGxOO37mWbMHg1RT4TxqcPKXgqj9/bp1YG0GBXA==}
+    engines: {node: '>=16.0.0', npm: '>=7.0.0'}
+
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
@@ -1550,6 +1563,9 @@ packages:
 
   bitcoin-address-validation@2.2.3:
     resolution: {integrity: sha512-1uGCGl26Ye8JG5qcExtFLQfuib6qEZWNDo1ZlLlwp/z7ygUFby3IxolgEfgMGaC+LG9csbVASLcH8fRLv7DIOg==}
+
+  bitcoin-address-validation@3.0.0:
+    resolution: {integrity: sha512-R1X1c9EdgjgjTpjshjk5e16TbgF7HYasxBcu7l5ScWMxVs53845vMUg5PvnQ/R/3h8Grly6Y52DgH6/77gazLQ==}
 
   bitcoinjs-lib@6.1.7:
     resolution: {integrity: sha512-tlf/r2DGMbF7ky1MgUqXHzypYHakkEnm0SZP23CJKIqNY/5uNAnMbFhMJdhjrL/7anfb/U8+AlpdjPWjPnAalg==}
@@ -5077,6 +5093,8 @@ snapshots:
 
   base58-js@1.0.5: {}
 
+  base58-js@3.0.3: {}
+
   base64-js@1.5.1: {}
 
   baseline-browser-mapping@2.8.24: {}
@@ -5150,6 +5168,12 @@ snapshots:
   bitcoin-address-validation@2.2.3:
     dependencies:
       base58-js: 1.0.5
+      bech32: 2.0.0
+      sha256-uint8array: 0.10.7
+
+  bitcoin-address-validation@3.0.0:
+    dependencies:
+      base58-js: 3.0.3
       bech32: 2.0.0
       sha256-uint8array: 0.10.7
 
@@ -6651,7 +6675,7 @@ snapshots:
 
   md5.js@1.3.5:
     dependencies:
-      hash-base: 3.0.5
+      hash-base: 3.1.2
       inherits: 2.0.4
       safe-buffer: 5.2.1
 

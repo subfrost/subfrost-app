@@ -1,10 +1,10 @@
-import { secp256k1, schnorr } from "@noble/curves/secp256k1";
+import { secp256k1, schnorr } from "@noble/curves/secp256k1.js";
 import { hex } from "@scure/base";
 import * as btc from "@scure/btc-signer";
 import { AddressType, getAddressInfo } from "bitcoin-address-validation";
-import { crypto } from "bitcoinjs-lib";
 import { signAsync } from "bitcoinjs-message";
 import { encode } from "varuint-bitcoin";
+import { createHash } from "crypto";
 
 const bitcoinMainnet = {
   bech32: "bc",
@@ -25,7 +25,7 @@ const bitcoinNetworks = {
   Testnet: bitcoinTestnet,
 };
 
-const getBtcNetwork = (networkType) => {
+const getBtcNetwork = (networkType: 'Mainnet' | 'Testnet') => {
   return bitcoinNetworks[networkType];
 };
 
@@ -35,8 +35,8 @@ const getBtcNetwork = (networkType) => {
  * @returns Bip322 Message Hash
  *
  */
-export function bip0322Hash(message) {
-  const { sha256 } = crypto;
+export function bip0322Hash(message: string) {
+  const sha256 = (data: Buffer) => createHash('sha256').update(data).digest();
   const tag = "BIP0322-signed-message";
   const tagHash = sha256(Buffer.from(tag));
   const result = sha256(
@@ -45,20 +45,21 @@ export function bip0322Hash(message) {
   return result.toString("hex");
 }
 
-function encodeVarString(b) {
-  return Buffer.concat([encode(b.byteLength), b]);
+function encodeVarString(b: Buffer) {
+  return Buffer.concat([Buffer.from(encode(b.byteLength).buffer), b]);
 }
 
-const getSigningPk = (type, privateKey) => {
+const getSigningPk = (type: AddressType, privateKey: string) => {
+  const pkBytes = hex.decode(privateKey);
   switch (type) {
     case AddressType.p2tr: {
-      return schnorr.getPublicKey(privateKey);
+      return schnorr.getPublicKey(pkBytes);
     }
     case AddressType.p2sh: {
-      return secp256k1.getPublicKey(privateKey, true);
+      return secp256k1.getPublicKey(pkBytes, true);
     }
     case AddressType.p2wpkh: {
-      return secp256k1.getPublicKey(privateKey, true);
+      return secp256k1.getPublicKey(pkBytes, true);
     }
     default: {
       throw new Error("Unsupported Address Type");
@@ -66,7 +67,7 @@ const getSigningPk = (type, privateKey) => {
   }
 };
 
-const getSignerScript = (type, publicKey, network) => {
+const getSignerScript = (type: AddressType, publicKey: Uint8Array, network: any) => {
   switch (type) {
     case AddressType.p2tr: {
       return btc.p2tr(publicKey, undefined, network);
@@ -89,6 +90,11 @@ export const signBip322Message = async ({
   network,
   privateKey,
   signatureAddress,
+}: {
+  message: string;
+  network: 'Mainnet' | 'Testnet';
+  privateKey: Buffer;
+  signatureAddress: string;
 }) => {
   const { type } = getAddressInfo(signatureAddress);
   const ecpairPk = privateKey;
@@ -140,7 +146,7 @@ export const signBip322Message = async ({
       script: txScript.script,
       amount: BigInt(0),
     },
-    redeemScript: AddressType.p2sh ? txScript.redeemScript : Buffer.alloc(0),
+    redeemScript: 'redeemScript' in txScript ? txScript.redeemScript : undefined,
   });
   txToSign.addOutput({
     script: btc.Script.encode(["RETURN"]),
@@ -152,10 +158,10 @@ export const signBip322Message = async ({
   // formulate-signature
   const firstInput = txToSign.getInput(0);
   if (firstInput.finalScriptWitness?.length) {
-    const len = encode(firstInput.finalScriptWitness?.length);
+    const len = Buffer.from(encode(firstInput.finalScriptWitness?.length).buffer);
     const result = Buffer.concat([
       len,
-      ...firstInput.finalScriptWitness.map((w) => encodeVarString(w)),
+      ...firstInput.finalScriptWitness.map((w) => encodeVarString(Buffer.from(w))),
     ]);
     return result.toString("base64");
   } else {

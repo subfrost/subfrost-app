@@ -4,8 +4,8 @@ import PageContent from '@/app/components/PageContent';
 
 export const metadata = { title: 'Transaction' };
 
-export default function TransactionDetails({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function TransactionDetails({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
 
   return (
     <PageContent>

@@ -105,12 +105,12 @@ export async function processOrdinalsWalletOffer({
   }
   if (assetType === AssetType.RUNES) {
     unsignedBid['outpoints'] = Array.isArray(offer.outpoint)
-      ? offer.outpoint
-      : [offer.outpoint]
+      ? offer.outpoint.filter((o): o is string => o !== undefined)
+      : offer.outpoint ? [offer.outpoint] : []
   } else {
     unsignedBid['inscriptions'] = Array.isArray(offer.inscriptionId)
-      ? offer.inscriptionId
-      : [offer.inscriptionId]
+      ? offer.inscriptionId.filter((id): id is string => id !== undefined)
+      : offer.inscriptionId ? [offer.inscriptionId] : []
   }
 
   const sellerData = await getSellerPsbt(unsignedBid)
@@ -135,7 +135,7 @@ export async function processOrdinalsWalletOffer({
 
   const finalizeResponse = await submitPsbt({
     psbt: signedPsbt.signedHexPsbt,
-    setupPsbt: setupTx,
+    setupPsbt: setupTx || undefined,
     assetType,
     provider,
   })
@@ -144,8 +144,11 @@ export async function processOrdinalsWalletOffer({
     purchaseTxId = data.purchase
     if (setupTx) await timeout(5000)
   }
+  if (!purchaseTxId) {
+    throw new Error('Purchase transaction ID is missing');
+  }
   return {
-    dummyTxId,
+    dummyTxId: dummyTxId || '',
     purchaseTxId,
   }
 }

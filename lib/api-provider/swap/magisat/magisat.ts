@@ -29,25 +29,36 @@ export async function processMagisatOffer({
     if (Array.isArray(offer.offerId)) {
         nUtxos = offer.offerId.length + 1
         for (let i = 0; i < offer.offerId.length; i++) {
+            const price = Array.isArray(offer.totalPrice) ? (offer.totalPrice[i] || 0) : 0
+            const rawAmount = Array.isArray(offer.amount) ? offer.amount[i] : 1
+            const amount = typeof rawAmount === 'string' ? parseInt(rawAmount) : (typeof rawAmount === 'number' ? rawAmount : 1)
+            const inscriptionId = Array.isArray(offer.inscriptionId) ? offer.inscriptionId[i] : undefined
             orders.push({
                 orderId: offer.offerId[i],
-                price: offer.totalPrice[i],
-                amount: offer.amount[i],
-                inscriptionId: offer.inscriptionId[i],
+                price,
+                amount,
+                inscriptionId,
                 feeRate
             })
         }
     } else {
         nUtxos = 2;
+        const price = typeof offer.totalPrice === 'number' ? offer.totalPrice : 0
+        const rawAmount = offer.amount
+        const amount = typeof rawAmount === 'string' ? parseInt(rawAmount) : (typeof rawAmount === 'number' ? rawAmount : 1)
+        const inscriptionId = typeof offer.inscriptionId === 'string' ? offer.inscriptionId : undefined
         orders.push({
             orderId: offer.offerId,
-            price: offer.totalPrice,
-            amount: offer.amount,
-            inscriptionId: offer.inscriptionId,
+            price,
+            amount,
+            inscriptionId,
             feeRate
         })
     }
 
+    if (!addressType) {
+        throw new Error('Invalid address type');
+    }
     const psbtForDummyUtxos =
         (assetType != AssetType.RUNES)
             ?
@@ -106,8 +117,11 @@ export async function processMagisatOffer({
     }
     const submitBuyerPsbt: SubmitBuyerPsbtResponse = submitBuyerPsbtResponse.data;
     purchaseTxId = submitBuyerPsbt.txid;
+    if (!purchaseTxId) {
+        throw new Error('Purchase transaction ID is missing');
+    }
     return {
-        dummyTxId,
+        dummyTxId: dummyTxId || '',
         purchaseTxId
     }
 }
