@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import Providers from "@/app/providers";
 import AppShell from "@/app/components/AppShell";
+import { SnowflakeWatermark } from "@/app/components/SnowflakeWatermark";
 
 const satoshi = localFont({
   src: [
@@ -33,6 +34,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${satoshi.variable} ${geistMono.variable} antialiased`}>
         <Providers>
+          <SnowflakeWatermark />
           <AppShell>{children}</AppShell>
         </Providers>
       </body>

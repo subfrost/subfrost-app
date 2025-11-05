@@ -4,11 +4,14 @@
  import Image from "next/image";
  import { useEffect, useRef, useState } from "react";
  import { useWallet } from "@/context/WalletContext";
+ import { Menu, X } from "lucide-react";
 
  export default function Header() {
   const { connected, isConnected, address, onConnectModalOpenChange, disconnect } = useWallet() as any;
    const [menuOpen, setMenuOpen] = useState(false);
+   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
    const menuRootRef = useRef<HTMLDivElement | null>(null);
+   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
    const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
@@ -33,6 +36,27 @@
      };
    }, [menuOpen]);
 
+   useEffect(() => {
+     if (!mobileMenuOpen) return;
+     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+       if (!mobileMenuRef.current) return;
+       if (!mobileMenuRef.current.contains(e.target as Node)) {
+         setMobileMenuOpen(false);
+       }
+     };
+     const handleKey = (e: KeyboardEvent) => {
+       if (e.key === 'Escape') setMobileMenuOpen(false);
+     };
+     document.addEventListener('mousedown', handleClickOutside);
+     document.addEventListener('touchstart', handleClickOutside, { passive: true } as any);
+     document.addEventListener('keydown', handleKey);
+     return () => {
+       document.removeEventListener('mousedown', handleClickOutside);
+       document.removeEventListener('touchstart', handleClickOutside as any);
+       document.removeEventListener('keydown', handleKey);
+     };
+   }, [mobileMenuOpen]);
+
    return (
     <header className="relative z-50 w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(40,67,114,0.05)] border-b border-[color:var(--sf-glass-border)]">
       <div className="relative flex h-16 w-full items-center px-6 sm:h-20 sm:px-10">
@@ -54,7 +78,7 @@
           />
         </Link>
 
-        {/* Nav (centered to viewport) */}
+        {/* Desktop Nav (centered to viewport) */}
         <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-12 md:flex">
           <Link href="/earn" className="text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:opacity-80 sf-focus-ring">
             EARN
@@ -67,8 +91,8 @@
           </Link>
         </nav>
 
-        {/* CTA */}
-         <div className="ml-auto relative" ref={menuRootRef}>
+        {/* Desktop CTA */}
+         <div className="ml-auto relative hidden md:block" ref={menuRootRef}>
           {walletConnected ? (
              <>
                <button
@@ -106,6 +130,81 @@
              >
                CONNECT WALLET
              </button>
+           )}
+         </div>
+
+        {/* Mobile Hamburger Menu */}
+         <div className="ml-auto md:hidden" ref={mobileMenuRef}>
+           <button
+             type="button"
+             onClick={() => setMobileMenuOpen((v) => !v)}
+             className="flex items-center justify-center w-10 h-10 rounded-lg text-[color:var(--sf-text)] hover:bg-white/10 sf-focus-ring"
+             aria-label="Toggle mobile menu"
+           >
+             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+           </button>
+
+           {mobileMenuOpen && (
+             <div className="fixed left-0 right-0 top-16 mx-4 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+               <nav className="flex flex-col">
+                 <Link
+                   href="/earn"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
+                 >
+                   EARN
+                 </Link>
+                 <Link
+                   href="/swap"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
+                 >
+                   SWAP
+                 </Link>
+                 <Link
+                   href="#"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
+                 >
+                   GOVERNANCE
+                 </Link>
+                 
+                 {walletConnected ? (
+                   <div className="px-6 py-4">
+                     <div className="mb-2 text-xs text-[color:var(--sf-text)]/70">Connected</div>
+                     <div className="mb-3 text-sm font-semibold text-[color:var(--sf-text)]">{truncate(address)}</div>
+                     <button
+                       type="button"
+                       onClick={async () => {
+                         try {
+                           await disconnect();
+                         } catch (e) {
+                           // noop
+                         } finally {
+                           setMobileMenuOpen(false);
+                         }
+                       }}
+                       className="w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[color:var(--sf-text)] hover:bg-white/90"
+                     >
+                       DISCONNECT WALLET
+                     </button>
+                   </div>
+                 ) : (
+                   <div className="px-6 py-4">
+                     <button
+                       type="button"
+                       onClick={() => {
+                         onConnectModalOpenChange(true);
+                         setMobileMenuOpen(false);
+                       }}
+                       className="w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[color:var(--sf-text)] hover:bg-white/90"
+                     >
+                       CONNECT WALLET
+                     </button>
+                   </div>
+                 )}
+               </nav>
+             </div>
            )}
          </div>
       </div>
