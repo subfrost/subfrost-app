@@ -232,9 +232,12 @@ export async function getMessageSignature({
   if (getAddressType(receiveAddress) == AddressType.P2WPKH) {
     const keyPair = signer.segwitKeyPair;
     const privateKey = keyPair.privateKey;
+    if (!privateKey) {
+      throw new Error('Private key is missing');
+    }
     const signature = await signBip322Message({
       message,
-      network: provider.networkType,
+      network: provider.networkType as 'Mainnet' | 'Testnet',
       privateKey,
       signatureAddress: receiveAddress,
     });
@@ -242,12 +245,16 @@ export async function getMessageSignature({
   } else if (getAddressType(receiveAddress) == AddressType.P2TR) {
     const keyPair = signer.taprootKeyPair;
     const privateKey = keyPair.privateKey;
+    if (!privateKey) {
+      throw new Error('Private key is missing');
+    }
     const signature = await signBip322Message({
       message,
-      network: provider.networkType,
+      network: provider.networkType as 'Mainnet' | 'Testnet',
       privateKey,
       signatureAddress: receiveAddress,
     });
     return signature;
   }
+  throw new Error(`Unsupported address type: ${getAddressType(receiveAddress)}`);
 }

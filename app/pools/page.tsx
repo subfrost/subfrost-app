@@ -1,9 +1,9 @@
+'use client';
+
 import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageHeader from '@/app/components/PageHeader';
 import PageContent from '@/app/components/PageContent';
 import { usePools } from '@/hooks/usePools';
-
-export const metadata = { title: 'Pools' };
 
 export default function PoolsPage() {
   return (
