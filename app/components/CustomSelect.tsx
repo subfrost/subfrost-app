@@ -7,6 +7,7 @@ type Option = {
   value: string;
   label: string;
   symbol?: string;
+  iconUrl?: string;
 };
 
 type CustomSelectProps = {
@@ -57,7 +58,7 @@ export default function CustomSelect({
   };
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${isOpen ? 'z-50' : 'z-10'} ${className}`}>
       <button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
@@ -67,7 +68,12 @@ export default function CustomSelect({
         }`}
       >
         {showTokenIcon && displaySymbol && (
-          <TokenIcon symbol={displaySymbol} size="sm" />
+          <TokenIcon 
+            symbol={displaySymbol} 
+            id={selectedOption?.value}
+            iconUrl={selectedOption?.iconUrl}
+            size="sm" 
+          />
         )}
         <span className="flex-1 truncate">{displayLabel}</span>
         <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-white/95 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
@@ -93,7 +99,12 @@ export default function CustomSelect({
                 } first:rounded-t-xl last:rounded-b-xl`}
               >
                 {showTokenIcon && (option.symbol || option.value) && (
-                  <TokenIcon symbol={option.symbol || option.value} size="sm" />
+                  <TokenIcon 
+                    symbol={option.symbol || option.value} 
+                    id={option.value}
+                    iconUrl={option.iconUrl}
+                    size="sm" 
+                  />
                 )}
                 <span className="flex-1 truncate">{option.label}</span>
                 {isSelected && (

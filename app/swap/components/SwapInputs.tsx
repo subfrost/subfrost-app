@@ -25,6 +25,7 @@ type Props = {
   fromFiatText?: string; // e.g., "$0.00"
   toFiatText?: string;
   onMaxFrom?: () => void; // optional Max action
+  onPercentFrom?: (percent: number) => void; // optional percentage action (0.25, 0.5, 0.75)
   summary?: React.ReactNode;
 };
 
@@ -46,6 +47,7 @@ export default function SwapInputs({
   fromFiatText = "$0.00",
   toFiatText = "$0.00",
   onMaxFrom,
+  onPercentFrom,
   summary,
 }: Props) {
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
@@ -63,10 +65,38 @@ export default function SwapInputs({
     onSwapClick();
   };
 
+  // Calculate balance usage percentage
+  const calculateBalanceUsage = (): number => {
+    if (!fromAmount || !fromBalanceText) return 0;
+    
+    // Extract balance from text like "Balance 8.908881"
+    const balanceMatch = fromBalanceText.match(/[\d.]+/);
+    if (!balanceMatch) return 0;
+    
+    const balance = parseFloat(balanceMatch[0]);
+    const amount = parseFloat(fromAmount);
+    
+    if (!balance || balance === 0 || !amount) return 0;
+    
+    const percentage = (amount / balance) * 100;
+    return Math.min(100, Math.max(0, percentage)); // Clamp between 0-100
+  };
+
+  const balanceUsage = calculateBalanceUsage();
+  
+  // Color based on usage
+  const getBalanceColor = () => {
+    if (balanceUsage === 0) return 'bg-gray-200';
+    if (balanceUsage < 50) return 'bg-green-500';
+    if (balanceUsage < 80) return 'bg-yellow-500';
+    if (balanceUsage < 100) return 'bg-orange-500';
+    return 'bg-red-500';
+  };
+
   return (
     <div className="relative flex flex-col gap-3">
       {/* Sell panel */}
-      <div className="relative rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+      <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Pay</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
           <div className="grid grid-cols-[1fr_auto] items-center gap-3">
@@ -85,15 +115,60 @@ export default function SwapInputs({
               <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
             </button>
             <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
-            <div className="text-right text-xs font-medium text-[color:var(--sf-text)]/60">
-              {fromBalanceText}
-              <button
-                type="button"
-                onClick={onMaxFrom}
-                className={`ml-2 inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all sf-focus-ring ${onMaxFrom ? "border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50" : "opacity-40 cursor-not-allowed border border-transparent"}`}
-              >
-                Max
-              </button>
+            <div className="text-right">
+              <div className="mb-2">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
+                  {fromBalanceText}
+                  {balanceUsage > 0 && (
+                    <span className="ml-1.5 text-[10px] font-bold">
+                      ({balanceUsage.toFixed(1)}%)
+                    </span>
+                  )}
+                </div>
+                {balanceUsage > 0 && (
+                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${getBalanceColor()} transition-all duration-300 ease-out`}
+                      style={{ width: `${balanceUsage}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-1.5">
+                {onPercentFrom && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onPercentFrom(0.25)}
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                    >
+                      25%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onPercentFrom(0.5)}
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                    >
+                      50%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onPercentFrom(0.75)}
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                    >
+                      75%
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={onMaxFrom}
+                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all sf-focus-ring ${onMaxFrom ? "border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50" : "opacity-40 cursor-not-allowed border border-transparent"}`}
+                  disabled={!onMaxFrom}
+                >
+                  Max
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -117,7 +192,7 @@ export default function SwapInputs({
       </div>
 
       {/* Receive panel */}
-      <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+      <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Receive</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
           <div className="grid grid-cols-[1fr_auto] items-center gap-3">
@@ -147,7 +222,9 @@ export default function SwapInputs({
       </div>
 
       {/* Summary */}
-      {summary}
+      <div className="relative z-10">
+        {summary}
+      </div>
 
       {/* CTA */}
       <button
