@@ -1,10 +1,11 @@
 "use client";
 
 import NumberField from "@/app/components/NumberField";
-import TokenSelect from "@/app/components/TokenSelect";
+import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
 import { useWallet } from "@/context/WalletContext";
 import { useModalStore } from "@/stores/modals";
+import { ChevronDown } from "lucide-react";
 
 type Props = {
   from?: TokenMeta;
@@ -47,18 +48,8 @@ export default function SwapInputs({
   onMaxFrom,
   summary,
 }: Props) {
-  const fromOpts = fromOptions.map((t) => ({
-    value: t.id,
-    label: `${t.name ?? t.symbol ?? t.id} [${t.id}]`,
-  }));
-  const toOpts = [
-    { value: '', label: 'Select a token' },
-    ...toOptions.map((t) => ({
-      value: t.id,
-      label: `${t.name ?? t.symbol ?? t.id} [${t.id}]`,
-    })),
-  ];
-  const { isConnected, onConnectModalOpenChange } = useWallet();
+  const { isConnected, onConnectModalOpenChange, network } = useWallet();
+  const { openTokenSelector } = useModalStore();
   const canSwap = isConnected &&
     !!fromAmount && !!toAmount &&
     isFinite(parseFloat(fromAmount)) && isFinite(parseFloat(toAmount)) &&
@@ -78,11 +69,21 @@ export default function SwapInputs({
       <div className="relative rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Pay</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-          <div className="grid grid-cols-[1fr_160px] items-center gap-3">
+          <div className="grid grid-cols-[1fr_auto] items-center gap-3">
             <NumberField placeholder={"0.00"} align="left" value={fromAmount} onChange={onChangeFromAmount} />
-            <div className="w-[160px]">
-              <TokenSelect value={from?.id ?? "btc"} options={fromOpts} onChange={onSelectFromToken} />
-            </div>
+            <button
+              type="button"
+              onClick={() => openTokenSelector('from')}
+              className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+            >
+              {from && (
+                <TokenIcon symbol={from.symbol} id={from.id} iconUrl={from.iconUrl} size="sm" network={network} />
+              )}
+              <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                {from?.symbol ?? 'Select'}
+              </span>
+              <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+            </button>
             <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
             <div className="text-right text-xs font-medium text-[color:var(--sf-text)]/60">
               {fromBalanceText}
@@ -119,11 +120,21 @@ export default function SwapInputs({
       <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Receive</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-          <div className="grid grid-cols-[1fr_160px] items-center gap-3">
+          <div className="grid grid-cols-[1fr_auto] items-center gap-3">
             <NumberField placeholder={"0.00"} align="left" value={toAmount} onChange={onChangeToAmount} />
-            <div className="w-[160px]">
-              <TokenSelect value={to?.id ?? ""} options={toOpts} onChange={onSelectToToken} />
-            </div>
+            <button
+              type="button"
+              onClick={() => openTokenSelector('to')}
+              className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+            >
+              {to && (
+                <TokenIcon symbol={to.symbol} id={to.id} iconUrl={to.iconUrl} size="sm" network={network} />
+              )}
+              <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                {to?.symbol ?? 'Select'}
+              </span>
+              <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+            </button>
             <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{toFiatText}</div>
             <div className="text-right text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
           </div>

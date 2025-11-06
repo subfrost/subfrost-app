@@ -18,8 +18,11 @@ import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import SwapSummary from "./components/SwapSummary";
 import TransactionSettingsModal from "@/app/components/TransactionSettingsModal";
+import TokenSelectorModal from "@/app/components/TokenSelectorModal";
+import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import LoadingOverlay from "@/app/components/LoadingOverlay";
 import { usePools } from "@/hooks/usePools";
+import { useModalStore } from "@/stores/modals";
 
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
@@ -34,6 +37,7 @@ export default function SwapShell() {
   const [direction, setDirection] = useState<'sell' | 'buy'>('sell');
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
+  const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
 
   const sellId = fromToken?.id ?? '';
   const buyId = toToken?.id ?? '';
@@ -190,6 +194,50 @@ export default function SwapShell() {
     });
   };
 
+  // Prepare token options for modal with balances and prices
+  const fromTokenOptions = useMemo<TokenOption[]>(() => {
+    return fromOptions.map((token) => {
+      const currency = idToUserCurrency.get(token.id);
+      return {
+        id: token.id,
+        symbol: token.symbol,
+        name: token.name,
+        iconUrl: token.id === 'btc' ? undefined : currency?.iconUrl,
+        balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
+        price: currency?.priceInfo?.price,
+      };
+    });
+  }, [fromOptions, idToUserCurrency, btcBalanceSats]);
+
+  const toTokenOptions = useMemo<TokenOption[]>(() => {
+    return toOptions.map((token) => {
+      const currency = idToUserCurrency.get(token.id);
+      const fetched = tokenDisplayMap?.[token.id];
+      return {
+        id: token.id,
+        symbol: token.symbol,
+        name: token.name || fetched?.name,
+        iconUrl: currency?.iconUrl,
+        balance: currency?.balance,
+        price: currency?.priceInfo?.price,
+      };
+    });
+  }, [toOptions, idToUserCurrency, tokenDisplayMap]);
+
+  const handleTokenSelect = (tokenId: string) => {
+    if (tokenSelectorMode === 'from') {
+      const token = fromOptions.find((t) => t.id === tokenId);
+      if (token) {
+        setFromToken(token);
+        setToToken(undefined);
+        setToAmount("");
+      }
+    } else if (tokenSelectorMode === 'to') {
+      const token = toOptions.find((t) => t.id === tokenId);
+      if (token) setToToken(token);
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-8">
       <section className="relative mx-auto w-full max-w-[540px] rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
@@ -256,6 +304,16 @@ export default function SwapShell() {
         custom={fee.custom}
         setCustom={fee.setCustom}
         feeRate={fee.feeRate}
+      />
+
+      <TokenSelectorModal
+        isOpen={isTokenSelectorOpen}
+        onClose={closeTokenSelector}
+        tokens={tokenSelectorMode === 'from' ? fromTokenOptions : toTokenOptions}
+        onSelectToken={handleTokenSelect}
+        selectedTokenId={tokenSelectorMode === 'from' ? fromToken?.id : toToken?.id}
+        title={tokenSelectorMode === 'from' ? 'Select token to pay' : 'Select token to receive'}
+        network={network}
       />
     </div>
   );

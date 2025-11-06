@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { Network } from '@oyl/sdk';
 
 type TokenIconProps = {
   symbol: string;
@@ -8,7 +9,7 @@ type TokenIconProps = {
   iconUrl?: string; // Direct URL to token icon (from API)
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
-  network?: 'mainnet' | 'testnet';
+  network?: Network;
 };
 
 const sizeMap = {
