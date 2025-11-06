@@ -198,6 +198,84 @@ export function useSwapQuotes(
     ],
     enabled: !!sellCurrencyId && !!buyCurrencyId,
     queryFn: async () => {
+      // Short-circuit: direct BTC ↔ frBTC wrap/unwrap (no AMM)
+      const isDirectWrap = sellCurrency === 'btc' && buyCurrency === FRBTC_ALKANE_ID;
+      const isDirectUnwrap = sellCurrency === FRBTC_ALKANE_ID && buyCurrency === 'btc';
+
+      const amtNum = parseFloat(debouncedAmount);
+      if (isDirectWrap || isDirectUnwrap) {
+        if (!debouncedAmount || !Number.isFinite(amtNum) || amtNum === 0) {
+          return {
+            direction,
+            inputAmount: debouncedAmount,
+            buyAmount: '0',
+            sellAmount: '0',
+            exchangeRate: '0',
+            minimumReceived: '0',
+            maximumSent: '0',
+            displayBuyAmount: '0',
+            displaySellAmount: '0',
+            displayMinimumReceived: '0',
+            displayMaximumSent: '0',
+            route: [isDirectWrap ? 'wrap' : 'unwrap'],
+            hops: 0,
+          } as SwapQuote;
+        }
+
+        const amountInAlks = toAlks(debouncedAmount);
+        let buyAmount: string;
+        let sellAmount: string;
+
+        if (direction === 'sell') {
+          // Input is the sell side
+          const inAlks = Number(amountInAlks);
+          if (isDirectWrap) {
+            const out = Math.floor((inAlks * (1000 - wrapFee)) / 1000);
+            sellAmount = amountInAlks;
+            buyAmount = out.toString();
+          } else {
+            // direct unwrap sell frBTC
+            const out = Math.floor((inAlks * (1000 - unwrapFee)) / 1000);
+            sellAmount = amountInAlks;
+            buyAmount = out.toString();
+          }
+        } else {
+          // Input is the buy side
+          const outAlks = Number(amountInAlks);
+          if (isDirectWrap) {
+            // Need to wrap enough BTC to receive outAlks frBTC after fee
+            const requiredIn = Math.ceil((outAlks * 1000) / (1000 - wrapFee));
+            buyAmount = amountInAlks;
+            sellAmount = requiredIn.toString();
+          } else {
+            // direct unwrap buy BTC
+            const requiredIn = Math.ceil((outAlks * 1000) / (1000 - unwrapFee));
+            buyAmount = amountInAlks;
+            sellAmount = requiredIn.toString();
+          }
+        }
+
+        const exchangeRate = new BigNumber(buyAmount || '0').dividedBy(sellAmount || '1').toString();
+        const minimumReceived = calculateMinimumFromSlippage({ amount: buyAmount, maxSlippage });
+        const maximumSent = calculateMaximumFromSlippage({ amount: sellAmount, maxSlippage });
+
+        return {
+          direction,
+          inputAmount: debouncedAmount,
+          buyAmount,
+          sellAmount: direction !== 'sell' ? maximumSent : sellAmount,
+          exchangeRate,
+          minimumReceived,
+          maximumSent,
+          displayBuyAmount: fromAlks(buyAmount),
+          displaySellAmount: direction !== 'sell' ? fromAlks(maximumSent) : fromAlks(sellAmount),
+          displayMinimumReceived: fromAlks(minimumReceived),
+          displayMaximumSent: fromAlks(maximumSent),
+          route: [isDirectWrap ? 'wrap' : 'unwrap'],
+          hops: 0,
+        } as SwapQuote;
+      }
+
       if (fetchingSell || fetchingBuy) {
         return {
           direction,

@@ -133,12 +133,24 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const swapRoute = getSwapRoute();
   const isMultiHop = swapRoute && swapRoute.length > 2;
 
+  const isDirectWrap = quote?.route && quote.route.length === 1 && quote.route[0] === 'wrap';
+  const isDirectUnwrap = quote?.route && quote.route.length === 1 && quote.route[0] === 'unwrap';
+
   return (
     <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-4 text-sm backdrop-blur-sm transition-all">
       {isCalculating ? (
         <SkeletonLines />
       ) : quote ? (
         <>
+          {(isDirectWrap || isDirectUnwrap) && (
+            <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-1">Swap Route</div>
+              <div className="text-xs font-semibold text-blue-900">
+                {isDirectWrap && 'Wrap BTC → frBTC'}
+                {isDirectUnwrap && 'Unwrap frBTC → BTC'}
+              </div>
+            </div>
+          )}
           {swapRoute && (
             <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-2">

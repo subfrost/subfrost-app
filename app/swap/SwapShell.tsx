@@ -23,6 +23,8 @@ import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import LoadingOverlay from "@/app/components/LoadingOverlay";
 import { usePools } from "@/hooks/usePools";
 import { useModalStore } from "@/stores/modals";
+import { useWrapMutation } from "@/hooks/useWrapMutation";
+import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
 
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
@@ -49,6 +51,8 @@ export default function SwapShell() {
     maxSlippage,
   );
   const swapMutation = useSwapMutation();
+  const wrapMutation = useWrapMutation();
+  const unwrapMutation = useUnwrapMutation();
 
   // Wallet/config
   const { address, network } = useWallet();
@@ -255,8 +259,43 @@ export default function SwapShell() {
     return `Balance ${amt.toFixed(6)}`;
   };
 
+  const isWrapPair = useMemo(() => fromToken?.id === 'btc' && toToken?.id === FRBTC_ALKANE_ID, [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
+  const isUnwrapPair = useMemo(() => fromToken?.id === FRBTC_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
+
   const handleSwap = async () => {
-    if (!fromToken || !toToken || !quote) return;
+    if (!fromToken || !toToken) return;
+
+    // Wrap/Unwrap direct pairs
+    if (isWrapPair) {
+      try {
+        const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
+        const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
+        if (res?.success) {
+          window.alert(`Wrap submitted. Tx: ${res.transactionId ?? 'unknown'}`);
+        }
+      } catch (e) {
+        console.error(e);
+        window.alert('Wrap failed. See console for details.');
+      }
+      return;
+    }
+
+    if (isUnwrapPair) {
+      try {
+        const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
+        const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
+        if (res?.success) {
+          window.alert(`Unwrap submitted. Tx: ${res.transactionId ?? 'unknown'}`);
+        }
+      } catch (e) {
+        console.error(e);
+        window.alert('Unwrap failed. See console for details.');
+      }
+      return;
+    }
+
+    // Default AMM swap
+    if (!quote) return;
     const payload = {
       sellCurrency: fromToken.id,
       buyCurrency: toToken.id,
