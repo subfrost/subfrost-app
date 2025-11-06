@@ -3,10 +3,13 @@
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { usePoolFee } from '@/hooks/usePoolFee';
 import { useAlkanesTokenPairs } from '@/hooks/useAlkanesTokenPairs';
+import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
+import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import type { SwapQuote } from '../types';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
+import { useMemo } from 'react';
 
 type Props = {
   sellId: string;
@@ -23,9 +26,20 @@ type Props = {
 export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp }: Props) {
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
-  const { FRBTC_ALKANE_ID } = getConfig(network);
+  const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
   const normalizedSell = sellId === 'btc' ? FRBTC_ALKANE_ID : sellId;
   const normalizedBuy = buyId === 'btc' ? FRBTC_ALKANE_ID : buyId;
+  
+  // Fetch dynamic frBTC wrap/unwrap fee
+  const { data: premiumData } = useFrbtcPremium();
+  const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
+  
+  // Fetch token display info for route tokens
+  const routeTokenIds = useMemo(() => {
+    if (!quote?.route) return [];
+    return quote.route.filter(id => id !== normalizedSell && id !== normalizedBuy);
+  }, [quote?.route, normalizedSell, normalizedBuy]);
+  const { data: tokenDisplayMap } = useTokenDisplayMap(routeTokenIds);
 
   const { data: sellPairs } = useAlkanesTokenPairs(normalizedSell);
   const directPair = sellPairs?.find(
@@ -39,7 +53,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   if (quote && poolFee && directPair) {
     const ammSellAmount = sellId === 'btc'
       ? BigNumber(quote.sellAmount)
-          .multipliedBy(1000 - FRBTC_WRAP_FEE_PER_1000)
+          .multipliedBy(1000 - wrapFee)
           .dividedBy(1000)
           .integerValue(BigNumber.ROUND_FLOOR)
       : BigNumber(quote.sellAmount);
@@ -68,30 +82,56 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const hasHighSlippage = slippagePercent !== null && slippagePercent > 5;
   const hasWarningSlippage = slippagePercent !== null && slippagePercent > 1 && slippagePercent <= 5;
 
-  // Determine if this is a multi-hop swap (BTC -> something other than frBTC)
-  const isMultiHop = (sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID) ||
-                     (buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID);
-  
+  // Get swap route from quote
   const getSwapRoute = () => {
-    if (!isMultiHop) return null;
+    // Use route from quote if available (multi-hop)
+    if (quote?.route && quote.route.length > 2) {
+      return quote.route.map((tokenId, index) => {
+        let symbol = tokenId;
+        let label = tokenId;
+        
+        if (tokenId === normalizedSell) {
+          symbol = sellName || sellId;
+          label = sellName || sellId;
+        } else if (tokenId === normalizedBuy) {
+          symbol = buyName || buyId;
+          label = buyName || buyId;
+        } else if (tokenId === FRBTC_ALKANE_ID) {
+          symbol = 'frBTC';
+          label = 'frBTC';
+        } else {
+          // Try to get display name from tokenDisplayMap
+          const displayToken = tokenDisplayMap?.[tokenId];
+          if (displayToken) {
+            symbol = displayToken.symbol || displayToken.name || tokenId;
+            label = displayToken.name || displayToken.symbol || tokenId;
+          }
+        }
+        
+        return { id: tokenId, symbol, label };
+      });
+    }
     
-    if (sellId === 'btc') {
+    // Handle BTC wrap/unwrap cases
+    if (sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID) {
       return [
         { id: 'btc', symbol: 'BTC', label: 'Bitcoin' },
         { id: 'frbtc', symbol: 'frBTC', label: 'Wrap' },
         { id: buyId, symbol: buyName || buyId, label: buyName || buyId }
       ];
-    } else if (buyId === 'btc') {
+    } else if (buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID) {
       return [
         { id: sellId, symbol: sellName || sellId, label: sellName || sellId },
         { id: 'frbtc', symbol: 'frBTC', label: 'Unwrap' },
         { id: 'btc', symbol: 'BTC', label: 'Bitcoin' }
       ];
     }
+    
     return null;
   };
 
   const swapRoute = getSwapRoute();
+  const isMultiHop = swapRoute && swapRoute.length > 2;
 
   return (
     <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-4 text-sm backdrop-blur-sm transition-all">
@@ -101,10 +141,12 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
         <>
           {swapRoute && (
             <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-2">Swap Route</div>
-              <div className="flex items-center gap-2">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-2">
+                {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
                 {swapRoute.map((step, index) => (
-                  <div key={step.id} className="flex items-center gap-2">
+                  <div key={`${step.id}-${index}`} className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5">
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">
                         {index + 1}
@@ -120,7 +162,15 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 ))}
               </div>
               <div className="mt-1.5 text-[10px] text-blue-700">
-                {sellId === 'btc' ? 'BTC will be wrapped to frBTC first' : 'frBTC will be unwrapped to BTC'}
+                {quote?.hops === 2 && swapRoute.length === 3 && (
+                  <>
+                    {swapRoute[1].id === BUSD_ALKANE_ID && '⚡ Using bUSD as bridge token'}
+                    {swapRoute[1].id === FRBTC_ALKANE_ID && '⚡ Using frBTC as bridge token'}
+                  </>
+                )}
+                {sellId === 'btc' && buyId !== 'frbtc' && '🔄 BTC will be wrapped to frBTC before swap'}
+                {buyId === 'btc' && sellId !== 'frbtc' && '🔄 frBTC will be unwrapped to BTC after swap'}
+                {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
               </div>
             </div>
           )}

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts && npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
+    "test:unit": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts",
+    "test:integration": "npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts"
   },
   "dependencies": {
     "@bitcoinerlab/secp256k1": "^1.2.0",
@@ -29,6 +32,8 @@
   },
   "devDependencies": {
     "@noble/curves": "^2.0.1",
+    "@playwright/experimental-ct-react": "^1.56.1",
+    "@playwright/test": "^1.56.1",
     "@scure/base": "^2.0.0",
     "@scure/btc-signer": "^2.0.1",
     "@tailwindcss/postcss": "^4",

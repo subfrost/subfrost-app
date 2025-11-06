@@ -101,47 +101,128 @@ export default function SwapShell() {
     (fromToken?.id === 'btc' ? FRBTC_ALKANE_ID : fromToken?.id) || FRBTC_ALKANE_ID,
   [fromToken?.id, FRBTC_ALKANE_ID]);
   const { data: fromPairs } = useAlkanesTokenPairs(normalizedFromId);
+  
+  // Fetch BUSD pairs for bridge routing
+  const { data: busdPairs } = useAlkanesTokenPairs(BUSD_ALKANE_ID);
+  
+  // Fetch frBTC pairs for bridge routing
+  const { data: frbtcPairs } = useAlkanesTokenPairs(FRBTC_ALKANE_ID);
+  
   const poolTokenIds = useMemo(() => {
     const ids = new Set<string>();
     fromPairs?.forEach((p) => {
       ids.add(p.token0.id === normalizedFromId ? p.token1.id : p.token0.id);
     });
+    // Add bridge-reachable tokens
+    busdPairs?.forEach((p) => {
+      ids.add(p.token0.id === BUSD_ALKANE_ID ? p.token1.id : p.token0.id);
+    });
+    frbtcPairs?.forEach((p) => {
+      ids.add(p.token0.id === FRBTC_ALKANE_ID ? p.token1.id : p.token0.id);
+    });
     return Array.from(ids);
-  }, [fromPairs, normalizedFromId]);
+  }, [fromPairs, busdPairs, frbtcPairs, normalizedFromId, BUSD_ALKANE_ID, FRBTC_ALKANE_ID]);
+  
   const { data: tokenDisplayMap } = useTokenDisplayMap(poolTokenIds);
+  
   const toOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
-    // Include tokens that pair with selected FROM
-    fromPairs?.forEach((p) => {
-      const other = p.token0.id === normalizedFromId ? p.token1.id : p.token0.id;
-      const userMeta = idToUserCurrency.get(other);
-      const fetched = tokenDisplayMap?.[other];
-      const symbol = userMeta?.symbol || fetched?.symbol || fetched?.name || other;
+    
+    // Helper function to create token meta
+    const createTokenMeta = (tokenId: string): TokenMeta => {
+      const userMeta = idToUserCurrency.get(tokenId);
+      const fetched = tokenDisplayMap?.[tokenId];
+      const symbol = userMeta?.symbol || fetched?.symbol || fetched?.name || tokenId;
       const name = userMeta?.name || fetched?.name || symbol;
       
-      // Generate Oyl asset URL for alkane tokens (note: asset.oyl.gg, not assets)
       let iconUrl: string | undefined;
-      if (/^\d+:\d+/.test(other)) {
-        const urlSafeId = other.replace(/:/g, '-');
+      if (/^\d+:\d+/.test(tokenId)) {
+        const urlSafeId = tokenId.replace(/:/g, '-');
         iconUrl = `https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`;
       }
       
-      opts.push({ id: other, symbol, name, iconUrl });
-    });
-    // Ensure bUSD is included initially when no FROM chosen; otherwise rely on pools list
+      return { id: tokenId, symbol, name, iconUrl };
+    };
+    
+    // Case 1: No FROM token selected - show defaults
     if (!fromToken) {
       const busdUrlSafe = BUSD_ALKANE_ID.replace(/:/g, '-');
-      opts.unshift({ 
+      opts.push({ 
         id: BUSD_ALKANE_ID, 
         symbol: 'bUSD', 
         name: 'bUSD',
         iconUrl: `https://asset.oyl.gg/alkanes/${network}/${busdUrlSafe}.png`
       });
+      return opts;
     }
+    
+    // Case 2: Selling BUSD - only show direct BUSD pairs
+    if (normalizedFromId === BUSD_ALKANE_ID) {
+      busdPairs?.forEach((p) => {
+        const other = p.token0.id === BUSD_ALKANE_ID ? p.token1.id : p.token0.id;
+        opts.push(createTokenMeta(other));
+      });
+      // Add BTC option (will unwrap from frBTC)
+      if (opts.some(t => t.id === FRBTC_ALKANE_ID)) {
+        opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+      }
+      const seen = new Set<string>();
+      return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
+    }
+    
+    // Case 3: Selling BTC or frBTC - show direct frBTC pairs + BTC
+    if (fromToken.id === 'btc' || normalizedFromId === FRBTC_ALKANE_ID) {
+      frbtcPairs?.forEach((p) => {
+        const other = p.token0.id === FRBTC_ALKANE_ID ? p.token1.id : p.token0.id;
+        opts.push(createTokenMeta(other));
+      });
+      // Add BTC as option if selling frBTC
+      if (fromToken.id !== 'btc') {
+        opts.unshift({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+      }
+      const seen = new Set<string>();
+      return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
+    }
+    
+    // Case 4: Selling other alkane - show direct + bridge options
+    // Direct pairs
+    fromPairs?.forEach((p) => {
+      const other = p.token0.id === normalizedFromId ? p.token1.id : p.token0.id;
+      opts.push(createTokenMeta(other));
+    });
+    
+    // BUSD bridge pairs (if FROM has pool with BUSD)
+    const hasBusdBridge = fromPairs?.some(p => 
+      p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID
+    );
+    if (hasBusdBridge) {
+      busdPairs?.forEach((p) => {
+        const other = p.token0.id === BUSD_ALKANE_ID ? p.token1.id : p.token0.id;
+        if (other !== normalizedFromId) { // Don't add self
+          opts.push(createTokenMeta(other));
+        }
+      });
+    }
+    
+    // frBTC bridge pairs (if FROM has pool with frBTC)
+    const hasFrbtcBridge = fromPairs?.some(p => 
+      p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID
+    );
+    if (hasFrbtcBridge) {
+      frbtcPairs?.forEach((p) => {
+        const other = p.token0.id === FRBTC_ALKANE_ID ? p.token1.id : p.token0.id;
+        if (other !== normalizedFromId) { // Don't add self
+          opts.push(createTokenMeta(other));
+        }
+      });
+      // Add BTC option since frBTC bridge is available
+      opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+    }
+    
     // Unique by id
     const seen = new Set<string>();
     return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
-  }, [fromPairs, idToUserCurrency, normalizedFromId, fromToken, BUSD_ALKANE_ID, tokenDisplayMap, network]);
+  }, [fromPairs, busdPairs, frbtcPairs, idToUserCurrency, normalizedFromId, fromToken, BUSD_ALKANE_ID, FRBTC_ALKANE_ID, tokenDisplayMap, network]);
 
   // Balances
   const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();

@@ -23,6 +23,8 @@ export type SwapQuote = {
   exchangeRate: string;
   minimumReceived: string;
   maximumSent: string;
+  route?: string[]; // Token IDs in swap path (e.g., ['32:0', '5:0', '2:0'])
+  hops?: number; // Number of swaps (1 for direct, 2 for multi-hop)
 };
 
 
