@@ -172,10 +172,25 @@ export default function SwapShell() {
     
     // Case 3: Selling BTC or frBTC - show direct frBTC pairs + BTC
     if (fromToken.id === 'btc' || normalizedFromId === FRBTC_ALKANE_ID) {
-      frbtcPairs?.forEach((p) => {
-        const other = p.token0.id === FRBTC_ALKANE_ID ? p.token1.id : p.token0.id;
-        opts.push(createTokenMeta(other));
-      });
+      // Always show frBTC as an option when selling BTC
+      if (fromToken.id === 'btc') {
+        const frbtcUrlSafe = FRBTC_ALKANE_ID.replace(/:/g, '-');
+        opts.push({
+          id: FRBTC_ALKANE_ID,
+          symbol: 'frBTC',
+          name: 'frBTC',
+          iconUrl: `https://asset.oyl.gg/alkanes/${network}/${frbtcUrlSafe}.png`
+        });
+      }
+      
+      if (frbtcPairs && frbtcPairs.length > 0) {
+        frbtcPairs.forEach((p) => {
+          const other = p.token0.id === FRBTC_ALKANE_ID ? p.token1.id : p.token0.id;
+          if (other !== FRBTC_ALKANE_ID) { // Don't duplicate frBTC
+            opts.push(createTokenMeta(other));
+          }
+        });
+      }
       // Add BTC as option if selling frBTC
       if (fromToken.id !== 'btc') {
         opts.unshift({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
