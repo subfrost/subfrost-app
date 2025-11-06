@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
-import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
+import { createSimulateRequestObject, parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 
 /**
@@ -47,21 +47,22 @@ export function useFrbtcPremium() {
         const frbtcId = parseAlkaneId(FRBTC_ALKANE_ID);
         
         // Simulate call to frBTC contract with opcode 104 (get_premium)
-        const result = await provider.alkanes.simulate({
-          target: frbtcId,
-          inputs: [104], // opcode 104 = get_premium
-          alkanes: [],
-        });
+        
+        const request = createSimulateRequestObject({
+          target: { block: frbtcId.block, tx: frbtcId.tx },
+          inputs: ["104"]
+        })
+        
+        const result = await provider.alkanes.simulate(request);
 
-        if (!result || !result.data) {
+        console.log('result', result);
+
+        if (!result || !result.execution.data) {
           throw new Error('No response data from simulate');
         }
 
-        // Parse premium from response data (u128 in le_bytes)
-        const premiumBigInt = parseU128FromBytes(result.data);
-        
         // Convert to number (premium is in range 0-100,000,000)
-        const premium = Number(premiumBigInt);
+        const premium = Number(result.parsed.le);
         
         // Convert to per-1000 format
         // Premium 100,000,000 = 100%, so divide by 100,000 to get per-1000
