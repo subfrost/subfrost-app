@@ -5,15 +5,19 @@ import SwapInputs from "./components/SwapInputs";
 import MarketsGrid from "./components/MarketsGrid";
 import PoolDetailsCard from "./components/PoolDetailsCard";
 import type { PoolSummary, TokenMeta } from "./types";
-import SwapHeaderTabs from "./components/SwapHeaderTabs";
+import SwapHeaderTabs, { type TabKey } from "./components/SwapHeaderTabs";
+import LiquidityPanel from "./components/LiquidityPanel";
+import UserPositionsList from "./components/UserPositionsList";
 import { useSwapQuotes } from "@/hooks/useSwapQuotes";
 import { useSwapMutation } from "@/hooks/useSwapMutation";
+import { useUserPositions } from "@/hooks/useUserPositions";
 import { useWallet } from "@/context/WalletContext";
 import { getConfig } from "@/utils/getConfig";
 import { useAlkanesTokenPairs } from "@/hooks/useAlkanesTokenPairs";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
 import { useBtcBalance } from "@/hooks/useBtcBalance";
 import { useTokenDisplayMap } from "@/hooks/useTokenDisplayMap";
+import { useAllAlkanes } from "@/hooks/useAllAlkanes";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import SwapSummary from "./components/SwapSummary";
@@ -25,6 +29,9 @@ import { usePools } from "@/hooks/usePools";
 import { useModalStore } from "@/stores/modals";
 
 export default function SwapShell() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabKey>("swap");
+
   // Markets from API: all pools sorted by TVL desc
   const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
   const markets = useMemo<PoolSummary[]>(() => (poolsData?.items ?? []), [poolsData?.items]);
@@ -35,9 +42,16 @@ export default function SwapShell() {
   const [fromAmount, setFromAmount] = useState<string>("");
   const [toAmount, setToAmount] = useState<string>("");
   const [direction, setDirection] = useState<'sell' | 'buy'>('sell');
+  
+  // LP state
+  const [lpToken0, setLpToken0] = useState<TokenMeta | undefined>();
+  const [lpToken1, setLpToken1] = useState<TokenMeta | undefined>();
+  const [lpToken0Amount, setLpToken0Amount] = useState<string>("");
+  const [lpToken1Amount, setLpToken1Amount] = useState<string>("");
+  
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
-  const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
+  const { isTokenSelectorOpen, tokenSelectorMode, openTokenSelector, closeTokenSelector } = useModalStore();
 
   const sellId = fromToken?.id ?? '';
   const buyId = toToken?.id ?? '';
@@ -53,6 +67,13 @@ export default function SwapShell() {
   // Wallet/config
   const { address, network } = useWallet();
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
+
+  // User LP positions
+  const { data: userPositions = [], isLoading: isLoadingPositions } = useUserPositions(address, network);
+
+  // All Alkanes tokens (for LP selector)
+  const { data: allAlkanesData } = useAllAlkanes({ limit: 200, sort_by: 'marketcap' });
+  const allAlkanes = useMemo(() => allAlkanesData?.tokens ?? [], [allAlkanesData?.tokens]);
 
   // User tokens (for FROM selector)
   const { data: userCurrencies = [], isFetching: isFetchingUserCurrencies } = useSellableCurrencies(address);
@@ -183,6 +204,55 @@ export default function SwapShell() {
     }
   };
 
+  const handleAddLiquidity = async () => {
+    if (!lpToken0 || !lpToken1) return;
+    // TODO: Implement liquidity addition mutation
+    window.alert('Add liquidity functionality coming soon!');
+  };
+
+  const formatLpBalance = (id?: string): string => {
+    if (!id) return 'Balance 0';
+    if (id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = sats / 1e8;
+      return `Balance ${btc.toFixed(6)}`;
+    }
+    const cur = idToUserCurrency.get(id);
+    if (!cur?.balance) return 'Balance 0';
+    const amt = Number(cur.balance) / 1e8;
+    return `Balance ${amt.toFixed(6)}`;
+  };
+
+  const handleMaxLpToken0 = () => {
+    if (!lpToken0) return;
+    if (lpToken0.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = sats / 1e8;
+      setLpToken0Amount(btc.toFixed(8));
+    } else {
+      const cur = idToUserCurrency.get(lpToken0.id);
+      if (cur?.balance) {
+        const amt = Number(cur.balance) / 1e8;
+        setLpToken0Amount(amt.toFixed(8));
+      }
+    }
+  };
+
+  const handleMaxLpToken1 = () => {
+    if (!lpToken1) return;
+    if (lpToken1.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = sats / 1e8;
+      setLpToken1Amount(btc.toFixed(8));
+    } else {
+      const cur = idToUserCurrency.get(lpToken1.id);
+      if (cur?.balance) {
+        const amt = Number(cur.balance) / 1e8;
+        setLpToken1Amount(amt.toFixed(8));
+      }
+    }
+  };
+
   useEffect(() => {
     if (!quote) return;
     if (direction === 'sell') {
@@ -252,6 +322,37 @@ export default function SwapShell() {
     });
   }, [toOptions, idToUserCurrency, tokenDisplayMap]);
 
+  // LP token options: BTC + all Alkanes (not just user-held ones)
+  const lpTokenOptions = useMemo<TokenOption[]>(() => {
+    const opts: TokenOption[] = [
+      {
+        id: 'btc',
+        symbol: 'BTC',
+        name: 'Bitcoin',
+        balance: String(btcBalanceSats ?? 0),
+        price: undefined,
+      }
+    ];
+
+    // Add all Alkanes from the protocol
+    allAlkanes.forEach((alkane) => {
+      const alkaneIdStr = `${alkane.id.block}:${alkane.id.tx}`;
+      const currency = idToUserCurrency.get(alkaneIdStr);
+      const urlSafeId = alkaneIdStr.replace(/:/g, '-');
+      
+      opts.push({
+        id: alkaneIdStr,
+        symbol: alkane.symbol || alkane.name,
+        name: alkane.name || alkane.symbol,
+        iconUrl: `https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`,
+        balance: currency?.balance,
+        price: alkane.busdPoolPriceInUsd,
+      });
+    });
+
+    return opts;
+  }, [allAlkanes, idToUserCurrency, btcBalanceSats, network]);
+
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {
       const token = fromOptions.find((t) => t.id === tokenId);
@@ -263,6 +364,28 @@ export default function SwapShell() {
     } else if (tokenSelectorMode === 'to') {
       const token = toOptions.find((t) => t.id === tokenId);
       if (token) setToToken(token);
+    } else if (tokenSelectorMode === 'lp0') {
+      // Find from lpTokenOptions which includes all alkanes
+      const lpOption = lpTokenOptions.find((t) => t.id === tokenId);
+      if (lpOption) {
+        setLpToken0({
+          id: lpOption.id,
+          symbol: lpOption.symbol,
+          name: lpOption.name,
+          iconUrl: lpOption.iconUrl,
+        });
+      }
+    } else if (tokenSelectorMode === 'lp1') {
+      // Find from lpTokenOptions which includes all alkanes
+      const lpOption = lpTokenOptions.find((t) => t.id === tokenId);
+      if (lpOption) {
+        setLpToken1({
+          id: lpOption.id,
+          symbol: lpOption.symbol,
+          name: lpOption.name,
+          iconUrl: lpOption.iconUrl,
+        });
+      }
     }
   };
 
@@ -307,9 +430,11 @@ export default function SwapShell() {
       <section className="relative mx-auto w-full max-w-[540px] rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
         {isBalancesLoading && <LoadingOverlay />}
         <div className="mb-6 flex w-full items-center justify-center">
-          <SwapHeaderTabs />
+          <SwapHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
-        <SwapInputs
+        
+        {activeTab === "swap" ? (
+          <SwapInputs
           from={fromToken}
           to={toToken}
           fromOptions={fromOptions}
@@ -357,9 +482,36 @@ export default function SwapShell() {
             />
           }
         />
+        ) : (
+          <div className="space-y-6">
+            <LiquidityPanel
+              token0={lpToken0}
+              token1={lpToken1}
+              token0Amount={lpToken0Amount}
+              token1Amount={lpToken1Amount}
+              onChangeToken0Amount={setLpToken0Amount}
+              onChangeToken1Amount={setLpToken1Amount}
+              onOpenToken0Selector={() => openTokenSelector('lp0')}
+              onOpenToken1Selector={() => openTokenSelector('lp1')}
+              onAddLiquidity={handleAddLiquidity}
+              token0BalanceText={formatLpBalance(lpToken0?.id)}
+              token1BalanceText={formatLpBalance(lpToken1?.id)}
+              token0FiatText="$0.00"
+              token1FiatText="$0.00"
+              onMaxToken0={lpToken0 ? handleMaxLpToken0 : undefined}
+              onMaxToken1={lpToken1 ? handleMaxLpToken1 : undefined}
+              network={network}
+            />
+            
+            <UserPositionsList 
+              positions={userPositions} 
+              isLoading={isLoadingPositions}
+            />
+          </div>
+        )}
       </section>
 
-      <PoolDetailsCard pool={selectedPool} />
+      {activeTab === "swap" && <PoolDetailsCard pool={selectedPool} />}
 
       <MarketsGrid pools={markets} onSelect={handleSelectPool} />
 
@@ -374,10 +526,24 @@ export default function SwapShell() {
       <TokenSelectorModal
         isOpen={isTokenSelectorOpen}
         onClose={closeTokenSelector}
-        tokens={tokenSelectorMode === 'from' ? fromTokenOptions : toTokenOptions}
+        tokens={
+          tokenSelectorMode === 'from' ? fromTokenOptions :
+          tokenSelectorMode === 'to' ? toTokenOptions :
+          lpTokenOptions // Use lpTokenOptions for LP modes (all Alkanes)
+        }
         onSelectToken={handleTokenSelect}
-        selectedTokenId={tokenSelectorMode === 'from' ? fromToken?.id : toToken?.id}
-        title={tokenSelectorMode === 'from' ? 'Select token to pay' : 'Select token to receive'}
+        selectedTokenId={
+          tokenSelectorMode === 'from' ? fromToken?.id :
+          tokenSelectorMode === 'to' ? toToken?.id :
+          tokenSelectorMode === 'lp0' ? lpToken0?.id :
+          lpToken1?.id
+        }
+        title={
+          tokenSelectorMode === 'from' ? 'Select token to pay' :
+          tokenSelectorMode === 'to' ? 'Select token to receive' :
+          tokenSelectorMode === 'lp0' ? 'Select first token for pool' :
+          'Select second token for pool'
+        }
         network={network}
       />
     </div>

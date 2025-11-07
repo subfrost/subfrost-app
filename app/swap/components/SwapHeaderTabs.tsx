@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+export type TabKey = "swap" | "lp";
 
-type TabKey = "swap" | "lp";
+type Props = {
+  activeTab: TabKey;
+  onTabChange: (tab: TabKey) => void;
+};
 
-export default function SwapHeaderTabs() {
-  const [tab, setTab] = useState<TabKey>("swap");
-
+export default function SwapHeaderTabs({ activeTab, onTabChange }: Props) {
   const base =
     "px-4 py-2 text-sm font-semibold rounded-md transition-colors sf-focus-ring";
   const active = "bg-[color:var(--sf-primary)] text-white shadow";
@@ -17,15 +18,15 @@ export default function SwapHeaderTabs() {
     <div className="inline-flex items-center gap-2 rounded-full bg-[color:var(--sf-glass-bg)] p-1 border border-[color:var(--sf-glass-border)] backdrop-blur-md">
       <button
         type="button"
-        className={`${base} ${tab === "swap" ? active : inactive}`}
-        onClick={() => setTab("swap")}
+        className={`${base} ${activeTab === "swap" ? active : inactive}`}
+        onClick={() => onTabChange("swap")}
       >
         SWAP
       </button>
       <button
         type="button"
-        className={`${base} ${tab === "lp" ? active : inactive}`}
-        onClick={() => setTab("lp")}
+        className={`${base} ${activeTab === "lp" ? active : inactive}`}
+        onClick={() => onTabChange("lp")}
       >
         LP
       </button>

@@ -11,9 +11,9 @@ export type ModalStoreShape = {
   openTxSettings: () => void;
   closeTxSettings: () => void;
   isTokenSelectorOpen: boolean;
-  tokenSelectorMode: 'from' | 'to' | null;
-  setTokenSelectorOpen: (open: boolean, mode?: 'from' | 'to') => void;
-  openTokenSelector: (mode: 'from' | 'to') => void;
+  tokenSelectorMode: 'from' | 'to' | 'lp0' | 'lp1' | null;
+  setTokenSelectorOpen: (open: boolean, mode?: 'from' | 'to' | 'lp0' | 'lp1') => void;
+  openTokenSelector: (mode: 'from' | 'to' | 'lp0' | 'lp1') => void;
   closeTokenSelector: () => void;
 };
 
@@ -37,7 +37,7 @@ export function ModalStore(props: { children: ReactNode }) {
   const [isConnectWalletOpen, setIsConnectWalletOpen] = useState(false);
   const [isTxSettingsOpen, setIsTxSettingsOpen] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
-  const [tokenSelectorMode, setTokenSelectorMode] = useState<'from' | 'to' | null>(null);
+  const [tokenSelectorMode, setTokenSelectorMode] = useState<'from' | 'to' | 'lp0' | 'lp1' | null>(null);
 
   const setConnectWalletOpen = (open: boolean) => setIsConnectWalletOpen(open);
   const openConnectWallet = () => setIsConnectWalletOpen(true);
@@ -45,12 +45,12 @@ export function ModalStore(props: { children: ReactNode }) {
   const setTxSettingsOpen = (open: boolean) => setIsTxSettingsOpen(open);
   const openTxSettings = () => setIsTxSettingsOpen(true);
   const closeTxSettings = () => setIsTxSettingsOpen(false);
-  const setTokenSelectorOpen = (open: boolean, mode?: 'from' | 'to') => {
+  const setTokenSelectorOpen = (open: boolean, mode?: 'from' | 'to' | 'lp0' | 'lp1') => {
     setIsTokenSelectorOpen(open);
     if (mode) setTokenSelectorMode(mode);
     if (!open) setTokenSelectorMode(null);
   };
-  const openTokenSelector = (mode: 'from' | 'to') => {
+  const openTokenSelector = (mode: 'from' | 'to' | 'lp0' | 'lp1') => {
     setTokenSelectorMode(mode);
     setIsTokenSelectorOpen(true);
   };
