@@ -12,7 +12,10 @@
     "test:calldata": "npx tsx hooks/__tests__/vaultCalldata.test.ts",
     "test:utxo": "npx tsx hooks/__tests__/utxoParsing.test.ts",
     "test:unit": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts",
-    "test:integration": "npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts"
+    "test:integration": "npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
+    "test:e2e:vault": "npx tsx e2e/vault-e2e.test.ts",
+    "test:e2e:swap": "npx tsx e2e/swap-e2e.test.ts",
+    "test:e2e": "npm run test:e2e:swap && npm run test:e2e:vault"
   },
   "dependencies": {
     "@bitcoinerlab/secp256k1": "^1.2.0",
@@ -41,10 +44,12 @@
     "@scure/btc-signer": "^2.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/puppeteer": "^5.4.7",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
+    "puppeteer": "^24.29.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
