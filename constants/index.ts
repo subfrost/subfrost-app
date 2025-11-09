@@ -17,4 +17,15 @@ export const FACTORY_OPCODES = {
   SwapTokensForExactTokens: '14',
 };
 
+// Vault opcodes for UnitVault operations (yveDIESEL, yvfrBTC, etc.)
+export const VAULT_OPCODES = {
+  Initialize: '0',
+  Purchase: '1',           // Deposit tokens, receive vault units
+  Redeem: '2',             // Burn vault units, receive tokens back
+  ClaimAndRestake: '3',    // Claim rewards and auto-compound
+  GetVeDieselBalance: '4', // Query user's vault unit balance
+  ReceiveRewards: '5',     // Claim accumulated rewards
+  ClaimAndDistributeRewards: '6', // Strategist harvest operation
+};
+
 

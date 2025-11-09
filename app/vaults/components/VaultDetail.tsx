@@ -4,6 +4,10 @@ import { useState } from "react";
 import VaultHero from "./VaultHero";
 import VaultDepositInterface from "./VaultDepositInterface";
 import { VaultConfig } from "../constants";
+import { useVaultStats } from "@/hooks/useVaultStats";
+import { useVaultDeposit } from "@/hooks/useVaultDeposit";
+import { useVaultWithdraw } from "@/hooks/useVaultWithdraw";
+import { useVaultUnits } from "@/hooks/useVaultUnits";
 
 type Props = {
   vault: VaultConfig;
@@ -12,17 +16,67 @@ type Props = {
 export default function VaultDetail({ vault }: Props) {
   const [mode, setMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [infoTab, setInfoTab] = useState<'about' | 'strategies' | 'info' | 'risk'>('about');
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
 
-  // Mock data - replace with real hooks
+  // Fetch real vault stats
+  const { data: vaultStats, isLoading: isLoadingStats } = useVaultStats(
+    vault.contractAddress,
+    vault.tokenId
+  );
+  
+  // Fetch user's vault units (for withdraw)
+  const { data: vaultUnits, isLoading: isLoadingUnits } = useVaultUnits(vault.tokenId);
+  
+  // Vault mutation hooks
+  const depositMutation = useVaultDeposit();
+  const withdrawMutation = useVaultWithdraw();
+
   const stats = {
-    tvl: "34,033,640.92",
-    apy: vault.estimatedApy || "0.00",
-    userBalance: "0.00",
+    tvl: vaultStats?.tvlFormatted || "0.00",
+    apy: vault.estimatedApy || vaultStats?.apy || "0.00",
+    userBalance: vaultStats?.userBalanceFormatted || "0.00",
   };
 
-  const handleExecute = () => {
-    console.log(`${mode}:`, vault.id, stats);
-    // TODO: Implement actual vault interaction
+  const handleExecute = async (amount: string) => {
+    const feeRate = 10; // Default fee rate, TODO: fetch from fee estimator
+    
+    if (mode === 'deposit') {
+      try {
+        const result = await depositMutation.mutateAsync({
+          vaultContractId: vault.contractAddress,
+          tokenId: vault.tokenId,
+          amount,
+          feeRate,
+        });
+        console.log('Deposit successful:', result.transactionId);
+        // TODO: Show success toast
+      } catch (error) {
+        console.error('Deposit failed:', error);
+        // TODO: Show error toast
+      }
+    } else {
+      // Withdraw mode
+      if (!selectedUnitId) {
+        console.error('No vault unit selected');
+        // TODO: Show error toast
+        return;
+      }
+      
+      try {
+        const result = await withdrawMutation.mutateAsync({
+          vaultContractId: vault.contractAddress,
+          vaultUnitId: selectedUnitId,
+          amount: '1', // Vault units are typically 1 per deposit
+          feeRate,
+        });
+        console.log('Withdraw successful:', result.transactionId);
+        // TODO: Show success toast
+        setSelectedUnitId(''); // Reset selection
+      } catch (error) {
+        console.error('Withdraw failed:', error);
+        // TODO: Show error toast
+      }
+    }
   };
 
   return (
@@ -39,6 +93,9 @@ export default function VaultDetail({ vault }: Props) {
           userBalance={stats.userBalance}
           apy={stats.apy}
           onExecute={handleExecute}
+          vaultUnits={vaultUnits || []}
+          selectedUnitId={selectedUnitId}
+          onUnitSelect={setSelectedUnitId}
         />
 
         {/* Right: Hero Section */}

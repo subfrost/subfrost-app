@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts && npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
+    "test": "npm run test:math && npm run test:calldata && npm run test:utxo",
+    "test:math": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts && npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
+    "test:calldata": "npx tsx hooks/__tests__/vaultCalldata.test.ts",
+    "test:utxo": "npx tsx hooks/__tests__/utxoParsing.test.ts",
     "test:unit": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts",
     "test:integration": "npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts"
   },
