@@ -47,73 +47,39 @@ export function useFuturesMarkets(params: UseFuturesMarketsParams = {}) {
     refetchInterval: 30_000, // Auto-refresh every 30 seconds
     queryFn: async () => {
       try {
-        // TODO: Replace with actual indexer API endpoint when available
-        // The indexer should expose something like:
-        // const response = await api.getFuturesMarkets({
-        //   network,
-        //   type: params.type,
-        //   baseAsset: params.baseAsset,
-        // });
-        
-        // For now, return mock data structure
-        // This shows the expected data format from the indexer
         console.log('[useFuturesMarkets] Fetching from indexer...', {
           network,
           ...params,
         });
 
-        // Mock data - replace with actual indexer call
-        const mockMarkets: FuturesMarket[] = [
-          {
-            id: 'btc-perp',
-            symbol: 'BTC-PERP',
-            type: 'perpetual',
-            baseAsset: 'BTC',
-            quoteAsset: 'USDT',
-            markPrice: 43250.50,
-            indexPrice: 43245.30,
-            lastPrice: 43255.00,
-            priceChange24h: 2.35,
-            volume24h: 15234567,
-            openInterest: 8934521,
-            fundingRate: 0.0123,
-            nextFundingTime: '2h 15m',
-            maxLeverage: 20,
-            minOrderSize: 0.001,
-            tickSize: 0.5,
-          },
-          {
-            id: 'diesel-perp',
-            symbol: 'DIESEL-PERP',
-            type: 'perpetual',
-            baseAsset: 'DIESEL',
-            quoteAsset: 'USDT',
-            markPrice: 1.45,
-            indexPrice: 1.44,
-            lastPrice: 1.46,
-            priceChange24h: 5.67,
-            volume24h: 234567,
-            openInterest: 156789,
-            fundingRate: 0.0089,
-            nextFundingTime: '2h 15m',
-            maxLeverage: 10,
-            minOrderSize: 1.0,
-            tickSize: 0.01,
-          },
-        ];
+        // Call the actual indexer API
+        const response = await api.getFuturesMarkets({
+          type: params.type,
+          baseAsset: params.baseAsset,
+        });
 
-        // Filter by type if specified
-        let filtered = mockMarkets;
-        if (params.type && params.type !== 'all') {
-          filtered = filtered.filter((m) => m.type === params.type);
-        }
+        // Transform API response to match our FuturesMarket type
+        const markets: FuturesMarket[] = response.markets.map((m) => ({
+          id: m.id,
+          symbol: m.symbol,
+          type: m.type,
+          baseAsset: m.baseAsset,
+          quoteAsset: m.quoteAsset,
+          markPrice: m.markPrice,
+          indexPrice: m.indexPrice,
+          lastPrice: m.lastPrice,
+          priceChange24h: m.priceChange24h,
+          volume24h: m.volume24h,
+          openInterest: m.openInterest,
+          fundingRate: m.fundingRate,
+          nextFundingTime: m.nextFundingTime,
+          expiryDate: m.expiryDate,
+          maxLeverage: m.maxLeverage,
+          minOrderSize: m.minOrderSize,
+          tickSize: m.tickSize,
+        }));
 
-        // Filter by base asset if specified
-        if (params.baseAsset) {
-          filtered = filtered.filter((m) => m.baseAsset === params.baseAsset);
-        }
-
-        return filtered;
+        return markets;
       } catch (error) {
         console.error('[useFuturesMarkets] Error fetching markets:', error);
         throw error;
@@ -133,15 +99,36 @@ export function useFuturesMarket(marketId: string) {
     queryKey: ['futures-market', network, marketId],
     staleTime: 10_000, // 10 seconds for individual market
     refetchInterval: 10_000,
+    enabled: !!marketId, // Only run if marketId is provided
     queryFn: async () => {
       try {
         console.log('[useFuturesMarket] Fetching market:', marketId);
         
-        // TODO: Replace with actual indexer API call
-        // const response = await api.getFuturesMarket({ marketId, network });
+        // Call the actual indexer API
+        const response = await api.getFuturesMarket({ marketId });
         
-        // Mock data for now
-        return null;
+        // Transform to our FuturesMarket type
+        const market: FuturesMarket = {
+          id: response.id,
+          symbol: response.symbol,
+          type: response.type,
+          baseAsset: response.baseAsset,
+          quoteAsset: response.quoteAsset,
+          markPrice: response.markPrice,
+          indexPrice: response.indexPrice,
+          lastPrice: response.lastPrice,
+          priceChange24h: response.priceChange24h,
+          volume24h: response.volume24h,
+          openInterest: response.openInterest,
+          fundingRate: response.fundingRate,
+          nextFundingTime: response.nextFundingTime,
+          expiryDate: response.expiryDate,
+          maxLeverage: response.maxLeverage,
+          minOrderSize: response.minOrderSize,
+          tickSize: response.tickSize,
+        };
+        
+        return market;
       } catch (error) {
         console.error('[useFuturesMarket] Error fetching market:', error);
         throw error;
