@@ -205,7 +205,7 @@ async function runTestSuite() {
       }
       
       // Wait for vault detail page to load
-      await page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Verify we're on vault detail page
       const hasDepositTab = await page.evaluate(() => {
@@ -277,7 +277,7 @@ async function runTestSuite() {
       }
       
       // Wait for console log indicating transaction submission
-      await page.waitForTimeout(5000);
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
       // Check console for transaction ID
       const txIdLog = consoleLogs.find(log => 
@@ -299,7 +299,7 @@ async function runTestSuite() {
     // ==========================================
     await runTest('Verify vault units appear after deposit', async () => {
       console.log('   ⏳ Waiting 60s for transaction to confirm...');
-      await page.waitForTimeout(60000); // Wait for block confirmation
+      await new Promise(resolve => setTimeout(resolve, 60000)); // Wait for block confirmation
       
       // Refresh page to fetch new UTXOs
       await page.reload({ waitUntil: 'networkidle2' });
@@ -320,7 +320,7 @@ async function runTestSuite() {
         throw new Error('Withdraw tab not found');
       }
       
-      await page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Check if vault units are displayed
       const hasUnits = await page.evaluate(() => {
@@ -358,7 +358,7 @@ async function runTestSuite() {
       
       console.log('   ✅ Vault unit selected');
       
-      await page.waitForTimeout(1000);
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Find withdraw button
       const withdrawButtonEnabled = await page.evaluate(() => {
@@ -401,7 +401,7 @@ async function runTestSuite() {
       }
       
       // Wait for console log
-      await page.waitForTimeout(5000);
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
       const txIdLog = consoleLogs.find(log => 
         log.includes('Withdraw successful') || log.includes('transactionId')

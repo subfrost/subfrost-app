@@ -117,7 +117,7 @@ async function runTestSuite() {
     // ==========================================
     await runTest('Dynamic frBTC premium fetches without errors', async () => {
       // Check console for premium fetch
-      await page.waitForTimeout(3000); // Give time for hook to execute
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Give time for hook to execute
       
       const hasPremiumLog = consoleLogs.some(log => 
         log.includes('frbtc-premium') || log.includes('premium')
@@ -179,7 +179,7 @@ async function runTestSuite() {
     // ==========================================
     await runTest('Swap quote calculates and displays', async () => {
       // Wait for quote calculation
-      await page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Check if quote is displayed
       const hasQuote = await page.evaluate(() => {
