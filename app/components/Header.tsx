@@ -98,7 +98,10 @@
         </nav>
 
         {/* Desktop CTA */}
-         <div className="ml-auto relative hidden md:block" ref={menuRootRef}>
+         <div className="ml-auto relative hidden md:flex md:items-center md:gap-4" ref={menuRootRef}>
+          <Link href="/activity" className="text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:opacity-80 sf-focus-ring">
+            ACTIVITY
+          </Link>
           {walletConnected ? (
              <>
                <button
@@ -180,6 +183,13 @@
                    className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
                  >
                    FUTURES
+                 </Link>
+                 <Link
+                   href="/activity"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
+                 >
+                   ACTIVITY
                  </Link>
                  <Link
                    href="#"
