@@ -73,10 +73,10 @@ export default function SwapShell() {
   const toInitializedRef = useRef(false);
   useEffect(() => {
     if (!toInitializedRef.current && !toToken) {
-      setToToken({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
+      setToToken({ id: BUSD_ALKANE_ID, symbol: 'bUSD', name: 'bUSD' });
       toInitializedRef.current = true;
     }
-  }, [toToken, FRBTC_ALKANE_ID]);
+  }, [toToken, BUSD_ALKANE_ID]);
 
   // Build FROM options: BTC + all user-held tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
