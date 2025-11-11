@@ -8,6 +8,7 @@ import { queryPoolFee } from '@/hooks/usePoolFee';
 import { getSandshrewProvider } from '@/utils/oylProvider';
 import { FRBTC_UNWRAP_FEE_PER_1000, FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/utils/amm';
+import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 
 type Direction = 'buy' | 'sell';
 
@@ -89,6 +90,8 @@ async function calculateSwapPrice(
   maxSlippage: string,
   pool: AlkanesTokenPair,
   network: any,
+  wrapFee: number = FRBTC_WRAP_FEE_PER_1000,
+  unwrapFee: number = FRBTC_UNWRAP_FEE_PER_1000,
 ) {
   const provider = getSandshrewProvider(network);
   const poolFee = await queryPoolFee(provider, pool.poolId);
@@ -119,22 +122,22 @@ async function calculateSwapPrice(
   if (direction === 'sell') {
     let amountIn = Number(amountInAlks);
     if (sellCurrency === 'btc') {
-      amountIn = (amountIn * (1000 - FRBTC_WRAP_FEE_PER_1000)) / 1000;
+      amountIn = (amountIn * (1000 - wrapFee)) / 1000;
     }
     let calculatedOut = swapCalculateOut({ amountIn, reserveIn, reserveOut, feePercentage: poolFee });
     if (buyCurrency === 'btc') {
-      calculatedOut = (calculatedOut * (1000 - FRBTC_UNWRAP_FEE_PER_1000)) / 1000;
+      calculatedOut = (calculatedOut * (1000 - unwrapFee)) / 1000;
     }
     sellAmount = amountInAlks;
     buyAmount = calculatedOut.toString();
   } else {
     let amountOut = Number(amountInAlks);
     if (buyCurrency === 'btc') {
-      amountOut = (amountOut * (1000 + FRBTC_UNWRAP_FEE_PER_1000)) / 1000;
+      amountOut = (amountOut * (1000 + unwrapFee)) / 1000;
     }
     let calculatedIn = swapCalculateIn({ amountOut, reserveIn, reserveOut, feePercentage: poolFee });
     if (sellCurrency === 'btc') {
-      calculatedIn = (calculatedIn * (1000 + FRBTC_WRAP_FEE_PER_1000)) / 1000;
+      calculatedIn = (calculatedIn * (1000 + wrapFee)) / 1000;
     }
     buyAmount = amountInAlks;
     sellAmount = calculatedIn.toString();
@@ -174,6 +177,11 @@ export function useSwapQuotes(
 
   const { data: sellPairs, isFetching: fetchingSell } = useAlkanesTokenPairs(sellCurrencyId);
   const { data: buyPairs, isFetching: fetchingBuy } = useAlkanesTokenPairs(buyCurrencyId);
+  
+  // Fetch dynamic frBTC wrap/unwrap fees
+  const { data: premiumData } = useFrbtcPremium();
+  const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
+  const unwrapFee = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
 
   return useQuery<SwapQuote>({
     queryKey: [
@@ -185,9 +193,89 @@ export function useSwapQuotes(
       sellPairs,
       buyPairs,
       maxSlippage,
+      wrapFee,
+      unwrapFee,
     ],
     enabled: !!sellCurrencyId && !!buyCurrencyId,
     queryFn: async () => {
+      // Short-circuit: direct BTC ↔ frBTC wrap/unwrap (no AMM)
+      const isDirectWrap = sellCurrency === 'btc' && buyCurrency === FRBTC_ALKANE_ID;
+      const isDirectUnwrap = sellCurrency === FRBTC_ALKANE_ID && buyCurrency === 'btc';
+
+      const amtNum = parseFloat(debouncedAmount);
+      if (isDirectWrap || isDirectUnwrap) {
+        if (!debouncedAmount || !Number.isFinite(amtNum) || amtNum === 0) {
+          return {
+            direction,
+            inputAmount: debouncedAmount,
+            buyAmount: '0',
+            sellAmount: '0',
+            exchangeRate: '0',
+            minimumReceived: '0',
+            maximumSent: '0',
+            displayBuyAmount: '0',
+            displaySellAmount: '0',
+            displayMinimumReceived: '0',
+            displayMaximumSent: '0',
+            route: [isDirectWrap ? 'wrap' : 'unwrap'],
+            hops: 0,
+          } as SwapQuote;
+        }
+
+        const amountInAlks = toAlks(debouncedAmount);
+        let buyAmount: string;
+        let sellAmount: string;
+
+        if (direction === 'sell') {
+          // Input is the sell side
+          const inAlks = Number(amountInAlks);
+          if (isDirectWrap) {
+            const out = Math.floor((inAlks * (1000 - wrapFee)) / 1000);
+            sellAmount = amountInAlks;
+            buyAmount = out.toString();
+          } else {
+            // direct unwrap sell frBTC
+            const out = Math.floor((inAlks * (1000 - unwrapFee)) / 1000);
+            sellAmount = amountInAlks;
+            buyAmount = out.toString();
+          }
+        } else {
+          // Input is the buy side
+          const outAlks = Number(amountInAlks);
+          if (isDirectWrap) {
+            // Need to wrap enough BTC to receive outAlks frBTC after fee
+            const requiredIn = Math.ceil((outAlks * 1000) / (1000 - wrapFee));
+            buyAmount = amountInAlks;
+            sellAmount = requiredIn.toString();
+          } else {
+            // direct unwrap buy BTC
+            const requiredIn = Math.ceil((outAlks * 1000) / (1000 - unwrapFee));
+            buyAmount = amountInAlks;
+            sellAmount = requiredIn.toString();
+          }
+        }
+
+        const exchangeRate = new BigNumber(buyAmount || '0').dividedBy(sellAmount || '1').toString();
+        const minimumReceived = calculateMinimumFromSlippage({ amount: buyAmount, maxSlippage });
+        const maximumSent = calculateMaximumFromSlippage({ amount: sellAmount, maxSlippage });
+
+        return {
+          direction,
+          inputAmount: debouncedAmount,
+          buyAmount,
+          sellAmount: direction !== 'sell' ? maximumSent : sellAmount,
+          exchangeRate,
+          minimumReceived,
+          maximumSent,
+          displayBuyAmount: fromAlks(buyAmount),
+          displaySellAmount: direction !== 'sell' ? fromAlks(maximumSent) : fromAlks(sellAmount),
+          displayMinimumReceived: fromAlks(minimumReceived),
+          displayMaximumSent: fromAlks(maximumSent),
+          route: [isDirectWrap ? 'wrap' : 'unwrap'],
+          hops: 0,
+        } as SwapQuote;
+      }
+
       if (fetchingSell || fetchingBuy) {
         return {
           direction,
@@ -234,57 +322,166 @@ export function useSwapQuotes(
           maxSlippage,
           direct,
           network,
+          wrapFee,
+          unwrapFee,
         );
       }
 
+      // BUSD bridge route
       const sellToBusd = sellPairs.find(
         (p) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
       );
       const buyToBusd = buyPairs.find(
         (p) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
       );
+      
+      // frBTC bridge route
+      const sellToFrbtc = sellPairs.find(
+        (p) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
+      );
+      const buyToFrbtc = buyPairs.find(
+        (p) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
+      );
+      
+      // Try both bridge routes and compare
+      const routes: SwapQuote[] = [];
+      
+      // Calculate BUSD bridge route
       if (sellToBusd && buyToBusd) {
         const mid = BUSD_ALKANE_ID;
         if (direction === 'sell') {
-          const firstHop = await calculateSwapPrice(
-            sellCurrencyId,
-            mid,
-            debouncedAmount,
-            'sell',
-            maxSlippage,
-            sellToBusd,
-            network,
-          );
-          const secondHop = await calculateSwapPrice(
-            mid,
-            buyCurrencyId,
-            firstHop.displayBuyAmount,
-            'sell',
-            maxSlippage,
-            buyToBusd,
-            network,
-          );
-          return { ...secondHop, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote;
+          try {
+            const firstHop = await calculateSwapPrice(
+              sellCurrencyId,
+              mid,
+              debouncedAmount,
+              'sell',
+              maxSlippage,
+              sellToBusd,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            const secondHop = await calculateSwapPrice(
+              mid,
+              buyCurrencyId,
+              firstHop.displayBuyAmount,
+              'sell',
+              maxSlippage,
+              buyToBusd,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            routes.push({ ...secondHop, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+          } catch (e) {
+            console.warn('BUSD bridge route failed:', e);
+          }
         } else {
-          const secondHop = await calculateSwapPrice(
-            mid,
-            buyCurrencyId,
-            debouncedAmount,
-            'buy',
-            maxSlippage,
-            buyToBusd,
-            network,
+          try {
+            const secondHop = await calculateSwapPrice(
+              mid,
+              buyCurrencyId,
+              debouncedAmount,
+              'buy',
+              maxSlippage,
+              buyToBusd,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            const firstHop = await calculateSwapPrice(
+              sellCurrencyId,
+              mid,
+              secondHop.displaySellAmount,
+              'buy',
+              maxSlippage,
+              sellToBusd,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            routes.push({ ...firstHop, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+          } catch (e) {
+            console.warn('BUSD bridge route failed:', e);
+          }
+        }
+      }
+      
+      // Calculate frBTC bridge route
+      if (sellToFrbtc && buyToFrbtc) {
+        const mid = FRBTC_ALKANE_ID;
+        if (direction === 'sell') {
+          try {
+            const firstHop = await calculateSwapPrice(
+              sellCurrencyId,
+              mid,
+              debouncedAmount,
+              'sell',
+              maxSlippage,
+              sellToFrbtc,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            const secondHop = await calculateSwapPrice(
+              mid,
+              buyCurrencyId,
+              firstHop.displayBuyAmount,
+              'sell',
+              maxSlippage,
+              buyToFrbtc,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            routes.push({ ...secondHop, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+          } catch (e) {
+            console.warn('frBTC bridge route failed:', e);
+          }
+        } else {
+          try {
+            const secondHop = await calculateSwapPrice(
+              mid,
+              buyCurrencyId,
+              debouncedAmount,
+              'buy',
+              maxSlippage,
+              buyToFrbtc,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            const firstHop = await calculateSwapPrice(
+              sellCurrencyId,
+              mid,
+              secondHop.displaySellAmount,
+              'buy',
+              maxSlippage,
+              sellToFrbtc,
+              network,
+              wrapFee,
+              unwrapFee,
+            );
+            routes.push({ ...firstHop, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+          } catch (e) {
+            console.warn('frBTC bridge route failed:', e);
+          }
+        }
+      }
+      
+      // Return best route (highest output for sell, lowest input for buy)
+      if (routes.length > 0) {
+        if (direction === 'sell') {
+          // Find route with highest buyAmount
+          return routes.reduce((best, curr) => 
+            new BigNumber(curr.buyAmount).gt(best.buyAmount) ? curr : best
           );
-          const firstHop = await calculateSwapPrice(
-            sellCurrencyId,
-            mid,
-            secondHop.displaySellAmount,
-            'buy',
-            maxSlippage,
-            sellToBusd,
-            network,
+        } else {
+          // Find route with lowest sellAmount
+          return routes.reduce((best, curr) => 
+            new BigNumber(curr.sellAmount).lt(best.sellAmount) ? curr : best
           );
-          return { ...firstHop, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote;
         }
       }
 

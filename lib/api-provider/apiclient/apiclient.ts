@@ -40,6 +40,11 @@ import {
   PoolCreationRow,
   PoolSwapHistoryResult,
   AllAddressAmmTxRow,
+  AllFuturesMarketsResult,
+  FuturesMarketResult,
+  FuturesPositionResult,
+  FuturesOrderResult,
+  FuturesMarketType,
 } from "./types";
 
 /**
@@ -1285,5 +1290,98 @@ export class OylApiClient {
       psbt,
       listingId,
     });
+  }
+
+  /**
+   * Futures Market Endpoints
+   */
+
+  /**
+   * Get all futures markets
+   * @param params - Query parameters for filtering markets
+   */
+  async getFuturesMarkets(params?: {
+    type?: FuturesMarketType | 'all';
+    baseAsset?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AllFuturesMarketsResult> {
+    return (await this._call("/get-futures-markets", "post", params || {})).data;
+  }
+
+  /**
+   * Get a specific futures market by ID
+   * @param marketId - The market ID to query
+   */
+  async getFuturesMarket(params: {
+    marketId: string;
+  }): Promise<FuturesMarketResult> {
+    return (await this._call("/get-futures-market", "post", params)).data;
+  }
+
+  /**
+   * Get user's open positions in futures markets
+   * @param address - User's wallet address
+   */
+  async getFuturesPositions(params: {
+    address: string;
+    marketId?: string;
+  }): Promise<FuturesPositionResult[]> {
+    return (await this._call("/get-futures-positions", "post", params)).data;
+  }
+
+  /**
+   * Get user's orders in futures markets
+   * @param address - User's wallet address
+   * @param status - Filter by order status
+   */
+  async getFuturesOrders(params: {
+    address: string;
+    marketId?: string;
+    status?: 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected';
+    limit?: number;
+    offset?: number;
+  }): Promise<FuturesOrderResult[]> {
+    return (await this._call("/get-futures-orders", "post", params)).data;
+  }
+
+  /**
+   * Place a futures order
+   * @param params - Order parameters
+   */
+  async placeFuturesOrder(params: {
+    marketId: string;
+    address: string;
+    side: 'long' | 'short';
+    type: 'market' | 'limit' | 'stop-market' | 'stop-limit';
+    size: number;
+    price?: number;
+    stopPrice?: number;
+    leverage: number;
+  }): Promise<FuturesOrderResult> {
+    return (await this._call("/place-futures-order", "post", params)).data;
+  }
+
+  /**
+   * Cancel a futures order
+   * @param orderId - The order ID to cancel
+   */
+  async cancelFuturesOrder(params: {
+    orderId: string;
+    address: string;
+  }): Promise<{ success: boolean }> {
+    return (await this._call("/cancel-futures-order", "post", params)).data;
+  }
+
+  /**
+   * Close a futures position
+   * @param positionId - The position ID to close
+   */
+  async closeFuturesPosition(params: {
+    positionId: string;
+    address: string;
+    size?: number; // Partial close if specified
+  }): Promise<{ success: boolean }> {
+    return (await this._call("/close-futures-position", "post", params)).data;
   }
 }

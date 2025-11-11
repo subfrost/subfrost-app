@@ -86,6 +86,12 @@
           <Link href="/swap" className="text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:opacity-80 sf-focus-ring">
             SWAP
           </Link>
+          <Link href="/vaults" className="text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:opacity-80 sf-focus-ring">
+            VAULTS
+          </Link>
+          <Link href="/futures" className="text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:opacity-80 sf-focus-ring">
+            FUTURES
+          </Link>
           <Link href="#" className="text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:opacity-80 sf-focus-ring">
             GOVERNANCE
           </Link>
@@ -160,6 +166,20 @@
                    className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
                  >
                    SWAP
+                 </Link>
+                 <Link
+                   href="/vaults"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
+                 >
+                   VAULTS
+                 </Link>
+                 <Link
+                   href="/futures"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className="px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)] hover:bg-white/10 border-b border-[color:var(--sf-glass-border)]"
+                 >
+                   FUTURES
                  </Link>
                  <Link
                    href="#"

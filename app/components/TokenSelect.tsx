@@ -1,4 +1,6 @@
-type Option = { value: string; label: string };
+import CustomSelect from './CustomSelect';
+
+type Option = { value: string; label: string; symbol?: string };
 
 export default function TokenSelect({
   value = "BTC",
@@ -12,23 +14,26 @@ export default function TokenSelect({
   options?: Option[];
   onChange?: (value: string) => void;
 }) {
+  // Extract symbol from options - clean up label to get just the symbol
+  const enhancedOptions = options.map(opt => {
+    // Try to extract symbol from label if it contains brackets like "Bitcoin [btc]"
+    const symbolMatch = opt.label.match(/\[([^\]]+)\]$/);
+    const symbol = symbolMatch ? symbolMatch[1] : opt.value;
+    
+    return {
+      ...opt,
+      symbol,
+    };
+  });
+
   return (
-    <div className="relative w-full">
-      <select
-        value={value}
-        className="h-10 w-full appearance-none rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)] pl-3 pr-9 text-sm font-semibold text-white shadow-sm sf-focus-ring"
-        onChange={(e) => onChange?.(e.target.value)}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/90">
-        ▾
-      </span>
-    </div>
+    <CustomSelect
+      value={value}
+      options={enhancedOptions}
+      onChange={onChange}
+      showTokenIcon={true}
+      className="w-full"
+    />
   );
 }
 

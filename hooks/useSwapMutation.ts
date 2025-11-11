@@ -9,6 +9,7 @@ import { getConfig } from '@/utils/getConfig';
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { FACTORY_OPCODES } from '@/constants';
+import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
   assertAlkaneUtxosAreClean,
   calculateMaximumFromSlippage,
@@ -34,6 +35,10 @@ export function useSwapMutation() {
   const signerShim = useSignerShim();
   const provider = useSandshrewProvider();
   const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID, FRBTC_ALKANE_ID } = getConfig(network);
+  
+  // Fetch dynamic frBTC wrap/unwrap fees
+  const { data: premiumData } = useFrbtcPremium();
+  const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
 
   return useMutation({
     mutationFn: async (swapData: SwapTransactionBaseData) => {
@@ -45,7 +50,7 @@ export function useSwapMutation() {
       const ammSellAmount =
         swapData.sellCurrency === 'btc'
           ? BigNumber(swapData.sellAmount)
-              .multipliedBy(1000 - FRBTC_WRAP_FEE_PER_1000)
+              .multipliedBy(1000 - wrapFee)
               .dividedBy(1000)
               .integerValue(BigNumber.ROUND_FLOOR)
               .toString()
@@ -53,7 +58,7 @@ export function useSwapMutation() {
       const ammBuyAmount =
         swapData.sellCurrency === 'btc'
           ? BigNumber(swapData.buyAmount)
-              .multipliedBy(1000 + FRBTC_WRAP_FEE_PER_1000)
+              .multipliedBy(1000 + wrapFee)
               .dividedBy(1000)
               .integerValue(BigNumber.ROUND_FLOOR)
               .toString()

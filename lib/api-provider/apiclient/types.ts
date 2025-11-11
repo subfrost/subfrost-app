@@ -486,3 +486,69 @@ export type AllAddressAmmTxRow =
   | AllAddressAmmTxMint
   | AllAddressAmmTxBurn
   | AllAddressAmmTxCreation;
+
+// Futures Market Types
+export type FuturesMarketType = 'perpetual' | 'expiry';
+
+export interface FuturesMarketResult {
+  id: string;
+  symbol: string;
+  type: FuturesMarketType;
+  baseAsset: string;
+  quoteAsset: string;
+  baseAssetId: AlkaneId;
+  quoteAssetId: AlkaneId;
+  markPrice: number;
+  indexPrice: number;
+  lastPrice: number;
+  priceChange24h: number;
+  volume24h: number;
+  openInterest: number;
+  fundingRate?: number;
+  nextFundingTime?: string;
+  expiryDate?: string;
+  maxLeverage: number;
+  minOrderSize: number;
+  tickSize: number;
+  makerFee: number;
+  takerFee: number;
+  liquidationFee: number;
+}
+
+export interface AllFuturesMarketsResult {
+  markets: FuturesMarketResult[];
+  total: number;
+  timestamp: string;
+}
+
+export interface FuturesPositionResult {
+  id: string;
+  marketId: string;
+  symbol: string;
+  side: 'long' | 'short';
+  size: number;
+  entryPrice: number;
+  markPrice: number;
+  liquidationPrice: number;
+  margin: number;
+  leverage: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  openedAt: string;
+}
+
+export interface FuturesOrderResult {
+  id: string;
+  marketId: string;
+  symbol: string;
+  side: 'long' | 'short';
+  type: 'market' | 'limit' | 'stop-market' | 'stop-limit';
+  size: number;
+  price?: number;
+  stopPrice?: number;
+  status: 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected';
+  filledSize: number;
+  averageFillPrice?: number;
+  createdAt: string;
+  updatedAt: string;
+}

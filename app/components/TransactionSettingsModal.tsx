@@ -30,27 +30,42 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
   if (!isTxSettingsOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4" onClick={close}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200" onClick={close}>
       <div
-        className="w-[520px] max-w-[92vw] overflow-hidden rounded-3xl border border-white/10 bg-background p-6"
+        className="w-[540px] max-w-[92vw] overflow-hidden rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-gradient-to-br from-white to-[color:var(--sf-surface)] p-8 shadow-[0_16px_64px_rgba(40,67,114,0.3)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Transaction Settings"
       >
-        <div className="mb-4 text-center text-lg font-medium">Transaction Settings</div>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-2xl font-extrabold text-[color:var(--sf-text)]">Transaction Settings</h2>
+          <button 
+            onClick={close}
+            className="h-8 w-8 rounded-full hover:bg-[color:var(--sf-primary)]/10 transition-colors flex items-center justify-center text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-primary)]"
+            aria-label="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
 
         <div className="flex flex-col gap-5">
           {/* Slippage */}
-          <section>
-            <div className="mb-2 text-xs font-semibold text-[color:var(--sf-text)]/80">Max Slippage</div>
-            <div className="flex items-center gap-2">
+          <section className="rounded-xl bg-[color:var(--sf-glass-bg)] p-4 backdrop-blur-sm">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Max Slippage</div>
+            <div className="flex items-center gap-2 flex-wrap">
               {['0.1', '0.5', '1'].map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setMaxSlippage(p)}
-                  className={`rounded-full border px-3 py-1 text-sm ${maxSlippage === p ? 'border-white/40 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}
+                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
+                    maxSlippage === p 
+                      ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
+                      : 'border-[color:var(--sf-outline)] bg-white text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                  }`}
                 >
                   {p}%
                 </button>
@@ -68,16 +83,16 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                     const n = Math.max(0, Math.min(50, Number(v)));
                     if (Number.isFinite(n)) setMaxSlippage(String(n));
                   }}
-                  className="h-9 w-28 rounded-md border border-white/10 bg-white/5 px-3 pr-10 text-sm outline-none focus:border-white/20"
+                  className="h-10 w-28 rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 pr-10 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
                 />
-                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-white/70">%</span>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
               </div>
             </div>
           </section>
 
           {/* Deadline */}
-          <section>
-            <div className="mb-2 text-xs font-semibold text-[color:var(--sf-text)]/80">Deadline (blocks)</div>
+          <section className="rounded-xl bg-[color:var(--sf-glass-bg)] p-4 backdrop-blur-sm">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Deadline (blocks)</div>
             <input
               aria-label="Deadline in blocks"
               type="number"
@@ -89,20 +104,24 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                 const n = Math.max(1, Math.min(10, Number(e.target.value)));
                 if (Number.isFinite(n)) setDeadlineBlocks(n);
               }}
-              className="h-9 w-28 rounded-md border border-white/10 bg-white/5 px-3 text-sm outline-none focus:border-white/20"
+              className="h-10 w-32 rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
             />
           </section>
 
           {/* Miner Fee */}
-          <section>
-            <div className="mb-2 text-xs font-semibold text-[color:var(--sf-text)]/80">Miner Fee</div>
+          <section className="rounded-xl bg-[color:var(--sf-glass-bg)] p-4 backdrop-blur-sm">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Miner Fee</div>
             <div className="flex flex-wrap items-center gap-2">
               {(['slow', 'medium', 'fast'] as FeeSelection[]).map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => setSelection(s)}
-                  className={`rounded-full border px-3 py-1 text-sm capitalize ${selection === s ? 'border-white/40 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}
+                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all ${
+                    selection === s 
+                      ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
+                      : 'border-[color:var(--sf-outline)] bg-white text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                  }`}
                 >
                   {s}
                 </button>
@@ -110,30 +129,43 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
               <button
                 type="button"
                 onClick={() => setSelection('custom')}
-                className={`rounded-full border px-3 py-1 text-sm ${selection === 'custom' ? 'border-white/40 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}
+                className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
+                  selection === 'custom' 
+                    ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
+                    : 'border-[color:var(--sf-outline)] bg-white text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                }`}
               >
                 Custom
               </button>
-              <div className="relative">
-                <input
-                  aria-label="Custom miner fee rate"
-                  type="number"
-                  min={1}
-                  max={999}
-                  step={1}
-                  value={selection === 'custom' ? custom : ''}
-                  onChange={(e) => setCustom(e.target.value)}
-                  placeholder="0"
-                  className="h-9 w-32 rounded-md border border-white/10 bg-white/5 px-3 pr-14 text-sm outline-none focus:border-white/20"
-                />
-                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-white/70">sats/vB</span>
-              </div>
-              <div className="ml-2 text-xs text-white/60">Selected: {feeRate} sats/vB</div>
+              {selection === 'custom' && (
+                <div className="relative">
+                  <input
+                    aria-label="Custom miner fee rate"
+                    type="number"
+                    min={1}
+                    max={999}
+                    step={1}
+                    value={custom}
+                    onChange={(e) => setCustom(e.target.value)}
+                    placeholder="0"
+                    className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sats/vB</span>
+                </div>
+              )}
+            </div>
+            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm">
+              <span className="font-semibold text-[color:var(--sf-text)]/70">Selected:</span>
+              <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sats/vB</span>
             </div>
           </section>
 
-          <div className="mt-2 flex justify-end">
-            <button type="button" onClick={close} className="rounded-md border border-white/20 bg-white/10 px-4 py-2 text-sm hover:bg-white/15">
+          <div className="mt-4 flex justify-end">
+            <button 
+              type="button" 
+              onClick={close} 
+              className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-6 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-lg transition-all hover:shadow-xl hover:scale-105 active:scale-95"
+            >
               Done
             </button>
           </div>

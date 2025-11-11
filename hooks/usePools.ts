@@ -17,8 +17,8 @@ export type UsePoolsParams = {
 export type PoolsListItem = {
   id: string;
   pairLabel: string;
-  token0: { id: string; symbol: string; name?: string };
-  token1: { id: string; symbol: string; name?: string };
+  token0: { id: string; symbol: string; name?: string; iconUrl?: string };
+  token1: { id: string; symbol: string; name?: string; iconUrl?: string };
   tvlUsd?: number;
   vol24hUsd?: number;
   apr?: number;
@@ -57,13 +57,18 @@ export function usePools(params: UsePoolsParams = {}) {
         const token1Name = (rawB ?? '').replace('SUBFROST BTC', 'frBTC');
         const token0Id = `${p.token0.block}:${p.token0.tx}`;
         const token1Id = `${p.token1.block}:${p.token1.tx}`;
+        
+        // Generate Oyl asset URLs for alkane tokens (note: asset.oyl.gg, not assets)
+        const token0IconUrl = `https://asset.oyl.gg/alkanes/${network}/${p.token0.block}-${p.token0.tx}.png`;
+        const token1IconUrl = `https://asset.oyl.gg/alkanes/${network}/${p.token1.block}-${p.token1.tx}.png`;
+        
         const tvlUsd = (p.token0TvlInUsd ?? 0) + (p.token1TvlInUsd ?? 0);
         const vol24hUsd = p.poolVolume1dInUsd ?? 0;
         return {
           id: `${p.poolId.block}:${p.poolId.tx}`,
           pairLabel: `${token0Name} / ${token1Name} LP`,
-          token0: { id: token0Id, symbol: token0Name, name: token0Name },
-          token1: { id: token1Id, symbol: token1Name, name: token1Name },
+          token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: token0IconUrl },
+          token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
           tvlUsd,
           vol24hUsd,
           apr: undefined,

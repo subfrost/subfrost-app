@@ -2,10 +2,10 @@
 
 export default function LoadingOverlay() {
   return (
-    <div className="pointer-events-auto absolute inset-0 z-40 grid place-items-center rounded-[22px] bg-black/30 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-3">
+    <div className="pointer-events-auto absolute inset-0 z-40 grid place-items-center rounded-[24px] bg-gradient-to-br from-[color:var(--sf-primary)]/20 to-[color:var(--sf-primary-pressed)]/10 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="flex flex-col items-center gap-4 animate-in zoom-in duration-300">
         <Spinner />
-        <div className="text-xs text-white/80">Loading balances…</div>
+        <div className="text-sm font-semibold text-[color:var(--sf-text)] animate-pulse">Loading balances…</div>
       </div>
     </div>
   );
@@ -13,9 +13,9 @@ export default function LoadingOverlay() {
 
 function Spinner() {
   return (
-    <svg className="h-8 w-8 animate-spin text-white" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Loading">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    <svg className="h-10 w-10 animate-spin text-[color:var(--sf-primary)]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Loading">
+      <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3.5" />
+      <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
     </svg>
   );
 }
