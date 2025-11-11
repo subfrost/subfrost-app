@@ -2,34 +2,100 @@
 
 import { useState } from "react";
 import VaultActionPanel from "./VaultActionPanel";
+import { useGaugeStake } from "@/hooks/useGaugeStake";
+import { useGaugeUnstake } from "@/hooks/useGaugeUnstake";
+import { useGaugeClaim } from "@/hooks/useGaugeClaim";
+import { useGaugeBoost } from "@/hooks/useGaugeBoost";
+import VaultSuccessNotification from "@/app/components/VaultSuccessNotification";
 
 export default function GaugeVault() {
   const [mode, setMode] = useState<'stake' | 'unstake'>('stake');
   const [amount, setAmount] = useState<string>("");
   const [infoTab, setInfoTab] = useState<'about' | 'boost' | 'info' | 'risk'>('about');
+  const [successNotification, setSuccessNotification] = useState<{ txId: string; type: 'stake' | 'unstake' | 'claim' } | null>(null);
 
-  // Mock data
+  // TODO: Replace with real gauge contract addresses
+  const gaugeContractId = "2:456";
+  const lpTokenId = "2:789";
+  const gaugeTokenId = "2:790";
+  const vaultContractId = "2:123"; // yveDIESEL vault for boost calculation
+
+  // Hooks
+  const stakeMutation = useGaugeStake();
+  const unstakeMutation = useGaugeUnstake();
+  const claimMutation = useGaugeClaim();
+  const { data: boostData } = useGaugeBoost(vaultContractId, gaugeContractId, 12.5);
+
+  // Stats
   const stats = {
     tvl: "450,200.00",
-    baseApy: "12.5",
-    boostedApy: "28.2",
-    userStaked: "0.00",
-    userBoost: "1.0",
-    pendingRewards: "12.50",
+    baseApy: boostData?.baseApr.toFixed(2) || "12.5",
+    boostedApy: boostData?.boostedApr.toFixed(2) || "28.2",
+    userStaked: "0.00", // TODO: Query from gauge contract
+    userBoost: boostData?.boostMultiplier.toFixed(2) || "1.0",
+    pendingRewards: "12.50", // TODO: Query from gauge contract
   };
 
-  const handleExecute = () => {
-    console.log(`${mode}:`, amount);
-    // TODO: Implement gauge interaction
+  const handleExecute = async () => {
+    const feeRate = 10;
+    
+    if (mode === 'stake') {
+      try {
+        const result = await stakeMutation.mutateAsync({
+          gaugeContractId,
+          lpTokenId,
+          amount,
+          feeRate,
+        });
+        if (result.success && result.transactionId) {
+          setSuccessNotification({ txId: result.transactionId, type: 'stake' });
+          setAmount('');
+        }
+      } catch (error) {
+        console.error('Stake failed:', error);
+      }
+    } else {
+      try {
+        const result = await unstakeMutation.mutateAsync({
+          gaugeContractId,
+          gaugeTokenId,
+          amount,
+          feeRate,
+        });
+        if (result.success && result.transactionId) {
+          setSuccessNotification({ txId: result.transactionId, type: 'unstake' });
+          setAmount('');
+        }
+      } catch (error) {
+        console.error('Unstake failed:', error);
+      }
+    }
   };
 
-  const handleClaim = () => {
-    console.log("Claim gauge rewards");
-    // TODO: Implement claim logic
+  const handleClaim = async () => {
+    const feeRate = 10;
+    try {
+      const result = await claimMutation.mutateAsync({
+        gaugeContractId,
+        feeRate,
+      });
+      if (result.success && result.transactionId) {
+        setSuccessNotification({ txId: result.transactionId, type: 'claim' });
+      }
+    } catch (error) {
+      console.error('Claim failed:', error);
+    }
   };
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {successNotification && (
+        <VaultSuccessNotification
+          txId={successNotification.txId}
+          type={successNotification.type}
+          onClose={() => setSuccessNotification(null)}
+        />
+      )}
       {/* Main Info */}
       <div className="lg:col-span-2 space-y-6">
         {/* Gauge Header */}

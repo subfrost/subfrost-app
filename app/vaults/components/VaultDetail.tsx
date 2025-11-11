@@ -8,6 +8,9 @@ import { useVaultStats } from "@/hooks/useVaultStats";
 import { useVaultDeposit } from "@/hooks/useVaultDeposit";
 import { useVaultWithdraw } from "@/hooks/useVaultWithdraw";
 import { useVaultUnits } from "@/hooks/useVaultUnits";
+import { useVaultClaim } from "@/hooks/useVaultClaim";
+import { useVaultHarvest } from "@/hooks/useVaultHarvest";
+import VaultSuccessNotification from "@/app/components/VaultSuccessNotification";
 
 type Props = {
   vault: VaultConfig;
@@ -17,6 +20,7 @@ export default function VaultDetail({ vault }: Props) {
   const [mode, setMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [infoTab, setInfoTab] = useState<'about' | 'strategies' | 'info' | 'risk'>('about');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [successNotification, setSuccessNotification] = useState<{ txId: string; type: 'deposit' | 'withdraw' | 'claim' | 'harvest' } | null>(null);
 
   // Fetch real vault stats
   const { data: vaultStats, isLoading: isLoadingStats } = useVaultStats(
@@ -30,6 +34,8 @@ export default function VaultDetail({ vault }: Props) {
   // Vault mutation hooks
   const depositMutation = useVaultDeposit();
   const withdrawMutation = useVaultWithdraw();
+  const claimMutation = useVaultClaim();
+  const harvestMutation = useVaultHarvest();
 
   const stats = {
     tvl: vaultStats?.tvlFormatted || "0.00",
@@ -48,8 +54,9 @@ export default function VaultDetail({ vault }: Props) {
           amount,
           feeRate,
         });
-        console.log('Deposit successful:', result.transactionId);
-        // TODO: Show success toast
+        if (result.success && result.transactionId) {
+          setSuccessNotification({ txId: result.transactionId, type: 'deposit' });
+        }
       } catch (error) {
         console.error('Deposit failed:', error);
         // TODO: Show error toast
@@ -69,9 +76,10 @@ export default function VaultDetail({ vault }: Props) {
           amount: '1', // Vault units are typically 1 per deposit
           feeRate,
         });
-        console.log('Withdraw successful:', result.transactionId);
-        // TODO: Show success toast
-        setSelectedUnitId(''); // Reset selection
+        if (result.success && result.transactionId) {
+          setSuccessNotification({ txId: result.transactionId, type: 'withdraw' });
+          setSelectedUnitId(''); // Reset selection
+        }
       } catch (error) {
         console.error('Withdraw failed:', error);
         // TODO: Show error toast
@@ -79,8 +87,47 @@ export default function VaultDetail({ vault }: Props) {
     }
   };
 
+  const handleClaim = async () => {
+    const feeRate = 10;
+    try {
+      const result = await claimMutation.mutateAsync({
+        vaultContractId: vault.contractAddress,
+        feeRate,
+      });
+      if (result.success && result.transactionId) {
+        setSuccessNotification({ txId: result.transactionId, type: 'claim' });
+      }
+    } catch (error) {
+      console.error('Claim failed:', error);
+      // TODO: Show error toast
+    }
+  };
+
+  const handleHarvest = async () => {
+    const feeRate = 10;
+    try {
+      const result = await harvestMutation.mutateAsync({
+        vaultContractId: vault.contractAddress,
+        feeRate,
+      });
+      if (result.success && result.transactionId) {
+        setSuccessNotification({ txId: result.transactionId, type: 'harvest' });
+      }
+    } catch (error) {
+      console.error('Harvest failed:', error);
+      // TODO: Show error toast
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {successNotification && (
+        <VaultSuccessNotification
+          txId={successNotification.txId}
+          type={successNotification.type}
+          onClose={() => setSuccessNotification(null)}
+        />
+      )}
       {/* Flex Layout: Deposit Panel (Left) + Hero Card (Right) */}
       <div className="flex gap-6 items-start">
         {/* Left: Deposit Interface */}
@@ -109,6 +156,10 @@ export default function VaultDetail({ vault }: Props) {
           apy={stats.apy}
           userBalance={stats.userBalance}
           badges={[vault.tokenSymbol, vault.badge || 'Bitcoin']}
+          onClaim={handleClaim}
+          onHarvest={handleHarvest}
+          isClaimLoading={claimMutation.isPending}
+          isHarvestLoading={harvestMutation.isPending}
         />
       </div>
 

@@ -12,6 +12,10 @@ type Props = {
   apy: string;
   userBalance: string;
   badges?: string[];
+  onClaim?: () => void;
+  onHarvest?: () => void;
+  isClaimLoading?: boolean;
+  isHarvestLoading?: boolean;
 };
 
 export default function VaultHero({
@@ -24,6 +28,10 @@ export default function VaultHero({
   apy,
   userBalance,
   badges = [],
+  onClaim,
+  onHarvest,
+  isClaimLoading = false,
+  isHarvestLoading = false,
 }: Props) {
   const { network } = useWallet();
   const tokenImageUrl = `https://asset.oyl.gg/alkanes/${network}/${tokenId.replace(/:/g, '-')}.png`;
@@ -98,6 +106,30 @@ export default function VaultHero({
           <div className="text-xs text-white/90">$0.00</div>
         </div>
       </div>
+
+      {/* Action Buttons */}
+      {(onClaim || onHarvest) && (
+        <div className="mt-6 pt-6 border-t border-white/30 space-y-2">
+          {onClaim && (
+            <button
+              onClick={onClaim}
+              disabled={isClaimLoading}
+              className="w-full rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-3 text-sm font-bold text-white uppercase tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            >
+              {isClaimLoading ? 'Claiming...' : 'Claim Rewards'}
+            </button>
+          )}
+          {onHarvest && (
+            <button
+              onClick={onHarvest}
+              disabled={isHarvestLoading}
+              className="w-full rounded-xl bg-gradient-to-r from-yellow-500 to-amber-600 px-4 py-3 text-sm font-bold text-white uppercase tracking-wider shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            >
+              {isHarvestLoading ? 'Harvesting...' : 'Harvest Fees'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

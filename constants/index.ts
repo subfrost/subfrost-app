@@ -28,4 +28,14 @@ export const VAULT_OPCODES = {
   ClaimAndDistributeRewards: '6', // Strategist harvest operation
 };
 
+// Gauge opcodes for LP staking with boost mechanics
+export const GAUGE_OPCODES = {
+  Initialize: '0',
+  Stake: '1',              // Stake LP tokens, receive gauge tokens
+  Unstake: '2',            // Burn gauge tokens, receive LP tokens back
+  ClaimRewards: '3',       // Claim accumulated boosted rewards
+  GetBoost: '4',           // Query user's boost multiplier (read-only)
+  DepositRewards: '10',    // Strategist deposits external rewards (DIESEL/frBTC)
+};
+
 
