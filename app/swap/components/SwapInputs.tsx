@@ -175,7 +175,7 @@ export default function SwapInputs({
       </div>
 
       {/* Invert button – centered between cards */}
-      <div className="relative -my-5 mt-2 z-20 flex items-center justify-center">
+      <div className="relative my-3 z-20 flex items-center justify-center">
         <button
           type="button"
           onClick={onInvert}
