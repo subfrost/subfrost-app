@@ -20,6 +20,8 @@ export default function MintTestTokensButton() {
     setMintResult(null);
 
     try {
+      console.log('Minting tokens for address:', address);
+      
       // Call the mint API endpoint
       const response = await fetch('/api/regtest/mint', {
         method: 'POST',
@@ -37,10 +39,21 @@ export default function MintTestTokensButton() {
         }),
       });
 
-      const data = await response.json();
+      console.log('Mint API response status:', response.status);
+
+      let data;
+      try {
+        data = await response.json();
+        console.log('Mint API response data:', data);
+      } catch (jsonError) {
+        console.error('Failed to parse JSON response:', jsonError);
+        throw new Error('Invalid response from mint API');
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to mint tokens');
+        const errorMsg = data.error || data.details || 'Failed to mint tokens';
+        console.error('Mint API error:', data);
+        throw new Error(errorMsg);
       }
 
       setMintResult(
