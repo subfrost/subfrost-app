@@ -13,9 +13,14 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 
 export async function POST(request: NextRequest) {
+  console.log('=== Mint API called ===');
+  console.log('NEXT_PUBLIC_NETWORK:', process.env.NEXT_PUBLIC_NETWORK);
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+
   // Security: Only allow in regtest/development
   const network = process.env.NEXT_PUBLIC_NETWORK;
   if (network !== 'regtest' && process.env.NODE_ENV !== 'development') {
+    console.log('Security check failed: not in regtest mode');
     return NextResponse.json(
       { error: 'This endpoint is only available in regtest mode' },
       { status: 403 }
@@ -24,6 +29,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    console.log('Request body:', body);
     const { address, tokens } = body;
 
     if (!address) {
@@ -38,16 +44,23 @@ export async function POST(request: NextRequest) {
     const rpcUser = process.env.BITCOIN_RPC_USER || 'subfrost';
     const rpcPassword = process.env.BITCOIN_RPC_PASSWORD || 'subfrost123';
 
+    console.log('Bitcoin RPC config:', { rpcUrl, rpcUser, rpcPassword: '***' });
+
     const btcAmount = tokens?.btc || 1.0;
     const blocksToGenerate = 6; // Standard confirmation threshold
 
     // Helper function to call Bitcoin RPC
     const callBitcoinRPC = async (method: string, params: any[] = []) => {
+      console.log(`Calling Bitcoin RPC: ${method}`, params);
+      
+      // Use btoa for base64 encoding (works in both Node and Edge runtime)
+      const auth = btoa(`${rpcUser}:${rpcPassword}`);
+      
       const response = await fetch(rpcUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic ' + Buffer.from(`${rpcUser}:${rpcPassword}`).toString('base64'),
+          'Authorization': `Basic ${auth}`,
         },
         body: JSON.stringify({
           jsonrpc: '1.0',
@@ -120,11 +133,14 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: any) {
-    console.error('Mint API error:', error);
+    console.error('=== Mint API error ===');
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
     return NextResponse.json(
       { 
         error: 'Failed to mint tokens',
         details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
       { status: 500 }
     );
