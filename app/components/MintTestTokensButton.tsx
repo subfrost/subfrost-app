@@ -144,6 +144,10 @@ export default function MintTestTokensButton() {
 
             <div className="space-y-3 mb-6">
               <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                <span className="text-sm font-medium text-[color:var(--sf-text)]">BTC</span>
+                <span className="text-sm text-[color:var(--sf-text)]/70">1.0 BTC</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
                 <span className="text-sm font-medium text-[color:var(--sf-text)]">DIESEL</span>
                 <span className="text-sm text-[color:var(--sf-text)]/70">1,000 tokens</span>
               </div>

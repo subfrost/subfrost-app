@@ -13,7 +13,7 @@ export type AlkanesTokenPair = {
 
 export function useAlkanesTokenPairs(
   alkaneId: string,
-  limit?: number,
+  limit: number = 200,
   offset?: number,
   sortBy?: 'tvl' | undefined,
   searchQuery?: string,
