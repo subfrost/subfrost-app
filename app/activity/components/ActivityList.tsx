@@ -5,8 +5,10 @@ import { useWallet } from '@/context/WalletContext';
 import TransactionCard from './TransactionCard';
 import type { Transaction, TransactionType } from '../types';
 import { useAddressTransactions } from '@/hooks/useAddressTransactions';
+import { useBridgeDepositHistory } from '@/hooks/useBridgeDepositHistory';
+import BridgeDepositProgress from '@/app/components/BridgeDepositProgress';
 
-type FilterType = 'All' | TransactionType;
+type FilterType = 'All' | TransactionType | 'Bridge';
 
 export default function ActivityList() {
   const { isConnected, address, network } = useWallet();
@@ -18,6 +20,10 @@ export default function ActivityList() {
     isConnected ? address : undefined,
     network
   );
+
+  // Fetch bridge deposit history
+  const { data: bridgeData } = useBridgeDepositHistory(isConnected ? address : undefined);
+  const incomingBridgeDeposits = bridgeData?.incoming || [];
 
   // Mock data for demonstration (will be removed once real data is working)
   const mockTransactions = useMemo<Transaction[]>(() => {
@@ -126,7 +132,7 @@ export default function ActivityList() {
     );
   }
 
-  const filters: FilterType[] = ['All', 'Swap', 'Wrap', 'Unwrap'];
+  const filters: FilterType[] = ['All', 'Bridge', 'Swap', 'Wrap', 'Unwrap'];
 
   if (allTransactions.length === 0) {
     return (
@@ -143,7 +149,17 @@ export default function ActivityList() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Incoming Bridge Deposits */}
+      {incomingBridgeDeposits.length > 0 && (filter === 'All' || filter === 'Bridge') && (
+        <div className="space-y-3">
+          <h3 className="text-lg font-bold text-[color:var(--sf-text)]">
+            Incoming Deposits ({incomingBridgeDeposits.length})
+          </h3>
+          <BridgeDepositProgress deposits={incomingBridgeDeposits} />
+        </div>
+      )}
+
       {/* Filter Tabs & Data Source Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div className="flex items-center gap-2 overflow-x-auto">
