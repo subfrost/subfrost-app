@@ -76,15 +76,32 @@ export default function MintTestTokensButton() {
       
     } catch (error: any) {
       const errorMsg = error.message || 'Unknown error';
-      setMintResult(
-        `❌ Failed to mint tokens\n\n` +
-        `Error: ${errorMsg}\n\n` +
-        `Make sure:\n` +
-        `- Bitcoin regtest node is running\n` +
-        `- OYL API is running\n` +
-        `- Check server logs for details`
-      );
       console.error('Mint error:', error);
+      
+      // Check if we have setup instructions from the API
+      if (errorMsg.includes('Bitcoin regtest node is not running') || 
+          errorMsg.includes('not running') ||
+          data?.setup) {
+        setMintResult(
+          `⚠️ Bitcoin regtest node not running\n\n` +
+          `The automated minting requires Bitcoin Core.\n\n` +
+          `Quick setup:\n` +
+          `1. Install Bitcoin Core\n` +
+          `2. Run: bitcoind -regtest -daemon\n` +
+          `3. Create wallet and generate blocks\n\n` +
+          `See docs/REGTEST_SETUP.md for details.\n\n` +
+          `Note: You can still use the app without this!`
+        );
+      } else {
+        setMintResult(
+          `❌ Failed to mint tokens\n\n` +
+          `Error: ${errorMsg}\n\n` +
+          `Check:\n` +
+          `- Bitcoin regtest node is running\n` +
+          `- RPC credentials in .env.local\n` +
+          `- Server logs for details`
+        );
+      }
     } finally {
       setIsMinting(false);
     }

@@ -84,6 +84,14 @@ export async function POST(request: NextRequest) {
     };
 
     try {
+      // First, check if the node is accessible
+      try {
+        await callBitcoinRPC('getblockchaininfo', []);
+      } catch (connectionError: any) {
+        console.error('Cannot connect to Bitcoin node:', connectionError);
+        throw new Error('BITCOIN_NODE_NOT_RUNNING');
+      }
+
       // 1. Send BTC to the address
       const txid = await callBitcoinRPC('sendtoaddress', [address, btcAmount]);
       console.log(`Sent ${btcAmount} BTC to ${address}, txid: ${txid}`);
@@ -114,18 +122,27 @@ export async function POST(request: NextRequest) {
       console.error('Bitcoin RPC error:', rpcError);
       
       // Provide helpful error messages
-      if (rpcError.message?.includes('connect')) {
+      if (rpcError.message === 'BITCOIN_NODE_NOT_RUNNING' || rpcError.message?.includes('connect') || rpcError.message?.includes('ECONNREFUSED')) {
         return NextResponse.json({
-          error: 'Could not connect to Bitcoin regtest node',
-          details: 'Make sure bitcoind is running in regtest mode on port 18443',
-          hint: 'Run: bitcoind -regtest -daemon'
+          error: 'Bitcoin regtest node is not running',
+          details: 'The minting feature requires a local Bitcoin regtest node',
+          setup: [
+            '1. Install Bitcoin Core: https://bitcoin.org/en/download',
+            '2. Create ~/.bitcoin/bitcoin.conf with regtest settings',
+            '3. Start node: bitcoind -regtest -daemon',
+            '4. Create wallet: bitcoin-cli -regtest createwallet "test"',
+            '5. Generate blocks: bitcoin-cli -regtest generatetoaddress 101 $(bitcoin-cli -regtest getnewaddress)',
+          ],
+          hint: 'See docs/REGTEST_SETUP.md for detailed instructions',
+          note: 'This is optional - you can still use the app without minting',
         }, { status: 503 });
       }
 
       if (rpcError.message?.includes('auth')) {
         return NextResponse.json({
           error: 'Bitcoin RPC authentication failed',
-          details: 'Check BITCOIN_RPC_USER and BITCOIN_RPC_PASSWORD environment variables',
+          details: 'Check BITCOIN_RPC_USER and BITCOIN_RPC_PASSWORD in .env.local',
+          hint: 'Default credentials: user=subfrost, password=subfrost123',
         }, { status: 503 });
       }
 
