@@ -109,14 +109,19 @@ export default function SwapShell() {
     return map;
   }, [userCurrencies]);
 
-  // Default from/to tokens: BTC → frBTC
+  // Default from/to tokens: BTC → USDT
   useEffect(() => {
     if (!fromToken) setFromToken({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
   }, [fromToken]);
   const toInitializedRef = useRef(false);
   useEffect(() => {
     if (!toInitializedRef.current && !toToken) {
-      setToToken({ id: BUSD_ALKANE_ID, symbol: 'bUSD', name: 'bUSD' });
+      setToToken({ 
+        id: VIRTUAL_TOKEN_IDS.USDT, 
+        symbol: 'USDT', 
+        name: 'Tether USD',
+        iconUrl: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].iconUrl,
+      });
       toInitializedRef.current = true;
     }
   }, [toToken, BUSD_ALKANE_ID]);
@@ -161,9 +166,26 @@ export default function SwapShell() {
     });
   }, [readySwaps, address, BUSD_ALKANE_ID, swapMutation, updateSwapStatus, removePendingSwap, maxSlippage, fee]);
 
-  // Build FROM options: BTC + all user-held tokens + USDT/USDC (for bridge in)
+  // Build FROM options: BTC, USDC, USDT first, then user-held tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
-    const opts: TokenMeta[] = [{ id: 'btc', symbol: 'BTC', name: 'Bitcoin' }]; // BTC uses local icon
+    const opts: TokenMeta[] = [];
+    
+    // Top 3: BTC, USDC, USDT
+    opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+    opts.push({
+      id: VIRTUAL_TOKEN_IDS.USDC,
+      symbol: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].symbol,
+      name: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].name,
+      iconUrl: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].iconUrl,
+    });
+    opts.push({
+      id: VIRTUAL_TOKEN_IDS.USDT,
+      symbol: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].symbol,
+      name: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].name,
+      iconUrl: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].iconUrl,
+    });
+    
+    // Then all user-held tokens
     userCurrencies.forEach((c: any) => {
       // Generate Oyl asset URL for alkane tokens (note: asset.oyl.gg, not assets)
       let iconUrl: string | undefined;
@@ -178,20 +200,6 @@ export default function SwapShell() {
         name: c.name || c.symbol || c.id,
         iconUrl
       });
-    });
-    
-    // Add USDT and USDC as input options (bridge in)
-    opts.push({
-      id: VIRTUAL_TOKEN_IDS.USDT,
-      symbol: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].symbol,
-      name: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].name,
-      iconUrl: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].iconUrl,
-    });
-    opts.push({
-      id: VIRTUAL_TOKEN_IDS.USDC,
-      symbol: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].symbol,
-      name: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].name,
-      iconUrl: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].iconUrl,
     });
     
     const seen = new Set<string>();
@@ -281,6 +289,30 @@ export default function SwapShell() {
     
     // Case 2: FROM is USDT/USDC - show all tokens reachable via bUSD
     if (isBridgeToken(fromToken.id)) {
+      // Top: BTC, USDC/USDT (the other one)
+      const hasFrbtc = busdPairs?.some(p => 
+        p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID
+      );
+      if (hasFrbtc) {
+        opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+      }
+      // Add the OTHER bridge token (if FROM is USDT, show USDC)
+      if (fromToken.id === VIRTUAL_TOKEN_IDS.USDT) {
+        opts.push({
+          id: VIRTUAL_TOKEN_IDS.USDC,
+          symbol: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].symbol,
+          name: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].name,
+          iconUrl: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDC].iconUrl,
+        });
+      } else {
+        opts.push({
+          id: VIRTUAL_TOKEN_IDS.USDT,
+          symbol: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].symbol,
+          name: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].name,
+          iconUrl: BRIDGE_TOKEN_META[VIRTUAL_TOKEN_IDS.USDT].iconUrl,
+        });
+      }
+      
       // Show bUSD directly
       opts.push(createTokenMeta(BUSD_ALKANE_ID));
       
@@ -290,17 +322,25 @@ export default function SwapShell() {
         opts.push(createTokenMeta(other));
       });
       
-      // Add BTC if frBTC is available
-      if (opts.some(t => t.id === FRBTC_ALKANE_ID)) {
-        opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
-      }
-      
       const seen = new Set<string>();
       return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
     }
     
     // Case 3: Selling BTC or frBTC - show all frBTC pairs + USDT/USDC
     if (fromToken.id === 'btc' || normalizedFromId === FRBTC_ALKANE_ID) {
+      // Top items: BTC (if selling frBTC), USDC, USDT
+      if (fromToken.id !== 'btc') {
+        opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+      }
+      
+      // Check if bUSD is reachable
+      const hasBusd = frbtcPairs?.some(p => 
+        p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID
+      );
+      if (hasBusd) {
+        addBridgeTokens(); // USDC, USDT
+      }
+      
       // Always show frBTC as an option when selling BTC
       if (fromToken.id === 'btc') {
         const frbtcUrlSafe = FRBTC_ALKANE_ID.replace(/:/g, '-');
@@ -320,27 +360,11 @@ export default function SwapShell() {
         }
       });
       
-      // Add BTC as option if selling frBTC
-      if (fromToken.id !== 'btc') {
-        opts.unshift({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
-      }
-      
-      // ALWAYS add USDT/USDC if bUSD is reachable
-      if (opts.some(t => t.id === BUSD_ALKANE_ID)) {
-        addBridgeTokens();
-      }
-      
       const seen = new Set<string>();
       return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
     }
     
     // Case 4: Selling other alkane - show all reachable tokens
-    // Direct pairs
-    fromPairs?.forEach((p) => {
-      const other = p.token0.id === normalizedFromId ? p.token1.id : p.token0.id;
-      opts.push(createTokenMeta(other));
-    });
-    
     // Check if we can reach bUSD (directly or via frBTC)
     const hasBusdDirect = fromPairs?.some(p => 
       p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID
@@ -352,7 +376,21 @@ export default function SwapShell() {
       p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID
     ));
     
-    // If we can reach bUSD, add all bUSD pairs + USDT/USDC
+    // Top items: BTC (if reachable), USDC, USDT
+    if (hasFrbtcBridge) {
+      opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+    }
+    if (canReachBusd) {
+      addBridgeTokens(); // USDC, USDT
+    }
+    
+    // Direct pairs
+    fromPairs?.forEach((p) => {
+      const other = p.token0.id === normalizedFromId ? p.token1.id : p.token0.id;
+      opts.push(createTokenMeta(other));
+    });
+    
+    // If we can reach bUSD, add all bUSD pairs
     if (canReachBusd) {
       busdPairs?.forEach((p) => {
         const other = p.token0.id === BUSD_ALKANE_ID ? p.token1.id : p.token0.id;
@@ -360,9 +398,6 @@ export default function SwapShell() {
           opts.push(createTokenMeta(other));
         }
       });
-      
-      // Add USDT/USDC
-      addBridgeTokens();
     }
     
     // Add frBTC-reachable tokens
@@ -373,8 +408,6 @@ export default function SwapShell() {
           opts.push(createTokenMeta(other));
         }
       });
-      // Add BTC option
-      opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
     }
     
     // Unique by id
