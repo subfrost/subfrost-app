@@ -30,7 +30,7 @@ const EthereumWalletContext = createContext<EthereumWalletContextType | undefine
 
 interface EthereumWalletProviderProps {
   children: ReactNode;
-  ethereumNetwork: 'mainnet' | 'sepolia';
+  ethereumNetwork: 'mainnet' | 'sepolia' | 'regtest';
 }
 
 export function EthereumWalletProvider({ children, ethereumNetwork }: EthereumWalletProviderProps) {

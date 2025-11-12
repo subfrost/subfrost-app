@@ -14,6 +14,9 @@
    const mobileMenuRef = useRef<HTMLDivElement | null>(null);
    const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
+  
+  const isRegtest = typeof window !== 'undefined' && 
+    (process.env.NEXT_PUBLIC_NETWORK === 'regtest' || window.location.host.startsWith('localhost'));
 
    useEffect(() => {
      if (!menuOpen) return;
@@ -59,6 +62,11 @@
 
    return (
     <header className="relative z-50 w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(40,67,114,0.05)] border-b border-[color:var(--sf-glass-border)]">
+      {isRegtest && (
+        <div className="w-full bg-amber-500/90 px-4 py-1 text-center text-xs font-bold text-black">
+          REGTEST MODE - Local Development Environment
+        </div>
+      )}
       <div className="relative flex h-16 w-full items-center px-6 sm:h-20 sm:px-10">
         {/* Brand */}
         <Link href="/" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">

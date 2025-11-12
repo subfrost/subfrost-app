@@ -10,12 +10,32 @@ export const ETHEREUM_CONTRACTS = {
     USDT_ADDRESS: '0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0', // Sepolia USDT
     CHAIN_ID: 11155111,
   },
+  regtest: {
+    USDC_ADDRESS: process.env.NEXT_PUBLIC_REGTEST_USDC_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+    USDT_ADDRESS: process.env.NEXT_PUBLIC_REGTEST_USDT_ADDRESS || '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
+    CHAIN_ID: 31337, // Anvil/Hardhat default chain ID
+  },
 } as const;
 
 export function getConfig(network: string) {
   const host = typeof window !== 'undefined' ? window.location.host : '';
 
   switch (network) {
+    case 'regtest':
+      return {
+        ALKANE_FACTORY_ID: '4:65522',
+        BUSD_ALKANE_ID: '2:0',
+        BUSD_SPLITTER_ID: undefined,
+        FRBTC_ALKANE_ID: '32:0',
+        DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:0',
+        VEDIESEL_VAULT_ID: '2:1',
+        DXBTC_VAULT_ID: '2:2',
+        OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'http://localhost:3001',
+        BLOCK_EXPLORER_URL_BTC: 'http://localhost:8080',
+        BLOCK_EXPLORER_URL_ETH: 'http://localhost:8545',
+        BOUND_API_URL: process.env.NEXT_PUBLIC_BOUND_API_URL ?? 'http://localhost:3002/api/v1',
+        ETHEREUM_NETWORK: 'regtest',
+      } as const;
     case 'oylnet':
       return {
         ALKANE_FACTORY_ID: '4:65522',

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:regtest": "NEXT_PUBLIC_NETWORK=regtest next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -15,7 +16,8 @@
     "test:integration": "npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
     "test:e2e:vault": "npx tsx e2e/vault-e2e.test.ts",
     "test:e2e:swap": "npx tsx e2e/swap-e2e.test.ts",
-    "test:e2e": "npm run test:e2e:swap && npm run test:e2e:vault"
+    "test:e2e": "npm run test:e2e:swap && npm run test:e2e:vault",
+    "test:e2e:regtest": "NEXT_PUBLIC_NETWORK=regtest npm run test:e2e"
   },
   "dependencies": {
     "@bitcoinerlab/secp256k1": "^1.2.0",

@@ -32,12 +32,14 @@ export default function Providers({ children }: { children: ReactNode }) {
           detectedNetwork = 'signet';
         } else if (host.startsWith('oylnet.') || host.startsWith('staging-oylnet.')) {
           detectedNetwork = 'oylnet';
+        } else if (host.startsWith('regtest.') || host.startsWith('localhost')) {
+          detectedNetwork = 'regtest' as Network;
         } else {
           detectedNetwork = 'mainnet';
         }
       } else {
-        const envNet = process.env.NEXT_PUBLIC_NETWORK as Network;
-        detectedNetwork = (envNet as any) === 'regtest' ? 'mainnet' : envNet;
+        const envNet = process.env.NEXT_PUBLIC_NETWORK;
+        detectedNetwork = envNet as Network;
       }
       setNetwork(detectedNetwork);
     }
@@ -46,7 +48,7 @@ export default function Providers({ children }: { children: ReactNode }) {
   if (!mounted) return null;
 
   const config = getConfig(network);
-  const ethereumNetwork = config.ETHEREUM_NETWORK as 'mainnet' | 'sepolia';
+  const ethereumNetwork = config.ETHEREUM_NETWORK as 'mainnet' | 'sepolia' | 'regtest';
 
   return (
     <QueryClientProvider client={queryClient}>
