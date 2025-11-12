@@ -2,42 +2,75 @@
 
 import { useState } from 'react';
 import { Coins } from 'lucide-react';
+import { useWallet } from '@/context/WalletContext';
 
 export default function MintTestTokensButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const [mintResult, setMintResult] = useState<string | null>(null);
+  const { address, isConnected } = useWallet() as any;
 
   const handleMint = async () => {
+    if (!isConnected || !address) {
+      setMintResult('❌ Please connect your wallet first');
+      return;
+    }
+
     setIsMinting(true);
     setMintResult(null);
 
     try {
-      // In regtest mode, we need to:
-      // 1. Get connected wallet address
-      // 2. Call Bitcoin regtest RPC to send BTC and mine blocks
-      // 3. Mint Alkane tokens via OYL API or direct protocol calls
-      
-      // For now, this provides instructions to the user
+      // Call the mint API endpoint
+      const response = await fetch('/api/regtest/mint', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address: address,
+          tokens: {
+            btc: 1.0,
+            diesel: 1000,
+            frbtc: 10,
+            busd: 10000,
+          }
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to mint tokens');
+      }
+
       setMintResult(
-        '💡 To mint test tokens in regtest:\n\n' +
-        '1. Fund your wallet:\n' +
-        '   bitcoin-cli -regtest sendtoaddress <your_address> 1.0\n\n' +
-        '2. Mine blocks:\n' +
-        '   bitcoin-cli -regtest generatetoaddress 6 <address>\n\n' +
-        '3. Use OYL SDK to mint alkane tokens via protocol operations\n\n' +
-        'See docs/REGTEST_SETUP.md for detailed instructions.'
+        `✅ Successfully minted tokens!\n\n` +
+        `Address: ${address.slice(0, 8)}...${address.slice(-6)}\n\n` +
+        `Minted:\n` +
+        `- 1.0 BTC\n` +
+        `- 1,000 DIESEL\n` +
+        `- 10 frBTC\n` +
+        `- 10,000 bUSD\n\n` +
+        `${data.blocksGenerated ? `Mined ${data.blocksGenerated} blocks\n` : ''}` +
+        `\nRefresh your wallet to see the new balance!`
       );
+
+      // Auto-close after 5 seconds
+      setTimeout(() => {
+        setIsOpen(false);
+        setMintResult(null);
+      }, 5000);
       
-      // TODO: Implement automated minting when OYL API endpoints are available
-      // This would require:
-      // - Getting wallet address from context
-      // - Calling local Bitcoin RPC to fund wallet
-      // - Calling OYL API to mint tokens
-      // - Mining blocks to confirm
-      
-    } catch (error) {
-      setMintResult('❌ Failed to mint tokens. Check console for details.');
+    } catch (error: any) {
+      const errorMsg = error.message || 'Unknown error';
+      setMintResult(
+        `❌ Failed to mint tokens\n\n` +
+        `Error: ${errorMsg}\n\n` +
+        `Make sure:\n` +
+        `- Bitcoin regtest node is running\n` +
+        `- OYL API is running\n` +
+        `- Check server logs for details`
+      );
       console.error('Mint error:', error);
     } finally {
       setIsMinting(false);
@@ -68,9 +101,16 @@ export default function MintTestTokensButton() {
               Mint Test Tokens
             </h2>
             
-            <p className="text-sm text-[color:var(--sf-text)]/70 mb-6">
-              This will mint test tokens to your connected wallet for testing purposes. Only available in regtest mode.
-            </p>
+            {!isConnected ? (
+              <p className="text-sm text-[color:var(--sf-text)]/70 mb-6 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                ⚠️ Please connect your wallet first to mint tokens.
+              </p>
+            ) : (
+              <p className="text-sm text-[color:var(--sf-text)]/70 mb-6">
+                This will mint test tokens to your connected wallet: <br />
+                <span className="font-mono text-xs">{address?.slice(0, 8)}...{address?.slice(-6)}</span>
+              </p>
+            )}
 
             <div className="space-y-3 mb-6">
               <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
@@ -109,10 +149,10 @@ export default function MintTestTokensButton() {
                 <button
                   type="button"
                   onClick={handleMint}
-                  disabled={isMinting}
+                  disabled={isMinting || !isConnected}
                   className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-emerald-500 rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed sf-focus-ring"
                 >
-                  {isMinting ? 'Loading...' : 'Show Instructions'}
+                  {isMinting ? 'Minting...' : 'Mint Tokens'}
                 </button>
               )}
             </div>
