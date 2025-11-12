@@ -32,6 +32,8 @@ import { useBridgeRedeemMutation } from "@/hooks/useBridgeRedeemMutation";
 import { useEthereumWallet } from "@/context/EthereumWalletContext";
 import { useEthereumTokenBalance } from "@/hooks/useEthereumTokenBalance";
 import BridgeDepositModal from "@/app/components/BridgeDepositModal";
+import { usePendingSwapQueue } from "@/hooks/usePendingSwapQueue";
+import { useSwapRouting } from "@/hooks/useSwapRouting";
 
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
@@ -54,6 +56,22 @@ export default function SwapShell() {
     amount: string;
     targetToken?: string;
   } | null>(null);
+
+  // Pending swap queue for auto-chaining
+  const { 
+    readySwaps, 
+    addPendingSwap, 
+    removePendingSwap, 
+    updateSwapStatus 
+  } = usePendingSwapQueue();
+
+  // Calculate routing for current pair
+  const swapRoute = useSwapRouting(
+    fromToken?.id,
+    toToken?.id,
+    fromToken?.symbol,
+    toToken?.symbol
+  );
 
   const sellId = fromToken?.id ?? '';
   const buyId = toToken?.id ?? '';
@@ -102,6 +120,46 @@ export default function SwapShell() {
       toInitializedRef.current = true;
     }
   }, [toToken, BUSD_ALKANE_ID]);
+
+  // Auto-execute ready swaps (after bUSD arrives from bridge)
+  useEffect(() => {
+    if (!address || readySwaps.length === 0) return;
+
+    readySwaps.forEach(async (swap) => {
+      try {
+        console.log('Auto-executing swap:', swap);
+        updateSwapStatus(swap.id, 'swapping');
+
+        // Execute bUSD → Target Token swap
+        const result = await swapMutation.mutateAsync({
+          sellCurrency: BUSD_ALKANE_ID,
+          buyCurrency: swap.targetToken,
+          sellAmount: swap.expectedBusdAmount,
+          buyAmount: '0', // Will be calculated by AMM
+          direction: 'sell',
+          maxSlippage: String(swap.maxSlippage),
+          feeRate: swap.feeRate,
+        });
+
+        if (result.success && result.transactionId) {
+          updateSwapStatus(swap.id, 'completed');
+          setSuccessTxId(result.transactionId);
+          window.alert(
+            `Auto-swap completed!\n\nSwapped bUSD → ${swap.targetSymbol}\n\nTX: ${result.transactionId}`
+          );
+          removePendingSwap(swap.id);
+        } else {
+          throw new Error('Swap failed: no transaction ID');
+        }
+      } catch (err: any) {
+        console.error('Auto-swap failed:', err);
+        updateSwapStatus(swap.id, 'failed');
+        window.alert(
+          `Auto-swap failed: ${err.message}\n\nYou have bUSD in your wallet. You can manually swap bUSD → ${swap.targetSymbol}.`
+        );
+      }
+    });
+  }, [readySwaps, address, BUSD_ALKANE_ID, swapMutation, updateSwapStatus, removePendingSwap, maxSlippage, fee]);
 
   // Build FROM options: BTC + all user-held tokens + USDT/USDC (for bridge in)
   const fromOptions: TokenMeta[] = useMemo(() => {
@@ -449,15 +507,98 @@ export default function SwapShell() {
 
       // SCENARIO 6: Swap + Bridge Out - Other Token -> USDT/USDC  
       if (isBridgeOutWithSwap) {
-        // For now, guide users to do this in two steps
-        // TODO: Implement automatic chaining
-        window.alert(
-          'Multi-step swap: ' + fromToken.symbol + ' → ' + toToken.symbol + '\n\n' +
-          'This requires two transactions:\n' +
-          '1. Swap ' + fromToken.symbol + ' → bUSD (Bitcoin transaction)\n' +
-          '2. Bridge bUSD → ' + toToken.symbol + ' (to Ethereum)\n\n' +
-          'Please complete step 1 first, then return to swap bUSD → ' + toToken.symbol
+        const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
+        const tokenType = toToken.id === VIRTUAL_TOKEN_IDS.USDT ? 'USDT' : 'USDC';
+        
+        // Confirm multi-step flow
+        const confirmed = window.confirm(
+          `Multi-step swap: ${fromToken.symbol} → ${toToken.symbol}\n\n` +
+          `This requires two transactions:\n` +
+          `1. Swap ${fromToken.symbol} → bUSD (Bitcoin)\n` +
+          `2. Bridge bUSD → ${tokenType} (Ethereum)\n\n` +
+          `Click OK to proceed with step 1.`
         );
+        
+        if (!confirmed) return;
+
+        // Step 1: Execute Token → bUSD swap
+        try {
+          // Get quote for Token → bUSD
+          const swapQuote = await fetch(
+            `/api/swap-quote?` +
+            `sellId=${encodeURIComponent(fromToken.id)}&` +
+            `buyId=${encodeURIComponent(BUSD_ALKANE_ID)}&` +
+            `amount=${encodeURIComponent(amountDisplay)}&` +
+            `direction=sell&` +
+            `maxSlippage=${maxSlippage}`
+          ).then(r => r.json());
+
+          if (!swapQuote) {
+            throw new Error('Unable to get quote for Token → bUSD');
+          }
+
+          // Execute the swap
+          const swapResult = await swapMutation.mutateAsync({
+            sellCurrency: fromToken.id,
+            buyCurrency: BUSD_ALKANE_ID,
+            sellAmount: amountDisplay,
+            buyAmount: '0', // Will be calculated by AMM
+            direction: 'sell',
+            maxSlippage,
+            feeRate: fee.feeRate,
+          });
+
+          if (!swapResult.success || !swapResult.transactionId) {
+            throw new Error('Swap failed: no transaction ID');
+          }
+
+          setSuccessTxId(swapResult.transactionId);
+
+          // Step 2: Prompt for Ethereum address and execute bridge
+          const proceedToBridge = window.confirm(
+            `Step 1 completed! Swapped ${fromToken.symbol} → bUSD\n\n` +
+            `TX: ${swapResult.transactionId}\n\n` +
+            `Click OK to proceed with step 2: Bridge bUSD → ${tokenType}`
+          );
+
+          if (proceedToBridge) {
+            const destinationAddress = window.prompt(
+              `Enter your Ethereum address to receive ${tokenType}:`,
+              ethAddress || ''
+            );
+
+            if (!destinationAddress || !/^0x[a-fA-F0-9]{40}$/.test(destinationAddress)) {
+              window.alert('Invalid Ethereum address. You can bridge manually: Swap bUSD → ' + tokenType);
+              return;
+            }
+
+            // Get expected bUSD amount from swap result
+            // Use the input amount as estimate (1:1 for bridge calculation)
+            const busdAmountSats = String(Math.floor(parseFloat(amountDisplay) * 1e8));
+
+            // Execute bridge
+            const bridgeResult = await bridgeRedeemMutation.mutateAsync({
+              amount: busdAmountSats,
+              destinationAddress,
+              tokenType,
+              feeRate: fee.feeRate,
+            });
+
+            if (bridgeResult?.success) {
+              window.alert(
+                `Multi-step swap completed!\n\n` +
+                `Step 1: ${swapResult.transactionId}\n` +
+                `Step 2: ${bridgeResult.transactionId}\n\n` +
+                `Your ${tokenType} will arrive on Ethereum in ~15-30 minutes.`
+              );
+              setFromAmount('');
+              setToAmount('');
+            }
+          }
+        } catch (err: any) {
+          console.error('Multi-step swap failed:', err);
+          window.alert(`Step failed: ${err.message}\n\nYou may need to complete the remaining steps manually.`);
+        }
         return;
       }
 
@@ -672,6 +813,21 @@ export default function SwapShell() {
           amount={bridgeModalConfig.amount}
           targetToken={bridgeModalConfig.targetToken}
           onSuccess={(txHash) => {
+            // If this is a multi-hop swap, add to pending queue
+            if (bridgeModalConfig.targetToken && toToken) {
+              const pendingSwapId = addPendingSwap({
+                fromToken: bridgeModalConfig.tokenType,
+                toToken: toToken.id,
+                expectedBusdAmount: bridgeModalConfig.amount,
+                targetToken: toToken.id,
+                targetSymbol: (toToken.symbol || toToken.name) ?? toToken.id,
+                bridgeEthTxHash: txHash,
+                maxSlippage: parseFloat(maxSlippage),
+                feeRate: fee.feeRate || 1,
+              });
+              console.log('Added pending swap:', pendingSwapId);
+            }
+
             setIsBridgeModalOpen(false);
             setBridgeModalConfig(null);
             setFromAmount('');
