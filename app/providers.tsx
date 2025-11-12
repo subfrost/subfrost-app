@@ -9,6 +9,8 @@ import type { Network } from '@oyl/sdk';
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
+import { EthereumWalletProvider } from '@/context/EthereumWalletContext';
+import { getConfig } from '@/utils/getConfig';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,13 +45,20 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   if (!mounted) return null;
 
+  const config = getConfig(network);
+  const ethereumNetwork = config.ETHEREUM_NETWORK as 'mainnet' | 'sepolia';
+
   return (
     <QueryClientProvider client={queryClient}>
       <GlobalStore>
         <ModalStore>
           {/* @ts-ignore - LaserEyes expects its own network type */}
           <LaserEyesProvider config={{ network }}>
-            <WalletProvider>{children}</WalletProvider>
+            <WalletProvider>
+              <EthereumWalletProvider ethereumNetwork={ethereumNetwork}>
+                {children}
+              </EthereumWalletProvider>
+            </WalletProvider>
           </LaserEyesProvider>
         </ModalStore>
       </GlobalStore>
