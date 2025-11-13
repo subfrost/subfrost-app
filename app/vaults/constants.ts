@@ -62,7 +62,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     id: 've-usd',
     name: 'veUSD Vault',
     description: 'Stake USD for boosted yield',
-    tokenId: '2:0', // Placeholder - needs actual bUSD ID
+    tokenId: 'usd', // Use custom USD icon (green $ sign)
     tokenSymbol: 'USD',
     contractAddress: '0x...',
     badge: 'New',
@@ -98,7 +98,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     id: 've-methane',
     name: 'veMETHANE Vault',
     description: 'Stake METHANE for boosted yield',
-    tokenId: '2:0', // Placeholder - needs actual METHANE ID
+    tokenId: '2:16', // METHANE alkane ID
     tokenSymbol: 'METHANE',
     contractAddress: '0x...',
     badge: 'New',
