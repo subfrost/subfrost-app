@@ -142,7 +142,10 @@ export default function SwapShell() {
       const name = userMeta?.name || fetched?.name || symbol;
       
       let iconUrl: string | undefined;
-      if (/^\d+:\d+/.test(tokenId)) {
+      // Special case: Always use local frBTC icon
+      if (tokenId === FRBTC_ALKANE_ID || symbol?.toLowerCase() === 'frbtc') {
+        iconUrl = '/tokens/frbtc.svg';
+      } else if (/^\d+:\d+/.test(tokenId)) {
         const urlSafeId = tokenId.replace(/:/g, '-');
         iconUrl = `https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`;
       }
@@ -180,12 +183,11 @@ export default function SwapShell() {
     if (fromToken.id === 'btc' || normalizedFromId === FRBTC_ALKANE_ID) {
       // Always show frBTC as an option when selling BTC
       if (fromToken.id === 'btc') {
-        const frbtcUrlSafe = FRBTC_ALKANE_ID.replace(/:/g, '-');
         opts.push({
           id: FRBTC_ALKANE_ID,
           symbol: 'frBTC',
           name: 'frBTC',
-          iconUrl: `https://asset.oyl.gg/alkanes/${network}/${frbtcUrlSafe}.png`
+          iconUrl: '/tokens/frbtc.svg'
         });
       }
       
