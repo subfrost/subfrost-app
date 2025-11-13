@@ -2,6 +2,7 @@
 
 import { useWallet } from "@/context/WalletContext";
 import { VaultConfig } from "../constants";
+import TokenIcon from "@/app/components/TokenIcon";
 
 type Props = {
   vault: VaultConfig;
@@ -11,7 +12,6 @@ type Props = {
 
 export default function VaultListItem({ vault, isSelected, onClick }: Props) {
   const { network } = useWallet();
-  const tokenImageUrl = `https://asset.oyl.gg/alkanes/${network}/${vault.tokenId.replace(/:/g, '-')}.png`;
 
   // Mock data - replace with real vault queries
   const holdings = "0.00";
@@ -41,18 +41,13 @@ export default function VaultListItem({ vault, isSelected, onClick }: Props) {
     >
       {/* Vault Icon */}
       <div className="relative flex-shrink-0">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#A8C5E8] to-[#7AA8D8] overflow-hidden border border-white/60">
-          <img 
-            src={tokenImageUrl} 
-            alt={vault.tokenSymbol}
-            className="h-10 w-10 object-contain"
-            style={{
-              filter: 'brightness(0.9) saturate(1.2) hue-rotate(15deg)',
-            }}
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.parentElement!.innerHTML = '<span class="text-xl text-white">💎</span>';
-            }}
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#A8C5E8] to-[#7AA8D8] overflow-hidden border border-white/60 p-1">
+          <TokenIcon 
+            symbol={vault.tokenSymbol}
+            id={vault.tokenId}
+            size="lg"
+            network={network}
+            className="rounded-full"
           />
         </div>
       </div>

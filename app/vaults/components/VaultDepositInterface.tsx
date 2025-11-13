@@ -83,20 +83,12 @@ export default function VaultDepositInterface({
           {mode === 'deposit' ? (
             <>
               <button className="w-full h-12 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 flex items-center gap-2 hover:bg-gray-50 transition-colors">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-[#A8C5E8] to-[#7AA8D8] overflow-hidden">
-                  <img 
-                    src={tokenImageUrl} 
-                    alt={inputToken}
-                    className="h-5 w-5 object-contain"
-                    style={{
-                      filter: 'brightness(0.9) saturate(1.2) hue-rotate(15deg)',
-                    }}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.parentElement!.innerHTML = '<span class="text-xs text-white font-bold">D</span>';
-                    }}
-                  />
-                </div>
+                <TokenIcon 
+                  symbol={inputToken}
+                  id={tokenId}
+                  size="sm"
+                  network={network}
+                />
                 <span className="text-sm font-bold text-[color:var(--sf-text)]">{inputToken}</span>
               </button>
               <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
