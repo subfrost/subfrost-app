@@ -25,6 +25,7 @@ import { usePools } from "@/hooks/usePools";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
+import SwapSuccessNotification from "@/app/components/SwapSuccessNotification";
 
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
@@ -40,6 +41,7 @@ export default function SwapShell() {
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
   const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
+  const [successTxId, setSuccessTxId] = useState<string | null>(null);
 
   const sellId = fromToken?.id ?? '';
   const buyId = toToken?.id ?? '';
@@ -270,8 +272,8 @@ export default function SwapShell() {
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
-        if (res?.success) {
-          window.alert(`Wrap submitted. Tx: ${res.transactionId ?? 'unknown'}`);
+        if (res?.success && res.transactionId) {
+          setSuccessTxId(res.transactionId);
         }
       } catch (e) {
         console.error(e);
@@ -284,8 +286,8 @@ export default function SwapShell() {
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
-        if (res?.success) {
-          window.alert(`Unwrap submitted. Tx: ${res.transactionId ?? 'unknown'}`);
+        if (res?.success && res.transactionId) {
+          setSuccessTxId(res.transactionId);
         }
       } catch (e) {
         console.error(e);
@@ -309,8 +311,8 @@ export default function SwapShell() {
     } as const;
     try {
       const res = await swapMutation.mutateAsync(payload as any);
-      if (res?.success) {
-        window.alert(`Swap submitted. Tx: ${res.transactionId ?? 'unknown'}`);
+      if (res?.success && res.transactionId) {
+        setSuccessTxId(res.transactionId);
       }
     } catch (e) {
       console.error(e);
@@ -439,6 +441,12 @@ export default function SwapShell() {
 
   return (
     <div className="flex w-full flex-col gap-8">
+      {successTxId && (
+        <SwapSuccessNotification
+          txId={successTxId}
+          onClose={() => setSuccessTxId(null)}
+        />
+      )}
       <section className="relative mx-auto w-full max-w-[540px] rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
         {isBalancesLoading && <LoadingOverlay />}
         <div className="mb-6 flex w-full items-center justify-center">
