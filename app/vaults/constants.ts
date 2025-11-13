@@ -26,7 +26,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     id: 'dx-btc',
     name: 'dxBTC Vault',
     description: 'Earn boosted BTC yield',
-    tokenId: 'btc', // Use Bitcoin icon
+    tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     contractAddress: '0x...',
     badge: 'Special',
