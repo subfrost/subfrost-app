@@ -401,7 +401,10 @@ export default function SwapShell() {
       }
     } else if (tokenSelectorMode === 'to') {
       const token = toOptions.find((t) => t.id === tokenId);
-      if (token) setToToken(token);
+      if (token) {
+        console.log('[DEBUG] Setting toToken:', token);
+        setToToken(token);
+      }
     }
   };
 
