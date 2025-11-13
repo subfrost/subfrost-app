@@ -452,6 +452,17 @@ export default function SwapShell() {
           onClose={() => setSuccessTxId(null)}
         />
       )}
+      
+      {/* Temporary Test Button */}
+      <div className="mx-auto">
+        <button
+          onClick={() => setSuccessTxId('test-transaction-id-' + Date.now())}
+          className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 transition-colors shadow-md"
+        >
+          🧪 Test Success Notification
+        </button>
+      </div>
+
       <section className="relative mx-auto w-full max-w-[540px] rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
         {isBalancesLoading && <LoadingOverlay />}
         <div className="mb-6 flex w-full items-center justify-center">
