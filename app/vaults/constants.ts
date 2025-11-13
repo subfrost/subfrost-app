@@ -7,34 +7,45 @@ export interface VaultConfig {
   tokenSymbol: string;
   contractAddress: string;
   badge?: string;
-  type: 'unit-vault' | 'gauge';
+  type: 'unit-vault';
   inputAsset: string;
   outputAsset: string;
   estimatedApy?: string;
   historicalApy?: string;
   riskLevel?: 'low' | 'medium' | 'high';
+  // Boost configuration
+  hasBoost: boolean;
+  boostTokenSymbol?: string; // e.g., "vxDIESEL"
+  boostTokenName?: string;
+  isBoostComingSoon?: boolean; // For FROST-based boosts
+  escrowNftName?: string; // For special vaults like dxBTC
 }
 
 export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
-    id: 'yve-diesel',
-    name: 'yveDIESEL Vault',
-    description: 'Vault Bridge DIESEL',
-    tokenId: '2:0',
-    tokenSymbol: 'DIESEL',
-    contractAddress: '0xBe53A1...F6204',
-    badge: 'Migrate',
+    id: 'dx-btc',
+    name: 'dxBTC Vault',
+    description: 'Earn boosted BTC yield',
+    tokenId: '32:0', // Use frBTC icon
+    tokenSymbol: 'BTC',
+    contractAddress: '0x...',
+    badge: 'Special',
     type: 'unit-vault',
-    inputAsset: 'DIESEL',
-    outputAsset: 'yveDIESEL',
-    estimatedApy: '3.95',
-    historicalApy: '5.61',
+    inputAsset: 'BTC',
+    outputAsset: 'dxBTC',
+    estimatedApy: '5.2',
+    historicalApy: '6.8',
     riskLevel: 'medium',
+    hasBoost: true,
+    boostTokenSymbol: 'vxFROST',
+    boostTokenName: 'Staked FROST',
+    isBoostComingSoon: true, // Grey out FROST features
+    escrowNftName: 'Escrow NFT', // TODO: needs proper name
   },
   {
-    id: 'yve-frbtc',
+    id: 'yv-frbtc',
     name: 'yvfrBTC Vault',
-    description: 'Vault Bridge frBTC',
+    description: 'Earn yield on frBTC',
     tokenId: '32:0',
     tokenSymbol: 'frBTC',
     contractAddress: '0xAb12C3...D4567',
@@ -45,39 +56,60 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     estimatedApy: '4.2',
     historicalApy: '6.1',
     riskLevel: 'medium',
+    hasBoost: false, // No boost for yvfrBTC
   },
-  // Future vaults can be added here:
-  // {
-  //   id: 'yve-busd',
-  //   name: 'yveBUSD Vault',
-  //   description: 'Vault Bridge BUSD',
-  //   tokenId: '1:0',
-  //   tokenSymbol: 'BUSD',
-  //   contractAddress: '0x...',
-  //   badge: 'New',
-  //   type: 'unit-vault',
-  //   inputAsset: 'BUSD',
-  //   outputAsset: 'yveBUSD',
-  //   estimatedApy: '4.2',
-  //   historicalApy: '4.8',
-  //   riskLevel: 'low',
-  // },
-];
-
-export const AVAILABLE_GAUGES: VaultConfig[] = [
   {
-    id: 'diesel-frbtc-gauge',
-    name: 'DIESEL/frBTC Gauge',
-    description: 'Stake LP tokens',
-    tokenId: '2:0', // Use DIESEL icon for now
-    tokenSymbol: 'LP',
+    id: 've-usd',
+    name: 'veUSD Vault',
+    description: 'Stake USD for boosted yield',
+    tokenId: '2:0', // Placeholder - needs actual bUSD ID
+    tokenSymbol: 'USD',
     contractAddress: '0x...',
-    badge: 'Ethereum',
-    type: 'gauge',
-    inputAsset: 'LP Tokens',
-    outputAsset: 'Gauge Tokens',
-    estimatedApy: '12.5',
-    historicalApy: '15.2',
+    badge: 'New',
+    type: 'unit-vault',
+    inputAsset: 'bUSD',
+    outputAsset: 'veUSD',
+    estimatedApy: '3.8',
+    historicalApy: '4.5',
+    riskLevel: 'low',
+    hasBoost: true,
+    boostTokenSymbol: 'vxUSD',
+    boostTokenName: 'Staked USD Gauge',
+  },
+  {
+    id: 've-diesel',
+    name: 'veDIESEL Vault',
+    description: 'Stake DIESEL for boosted yield',
+    tokenId: '2:0',
+    tokenSymbol: 'DIESEL',
+    contractAddress: '0xBe53A1...F6204',
+    badge: 'Popular',
+    type: 'unit-vault',
+    inputAsset: 'DIESEL',
+    outputAsset: 'veDIESEL',
+    estimatedApy: '3.95',
+    historicalApy: '5.61',
     riskLevel: 'medium',
+    hasBoost: true,
+    boostTokenSymbol: 'vxDIESEL',
+    boostTokenName: 'Staked DIESEL Gauge',
+  },
+  {
+    id: 've-methane',
+    name: 'veMETHANE Vault',
+    description: 'Stake METHANE for boosted yield',
+    tokenId: '2:0', // Placeholder - needs actual METHANE ID
+    tokenSymbol: 'METHANE',
+    contractAddress: '0x...',
+    badge: 'New',
+    type: 'unit-vault',
+    inputAsset: 'METHANE',
+    outputAsset: 'veMETHANE',
+    estimatedApy: '4.5',
+    historicalApy: '5.2',
+    riskLevel: 'medium',
+    hasBoost: true,
+    boostTokenSymbol: 'vxMETHANE',
+    boostTokenName: 'Staked METHANE Gauge',
   },
 ];
