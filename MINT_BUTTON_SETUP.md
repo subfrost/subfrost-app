@@ -28,13 +28,15 @@ The mint button will:
 
 ## What Gets Minted
 
-Currently the button mints:
-- **1.0 BTC** - Real Bitcoin on regtest ✓
+**Currently:**
+- ✅ **1.0 BTC** - Real Bitcoin on regtest (WORKING!)
 
-Planned (requires alkanes integration):
-- 1,000 DIESEL tokens
-- 10 frBTC tokens  
-- 10,000 bUSD tokens
+**Coming Soon** (requires alkanes integration):
+- ⏳ 1,000 DIESEL tokens
+- ⏳ 10 frBTC tokens  
+- ⏳ 10,000 bUSD tokens
+
+The UI now clearly shows which tokens are available and which are "Coming soon".
 
 ## Configuration
 

@@ -6,7 +6,8 @@
 - ✅ **Fixed and working!**
 - Sends 1.0 BTC to connected wallet
 - Mines 6 blocks for confirmation
-- Shows success message
+- Shows success message with transaction ID
+- ⚠️ **Note**: Only mints BTC currently (alkane tokens coming soon)
 
 ### Environment Setup
 - ✅ Docker-compose services running
