@@ -51,9 +51,11 @@ export default function MintTestTokensButton() {
       }
 
       if (!response.ok) {
-        const errorMsg = data.error || data.details || 'Failed to mint tokens';
+        const errorMsg = data?.error || data?.details || 'Failed to mint tokens';
         console.error('Mint API error:', data);
-        throw new Error(errorMsg);
+        const error: any = new Error(errorMsg);
+        error.apiData = data; // Attach data to error for access in catch block
+        throw error;
       }
 
       setMintResult(
@@ -79,9 +81,10 @@ export default function MintTestTokensButton() {
       console.error('Mint error:', error);
       
       // Check if we have setup instructions from the API
+      const apiData = error.apiData;
       if (errorMsg.includes('Bitcoin regtest node is not running') || 
           errorMsg.includes('not running') ||
-          data?.setup) {
+          apiData?.setup) {
         setMintResult(
           `⚠️ Bitcoin regtest node not running\n\n` +
           `The automated minting requires Bitcoin Core.\n\n` +
