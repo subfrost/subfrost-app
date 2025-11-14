@@ -7,11 +7,15 @@ export const useSellableCurrencies = (
   tokensWithPools?: { id: string; name?: string }[],
 ) => {
   const api = useApiProvider();
+  // In regtest mode, return empty data since OYL API isn't available
+  const isRegtest = process.env.NEXT_PUBLIC_NETWORK === 'regtest';
+  
   return useQuery({
     queryKey: ['sellable-currencies', walletAddress, tokensWithPools],
     staleTime: 1000 * 60 * 2,
+    enabled: !isRegtest && !!walletAddress, // Disable query in regtest mode
     queryFn: async (): Promise<CurrencyPriceInfoResponse[]> => {
-      if (!walletAddress) return [];
+      if (!walletAddress || isRegtest) return [];
 
       const response = await api.getAlkanesTokensByAddress({ address: walletAddress });
 
