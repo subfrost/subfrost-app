@@ -220,11 +220,17 @@ BITCOIN_RPC_PASSWORD=bitcoinrpc
 # Alkanes JSON-RPC API
 NEXT_PUBLIC_ALKANES_RPC_URL=http://localhost:18888
 
-# Esplora API
+# Esplora API  
 NEXT_PUBLIC_ESPLORA_URL=http://localhost:50010
 
 # Espo API
 NEXT_PUBLIC_ESPO_URL=http://localhost:9069
+
+# OYL API (optional - for additional features)
+# NEXT_PUBLIC_OYL_API_URL=http://localhost:3001
+
+# Bound API (optional - for bridge features)
+# NEXT_PUBLIC_BOUND_API_URL=http://localhost:3002/api/v1
 EOF
     success "Created .env.local with regtest configuration"
 else
