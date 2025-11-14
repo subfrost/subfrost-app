@@ -99,14 +99,15 @@ export async function POST(request: NextRequest) {
 
       // 1. Send BTC to the address
       // Add fee parameters for regtest (no fee estimation available)
+      // Use explicit fee rate instead of conf_target since fee estimation doesn't work in regtest
       const comment = ''; // Optional comment
       const commentTo = ''; // Optional comment about recipient
       const subtractFeeFromAmount = false;
       const replaceable = true; // RBF enabled
-      const confTarget = 6;
+      const confTarget = null; // Must be null when using feeRate
       const estimateMode = 'unset'; // Don't use fee estimation
       const avoidReuse = false;
-      const feeRate = 0.00001; // 1 sat/vB (low fee for regtest)
+      const feeRate = 1; // 1 sat/vB (Bitcoin Core expects sat/vB, not BTC/kvB)
       
       const txid = await callBitcoinRPC('sendtoaddress', [
         address, 
