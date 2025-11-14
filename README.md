@@ -86,43 +86,40 @@ For local development and testing, you can run the app in regtest mode with a lo
    NEXT_PUBLIC_BOUND_API_URL=http://localhost:3002/api/v1
    ```
 
-6. **Start the App in Regtest Mode**
+3. **Start the App in Regtest Mode**
    ```bash
    npm run dev:regtest
    ```
    
    Open [http://localhost:3003](http://localhost:3003)
 
+</details>
+
 ### Regtest Features
 
+- **Complete Alkanes Stack**: Full alkanes-rs indexer with all protocols
 - **Instant Block Mining**: Mine blocks on-demand for fast testing
 - **Free Test Tokens**: Use the "MINT TOKENS" button to get test BTC, DIESEL, frBTC, and bUSD
 - **No Real Funds**: All transactions use test coins
 - **Local Control**: Full control over blockchain state
+- **Docker Orchestration**: All services managed via docker-compose
 
-### Helper Scripts
+### Services Included
 
-The app includes helper scripts for common regtest operations:
+When you run the setup script, you get:
+- **Bitcoin Regtest** (port 18443) - Local Bitcoin blockchain
+- **Metashrew** - Alkanes indexer
+- **Memshrew** - Mempool indexer
+- **JSON-RPC** (port 18888) - Alkanes API
+- **Ord** - Ordinals indexer
+- **Esplora** (port 50010) - Block explorer API
+- **Espo** (port 9069) - Additional indexer
 
-```bash
-# Start Bitcoin regtest node
-./scripts/bitcoin-regtest.sh start
+### Documentation
 
-# Stop node
-./scripts/bitcoin-regtest.sh stop
-
-# Mine blocks
-./scripts/bitcoin-regtest.sh mine 6
-
-# Check balance
-./scripts/bitcoin-regtest.sh balance
-
-# Get new address
-./scripts/bitcoin-regtest.sh address
-
-# Send BTC
-./scripts/bitcoin-regtest.sh send <address> <amount>
-```
+- **Quick Start**: This README
+- **Detailed Setup**: `docs/REGTEST_ALKANES_SETUP.md`
+- **Alkanes Wiki**: https://github.com/kungfuflex/alkanes-rs/wiki
 
 ### Full Setup Documentation
 
