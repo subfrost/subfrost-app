@@ -10,20 +10,31 @@
 import type { Network } from '@oyl/sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 
-// ✅ REAL ALKANES-RS SDK IMPORTS!
-// Import as namespace to avoid bundling issues
-import * as AlkanesSDK from '@alkanes/ts-sdk';
+// Use browser-compatible keystore (alkanes SDK has bundling issues)
+import {
+  generateMnemonic,
+  validateMnemonic,
+  createBrowserKeystore,
+  encryptBrowserKeystore,
+  decryptBrowserKeystore,
+  serializeEncryptedKeystore,
+  parseEncryptedKeystore,
+  type BrowserKeystore,
+} from './browser-keystore';
 
-// Extract what we need
-const {
-  KeystoreManager,
-  createKeystore,
-  unlockKeystore,
-  createWallet,
-} = AlkanesSDK;
+// Type definitions
+export type Keystore = {
+  mnemonic: string;
+  masterFingerprint: string;
+  accountXpub: string;
+  hdPaths: Record<string, any>;
+  network: string;
+  createdAt: number;
+};
 
-// Type imports
-import type { Keystore, WalletConfig } from '@alkanes/ts-sdk';
+export type WalletConfig = {
+  network: string;
+};
 
 // ECC library initialization state
 let eccInitialized = false;
