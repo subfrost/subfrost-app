@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Bitcoin RPC configuration from environment
+    // For docker-compose setup: use bitcoinrpc credentials
     const rpcUrl = process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:18443';
-    const rpcUser = process.env.BITCOIN_RPC_USER || 'subfrost';
-    const rpcPassword = process.env.BITCOIN_RPC_PASSWORD || 'subfrost123';
+    const rpcUser = process.env.BITCOIN_RPC_USER || 'bitcoinrpc';
+    const rpcPassword = process.env.BITCOIN_RPC_PASSWORD || 'bitcoinrpc';
 
     console.log('Bitcoin RPC config:', { rpcUrl, rpcUser, rpcPassword: '***' });
 
