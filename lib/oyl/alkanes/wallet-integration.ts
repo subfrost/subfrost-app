@@ -11,14 +11,19 @@ import type { Network } from '@oyl/sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 
 // ✅ REAL ALKANES-RS SDK IMPORTS!
-import {
+// Import as namespace to avoid bundling issues
+import * as AlkanesSDK from '@alkanes/ts-sdk';
+
+// Extract what we need
+const {
   KeystoreManager,
   createKeystore,
   unlockKeystore,
   createWallet,
-  type Keystore,
-  type WalletConfig,
-} from '@alkanes/ts-sdk';
+} = AlkanesSDK;
+
+// Type imports
+import type { Keystore, WalletConfig } from '@alkanes/ts-sdk';
 
 // ECC library initialization state
 let eccInitialized = false;
