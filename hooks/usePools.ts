@@ -28,6 +28,9 @@ export function usePools(params: UsePoolsParams = {}) {
   const { network } = useWallet();
   const api = useApiProvider();
   const { ALKANE_FACTORY_ID } = getConfig(network);
+  
+  // In regtest mode, return empty data since OYL API isn't available
+  const isRegtest = network === 'regtest' || process.env.NEXT_PUBLIC_NETWORK === 'regtest';
 
   return useQuery<{ items: PoolsListItem[]; total: number }>({
     queryKey: [
@@ -40,7 +43,11 @@ export function usePools(params: UsePoolsParams = {}) {
       params.order ?? 'desc',
     ],
     staleTime: 120_000,
+    enabled: !isRegtest, // Disable query in regtest mode
     queryFn: async () => {
+      if (isRegtest) {
+        return { items: [], total: 0 };
+      }
       const res: AllPoolsDetailsResult = await api.getAlkanesTokenPools({
         factoryId: parseAlkaneId(ALKANE_FACTORY_ID),
         limit: params.limit ?? 100,
