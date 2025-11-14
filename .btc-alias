@@ -1,0 +1,11 @@
+# Bitcoin CLI Alias for Easy Use
+# Add to your ~/.zshrc or ~/.bashrc:
+#   source ~/Documents/github/subfrost-appx/.btc-alias
+
+alias btc='bitcoin-cli -regtest -rpcuser=alkanes -rpcpassword=alkanes123 -rpcconnect=127.0.0.1'
+
+# Usage:
+#   btc getbalance
+#   btc getnewaddress
+#   btc sendtoaddress <address> <amount>
+#   btc generatetoaddress 1 $(btc getnewaddress)

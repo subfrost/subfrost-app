@@ -7,6 +7,17 @@
   resolved "https://registry.npmjs.org/@adraffy/ens-normalize/-/ens-normalize-1.10.1.tgz"
   integrity sha512-96Z2IP3mYmF1Xg2cDm8f1gWGf/HUVedQ3FMifV4kG/PQ4yEP51xDtRAEfhVNt5f/uzpNkZHwWQuUcu6D6K+Ekw==
 
+"@alkanes/ts-sdk@file:../alkanes-rs/ts-sdk":
+  version "0.1.0"
+  resolved "file:../alkanes-rs/ts-sdk"
+  dependencies:
+    "@bitcoinerlab/secp256k1" "^1.1.1"
+    bip32 "^4.0.0"
+    bip39 "^3.1.0"
+    bitcoinjs-lib "^6.1.7"
+    ecpair "^2.1.0"
+    tiny-secp256k1 "^2.2.3"
+
 "@alloc/quick-lru@^5.2.0":
   version "5.2.0"
   resolved "https://registry.npmjs.org/@alloc/quick-lru/-/quick-lru-5.2.0.tgz"

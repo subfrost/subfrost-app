@@ -25,6 +25,20 @@ const nextConfig = {
       '@noble/hashes/sha256': '@noble/hashes/sha2.js',
     };
     
+    // Exclude Node.js built-ins from browser bundle
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        crypto: false,
+        'node:crypto': false,
+        stream: false,
+        buffer: false,
+        util: false,
+        fs: false,
+        path: false,
+      };
+    }
+    
     return config;
   },
 };

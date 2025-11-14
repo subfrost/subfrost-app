@@ -1,27 +1,35 @@
 import { OylApiClient } from '@/lib/api-provider';
 import type { Network } from '@oyl/sdk';
 import { Provider } from '@oyl/sdk';
+import { createAlkanesProvider } from '@/lib/oyl/alkanes/wallet-integration';
 
 import { SANDSHREW_PROJECT_ID } from '@/constants';
 import type { OylConnectProviderAPI } from '@/types';
 import { NetworkMap, SandshrewUrlMap } from '@/utils/constants';
 import { getConfig } from '@/utils/getConfig';
 
-export function getSandshrewProvider(network: Network): Provider {
-  const mappedNetwork = NetworkMap[network] ?? NetworkMap.mainnet!;
+export async function getSandshrewProvider(network: Network): Promise<any> {
   const url = SandshrewUrlMap[network] ?? SandshrewUrlMap.mainnet!;
-  const networkType = ((network as any) === 'oylnet' ? 'regtest' : (network as any)) as
-    | 'mainnet'
-    | 'testnet'
-    | 'regtest'
-    | 'signet';
-  return new Provider({
-    version: 'v2',
-    network: mappedNetwork,
-    networkType,
-    url,
-    projectId: (network as any) === 'oylnet' ? 'regtest' : SANDSHREW_PROJECT_ID,
-  });
+  
+  try {
+    const alkanesProvider = await createAlkanesProvider(network, url);
+    return alkanesProvider;
+  } catch (error) {
+    console.error('Failed to create Alkanes provider, falling back to default:', error);
+    const mappedNetwork = NetworkMap[network] ?? NetworkMap.mainnet!;
+    const networkType = ((network as any) === 'oylnet' ? 'regtest' : (network as any)) as
+      | 'mainnet'
+      | 'testnet'
+      | 'regtest'
+      | 'signet';
+    return new Provider({
+      version: 'v2',
+      network: mappedNetwork,
+      networkType,
+      url,
+      projectId: (network as any) === 'oylnet' ? 'regtest' : SANDSHREW_PROJECT_ID,
+    });
+  }
 }
 
 export function getApiProvider(network: Network) {
