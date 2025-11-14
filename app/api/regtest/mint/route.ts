@@ -155,14 +155,28 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: any) {
+    const timestamp = new Date().toISOString();
+    const errorLog = {
+      timestamp,
+      error: error.message,
+      stack: error.stack,
+      rpcConfig: {
+        url: process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:18443',
+        user: process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
+        wallet: process.env.BITCOIN_RPC_WALLET || 'test',
+      }
+    };
+    
     console.error('=== Mint API error ===');
-    console.error('Error:', error);
-    console.error('Stack:', error.stack);
+    console.error(JSON.stringify(errorLog, null, 2));
+    console.error('======================');
+    
     return NextResponse.json(
       { 
         error: 'Failed to mint tokens',
         details: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        timestamp,
       },
       { status: 500 }
     );

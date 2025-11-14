@@ -78,7 +78,18 @@ export default function MintTestTokensButton() {
       
     } catch (error: any) {
       const errorMsg = error.message || 'Unknown error';
-      console.error('Mint error:', error);
+      const timestamp = new Date().toISOString();
+      
+      // Log detailed error for debugging
+      console.error('=== Mint Button Error ===');
+      console.error('Timestamp:', timestamp);
+      console.error('Error message:', errorMsg);
+      console.error('Full error:', error);
+      console.error('Stack:', error.stack);
+      if (error.apiData) {
+        console.error('API Response:', error.apiData);
+      }
+      console.error('========================');
       
       // Check if we have setup instructions from the API
       const apiData = error.apiData;
