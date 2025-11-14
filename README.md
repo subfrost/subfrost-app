@@ -34,9 +34,56 @@ npm run dev:regtest
 
 ## Regtest Development Environment
 
-For local development and testing, you can run the app in regtest mode with a local Bitcoin node and Ethereum test environment.
+For local development and testing, you can run the app in regtest mode with the full alkanes-rs stack.
 
-### Quick Start (Regtest)
+### 🚀 Quick Start (One Command!)
+
+```bash
+./scripts/setup-regtest.sh
+```
+
+This single command will:
+- ✓ Check all prerequisites (Docker, Rust, Node.js)
+- ✓ Build alkanes.wasm from kungfuflex/develop
+- ✓ Start all docker services (Bitcoin, indexers, APIs)
+- ✓ Initialize regtest blockchain with 101 blocks
+- ✓ Configure environment variables
+
+Then start the app:
+```bash
+npm run dev:regtest
+```
+
+Open [http://localhost:3003](http://localhost:3003)
+
+### Helper Commands
+
+Mine blocks:
+```bash
+./scripts/regtest.sh mine 10
+```
+
+Check balance:
+```bash
+./scripts/regtest.sh balance
+```
+
+View logs:
+```bash
+./scripts/regtest.sh logs
+```
+
+See all commands:
+```bash
+./scripts/regtest.sh help
+```
+
+### Manual Setup (Advanced)
+
+If you prefer manual setup or need more control, follow the detailed guide in `docs/REGTEST_ALKANES_SETUP.md`.
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
 
 1. **Install Bitcoin Core**
    ```bash
@@ -47,34 +94,7 @@ For local development and testing, you can run the app in regtest mode with a lo
    sudo apt-get install bitcoind
    ```
 
-2. **Configure Bitcoin Regtest**
-   
-   Create `~/.bitcoin/bitcoin.conf`:
-   ```conf
-   regtest=1
-   rpcuser=subfrost
-   rpcpassword=subfrost123
-   rpcport=18443
-   rpcallowip=127.0.0.1
-   rpcbind=127.0.0.1
-   fallbackfee=0.00001
-   ```
-
-3. **Start Bitcoin Node**
-   ```bash
-   bitcoind -regtest -daemon
-   ```
-
-4. **Create Wallet and Mine Initial Blocks**
-   ```bash
-   # Create wallet
-   bitcoin-cli -regtest createwallet "test"
-   
-   # Mine 101 blocks (needed for coinbase maturity)
-   bitcoin-cli -regtest generatetoaddress 101 $(bitcoin-cli -regtest getnewaddress)
-   ```
-
-5. **Configure App Environment**
+2. **Configure App Environment**
    
    Create `.env.local`:
    ```env
