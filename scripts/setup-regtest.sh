@@ -143,6 +143,27 @@ info "Step 6/7: Starting docker-compose environment..."
 
 cd "$ALKANES_DOCKER_DIR"
 
+# Check if port 18443 is already in use
+if lsof -Pi :18443 -sTCP:LISTEN -t >/dev/null 2>&1 || netstat -tuln 2>/dev/null | grep -q ":18443 "; then
+    warning "Port 18443 is already in use!"
+    echo ""
+    echo "You may have a Bitcoin regtest node already running."
+    echo "Please stop it first:"
+    echo "  • If using bitcoind: ${GREEN}bitcoin-cli -regtest stop${NC}"
+    echo "  • Check what's using the port: ${GREEN}lsof -i :18443${NC}"
+    echo "  • Or kill the process: ${GREEN}sudo lsof -ti:18443 | xargs kill${NC}"
+    echo ""
+    read -p "Stop existing Bitcoin node and continue? (yes/no): " STOP_CONFIRM
+    if [ "$STOP_CONFIRM" = "yes" ]; then
+        info "Attempting to stop existing Bitcoin node..."
+        bitcoin-cli -regtest stop 2>/dev/null || true
+        sleep 3
+    else
+        error "Cannot continue with port 18443 in use. Exiting."
+        exit 1
+    fi
+fi
+
 # Stop any existing containers
 if docker-compose ps -q 2>/dev/null | grep -q .; then
     warning "Stopping existing containers..."
