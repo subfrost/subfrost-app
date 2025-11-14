@@ -1,23 +1,24 @@
 /**
  * Alkanes-RS Wallet Integration
  * 
+ * ✅ NOW USING REAL ALKANES-RS SDK!
+ * 
  * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
  */
 
 import type { Network } from '@oyl/sdk';
 import * as bitcoin from 'bitcoinjs-lib';
+
+// ✅ REAL ALKANES-RS SDK IMPORTS!
 import {
-  generateMnemonic,
-  validateMnemonic,
-  createBrowserKeystore,
-  encryptBrowserKeystore,
-  decryptBrowserKeystore,
-  serializeEncryptedKeystore,
-  parseEncryptedKeystore,
-  type BrowserKeystore,
-  type EncryptedBrowserKeystore,
-} from './browser-keystore';
+  KeystoreManager,
+  createKeystore,
+  unlockKeystore,
+  createWallet,
+  type Keystore,
+  type WalletConfig,
+} from '@alkanes/ts-sdk';
 
 // ECC library initialization state
 let eccInitialized = false;
@@ -29,18 +30,6 @@ async function initEccLib() {
   bitcoin.initEccLib(ecc);
   eccInitialized = true;
 }
-
-// These will be available after linking @alkanes/ts-sdk
-// import { 
-//   createKeystore, 
-//   unlockKeystore, 
-//   createWallet,
-//   createProvider as createAlkanesProvider,
-//   type AlkanesProvider,
-//   type AlkanesWallet,
-//   type Keystore,
-// } from '@alkanes/ts-sdk';
-// import init, * as wasm from '@alkanes/ts-sdk/wasm';
 
 // Type definitions (matching alkanes-rs ts-sdk types)
 export type Keystore = {
