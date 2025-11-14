@@ -44,20 +44,24 @@ export async function POST(request: NextRequest) {
     const rpcUrl = process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:18443';
     const rpcUser = process.env.BITCOIN_RPC_USER || 'bitcoinrpc';
     const rpcPassword = process.env.BITCOIN_RPC_PASSWORD || 'bitcoinrpc';
+    const rpcWallet = process.env.BITCOIN_RPC_WALLET || 'test'; // Wallet name in docker-compose
 
-    console.log('Bitcoin RPC config:', { rpcUrl, rpcUser, rpcPassword: '***' });
+    console.log('Bitcoin RPC config:', { rpcUrl, rpcUser, rpcPassword: '***', rpcWallet });
 
     const btcAmount = tokens?.btc || 1.0;
     const blocksToGenerate = 6; // Standard confirmation threshold
 
     // Helper function to call Bitcoin RPC
-    const callBitcoinRPC = async (method: string, params: any[] = []) => {
+    const callBitcoinRPC = async (method: string, params: any[] = [], useWallet: boolean = true) => {
       console.log(`Calling Bitcoin RPC: ${method}`, params);
       
       // Use btoa for base64 encoding (works in both Node and Edge runtime)
       const auth = btoa(`${rpcUser}:${rpcPassword}`);
       
-      const response = await fetch(rpcUrl, {
+      // Use wallet-specific endpoint for wallet operations
+      const url = useWallet ? `${rpcUrl}/wallet/${rpcWallet}` : rpcUrl;
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -87,20 +91,20 @@ export async function POST(request: NextRequest) {
     try {
       // First, check if the node is accessible
       try {
-        await callBitcoinRPC('getblockchaininfo', []);
+        await callBitcoinRPC('getblockchaininfo', [], false);
       } catch (connectionError: any) {
         console.error('Cannot connect to Bitcoin node:', connectionError);
         throw new Error('BITCOIN_NODE_NOT_RUNNING');
       }
 
       // 1. Send BTC to the address
-      const txid = await callBitcoinRPC('sendtoaddress', [address, btcAmount]);
+      const txid = await callBitcoinRPC('sendtoaddress', [address, btcAmount], true);
       console.log(`Sent ${btcAmount} BTC to ${address}, txid: ${txid}`);
 
       // 2. Mine blocks to confirm the transaction
       // Get a mining address first (generate to our own wallet)
-      const miningAddress = await callBitcoinRPC('getnewaddress', []);
-      const blockHashes = await callBitcoinRPC('generatetoaddress', [blocksToGenerate, miningAddress]);
+      const miningAddress = await callBitcoinRPC('getnewaddress', [], true);
+      const blockHashes = await callBitcoinRPC('generatetoaddress', [blocksToGenerate, miningAddress], false);
       console.log(`Mined ${blocksToGenerate} blocks to confirm transaction`);
 
       // TODO: Mint Alkane tokens (DIESEL, frBTC, bUSD)
