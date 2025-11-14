@@ -59,15 +59,13 @@ export default function MintTestTokensButton() {
       }
 
       setMintResult(
-        `✅ Successfully minted tokens!\n\n` +
+        `✅ Successfully minted BTC!\n\n` +
         `Address: ${address.slice(0, 8)}...${address.slice(-6)}\n\n` +
         `Minted:\n` +
-        `- 1.0 BTC\n` +
-        `- 1,000 DIESEL\n` +
-        `- 10 frBTC\n` +
-        `- 10,000 bUSD\n\n` +
-        `${data.blocksGenerated ? `Mined ${data.blocksGenerated} blocks\n` : ''}` +
-        `\nRefresh your wallet to see the new balance!`
+        `- 1.0 BTC ✓\n\n` +
+        `${data.blocksGenerated ? `Mined ${data.blocksGenerated} blocks\n\n` : ''}` +
+        `Transaction ID:\n${data.txid?.slice(0, 16)}...\n\n` +
+        `Check balance:\n./scripts/regtest.sh balance`
       );
 
       // Auto-close after 5 seconds
@@ -161,18 +159,26 @@ export default function MintTestTokensButton() {
                 <span className="text-sm font-medium text-[color:var(--sf-text)]">BTC</span>
                 <span className="text-sm text-[color:var(--sf-text)]/70">1.0 BTC</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg opacity-50">
                 <span className="text-sm font-medium text-[color:var(--sf-text)]">DIESEL</span>
-                <span className="text-sm text-[color:var(--sf-text)]/70">1,000 tokens</span>
+                <span className="text-xs text-[color:var(--sf-text)]/50">Coming soon</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg opacity-50">
                 <span className="text-sm font-medium text-[color:var(--sf-text)]">frBTC</span>
-                <span className="text-sm text-[color:var(--sf-text)]/70">10 tokens</span>
+                <span className="text-xs text-[color:var(--sf-text)]/50">Coming soon</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-white/10 rounded-lg opacity-50">
                 <span className="text-sm font-medium text-[color:var(--sf-text)]">bUSD</span>
-                <span className="text-sm text-[color:var(--sf-text)]/70">10,000 tokens</span>
+                <span className="text-xs text-[color:var(--sf-text)]/50">Coming soon</span>
               </div>
+            </div>
+            
+            <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-xs text-[color:var(--sf-text)]/70">
+                💡 <strong>Note:</strong> Currently only BTC minting is available. 
+                Alkane token minting (DIESEL, frBTC, bUSD) requires integration with 
+                the alkanes indexer.
+              </p>
             </div>
 
             {mintResult && (
