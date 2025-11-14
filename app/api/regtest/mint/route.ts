@@ -98,7 +98,28 @@ export async function POST(request: NextRequest) {
       }
 
       // 1. Send BTC to the address
-      const txid = await callBitcoinRPC('sendtoaddress', [address, btcAmount], true);
+      // Add fee parameters for regtest (no fee estimation available)
+      const comment = ''; // Optional comment
+      const commentTo = ''; // Optional comment about recipient
+      const subtractFeeFromAmount = false;
+      const replaceable = true; // RBF enabled
+      const confTarget = 6;
+      const estimateMode = 'unset'; // Don't use fee estimation
+      const avoidReuse = false;
+      const feeRate = 0.00001; // 1 sat/vB (low fee for regtest)
+      
+      const txid = await callBitcoinRPC('sendtoaddress', [
+        address, 
+        btcAmount,
+        comment,
+        commentTo,
+        subtractFeeFromAmount,
+        replaceable,
+        confTarget,
+        estimateMode,
+        avoidReuse,
+        feeRate
+      ], true);
       console.log(`Sent ${btcAmount} BTC to ${address}, txid: ${txid}`);
 
       // 2. Mine blocks to confirm the transaction
