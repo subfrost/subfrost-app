@@ -16,23 +16,13 @@ import {
   createKeystore,
   unlockKeystore,
   createWallet,
-  type Keystore,
-  type WalletConfig,
+  type Keystore as AlkanesKeystore,
+  type WalletConfig as AlkanesWalletConfig,
 } from '@alkanes/ts-sdk';
 
-// Type definitions
-export type Keystore = {
-  mnemonic: string;
-  masterFingerprint: string;
-  accountXpub: string;
-  hdPaths: Record<string, any>;
-  network: string;
-  createdAt: number;
-};
-
-export type WalletConfig = {
-  network: string;
-};
+// Re-export types from SDK
+export type Keystore = AlkanesKeystore;
+export type WalletConfig = AlkanesWalletConfig;
 
 // ECC library initialization state
 let eccInitialized = false;
@@ -153,14 +143,19 @@ export async function createAlkanesKeystore(
   network: Network = 'mainnet',
   wordCount: 12 | 15 | 18 | 21 | 24 = 12
 ): Promise<{ keystore: string; mnemonic: string }> {
-  // ✅ Use REAL alkanes-rs SDK!
-  const config: WalletConfig = { network };
-  const result = await createKeystore(password, config, wordCount);
-  
-  return {
-    keystore: result.keystore,
-    mnemonic: result.mnemonic,
-  };
+  try {
+    // ✅ Use REAL alkanes-rs SDK!
+    const config: AlkanesWalletConfig = { network };
+    const result = await createKeystore(password, config, wordCount);
+    
+    return {
+      keystore: result.keystore,
+      mnemonic: result.mnemonic,
+    };
+  } catch (error) {
+    console.error('Error creating keystore:', error);
+    throw new Error(`Failed to create keystore: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**
@@ -174,10 +169,15 @@ export async function unlockAlkanesKeystore(
   keystoreJson: string,
   password: string,
   network: Network = 'mainnet'
-): Promise<Keystore> {
-  // ✅ Use REAL alkanes-rs SDK!
-  const keystore = await unlockKeystore(keystoreJson, password);
-  return keystore;
+): Promise<AlkanesKeystore> {
+  try {
+    // ✅ Use REAL alkanes-rs SDK!
+    const keystore = await unlockKeystore(keystoreJson, password);
+    return keystore;
+  } catch (error) {
+    console.error('Error unlocking keystore:', error);
+    throw new Error(`Failed to unlock keystore: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**
@@ -189,36 +189,58 @@ export async function unlockAlkanesKeystore(
 export async function createAlkanesWallet(
   keystore: Keystore
 ): Promise<AlkanesWalletInstance> {
-  // ✅ Use REAL alkanes-rs SDK to create wallet!
-  const alkanesWallet = await createWallet(keystore);
-  
-  // Wrap alkanes wallet with our interface for compatibility
-  return {
-    getMnemonic: () => keystore.mnemonic,
-    getReceivingAddress: (index = 0) => {
-      return alkanesWallet.getAddress('p2wpkh', 0, index);
-    },
-    getChangeAddress: (index = 0) => {
-      return alkanesWallet.getAddress('p2wpkh', 1, index);
-    },
-    deriveAddress: (type, index, change) => {
-      const address = alkanesWallet.getAddress(type as any, change, index);
-      const addressInfo = alkanesWallet.getAddressInfo(type as any, change, index);
-      
-      return {
-        address,
-        path: addressInfo?.path || `m/84'/0'/0'/${change}/${index}`,
-        publicKey: addressInfo?.publicKey || '',
-      };
-    },
-    signPsbt: (psbtBase64: string) => {
-      return alkanesWallet.signPsbt(psbtBase64);
-    },
-    signMessage: (message: string, index = 0) => {
-      return alkanesWallet.signMessage(message, 0, index);
-    },
-    getKeystore: () => keystore,
-  };
+  try {
+    // ✅ Use REAL alkanes-rs SDK to create wallet!
+    const alkanesWallet = await createWallet(keystore);
+    
+    console.log('Created alkanes wallet:', alkanesWallet);
+    console.log('Wallet methods:', Object.keys(alkanesWallet));
+    
+    // Check if the wallet has the expected methods
+    if (!alkanesWallet || typeof alkanesWallet !== 'object') {
+      throw new Error('createWallet returned invalid object');
+    }
+    
+    // Wrap alkanes wallet with our interface for compatibility
+    return {
+      getMnemonic: () => keystore.mnemonic,
+      getReceivingAddress: (index = 0) => {
+        // AlkanesWallet has deriveAddress(type, index, change)
+        const addressInfo = alkanesWallet.deriveAddress('p2wpkh', index, 0);
+        return addressInfo.address;
+      },
+      getChangeAddress: (index = 0) => {
+        const addressInfo = alkanesWallet.deriveAddress('p2wpkh', index, 1);
+        return addressInfo.address;
+      },
+      deriveAddress: (type, index, change) => {
+        const addressInfo = alkanesWallet.deriveAddress(type as any, index, change);
+        return {
+          address: addressInfo.address,
+          path: addressInfo.path,
+          publicKey: addressInfo.publicKey || '',
+        };
+      },
+      signPsbt: (psbtBase64: string) => {
+        if (typeof alkanesWallet.signPsbt === 'function') {
+          return alkanesWallet.signPsbt(psbtBase64);
+        } else {
+          throw new Error('signPsbt method not found on wallet');
+        }
+      },
+      signMessage: (message: string, index = 0) => {
+        if (typeof alkanesWallet.signMessage === 'function') {
+          return alkanesWallet.signMessage(message, 0, index);
+        } else {
+          throw new Error('signMessage method not found on wallet');
+        }
+      },
+      getKeystore: () => keystore,
+    };
+  } catch (error) {
+    console.error('Error creating alkanes wallet:', error);
+    throw new Error(`Failed to create wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**

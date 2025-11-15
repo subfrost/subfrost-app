@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Wallet Test Page
  * 
@@ -5,9 +7,20 @@
  * Visit: http://localhost:3000/wallet-test
  */
 
+import { useState } from 'react';
 import { AlkanesWalletExample } from '@/app/components/AlkanesWalletExample';
 
 export default function WalletTestPage() {
+  const [cleared, setCleared] = useState(false);
+
+  const clearStorage = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.clear();
+      setCleared(true);
+      setTimeout(() => window.location.reload(), 1000);
+    }
+  };
+
   return (
     <div className="container mx-auto p-8 max-w-4xl">
       <div className="mb-8">
@@ -17,6 +30,23 @@ export default function WalletTestPage() {
         <p className="text-gray-600">
           Test the alkanes-rs keystore backend for @oyl/sdk
         </p>
+      </div>
+
+      {/* Clear Storage Warning */}
+      <div className="mb-6 p-4 bg-yellow-50 border border-yellow-300 rounded">
+        <p className="text-sm font-semibold text-yellow-900 mb-2">
+          ⚠️ Getting "Invalid keystore format" error?
+        </p>
+        <p className="text-sm text-yellow-800 mb-3">
+          Old data from previous implementation may be stored. Click below to clear:
+        </p>
+        <button
+          onClick={clearStorage}
+          disabled={cleared}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400 text-sm font-medium"
+        >
+          {cleared ? '✅ Cleared! Refreshing...' : '🗑️ Clear All Storage & Refresh'}
+        </button>
       </div>
 
       <AlkanesWalletExample />
