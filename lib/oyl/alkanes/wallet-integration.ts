@@ -1,7 +1,7 @@
 /**
  * Alkanes-RS Wallet Integration
  * 
- * ✅ NOW USING REAL ALKANES-RS SDK!
+ * ✅ NOW USING REAL ALKANES-RS SDK! (Source fixed)
  * 
  * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
@@ -10,17 +10,15 @@
 import type { Network } from '@oyl/sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 
-// Use browser-compatible keystore (alkanes SDK has bundling issues)
+// ✅ REAL ALKANES-RS SDK - Source code fixed for proper exports
 import {
-  generateMnemonic,
-  validateMnemonic,
-  createBrowserKeystore,
-  encryptBrowserKeystore,
-  decryptBrowserKeystore,
-  serializeEncryptedKeystore,
-  parseEncryptedKeystore,
-  type BrowserKeystore,
-} from './browser-keystore';
+  KeystoreManager,
+  createKeystore,
+  unlockKeystore,
+  createWallet,
+  type Keystore,
+  type WalletConfig,
+} from '@alkanes/ts-sdk';
 
 // Type definitions
 export type Keystore = {
