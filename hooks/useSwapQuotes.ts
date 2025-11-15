@@ -93,7 +93,7 @@ async function calculateSwapPrice(
   wrapFee: number = FRBTC_WRAP_FEE_PER_1000,
   unwrapFee: number = FRBTC_UNWRAP_FEE_PER_1000,
 ) {
-  const provider = getSandshrewProvider(network);
+  const provider = await getSandshrewProvider(network);
   const poolFee = await queryPoolFee(provider, pool.poolId);
   let buyAmount: string;
   let sellAmount: string;

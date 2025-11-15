@@ -5,6 +5,7 @@ import "./globals.css";
 import Providers from "@/app/providers";
 import AppShell from "@/app/components/AppShell";
 import { SnowflakeWatermark } from "@/app/components/SnowflakeWatermark";
+import { AlkanesWasmInitializer } from "@/app/components/AlkanesWasmInitializer";
 
 const satoshi = localFont({
   src: [
@@ -33,6 +34,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${satoshi.variable} ${geistMono.variable} antialiased`}>
+        <AlkanesWasmInitializer />
         <Providers>
           <SnowflakeWatermark />
           <AppShell>{children}</AppShell>
