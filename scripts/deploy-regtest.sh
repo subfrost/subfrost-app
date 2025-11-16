@@ -261,10 +261,10 @@ main() {
     log_info "    - YVE Token NFT Template at [4, 0x1f22]"
     log_info "    - VX Token Gauge Template at [4, 0x1f23]"
     log_info ""
-    log_info "  DIESEL Governance (0x1f30-0x1f3f):"
-    log_info "    - veDIESEL at [4, 0x1f30]"
-    log_info "    - yveDIESEL at [4, 0x1f31]"
-    log_info "    - vxDIESEL Gauge at [4, 0x1f32]"
+    log_info "  DIESEL Governance (instantiated from templates):"
+    log_info "    - veDIESEL: [6, 0x1f21] → creates at [2, n]"
+    log_info "    - yveDIESEL: [6, 0x1f22] → creates at [2, n]"
+    log_info "    - vxDIESEL Gauge: [6, 0x1f23] → creates at [2, n]"
     echo ""
     
     # Deploy Core Alkanes
@@ -333,20 +333,76 @@ main() {
     deploy_contract "VX Token Gauge Template" "$WASM_DIR/vx_token_gauge_template.wasm" $((0x1f23)) ""
     
     log_info "=========================================="
-    log_info "Phase 5: DIESEL Governance System"
+    log_info "Phase 5: DIESEL Governance System (Instantiated from Templates)"
     log_info "=========================================="
     
-    # Deploy veDIESEL at [4, 0x1f30] (VE_DIESEL_ID)
-    # TODO: Instantiate from ve-token-vault-template with DIESEL token
-    deploy_contract "veDIESEL (Vote Escrowed DIESEL)" "$WASM_DIR/ve_diesel_vault.wasm" $((0x1f30)) "2,0"
+    # Instantiate veDIESEL from ve-token-vault-template at [4, 0x1f21]
+    # Using [6, 0x1f21] cellpack creates instance at [2, 1] (or next available [2, n])
+    log_info "Instantiating veDIESEL from template [4, 0x1f21]..."
+    PROTOSTONE="[6,$((0x1f21)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
+    log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
     
-    # Deploy yveDIESEL at [4, 0x1f31] (YVE_DIESEL_ID)
-    # TODO: Instantiate from yve-token-nft-template
-    deploy_contract "yveDIESEL Vault" "$WASM_DIR/yve_diesel_vault.wasm" $((0x1f31)) "2,0"
+    subfrost-cli -p regtest \
+        --wallet-file "$WALLET_FILE" \
+        alkanes execute "$PROTOSTONE" \
+        --fee-rate 1 \
+        --mine \
+        --trace \
+        -y \
+        > /dev/null 2>&1
     
-    # Deploy vxDIESEL gauge at [4, 0x1f32] (VX_DIESEL_GAUGE_ID)
-    # TODO: Instantiate from vx-token-gauge-template with DIESEL LP token
-    deploy_contract "vxDIESEL Gauge" "$WASM_DIR/gauge_contract.wasm" $((0x1f32)) "2,0,4,$((0x1f30)),100"
+    if [ $? -eq 0 ]; then
+        log_success "veDIESEL instantiated at [2, n]"
+    else
+        log_warn "Failed to instantiate veDIESEL"
+    fi
+    
+    echo ""
+    
+    # Instantiate yveDIESEL from yve-token-nft-template at [4, 0x1f22]
+    # Using [6, 0x1f22] cellpack creates instance at [2, n]
+    log_info "Instantiating yveDIESEL from template [4, 0x1f22]..."
+    PROTOSTONE="[6,$((0x1f22)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
+    log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
+    
+    subfrost-cli -p regtest \
+        --wallet-file "$WALLET_FILE" \
+        alkanes execute "$PROTOSTONE" \
+        --fee-rate 1 \
+        --mine \
+        --trace \
+        -y \
+        > /dev/null 2>&1
+    
+    if [ $? -eq 0 ]; then
+        log_success "yveDIESEL instantiated at [2, n]"
+    else
+        log_warn "Failed to instantiate yveDIESEL"
+    fi
+    
+    echo ""
+    
+    # Instantiate vxDIESEL gauge from vx-token-gauge-template at [4, 0x1f23]
+    # Using [6, 0x1f23] cellpack creates instance at [2, n]
+    log_info "Instantiating vxDIESEL Gauge from template [4, 0x1f23]..."
+    # TODO: Update with correct LP token ID and reward rate
+    PROTOSTONE="[6,$((0x1f23)),0,2,0,2,1,100]"  # [6, template_tx, opcode, lp_token, ve_token, reward_rate]
+    log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
+    
+    subfrost-cli -p regtest \
+        --wallet-file "$WALLET_FILE" \
+        alkanes execute "$PROTOSTONE" \
+        --fee-rate 1 \
+        --mine \
+        --trace \
+        -y \
+        > /dev/null 2>&1
+    
+    if [ $? -eq 0 ]; then
+        log_success "vxDIESEL Gauge instantiated at [2, n]"
+    else
+        log_warn "Failed to instantiate vxDIESEL Gauge"
+    fi
     
     # NOTE: ftr-btc at [31, 0] is deployed automatically in alkanes-rs genesis (setup_ftrbtc)
     # NOTE: dx-btc and yv-fr-btc-vault are now deployed above in the reserved range
@@ -373,13 +429,14 @@ main() {
     
     echo ""
     
-    # Additional Vaults & Gauges (used in tests, deployed to [4, n] via [3, n])
-    # Note: vxFROST Gauge already deployed above at [4, 0x1f14]
-    deploy_contract "veDIESEL Vault" "$WASM_DIR/ve_diesel_vault.wasm" 60 "1"
-    deploy_contract "Gauge Contract" "$WASM_DIR/gauge_contract.wasm" 100 "1"
-    deploy_contract "yvBOOST Vault" "$WASM_DIR/yv_boost_vault.wasm" 101 "1"
-    deploy_contract "yvTOKEN Vault" "$WASM_DIR/yv_token_vault.wasm" 102 "1"
-    deploy_contract "yveDIESEL Vault" "$WASM_DIR/yve_diesel_vault.wasm" 103 "1"
+    # Additional Test Contracts (if needed for specific test scenarios)
+    # NOTE: DIESEL governance contracts are instantiated from templates above
+    # These are generic test vaults deployed to [4, n] via [3, n]
+    
+    # Uncomment if needed for testing:
+    # deploy_contract "Generic Gauge Contract" "$WASM_DIR/gauge_contract.wasm" 100 "1"
+    # deploy_contract "yvBOOST Vault" "$WASM_DIR/yv_boost_vault.wasm" 101 "1"
+    # deploy_contract "yvTOKEN Vault" "$WASM_DIR/yv_token_vault.wasm" 102 "1"
     
     # OYL AMM System (following oyl-protocol deployment pattern)
     log_info "Deploying OYL AMM System..."
