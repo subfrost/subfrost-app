@@ -250,7 +250,7 @@ main() {
     log_info "    - pLBTC at [4, 0x1f11]"
     log_info "    - yxLBTC at [4, 0x1f12]"
     log_info "    - FROST Token at [4, 0x1f13]"
-    log_info "    - vxFROST Gauge at [4, 0x1f14]"
+    log_info "    - vxFROST Gauge at [4, 0x1f14] (special: needs fixed ID)"
     log_info "    - Synth Pool at [4, 0x1f15]"
     log_info "    - LBTC Oracle at [4, 0x1f16]"
     log_info "    - LBTC Token at [4, 0x1f17]"
@@ -300,6 +300,7 @@ main() {
     deploy_contract "FROST Token" "$WASM_DIR/frost_token.wasm" $((0x1f13)) "1"
     
     # Deploy vx-frost-gauge at [4, 0x1f14] (VX_FROST_GAUGE_ID)
+    # NOTE: vxFROST is deployed directly (not instantiated) because dx-btc needs to reference it at init time
     deploy_contract "vxFROST Gauge" "$WASM_DIR/vx_frost_gauge.wasm" $((0x1f14)) "4,$((0x1f13))"
     
     # Deploy synth-pool at [4, 0x1f15] (SYNTH_POOL_ID)
