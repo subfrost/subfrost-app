@@ -1,253 +1,379 @@
-# Subfrost Scripts
+# Subfrost Regtest Deployment Scripts
 
-Scripts for deploying and testing the Subfrost app with Alkanes integration.
+## Overview
 
-## Available Scripts
+This directory contains scripts for deploying and managing the Subfrost alkanes environment on a Bitcoin regtest network.
 
-### 🚀 `deploy-regtest-environment.sh` - **Full Environment Setup**
+## Prerequisites
 
-Complete setup including Bitcoin Core regtest node, Alkanes SDK, and dev server.
+### 1. Start Regtest Node
 
-**What it does:**
-1. ✅ Checks dependencies (Bitcoin Core, Node.js, npm, wasm-pack)
-2. ✅ Builds Alkanes WASM and TypeScript SDK
-3. ✅ Links @alkanes/ts-sdk to subfrost-app
-4. ✅ Starts Bitcoin Core in regtest mode
-5. ✅ Creates and funds test addresses
-6. ✅ Sets up environment variables (.env.local)
-7. ✅ Installs npm dependencies
-8. ✅ Starts Next.js dev server
-
-**Usage:**
-```bash
-cd /Users/erickdelgado/Documents/github/subfrost-appx
-chmod +x scripts/deploy-regtest-environment.sh
-./scripts/deploy-regtest-environment.sh
-```
-
-**Requirements:**
-- Bitcoin Core (bitcoind, bitcoin-cli)
-- Node.js and npm
-- wasm-pack (`cargo install wasm-pack`)
-
-**After completion:**
-- Bitcoin Core regtest running on port 18443
-- Dev server at http://localhost:3000
-- Wallet test page at http://localhost:3000/wallet-test
-- Test wallet funded with 10 BTC
-
----
-
-### ⚡ `quick-setup.sh` - **SDK Only (No Bitcoin Core)**
-
-Quick build and link of Alkanes SDK without Bitcoin Core setup.
-
-**What it does:**
-1. ✅ Builds TypeScript SDK
-2. ✅ Links @alkanes/ts-sdk globally
-3. ✅ Links to subfrost-app
-
-**Usage:**
-```bash
-cd /Users/erickdelgado/Documents/github/subfrost-appx
-chmod +x scripts/quick-setup.sh
-./scripts/quick-setup.sh
-```
-
-**Use when:**
-- You already have Bitcoin Core running
-- You just need to rebuild/relink the SDK
-- You're testing without a regtest node
-
-**After completion:**
-```bash
-npm run dev
-# Visit http://localhost:3000/wallet-test
-```
-
----
-
-## Quick Start
-
-### Option 1: Full Setup with Bitcoin Core
+The regtest node must be running before deployment:
 
 ```bash
-cd /Users/erickdelgado/Documents/github/subfrost-appx
-./scripts/deploy-regtest-environment.sh
+cd reference/alkanes-rs
+docker-compose up -d
 ```
 
-This is the **recommended** option for full integration testing.
+This starts:
+- Bitcoin Core regtest node on `localhost:18888`
+- Alkanes indexer
+- All necessary services
 
-### Option 2: Quick SDK Setup Only
+### 2. Build alkanes-cli
 
 ```bash
-cd /Users/erickdelgado/Documents/github/subfrost-appx
-./scripts/quick-setup.sh
-npm run dev
+cd reference/alkanes-rs
+cargo build --release
 ```
 
-Use this when you're iterating on SDK code or don't need Bitcoin Core.
+The CLI will be at: `reference/alkanes-rs/target/release/alkanes-cli`
 
----
+### 3. Build All WASMs
 
-## Testing the Integration
+From the project root:
 
-After running either script, test at:
-- **Main app:** http://localhost:3000
-- **Wallet test page:** http://localhost:3000/wallet-test
-
-### Test Checklist
-
-1. ✅ Browser console shows "✅ Alkanes WASM ready"
-2. ✅ Can create new wallet
-3. ✅ Mnemonic is displayed (12 words)
-4. ✅ Both addresses generated (P2WPKH and P2TR)
-5. ✅ Can lock and unlock wallet
-6. ✅ Keystore persists in localStorage
-7. ✅ Can sign PSBTs (if wallet unlocked)
-
----
-
-## Bitcoin Core Regtest Commands
-
-If using `deploy-regtest-environment.sh`, you can interact with the regtest node:
-
-### Check Status
 ```bash
-bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass getblockcount
-bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass getbalance
+cargo build --release --target wasm32-unknown-unknown
 ```
 
-### Generate Blocks
+This builds all contract WASMs to: `target/wasm32-unknown-unknown/release/`
+
+## Deployment Script
+
+### Usage
+
 ```bash
-bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass \
-  generatetoaddress 1 $(bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass getnewaddress)
+./reference/subfrost-app/scripts/deploy-regtest-environment.sh
 ```
 
-### Send Test BTC to Alkanes Address
+### What It Does
+
+The script performs the following steps:
+
+#### 1. Dependency Check
+- Verifies `alkanes-cli` is built
+- Checks regtest node is running on `localhost:18888`
+- Validates all required WASMs are built
+
+#### 2. Wallet Setup
+- Creates a new wallet if needed (stored in `~/.alkanes/regtest-wallet.json`)
+- Uses existing wallet if already created
+- Displays wallet address for funding
+
+#### 3. Wallet Funding
+- Checks current balance
+- If balance < 10 BTC, generates blocks to wallet address (regtest only)
+- Syncs wallet with blockchain
+
+#### 4. Contract Deployment
+
+Deploys all Subfrost contracts in the correct order:
+
+##### LBTC System
+- **FROST Token** `[4, 10]` - Governance token (10M supply)
+- **pLBTC** `[4, 11]` - Principal LBTC
+- **yxLBTC** `[4, 12]` - Yield LBTC
+- **LBTC Yield Splitter** `[4, 13]` - Splits LBTC into pLBTC + yxLBTC
+- **Synth Pool** `[4, 30]` - pLBTC/frBTC stableswap (A=100, fee=0.04%)
+
+##### Governance System
+- **vxFROST Gauge** `[4, 50]` - Gauge for FROST incentives
+
+##### Futures System
+- **dxBTC Vault** `[4, 0]` - Leveraged frBTC vault
+
+##### Vault System
+- **veDIESEL Vault** `[4, 60]` - Vote-escrowed DIESEL vault
+
+##### Genesis Contracts (Pre-deployed)
+- **DIESEL** `[2, 0]` - Genesis alkane
+- **frBTC** `[32, 0]` - Wrapped BTC
+- **ftrBTC Master** `[31, 0]` - Futures master contract
+
+#### 5. Verification
+- Checks all contracts are deployed correctly
+- Verifies genesis contracts are available
+
+#### 6. Test State Setup
+- Validates initial token balances
+- Confirms contracts are ready for interaction
+
+#### 7. Summary Display
+- Shows all deployed contract addresses
+- Provides example commands
+- Displays wallet information
+
+## Contract Addresses
+
+After deployment, contracts will be available at these addresses:
+
+| Contract | Address | Description |
+|----------|---------|-------------|
+| FROST Token | [4, 10] | Governance token |
+| pLBTC | [4, 11] | Principal LBTC |
+| yxLBTC | [4, 12] | Yield LBTC |
+| LBTC Yield Splitter | [4, 13] | Splits LBTC |
+| Synth Pool | [4, 30] | pLBTC/frBTC AMM |
+| vxFROST Gauge | [4, 50] | Gauge contract |
+| dxBTC Vault | [4, 0] | Futures vault |
+| veDIESEL Vault | [4, 60] | Vote-escrowed vault |
+| DIESEL | [2, 0] | Genesis (auto) |
+| frBTC | [32, 0] | Genesis (auto) |
+| ftrBTC Master | [31, 0] | Genesis (auto) |
+
+## Example Usage
+
+### After Deployment
+
+1. **Check FROST balance:**
 ```bash
-# Get your alkanes address from the wallet test page
-bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass \
-  sendtoaddress bcrt1q... 1.0
-
-# Mine a block to confirm
-bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass \
-  generatetoaddress 1 $(bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass getnewaddress)
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  alkanes getbalance
 ```
 
-### Stop Bitcoin Core
+2. **Inspect a contract:**
 ```bash
-bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass stop
+alkanes-cli -p regtest alkanes inspect 4:10
 ```
 
----
+3. **Execute a contract call (example: transfer FROST):**
+```bash
+# Transfer 1000 FROST tokens
+# Opcode 1 = transfer, args: amount, recipient_block, recipient_tx
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  alkanes execute '[4:10:1,1000,0,0]' \
+  --mine -y
+```
+
+4. **Split LBTC into pLBTC + yxLBTC:**
+```bash
+# First need LBTC tokens (using FROST as mock)
+# Opcode 1 = split, args: amount
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  alkanes execute '[4:13:1,10000]' \
+  --mine -y
+```
+
+5. **Add liquidity to synth pool:**
+```bash
+# Opcode 2 = add_liquidity, args: token0_amount, token1_amount, min_lp
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  alkanes execute '[4:30:2,100000,100000,0]' \
+  --mine -y
+```
+
+## Protostone Format
+
+Alkanes transactions use the "protostone" format:
+
+```
+[alkane_id:opcode:arg1,arg2,...]
+```
+
+Where:
+- `alkane_id` = `block:tx` (e.g., `4:10` for FROST at [4, 10])
+- `opcode` = operation number (0=init, 1=transfer, etc.)
+- `arg1,arg2,...` = comma-separated arguments
+
+### Examples
+
+```bash
+# Deploy contract to [3, 50] → becomes [4, 50]
+# Then initialize with args
+'[3:50:0,1] [4:50:0,arg1,arg2]'
+
+# Call opcode 1 on contract [4, 10]
+'[4:10:1,1000,0,0]'
+
+# Multiple calls in one transaction
+'[4:10:1,1000,0,0] [4:11:2,500]'
+```
 
 ## Troubleshooting
 
-### "Cannot find module '@alkanes/ts-sdk'"
+### Regtest Node Not Running
+
+**Error:** `Bitcoin regtest node not responding at http://localhost:18888`
 
 **Solution:**
 ```bash
-./scripts/quick-setup.sh
-npm run dev
+cd reference/alkanes-rs
+docker-compose up -d
 ```
 
-### "Bitcoin Core not responding"
+### alkanes-cli Not Found
 
-**Check if running:**
+**Error:** `alkanes-cli not found at: reference/alkanes-rs/target/release/alkanes-cli`
+
+**Solution:**
 ```bash
-bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass getblockcount
+cd reference/alkanes-rs
+cargo build --release
 ```
 
-**Start manually:**
+### WASMs Not Built
+
+**Error:** `WASM directory not found` or `Missing WASM: xxx.wasm`
+
+**Solution:**
 ```bash
-bitcoind -regtest -daemon \
-  -rpcuser=user \
-  -rpcpassword=pass \
-  -rpcport=18443 \
-  -fallbackfee=0.00001
+cargo build --release --target wasm32-unknown-unknown
 ```
 
-### "Failed to initialize Alkanes WASM"
+### Insufficient Funds
 
-**Rebuild SDK:**
+**Error:** `Insufficient funds` during deployment
+
+**Solution:**
 ```bash
-cd /Users/erickdelgado/Documents/github/alkanes-rs/ts-sdk
-npm run build:wasm
-npm run build:ts
-npm link
+# Get wallet address
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  wallet addresses
 
-cd /Users/erickdelgado/Documents/github/subfrost-appx
-npm link @alkanes/ts-sdk
+# Generate blocks to that address
+bitcoin-cli -regtest generatetoaddress 101 <ADDRESS>
 ```
 
-### TypeScript errors
+### Contract Already Deployed
 
-**Restart TS server:**
-- VS Code: `Cmd+Shift+P` → "TypeScript: Restart TS Server"
-- Or rebuild SDK with types: `npx tsup src/index.ts --format cjs,esm --dts --clean`
+**Warning:** If you run the script multiple times, some contracts may already exist.
 
----
+**Solution:** 
+- The script will show errors for already-deployed contracts
+- You can either:
+  1. Continue (already deployed contracts will work)
+  2. Reset the regtest environment:
+     ```bash
+     cd reference/alkanes-rs
+     docker-compose down -v
+     docker-compose up -d
+     ```
 
-## Environment Variables
+## Advanced Usage
 
-Created by `deploy-regtest-environment.sh` in `.env.local`:
+### Deploy Individual Contracts
 
-```bash
-NEXT_PUBLIC_NETWORK=regtest
-NEXT_PUBLIC_BITCOIN_RPC_URL=http://localhost:18443
-NEXT_PUBLIC_BITCOIN_RPC_USER=user
-NEXT_PUBLIC_BITCOIN_RPC_PASSWORD=pass
-NEXT_PUBLIC_ALKANES_ENABLED=true
-NEXT_PUBLIC_ALKANES_API_URL=http://localhost:18443
-```
-
----
-
-## Script Maintenance
-
-### Update Paths
-
-If your directories are different, edit these variables in the scripts:
+You can manually deploy contracts using `alkanes-cli`:
 
 ```bash
-ALKANES_SDK_PATH="/path/to/alkanes-rs/ts-sdk"
-SUBFROST_APP_PATH="/path/to/subfrost-appx"
+# Deploy WASM to [3, 50], which creates contract at [4, 50]
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  alkanes execute \
+  --envelope target/wasm32-unknown-unknown/release/vx_frost_gauge.wasm \
+  --fee-rate 1 \
+  --mine \
+  -y \
+  '[3:50:0,1]'
+
+# Initialize the deployed contract
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  alkanes execute \
+  --fee-rate 1 \
+  --mine \
+  -y \
+  '[4:50:0,4,10,4,30]'
 ```
 
-### Add Custom Steps
+### Trace Transactions
 
-Both scripts are modular. Add functions and call them in `main()`:
+Enable tracing to see detailed execution:
 
 ```bash
-custom_step() {
-  print_header "Custom Step"
-  # Your code here
-  print_success "Done"
-}
-
-main() {
-  # ... existing steps
-  custom_step
-  # ... continue
-}
+alkanes-cli -p regtest \
+  --wallet-file ~/.alkanes/regtest-wallet.json \
+  alkanes execute '[4:10:1,1000,0,0]' \
+  --trace \
+  --mine -y
 ```
 
----
+### Simulate Before Execution
 
-## Summary
+Test a transaction without broadcasting:
 
-- 🚀 **Full setup:** `./scripts/deploy-regtest-environment.sh`
-- ⚡ **Quick SDK:** `./scripts/quick-setup.sh`
-- 🧪 **Test page:** http://localhost:3000/wallet-test
-- 📚 **Docs:** See `ALKANES_INTEGRATION_SETUP.md`
+```bash
+alkanes-cli -p regtest \
+  alkanes simulate '[4:10:1,1000,0,0]'
+```
 
----
+## Network Configuration
+
+### Regtest (Default)
+
+- RPC URL: `http://localhost:18888`
+- Network: Bitcoin regtest
+- Genesis contracts automatically deployed
+
+### Testnet
+
+To use testnet instead of regtest:
+
+```bash
+# Set provider to testnet
+alkanes-cli -p testnet \
+  --wallet-file ~/.alkanes/testnet-wallet.json \
+  wallet create
+  
+# Deploy contracts (same commands, different provider)
+```
+
+### Mainnet
+
+⚠️ **WARNING:** Only deploy to mainnet when thoroughly tested!
+
+```bash
+alkanes-cli -p mainnet \
+  --wallet-file ~/.alkanes/mainnet-wallet.json \
+  # ... rest of commands
+```
+
+## Development Workflow
+
+### 1. Start Fresh Environment
+
+```bash
+cd reference/alkanes-rs
+docker-compose down -v
+docker-compose up -d
+```
+
+### 2. Rebuild Contracts (if changed)
+
+```bash
+cargo build --release --target wasm32-unknown-unknown
+```
+
+### 3. Deploy
+
+```bash
+./reference/subfrost-app/scripts/deploy-regtest-environment.sh
+```
+
+### 4. Test Interactions
+
+Use `alkanes-cli` to interact with deployed contracts.
+
+### 5. Iterate
+
+Make changes, rebuild, redeploy.
+
+## Additional Resources
+
+- **alkanes-cli Documentation:** `alkanes-cli --help`
+- **Alkanes Protocol:** [reference/alkanes-rs/README.md](../../alkanes-rs/README.md)
+- **Test Examples:** [src/tests/](../../../src/tests/)
+- **Contract Source:** [alkanes/](../../../alkanes/)
 
 ## Support
 
-For issues:
-- Check browser console for errors
-- Review `INTEGRATION_STATUS.md` for current status
-- See `/Users/erickdelgado/Documents/github/TEST_ALKANES_INTEGRATION.md`
-- Verify paths in script variables
+For issues or questions:
+1. Check troubleshooting section above
+2. Review test files in `src/tests/` for working examples
+3. Check alkanes-cli help: `alkanes-cli <command> --help`
