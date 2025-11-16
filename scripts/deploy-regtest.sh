@@ -241,58 +241,112 @@ main() {
     log_info "=========================================="
     log_info "Subfrost Reserved Range: [4, 0x1f00-0x1fff]"
     log_info "=========================================="
-    log_info "  Core Infrastructure:"
-    log_info "    - dxBTC at [4, 0x1f00] (DX_BTC_ID)"
-    log_info "    - yv-fr-btc Vault at [4, 0x1f01] (YV_FR_BTC_VAULT_ID)"
-    log_info "  LBTC Yield System:"
-    log_info "    - LBTC Yield Splitter at [4, 0x1f10] (LBTC_YIELD_SPLITTER_ID)"
-    log_info "    - pLBTC at [4, 0x1f11] (PLBTC_ID)"
-    log_info "    - yxLBTC at [4, 0x1f12] (YXLBTC_ID)"
-    log_info "    - FROST Token at [4, 0x1f13] (FROST_TOKEN_ID)"
-    log_info "    - vxFROST Gauge at [4, 0x1f14] (VX_FROST_GAUGE_ID)"
-    log_info "    - Synth Pool at [4, 0x1f15] (SYNTH_POOL_ID)"
+    log_info "  Core Infrastructure (0x1f00-0x1f0f):"
+    log_info "    - dxBTC at [4, 0x1f00]"
+    log_info "    - yv-fr-btc Vault at [4, 0x1f01]"
+    log_info ""
+    log_info "  LBTC Yield System (0x1f10-0x1f1f):"
+    log_info "    - LBTC Yield Splitter at [4, 0x1f10]"
+    log_info "    - pLBTC at [4, 0x1f11]"
+    log_info "    - yxLBTC at [4, 0x1f12]"
+    log_info "    - FROST Token at [4, 0x1f13]"
+    log_info "    - vxFROST Gauge at [4, 0x1f14]"
+    log_info "    - Synth Pool at [4, 0x1f15]"
+    log_info "    - LBTC Oracle at [4, 0x1f16]"
+    log_info "    - LBTC Token at [4, 0x1f17]"
+    log_info ""
+    log_info "  Templates (0x1f20-0x1f2f):"
+    log_info "    - Unit Template at [4, 0x1f20]"
+    log_info "    - VE Token Vault Template at [4, 0x1f21]"
+    log_info "    - YVE Token NFT Template at [4, 0x1f22]"
+    log_info "    - VX Token Gauge Template at [4, 0x1f23]"
+    log_info ""
+    log_info "  DIESEL Governance (0x1f30-0x1f3f):"
+    log_info "    - veDIESEL at [4, 0x1f30]"
+    log_info "    - yveDIESEL at [4, 0x1f31]"
+    log_info "    - vxDIESEL Gauge at [4, 0x1f32]"
     echo ""
     
     # Deploy Core Alkanes
     # Note: We deploy to [3, n] which creates the alkane at [4, n]
     # Format: deploy_contract "Name" "file.wasm" target_tx [init_args...]
     
-    # === RESERVED RANGE: [4, 0x1f00-0x1f15] for Subfrost System ===
-    # Using hex values in deployment to match fr-btc-support constants
+    # === RESERVED RANGE: [4, 0x1f00-0x1fff] for Subfrost System ===
+    
+    log_info "=========================================="
+    log_info "Phase 1: Core Infrastructure"
+    log_info "=========================================="
     
     # Deploy dx-btc at [4, 0x1f00] (DX_BTC_ID)
-    log_info "Deploying dxBTC at RESERVED [4, 0x1f00]..."
     deploy_contract "dxBTC" "$WASM_DIR/dx_btc.wasm" $((0x1f00)) ""
     
     # Deploy yv-fr-btc-vault at [4, 0x1f01] (YV_FR_BTC_VAULT_ID)
-    log_info "Deploying yv-fr-btc-vault at RESERVED [4, 0x1f01]..."
     deploy_contract "yv-fr-btc Vault" "$WASM_DIR/yv_fr_btc_vault.wasm" $((0x1f01)) "32,0"
     
-    # === LBTC Yield System: [4, 0x1f10-0x1f15] ===
+    log_info "=========================================="
+    log_info "Phase 2: LBTC Yield System"
+    log_info "=========================================="
     
     # Deploy lbtc-yield-splitter at [4, 0x1f10] (LBTC_YIELD_SPLITTER_ID)
-    log_info "Deploying LBTC Yield Splitter at RESERVED [4, 0x1f10]..."
     deploy_contract "LBTC Yield Splitter" "$WASM_DIR/lbtc_yield_splitter.wasm" $((0x1f10)) "4,$((0x1f11)),4,$((0x1f12))"
     
     # Deploy p-lbtc at [4, 0x1f11] (PLBTC_ID)
-    log_info "Deploying pLBTC at RESERVED [4, 0x1f11]..."
     deploy_contract "pLBTC (Principal LBTC)" "$WASM_DIR/p_lbtc.wasm" $((0x1f11)) "4,$((0x1f10))"
     
     # Deploy yx-lbtc at [4, 0x1f12] (YXLBTC_ID)
-    log_info "Deploying yxLBTC at RESERVED [4, 0x1f12]..."
     deploy_contract "yxLBTC (Yield LBTC)" "$WASM_DIR/yx_lbtc.wasm" $((0x1f12)) "4,$((0x1f10))"
     
     # Deploy frost-token at [4, 0x1f13] (FROST_TOKEN_ID)
-    log_info "Deploying FROST Token at RESERVED [4, 0x1f13]..."
     deploy_contract "FROST Token" "$WASM_DIR/frost_token.wasm" $((0x1f13)) "1"
     
     # Deploy vx-frost-gauge at [4, 0x1f14] (VX_FROST_GAUGE_ID)
-    log_info "Deploying vxFROST Gauge at RESERVED [4, 0x1f14]..."
     deploy_contract "vxFROST Gauge" "$WASM_DIR/vx_frost_gauge.wasm" $((0x1f14)) "4,$((0x1f13))"
     
     # Deploy synth-pool at [4, 0x1f15] (SYNTH_POOL_ID)
-    log_info "Deploying Synth Pool at RESERVED [4, 0x1f15]..."
     deploy_contract "Synth Pool (pLBTC/frBTC)" "$WASM_DIR/synth_pool.wasm" $((0x1f15)) "4,$((0x1f11)),32,0"
+    
+    log_info "=========================================="
+    log_info "Phase 3: LBTC Oracle System"
+    log_info "=========================================="
+    
+    # Deploy lbtc-oracle (unit alkane) at [4, 0x1f16] (LBTC_ORACLE_ID)
+    deploy_contract "LBTC Oracle" "$WASM_DIR/unit.wasm" $((0x1f16)) ""
+    
+    # Deploy lbtc token at [4, 0x1f17] (LBTC_ID)
+    # Initialize with oracle ID [4, 0x1f16]
+    deploy_contract "LBTC Token" "$WASM_DIR/lbtc.wasm" $((0x1f17)) "4,$((0x1f16))"
+    
+    log_info "=========================================="
+    log_info "Phase 4: Template Contracts"
+    log_info "=========================================="
+    
+    # Deploy unit template at [4, 0x1f20] (UNIT_TEMPLATE_ID)
+    deploy_contract "Unit Template" "$WASM_DIR/unit.wasm" $((0x1f20)) ""
+    
+    # Deploy ve-token-vault-template at [4, 0x1f21] (VE_TOKEN_VAULT_TEMPLATE_ID)
+    deploy_contract "VE Token Vault Template" "$WASM_DIR/ve_token_vault_template.wasm" $((0x1f21)) ""
+    
+    # Deploy yve-token-nft-template at [4, 0x1f22] (YVE_TOKEN_NFT_TEMPLATE_ID)
+    deploy_contract "YVE Token NFT Template" "$WASM_DIR/yve_token_nft_template.wasm" $((0x1f22)) ""
+    
+    # Deploy vx-token-gauge-template at [4, 0x1f23] (VX_TOKEN_GAUGE_TEMPLATE_ID)
+    deploy_contract "VX Token Gauge Template" "$WASM_DIR/vx_token_gauge_template.wasm" $((0x1f23)) ""
+    
+    log_info "=========================================="
+    log_info "Phase 5: DIESEL Governance System"
+    log_info "=========================================="
+    
+    # Deploy veDIESEL at [4, 0x1f30] (VE_DIESEL_ID)
+    # TODO: Instantiate from ve-token-vault-template with DIESEL token
+    deploy_contract "veDIESEL (Vote Escrowed DIESEL)" "$WASM_DIR/ve_diesel_vault.wasm" $((0x1f30)) "2,0"
+    
+    # Deploy yveDIESEL at [4, 0x1f31] (YVE_DIESEL_ID)
+    # TODO: Instantiate from yve-token-nft-template
+    deploy_contract "yveDIESEL Vault" "$WASM_DIR/yve_diesel_vault.wasm" $((0x1f31)) "2,0"
+    
+    # Deploy vxDIESEL gauge at [4, 0x1f32] (VX_DIESEL_GAUGE_ID)
+    # TODO: Instantiate from vx-token-gauge-template with DIESEL LP token
+    deploy_contract "vxDIESEL Gauge" "$WASM_DIR/gauge_contract.wasm" $((0x1f32)) "2,0,4,$((0x1f30)),100"
     
     # NOTE: ftr-btc at [31, 0] is deployed automatically in alkanes-rs genesis (setup_ftrbtc)
     # NOTE: dx-btc and yv-fr-btc-vault are now deployed above in the reserved range
