@@ -158,6 +158,7 @@ deploy_contract() {
         --envelope "$WASM_FILE" \
         --fee-rate 1 \
         --mine \
+        --trace \
         -y \
         > /dev/null 2>&1
     
@@ -186,6 +187,7 @@ initialize_contract() {
         alkanes execute "$PROTOSTONE" \
         --fee-rate 1 \
         --mine \
+        --trace \
         -y \
         > /dev/null 2>&1
     
@@ -218,83 +220,86 @@ main() {
     echo ""
     
     # Deploy Genesis Contracts (these are special and auto-deployed by the protocol)
-    log_info "Genesis contracts (auto-deployed):"
+    log_info "=========================================="
+    log_info "Genesis Contracts (auto-deployed by alkanes-rs)"
+    log_info "=========================================="
+    log_info "  - Genesis Alkane at [1, 0]"
     log_info "  - DIESEL at [2, 0]"
-    log_info "  - frBTC at [32, 0]"
+    log_info "  - frBTC (or frZEC) at [32, 0] (or [42, 0] for Zcash)"
+    log_info "  - frSIGIL at [32, 1] (or [42, 1] for Zcash)"
+    log_info "  - ftrBTC Master at [31, 0] (via setup_ftrbtc in network.rs)"
     echo ""
     
-    log_info "Deployment Patterns:"
+    log_info "=========================================="
+    log_info "Deployment Patterns"
+    log_info "=========================================="
     log_info "  [3, tx] + envelope -> creates alkane at [4, tx]"
     log_info "  [2, 0] + envelope  -> CREATE (next available [2, n])"
     log_info "  [4, tx] + envelope -> CREATERESERVED ([tx, 0])"
+    echo ""
+    
+    log_info "=========================================="
+    log_info "Subfrost Reserved Range: [4, 0x1f00-0x1fff]"
+    log_info "=========================================="
+    log_info "  Core Infrastructure:"
+    log_info "    - dxBTC at [4, 0x1f00] (DX_BTC_ID)"
+    log_info "    - yv-fr-btc Vault at [4, 0x1f01] (YV_FR_BTC_VAULT_ID)"
+    log_info "  LBTC Yield System:"
+    log_info "    - LBTC Yield Splitter at [4, 0x1f10] (LBTC_YIELD_SPLITTER_ID)"
+    log_info "    - pLBTC at [4, 0x1f11] (PLBTC_ID)"
+    log_info "    - yxLBTC at [4, 0x1f12] (YXLBTC_ID)"
+    log_info "    - FROST Token at [4, 0x1f13] (FROST_TOKEN_ID)"
+    log_info "    - vxFROST Gauge at [4, 0x1f14] (VX_FROST_GAUGE_ID)"
+    log_info "    - Synth Pool at [4, 0x1f15] (SYNTH_POOL_ID)"
     echo ""
     
     # Deploy Core Alkanes
     # Note: We deploy to [3, n] which creates the alkane at [4, n]
     # Format: deploy_contract "Name" "file.wasm" target_tx [init_args...]
     
-    # LBTC System (deploy tokens first, as other contracts may depend on them)
-    deploy_contract "FROST Token" "$WASM_DIR/frost_token.wasm" 10 "1"
-    deploy_contract "pLBTC (Principal LBTC)" "$WASM_DIR/p_lbtc.wasm" 11 "1"
-    deploy_contract "yxLBTC (Yield LBTC)" "$WASM_DIR/yx_lbtc.wasm" 12 "1"
+    # === RESERVED RANGE: [4, 0x1f00-0x1f15] for Subfrost System ===
+    # Using hex values in deployment to match fr-btc-support constants
     
-    # LBTC Yield Splitter (needs pLBTC[4,11] and yxLBTC[4,12])
-    deploy_contract "LBTC Yield Splitter" "$WASM_DIR/lbtc_yield_splitter.wasm" 13 "4,11,4,12"
+    # Deploy dx-btc at [4, 0x1f00] (DX_BTC_ID)
+    log_info "Deploying dxBTC at RESERVED [4, 0x1f00]..."
+    deploy_contract "dxBTC" "$WASM_DIR/dx_btc.wasm" $((0x1f00)) ""
     
-    # Synth Pool (pLBTC/frBTC AMM) - needs token IDs
-    deploy_contract "Synth Pool" "$WASM_DIR/synth_pool.wasm" 30 "4,11,32,0"
+    # Deploy yv-fr-btc-vault at [4, 0x1f01] (YV_FR_BTC_VAULT_ID)
+    log_info "Deploying yv-fr-btc-vault at RESERVED [4, 0x1f01]..."
+    deploy_contract "yv-fr-btc Vault" "$WASM_DIR/yv_fr_btc_vault.wasm" $((0x1f01)) "32,0"
     
-    # YV-FR-BTC Vault - deploys to RESERVED slot [3,0] via [4,3] (CREATERESERVED)
-    log_info "Deploying yv-fr-btc Vault to RESERVED slot [3, 0] via [4, 3]..."
+    # === LBTC Yield System: [4, 0x1f10-0x1f15] ===
     
-    # Build protostone for CREATERESERVED: [4,3,0,32,0] -> creates at [3,0] with frBTC[32,0]
-    PROTOSTONE="[4,3,0,32,0]"
-    log_info "  Protostone: $PROTOSTONE"
+    # Deploy lbtc-yield-splitter at [4, 0x1f10] (LBTC_YIELD_SPLITTER_ID)
+    log_info "Deploying LBTC Yield Splitter at RESERVED [4, 0x1f10]..."
+    deploy_contract "LBTC Yield Splitter" "$WASM_DIR/lbtc_yield_splitter.wasm" $((0x1f10)) "4,$((0x1f11)),4,$((0x1f12))"
     
-    subfrost-cli -p regtest \
-        --wallet-file "$WALLET_FILE" \
-        alkanes execute "$PROTOSTONE" \
-        --envelope "$WASM_DIR/yv_fr_btc_vault.wasm" \
-        --fee-rate 1 \
-        --mine \
-        -y \
-        > /dev/null 2>&1
+    # Deploy p-lbtc at [4, 0x1f11] (PLBTC_ID)
+    log_info "Deploying pLBTC at RESERVED [4, 0x1f11]..."
+    deploy_contract "pLBTC (Principal LBTC)" "$WASM_DIR/p_lbtc.wasm" $((0x1f11)) "4,$((0x1f10))"
     
-    if [ $? -eq 0 ]; then
-        log_success "yv-fr-btc Vault deployed at RESERVED [3, 0]"
-    else
-        log_error "Failed to deploy yv-fr-btc Vault"
-    fi
+    # Deploy yx-lbtc at [4, 0x1f12] (YXLBTC_ID)
+    log_info "Deploying yxLBTC at RESERVED [4, 0x1f12]..."
+    deploy_contract "yxLBTC (Yield LBTC)" "$WASM_DIR/yx_lbtc.wasm" $((0x1f12)) "4,$((0x1f10))"
     
-    echo ""
+    # Deploy frost-token at [4, 0x1f13] (FROST_TOKEN_ID)
+    log_info "Deploying FROST Token at RESERVED [4, 0x1f13]..."
+    deploy_contract "FROST Token" "$WASM_DIR/frost_token.wasm" $((0x1f13)) "1"
     
-    # DX-BTC Vault (Leveraged frBTC Vault) - uses CREATE pattern [2,0] -> deploys to [2,1]
-    log_info "Deploying dxBTC Vault using CREATE pattern [2, 0] -> [2, 1]..."
+    # Deploy vx-frost-gauge at [4, 0x1f14] (VX_FROST_GAUGE_ID)
+    log_info "Deploying vxFROST Gauge at RESERVED [4, 0x1f14]..."
+    deploy_contract "vxFROST Gauge" "$WASM_DIR/vx_frost_gauge.wasm" $((0x1f14)) "4,$((0x1f13))"
     
-    # Build protostone for CREATE: [2,0] with envelope -> creates at next [2,n] which is [2,1]
-    PROTOSTONE="[2,0]"
-    log_info "  Protostone: $PROTOSTONE"
+    # Deploy synth-pool at [4, 0x1f15] (SYNTH_POOL_ID)
+    log_info "Deploying Synth Pool at RESERVED [4, 0x1f15]..."
+    deploy_contract "Synth Pool (pLBTC/frBTC)" "$WASM_DIR/synth_pool.wasm" $((0x1f15)) "4,$((0x1f11)),32,0"
     
-    subfrost-cli -p regtest \
-        --wallet-file "$WALLET_FILE" \
-        alkanes execute "$PROTOSTONE" \
-        --envelope "$WASM_DIR/dx_btc.wasm" \
-        --fee-rate 1 \
-        --mine \
-        -y \
-        > /dev/null 2>&1
+    # NOTE: ftr-btc at [31, 0] is deployed automatically in alkanes-rs genesis (setup_ftrbtc)
+    # NOTE: dx-btc and yv-fr-btc-vault are now deployed above in the reserved range
     
-    if [ $? -eq 0 ]; then
-        log_success "dxBTC Vault deployed at [2, 1]"
-    else
-        log_error "Failed to deploy dxBTC Vault"
-    fi
-    
-    echo ""
-    
-    # Initialize dx-btc at [2,1] with frBTC[32,0] and yv-fr-btc-vault[3,0]
-    log_info "Initializing dxBTC Vault at [2, 1]..."
-    INIT_PROTOSTONE="[2,1,0,32,0,3,0]"
+    # Initialize dx-btc at [4, 0x1f00] with frBTC[32,0] and yv-fr-btc-vault[4,0x1f01]
+    log_info "Initializing dxBTC at [4, 0x1f00]..."
+    INIT_PROTOSTONE="[4,$((0x1f00)),0,32,0,4,$((0x1f01))]"
     log_info "  Protostone: $INIT_PROTOSTONE"
     
     subfrost-cli -p regtest \
@@ -302,43 +307,21 @@ main() {
         alkanes execute "$INIT_PROTOSTONE" \
         --fee-rate 1 \
         --mine \
+        --trace \
         -y \
         > /dev/null 2>&1
     
     if [ $? -eq 0 ]; then
-        log_success "dxBTC Vault initialized"
+        log_success "dxBTC initialized"
     else
-        log_warn "Failed to initialize dxBTC Vault (may not need initialization)"
+        log_warn "Failed to initialize dxBTC (may not need initialization)"
     fi
     
-    # FTR-BTC Master (Futures Contract) - deploys to RESERVED slot [31,0]
-    # Use [4, 31] which deploys to [31, 0] (CREATERESERVED pattern)
-    log_info "Deploying ftrBTC Master to RESERVED slot [31, 0] via [4, 31]..."
+    echo ""
     
-    # Build protostone for CREATERESERVED: [4,31,0] -> creates at [31,0]
-    PROTOSTONE="[4,31,0]"
-    log_info "  Protostone: $PROTOSTONE"
-    
-    subfrost-cli -p regtest \
-        --wallet-file "$WALLET_FILE" \
-        alkanes execute "$PROTOSTONE" \
-        --envelope "$WASM_DIR/ftr_btc.wasm" \
-        --fee-rate 1 \
-        --mine \
-        -y \
-        > /dev/null 2>&1
-    
-    if [ $? -eq 0 ]; then
-        log_success "ftrBTC Master deployed at RESERVED [31, 0]"
-    else
-        log_error "Failed to deploy ftrBTC Master"
-    fi
-    
-    # Governance & Vaults
-    deploy_contract "vxFROST Gauge" "$WASM_DIR/vx_frost_gauge.wasm" 50 "1"
+    # Additional Vaults & Gauges (used in tests, deployed to [4, n] via [3, n])
+    # Note: vxFROST Gauge already deployed above at [4, 0x1f14]
     deploy_contract "veDIESEL Vault" "$WASM_DIR/ve_diesel_vault.wasm" 60 "1"
-    
-    # Additional Vaults & Gauges (used in tests)
     deploy_contract "Gauge Contract" "$WASM_DIR/gauge_contract.wasm" 100 "1"
     deploy_contract "yvBOOST Vault" "$WASM_DIR/yv_boost_vault.wasm" 101 "1"
     deploy_contract "yvTOKEN Vault" "$WASM_DIR/yv_token_vault.wasm" 102 "1"
@@ -376,6 +359,7 @@ main() {
         alkanes execute "$INIT_PROTOSTONE" \
         --fee-rate 1 \
         --mine \
+        --trace \
         -y \
         > /dev/null 2>&1
     
