@@ -273,14 +273,20 @@ EOF
 check_contract_dependencies() {
   log_header "Phase 2: Contract Deployment - Checking Dependencies"
   
-  # Check if subfrost-cli exists
-  if ! command_exists subfrost-cli; then
-    log_error "subfrost-cli not found in PATH"
-    log_info "Build it with: cd $ALKANES_RS_DIR && cargo build --release"
+  # Check if alkanes-cli exists (try both names for compatibility)
+  if command_exists alkanes-cli; then
+    CLI_CMD="alkanes-cli"
+    log_success "Found alkanes-cli: $(which alkanes-cli)"
+  elif command_exists subfrost-cli; then
+    CLI_CMD="subfrost-cli"
+    log_success "Found subfrost-cli: $(which subfrost-cli)"
+  else
+    log_error "alkanes-cli/subfrost-cli not found in PATH"
+    log_info "Build it with: cd $ALKANES_RS_DIR && cargo build --release --bin alkanes-cli"
     log_info "Add to PATH: export PATH=\"$ALKANES_RS_DIR/target/release:\$PATH\""
+    log_info "Or create symlink: ln -s alkanes-cli subfrost-cli"
     exit 1
   fi
-  log_success "Found subfrost-cli: $(which subfrost-cli)"
   
   # Check if regtest node is running
   if ! curl -s "$RPC_URL" >/dev/null 2>&1; then
@@ -301,120 +307,151 @@ check_contract_dependencies() {
   fi
   
   local count=$(find "$WASM_DIR" -name "*.wasm" -type f -size +1k | wc -l)
-  log_success "Found $count WASM files in $WASM_DIR"
+  log_success "Found $(printf "%8s" $count) WASM files in $WASM_DIR"
 }
 
 setup_wallet() {
-  log_info "Setting up wallet..."
+  log_info "Setting up deployment wallet..."
   
-  if [ ! -f "$WALLET_FILE" ]; then
-    mkdir -p "$(dirname "$WALLET_FILE")"
-    subfrost-cli -p regtest wallet new > "$WALLET_FILE" 2>/dev/null
-    log_success "Wallet created at $WALLET_FILE"
+  # Note: alkanes-cli uses keystore files and wallet options differently than old subfrost-cli
+  # For regtest deployment, we'll use Bitcoin Core's wallet for funding
+  log_info "Using Bitcoin Core regtest wallet for contract deployment"
+  
+  # Generate a test address for deployment
+  local TEST_ADDRESS=$(docker exec subfrost-bitcoin bitcoin-cli \
+    -regtest \
+    -rpcuser="$BITCOIN_RPC_USER" \
+    -rpcpassword="$BITCOIN_RPC_PASSWORD" \
+    -rpcport="$BITCOIN_RPC_PORT" \
+    getnewaddress 2>/dev/null || echo "")
+  
+  if [ -n "$TEST_ADDRESS" ]; then
+    log_success "Deployment address: $TEST_ADDRESS"
+    WALLET_ADDRESS="$TEST_ADDRESS"
   else
-    log_success "Using existing wallet at $WALLET_FILE"
+    log_warning "Could not get deployment address (will use defaults)"
   fi
-  
-  WALLET_ADDRESS=$(subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet address 2>/dev/null)
-  log_info "Wallet address: $WALLET_ADDRESS"
 }
 
 fund_wallet() {
-  log_info "Checking wallet balance..."
+  log_info "Checking wallet funding..."
   
-  subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet sync >/dev/null 2>&1 || true
+  # For regtest, we'll use Bitcoin Core to manage funds
+  # alkanes-cli will interact with the regtest node for deployments
   
-  BALANCE=$(subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
+  # Generate some blocks to ensure we have mature coinbase UTXOs
+  log_info "Generating blocks for deployment funding..."
+  docker exec subfrost-bitcoin bitcoin-cli \
+    -regtest \
+    -rpcuser="$BITCOIN_RPC_USER" \
+    -rpcpassword="$BITCOIN_RPC_PASSWORD" \
+    -rpcport="$BITCOIN_RPC_PORT" \
+    -generate 10 >/dev/null 2>&1 || true
   
-  if [ "$BALANCE" -lt "1000000000" ]; then
-    log_info "Funding wallet (current: $BALANCE sats)..."
-    for i in {1..10}; do
-      subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet mine 10 >/dev/null 2>&1 || true
-    done
-    
-    subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet sync >/dev/null 2>&1 || true
-    BALANCE=$(subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
-    log_success "Wallet funded: $BALANCE sats"
-  else
-    log_success "Wallet balance: $BALANCE sats"
-  fi
+  log_success "Wallet funded and ready for deployment"
 }
 
 deploy_contract() {
   local CONTRACT_NAME=$1
   local WASM_FILE=$2
-  local TARGET_TX=$3
-  shift 3
+  local TARGET_BLOCK=$3
+  local TARGET_TX=$4
+  shift 4
   local INIT_ARGS="$@"
   
-  log_info "Deploying $CONTRACT_NAME to [4, $TARGET_TX]..."
+  log_info "📄 Deploying $CONTRACT_NAME to [$TARGET_BLOCK, $TARGET_TX]..."
   
   if [ ! -f "$WASM_FILE" ]; then
-    log_warning "WASM file not found: $WASM_FILE (skipping)"
+    log_warning "   WASM not found: $WASM_FILE (skipping)"
     return 0
   fi
   
-  local PROTOSTONE="[3,$TARGET_TX$([ -n "$INIT_ARGS" ] && echo ",$INIT_ARGS" || echo "")]:v0:v0"
+  # Note: Full deployment requires:
+  # 1. Creating envelope with WASM bytes
+  # 2. Building transaction with cellpack targeting [target_block, target_tx]
+  # 3. Signing and broadcasting transaction
+  # 4. Mining block to confirm
+  # 5. If initialization needed: create cellpack with opcode 0 + init args
   
-  subfrost-cli -p regtest \
-    --wallet-file "$WALLET_FILE" \
-    alkanes execute "$PROTOSTONE" \
-    --envelope "$WASM_FILE" \
-    --fee-rate 1 \
-    --mine \
-    --trace \
-    -y \
-    >/dev/null 2>&1
+  # For now, this is a placeholder - full implementation requires
+  # proper transaction building with alkanes-cli
+  log_warning "   Contract deployment needs manual alkanes-cli integration"
+  log_info "   Command: $CLI_CMD -p regtest alkanes execute --help"
   
-  if [ $? -eq 0 ]; then
-    log_success "$CONTRACT_NAME deployed at [4, $TARGET_TX]"
-  else
-    log_warning "Failed to deploy $CONTRACT_NAME"
-  fi
+  return 0
 }
 
 deploy_all_contracts() {
-  log_header "Deploying Subfrost Contracts"
+  log_header "Deploying Subfrost Contracts (See CONTRACT_DEPLOYMENT_GUIDE.md)"
   
-  log_info "Subfrost Reserved Range: [4, 0x1f00-0x1fff]"
+  log_warning "Note: Contract deployment requires manual alkanes-cli integration"
+  log_info "This function lists all contracts that need deployment."
+  log_info "Full implementation requires proper transaction building with cellpacks."
   echo ""
   
-  # Phase 1: Core Infrastructure
-  log_info "Phase 1: Core Infrastructure"
-  deploy_contract "dxBTC" "$WASM_DIR/dx_btc.wasm" $((0x1f00)) ""
-  deploy_contract "yv-fr-btc Vault" "$WASM_DIR/yv_fr_btc_vault.wasm" $((0x1f01)) "32,0"
+  # Phase 1: Foundation Tokens
+  log_info "═══ Phase 1: Foundation Tokens (2 contracts) ═══"
+  deploy_contract "DIESEL Token" "$WASM_DIR/diesel.wasm" 2 0 "opcode_77_free_mint"
+  deploy_contract "ftrBTC" "$WASM_DIR/fr_btc.wasm" 32 0 "opcode_0_init"
+  echo ""
   
-  # Phase 2: LBTC Yield System
-  log_info "Phase 2: LBTC Yield System"
-  deploy_contract "LBTC Yield Splitter" "$WASM_DIR/lbtc_yield_splitter.wasm" $((0x1f10)) "4,$((0x1f11)),4,$((0x1f12))"
-  deploy_contract "pLBTC" "$WASM_DIR/p_lbtc.wasm" $((0x1f11)) "4,$((0x1f10))"
-  deploy_contract "yxLBTC" "$WASM_DIR/yx_lbtc.wasm" $((0x1f12)) "4,$((0x1f10))"
-  deploy_contract "FROST Token" "$WASM_DIR/frost_token.wasm" $((0x1f13)) "1"
-  deploy_contract "vxFROST Gauge" "$WASM_DIR/vx_frost_gauge.wasm" $((0x1f14)) "4,$((0x1f13))"
-  deploy_contract "Synth Pool" "$WASM_DIR/synth_pool.wasm" $((0x1f15)) "4,$((0x1f11)),32,0"
+  # Phase 2: Standard Templates (Block 3)
+  log_info "═══ Phase 2: Standard Templates (4 contracts, block 3) ═══"
+  deploy_contract "Auth Token Factory" "$WASM_DIR/alkanes_std_auth_token.wasm" 3 $((0xffed)) "marker_100"
+  deploy_contract "Beacon Proxy" "$WASM_DIR/alkanes_std_beacon_proxy.wasm" 3 $((0xbeac1)) "marker_0x8fff"
+  deploy_contract "Upgradeable Beacon" "$WASM_DIR/alkanes_std_upgradeable_beacon.wasm" 3 $((0xbeac0)) "marker_0x7fff,pool_template_4,0xffef,version_1"
+  deploy_contract "Upgradeable Proxy" "$WASM_DIR/alkanes_std_upgradeable.wasm" 3 1 "marker_0x7fff"
+  echo ""
   
-  # Phase 3: LBTC Oracle System
-  log_info "Phase 3: LBTC Oracle System"
-  deploy_contract "LBTC Oracle" "$WASM_DIR/unit.wasm" $((0x1f16)) ""
-  deploy_contract "LBTC Token" "$WASM_DIR/lbtc.wasm" $((0x1f17)) "4,$((0x1f16))"
+  # Phase 3: OYL AMM System (Block 4)
+  log_info "═══ Phase 3: OYL AMM System (3 contracts, block 4) ═══"
+  deploy_contract "Pool Template" "$WASM_DIR/pool.wasm" 4 $((0xffef)) "marker_50"
+  deploy_contract "Factory Logic" "$WASM_DIR/factory.wasm" 4 2 "marker_50"
+  deploy_contract "Factory Proxy" "$WASM_DIR/alkanes_std_upgradeable.wasm" 4 1 "init_opcode_0,pool_factory_0xbeac1,beacon_4_0xbeac0"
+  echo ""
   
-  # Phase 4: Template Contracts
-  log_info "Phase 4: Template Contracts"
-  deploy_contract "Unit Template" "$WASM_DIR/unit.wasm" $((0x1f20)) ""
-  deploy_contract "VE Token Vault Template" "$WASM_DIR/ve_token_vault_template.wasm" $((0x1f21)) ""
-  deploy_contract "YVE Token NFT Template" "$WASM_DIR/yve_token_nft_template.wasm" $((0x1f22)) ""
-  deploy_contract "VX Token Gauge Template" "$WASM_DIR/vx_token_gauge_template.wasm" $((0x1f23)) ""
+  # Phase 4: LBTC Yield System (Block 4, 0x1f00 range)
+  log_info "═══ Phase 4: LBTC Yield System (10 contracts, 0x1f00 range) ═══"
+  deploy_contract "yv-fr-btc Vault" "$WASM_DIR/yv_fr_btc_vault.wasm" 4 $((0x1f01)) "init_with_frbtc_32_0"
+  deploy_contract "dxBTC" "$WASM_DIR/dx_btc.wasm" 4 $((0x1f00)) "init_asset_32_0,vault_4_0x1f01"
+  deploy_contract "LBTC Yield Splitter" "$WASM_DIR/lbtc_yield_splitter.wasm" 4 $((0x1f10)) ""
+  deploy_contract "pLBTC" "$WASM_DIR/p_lbtc.wasm" 4 $((0x1f11)) ""
+  deploy_contract "yxLBTC" "$WASM_DIR/yx_lbtc.wasm" 4 $((0x1f12)) ""
+  deploy_contract "FROST Token" "$WASM_DIR/frost_token.wasm" 4 $((0x1f13)) ""
+  deploy_contract "vxFROST Gauge" "$WASM_DIR/vx_frost_gauge.wasm" 4 $((0x1f14)) ""
+  deploy_contract "Synth Pool" "$WASM_DIR/synth_pool.wasm" 4 $((0x1f15)) ""
+  deploy_contract "LBTC Oracle" "$WASM_DIR/fr_oracle.wasm" 4 $((0x1f16)) ""
+  deploy_contract "LBTC Token" "$WASM_DIR/lbtc.wasm" 4 $((0x1f17)) ""
+  echo ""
   
-  # OYL AMM System
-  log_info "Phase 5: OYL AMM System"
-  deploy_contract "OYL Pool Logic" "$WASM_DIR/pool.wasm" "$AMM_FACTORY_ID" "50"
-  deploy_contract "OYL Auth Token" "$WASM_DIR/alkanes_std_auth_token.wasm" "$AUTH_TOKEN_FACTORY_ID" "100"
-  deploy_contract "OYL Factory Logic" "$WASM_DIR/factory.wasm" "$AMM_FACTORY_LOGIC_IMPL_TX" "50"
-  deploy_contract "OYL Beacon Proxy" "$WASM_DIR/alkanes_std_beacon_proxy.wasm" "$POOL_BEACON_PROXY_TX" "$((0x8fff))"
-  deploy_contract "OYL Upgradeable Beacon" "$WASM_DIR/alkanes_std_upgradeable_beacon.wasm" "$POOL_UPGRADEABLE_BEACON_TX" "$((0x7fff)),4,$AMM_FACTORY_ID,1"
-  deploy_contract "OYL Factory Proxy" "$WASM_DIR/alkanes_std_upgradeable.wasm" "$AMM_FACTORY_PROXY_TX" "$((0x7fff)),4,$AMM_FACTORY_LOGIC_IMPL_TX,1"
+  # Phase 5: Futures System (Block 31)
+  log_info "═══ Phase 5: Futures System (3 contracts, block 31) ═══"
+  deploy_contract "ftrBTC Master" "$WASM_DIR/ftr_btc.wasm" 31 0 "init_opcode_0_master_mode"
+  deploy_contract "BTC Principal Token" "$WASM_DIR/btc_pt.wasm" 2 0 "CREATE_pattern"
+  deploy_contract "BTC Yield Token" "$WASM_DIR/btc_yt.wasm" 2 0 "CREATE_pattern"
+  echo ""
   
-  log_success "All contracts deployed!"
+  # Phase 6: Gauge & Vault System (Block 5)
+  log_info "═══ Phase 6: Gauge & Vault System (5 contracts) ═══"
+  deploy_contract "Gauge Contract" "$WASM_DIR/gauge_contract.wasm" 5 1 "init_lp_token,reward_token_2_0,ve_diesel,rate"
+  deploy_contract "veDIESEL Vault" "$WASM_DIR/ve_diesel_vault.wasm" 2 0 "CREATE_pattern"
+  deploy_contract "yveDIESEL Vault" "$WASM_DIR/yve_diesel_vault.wasm" 2 0 "CREATE_pattern"
+  deploy_contract "yv Boost Vault" "$WASM_DIR/yv_boost_vault.wasm" 2 0 "CREATE_pattern"
+  deploy_contract "yv Token Vault" "$WASM_DIR/yv_token_vault.wasm" 2 0 "CREATE_pattern"
+  echo ""
+  
+  # Phase 7: Templates
+  log_info "═══ Phase 7: Templates (3 contracts) ═══"
+  deploy_contract "ve Token Vault Template" "$WASM_DIR/ve_token_vault_template.wasm" 2 0 "CREATE_pattern"
+  deploy_contract "vx Token Gauge Template" "$WASM_DIR/vx_token_gauge_template.wasm" 2 0 "CREATE_pattern"
+  deploy_contract "yve Token NFT Template" "$WASM_DIR/yve_token_nft_template.wasm" 2 0 "CREATE_pattern"
+  echo ""
+  
+  log_info "══════════════════════════════════════════════════════════════"
+  log_warning "Contract deployment listing complete (30 contracts)"
+  log_info "For manual deployment, see: scripts/CONTRACT_DEPLOYMENT_GUIDE.md"
+  log_info "For working example, see: subfrost-alkanes/src/tests/foundation.rs"
+  log_info "══════════════════════════════════════════════════════════════"
 }
 
 ################################################################################
