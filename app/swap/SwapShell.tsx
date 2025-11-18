@@ -452,64 +452,70 @@ export default function SwapShell() {
           onClose={() => setSuccessTxId(null)}
         />
       )}
-      <section className="relative mx-auto w-full max-w-[540px] rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
-        {isBalancesLoading && <LoadingOverlay />}
-        <div className="mb-6 flex w-full items-center justify-center">
-          <SwapHeaderTabs />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Left Column: Swap/LP Module */}
+        <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl">
+          {isBalancesLoading && <LoadingOverlay />}
+          <div className="mb-6 flex w-full items-center justify-center">
+            <SwapHeaderTabs />
+          </div>
+          <SwapInputs
+            from={fromToken}
+            to={toToken}
+            fromOptions={fromOptions}
+            toOptions={toOptions}
+            fromAmount={fromAmount}
+            toAmount={toAmount}
+            onChangeFromAmount={(v) => { setDirection('sell'); setFromAmount(v); }}
+            onChangeToAmount={(v) => { setDirection('buy'); setToAmount(v); }}
+            onSelectFromToken={(id) => {
+              const t = fromOptions.find((x) => x.id === id);
+              if (t) {
+                setFromToken(t);
+                // Reset TO selection when FROM changes
+                setToToken(undefined);
+                setToAmount("");
+              }
+            }}
+            onSelectToToken={(symbol) => {
+              if (!symbol) {
+                setToToken(undefined);
+                setToAmount("");
+                return;
+              }
+              const t = toOptions.find((x) => x.id === symbol);
+              if (t) setToToken(t);
+            }}
+            onInvert={handleInvert}
+            onSwapClick={handleSwap}
+            fromBalanceText={formatBalance(fromToken?.id)}
+            toBalanceText={formatBalance(toToken?.id)}
+            fromFiatText={"$0.00"}
+            toFiatText={"$0.00"}
+            onMaxFrom={fromToken ? handleMaxFrom : undefined}
+            onPercentFrom={fromToken ? handlePercentFrom : undefined}
+            summary={
+              <SwapSummary
+                sellId={fromToken?.id ?? ''}
+                buyId={toToken?.id ?? ''}
+                sellName={fromToken?.name ?? fromToken?.symbol}
+                buyName={toToken?.name ?? toToken?.symbol}
+                direction={direction}
+                quote={quote}
+                isCalculating={!!isCalculating}
+                feeRate={fee.feeRate}
+              />
+            }
+          />
+        </section>
+
+        {/* Right Column: TVL and Markets */}
+        <div className="flex flex-col gap-8">
+          <PoolDetailsCard pool={selectedPool} />
+          <MarketsGrid pools={markets} onSelect={handleSelectPool} />
         </div>
-        <SwapInputs
-          from={fromToken}
-          to={toToken}
-          fromOptions={fromOptions}
-          toOptions={toOptions}
-          fromAmount={fromAmount}
-          toAmount={toAmount}
-          onChangeFromAmount={(v) => { setDirection('sell'); setFromAmount(v); }}
-          onChangeToAmount={(v) => { setDirection('buy'); setToAmount(v); }}
-          onSelectFromToken={(id) => {
-            const t = fromOptions.find((x) => x.id === id);
-            if (t) {
-              setFromToken(t);
-              // Reset TO selection when FROM changes
-              setToToken(undefined);
-              setToAmount("");
-            }
-          }}
-          onSelectToToken={(symbol) => {
-            if (!symbol) {
-              setToToken(undefined);
-              setToAmount("");
-              return;
-            }
-            const t = toOptions.find((x) => x.id === symbol);
-            if (t) setToToken(t);
-          }}
-          onInvert={handleInvert}
-          onSwapClick={handleSwap}
-          fromBalanceText={formatBalance(fromToken?.id)}
-          toBalanceText={formatBalance(toToken?.id)}
-          fromFiatText={"$0.00"}
-          toFiatText={"$0.00"}
-          onMaxFrom={fromToken ? handleMaxFrom : undefined}
-          onPercentFrom={fromToken ? handlePercentFrom : undefined}
-          summary={
-            <SwapSummary
-              sellId={fromToken?.id ?? ''}
-              buyId={toToken?.id ?? ''}
-              sellName={fromToken?.name ?? fromToken?.symbol}
-              buyName={toToken?.name ?? toToken?.symbol}
-              direction={direction}
-              quote={quote}
-              isCalculating={!!isCalculating}
-              feeRate={fee.feeRate}
-            />
-          }
-        />
-      </section>
-
-      <PoolDetailsCard pool={selectedPool} />
-
-      <MarketsGrid pools={markets} onSelect={handleSelectPool} />
+      </div>
 
       <TransactionSettingsModal
         selection={fee.selection}

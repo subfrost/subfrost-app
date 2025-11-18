@@ -63,7 +63,7 @@
         {/* Brand */}
         <Link href="/" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">
           <Image
-            src="/brand/snowflake-mark.svg"
+            src="/brand/snowflake_2025.svg"
             alt="Subfrost snowflake logo"
             width={24}
             height={24}

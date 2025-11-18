@@ -12,6 +12,8 @@ export type PoolSummary = {
   token1: TokenMeta;
   tvlUsd?: number;
   vol24hUsd?: number;
+  vol7dUsd?: number;
+  vol30dUsd?: number;
   apr?: number;
 };
 
