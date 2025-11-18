@@ -372,9 +372,6 @@ deploy_contract() {
   local DEPLOY_PROTOSTONE="[$TARGET_BLOCK,$TARGET_TX]"
   
   $CLI_CMD -p regtest \
-    --bitcoin-rpc-url="http://localhost:$BITCOIN_RPC_PORT" \
-    --bitcoin-rpc-user="$BITCOIN_RPC_USER" \
-    --bitcoin-rpc-password="$BITCOIN_RPC_PASSWORD" \
     alkanes execute "$DEPLOY_PROTOSTONE" \
     --envelope "$WASM_FILE" \
     --fee-rate 1 \
@@ -382,7 +379,8 @@ deploy_contract() {
     -y \
     >/dev/null 2>&1
   
-  if [ $? -eq 0 ]; then
+  local DEPLOY_STATUS=$?
+  if [ $DEPLOY_STATUS -eq 0 ]; then
     log_success "   ✅ $CONTRACT_NAME deployed at [$TARGET_BLOCK, $TARGET_TX]"
     
     # Step 2: Initialize if needed
@@ -392,16 +390,14 @@ deploy_contract() {
       local INIT_PROTOSTONE="[$TARGET_BLOCK,$TARGET_TX,0,$INIT_ARGS]"
       
       $CLI_CMD -p regtest \
-        --bitcoin-rpc-url="http://localhost:$BITCOIN_RPC_PORT" \
-        --bitcoin-rpc-user="$BITCOIN_RPC_USER" \
-        --bitcoin-rpc-password="$BITCOIN_RPC_PASSWORD" \
         alkanes execute "$INIT_PROTOSTONE" \
         --fee-rate 1 \
         --mine \
         -y \
         >/dev/null 2>&1
       
-      if [ $? -eq 0 ]; then
+      local INIT_STATUS=$?
+      if [ $INIT_STATUS -eq 0 ]; then
         log_success "   ✅ Initialized successfully"
       else
         log_warning "   ⚠️  Initialization failed (may not be critical)"
