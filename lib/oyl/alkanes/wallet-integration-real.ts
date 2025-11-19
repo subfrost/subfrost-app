@@ -8,12 +8,8 @@ import type { Network } from '@oyl/sdk';
 import { Provider } from '@oyl/sdk';
 
 // Import from the browser-bundled alkanes SDK
-import { 
-  createKeystore,
-  unlockKeystore,
-  // @ts-ignore - Bundle doesn't have types
-  KeystoreManager 
-} from '@alkanes/ts-sdk';
+// @ts-ignore - No type definitions available yet
+import { createKeystore, unlockKeystore, KeystoreManager } from '@alkanes/ts-sdk';
 
 export type { Network };
 

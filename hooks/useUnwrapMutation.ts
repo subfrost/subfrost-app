@@ -31,6 +31,7 @@ export function useUnwrapMutation() {
   return useMutation({
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      if (!provider) throw new Error('Provider not available');
 
       const utxos = await getUtxos();
 

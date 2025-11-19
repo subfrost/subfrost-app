@@ -1,3 +1,6 @@
+packages:
+  - 'ts-sdk'
+
 onlyBuiltDependencies:
   - cbor-extract
   - esbuild

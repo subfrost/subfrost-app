@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useWallet } from "@/context/WalletContext";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
-import type { VaultUnit } from "@/types/alkanes";
+import type { VaultUnit } from "@/hooks/useVaultUnits";
 
 type Props = {
   mode: 'deposit' | 'withdraw';

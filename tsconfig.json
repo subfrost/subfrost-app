@@ -39,6 +39,7 @@
   ],
   "exclude": [
     "node_modules",
-    "reference"
+    "reference",
+    "ts-sdk"
   ]
 }

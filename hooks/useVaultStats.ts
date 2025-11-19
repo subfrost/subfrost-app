@@ -41,6 +41,9 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
               target: { block: vaultId.block, tx: vaultId.tx },
               inputs: ['4'], // GetVeDieselBalance opcode
             });
+            if (!provider) {
+              throw new Error('Provider not available');
+            }
             const userBalanceResult = await provider.alkanes.simulate(userBalanceRequest);
             
             if (userBalanceResult && userBalanceResult.execution?.data) {

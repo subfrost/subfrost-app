@@ -31,6 +31,7 @@ export function useVaultDeposit() {
   return useMutation({
     mutationFn: async (depositData: VaultDepositData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      if (!provider) throw new Error('Provider not available');
 
       const vaultId = parseAlkaneId(depositData.vaultContractId);
       const tokenId = parseAlkaneId(depositData.tokenId);

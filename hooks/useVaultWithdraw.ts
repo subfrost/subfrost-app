@@ -30,6 +30,7 @@ export function useVaultWithdraw() {
   return useMutation({
     mutationFn: async (withdrawData: VaultWithdrawData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      if (!provider) throw new Error('Provider not available');
 
       const vaultId = parseAlkaneId(withdrawData.vaultContractId);
       const vaultUnitId = parseAlkaneId(withdrawData.vaultUnitId);

@@ -20,9 +20,9 @@ import {
   type WalletConfig as AlkanesWalletConfig,
 } from '@alkanes/ts-sdk';
 
-// Re-export types from SDK
-export type Keystore = AlkanesKeystore;
-export type WalletConfig = AlkanesWalletConfig;
+// Re-export types from SDK (use different names to avoid conflicts)
+export type AlkanesWalletKeystore = AlkanesKeystore;
+export type AlkanesWalletConfiguration = AlkanesWalletConfig;
 
 // ECC library initialization state
 let eccInitialized = false;
@@ -370,7 +370,7 @@ export async function restoreFromMnemonic(
   }
 
   // ✅ Create keystore from mnemonic using REAL alkanes SDK
-  const config: WalletConfig = { network };
+  const config: AlkanesWalletConfig = { network };
   const internalKeystore = manager.createKeystore(mnemonic, config);
   const keystoreJson = await manager.exportKeystore(internalKeystore, password, { pretty: false });
   

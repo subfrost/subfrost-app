@@ -13,6 +13,7 @@ export function useSignerShim() {
 
   const finalizePsbt = (signedPsbtBase64: string | undefined) => {
     if (!signedPsbtBase64) throw new Error('Failed to sign PSBT');
+    if (!provider) throw new Error('Provider not available');
     let psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: provider.network });
     for (let i = 0; i < psbt.inputCount; i++) {
       const input = psbt.data.inputs[i];
@@ -37,7 +38,7 @@ export function useSignerShim() {
       const finalizedPsbts = signedPsbtResponse?.signedPsbts.map((res: any) => finalizePsbt(res.signedPsbtBase64));
       return finalizedPsbts;
     },
-    taprootKeyPair: ECPair.makeRandom({ network: provider.network }),
+    taprootKeyPair: provider ? ECPair.makeRandom({ network: provider.network }) : undefined,
   } as any;
 
   return signerShim;

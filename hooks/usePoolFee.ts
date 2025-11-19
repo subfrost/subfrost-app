@@ -25,7 +25,12 @@ export const usePoolFee = (alkaneId?: AlkaneId) => {
   const provider = useSandshrewProvider();
   return useQuery({
     queryKey: ['poolFee', alkaneId],
-    queryFn: async () => queryPoolFee(provider, alkaneId),
+    queryFn: async () => {
+      if (!provider) {
+        throw new Error('Provider not available');
+      }
+      return queryPoolFee(provider, alkaneId);
+    },
     enabled: !!provider && !!alkaneId,
   });
 };

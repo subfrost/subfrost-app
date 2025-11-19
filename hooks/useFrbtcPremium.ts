@@ -53,6 +53,10 @@ export function useFrbtcPremium() {
           inputs: ["104"]
         })
         
+        if (!provider) {
+          throw new Error('Provider not available');
+        }
+        
         const result = await provider.alkanes.simulate(request);
 
         console.log('result', result);

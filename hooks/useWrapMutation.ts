@@ -28,6 +28,7 @@ export function useWrapMutation() {
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      if (!provider) throw new Error('Provider not available');
 
       const utxos = await getSpendableUtxos();
 

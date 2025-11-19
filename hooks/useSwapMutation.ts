@@ -103,6 +103,9 @@ export function useSwapMutation() {
         ),
       );
       const deadlineBlocks = swapData.deadlineBlocks || 3;
+      if (!provider) {
+        throw new Error('Provider not available');
+      }
       calldata.push(BigInt(await getFutureBlockHeight(deadlineBlocks, provider)));
 
       const utxos = await getUtxos();
