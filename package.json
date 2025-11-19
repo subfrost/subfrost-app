@@ -45,6 +45,7 @@
     "@scure/base": "^2.0.0",
     "@scure/btc-signer": "^2.0.1",
     "@tailwindcss/postcss": "^4",
+    "@types/bip39": "^3.0.4",
     "@types/node": "^20",
     "@types/puppeteer": "^5.4.7",
     "@types/react": "^19",
