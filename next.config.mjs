@@ -6,7 +6,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
@@ -21,17 +21,26 @@ const nextConfig = {
       '@noble/hashes/sha2': '@noble/hashes/sha2.js',
     };
     
-    // Exclude Node.js built-ins from browser bundle
+    // Add polyfills for browser
     if (!isServer) {
+      config.plugins.push(
+        new webpack.ProvidePlugin({
+          global: 'global/window',
+          Buffer: ['buffer', 'Buffer'],
+          process: 'process/browser',
+        })
+      );
+      
       config.resolve.fallback = {
         ...config.resolve.fallback,
         crypto: false,
         'node:crypto': false,
         stream: false,
-        buffer: false,
+        buffer: 'buffer',
         util: false,
         fs: false,
         path: false,
+        process: 'process/browser',
       };
     }
     
