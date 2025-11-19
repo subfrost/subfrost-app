@@ -18,7 +18,7 @@
     "test:e2e": "npm run test:e2e:swap && npm run test:e2e:vault"
   },
   "dependencies": {
-    "@alkanes/ts-sdk": "file:../alkanes-rs/ts-sdk",
+    "@alkanes/ts-sdk": "file:./ts-sdk",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@omnisat/lasereyes-core": "^0.0.82",
     "@omnisat/lasereyes-react": "^0.0.77",
