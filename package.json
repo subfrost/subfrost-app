@@ -20,6 +20,7 @@
   "dependencies": {
     "@alkanes/ts-sdk": "file:./ts-sdk",
     "@bitcoinerlab/secp256k1": "^1.2.0",
+    "@noble/hashes": "^2.0.1",
     "@omnisat/lasereyes-core": "^0.0.82",
     "@omnisat/lasereyes-react": "^0.0.77",
     "@oyl/sdk": "git+https://github.com/Oyl-Wallet/oyl-sdk",
