@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useState } from 'react';
 
+export type TokenSelectorMode = 'from' | 'to' | 'pool0' | 'pool1';
+
 export type ModalStoreShape = {
   isConnectWalletOpen: boolean;
   setConnectWalletOpen: (open: boolean) => void;
@@ -11,9 +13,9 @@ export type ModalStoreShape = {
   openTxSettings: () => void;
   closeTxSettings: () => void;
   isTokenSelectorOpen: boolean;
-  tokenSelectorMode: 'from' | 'to' | null;
-  setTokenSelectorOpen: (open: boolean, mode?: 'from' | 'to') => void;
-  openTokenSelector: (mode: 'from' | 'to') => void;
+  tokenSelectorMode: TokenSelectorMode | null;
+  setTokenSelectorOpen: (open: boolean, mode?: TokenSelectorMode) => void;
+  openTokenSelector: (mode: TokenSelectorMode) => void;
   closeTokenSelector: () => void;
 };
 
@@ -37,7 +39,7 @@ export function ModalStore(props: { children: ReactNode }) {
   const [isConnectWalletOpen, setIsConnectWalletOpen] = useState(false);
   const [isTxSettingsOpen, setIsTxSettingsOpen] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
-  const [tokenSelectorMode, setTokenSelectorMode] = useState<'from' | 'to' | null>(null);
+  const [tokenSelectorMode, setTokenSelectorMode] = useState<TokenSelectorMode | null>(null);
 
   const setConnectWalletOpen = (open: boolean) => setIsConnectWalletOpen(open);
   const openConnectWallet = () => setIsConnectWalletOpen(true);
@@ -45,12 +47,12 @@ export function ModalStore(props: { children: ReactNode }) {
   const setTxSettingsOpen = (open: boolean) => setIsTxSettingsOpen(open);
   const openTxSettings = () => setIsTxSettingsOpen(true);
   const closeTxSettings = () => setIsTxSettingsOpen(false);
-  const setTokenSelectorOpen = (open: boolean, mode?: 'from' | 'to') => {
+  const setTokenSelectorOpen = (open: boolean, mode?: TokenSelectorMode) => {
     setIsTokenSelectorOpen(open);
     if (mode) setTokenSelectorMode(mode);
     if (!open) setTokenSelectorMode(null);
   };
-  const openTokenSelector = (mode: 'from' | 'to') => {
+  const openTokenSelector = (mode: TokenSelectorMode) => {
     setTokenSelectorMode(mode);
     setIsTokenSelectorOpen(true);
   };
