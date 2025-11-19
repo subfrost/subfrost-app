@@ -8,6 +8,7 @@ import { useVaultStats } from "@/hooks/useVaultStats";
 import { useVaultDeposit } from "@/hooks/useVaultDeposit";
 import { useVaultWithdraw } from "@/hooks/useVaultWithdraw";
 import { useVaultUnits } from "@/hooks/useVaultUnits";
+import BoostSection from "./BoostSection";
 
 type Props = {
   vault: VaultConfig;
@@ -111,6 +112,9 @@ export default function VaultDetail({ vault }: Props) {
           badges={[vault.tokenSymbol, vault.badge || 'Bitcoin']}
         />
       </div>
+
+      {/* Boost Section - Integrated Gauges */}
+      <BoostSection vault={vault} />
 
       {/* Info Tabs Section */}
       <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">

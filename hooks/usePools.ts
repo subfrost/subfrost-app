@@ -21,6 +21,8 @@ export type PoolsListItem = {
   token1: { id: string; symbol: string; name?: string; iconUrl?: string };
   tvlUsd?: number;
   vol24hUsd?: number;
+  vol7dUsd?: number;
+  vol30dUsd?: number;
   apr?: number;
 };
 
@@ -51,8 +53,9 @@ export function usePools(params: UsePoolsParams = {}) {
       });
 
       const items: PoolsListItem[] = (res.pools ?? []).map((p) => {
-        // poolName like "TOKEN0 / TOKEN1"
-        const [rawA, rawB] = (p.poolName ?? '').split(' / ');
+        // poolName like "TOKEN0 / TOKEN1 LP" or "TOKEN0 / TOKEN1"
+        const poolNameClean = (p.poolName ?? '').replace(/ LP$/, ''); // Remove trailing " LP" if present
+        const [rawA, rawB] = poolNameClean.split(' / ');
         const token0Name = (rawA ?? '').replace('SUBFROST BTC', 'frBTC');
         const token1Name = (rawB ?? '').replace('SUBFROST BTC', 'frBTC');
         const token0Id = `${p.token0.block}:${p.token0.tx}`;
@@ -64,6 +67,8 @@ export function usePools(params: UsePoolsParams = {}) {
         
         const tvlUsd = (p.token0TvlInUsd ?? 0) + (p.token1TvlInUsd ?? 0);
         const vol24hUsd = p.poolVolume1dInUsd ?? 0;
+        const vol7dUsd = 0; // Note: API doesn't provide 7d volume, would need to calculate or add to API
+        const vol30dUsd = p.poolVolume30dInUsd ?? 0;
         return {
           id: `${p.poolId.block}:${p.poolId.tx}`,
           pairLabel: `${token0Name} / ${token1Name} LP`,
@@ -71,6 +76,8 @@ export function usePools(params: UsePoolsParams = {}) {
           token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
           tvlUsd,
           vol24hUsd,
+          vol7dUsd,
+          vol30dUsd,
           apr: undefined,
         };
       });

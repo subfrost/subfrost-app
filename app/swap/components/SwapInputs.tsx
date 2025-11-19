@@ -107,7 +107,14 @@ export default function SwapInputs({
               className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
             >
               {from && (
-                <TokenIcon symbol={from.symbol} id={from.id} iconUrl={from.iconUrl} size="sm" network={network} />
+                <TokenIcon 
+                  key={`from-${from.id}-${from.symbol}`} 
+                  symbol={from.symbol} 
+                  id={from.id} 
+                  iconUrl={from.iconUrl} 
+                  size="sm" 
+                  network={network} 
+                />
               )}
               <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
                 {from?.symbol ?? 'Select'}
@@ -203,7 +210,14 @@ export default function SwapInputs({
               className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
             >
               {to && (
-                <TokenIcon symbol={to.symbol} id={to.id} iconUrl={to.iconUrl} size="sm" network={network} />
+                <TokenIcon 
+                  key={`to-${to.id}-${to.symbol}`} 
+                  symbol={to.symbol} 
+                  id={to.id} 
+                  iconUrl={to.iconUrl} 
+                  size="sm" 
+                  network={network} 
+                />
               )}
               <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
                 {to?.symbol ?? 'Select'}

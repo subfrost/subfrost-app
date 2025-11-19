@@ -27,12 +27,24 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
   const getIconPaths = (): string[] => {
     const paths: string[] = [];
     
-    // Priority 1: Use direct iconUrl if provided (from API - should be Oyl SDK URL)
+    // Priority 1: Special handling for frBTC - always use local logo first (brand consistency)
+    if (symbol?.toLowerCase() === 'frbtc' || id === '32:0') {
+      paths.push('/tokens/frbtc.svg');
+      paths.push('/tokens/frbtc.png');
+      return paths; // Return early to prevent remote fallback
+    }
+    
+    // Priority 2: Special handling for BTC (local file)
+    if (symbol?.toLowerCase() === 'btc' || id === 'btc') {
+      paths.push('/tokens/btc.svg');
+    }
+    
+    // Priority 3: Use direct iconUrl if provided (from API - should be Oyl SDK URL)
     if (iconUrl) {
       paths.push(iconUrl);
     }
     
-    // Priority 2: Try Oyl asset for Alkanes tokens (if id is an alkane ID like "32:0" or "2:56801")
+    // Priority 4: Try Oyl asset for Alkanes tokens (if id is an alkane ID like "32:0" or "2:56801")
     // Alkane IDs use colon format: "block:tx"
     // This ensures official images are tried BEFORE local fallbacks
     if (id && /^\d+:\d+/.test(id)) {
@@ -41,12 +53,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
     }
     
-    // Priority 3: Special handling for BTC (local file)
-    if (symbol?.toLowerCase() === 'btc' || id === 'btc') {
-      paths.push('/tokens/btc.svg');
-    }
-    
-    // Priority 4: Try local token assets by symbol
+    // Priority 5: Try local token assets by symbol
     if (symbol) {
       paths.push(`/tokens/${symbol.toLowerCase()}.svg`);
       paths.push(`/tokens/${symbol.toLowerCase()}.png`);

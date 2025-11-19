@@ -1,6 +1,7 @@
 "use client";
 
 import { useWallet } from "@/context/WalletContext";
+import TokenIcon from "@/app/components/TokenIcon";
 
 type Props = {
   tokenId: string; // Alkane ID like "2:0"
@@ -26,7 +27,6 @@ export default function VaultHero({
   badges = [],
 }: Props) {
   const { network } = useWallet();
-  const tokenImageUrl = `https://asset.oyl.gg/alkanes/${network}/${tokenId.replace(/:/g, '-')}.png`;
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#A8C5E8] to-[#8BB4E0] p-6 text-[#1A2B3D] shadow-lg w-[400px] flex flex-col">
       {/* Back button */}
@@ -39,19 +39,13 @@ export default function VaultHero({
 
       {/* Token Icon */}
       <div className="mb-4 flex justify-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/40 backdrop-blur-sm overflow-hidden border border-white/60">
-          <img 
-            src={tokenImageUrl} 
-            alt={vaultSymbol}
-            className="h-16 w-16 object-contain"
-            style={{
-              filter: 'brightness(0.9) saturate(1.2) hue-rotate(15deg)',
-            }}
-            onError={(e) => {
-              // Fallback to emoji if image fails
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.parentElement!.innerHTML = '<span class="text-4xl">💎</span>';
-            }}
+        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/40 backdrop-blur-sm overflow-hidden border border-white/60 p-2">
+          <TokenIcon 
+            symbol={tokenSymbol}
+            id={tokenId}
+            size="xl"
+            network={network}
+            className="rounded-xl"
           />
         </div>
       </div>
