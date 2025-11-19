@@ -1,6 +1,7 @@
 'use client';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { useApiProvider } from '@/hooks/useApiProvider';
 
 type AmmPageResponse<T> = {
@@ -24,7 +25,7 @@ export function useInfiniteAmmTxHistory({
 }) {
   const api = useApiProvider();
 
-  return useInfiniteQuery<
+  const query = useInfiniteQuery<
     AmmPageResponse<any>,
     Error,
     { pages: AmmPageResponse<any>[]; pageParams: number[] },
@@ -52,6 +53,43 @@ export function useInfiniteAmmTxHistory({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  // Allowlist of allowed pools by poolId (block:tx)
+  const allowedPoolIds = useMemo(
+    () =>
+      new Set<string>([
+        '2:77222',
+        '2:77087',
+        '2:77221',
+        '2:77237',
+        '2:77228',
+        '2:68441',
+        '2:68433',
+      ]),
+    [],
+  );
+
+  // Filter pages to only include allowed pairs; exclude wrap/unwrap always
+  const filteredData = useMemo(() => {
+    if (!query.data) return query.data;
+    const pages = query.data.pages.map((page) => {
+      const items = Array.isArray(page.items) ? page.items : [];
+      const filteredItems = items.filter((row: any) => {
+        if (!row || !row.type) return false;
+        // Do not apply pair filter to wrap/unwrap
+        if (row.type === 'wrap' || row.type === 'unwrap') return true;
+
+        // For AMM pool-related rows, match by poolId = block:tx
+        const poolId = row?.poolBlockId && row?.poolTxId ? `${row.poolBlockId}:${row.poolTxId}` : null;
+        if (!poolId) return false;
+        return allowedPoolIds.has(poolId);
+      });
+      return { ...page, items: filteredItems };
+    });
+    return { ...query.data, pages };
+  }, [query.data, allowedPoolIds]);
+
+  return { ...query, data: filteredData };
 }
 
 
