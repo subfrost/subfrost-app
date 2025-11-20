@@ -37,17 +37,12 @@ function calculateExercisePrice(blocksLeft: number, notionalBtc: number = 1.0): 
 }
 
 type MarketsTableProps = {
+  contracts: Contract[];
   onContractSelect: (contract: { id: string; blocksLeft: number }) => void;
 };
 
-export default function MarketsTable({ onContractSelect }: MarketsTableProps) {
+export default function MarketsTable({ contracts, onContractSelect }: MarketsTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  // Use shared mock contracts data
-  // Market Price must always be HIGHER than Exercise Price
-  // Exercise Price = what you get when exercising now (with premium)
-  // Market Price = price to buy ftrBTC on secondary market
-  const contracts: Contract[] = mockContracts;
 
   const toggleRow = (contractId: string) => {
     const newExpanded = new Set(expandedRows);
