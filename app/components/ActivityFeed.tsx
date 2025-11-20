@@ -106,42 +106,46 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
   };
 
   return (
-    <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-white/5">
-      <div className="flex items-center justify-between px-4 py-3 gap-2">
-        <h3 className="text-base font-semibold text-[color:var(--sf-text)]">Global Activity</h3>
-        <div className="flex items-center gap-2">
-          {!isFullPage && (
-            <Link href="/activity" className="rounded-md border border-white/10 px-2 py-1 text-xs text-[color:var(--sf-primary)] hover:underline">
+    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-[color:var(--sf-text)]">Global Activity</h3>
+            <select
+              className="rounded-md border border-white/20 bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)]"
+              value={txFilter}
+              onChange={(e) => setTxFilter(e.target.value as any)}
+            >
+              <option value="all">All Types</option>
+              <option value="swap">Swaps</option>
+              <option value="mint">Supply</option>
+              <option value="burn">Withdraw</option>
+              <option value="creation">Create Pool</option>
+              <option value="wrap">Wrap</option>
+              <option value="unwrap">Unwrap</option>
+            </select>
+          </div>
+          {!isFullPage ? (
+            <Link href="/activity" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors">
               View all
             </Link>
+          ) : (
+            <Link href="/" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors">
+              Back
+            </Link>
           )}
-          <select
-            className="rounded-md border border-white/20 bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)]"
-            value={txFilter}
-            onChange={(e) => setTxFilter(e.target.value as any)}
-          >
-            <option value="all">All</option>
-            <option value="swap">Swaps</option>
-            <option value="mint">Supply</option>
-            <option value="burn">Withdraw</option>
-            <option value="creation">Create Pool</option>
-            <option value="wrap">Wrap</option>
-            <option value="unwrap">Unwrap</option>
-          </select>
         </div>
       </div>
-      <div className="h-px w-full bg-white/10" />
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
         {/* Header */}
-        <div className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-4 px-4 py-2 text-xs text-[color:var(--sf-text)]/60">
+        <div className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-white/40 border-b-2 border-[color:var(--sf-glass-border)]">
           <div>Txn</div>
           <div>Pair</div>
           <div className="text-right">Amounts</div>
           <div className="text-right">Address</div>
           <div className="text-right">Time</div>
         </div>
-        <div className="h-px w-full bg-white/10" />
 
         {/* Rows */}
         {items.map((row, idx) => {
@@ -200,7 +204,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-4 px-4 py-2 transition-colors hover:bg-white/5"
+              className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-4 px-6 py-4 transition-all hover:bg-white/20 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
             >
               <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
@@ -213,7 +217,12 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 />
                 <div className="min-w-0">
                   <div className="truncate text-sm text-[color:var(--sf-text)]">
-                    {pairNames.leftName} · {pairNames.rightName}
+                    {(row.type === 'mint' || row.type === 'burn') 
+                      ? `${pairNames.leftName} / ${pairNames.rightName}`
+                      : (row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap')
+                      ? `${pairNames.leftName} → ${pairNames.rightName}`
+                      : `${pairNames.leftName} · ${pairNames.rightName}`
+                    }
                   </div>
                 </div>
               </div>

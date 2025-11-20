@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import {
   LaserEyesLogo,
   MAGIC_EDEN,
@@ -63,21 +63,30 @@ export default function ConnectWalletModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm"
       onClick={() => onConnectModalOpenChange(false)}
     >
       <div
-        className="h-[80vh] max-h-[720px] w-[560px] max-w-[92vw] overflow-hidden rounded-3xl border border-white/10 bg-background"
+        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(40,67,114,0.4)] backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-4 pb-2">
-          <div className="ml-1 text-center text-xl font-medium leading-10">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b-2 border-[color:var(--sf-glass-border)] bg-white/40 px-6 py-5">
+          <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
             Select your wallet
-          </div>
+          </h2>
+          <button
+            onClick={() => onConnectModalOpenChange(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-white/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-white hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="scrollbar-hide relative z-0 h-[calc(80vh-96px)] w-full overflow-y-auto px-6 pb-20">
-          <div className="flex w-full flex-col gap-2">
+        {/* Wallet List */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          <div className="space-y-1">
             {Object.values(WALLETS).map((wallet) => {
               // @ts-ignore
               const isMissingWallet = !hasWallet[wallet.name];
@@ -87,10 +96,10 @@ export default function ConnectWalletModal() {
                   onClick={
                     isMissingWallet ? undefined : () => finalizeConnect(wallet.name)
                   }
-                  className="group flex w-full items-center justify-between rounded-md border border-white/10 bg-white/5 px-4 py-4 text-left transition-colors hover:bg-white/10"
+                  className="group w-full rounded-xl border-2 p-4 text-left transition-all hover:shadow-md sf-focus-ring border-transparent bg-white/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-white/60"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex size-[32px] min-h-[32px] min-w-[32px] items-center justify-center">
+                    <div className="flex size-[32px] min-h-[32px] min-w-[32px] items-center justify-center flex-shrink-0">
                       <WalletIcon
                         size={32}
                         // @ts-ignore
@@ -98,57 +107,63 @@ export default function ConnectWalletModal() {
                         className="!h-[32px] !w-[32px]"
                       />
                     </div>
-                    <span className="retro-text text-sm">
-                      {
-                        // @ts-ignore
-                        String(wallet.name)
-                          .replace(/[-_]/g, ' ')
-                          .split(' ')
-                          .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                          .join(' ')
-                      }
-                    </span>
-                  </div>
-
-                  {isMissingWallet ? (
-                    <a
-                      // @ts-ignore
-                      href={wallet.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-blue-800 hover:text-blue-600"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="text-sm">Install</span>
-                      <ChevronRight className="size-4" />
-                    </a>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">Connect</span>
-                      <ChevronRight className="size-4" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-colors">
+                        {
+                          // @ts-ignore
+                          String(wallet.name)
+                            .replace(/[-_]/g, ' ')
+                            .split(' ')
+                            .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                            .join(' ')
+                        }
+                      </span>
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      {isMissingWallet ? (
+                        <a
+                          // @ts-ignore
+                          href={wallet.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-sm font-medium text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary)]/80 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span>Install</span>
+                          <ChevronRight className="size-4" />
+                        </a>
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium text-[color:var(--sf-text)]/60">Connect</span>
+                          <ChevronRight className="size-4 text-[color:var(--sf-text)]/60" />
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </button>
               );
             })}
           </div>
         </div>
 
-        <div className="group fixed bottom-3 left-1/2 -translate-x-1/2 text-[8px]">
-          <div className="retro-text text-center text-xs text-blue-500 opacity-100 transition-opacity duration-300 ease-in-out group-hover:opacity-0 dark:text-gray-400">
-            <a href="https://www.lasereyes.build/" target="_blank" rel="noopener noreferrer">
-              Powered by LaserEyes
-            </a>
-          </div>
-          <div className="absolute left-1/2 mt-1 -translate-x-1/2 opacity-0 transition-opacity duration-500 ease-in-out group-hover:opacity-100">
-            <a
-              href="https://www.lasereyes.build/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex justify-center"
-            >
-              <LaserEyesLogo width={48} color={'darkBlue'} />
-            </a>
+        {/* Footer */}
+        <div className="border-t-2 border-[color:var(--sf-glass-border)] bg-white/20 px-6 py-4">
+          <div className="group relative text-center">
+            <div className="text-xs font-medium text-[color:var(--sf-text)]/50 opacity-100 transition-opacity duration-300 ease-in-out group-hover:opacity-0">
+              <a href="https://www.lasereyes.build/" target="_blank" rel="noopener noreferrer">
+                Powered by LaserEyes
+              </a>
+            </div>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-500 ease-in-out group-hover:opacity-100">
+              <a
+                href="https://www.lasereyes.build/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex justify-center"
+              >
+                <LaserEyesLogo width={48} color={'darkBlue'} />
+              </a>
+            </div>
           </div>
         </div>
       </div>

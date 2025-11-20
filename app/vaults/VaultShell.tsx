@@ -10,11 +10,6 @@ export default function VaultShell() {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-[color:var(--sf-text)]">Vaults</h1>
-      </div>
-
       {/* Content */}
       {selectedVault ? (
         <div className="space-y-4">

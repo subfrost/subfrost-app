@@ -217,55 +217,54 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
       {/* Desktop Table View */}
       {filteredPools.length > 0 && (
         <div className="hidden lg:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+        <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-base font-bold text-[color:var(--sf-text)]">Markets</h3>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrencyDisplay('usd')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    currencyDisplay === 'usd' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  $
+                </button>
+                <span className="text-[color:var(--sf-text)]/30">|</span>
+                <button
+                  onClick={() => setCurrencyDisplay('btc')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    currencyDisplay === 'btc' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  ₿
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setVolumePeriod('24h')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    volumePeriod === '24h' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  24H
+                </button>
+                <span className="text-[color:var(--sf-text)]/30">|</span>
+                <button
+                  onClick={() => setVolumePeriod('30d')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    volumePeriod === '30d' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  30D
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="h-9">
-                <th className="px-6"></th>
-                <th className="px-6">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button
-                      onClick={() => setCurrencyDisplay('usd')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        currencyDisplay === 'usd' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      $
-                    </button>
-                    <span className="text-[color:var(--sf-text)]/30">|</span>
-                    <button
-                      onClick={() => setCurrencyDisplay('btc')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        currencyDisplay === 'btc' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      ₿
-                    </button>
-                  </div>
-                </th>
-                <th className="px-6">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button
-                      onClick={() => setVolumePeriod('24h')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        volumePeriod === '24h' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      24H
-                    </button>
-                    <span className="text-[color:var(--sf-text)]/30">|</span>
-                    <button
-                      onClick={() => setVolumePeriod('30d')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        volumePeriod === '30d' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      30D
-                    </button>
-                  </div>
-                </th>
-                <th className="px-6"></th>
-              </tr>
               <tr className="border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
                 <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
                 <th className="px-6 py-4 text-right">
@@ -452,7 +451,7 @@ function SortableHeader({
     <th className={`px-6 py-4 ${align === 'right' ? 'text-right' : 'text-left'}`}>
       <button
         onClick={() => onSort(field)}
-        className={`inline-flex items-center gap-2 font-bold uppercase tracking-wider text-xs transition-colors sf-focus-ring ${alignClass} ${
+        className={`inline-flex items-center gap-2 font-bold uppercase tracking-wider text-xs transition-colors outline-none ${alignClass} ${
           isActive ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
         }`}
       >

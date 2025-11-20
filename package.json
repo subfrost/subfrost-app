@@ -22,7 +22,7 @@
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@noble/hashes": "^2.0.1",
     "@omnisat/lasereyes-core": "^0.0.82",
-    "@omnisat/lasereyes-react": "^0.0.77",
+    "@omnisat/lasereyes-react": "^0.0.78",
     "@oyl/sdk": "git+https://github.com/Oyl-Wallet/oyl-sdk",
     "@tanstack/react-query": "^5.83.0",
     "bignumber.js": "^9.3.1",

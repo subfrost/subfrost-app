@@ -8,15 +8,20 @@ import PageContent from "@/app/components/PageContent";
 
 export default function Home() {
   return (
-    <AlkanesMainWrapper header={<PageHeader title={<span>Home</span>} />} >
+    <AlkanesMainWrapper>
       <PageContent className="px-4 md:px-5">
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-          {/* Wide trending pairs at top */}
-          <TrendingPairs />
+          {/* Top row: 1/4 Trending Pair, 3/4 Trending Vaults */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <div className="lg:col-span-1">
+              <TrendingPairs />
+            </div>
+            <div className="lg:col-span-3">
+              <VaultTiles />
+            </div>
+          </div>
           {/* Global activity full width, compact height */}
           <ActivityFeed maxHeightClass="max-h-[40vh]" />
-          {/* Vault tiles below */}
-          <VaultTiles />
         </div>
       </PageContent>
     </AlkanesMainWrapper>

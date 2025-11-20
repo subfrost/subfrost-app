@@ -35,6 +35,17 @@ export default function SwapShell() {
   const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
   const markets = useMemo<PoolSummary[]>(() => (poolsData?.items ?? []), [poolsData?.items]);
 
+  // Define allowed token symbols - matches what's shown in MarketsGrid
+  const allowedTokenSymbols = useMemo(() => new Set([
+    'BTC',
+    'frBTC', 
+    'bUSD',
+    'DIESEL',
+    'METHANE',
+    'ALKAMIST',
+    'GOLD DUST'
+  ]), []);
+
   // Tab state
   const [selectedTab, setSelectedTab] = useState<'swap' | 'lp'>('swap');
   
@@ -122,7 +133,7 @@ export default function SwapShell() {
     }
   }, [poolToken1, selectedTab]);
 
-  // Build FROM options: BTC + all user-held tokens
+  // Build FROM options: BTC + all user-held tokens, filtered by allowed tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [{ id: 'btc', symbol: 'BTC', name: 'Bitcoin' }]; // BTC uses local icon
     userCurrencies.forEach((c: any) => {
@@ -141,8 +152,10 @@ export default function SwapShell() {
       });
     });
     const seen = new Set<string>();
-    return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
-  }, [userCurrencies, network]);
+    return opts
+      .filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true))
+      .filter((t) => allowedTokenSymbols.has(t.symbol));
+  }, [userCurrencies, network, allowedTokenSymbols]);
 
   // Build TO options based on selected FROM: tokens that have pool with FROM
   const normalizedFromId = useMemo(() =>
@@ -204,7 +217,7 @@ export default function SwapShell() {
         name: 'bUSD',
         iconUrl: `https://asset.oyl.gg/alkanes/${network}/${busdUrlSafe}.png`
       });
-      return opts;
+      return opts.filter((t) => allowedTokenSymbols.has(t.symbol));
     }
     
     // Case 2: Selling BUSD - only show direct BUSD pairs
@@ -218,7 +231,9 @@ export default function SwapShell() {
         opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
       }
       const seen = new Set<string>();
-      return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
+      return opts
+        .filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true))
+        .filter((t) => allowedTokenSymbols.has(t.symbol));
     }
     
     // Case 3: Selling BTC or frBTC - show direct frBTC pairs + BTC
@@ -246,7 +261,9 @@ export default function SwapShell() {
         opts.unshift({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
       }
       const seen = new Set<string>();
-      return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
+      return opts
+        .filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true))
+        .filter((t) => allowedTokenSymbols.has(t.symbol));
     }
     
     // Case 4: Selling other alkane - show direct + bridge options
@@ -284,10 +301,12 @@ export default function SwapShell() {
       opts.push({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
     }
     
-    // Unique by id
+    // Unique by id and filter by allowed tokens
     const seen = new Set<string>();
-    return opts.filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true));
-  }, [fromPairs, busdPairs, frbtcPairs, idToUserCurrency, normalizedFromId, fromToken, BUSD_ALKANE_ID, FRBTC_ALKANE_ID, tokenDisplayMap, network]);
+    return opts
+      .filter((t) => (seen.has(t.id) ? false : seen.add(t.id) || true))
+      .filter((t) => allowedTokenSymbols.has(t.symbol));
+  }, [fromPairs, busdPairs, frbtcPairs, idToUserCurrency, normalizedFromId, fromToken, BUSD_ALKANE_ID, FRBTC_ALKANE_ID, tokenDisplayMap, network, allowedTokenSymbols]);
 
   // Balances
   const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
@@ -444,6 +463,62 @@ export default function SwapShell() {
     });
   }, [toOptions, idToUserCurrency, tokenDisplayMap]);
 
+  // Pool token options - filtered to only show tokens that are in the displayed markets
+  const poolTokenOptions = useMemo<TokenOption[]>(() => {
+    // Define allowed pairs - same as MarketsGrid filter
+    const allowedPairs = new Set([
+      'DIESEL / frBTC LP',
+      'frBTC / DIESEL LP',
+      'METHANE / frBTC LP',
+      'frBTC / METHANE LP',
+      'ALKAMIST / frBTC LP',
+      'frBTC / ALKAMIST LP',
+      'GOLD DUST / frBTC LP',
+      'frBTC / GOLD DUST LP',
+      'bUSD / frBTC LP',
+      'frBTC / bUSD LP',
+      'DIESEL / bUSD LP',
+      'bUSD / DIESEL LP',
+      'METHANE / bUSD LP',
+      'bUSD / METHANE LP',
+    ]);
+    
+    const poolTokenIds = new Set<string>();
+    
+    // Collect token IDs only from allowed pairs
+    markets
+      .filter(pool => allowedPairs.has(pool.pairLabel))
+      .forEach(pool => {
+        poolTokenIds.add(pool.token0.id);
+        poolTokenIds.add(pool.token1.id);
+      });
+    
+    // Also add BTC since it can be wrapped to frBTC
+    if (poolTokenIds.has(FRBTC_ALKANE_ID)) {
+      poolTokenIds.add('btc');
+    }
+    
+    // Filter toOptions to only include tokens that are in allowed pools
+    return toOptions
+      .filter(token => {
+        // Map BTC to frBTC for checking
+        const tokenId = token.id === 'btc' ? FRBTC_ALKANE_ID : token.id;
+        return poolTokenIds.has(tokenId);
+      })
+      .map((token) => {
+        const currency = idToUserCurrency.get(token.id);
+        const fetched = tokenDisplayMap?.[token.id];
+        return {
+          id: token.id,
+          symbol: token.symbol,
+          name: token.name || fetched?.name,
+          iconUrl: currency?.iconUrl,
+          balance: currency?.balance,
+          price: currency?.priceInfo?.price,
+        };
+      });
+  }, [toOptions, markets, idToUserCurrency, tokenDisplayMap, FRBTC_ALKANE_ID]);
+
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {
       const token = fromOptions.find((t) => t.id === tokenId);
@@ -459,14 +534,16 @@ export default function SwapShell() {
         setToToken(token);
       }
     } else if (tokenSelectorMode === 'pool0') {
-      const token = toOptions.find((t) => t.id === tokenId);
-      if (token) {
-        setPoolToken0(token);
+      // Find token in the filtered pool options
+      const filteredToken = toOptions.find((t) => t.id === tokenId);
+      if (filteredToken) {
+        setPoolToken0(filteredToken);
       }
     } else if (tokenSelectorMode === 'pool1') {
-      const token = toOptions.find((t) => t.id === tokenId);
-      if (token) {
-        setPoolToken1(token);
+      // Find token in the filtered pool options
+      const filteredToken = toOptions.find((t) => t.id === tokenId);
+      if (filteredToken) {
+        setPoolToken1(filteredToken);
       }
     }
   };
@@ -663,6 +740,8 @@ export default function SwapShell() {
         tokens={
           tokenSelectorMode === 'from'
             ? fromTokenOptions 
+            : tokenSelectorMode === 'pool0' || tokenSelectorMode === 'pool1'
+            ? poolTokenOptions
             : toTokenOptions
         }
         onSelectToken={handleTokenSelect}

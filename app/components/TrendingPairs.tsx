@@ -29,36 +29,44 @@ function formatUsd(n?: number) {
 }
 
 export default function TrendingPairs() {
-  const { data } = usePools({ sortBy: 'volume1d', order: 'desc', limit: 6 });
-  const pairs = useMemo(() => (data?.items ?? []).slice(0, 6), [data?.items]);
+  const { data } = usePools({ sortBy: 'volume1d', order: 'desc', limit: 1 });
+  const pairs = useMemo(() => (data?.items ?? []).slice(0, 1), [data?.items]);
 
   return (
-    <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-white/5 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-[color:var(--sf-text)]">Trending pairs</h3>
-        <Link href="/swap" className="text-xs text-[color:var(--sf-primary)] hover:underline">View all</Link>
+    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">Trending Pair</h3>
+          <Link href="/swap" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors">View all</Link>
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {pairs.map((p) => (
-          <Link
-            key={p.id}
-            href="/swap"
-            className="group rounded-xl border border-[color:var(--sf-glass-border)] bg-white/5 p-3 transition-colors hover:bg-white/10"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <PairBadge a={{ id: p.token0.id, symbol: p.token0.symbol }} b={{ id: p.token1.id, symbol: p.token1.symbol }} />
-            </div>
-            <div className="mt-2 flex items-center justify-end">
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-wide text-[color:var(--sf-text)]/60">TVL</div>
-                <div className="text-sm font-semibold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+      <div className="p-4">
+        <div className="grid grid-cols-1 gap-3">
+          {pairs.map((p) => (
+            <Link
+              key={p.id}
+              href="/swap"
+              className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(40,67,114,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-white/20 sf-focus-ring"
+            >
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <PairBadge a={{ id: p.token0.id, symbol: p.token0.symbol }} b={{ id: p.token1.id, symbol: p.token1.symbol }} />
               </div>
-            </div>
-          </Link>
-        ))}
-        {pairs.length === 0 && (
-          <div className="text-sm text-[color:var(--sf-text)]/60">No pairs available.</div>
-        )}
+              <div className="flex items-center justify-between gap-4">
+                <div className="text-left">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Volume</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+                </div>
+              </div>
+            </Link>
+          ))}
+          {pairs.length === 0 && (
+            <div className="text-sm text-[color:var(--sf-text)]/60">No pairs available.</div>
+          )}
+        </div>
       </div>
     </div>
   );

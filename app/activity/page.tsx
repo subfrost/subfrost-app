@@ -7,7 +7,7 @@ import ActivityFeed from "@/app/components/ActivityFeed";
 
 export default function ActivityPage() {
   return (
-    <AlkanesMainWrapper header={<PageHeader title={<span>Activity</span>} />}>
+    <AlkanesMainWrapper>
       <PageContent className="px-4 md:px-5">
         <ActivityFeed isFullPage />
       </PageContent>
