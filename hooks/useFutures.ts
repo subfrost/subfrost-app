@@ -3,52 +3,91 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAlkanesWallet } from './useAlkanesWallet';
 import {
-  getFutures,
+  getAllFutures,
   generateFuture,
   getCurrentBlockHeight,
   type FutureToken,
 } from '@/lib/oyl/alkanes/futures';
 
+// Create a simple provider for reading public blockchain data (no wallet needed)
+async function createReadOnlyProvider() {
+  const { Provider } = await import('@oyl/sdk');
+  const bitcoin = await import('bitcoinjs-lib');
+  
+  // Create provider using the @oyl/sdk Provider class
+  const provider = new Provider({
+    url: 'http://localhost:18888', // metashrew RPC
+    projectId: 'regtest-local',
+    network: bitcoin.networks.regtest,
+    networkType: 'regtest',
+  });
+  
+  return provider;
+}
+
 export function useFutures() {
-  const { provider, address } = useAlkanesWallet();
+  const [provider, setProvider] = useState<any>(null);
   const [futures, setFutures] = useState<FutureToken[]>([]);
   const [currentBlock, setCurrentBlock] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Initialize provider on mount (no wallet needed for viewing futures)
+  useEffect(() => {
+    createReadOnlyProvider()
+      .then(p => {
+        console.log('[useFutures] Provider initialized:', !!p);
+        setProvider(p);
+      })
+      .catch(err => {
+        console.error('[useFutures] Failed to create provider:', err);
+        setError('Failed to initialize provider');
+      });
+  }, []);
+
   // Fetch current block height
   const fetchBlockHeight = useCallback(async () => {
-    if (!provider) return;
+    if (!provider) {
+      console.log('[useFutures] No provider, skipping block height fetch');
+      return;
+    }
 
     try {
       const height = await getCurrentBlockHeight(provider);
+      console.log('[useFutures] Current block height:', height);
       setCurrentBlock(height);
     } catch (err) {
-      console.error('Failed to fetch block height:', err);
+      console.error('[useFutures] Failed to fetch block height:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch block height');
     }
   }, [provider]);
 
-  // Fetch all futures for the current address
+  // Fetch all futures (public data, no wallet needed)
   const fetchFutures = useCallback(async () => {
-    if (!provider || !address || currentBlock === 0) return;
+    console.log('[useFutures] fetchFutures called', { provider: !!provider, currentBlock });
+    
+    if (!provider || currentBlock === 0) {
+      console.log('[useFutures] Skipping fetch - provider or block not ready');
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const fetchedFutures = await getFutures(provider, address, currentBlock);
+      console.log('[useFutures] Calling getAllFutures...');
+      const fetchedFutures = await getAllFutures(provider, currentBlock);
+      console.log('[useFutures] Got futures:', fetchedFutures.length);
       setFutures(fetchedFutures);
     } catch (err) {
-      console.error('Failed to fetch futures:', err);
+      console.error('[useFutures] Failed to fetch futures:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch futures');
       setFutures([]);
     } finally {
       setLoading(false);
     }
-  }, [provider, address, currentBlock]);
+  }, [provider, currentBlock]);
 
   // Generate a new future (regtest only)
   const handleGenerateFuture = useCallback(async (rpcUrl?: string) => {
