@@ -3,6 +3,8 @@ export type TokenMeta = {
   symbol: string;
   name?: string;
   iconUrl?: string;
+  isAvailable?: boolean;
+  unavailableReason?: 'no_balance' | 'no_pool';
 };
 
 export type PoolSummary = {
@@ -11,6 +13,8 @@ export type PoolSummary = {
   token0: TokenMeta;
   token1: TokenMeta;
   tvlUsd?: number;
+  token0TvlUsd?: number;
+  token1TvlUsd?: number;
   vol24hUsd?: number;
   vol7dUsd?: number;
   vol30dUsd?: number;

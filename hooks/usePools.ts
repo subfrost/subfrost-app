@@ -69,16 +69,19 @@ export function usePools(params: UsePoolsParams = {}) {
         const vol24hUsd = p.poolVolume1dInUsd ?? 0;
         const vol7dUsd = 0; // Note: API doesn't provide 7d volume, would need to calculate or add to API
         const vol30dUsd = p.poolVolume30dInUsd ?? 0;
+        const apr = p.poolApr ?? 0;
         return {
           id: `${p.poolId.block}:${p.poolId.tx}`,
           pairLabel: `${token0Name} / ${token1Name} LP`,
           token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: token0IconUrl },
           token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
           tvlUsd,
+          token0TvlUsd: p.token0TvlInUsd,
+          token1TvlUsd: p.token1TvlInUsd,
           vol24hUsd,
           vol7dUsd,
           vol30dUsd,
-          apr: undefined,
+          apr,
         };
       });
 

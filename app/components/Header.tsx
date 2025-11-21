@@ -126,7 +126,7 @@
 
    return (
     <header className="relative z-50 w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(40,67,114,0.05)] border-b border-[color:var(--sf-glass-border)]">
-      <div className="relative flex h-16 w-full items-center px-6 sm:h-20 sm:px-10">
+      <div className="relative flex h-[58px] w-full items-center px-6 sm:px-10">
         {/* Brand */}
         <Link href="/" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">
           <Image
@@ -135,6 +135,7 @@
             width={24}
             height={24}
             priority
+            className="w-6 h-6"
           />
           <Image
             src="/brand/subfrost-wordmark.svg"
@@ -142,21 +143,22 @@
             width={180}
             height={24}
             priority
+            className="transition-opacity hover:opacity-80 h-6 w-auto"
           />
         </Link>
 
         {/* Desktop Nav (centered to viewport) */}
-        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-12 md:flex">
-          <Link href="/" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all ${isActive('/') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-4 md:flex lg:gap-8 xl:gap-12">
+          <Link href="/" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
             HOME
           </Link>
-          <Link href="/swap" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all ${isActive('/swap') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+          <Link href="/swap" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/swap') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
             SWAP
           </Link>
-          <Link href="/vaults" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+          <Link href="/vaults" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
             VAULTS
           </Link>
-          <Link href="/futures" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all ${isActive('/futures') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+          <Link href="/futures" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/futures') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
             FUTURES
           </Link>
         </nav>
@@ -220,7 +222,7 @@
            </button>
 
            {mobileMenuOpen && (
-             <div className="fixed left-0 right-0 top-16 mx-4 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+             <div className="fixed left-0 right-0 top-[58px] mx-4 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                <nav className="flex flex-col">
                  <Link
                    href="/"

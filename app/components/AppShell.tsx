@@ -10,8 +10,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="absolute inset-0 sf-watermark" aria-hidden />
       <div className="absolute inset-0 sf-snow" aria-hidden />
       <Header />
-      <main className="relative flex-1">
-        <div className="container relative mx-auto flex justify-center px-4 pt-8 sm:pt-12 pb-8">
+      <main className="relative flex-1 flex flex-col min-h-0">
+        <div className="container relative mx-auto flex justify-center px-4 pt-8 sm:pt-12 pb-8 flex-1 min-h-0">
           {children}
         </div>
       </main>

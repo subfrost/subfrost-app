@@ -15,10 +15,14 @@ type AmmRow =
   | ({ type: 'wrap'; address?: string; transactionId: string; timestamp: string; amount: string })
   | ({ type: 'unwrap'; address?: string; transactionId: string; timestamp: string; amount: string });
 
-function formatAmount(raw: string, decimals = 8, fractionDigits = 2) {
+function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
   const n = Number(raw ?? '0');
   const scaled = n / Math.pow(10, decimals);
   if (!Number.isFinite(scaled)) return '0';
+  
+  // Use 4 decimals for BTC/frBTC, 2 for other tokens
+  const fractionDigits = (tokenSymbol === 'BTC' || tokenSymbol === 'frBTC') ? 4 : 2;
+  
   if (scaled > 0 && scaled < Math.pow(10, -fractionDigits)) {
     return `<${(Math.pow(10, -fractionDigits)).toFixed(fractionDigits)}`;
   }
@@ -102,7 +106,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
   const getName = (id: string | undefined) => {
     if (!id) return '';
     const d = displayMap?.[id];
-    return d?.symbol || d?.name || id;
+    return d?.name || d?.symbol || id;
   };
 
   return (
@@ -230,32 +234,32 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               <div className="text-right font-mono text-xs text-[color:var(--sf-text)]">
                 {row.type === 'swap' && (
                   <>
-                    <div>- {formatAmount(row.soldAmount)} {pairNames.leftName}</div>
-                    <div className="text-green-500">+ {formatAmount(row.boughtAmount)} {pairNames.rightName}</div>
+                    <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                    <div className="text-green-500">+ {formatAmount(row.boughtAmount, 8, pairNames.rightName)} {pairNames.rightName}</div>
                   </>
                 )}
                 {row.type === 'mint' && (
                   <>
-                    <div>- {formatAmount((row as any).token0Amount)} {pairNames.leftName}</div>
-                    <div>- {formatAmount((row as any).token1Amount)} {pairNames.rightName}</div>
+                    <div>- {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                    <div>- {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
                   </>
                 )}
                 {(row.type === 'burn' || row.type === 'creation') && (
                   <>
-                    <div className="text-green-500">+ {formatAmount((row as any).token0Amount)} {pairNames.leftName}</div>
-                    <div className="text-green-500">+ {formatAmount((row as any).token1Amount)} {pairNames.rightName}</div>
+                    <div className="text-green-500">+ {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                    <div className="text-green-500">+ {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
                   </>
                 )}
                 {row.type === 'wrap' && (
                   <>
-                    <div>- {formatAmount((row as any).amount)} BTC</div>
-                    <div className="text-green-500">+ {formatAmount((row as any).amount)} frBTC</div>
+                    <div>- {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
+                    <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
                   </>
                 )}
                 {row.type === 'unwrap' && (
                   <>
-                    <div>- {formatAmount((row as any).amount)} frBTC</div>
-                    <div className="text-green-500">+ {formatAmount((row as any).amount)} BTC</div>
+                    <div>- {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
+                    <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
                   </>
                 )}
               </div>

@@ -7,7 +7,7 @@ import {
 } from '@omnisat/lasereyes-react';
 import { type Account, getAddressType, AddressType } from '@oyl/sdk';
 import type { ReactNode } from 'react';
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 
 import { NetworkMap } from '@/utils/constants';
 import type { Network, utxo } from '@oyl/sdk';
@@ -54,7 +54,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   // @ts-ignore
-  const account: Account = (() => {
+  const account: Account = useMemo(() => {
     // Detect address types independently for both addresses
     const addressType = getAddressType(laserEyesContext.address);
     const paymentAddressType = getAddressType(laserEyesContext.paymentAddress);
@@ -92,7 +92,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       spendStrategy: {
         addressOrder: ['nativeSegwit', 'taproot'],
         utxoSortGreatestToLeast: true,
-        changeAddress: 'nativeSegwit', // Default to nativeSegwit for change
+        changeAddress: 'nativeSegwit',
       },
       network: NetworkMap[laserEyesContext.network as Network],
     };
@@ -141,7 +141,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     
     return accountStructure;
-  })();
+  }, [
+    laserEyesContext.address,
+    laserEyesContext.paymentAddress,
+    laserEyesContext.publicKey,
+    laserEyesContext.paymentPublicKey,
+    laserEyesContext.network,
+  ]);
 
   const getUtxos = async () => {
     const api = getApiProvider(network);

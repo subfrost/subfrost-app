@@ -12,6 +12,7 @@ export type TokenOption = {
   iconUrl?: string;
   balance?: string;
   price?: number;
+  isAvailable?: boolean;
 };
 
 type Props = {
@@ -22,6 +23,7 @@ type Props = {
   selectedTokenId?: string;
   title?: string;
   network?: Network;
+  excludedTokenIds?: string[];
 };
 
 export default function TokenSelectorModal({
@@ -32,6 +34,7 @@ export default function TokenSelectorModal({
   selectedTokenId,
   title = 'Select a token',
   network = 'mainnet',
+  excludedTokenIds = [],
 }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -65,17 +68,22 @@ export default function TokenSelectorModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-[color:var(--sf-glass-border)] bg-white/40 px-6 py-5">
-          <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-white/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-white hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
+        <div className="border-b-2 border-[color:var(--sf-glass-border)] bg-white/40 px-6 py-5">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
+              {title}
+            </h2>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-white/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-white hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <p className="text-xs font-medium text-[color:var(--sf-text)]/60">
+            We only support trades matched with BTC, frBTC, or bUSD
+          </p>
         </div>
 
         {/* Search */}
@@ -107,6 +115,7 @@ export default function TokenSelectorModal({
             <div className="space-y-1">
               {filteredTokens.map((token) => {
                 const isSelected = token.id === selectedTokenId;
+                const isAvailable = token.isAvailable !== false;
                 const balanceNum = token.balance ? parseFloat(token.balance) / 1e8 : 0;
                 const valueUsd = token.price && token.balance 
                   ? (balanceNum * token.price).toFixed(2) 
@@ -116,11 +125,14 @@ export default function TokenSelectorModal({
                   <button
                     key={token.id}
                     onClick={() => handleSelect(token.id)}
-                    className={`group w-full rounded-xl border-2 p-4 text-left transition-all hover:shadow-md sf-focus-ring ${
-                      isSelected
-                        ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
-                        : 'border-transparent bg-white/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-white/60'
+                    className={`group relative w-full rounded-xl border-2 p-4 text-left transition-all sf-focus-ring ${
+                      !isAvailable
+                        ? 'border-transparent bg-gray-300/50 opacity-50 cursor-not-allowed'
+                        : isSelected
+                        ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 hover:shadow-md'
+                        : 'border-transparent bg-white/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-white/60 hover:shadow-md'
                     }`}
+                    disabled={!isAvailable}
                   >
                     <div className="flex items-center gap-3">
                       <TokenIcon
