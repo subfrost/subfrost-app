@@ -9,10 +9,13 @@ import { NetworkMap, SandshrewUrlMap } from '@/utils/constants';
 import { getConfig } from '@/utils/getConfig';
 
 export async function getSandshrewProvider(network: Network): Promise<any> {
-  const url = SandshrewUrlMap[network] ?? SandshrewUrlMap.mainnet!;
+  const isClient = typeof window !== 'undefined';
+  const baseUrl = isClient 
+    ? `${window.location.origin}/api/sandshrew?network=${network}`
+    : SandshrewUrlMap[network] ?? SandshrewUrlMap.mainnet!;
   
   try {
-    const alkanesProvider = await createAlkanesProvider(network, url);
+    const alkanesProvider = await createAlkanesProvider(network, baseUrl);
     return alkanesProvider;
   } catch (error) {
     console.error('Failed to create Alkanes provider, falling back to default:', error);
@@ -23,11 +26,11 @@ export async function getSandshrewProvider(network: Network): Promise<any> {
       | 'regtest'
       | 'signet';
     return new Provider({
-      version: 'v2',
+      version: isClient ? '' : 'v2',
       network: mappedNetwork,
       networkType,
-      url,
-      projectId: (network as any) === 'oylnet' ? 'regtest' : SANDSHREW_PROJECT_ID,
+      url: baseUrl,
+      projectId: isClient ? '' : ((network as any) === 'oylnet' ? 'regtest' : SANDSHREW_PROJECT_ID),
     });
   }
 }

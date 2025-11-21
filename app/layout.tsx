@@ -22,8 +22,32 @@ const geistMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SUBFROST — Stake BTC",
+  title: "SUBFROST | Bitcoin App",
   description: "Stake BTC and earn yield in BTC with Subfrost.",
+  icons: {
+    icon: "/brand/Logo.png",
+    apple: "/brand/Logo.png",
+  },
+  openGraph: {
+    title: "SUBFROST | Bitcoin App",
+    description: "Stake BTC and earn yield in BTC with Subfrost.",
+    images: [
+      {
+        url: "/brand/Logo.png",
+        width: 1200,
+        height: 1200,
+        alt: "Subfrost Logo",
+      },
+    ],
+    siteName: "Subfrost",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SUBFROST | Bitcoin App",
+    description: "Stake BTC and earn yield in BTC with Subfrost.",
+    images: ["/brand/Logo.png"],
+  },
 };
 
 export default function RootLayout({

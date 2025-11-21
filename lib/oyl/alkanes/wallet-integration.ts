@@ -254,28 +254,35 @@ export async function createAlkanesProvider(
   network: Network,
   rpcUrl?: string
 ) {
-  // For now, return a simple provider that uses the default @oyl/sdk Provider
-  // This avoids importing the alkanes SDK which has node:crypto issues
   const { Provider } = await import('@oyl/sdk');
   
-  const defaultUrls: Record<Network, string> = {
-    mainnet: 'https://api.subfrost.com',
-    testnet: 'https://testnet-api.subfrost.com',
-    regtest: 'http://localhost:18443',
-    signet: 'https://signet-api.subfrost.com',
-    oylnet: 'https://oylnet-api.subfrost.com',
-  };
+  const isClient = typeof window !== 'undefined';
+  const defaultUrls: Record<Network, string> = isClient
+    ? {
+        mainnet: `${window.location.origin}/api/sandshrew?network=mainnet`,
+        testnet: `${window.location.origin}/api/sandshrew?network=testnet`,
+        regtest: `${window.location.origin}/api/sandshrew?network=regtest`,
+        signet: `${window.location.origin}/api/sandshrew?network=signet`,
+        oylnet: `${window.location.origin}/api/sandshrew?network=oylnet`,
+      }
+    : {
+        mainnet: 'https://api.subfrost.com',
+        testnet: 'https://testnet-api.subfrost.com',
+        regtest: 'http://localhost:18443',
+        signet: 'https://signet-api.subfrost.com',
+        oylnet: 'https://oylnet-api.subfrost.com',
+      };
   
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
   const networkType = getAlkanesNetwork(network);
   const bitcoinNetwork = getBitcoinJsNetwork(network);
   
   return new Provider({
-    version: 'v2',
+    version: isClient ? '' : 'v2',
     network: bitcoinNetwork,
     networkType,
     url,
-    projectId: network === 'oylnet' ? 'regtest' : 'subfrost',
+    projectId: isClient ? '' : (network === 'oylnet' ? 'regtest' : 'subfrost'),
   });
 }
 
