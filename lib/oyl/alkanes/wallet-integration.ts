@@ -256,33 +256,24 @@ export async function createAlkanesProvider(
 ) {
   const { Provider } = await import('@oyl/sdk');
   
-  const isClient = typeof window !== 'undefined';
-  const defaultUrls: Record<Network, string> = isClient
-    ? {
-        mainnet: `${window.location.origin}/api/sandshrew?network=mainnet`,
-        testnet: `${window.location.origin}/api/sandshrew?network=testnet`,
-        regtest: `${window.location.origin}/api/sandshrew?network=regtest`,
-        signet: `${window.location.origin}/api/sandshrew?network=signet`,
-        oylnet: `${window.location.origin}/api/sandshrew?network=oylnet`,
-      }
-    : {
-        mainnet: 'https://api.subfrost.com',
-        testnet: 'https://testnet-api.subfrost.com',
-        regtest: 'http://localhost:18443',
-        signet: 'https://signet-api.subfrost.com',
-        oylnet: 'https://oylnet-api.subfrost.com',
-      };
+  const defaultUrls: Record<Network, string> = {
+    mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',
+    testnet: 'https://testnet.sandshrew.io/v4/wrlckwrld',
+    regtest: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
+    signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
+    oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
+  };
   
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
   const networkType = getAlkanesNetwork(network);
   const bitcoinNetwork = getBitcoinJsNetwork(network);
   
   return new Provider({
-    version: isClient ? '' : 'v2',
+    version: '',
     network: bitcoinNetwork,
     networkType,
     url,
-    projectId: isClient ? '' : (network === 'oylnet' ? 'regtest' : 'subfrost'),
+    projectId: '',
   });
 }
 

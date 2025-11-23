@@ -28,7 +28,7 @@ export default function VaultShell() {
           <VaultDetail vault={selectedVault} />
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-col gap-3">
           {/* Vault List */}
           {AVAILABLE_VAULTS.map((vault) => (
             <VaultListItem

@@ -9,10 +9,10 @@ export const NetworkMap: Partial<Record<Network, typeof networks.mainnet>> = {
 };
 
 export const SandshrewUrlMap: Partial<Record<Network, string>> = {
-  mainnet: 'https://mainnet.sandshrew.io',
-  testnet: 'https://testnet.sandshrew.io',
-  signet: 'https://signet.sandshrew.io',
-  oylnet: 'https://ladder-chain-sieve.sandshrew.io',
+  mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',
+  testnet: 'https://testnet.sandshrew.io/v4/wrlckwrld',
+  signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
+  oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
 };
 
 
