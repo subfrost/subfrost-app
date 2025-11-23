@@ -16,7 +16,7 @@ function PairBadge({ a, b }: { a: { id: string; symbol: string }, b: { id: strin
           <TokenIcon id={b.id} symbol={b.symbol} size="sm" />
         </div>
       </div>
-      <div className="truncate text-sm font-medium text-[color:var(--sf-text)]">
+      <div className="truncate text-sm font-bold text-[color:var(--sf-text)]">
         {a.symbol} / {b.symbol}
       </div>
     </div>
