@@ -94,7 +94,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 'dx-btc',
     name: 'dxBTC Token',
-    description: 'Hold Tokenized BTC Yield',
+    description: 'Stake BTC/frBTC for pure BTC yield',
     tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     contractAddress: '0x...',
