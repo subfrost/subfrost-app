@@ -1,17 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWallet } from "@/context/WalletContext";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { VaultUnit } from "@/hooks/useVaultUnits";
+import { AVAILABLE_VAULTS, VaultConfig } from "../constants";
+import { useFeeRate } from "@/hooks/useFeeRate";
+import { ChevronDown } from "lucide-react";
+
+// All available tokens that can be deposited into vaults
+const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
+  { id: 'btc', symbol: 'BTC' },
+  { id: '32:0', symbol: 'frBTC' },
+  { id: 'usd', symbol: 'bUSD' },
+  { id: '2:0', symbol: 'DIESEL' },
+  { id: 'eth_empty', symbol: 'frETH' },
+  { id: '2:16', symbol: 'METHANE' },
+  { id: 'frUSD', symbol: 'frUSD' },
+  { id: 'zec_empty', symbol: 'frZEC' },
+];
+
+// Get the corresponding vault for an input token
+const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
+  const tokenToVaultMap: Record<string, string> = {
+    'btc': 'dx-btc',       // BTC -> dxBTC
+    '32:0': 'dx-btc',      // frBTC -> dxBTC (prioritize dxBTC over yvfrBTC)
+    '2:16': 've-methane',  // METHANE -> veMETHANE
+    '2:0': 've-diesel',    // DIESEL -> veDIESEL
+    'usd': 've-usd',       // bUSD -> veUSD
+    'frUSD': 've-usd',     // frUSD -> veUSD
+    'zec_empty': 've-zec', // frZEC -> veZEC
+    'eth_empty': 've-eth', // frETH -> veETH
+  };
+  
+  const vaultId = tokenToVaultMap[tokenId];
+  if (!vaultId) return null;
+  
+  return AVAILABLE_VAULTS.find(v => v.id === vaultId) || null;
+};
+
+// Get the initial input token for a vault (first supported token)
+const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol: string } => {
+  // Map of output asset to default input token
+  const defaultInputMap: Record<string, { id: string; symbol: string }> = {
+    'dxBTC': { id: 'btc', symbol: 'BTC' },
+    'veMETHANE': { id: '2:16', symbol: 'METHANE' },
+    'veDIESEL': { id: '2:0', symbol: 'DIESEL' },
+    'veUSD': { id: 'usd', symbol: 'bUSD' },
+    'veZEC': { id: 'zec_empty', symbol: 'frZEC' },
+    'veETH': { id: 'eth_empty', symbol: 'frETH' },
+    'yvfrBTC': { id: '32:0', symbol: 'frBTC' },
+  };
+  
+  return defaultInputMap[vault.outputAsset] || { id: vault.tokenId, symbol: vault.inputAsset };
+};
 
 type Props = {
   mode: 'deposit' | 'withdraw';
   onModeChange: (mode: 'deposit' | 'withdraw') => void;
-  inputToken: string;
-  outputToken: string;
-  tokenId: string; // Alkane ID like "2:0"
+  vault: VaultConfig;
+  onVaultChange: (vault: VaultConfig) => void;
   userBalance: string;
   apy: string;
   onExecute: (amount: string) => void;
@@ -23,9 +72,8 @@ type Props = {
 export default function VaultDepositInterface({
   mode,
   onModeChange,
-  inputToken,
-  outputToken,
-  tokenId,
+  vault,
+  onVaultChange,
   userBalance,
   apy,
   onExecute,
@@ -34,15 +82,55 @@ export default function VaultDepositInterface({
   onUnitSelect = () => {},
 }: Props) {
   const [amount, setAmount] = useState("");
+  const [selectedInputToken, setSelectedInputToken] = useState<{ id: string; symbol: string }>(
+    getInitialInputTokenForVault(vault)
+  );
+  const [showTokenSelector, setShowTokenSelector] = useState(false);
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
-  const tokenImageUrl = `https://asset.oyl.gg/alkanes/${network}/${tokenId.replace(/:/g, '-')}.png`;
+  const { selection, setSelection, custom, setCustom, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
+  const selectorRef = useRef<HTMLDivElement>(null);
 
   const canExecute = mode === 'deposit' 
     ? (isConnected && amount && parseFloat(amount) > 0)
     : (isConnected && selectedUnitId !== '');
 
+  // Close token selector when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
+        setShowTokenSelector(false);
+      }
+    };
+
+    if (showTokenSelector) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showTokenSelector]);
+
+  // Update selected input token when vault changes
+  useEffect(() => {
+    setSelectedInputToken(getInitialInputTokenForVault(vault));
+  }, [vault.id]);
+
+  const handleInputTokenSelect = (token: { id: string; symbol: string }) => {
+    setSelectedInputToken(token);
+    setShowTokenSelector(false);
+    
+    // Find the corresponding vault for this input token
+    const newVault = getVaultForInputToken(token.id);
+    if (newVault && newVault.id !== vault.id) {
+      // Reset amount when switching vaults
+      setAmount('');
+      onVaultChange(newVault);
+    }
+  };
+
   return (
-    <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm flex-1">
+    <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
       {/* Tabs */}
       <div className="flex gap-4 mb-6 border-b border-[color:var(--sf-outline)]">
         <button
@@ -65,40 +153,180 @@ export default function VaultDepositInterface({
         >
           Withdraw
         </button>
-
-        {/* Settings icon on right */}
-        <button className="ml-auto text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-colors">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
       </div>
 
-      {/* Vertical Layout */}
-      <div className="space-y-4 mb-6">
-        {/* From wallet */}
-        <div>
-          <label className="text-xs font-bold text-[color:var(--sf-text)] mb-2 block">
-            {mode === 'deposit' ? 'From wallet' : 'Select vault unit to redeem'}
-          </label>
-          
-          {mode === 'deposit' ? (
-            <>
-              <button className="w-full h-12 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 flex items-center gap-2 hover:bg-gray-50 transition-colors">
-                <TokenIcon 
-                  symbol={inputToken}
-                  id={tokenId}
-                  size="sm"
-                  network={network}
-                />
-                <span className="text-sm font-bold text-[color:var(--sf-text)]">{inputToken}</span>
-              </button>
-              <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-                You have {userBalance} {inputToken}
+      {mode === 'deposit' ? (
+        /* Deposit Mode: Swap-like UI */
+        <div className="relative flex flex-col gap-3">
+          {/* From Wallet Panel */}
+          <div className="relative z-30 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">From Wallet</span>
+            <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                <NumberField placeholder={"0.00"} align="left" value={amount} onChange={setAmount} />
+                <div className="relative" ref={selectorRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTokenSelector(!showTokenSelector)}
+                    className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+                  >
+                    <TokenIcon 
+                      key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
+                      symbol={selectedInputToken.symbol}
+                      id={selectedInputToken.id}
+                      size="sm"
+                      network={network}
+                    />
+                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                      {selectedInputToken.symbol}
+                    </span>
+                    <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+                  </button>
+                  
+                  {/* Token Selector Dropdown */}
+                  {showTokenSelector && (
+                    <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-white shadow-[0_8px_32px_rgba(40,67,114,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
+                      {ALL_VAULT_TOKENS.map((token) => {
+                        const tokenVault = getVaultForInputToken(token.id);
+                        return (
+                          <button
+                            key={token.id}
+                            type="button"
+                            onClick={() => handleInputTokenSelect(token)}
+                            className={`w-full px-4 py-3 text-left text-sm font-semibold transition-colors first:rounded-t-xl last:rounded-b-xl ${
+                              selectedInputToken.id === token.id
+                                ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                                : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <TokenIcon 
+                                symbol={token.symbol}
+                                id={token.id}
+                                size="sm"
+                                network={network}
+                              />
+                              <div className="flex-1">
+                                <div className="font-semibold">{token.symbol}</div>
+                                {tokenVault && (
+                                  <div className="text-[10px] text-[color:var(--sf-text)]/50">
+                                    → {tokenVault.outputAsset}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
+                <div className="text-right">
+                  <div className="mb-1">
+                    <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                      Balance {userBalance}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAmount(userBalance)}
+                    className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50"
+                  >
+                    Max
+                  </button>
+                </div>
               </div>
-            </>
-          ) : (
+            </div>
+          </div>
+
+          {/* To Vault Panel */}
+          <div className="relative z-10 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">To Vault</span>
+            <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                <NumberField placeholder={"0.00"} align="left" value={amount} onChange={() => {}} disabled />
+                <div className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2">
+                  <TokenIcon 
+                    key={`vault-${vault.id}-${vault.outputAsset}`}
+                    symbol={vault.outputAsset}
+                    id={vault.tokenId}
+                    size="sm"
+                    network={network}
+                  />
+                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                    {vault.outputAsset}
+                  </span>
+                </div>
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
+                <div className="text-right text-xs font-medium text-[color:var(--sf-text)]/60">
+                  APY {apy}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Miner Fee Section */}
+          <div className="relative z-[5] rounded-xl border border-[color:var(--sf-glass-border)] bg-white/40 p-4 backdrop-blur-sm">
+            <div>
+              <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 mb-1">Miner Fee:</div>
+              <div className="flex items-center gap-2">
+                {selection === 'custom' && setCustom ? (
+                  <div className="relative w-40">
+                    <input
+                      aria-label="Custom miner fee rate"
+                      type="number"
+                      min={1}
+                      max={999}
+                      step={1}
+                      value={custom}
+                      onChange={(e) => setCustom(e.target.value)}
+                      placeholder="0"
+                      className="h-9 w-full rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">Sats / vByte</span>
+                  </div>
+                ) : (
+                  <div className="text-sm font-bold text-[color:var(--sf-text)]">
+                    {feeRate} Sats / vByte
+                  </div>
+                )}
+                <div className="ml-auto">
+                  <MinerFeeButton 
+                    selection={selection}
+                    setSelection={setSelection}
+                    customFee={custom}
+                    setCustomFee={setCustom}
+                    feeRate={feeRate}
+                    presets={presets}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Deposit Button */}
+          <button
+            onClick={() => {
+              if (!isConnected) {
+                onConnectModalOpenChange(true);
+                return;
+              }
+              onExecute(amount);
+            }}
+            disabled={!canExecute}
+            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(40,67,114,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(40,67,114,0.3)]"
+          >
+            {isConnected ? 'DEPOSIT' : 'CONNECT WALLET'}
+          </button>
+        </div>
+      ) : (
+        /* Withdraw Mode: Unit Selection */
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="text-xs font-bold text-[color:var(--sf-text)] mb-2 block">
+              Select vault unit to redeem
+            </label>
             <>
               <div className="max-h-48 overflow-y-auto space-y-2">
                 {vaultUnits.length === 0 ? (
@@ -136,77 +364,104 @@ export default function VaultDepositInterface({
                 )}
               </div>
             </>
-          )}
+          </div>
+
+          {/* Withdraw Button */}
+          <button
+            onClick={() => {
+              if (!isConnected) {
+                onConnectModalOpenChange(true);
+                return;
+              }
+              onExecute('1'); // Vault units are typically 1 per deposit
+            }}
+            disabled={!canExecute}
+            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(40,67,114,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(40,67,114,0.3)]"
+          >
+            {isConnected ? 'WITHDRAW' : 'CONNECT WALLET'}
+          </button>
         </div>
+      )}
+    </div>
+  );
+}
 
-        {/* Amount (only for deposit mode) */}
-        {mode === 'deposit' && (
-          <div>
-            <label className="text-xs font-bold text-[color:var(--sf-text)] mb-2 block">
-              Amount
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                step="0.00000001"
-                placeholder="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full h-12 rounded-lg border border-[color:var(--sf-outline)] bg-white px-3 text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] sf-focus-ring"
-              />
-              <button
-                onClick={() => setAmount(userBalance)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-xs font-semibold text-gray-700 transition-colors"
-              >
-                Max
-              </button>
-            </div>
-            <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-              $0.00
-            </div>
-          </div>
-        )}
+// Miner Fee Button Component (copied from LiquidityInputs)
+type MinerFeeButtonProps = {
+  selection: any;
+  setSelection?: (s: any) => void;
+  customFee: string;
+  setCustomFee?: (v: string) => void;
+  feeRate: number;
+  presets: { slow: number; medium: number; fast: number };
+};
 
-        {/* To vault info */}
-        <div className="flex items-center justify-between py-3 px-4 rounded-lg bg-gray-50">
-          <div>
-            <div className="text-xs font-bold text-[color:var(--sf-text)] mb-1">To vault</div>
-            <div className="text-sm font-bold text-[color:var(--sf-text)]">{outputToken}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-[color:var(--sf-text)]/60">APY</div>
-            <div className="text-lg font-bold text-green-600">{apy}%</div>
-          </div>
-        </div>
+function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-        {/* You will receive */}
-        <div>
-          <label className="text-xs font-bold text-[color:var(--sf-text)] mb-2 block">
-            You will receive
-          </label>
-          <div className="w-full h-12 rounded-lg border border-[color:var(--sf-outline)] bg-gray-50 px-3 flex items-center text-sm text-[color:var(--sf-text)]">
-            {amount || '0'}
-          </div>
-          <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-            $0.00
-          </div>
-        </div>
-      </div>
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
 
-      {/* Deposit Button */}
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleSelect = (s: any) => {
+    if (setSelection) setSelection(s);
+    setIsOpen(false);
+  };
+
+  const getDisplayText = () => {
+    if (selection === 'custom') return 'Custom';
+    return selection.charAt(0).toUpperCase() + selection.slice(1);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => {
-          if (!isConnected) {
-            onConnectModalOpenChange(true);
-            return;
-          }
-          onExecute(amount);
-        }}
-        disabled={!canExecute}
-        className="w-full rounded-lg bg-[color:var(--sf-primary)] py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
       >
-        {isConnected ? mode.toUpperCase() : 'CONNECT WALLET'}
+        <span>{getDisplayText()}</span>
+        <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg border-2 border-[color:var(--sf-glass-border)] bg-white shadow-[0_8px_32px_rgba(40,67,114,0.2)] backdrop-blur-xl">
+          {(['slow', 'medium', 'fast', 'custom'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-colors first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{option}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {presets[option as keyof typeof presets]}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

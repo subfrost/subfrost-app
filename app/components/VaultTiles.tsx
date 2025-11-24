@@ -5,7 +5,14 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { AVAILABLE_VAULTS } from '@/app/vaults/constants';
 
 export default function VaultTiles() {
-  const featured = AVAILABLE_VAULTS.slice(0, 3);
+  const filteredVaults = AVAILABLE_VAULTS
+    .filter(vault => vault.id !== 'yv-frbtc')
+    .sort((a, b) => {
+      if (a.id === 'dx-btc') return -1;
+      if (b.id === 'dx-btc') return 1;
+      return 0;
+    });
+  const featured = filteredVaults.slice(0, 3);
 
   return (
     <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">

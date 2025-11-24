@@ -444,9 +444,33 @@ export default function SwapShell() {
     return pool ? allowedPairs.has(pool.pairLabel) : false;
   }, [markets, FRBTC_ALKANE_ID, allowedPairs]);
 
+  // Custom sort function for token options: BTC, bUSD, frBTC, then alphabetical
+  const sortTokenOptions = (options: TokenOption[]): TokenOption[] => {
+    return [...options].sort((a, b) => {
+      // Priority order
+      const getPriority = (symbol: string) => {
+        if (symbol === 'BTC') return 0;
+        if (symbol === 'bUSD') return 1;
+        if (symbol === 'frBTC') return 2;
+        return 3;
+      };
+      
+      const priorityA = getPriority(a.symbol);
+      const priorityB = getPriority(b.symbol);
+      
+      // If different priorities, sort by priority
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      
+      // If same priority (both are priority 3, i.e., other tokens), sort alphabetically
+      return a.symbol.localeCompare(b.symbol);
+    });
+  };
+
   // Prepare token options for modal with balances and prices
   const fromTokenOptions = useMemo<TokenOption[]>(() => {
-    return fromOptions.map((token) => {
+    const options = fromOptions.map((token) => {
       const currency = idToUserCurrency.get(token.id);
       // Check if token has an allowed pool with the selected TO token
       let isAvailable = true;
@@ -465,10 +489,12 @@ export default function SwapShell() {
         isAvailable,
       };
     });
+    
+    return sortTokenOptions(options);
   }, [fromOptions, idToUserCurrency, btcBalanceSats, toToken, isAllowedPair]);
 
   const toTokenOptions = useMemo<TokenOption[]>(() => {
-    return toOptions.map((token) => {
+    const options = toOptions.map((token) => {
       const currency = idToUserCurrency.get(token.id);
       // Check if token has an allowed pool with the selected FROM token
       let isAvailable = true;
@@ -487,6 +513,8 @@ export default function SwapShell() {
         isAvailable,
       };
     });
+    
+    return sortTokenOptions(options);
   }, [toOptions, idToUserCurrency, fromToken, isAllowedPair]);
 
   // Pool token options - filtered to only show tokens that are in the displayed markets
@@ -524,10 +552,24 @@ export default function SwapShell() {
       poolTokenIds.add('btc');
     }
     
+    // Determine which counterpart token to check against
+    const counterpartToken = tokenSelectorMode === 'pool0' ? poolToken1 : 
+                            tokenSelectorMode === 'pool1' ? poolToken0 : 
+                            undefined;
+    
     // Build full list of all allowed tokens for LP
     const opts: TokenOption[] = [];
     
     // Add BTC first
+    let btcIsAvailable = counterpartToken 
+      ? isAllowedPair('btc', counterpartToken.id)
+      : true; // If no counterpart, BTC is always available
+    
+    // For LP mode, disallow BTC/frBTC pairing
+    if (counterpartToken && (counterpartToken.id === FRBTC_ALKANE_ID)) {
+      btcIsAvailable = false;
+    }
+    
     opts.push({
       id: 'btc',
       symbol: 'BTC',
@@ -535,12 +577,24 @@ export default function SwapShell() {
       iconUrl: undefined,
       balance: String(btcBalanceSats ?? 0),
       price: undefined,
+      isAvailable: btcIsAvailable,
     });
     
     // Get all other pool tokens
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
       if (allowedTokenSymbols.has(poolToken.symbol) && poolToken.id !== 'btc') {
         const currency = idToUserCurrency.get(poolToken.id);
+        
+        // Check if this token can pair with the counterpart token (if selected)
+        let isAvailable = true;
+        if (counterpartToken) {
+          isAvailable = isAllowedPair(poolToken.id, counterpartToken.id);
+          
+          // For LP mode, disallow BTC/frBTC pairing
+          if (poolToken.id === FRBTC_ALKANE_ID && counterpartToken.id === 'btc') {
+            isAvailable = false;
+          }
+        }
         
         opts.push({
           id: poolToken.id,
@@ -549,12 +603,13 @@ export default function SwapShell() {
           iconUrl: poolToken.iconUrl || currency?.iconUrl,
           balance: poolToken.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
           price: currency?.priceInfo?.price,
+          isAvailable,
         });
       }
     });
     
-    return opts;
-  }, [markets, idToUserCurrency, FRBTC_ALKANE_ID, poolTokenMap, allowedTokenSymbols, btcBalanceSats]);
+    return sortTokenOptions(opts);
+  }, [markets, idToUserCurrency, FRBTC_ALKANE_ID, poolTokenMap, allowedTokenSymbols, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair]);
 
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {
@@ -611,7 +666,9 @@ export default function SwapShell() {
       if (cur?.balance) {
         const amt = Number(cur.balance) / 1e8;
         setDirection('sell');
-        setFromAmount(amt.toFixed(8));
+        // Use 8 decimals for frBTC, 2 for other tokens
+        const decimals = fromToken.id === FRBTC_ALKANE_ID ? 8 : 2;
+        setFromAmount(amt.toFixed(decimals));
       }
     }
   };
@@ -629,7 +686,9 @@ export default function SwapShell() {
       if (cur?.balance) {
         const amt = (Number(cur.balance) * percent) / 1e8;
         setDirection('sell');
-        setFromAmount(amt.toFixed(8));
+        // Use 8 decimals for frBTC, 2 for other tokens
+        const decimals = fromToken.id === FRBTC_ALKANE_ID ? 8 : 2;
+        setFromAmount(amt.toFixed(decimals));
       }
     }
   };
@@ -741,8 +800,12 @@ export default function SwapShell() {
               token1BalanceText={formatBalance(poolToken1?.id)}
               token0FiatText="$0.00"
               token1FiatText="$0.00"
-              minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(6) : undefined}
-              minimumToken1={poolToken1Amount ? (parseFloat(poolToken1Amount) * 0.995).toFixed(6) : undefined}
+              minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(
+                poolToken0?.id === 'btc' || poolToken0?.id === FRBTC_ALKANE_ID ? 8 : 2
+              ) : undefined}
+              minimumToken1={poolToken1Amount ? (parseFloat(poolToken1Amount) * 0.995).toFixed(
+                poolToken1?.id === 'btc' || poolToken1?.id === FRBTC_ALKANE_ID ? 8 : 2
+              ) : undefined}
               feeRate={fee.feeRate}
               feeSelection={fee.selection}
               setFeeSelection={fee.setSelection}
@@ -825,7 +888,7 @@ export default function SwapShell() {
         }
         title={
           tokenSelectorMode === 'from' 
-            ? 'Select token to pay' 
+            ? 'Select token to swap' 
             : tokenSelectorMode === 'to'
             ? 'Select token to receive'
             : 'Select token to pool'

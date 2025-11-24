@@ -3,10 +3,14 @@
 import { useState } from "react";
 import VaultHero from "./VaultHero";
 import VaultDepositInterface from "./VaultDepositInterface";
+import { AVAILABLE_VAULTS } from "../constants";
 
 export default function YveDieselVault() {
   const [mode, setMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [infoTab, setInfoTab] = useState<'about' | 'strategies' | 'info' | 'risk'>('about');
+
+  // Get DIESEL vault from constants
+  const dieselVault = AVAILABLE_VAULTS.find(v => v.id === 've-diesel')!;
 
   // Mock data
   const stats = {
@@ -36,9 +40,10 @@ export default function YveDieselVault() {
       <VaultDepositInterface
         mode={mode}
         onModeChange={setMode}
-        inputToken="DIESEL"
-        outputToken="yveDIESEL-1"
-        tokenId="2:0"
+        vault={dieselVault}
+        onVaultChange={(newVault) => {
+          console.log('Vault changed to:', newVault.id);
+        }}
         userBalance={stats.userBalance}
         apy={stats.apy}
         onExecute={handleExecute}

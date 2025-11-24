@@ -34,17 +34,23 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths; // Return early to prevent remote fallback
     }
     
-    // Priority 2: Special handling for BTC (local file)
+    // Priority 2: Special handling for bUSD - use PNG only
+    if (symbol?.toLowerCase() === 'busd' || id === 'usd') {
+      paths.push('/tokens/busd.png');
+      return paths; // Return early to prevent .svg fallback
+    }
+    
+    // Priority 3: Special handling for BTC (local file)
     if (symbol?.toLowerCase() === 'btc' || id === 'btc') {
       paths.push('/tokens/btc.svg');
     }
     
-    // Priority 3: Use direct iconUrl if provided (from API - should be Oyl SDK URL)
+    // Priority 4: Use direct iconUrl if provided (from API - should be Oyl SDK URL)
     if (iconUrl) {
       paths.push(iconUrl);
     }
     
-    // Priority 4: Try Oyl asset for Alkanes tokens (if id is an alkane ID like "32:0" or "2:56801")
+    // Priority 5: Try Oyl asset for Alkanes tokens (if id is an alkane ID like "32:0" or "2:56801")
     // Alkane IDs use colon format: "block:tx"
     // This ensures official images are tried BEFORE local fallbacks
     if (id && /^\d+:\d+/.test(id)) {
@@ -53,20 +59,20 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
     }
     
-    // Priority 5: Try local token assets by symbol
+    // Priority 6: Try local token assets by symbol
     if (symbol) {
       paths.push(`/tokens/${symbol.toLowerCase()}.svg`);
       paths.push(`/tokens/${symbol.toLowerCase()}.png`);
     }
     
-    // Priority 5: Try local files with alkane ID format (legacy support)
+    // Priority 7: Try local files with alkane ID format (legacy support)
     if (id && /^\d+:\d+/.test(id)) {
       const urlSafeId = id.replace(/:/g, '-');
       paths.push(`/tokens/${urlSafeId}.svg`);
       paths.push(`/tokens/${urlSafeId}.png`);
     }
     
-    // Priority 6: Try local token assets by id (non-alkane IDs)
+    // Priority 8: Try local token assets by id (non-alkane IDs)
     if (id && id !== symbol && !/^\d+:\d+/.test(id)) {
       paths.push(`/tokens/${id.toLowerCase()}.svg`);
       paths.push(`/tokens/${id.toLowerCase()}.png`);

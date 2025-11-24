@@ -8,9 +8,10 @@ type Props = {
   vault: VaultConfig;
   isSelected: boolean;
   onClick: () => void;
+  interactive?: boolean;
 };
 
-export default function VaultListItem({ vault, isSelected, onClick }: Props) {
+export default function VaultListItem({ vault, isSelected, onClick, interactive = true }: Props) {
   const { network } = useWallet();
 
   // Mock data - replace with real vault queries
@@ -34,10 +35,14 @@ export default function VaultListItem({ vault, isSelected, onClick }: Props) {
     'Ethereum': 'bg-blue-400 text-blue-900',
   };
 
+  const Element = interactive ? 'button' : 'div';
+  
   return (
-    <button
-      onClick={onClick}
-      className={`w-full lg:w-auto lg:mx-auto rounded-lg transition-all hover:bg-white/80 overflow-hidden ${
+    <Element
+      onClick={interactive ? onClick : undefined}
+      className={`w-full lg:w-auto lg:mx-auto rounded-lg transition-all overflow-hidden ${
+        interactive ? 'hover:bg-white/80 cursor-pointer' : 'cursor-default'
+      } ${
         isSelected 
           ? 'bg-white/90 border-2 border-[color:var(--sf-primary)] shadow-md' 
           : 'bg-white/60 border border-[color:var(--sf-outline)]'
@@ -69,39 +74,46 @@ export default function VaultListItem({ vault, isSelected, onClick }: Props) {
         </div>
         
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
-            <div className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-bold text-green-700">
-              {vault.estimatedApy ? `${vault.estimatedApy}%` : '-'}
+          {/* Column 1: EST. APY and AVAILABLE */}
+          <div className="space-y-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
+              <div className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-bold text-green-700">
+                {vault.estimatedApy ? `${vault.estimatedApy}%` : '-'}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Available</div>
+              <div className="text-sm font-bold text-[color:var(--sf-text)]">{availableToken}</div>
+              <div className="text-xs text-[color:var(--sf-text)]/60">{availableUsd}</div>
             </div>
           </div>
-          <div className="flex flex-col items-center">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Risk Level</div>
-            <div className="flex gap-0.5">
-              {[1, 2, 3, 4, 5].map((level) => {
-                const riskValue = vault.riskLevel === 'low' ? 2 : vault.riskLevel === 'medium' ? 3 : vault.riskLevel === 'high' ? 4 : 5;
-                return (
-                  <div 
-                    key={level}
-                    className={`w-1.5 h-4 rounded-sm ${
-                      level <= riskValue 
-                        ? vault.riskLevel === 'low' ? 'bg-green-500' : vault.riskLevel === 'medium' ? 'bg-yellow-500' : 'bg-red-500'
-                        : 'bg-gray-300'
-                    }`}
-                  />
-                );
-              })}
+          
+          {/* Column 2: RISK LEVEL and DEPOSITS */}
+          <div className="space-y-3">
+            <div className={interactive ? 'flex flex-col items-center' : ''}>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Risk Level</div>
+              <div className="flex gap-0.5">
+                {[1, 2, 3, 4, 5].map((level) => {
+                  const riskValue = vault.riskLevel === 'low' ? 2 : vault.riskLevel === 'medium' ? 3 : vault.riskLevel === 'high' ? 4 : 5;
+                  return (
+                    <div 
+                      key={level}
+                      className={`w-1.5 h-4 rounded-sm ${
+                        level <= riskValue 
+                          ? vault.riskLevel === 'low' ? 'bg-green-500' : vault.riskLevel === 'medium' ? 'bg-yellow-500' : vault.riskLevel === 'high' ? 'bg-orange-500' : 'bg-red-500'
+                          : 'bg-gray-300'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Available</div>
-            <div className="text-sm font-bold text-[color:var(--sf-text)]">{availableToken}</div>
-            <div className="text-xs text-[color:var(--sf-text)]/60">{availableUsd}</div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Deposits</div>
-            <div className="text-sm font-bold text-[color:var(--sf-text)]">{depositsToken}</div>
-            <div className="text-xs text-[color:var(--sf-text)]/60">{depositsUsd}</div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Deposits</div>
+              <div className="text-sm font-bold text-[color:var(--sf-text)]">{depositsToken}</div>
+              <div className="text-xs text-[color:var(--sf-text)]/60">{depositsUsd}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -161,7 +173,7 @@ export default function VaultListItem({ vault, isSelected, onClick }: Props) {
                   key={level}
                   className={`w-1.5 h-4 rounded-sm ${
                     level <= riskValue 
-                      ? vault.riskLevel === 'low' ? 'bg-green-500' : vault.riskLevel === 'medium' ? 'bg-yellow-500' : 'bg-red-500'
+                      ? vault.riskLevel === 'low' ? 'bg-green-500' : vault.riskLevel === 'medium' ? 'bg-yellow-500' : vault.riskLevel === 'high' ? 'bg-orange-500' : 'bg-red-500'
                       : 'bg-gray-300'
                   }`}
                 />
@@ -184,6 +196,6 @@ export default function VaultListItem({ vault, isSelected, onClick }: Props) {
           <div className="text-xs text-[color:var(--sf-text)]/60 whitespace-nowrap">{depositsUsd}</div>
         </div>
       </div>
-    </button>
+    </Element>
   );
 }

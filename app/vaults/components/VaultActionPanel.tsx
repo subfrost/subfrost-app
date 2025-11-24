@@ -128,7 +128,7 @@ export default function VaultActionPanel({
           onExecute();
         }}
         disabled={isConnected && (!amount || parseFloat(amount) <= 0)}
-        className="w-full rounded-lg bg-[color:var(--sf-primary)] py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed mb-4"
+        className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(40,67,114,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(40,67,114,0.3)] mb-4"
       >
         {isConnected ? mode.toUpperCase() : 'CONNECT WALLET'}
       </button>

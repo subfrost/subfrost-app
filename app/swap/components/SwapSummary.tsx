@@ -10,6 +10,7 @@ import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 import { useMemo } from 'react';
+import { useModalStore } from '@/stores/modals';
 
 type Props = {
   sellId: string;
@@ -27,6 +28,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
+  const { openTxSettings } = useModalStore();
   const normalizedSell = sellId === 'btc' ? FRBTC_ALKANE_ID : sellId;
   const normalizedBuy = buyId === 'btc' ? FRBTC_ALKANE_ID : buyId;
   
@@ -199,6 +201,22 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
               )}
             </div>
           )}
+          
+          {/* Settings button */}
+          <div className="flex items-center justify-end mb-2">
+            <button
+              type="button"
+              onClick={() => openTxSettings()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>Settings</span>
+            </button>
+          </div>
+          
           <Row 
             label="Exchange Rate" 
             value={`1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}

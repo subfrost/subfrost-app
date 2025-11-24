@@ -310,7 +310,7 @@ export default function LiquidityInputs({
                 <SettingsButton />
               </div>
               <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                {minimumToken0 || '0.00000000'} {token0.symbol} / {minimumToken1 || '0.00000000'} {token1.symbol}
+                {minimumToken0 || (token0.id === 'btc' || token0.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token0.symbol} / {minimumToken1 || (token1.id === 'btc' || token1.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token1.symbol}
               </div>
             </div>
 
