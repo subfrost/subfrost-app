@@ -78,7 +78,7 @@ bitcoin-cli -regtest -rpcuser=alkanes -rpcpassword=alkanes123 -rpcconnect=127.0.
 Once Bitcoin Core RPC is working, everything else is already set up:
 
 ✅ alkanes-rs SDK installed
-✅ @oyl/sdk using alkanes backend  
+✅ @alkanes/ts-sdk using alkanes backend
 ✅ Dev server running: http://localhost:3000
 ✅ Test page ready: http://localhost:3000/wallet-test
 ✅ Regtest configured: http://localhost:18443

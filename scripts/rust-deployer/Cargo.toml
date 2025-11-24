@@ -1,0 +1,17 @@
+[package]
+name = "rust-deployer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.8", features = ["derive"] }
+tokio = { version = "1.38.0", features = ["full"] }
+serde_json = "1.0"
+bitcoin = "0.32.7"
+
+[dependencies.alkanes-cli-common]
+path = "../../reference/alkanes-rs/crates/alkanes-cli-common"
+
+[dependencies.alkanes-support]
+path = "../../reference/alkanes-rs/crates/alkanes-support"

@@ -17,6 +17,24 @@
       "import": "./build/wasm/alkanes_web_sys.js",
       "require": "./build/wasm/alkanes_web_sys.js",
       "default": "./build/wasm/alkanes_web_sys.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.mjs",
+      "require": "./dist/types/index.js",
+      "default": "./dist/types/index.mjs"
+    },
+    "./wallet": {
+      "types": "./dist/wallet/index.d.ts",
+      "import": "./dist/wallet/index.mjs",
+      "require": "./dist/wallet/index.js",
+      "default": "./dist/wallet/index.mjs"
+    },
+    "./provider": {
+      "types": "./dist/provider/index.d.ts",
+      "import": "./dist/provider/index.mjs",
+      "require": "./dist/provider/index.js",
+      "default": "./dist/provider/index.mjs"
     }
   },
   "files": [
@@ -79,13 +97,5 @@
     "ts-jest": "^29.2.5",
     "tsup": "^8.3.5",
     "typescript": "^5.6.3"
-  },
-  "peerDependencies": {
-    "@oyl/sdk": "*"
-  },
-  "peerDependenciesMeta": {
-    "@oyl/sdk": {
-      "optional": true
-    }
   }
 }

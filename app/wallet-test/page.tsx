@@ -28,7 +28,7 @@ export default function WalletTestPage() {
           Alkanes Wallet Integration Test
         </h1>
         <p className="text-gray-600">
-          Test the alkanes-rs keystore backend for @oyl/sdk
+          Test the alkanes-rs keystore backend for Alkanes SDK
         </p>
       </div>
 
@@ -56,11 +56,11 @@ export default function WalletTestPage() {
           ℹ️ Integration Status
         </h3>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>✅ Alkanes WASM initialized in layout</li>
+          <li>✅ Alkanes WASM initialized in layout (Placeholder)</li>
           <li>✅ Wallet integration module created</li>
           <li>✅ React hook (useAlkanesWallet) available</li>
           <li>✅ Storage persistence enabled (localStorage)</li>
-          <li>✅ Compatible with @oyl/sdk provider interface</li>
+          <li>✅ Compatible with Alkanes SDK provider interface</li>
         </ul>
       </div>
 
@@ -69,11 +69,12 @@ export default function WalletTestPage() {
           📋 Files Created
         </h3>
         <ul className="text-xs font-mono text-gray-700 space-y-1">
-          <li>lib/oyl/alkanes/wallet-integration.ts</li>
+          {/* Files listed here were part of the initial setup, some are now modified or replaced */}
+          <li>lib/oyl/alkanes/wallet-integration.ts (Replaced)</li>
           <li>hooks/useAlkanesWallet.ts</li>
-          <li>app/components/AlkanesWasmInitializer.tsx</li>
           <li>app/components/AlkanesWalletExample.tsx</li>
-          <li>app/layout.tsx (modified)</li>
+          <li>utils/types.ts (New)</li>
+          <li>utils/wallet.ts (New)</li>
         </ul>
       </div>
     </div>

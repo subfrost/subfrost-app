@@ -1,14 +1,48 @@
-
 import { Psbt } from 'bitcoinjs-lib'
 import * as bitcoin from 'bitcoinjs-lib'
-import {
-  AddressType,
-  AssetType,
-  FormattedUtxo,
-  Provider,
-  Signer,
-  Account,
-} from  "@oyl/sdk"
+import { AddressType } from "@alkanes/ts-sdk/wallet";
+import { AlkanesProvider as Provider } from "@alkanes/ts-sdk/provider";
+import { UTXO as FormattedUtxo } from "@alkanes/ts-sdk/types";
+
+// Temporarily defining placeholder types until exact source is identified in @alkanes/ts-sdk
+export enum AssetType {
+  BRC20 = 'BRC20',
+  ARC20 = 'ARC20',
+  ERC20 = 'ERC20',
+  NFT = 'NFT',
+  RUNE = 'RUNE',
+}
+
+export interface Signer {
+  signPsbt(psbt: string): Promise<string>;
+  signMessage(message: string, address: string): Promise<string>;
+}
+
+export interface Account {
+  address: string;
+  publicKey: string;
+  type: AddressType;
+}
+
+// Temporarily defining placeholder types until exact source is identified in @alkanes/ts-sdk
+export enum AssetType {
+  BRC20 = 'BRC20',
+  ARC20 = 'ARC20',
+  ERC20 = 'ERC20',
+  NFT = 'NFT',
+  RUNE = 'RUNE',
+}
+
+export interface Signer {
+  signPsbt(psbt: string): Promise<string>;
+  signMessage(message: string, address: string): Promise<string>;
+}
+
+export interface Account {
+  address: string;
+  publicKey: string;
+  type: AddressType;
+}
 
 export interface ConditionalInput {
   hash: string
@@ -170,7 +204,6 @@ export interface PsbtBuilder {
   amountRetrieved: number
   spendAddress: string
   spendPubKey: string
-  spendAmount: number
   addressType: AddressType
   feeRate: number
 }
@@ -182,7 +215,6 @@ export interface BuiltPsbt {
   outputTemplate: OutputTxTemplate[]
 }
 export interface GetSellerPsbtRequest {
-  //<T extends GetSellerPsbtSchemas = GetSellerPsbtSchemas> {
   marketplaceType: Marketplaces
   assetType: AssetType
   buyerAddress: string
@@ -192,17 +224,14 @@ export interface GetSellerPsbtRequest {
   receiveAddress?: string
   receivePublicKey?: string;
   orders: BuyOrder[]
-  //additionalParams?: Omit<T, keyof GetSellerPsbtRequest<T>>;
 }
 
 export interface GetListingPsbtRequest{
-//<T extends GetListingPsbtSchemas = GetListingPsbtSchemas> {
   marketplaceType: Marketplaces;
   assetType: AssetType;
   sellerAddress: string;
   sellerPublicKey: string;
   listings: GetListingPsbtInfo[];
-  //additionalParams?: Omit<T, keyof GetListingPsbtRequest<T>>;
 }
 
 
@@ -244,7 +273,6 @@ export interface GetListingPsbtResponse {
 }
 
 export interface SubmitBuyerPsbtRequest {
-  //<T extends SubmitBuyerPsbtSchemas = SubmitBuyerPsbtSchemas> {
   marketplaceType: Marketplaces
   assetType: AssetType
   buyerAddress: string
@@ -252,11 +280,9 @@ export interface SubmitBuyerPsbtRequest {
   receiveAddress?: string
   psbt: string
   orders: BuyOrder[]
-  //additionalParams?: Omit<T, keyof SubmitBuyerPsbtRequest<T>>;
 }
 
 export interface SubmitListingPsbtRequest{
-//<T extends SubmitListingPsbtSchemas = SubmitListingPsbtSchemas> {
   marketplaceType: Marketplaces;
   assetType: AssetType;
   sellerAddress: string;
@@ -264,7 +290,6 @@ export interface SubmitListingPsbtRequest{
   signedPsbt: string;
   orderId?: string;
   listings?: GetListingPsbtInfo[];
-  //additionalParams?: Omit<T, keyof SubmitListingRequest<T>>;
 }
 
 export interface SubmitBuyerPsbtResponse {

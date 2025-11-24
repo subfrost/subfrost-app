@@ -4,20 +4,18 @@
  * This file uses the actual alkanes-rs SDK (now properly bundled for browser)
  */
 
-import type { Network } from '@oyl/sdk';
-import { Provider } from '@oyl/sdk';
+import type { NetworkType } from '@alkanes/ts-sdk';
+import { AlkanesProvider } from '@alkanes/ts-sdk';
 
 // Import from the browser-bundled alkanes SDK
 // @ts-ignore - No type definitions available yet
 import { createKeystore, unlockKeystore, KeystoreManager } from '@alkanes/ts-sdk';
 
-export type { Network };
-
 export type AlkanesKeystore = {
   mnemonic: string;
   masterFingerprint: string;
   accountXpub: string;
-  network: string;
+  network: NetworkType;
   createdAt: number;
 };
 
@@ -26,7 +24,7 @@ export type AlkanesKeystore = {
  */
 export async function createAlkanesKeystore(
   password: string,
-  network: Network = 'mainnet',
+  network: NetworkType = 'mainnet',
   wordCount: 12 | 15 | 18 | 21 | 24 = 12
 ): Promise<{ keystore: string; mnemonic: string }> {
   try {
@@ -50,7 +48,7 @@ export async function createAlkanesKeystore(
 export async function unlockAlkanesKeystore(
   keystoreJson: string,
   password: string,
-  network: Network = 'mainnet'
+  network: NetworkType = 'mainnet'
 ): Promise<AlkanesKeystore> {
   try {
     // Use real alkanes SDK
@@ -120,13 +118,13 @@ export async function createAlkanesWallet(keystore: AlkanesKeystore) {
 }
 
 /**
- * Create provider for @oyl/sdk
+ * Create provider for @alkanes/ts-sdk
  */
 export async function createAlkanesProvider(
-  network: Network,
+  network: NetworkType,
   rpcUrl?: string
 ) {
-  const defaultUrls: Record<Network, string> = {
+  const defaultUrls: Record<NetworkType, string> = {
     mainnet: 'https://api.subfrost.com',
     testnet: 'https://testnet-api.subfrost.com',
     regtest: 'http://localhost:18443',
@@ -140,7 +138,7 @@ export async function createAlkanesProvider(
   const networkType = network === 'oylnet' ? 'regtest' : network;
   const bitcoinNetwork = network === 'mainnet' ? 'bitcoin' : network;
   
-  return new Provider({
+  return new AlkanesProvider({
     version: 'v2',
     network: bitcoinNetwork as any,
     networkType: networkType as any,
@@ -155,7 +153,7 @@ export async function createAlkanesProvider(
 export async function restoreFromMnemonic(
   mnemonic: string,
   password: string,
-  network: Network = 'mainnet'
+  network: NetworkType = 'mainnet'
 ) {
   // Validate mnemonic first
   const manager = new KeystoreManager();
@@ -202,7 +200,7 @@ export const STORAGE_KEYS = {
   WALLET_NETWORK: 'alkanes_wallet_network',
 } as const;
 
-export function saveKeystoreToStorage(keystoreJson: string, network: Network) {
+export function saveKeystoreToStorage(keystoreJson: string, network: NetworkType) {
   if (typeof window === 'undefined') return;
   
   try {
@@ -213,12 +211,12 @@ export function saveKeystoreToStorage(keystoreJson: string, network: Network) {
   }
 }
 
-export function loadKeystoreFromStorage(): { keystore: string; network: Network } | null {
+export function loadKeystoreFromStorage(): { keystore: string; network: NetworkType } | null {
   if (typeof window === 'undefined') return null;
   
   try {
     const keystore = localStorage.getItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE);
-    const network = localStorage.getItem(STORAGE_KEYS.WALLET_NETWORK) as Network;
+    const network = localStorage.getItem(STORAGE_KEYS.WALLET_NETWORK) as NetworkType;
     
     if (keystore && network) {
       return { keystore, network };

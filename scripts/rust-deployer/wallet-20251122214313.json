@@ -1,0 +1,29 @@
+{
+  "encrypted_mnemonic": "-----BEGIN ENCRYPTED MNEMONIC-----\n\nAci6KiNai7/rgGq7JQHpHLKOTLmMcHrvtCJN6IB+z62BQVibDDpQgaROKYTCgcBG\nrQhWbyjgb5m+Puu3mgHhMh5bWni7TPvCItsbDtxjXxP9N2Scd7Qvq8r5kIcBbV7J\njyDCsaF4QGl5YOttTx/L9S+LJHgSbsd9tvmpUm06s5DYxvCNYBnvIUq0MQxKF+ES\n6SpwdNhemBvKW/c=\n=25AI\n-----END ENCRYPTED MNEMONIC-----\n",
+  "master_fingerprint": "79c53e08",
+  "created_at": 0,
+  "version": "10.0.0",
+  "pbkdf2_params": {
+    "salt": "3210940f420d532d2159406cbe4d5dcd",
+    "nonce": "01a4867b92a9bfd013c8e135",
+    "iterations": 600000,
+    "algorithm": "aes-256-gcm"
+  },
+  "account_xpub": "tpubDDeePbQCHy36YPbzTf4whHyfi8gn1ziUvimnkXz7H4t8HHhvKauC2H9oNJBzyWQuuoD2G6TTGu5VYTEAhc1JgAcfApq9w3fXoiqWQqrNS68",
+  "account_xpubs": {
+    "p2pkh:mainnet": "tpubDDpJiN8zHZND3HydJiggSqKPzXR5GUjDvXynMKaz5HPjKUDf9u737Eo5AjiKkrRk3PxLMsP3yHfV1JKVga679UBZHsZVkjXR9TstnGnHwhC",
+    "p2pkh:testnet": "tpubDCRLpHbAtDKic3GPCnsKPyuzUSFXMzLCaRUuNFi6tWuh8ENkwbrA2kTVsDFu34stXyB5L9U2SXNn1a3gnR46pvLC7ZV9GZK6GDGgLEMYARx",
+    "p2sh-p2wpkh:mainnet": "tpubDCmPapi4ZpAUttydy2EGPWC7mxqMoUWxtm428WjQ1STXMAwRNN4RQJKSnnHCXMETD4i13eoHyHVkxRaw43HK7uNCwytBndiKzYMhV4UCPkg",
+    "p2sh-p2wpkh:testnet": "tpubDDBiu1mKzyJhEG86Spma36DddsJJTMcD5dnBnKcoLe48vSoNeupLzA1DNQYQqXgvDSjJgJwyA89TSGTsM8KKhYt19g4WeisBhaBAfaSTzMo",
+    "p2tr:mainnet": "tpubDDeePbQCHy36YPbzTf4whHyfi8gn1ziUvimnkXz7H4t8HHhvKauC2H9oNJBzyWQuuoD2G6TTGu5VYTEAhc1JgAcfApq9w3fXoiqWQqrNS68",
+    "p2tr:testnet": "tpubDCQ5TG9fwfNaeam1mBH19HHT9G3P6xc9sCrWwVYvR2ejNypjrpD2Y3X5WETiaq7JGXSwe9a2wiARfpS2LfraHUafo8B2YLaX4fnpqEehnR6",
+    "p2wpkh:mainnet": "tpubDCWgwKucWRXAfFzByhifpX8hSGEBTjGHPT1oEu1jwwLhrzuMfU3wAoq5aj446UsEHxBX1wsQD2nJ8FNHaYgpf8jqaKAQyaptuiLT9UH4kGk",
+    "p2wpkh:testnet": "tpubDDkA4dVjsR6EpYbpFhHSBwr9vrqPhikWUppwYj8Hh3SQJPE1fGc6g2XKnjjzjYXrU361ymexTCfd4LqmgwGWGMHahSKn2fL9GNVfCKgMSSz"
+  },
+  "hd_paths": {
+    "p2pkh": "m/44'/COIN'/0'/0/0",
+    "p2sh-p2wpkh": "m/49'/COIN'/0'/0/0",
+    "p2tr": "m/86'/COIN'/0'/0/0",
+    "p2wpkh": "m/84'/COIN'/0'/0/0"
+  }
+}

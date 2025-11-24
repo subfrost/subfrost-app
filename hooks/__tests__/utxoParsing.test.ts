@@ -1,10 +1,10 @@
 /**
  * UTXO Parsing and Vault Unit Detection Tests
  * 
- * These tests verify our UTXO parsing logic matches the Oyl SDK structure
+ * These tests verify our UTXO parsing logic matches the Alkanes SDK structure
  * and that our vault unit detection correctly filters alkanes.
  * 
- * Based on: @oyl/sdk/lib/utxo/types.d.ts
+ * Based on: @alkanes/ts-sdk/src/types/index.ts (UTXO)
  */
 
 // Mock FormattedUtxo structure based on SDK
@@ -432,7 +432,7 @@ console.log('══════════════════════�
 
 if (testsFailed === 0) {
   console.log('✅ All UTXO parsing logic matches SDK structure!');
-  console.log('📋 Verified against: @oyl/sdk/lib/utxo/types.d.ts\n');
+  console.log('📋 Verified against: @alkanes/ts-sdk/src/types/index.ts (UTXO)\n');
   process.exit(0);
 } else {
   console.log('⚠️  Some tests failed. Review errors above.\n');

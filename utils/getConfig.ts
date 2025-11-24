@@ -8,8 +8,7 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:8',
         FRBTC_ALKANE_ID: '32:0',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:2082',
-        OYL_API_URL:
-          process.env.NEXT_PUBLIC_OYL_API_URL ?? 'https://ladder-chain-sieve.sandshrew.io',
+        OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'https://oylnet-api.oyl.gg',
         BLOCK_EXPLORER_URL_BTC: 'https://ordiscan.com',
         BLOCK_EXPLORER_URL_ETH: 'https://etherscan.io',
       };

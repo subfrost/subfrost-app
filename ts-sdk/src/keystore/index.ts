@@ -1,11 +1,11 @@
 /**
  * Keystore management for Alkanes SDK
- * 
+ *
  * Provides ethers.js-style keystore encryption/decryption with password protection.
- * Compatible with the WASM keystore implementation in alkanes-web-sys.
  */
 
 import * as bip39 from 'bip39';
+import init from "../wasm/alkanes";
 import * as bitcoin from 'bitcoinjs-lib';
 import BIP32Factory, { BIP32Interface } from 'bip32';
 import * as ecc from '@bitcoinerlab/secp256k1';
@@ -21,10 +21,6 @@ import {
   ExportOptions,
   ImportOptions,
 } from '../types';
-
-// Re-export the WASM keystore functions
-// @ts-ignore - WASM types are available at runtime
-import type * as AlkanesWasm from '../../build/wasm/alkanes_web_sys';
 
 /**
  * Default PBKDF2 parameters (matching ethers.js defaults)
@@ -47,13 +43,12 @@ export const DERIVATION_PATHS = {
  * Keystore manager class
  * 
  * Manages wallet mnemonics with encryption compatible with ethers.js format.
- * Can be used standalone or integrated with WASM backend.
+ * Uses pure JS implementation for cryptographic operations.
  */
 export class KeystoreManager {
-  private wasm?: typeof AlkanesWasm;
 
-  constructor(wasmModule?: typeof AlkanesWasm) {
-    this.wasm = wasmModule;
+  constructor() {
+    // WASM module is no longer used for keystore operations.
   }
 
   /**
@@ -140,12 +135,7 @@ export class KeystoreManager {
       throw new Error('Password must be at least 8 characters');
     }
 
-    // Use WASM implementation if available
-    if (this.wasm) {
-      return this.exportKeystoreWasm(keystore, password, options);
-    }
-
-    // Fallback to pure JS implementation
+    // Always use pure JS implementation
     return this.exportKeystoreJS(keystore, password, options);
   }
 
@@ -168,87 +158,8 @@ export class KeystoreManager {
       throw new Error('Invalid keystore format');
     }
 
-    // Use WASM implementation if available
-    if (this.wasm) {
-      return this.importKeystoreWasm(encrypted, password, options);
-    }
-
-    // Fallback to pure JS implementation
+    // Always use pure JS implementation
     return this.importKeystoreJS(encrypted, password, options);
-  }
-
-  /**
-   * Export using WASM backend (delegates to alkanes-web-sys)
-   */
-  private async exportKeystoreWasm(
-    keystore: Keystore,
-    password: string,
-    options: ExportOptions
-  ): Promise<string | EncryptedKeystore> {
-    if (!this.wasm) {
-      throw new Error('WASM module not loaded');
-    }
-
-    // Convert to WASM keystore format
-    const wasmKeystore = new this.wasm.Keystore({
-      encrypted_mnemonic: '', // Will be encrypted by WASM
-      master_fingerprint: keystore.masterFingerprint,
-      created_at: keystore.createdAt,
-      version: '1.0',
-      pbkdf2_params: {
-        salt: '',
-        iterations: DEFAULT_PBKDF2_ITERATIONS,
-      },
-      account_xpub: keystore.accountXpub,
-      hd_paths: this.serializeHdPaths(keystore.hdPaths),
-      seed: null,
-    });
-
-    // Call WASM encrypt method
-    const encryptedJson = await wasmKeystore.encrypt(password);
-    
-    if (options.format === 'json') {
-      return JSON.parse(encryptedJson);
-    }
-
-    return options.pretty ? 
-      JSON.stringify(JSON.parse(encryptedJson), null, 2) : 
-      encryptedJson;
-  }
-
-  /**
-   * Import using WASM backend (delegates to alkanes-web-sys)
-   */
-  private async importKeystoreWasm(
-    encrypted: EncryptedKeystore,
-    password: string,
-    options: ImportOptions
-  ): Promise<Keystore> {
-    if (!this.wasm) {
-      throw new Error('WASM module not loaded');
-    }
-
-    // Create WASM keystore from encrypted data
-    const wasmKeystore = new this.wasm.Keystore(encrypted);
-    
-    // Decrypt
-    await wasmKeystore.decrypt(password);
-    
-    // Extract decrypted data
-    const mnemonic = wasmKeystore.getMnemonic();
-    
-    if (options.validate && !this.validateMnemonic(mnemonic)) {
-      throw new Error('Decrypted mnemonic is invalid');
-    }
-
-    return {
-      mnemonic,
-      masterFingerprint: encrypted.master_fingerprint,
-      accountXpub: encrypted.account_xpub,
-      hdPaths: this.deserializeHdPaths(encrypted.hd_paths),
-      network: options.network || 'mainnet',
-      createdAt: encrypted.created_at,
-    };
   }
 
   /**
@@ -281,7 +192,7 @@ export class KeystoreManager {
     const key = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt,
+        salt: salt as BufferSource,
         iterations: DEFAULT_PBKDF2_ITERATIONS,
         hash: 'SHA-256',
       },
@@ -294,7 +205,7 @@ export class KeystoreManager {
     // Encrypt mnemonic
     const mnemonicBuffer = encoder.encode(keystore.mnemonic);
     const encryptedBuffer = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: nonce },
+      { name: 'AES-GCM', iv: nonce as BufferSource },
       key,
       mnemonicBuffer
     );
@@ -355,7 +266,7 @@ export class KeystoreManager {
     const key = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt,
+        salt: salt as BufferSource,
         iterations: encrypted.pbkdf2_params.iterations,
         hash: 'SHA-256',
       },
@@ -369,9 +280,9 @@ export class KeystoreManager {
     try {
       const encryptedBuffer = this.hexToBuffer(encrypted.encrypted_mnemonic);
       const decryptedBuffer = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: nonce },
+        { name: 'AES-GCM', iv: nonce as BufferSource },
         key,
-        encryptedBuffer
+        encryptedBuffer as BufferSource
       );
       
       const mnemonic = decoder.decode(decryptedBuffer);
@@ -445,15 +356,13 @@ export class KeystoreManager {
     );
   }
 
-  private async getCrypto(): Promise<SubtleCrypto & { getRandomValues: (arr: Uint8Array) => Uint8Array }> {
-    // Always use browser crypto API
+  private async getCrypto(): Promise<Crypto> {
     if (typeof window !== 'undefined' && window.crypto) {
-      return window.crypto as any;
+      return window.crypto;
     }
     
-    // For Node.js/SSR, use global crypto (Node 19+)
     if (typeof globalThis !== 'undefined' && (globalThis as any).crypto) {
-      return (globalThis as any).crypto as any;
+      return (globalThis as any).crypto;
     }
     
     throw new Error('Web Crypto API not available. Please use a modern browser or Node.js 19+');

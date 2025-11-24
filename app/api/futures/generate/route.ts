@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     // Get RPC URL from request or use default (Sandshrew proxy)
     const body = await request.json().catch(() => ({}));
-    const rpcUrl = body.rpcUrl || 'http://localhost:18888';
+    const rpcUrl = body.rpcUrl || 'https://regtest.subfrost.io/v4/jsonrpc';
     console.log('[API] Using RPC URL:', rpcUrl);
     
     // Use the hardcoded frBTC signer address that we know works

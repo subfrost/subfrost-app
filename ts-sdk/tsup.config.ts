@@ -1,9 +1,14 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: [
+    'src/index.ts',
+    'src/types/index.ts',
+    'src/wallet/index.ts',
+    'src/provider/index.ts',
+  ],
   format: ['cjs', 'esm'],
-  dts: false,
+  dts: true,
   clean: true,
   splitting: false,
   sourcemap: true,
@@ -12,6 +17,7 @@ export default defineConfig({
   external: [
     'node:crypto',
     'crypto',
+    'env' // Exclude 'env' as it's a generated import from wasm-bindgen
   ],
   noExternal: [
     'bip39',

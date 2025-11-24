@@ -1,0 +1,29 @@
+{
+  "encrypted_mnemonic": "-----BEGIN ENCRYPTED MNEMONIC-----\n\n/p60NI70Zio2vy8Z2DTGvW406y9unb5wL9FwnZTS3hfmkx+IYnIVbq0U60X8tsMN\nqCaE5szISyx5MMxpnu8BVghCmHOJvH6FE25BQJ6Oqc7KjH+T7FUCYjDqooS2lueM\ngaj8vUOATndmfaY9v23aZS/L8Y1epLaaZOUeSlC6x6ONfJcF+VHNhNthuzaIAqrI\nFx6PPIPrvNY5V5pKIPQ1nJFQtQojoq6v4fPcUmDupc8mpg==\n=xBd1\n-----END ENCRYPTED MNEMONIC-----\n",
+  "master_fingerprint": "d96714ac",
+  "created_at": 0,
+  "version": "10.0.0",
+  "pbkdf2_params": {
+    "salt": "fe9604514868a6218f78b0d365d50e54",
+    "nonce": "ad209cd815d7803a9961b628",
+    "iterations": 600000,
+    "algorithm": "aes-256-gcm"
+  },
+  "account_xpub": "tpubDCxKejfZm789Q3Xp1xGzT6mksDzXfU2WiNt5XZnMzfnrSUqyXhMrd5BaEQUhLbrMYT3vEnwZ8w2cVcjyBAkzJNSrtvdPcgMZB2wUivyjcVB",
+  "account_xpubs": {
+    "p2pkh:mainnet": "tpubDD5eqga7KxQrJJGDQy9hesPmEH3XnQKargWYXQYGXMEdLh8VwVnS343KNxwYuhNb16Xcu2jFdxdeNpp3L7YoHM7jGLx1uPWJB1zn37zkBsM",
+    "p2pkh:testnet": "tpubDD8qC1CZUR9DRAsjmHxUnAm4T5Csa1FLgzY2BkWzmzoaEZkyG9wkaFWJS9NytwAPqW7XHJGdytXeFhHcCqV7EWNAyCaXvgqTLAGZxhALmwP",
+    "p2sh-p2wpkh:mainnet": "tpubDDdVyuEQGBF5Xgb3JNoRTxh3ByB1pJT5nCP32b9RpgRmRbdbtpEPoew93fN1N8gbUq6mn3uNYomcvd1LgBTeY2NSuzccNf6VZrACggWfJAD",
+    "p2sh-p2wpkh:testnet": "tpubDCBnETvkFjmX3Hz6QezUrHCHB24wWZStghCGErGsEuHCSCX6TfFcpTvQXC1tgbSqX3BTYqVPLJaDLBP6RGAg462BcKkXfWeg5xHxkBPRGtX",
+    "p2tr:mainnet": "tpubDCxKejfZm789Q3Xp1xGzT6mksDzXfU2WiNt5XZnMzfnrSUqyXhMrd5BaEQUhLbrMYT3vEnwZ8w2cVcjyBAkzJNSrtvdPcgMZB2wUivyjcVB",
+    "p2tr:testnet": "tpubDDAPu52VwTLcL1uNsA1fGoW89EmMrcyNyK2NLw7W57muEw5YpWBTPDgPwvHRHchQnVWCnBdRPxG16mH92txS6h7PHu38Rh1ttjxvQS3Jwyr",
+    "p2wpkh:mainnet": "tpubDCs9cCHqax1b2UGdKupcn1CYfBZAtjb3n7Yd5DtsCqMec3kczhYvDovgQ8oSrqh81Z1cE7RVR6EY3p7eKECpXimAF9TrnsyLKD3pEsZDH8W",
+    "p2wpkh:testnet": "tpubDDA1G6JtczVSkd1gGMmZx9gE7kpb1XRH64dvLTEArd1LUd7YpUjzkkbueyoG116yAUVNpzQFCied1AEGcs1oDX7i1v2sjUnCqAqeVMeRyGm"
+  },
+  "hd_paths": {
+    "p2pkh": "m/44'/COIN'/0'/0/0",
+    "p2sh-p2wpkh": "m/49'/COIN'/0'/0/0",
+    "p2tr": "m/86'/COIN'/0'/0/0",
+    "p2wpkh": "m/84'/COIN'/0'/0/0"
+  }
+}

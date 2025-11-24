@@ -1,5 +1,6 @@
 import BigNumber from 'bignumber.js';
-import type { FormattedUtxo, Provider } from '@oyl/sdk';
+import type { FormattedUtxo } from '@alkanes/ts-sdk/types'; // Import FormattedUtxo from types submodule
+import type { AlkanesProvider } from '@alkanes/ts-sdk';
 
 export function calculateMinimumFromSlippage({
   amount,
@@ -29,7 +30,7 @@ export function calculateMaximumFromSlippage({
     .toString();
 }
 
-export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
+export const getFutureBlockHeight = async (blocks = 0, provider: AlkanesProvider) => {
   const currentBlockHeight = await provider.sandshrew.bitcoindRpc.getBlockCount!();
   return currentBlockHeight + blocks;
 };
@@ -47,5 +48,3 @@ export const assertAlkaneUtxosAreClean = (utxos: FormattedUtxo[]): void => {
     );
   }
 };
-
-

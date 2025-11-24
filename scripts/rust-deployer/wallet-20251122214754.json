@@ -1,0 +1,29 @@
+{
+  "encrypted_mnemonic": "-----BEGIN ENCRYPTED MNEMONIC-----\n\nv2NWgiErK5avb1gA/ooK+ii2asDGt5egxwlAsFLsE1Tdt8nB7QxQvQFW2u5+q7lL\nbY1S7Le+HZAcB7ZWXgM0E10CfLyt7D5HLdFEH7jvXTAF7oli41Wm278LdVBhebby\nLp7PTM+BgnAiKySTOpmIXmdWyWw7fHFQNZjf1hS2PZMY41i8+7GhvN2aV7sHUFPz\na6XXafCI5OAA1LNTExIn9dbPGieo8DrLsLw+Y5s=\n=2exz\n-----END ENCRYPTED MNEMONIC-----\n",
+  "master_fingerprint": "55e751d8",
+  "created_at": 0,
+  "version": "10.0.0",
+  "pbkdf2_params": {
+    "salt": "978bc6b1347d7dc9cb1fefa299524db3",
+    "nonce": "6a7dd007077a4649140fd819",
+    "iterations": 600000,
+    "algorithm": "aes-256-gcm"
+  },
+  "account_xpub": "tpubDCBXDMtErSytUcB9KH3tCLLFJ4tMy9Wewvx2yCGLyyiLazgmsacyG6wNY8ReETgNJ51idL8k27FK5g5uBRp76mnafvTfxuJMC138XuZnvX1",
+  "account_xpubs": {
+    "p2pkh:mainnet": "tpubDCvdWCKxA6JZ26Uwp9cjFxsT6JRaYr85s7W8Ewv6uyNgs6CEvjEdZK91UGsezcah7hn9awy3Kpt7VMn1r94jqh4YVdWysUQ159K7iWDHjop",
+    "p2pkh:testnet": "tpubDDJGFCc7TxHsxE53vWzytiLJojasTg19RX6u7S2BBC3zqqPvxw1xn5Ygbn3xNmFnGTnMTJFUXYeZemru2e6A3JFbrHXNJvwgD6fDwWqgKGg",
+    "p2sh-p2wpkh:mainnet": "tpubDCLvSiMRy5TdpSYuqSq4Nx84SfRuS7TLAM7Ju2Azjyph8KrZm6V9Gg5K3UTbDQ5YoUE8t6paKiUv7EPrZKnsXipj6hGzXYqd8YemBXrkEcV",
+    "p2sh-p2wpkh:testnet": "tpubDCBTLVFJEcbRD91pLQx5h9dP21gkQkdasNRPPhTonCM1mxTmCDxML3PKc43pXmFqbTzsLBbm8XosQsZVjUSzs73UJka5XGhaMkQZXQLVSXy",
+    "p2tr:mainnet": "tpubDCBXDMtErSytUcB9KH3tCLLFJ4tMy9Wewvx2yCGLyyiLazgmsacyG6wNY8ReETgNJ51idL8k27FK5g5uBRp76mnafvTfxuJMC138XuZnvX1",
+    "p2tr:testnet": "tpubDDrDszwUmGymzUD98LFANAcvastPDZodULPAew9h8v56h9BBiEzmLjW56mh7dCRajthxaCE7PN5SXpnMNWC8kCp9ahUJpfbHPG9EpDvoV6A",
+    "p2wpkh:mainnet": "tpubDCyAv5f3AzdqHXgzbDQX85cKty6nXwda8RhaYDPU4VQaUYYABS1pC6zNKTwSCofS8d1enotzkgEU4KfTUy3zrE3vTcrRr3SRKoQo9321JVN",
+    "p2wpkh:testnet": "tpubDCwUstasW25W4Y1Mv8xyEVcLc66nMgLX1JUDBQ5Nr562K6kMHxQtLkhMVfDjSA4YrEhHJVoc7dKcNkwu943mZTBuojgye6AfAJhqe9789eM"
+  },
+  "hd_paths": {
+    "p2pkh": "m/44'/COIN'/0'/0/0",
+    "p2sh-p2wpkh": "m/49'/COIN'/0'/0/0",
+    "p2tr": "m/86'/COIN'/0'/0/0",
+    "p2wpkh": "m/84'/COIN'/0'/0/0"
+  }
+}

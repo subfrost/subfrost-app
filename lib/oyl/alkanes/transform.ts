@@ -1,4 +1,4 @@
-import type { AlkaneId } from '@oyl/sdk';
+import type { AlkaneId } from '@alkanes/ts-sdk';
 
 export function formatAlkaneId({ block, tx }: AlkaneId): string {
   return `${block}:${tx}`;

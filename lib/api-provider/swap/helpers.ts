@@ -5,7 +5,7 @@ import {
   assertHex,
   UTXO_DUST,
   getAddressType,
-} from  "@oyl/sdk"
+} from  "@alkanes/ts-sdk"
 import {
   BidAffordabilityCheck,
   BidAffordabilityCheckResponse,

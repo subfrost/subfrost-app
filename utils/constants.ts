@@ -1,18 +1,18 @@
-import type { Network } from '@oyl/sdk';
-import { networks } from '@oyl/sdk';
+import type { NetworkType } from '@alkanes/ts-sdk';
+import * as bitcoin from 'bitcoinjs-lib';
 
-export const NetworkMap: Partial<Record<Network, typeof networks.mainnet>> = {
-  mainnet: networks.mainnet,
-  testnet: networks.testnet,
-  signet: networks.testnet,
-  oylnet: networks.regtest,
+export const NetworkMap: Partial<Record<NetworkType, bitcoin.Network>> = {
+  mainnet: bitcoin.networks.bitcoin,
+  testnet: bitcoin.networks.testnet,
+  signet: bitcoin.networks.testnet, // Signet often uses testnet parameters or specific signet parameters not in bitcoinjs-lib
+  regtest: bitcoin.networks.regtest, // Assuming oylnet maps to regtest
 };
 
-export const SandshrewUrlMap: Partial<Record<Network, string>> = {
+export const SandshrewUrlMap: Partial<Record<NetworkType, string>> = {
   mainnet: 'https://mainnet.sandshrew.io',
   testnet: 'https://testnet.sandshrew.io',
   signet: 'https://signet.sandshrew.io',
-  oylnet: 'https://ladder-chain-sieve.sandshrew.io',
+  regtest: 'https://oylnet-api.oyl.gg', // Assuming oylnet maps to regtest
 };
 
 

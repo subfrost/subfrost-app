@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Network } from '@oyl/sdk';
+import type { Network } from '@/utils/types'; // Using local Network type
 
 type TokenIconProps = {
   symbol: string;
@@ -50,7 +50,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     if (id && /^\d+:\d+/.test(id)) {
       // Convert colon to hyphen for URL: "2:56801" becomes "2-56801"
       const urlSafeId = id.replace(/:/g, '-');
-      paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+      // TODO: Replace with @alkanes asset URL or a generic one
     }
     
     // Priority 5: Try local token assets by symbol

@@ -1,8 +1,5 @@
 const nextConfig = {
-  /* config options here */
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  reactStrictMode: true,
   typescript: {
     ignoreBuildErrors: false,
   },
@@ -10,18 +7,36 @@ const nextConfig = {
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
+      layers: true, // Enable Webpack layers for WASM if not already
     };
+
     config.output.webassemblyModuleFilename =
       (isServer ? "../" : "") + "static/wasm/[modulehash].wasm";
-    
-    // Fix @noble/hashes module resolution for @oyl/sdk
-    // @oyl/sdk imports '@noble/hashes/sha2' but package exports require '.js' extension
+
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@noble/hashes/sha2': '@noble/hashes/sha2.js',
     };
+
+    // Use NormalModuleReplacementPlugin to point 'env' to an empty module
+    // This addresses the `import * as __wbg_star0 from 'env';` issue in wasm-bindgen generated code
+    config.plugins.push(new webpack.NormalModuleReplacementPlugin(
+      /^env$/,
+      resource => {
+        resource.request = require.resolve('./utils/empty-module.js'); // Point to a dummy module
+      }
+    ));
     
-    // Add polyfills for browser
+    // Add a rule to handle .wasm files directly
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: "asset/resource",
+      exclude: [/node_modules/], // Ensure this isn't handled by other loaders
+      generator: {
+        filename: "static/wasm/[name].[hash][ext]",
+      },
+    });
+    
+    // Add polyfills for browser (existing)
     if (!isServer) {
       config.plugins.push(
         new webpack.ProvidePlugin({

@@ -3,8 +3,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { LaserEyesProvider } from '@omnisat/lasereyes-react';
-import type { Network } from '@oyl/sdk';
+import type { NetworkType as Network } from '@alkanes/ts-sdk/types'; // Corrected import for Network
 
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
@@ -25,17 +24,16 @@ export default function Providers({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       const host = window.location.host;
       let detectedNetwork: Network;
-      if (!process.env.NEXT_PUBLIC_NETWORK) {
-        if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
-          detectedNetwork = 'signet';
-        } else if (host.startsWith('oylnet.') || host.startsWith('staging-oylnet.')) {
-          detectedNetwork = 'oylnet';
-        } else {
-          detectedNetwork = 'mainnet';
-        }
+      const envNetwork = process.env.NEXT_PUBLIC_NETWORK as Network;
+
+      if (envNetwork) {
+        detectedNetwork = envNetwork === 'regtest' ? 'mainnet' : envNetwork;
+      } else if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
+        detectedNetwork = 'signet';
+      } else if (host.startsWith('oylnet.') || host.startsWith('staging-oylnet.')) {
+        detectedNetwork = 'oylnet';
       } else {
-        const envNet = process.env.NEXT_PUBLIC_NETWORK as Network;
-        detectedNetwork = (envNet as any) === 'regtest' ? 'mainnet' : envNet;
+        detectedNetwork = 'mainnet';
       }
       setNetwork(detectedNetwork);
     }
@@ -47,14 +45,9 @@ export default function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <GlobalStore>
         <ModalStore>
-          {/* @ts-ignore - LaserEyes expects its own network type */}
-          <LaserEyesProvider config={{ network }}>
             <WalletProvider>{children}</WalletProvider>
-          </LaserEyesProvider>
         </ModalStore>
       </GlobalStore>
     </QueryClientProvider>
   );
 }
-
-

@@ -5,7 +5,7 @@ import {
   Signer,
   OylTransactionError,
   getAddressType,
-} from "@oyl/sdk";
+} from "@alkanes/ts-sdk";
 import { signBip322Message } from "./BIP322";
 import {
   GetListingPsbtRequest,

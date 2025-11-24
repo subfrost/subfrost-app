@@ -14,8 +14,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-ALKANES_DIR="$HOME/alkanes-rs"
-CLI_BINARY="${ALKANES_CLI:-$ALKANES_DIR/target/release/alkanes-cli}"
+ALKANES_DIR="reference/alkanes-rs"
+CLI_BINARY="$ALKANES_DIR/target/release/alkanes-cli"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WASM_DIR="$SCRIPT_DIR/../prod_wasms"
 WALLET_FILE="$HOME/.alkanes/regtest-wallet.json"
@@ -54,7 +54,7 @@ check_cli() {
     fi
     
     # Fallback to PATH
-    if command -v subfrost-cli &> /dev/null; then
+    if command -v subfrost-cli > /dev/null; then
         CLI_BINARY="subfrost-cli"
         log_success "Found subfrost-cli in PATH: $(which subfrost-cli)"
         return 0
@@ -100,14 +100,29 @@ setup_wallet() {
     if [ ! -f "$WALLET_FILE" ]; then
         log_info "Creating new wallet..."
         mkdir -p "$(dirname "$WALLET_FILE")"
-        "$CLI_BINARY" -p regtest wallet new > "$WALLET_FILE"
-        log_success "Wallet created at $WALLET_FILE"
+        
+        # Create wallet and wait for it to be valid
+        "$CLI_BINARY" -p regtest wallet create > "$WALLET_FILE"
+        
+        # Validate wallet file
+        local attempts=0
+        while ! jq . "$WALLET_FILE" > /dev/null 2>&1; do
+            log_warn "Wallet file is not yet valid JSON, waiting..."
+            sleep 1
+            attempts=$((attempts + 1))
+            if [ "$attempts" -ge 10 ]; then
+                log_error "Wallet file is still not valid after 10 seconds."
+                exit 1
+            fi
+        done
+        
+        log_success "Wallet created and validated at $WALLET_FILE"
     else
         log_success "Using existing wallet at $WALLET_FILE"
     fi
     
     # Get wallet address
-    WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet address)
+    WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet addresses)
     log_info "Wallet address: $WALLET_ADDRESS"
 }
 
@@ -122,7 +137,7 @@ fund_wallet() {
     
     if [ "$BALANCE" -lt "1000000000" ]; then # Less than 10 BTC
         log_info "Wallet balance low ($BALANCE sats), mining blocks to fund wallet..."
-        WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet address)
+        WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet addresses)
         
         # Mine blocks using bitcoin-cli (regtest mode allows instant mining)
         # This assumes bitcoin-cli is configured for the regtest network
@@ -471,14 +486,33 @@ main() {
     # Deploy factory proxy
     deploy_contract "OYL Factory Proxy" "$WASM_DIR/alkanes_std_upgradeable.wasm" "$AMM_FACTORY_PROXY_TX" "$((0x7fff)),4,$AMM_FACTORY_LOGIC_IMPL_TX,1"
     
-    # Initialize factory proxy
-    log_info "Initializing OYL Factory Proxy..."
+    # Create an auth token to be spent in the factory initialization
+    log_info "Creating auth token..."
+    CREATE_AUTH_TOKEN_OUTPUT=$("$CLI_BINARY" -p regtest \
+        --wallet-file "$WALLET_FILE" \
+        alkanes execute "[4,$AUTH_TOKEN_FACTORY_ID,0]" \
+        --fee-rate 1 \
+        --mine \
+        -y 2>&1)
+    
+    AUTH_TOKEN_ID=$(echo "$CREATE_AUTH_TOKEN_OUTPUT" | grep -o '\[2, [0-9]\+\]' | sed 's/\[//;s/\]//;s/, /:/')
+    
+    if [ -z "$AUTH_TOKEN_ID" ]; then
+        log_error "Failed to create or parse auth token ID"
+        log_error "Output: $CREATE_AUTH_TOKEN_OUTPUT"
+        exit 1
+    fi
+    log_success "Auth token created with ID: $AUTH_TOKEN_ID"
+    
+    # Initialize factory proxy, spending the auth token
+    log_info "Initializing OYL Factory Proxy with auth token $AUTH_TOKEN_ID..."
     INIT_PROTOSTONE="[4,$AMM_FACTORY_PROXY_TX,0,$POOL_BEACON_PROXY_TX,4,$POOL_UPGRADEABLE_BEACON_TX]:v0:v0"
     log_info "  Protostone: $INIT_PROTOSTONE"
     
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$INIT_PROTOSTONE" \
+        --inputs "$AUTH_TOKEN_ID:1" \
         --fee-rate 1 \
         --mine \
         --trace \

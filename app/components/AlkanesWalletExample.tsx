@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import { useAlkanesWallet } from '@/hooks/useAlkanesWallet';
-import type { Network } from '@oyl/sdk';
+import type { Network } from '@/utils/types'; // Using local Network type
 
 export function AlkanesWalletExample() {
   const [password, setPassword] = useState('');
@@ -148,8 +148,8 @@ export function AlkanesWalletExample() {
         {wallet.isUnlocked && (
           <>
             <button
-              onClick={handleSignPsbt}
-              className="px-4 py-2 bg-purple-500 text-white rounded"
+            onClick={handleSignPsbt}
+            className="px-4 py-2 bg-purple-500 text-white rounded"
             >
               Sign PSBT
             </button>

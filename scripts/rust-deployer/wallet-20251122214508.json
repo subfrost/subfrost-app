@@ -1,0 +1,29 @@
+{
+  "encrypted_mnemonic": "-----BEGIN ENCRYPTED MNEMONIC-----\n\ndKWMMQLkqVaGF5dajqFFd3QCGI7A9HBMkPbD01n3ENB7FD3JzfGxUmZ2fit0Swqc\naZlFg8tM5EJPbWLVZse3Aa9DpBJAIuJ5J4JNqSEvr8ZhLKC3bA1Nh/yM/47KRnQS\nUrUD1n4chlHalyrrsCUaLEw+B+BXyRRJb3XwWRphWIEaeRS//YuYusSDNRIMnPaI\n22ZN7Kygu+WvHlV+nslZUXW3q6j5wH8=\n=nyWg\n-----END ENCRYPTED MNEMONIC-----\n",
+  "master_fingerprint": "1dd680c6",
+  "created_at": 0,
+  "version": "10.0.0",
+  "pbkdf2_params": {
+    "salt": "5aa0d164d188a93a6747cea40a182b8f",
+    "nonce": "d5f972daec76c11a9e555fe2",
+    "iterations": 600000,
+    "algorithm": "aes-256-gcm"
+  },
+  "account_xpub": "tpubDCNPKGc8sxsumAmJkTu4DEEyrrqEdXswypqRUaoGhHf9W8Zo5ExSHS386xHEidCqk1zFHb9ByVf3ayNMeUeEQuvzXjHoHkpdXCmwyT5bD2Q",
+  "account_xpubs": {
+    "p2pkh:mainnet": "tpubDDfdALMzZrXLZNTFXsEmWCaodzwju6uAeHrhfNBPm6uULmEuNvgz7bz9xdJpzoNzNJ6FPzDyzeGhXmC9V66WTHAvnUMJhShTeM7ZxW5zsGd",
+    "p2pkh:testnet": "tpubDDrVS5AUXmt7o1ai9GCAFAiiqPp2XTMsH5CG2xMY7gbDNCiaH8ymaeqv3RTb2upFjcuLkq6CWJuku7aJnSFZTGdRcoPu4fcNNzuadPkmgS8",
+    "p2sh-p2wpkh:mainnet": "tpubDDfPgTvYe6ZPNo5LmAV2ZjG8ueWrNqekrsbjeVqb1VcQ8pGhbCeP2KzAAXmFb4uxG81w5opaSZ76DvrXvWxa3vKeyoQXnpxsQaUw9fGCu83",
+    "p2sh-p2wpkh:testnet": "tpubDCbSj2C8PN2DZWH6UsMjYgZrh3ya3jNGnT1ZsBLa9u6t5NYN9a14bnskhCm3Zr9aL5XeSTnDHt2gKtuYSPE6vHcL6Rd6VbbVkx6SMUHj7hW",
+    "p2tr:mainnet": "tpubDCNPKGc8sxsumAmJkTu4DEEyrrqEdXswypqRUaoGhHf9W8Zo5ExSHS386xHEidCqk1zFHb9ByVf3ayNMeUeEQuvzXjHoHkpdXCmwyT5bD2Q",
+    "p2tr:testnet": "tpubDChmwjaWfkrYU3ivgdVFyGa77keqjmbEdBBmWgJnNi5TyxSrqGHi9Chx9ay1hf5ofuYyo9rZNijMYkS6g1ZZ7irUio1UsjWX2se3aNNwZrA",
+    "p2wpkh:mainnet": "tpubDD1cmjfgn4q6EUfeG7CFNLGNjUEFK2uSCdiFzf5ey9Fj2Yhd5i5vWT5pyFGA5uvBBjotMz2vdRzP3aB1BSZQ7ZaFYSwV72tRCr9JMuUn4J9",
+    "p2wpkh:testnet": "tpubDCxK9PvgBP69H4U1oMU1EqhTdsuTBgF2vpvDQiifKWHyTKLzFMquh9WoH3vQwYAaNeL9mFauHRj6G1qcc3yPJN8CcmbnT8tmEDScE2usugi"
+  },
+  "hd_paths": {
+    "p2pkh": "m/44'/COIN'/0'/0/0",
+    "p2sh-p2wpkh": "m/49'/COIN'/0'/0/0",
+    "p2tr": "m/86'/COIN'/0'/0/0",
+    "p2wpkh": "m/84'/COIN'/0'/0/0"
+  }
+}

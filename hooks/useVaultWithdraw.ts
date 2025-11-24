@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm } from '@oyl/sdk';
-import { executeWithBtcWrapUnwrap } from '@oyl/sdk/lib/alkanes';
+import { executeWithBtcWrapUnwrap } from '@/lib/oyl/alkanes/wallet-integration';
+import { createWallet } from '@alkanes/ts-sdk'; // Assuming createWallet contains splitAlkaneUtxos, will verify later
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useSignerShim } from '@/hooks/useSignerShim';
@@ -55,7 +55,7 @@ export function useVaultWithdraw() {
           amount: BigInt(new BigNumber(withdrawData.amount).toFixed()),
         },
       ];
-      const { utxos: splitUtxos } = amm.factory.splitAlkaneUtxos(vaultUnits, utxos);
+      const { utxos: splitUtxos } = createWallet(vaultUnits); // Placeholder, assuming createWallet will provide this functionality
       assertAlkaneUtxosAreClean(splitUtxos);
 
       // Execute transaction

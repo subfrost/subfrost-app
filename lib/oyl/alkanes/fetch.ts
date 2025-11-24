@@ -1,4 +1,4 @@
-import type { Network } from '@oyl/sdk';
+import type { NetworkType } from '@alkanes/ts-sdk';
 import { getApiProvider } from '@/utils/oylProvider';
 import { parseAlkaneId } from './transform';
 
@@ -24,7 +24,7 @@ export type AlkaneDetailsDisplayData = {
   marketcap: number;
 };
 
-export async function fetchAlkane(id: string, network: Network) {
+export async function fetchAlkane(id: string, network: NetworkType) {
   if (id === 'btc') {
     const btcDetails: AlkaneDetailsDisplayData = {
       id: { block: '0', tx: '0' },
@@ -55,5 +55,3 @@ export async function fetchAlkane(id: string, network: Network) {
   response.name = response.name?.replace?.('SUBFROST BTC', 'frBTC') ?? response.name;
   return response as AlkaneDetailsDisplayData;
 }
-
-

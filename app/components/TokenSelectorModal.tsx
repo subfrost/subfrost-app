@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import TokenIcon from './TokenIcon';
-import type { Network } from '@oyl/sdk';
+import type { Network } from '@/utils/types'; // Using local Network type
 import { Search, X } from 'lucide-react';
 
 export type TokenOption = {

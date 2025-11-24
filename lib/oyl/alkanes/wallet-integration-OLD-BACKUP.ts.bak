@@ -1,11 +1,11 @@
 /**
  * Alkanes-RS Wallet Integration
  * 
- * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
+ * Integrates alkanes-rs ts-sdk as a keystore backend for @alkanes/ts-sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
  */
 
-import type { Network } from '@oyl/sdk';
+import type { Network } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import {
   generateMnemonic,
@@ -256,19 +256,19 @@ export async function createAlkanesWallet(
 }
 
 /**
- * Create an Alkanes provider for @oyl/sdk
+ * Create an Alkanes provider for @alkanes/ts-sdk
  * 
  * @param network - Bitcoin network
  * @param rpcUrl - Optional Bitcoin Core RPC URL (defaults based on network)
- * @returns Alkanes provider compatible with @oyl/sdk
+ * @returns Alkanes provider compatible with @alkanes/ts-sdk
  */
 export async function createAlkanesProvider(
   network: Network,
   rpcUrl?: string
 ) {
-  // For now, return a simple provider that uses the default @oyl/sdk Provider
+  // For now, return a simple provider that uses the default @alkanes/ts-sdk Provider
   // This avoids importing the alkanes SDK which has node:crypto issues
-  const { Provider } = await import('@oyl/sdk');
+  const { Provider } = await import('@alkanes/ts-sdk');
   
   const defaultUrls: Record<Network, string> = {
     mainnet: 'https://api.subfrost.com',

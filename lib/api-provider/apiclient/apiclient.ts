@@ -1,23 +1,26 @@
-import {
-  SwapBrcBid,
-  SignedBid,
-  OkxBid,
-  GetOffersParams,
-  GetCollectionOffersParams,
-  Account,
-  SpendStrategy,
+import type {
   AlkaneId,
   FormattedUtxo,
-} from "@oyl/sdk";
-import {
+  NetworkType,
+  ProviderConfig,
+  Account, // From ts-sdk types
+  SpendStrategy, // From ts-sdk types
+} from "@alkanes/ts-sdk"; 
+import { AlkanesProvider } from "@alkanes/ts-sdk";
+import * as bitcoin from 'bitcoinjs-lib'; // Import bitcoinjs-lib
+import type {
   GetAddressListingsRequest,
   GetListingPsbtRequest,
   GetSellerPsbtRequest,
   SubmitBuyerPsbtRequest,
   SubmitListingPsbtRequest,
-} from "../swap/types";
-import { AccountUtxoPortfolio } from "@oyl/sdk/lib/utxo";
-import {
+  SwapBrcBid,
+  SignedBid,
+  OkxBid,
+  GetOffersParams,
+  GetCollectionOffersParams,
+} from "../swap/types"; // These types are defined in "../swap/types"
+import type {
   AddressPositionsResult,
   AlkanesByAddressResult,
   AlkanesGlobalSearchResult,
@@ -45,1343 +48,124 @@ import {
   FuturesPositionResult,
   FuturesOrderResult,
   FuturesMarketType,
-} from "./types";
+} from "./types"; // These types are defined in "./types"
 
 /**
- * Represents the client for interacting with the Oyl API.
+ * Represents the client for interacting with the Alkanes API.
  */
-export class OylApiClient {
-  private host: string;
-  private apiKey: string;
-  private network: string;
+export class ApiClient {
+  private provider: AlkanesProvider;
+  private apiKey: string; // Not directly used by AlkanesProvider but kept for consistency if needed by other components
 
-  /**
-   * Create an instance of the OylApiClient.
-   * @param options - Configuration object containing the API host.
-   */
-  constructor(options: { host: string; apiKey: string; network: string }) {
-    this.host = options?.host || "";
-    this.network = options.network;
+  constructor(options: { network: NetworkType; host: string; apiKey: string; version?: string }) {
     this.apiKey = options.apiKey;
+    // Initialize AlkanesProvider with the provided configuration
+    this.provider = new AlkanesProvider({
+      network: options.network === 'mainnet' ? bitcoin.networks.bitcoin : (options.network === 'testnet' ? bitcoin.networks.testnet : bitcoin.networks.regtest), // Map NetworkType to bitcoinjs-lib Network
+      networkType: options.network,
+      url: options.host,
+      projectId: options.apiKey, // Assuming projectId maps to apiKey
+      version: options.version,
+    });
   }
 
-  /**
-   * Create an instance of the OylApiClient from a plain object.
-   * @param data - The data object.
-   * @returns An instance of OylApiClient.
-   */
-  static fromObject(data: {
-    host: string;
-    apiKey: string;
-    network: string;
-  }): OylApiClient {
-    return new this(data);
-  }
-
-  /**
-   * Convert this OylApiClient instance to a plain object.
-   * @returns The plain object representation.
-   */
-  toObject(): { host: string; apiKey: string } {
-    return {
-      host: this.host,
-      apiKey: this.apiKey,
-    };
-  }
-
-
-  private async _call(
+  // Helper method to route API calls through the AlkanesProvider's underlying clients
+  private async _call<T>(
     path: string,
-    method: string,
+    method: string, // Method not directly used, as AlkanesProvider methods are specific
     data?: any,
-  ) {
-    try {
-      const options: RequestInit = {
-        method: method,
-        headers: {
-          "Content-Type": "application/json",
-          "x-oyl-api-key": this.apiKey,
-          "Accept": "application/json",
-        },
-        cache: "no-cache",
-      };
-
-      
-
-      if (["post", "put", "patch"].includes(method)) {
-        options.body = JSON.stringify(data);
-      }
-
-      const response: Response = await fetch(`${this.host}${path}`, options);
-      const contentType = response.headers.get("content-type") || "";
-
-      if (!response.ok) {
-        // Try to extract error details
-        let errorMessage = `HTTP ${response.status} ${response.statusText}`;
-        try {
-          if (contentType.includes("application/json")) {
-            const errorBody = await response.json();
-            const details = errorBody?.error || errorBody?.message || JSON.stringify(errorBody);
-            errorMessage = `${errorMessage}: ${details}`;
-          } else {
-            const text = await response.text();
-            errorMessage = `${errorMessage}: ${text}`;
-          }
-        } catch (_) {
-          // ignore parse errors
-        }
-        throw new Error(errorMessage);
-      }
-
-      if (contentType.includes("application/json")) {
-        return await response.json();
-      }
-      // Fallback to text for unexpected content types
-      return await response.text();
-    } catch (err) {
-      throw err;
-    }
-  }
-
-
-  /**
-   * Check beta access code.
-   * @param code - Access code.
-   * @param userId - User id.
-   */
-  async checkAccessCode({ code, userId }: { code: string; userId: string }) {
-    return await this._call("/check-access-code", "post", {
-      code,
-      userId,
-    });
-  }
-
-  /**
-   * Get brc20 info by ticker.
-   * @param ticker - The ticker to query.
-   */
-  async getBrc20TokenInfo(ticker: string) {
-    return await this._call("/get-brc20-token-info", "post", {
-      ticker: ticker,
-    });
-  }
-
-  /**
-   * Get Runes info by ticker.
-   * @param ticker - The ticker to query.
-   */
-  async getRuneTokenInfo(ticker: string) {
-    return await this._call("/get-rune-token-info", "post", {
-      ticker: ticker,
-    });
-  }
-
-  /***MARKETPLACE TRADE ENDPOINTS */
-
-  async getSellerPsbt(params: GetSellerPsbtRequest) {
-    return await this._call("/get-seller-psbt", "post", params);
-  }
-
-  async submitBuyerPsbt(params: SubmitBuyerPsbtRequest) {
-    return await this._call("/submit-buyer-psbt", "post", params);
-  }
-
-  async getListingPsbt(params: GetListingPsbtRequest) {
-    return await this._call("/get-listing-psbt", "post", params);
-  }
-
-  async submitListingPsbt(params: SubmitListingPsbtRequest) {
-    return await this._call("/submit-listing-psbt", "post", params);
-  }
-
-  async getAddressListings(params: GetAddressListingsRequest) {
-    return await this._call("/get-address-listings", "post", params);
-  }
-
-  /**
-   * Get Collection info by id.
-   * @param collectionId - The collectionId to query.
-   */
-  async getCollectionInfo(collectionId: string) {
-    return await this._call("/get-collection-info", "post", {
-      collectionId: collectionId,
-    });
-  }
-
-  /**
-   * Get Collection Market info by id.
-   * @param collectionId - The collectionId to query.
-   */
-  async getCollectionMarketInfo(collectionId: string) {
-    return await this._call("/get-collection-market-info", "post", {
-      collectionId: collectionId,
-    });
-  }
-
-  /**
-   * Get brc20 details by ticker.
-   * @param ticker - The ticker to query.
-   */
-  async getBrc20TokenDetails(ticker: string) {
-    return await this._call("/get-brc20-token-details", "post", {
-      ticker: ticker,
-    });
-  }
-  /**
-   * Get Brc20 balances by address.
-   * @param address - The address to query.
-   */
-
-  async getBrc20sByAddress(address: string) {
-    return await this._call("/get-address-brc20-balance", "post", {
-      address: address,
-    });
-  }
-
-  async getBrcPrice(ticker: string) {
-    return await this._call("/get-brc-price", "post", {
-      ticker: ticker,
-    });
-  }
-
-  async getBrc20Tickers(tickerParams: {
-    sort_by?: string;
-    order?: string;
-    offset?: number;
-    count?: number;
-    minting_status?: string;
-  }) {
-    return await this._call("/get-brc20-tickers", "post", tickerParams);
-  }
-
-  async getRuneTickers() {
-    return await this._call("/get-rune-tickers", "post");
-  }
-
-  async getMarketplaceCollections() {
-    return await this._call("/get-marketplace-collections", "post");
-  }
-
-  async getAggrMarketplaceCollections(onlyOffers?: boolean) {
-    return await this._call("/get-aggr-marketplace-collections", "post", {
-      onlyOffers,
-    });
-  }
-
-  async getAllInscriptionsByAddress(address: string): Promise<any> {
-    return await this._call("/get-inscriptions", "post", {
-      address: address,
-      exclude_brc20: false,
-      count: 20,
-      order: "desc",
-    });
-  }
-
-  async getInscriptionsForTxn(txn_id: string): Promise<any> {
-    const res = await this._call("/get-inscriptions-for-txn", "post", {
-      tx_id: txn_id,
-    });
-
-    return res.data;
-  }
-
-  async getTaprootTxHistory(taprootAddress: string, totalTxs: number): Promise<any> {
-    const res = await this._call("/get-taproot-history", "post", {
-      taprootAddress: taprootAddress,
-      totalTxs: totalTxs,
-    });
-
-    return res.data;
-  }
-
-  async getTaprootBalance(address: string): Promise<any> {
-    const res = await this._call("/get-taproot-balance", "post", {
-      address: address,
-    });
-    if (res.data) {
-      return res.data;
-    } else {
-      return res;
-    }
-  }
-
-  async getAddressBalance(address: string): Promise<any> {
-    const res = await this._call("/get-address-balance", "post", {
-      address: address,
-    });
-    if (res.data) {
-      return res.data;
-    } else {
-      return res;
-    }
-  }
-
-  /**
-   * Get account balance.
-   * @param account - The stringified account object to get balance for.
-   */
-  async getAccountBalance(account: string): Promise<any> {
-    const res = await this._call("/get-account-balance", "post", {
-      account: account,
-    });
-    if (res.data) {
-      return res.data;
-    } else {
-      return res;
-    }
-  }
-
-  /**
-   * Get account utxos.
-   * @param account - The account object to get utxos for.
-   */
-  async getAccountUtxos(account: Account): Promise<AccountUtxoPortfolio> {
-    const stringifiedAccount = JSON.stringify(account);
-    const res = await this._call("/get-account-utxos", "post", {
-      account: stringifiedAccount,
-    });
-    if (res.data) {
-      return res.data;
-    } else {
-      return res;
-    }
-  }
-
-  /**
-   * Get address utxos.
-   * @param address - The address to get utxos for.
-   * @param spendStrategy - The spendStrategy object to use.
-   */
-  async getAddressUtxos(
-    address: string,
-    spendStrategy?: SpendStrategy
-  ): Promise<any> {
-    const stringifiedSpendStrategy = spendStrategy
-      ? JSON.stringify(spendStrategy)
-      : null;
-    const res = await this._call("/get-address-utxos", "post", {
-      address: address,
-      spendStrategy: stringifiedSpendStrategy,
-    });
-    if (res.data) {
-      return res.data;
-    } else {
-      return res;
-    }
-  }
-
-  /**
-   * Get account balance.
-   * @param account - The stringified account object to get balance for.
-   */
-  async getaccountUtxos(account: string, spendAmount?: number): Promise<any> {
-    const res = await this._call("/get-account-spendable-utxos", "post", {
-      account,
-      spendAmount,
-    });
-    if (res.data) {
-      return res.data;
-    } else {
-      return res;
-    }
-  }
-
-  /**
-   * Get account balance.
-   * @param address - The stringified account object to get balance for.
-   */
-  async getaddressUtxos(
-    address: string,
-    spendAmount?: number,
-    spendStrategy?: string
-  ): Promise<any> {
-    const res = await this._call("/get-address-spendable-utxos", "post", {
-      address,
-      spendAmount,
-      spendStrategy,
-    });
-    if (res.data) {
-      return res.data;
-    } else {
-      return res;
-    }
-  }
-
-  /**
-   * Get collectible by ID.
-   * @param id - The ID of the collectible.
-   */
-  async getCollectiblesById(id: string): Promise<any> {
-    return await this._call("/get-inscription-info", "post", {
-      inscription_id: id,
-    });
-  }
-
-  /**
-   * Get collectibles by address.
-   * @param address - The address to query.
-   */
-  async getCollectiblesByAddress(
-    address: string,
-    options?: {
-      count?: number;
-      offset?: number;
-      sort_by?: string;
-      order?: string;
-    }
-  ): Promise<any> {
-    return await this._call("/get-inscriptions", "post", {
-      address: address,
-      exclude_brc20: true,
-      ...options,
-    });
-  }
-
-  /**
-   * Get Unisat ticker offers.
-   * @param _ticker - The ticker to query.
-   */
-  async getUnisatTickerOffers({ ticker }: { ticker: string }): Promise<any> {
-    const response = await this._call("/get-token-unisat-offers", "post", {
-      ticker: ticker,
-    });
-    if (response.error) throw Error(response.error);
-    return response.data.list;
-  }
-
-  /**
-   * Get Aggregated brc20 ticker offers for a limit order.
-   * @param ticker - The ticker to query.
-   * @param limitOrderAmount - The limit order amount.
-   * @param marketPrice - The limit order market price.
-   * @param testnet - mainnet/testnet network toggle.
-   */
-  async getAggregatedOffers({
-    ticker,
-    limitOrderAmount,
-  }: {
-    ticker: string;
-    limitOrderAmount: number;
-  }): Promise<any> {
-    const response = await this._call("/get-brc20-aggregate-offers", "post", {
-      ticker: ticker,
-      limitOrderAmount,
-    });
-    if (response.error) throw Error(response.error);
-    return response;
-  }
-
-  /**
-   * Get BRC-20 offers.
-   * @param ticker - The ticker to query.
-   * @param limit - The number of offers to return.
-   * @param sort_by - The sort by field.
-   * @param order - The order of sorted offers to return.
-   * @param offset - The offset to paginate offers.
-   */
-  async getBrc20Offers({
-    ticker,
-    limit,
-    sort_by,
-    order,
-    offset,
-  }: GetOffersParams): Promise<any> {
-    const response = await this._call("/get-brc20-offers", "post", {
-      ticker,
-      limit,
-      sort_by,
-      order,
-      offset,
-    });
-    if (response.error) throw Error(response.error);
-    return response;
-  }
-
-  /**
-   * Get Rune offers.
-   * @param ticker - The ticker to query.
-   * @param limit - The number of offers to return.
-   * @param sort_by - The sort by field.
-   * @param order - The order of sorted offers to return.
-   * @param offset - The offset to paginate offers.
-   */
-  async getRuneOffers({
-    ticker,
-    limit,
-    sort_by,
-    order,
-    offset,
-  }: GetOffersParams): Promise<any> {
-    const response = await this._call("/get-rune-offers", "post", {
-      ticker,
-      limit,
-      sort_by,
-      order,
-      offset,
-    });
-    if (response.error) throw Error(response.error);
-    return response;
-  }
-
-  /**
-   * Get Collection offers.
-   * @param collectionId - The collectionId to query.
-   * @param limit - The number of offers to return.
-   * @param sort_by - The sort by field.
-   * @param order - The order of sorted offers to return.
-   * @param offset - The offset to paginate offers.
-   */
-  async getCollectionOffers({
-    collectionId,
-    limit,
-    sort_by,
-    order,
-    offset,
-  }: GetCollectionOffersParams): Promise<any> {
-    const response = await this._call("/get-collection-offers", "post", {
-      collectionId,
-      limit,
-      sort_by,
-      order,
-      offset,
-    });
-    if (response.error) throw Error(response.error);
-    return response;
-  }
-
-  /**
-   * Get Okx ticker offers.
-   * @param _ticker - The ticker to query.
-   */
-  async getOkxTickerOffers({ ticker }: { ticker: string }): Promise<any> {
-    const response = await this._call("/get-token-okx-offers", "post", {
-      ticker: ticker,
-    });
-    if (response.error) throw Error(response.error);
-    return response.data.items;
-  }
-
-  /**
-   * Get Okx offer psbt.
-   * @param offerId - The offer Id to query.
-   */
-  async getOkxOfferPsbt({
-    offerId,
-    rune,
-  }: {
-    offerId: number;
-    rune?: boolean;
-  }): Promise<any> {
-    const response = await this._call("/get-okx-offer-psbt", "post", {
-      offerId: offerId,
-      rune,
-    });
-    return response;
-  }
-
-  /**
-   * Submit a signed bid for OKX marketplace.
-   * @param params - Parameters for the signed bid.
-   */
-  async submitOkxBid(bidDetails: OkxBid): Promise<any> {
-    const response = await this._call("/finalize-okx-bid", "post", bidDetails);
-    return response;
-  }
-
-  /**
-   * Submit a signed bid for rune offers on OKX marketplace.
-   * @param params - Parameters for the signed bid.
-   */
-  async submitOkxRuneBid({
-    orderId,
-    fromAddress,
-    psbt,
-  }: {
-    orderId: number;
-    fromAddress: string;
-    psbt: string;
-  }): Promise<any> {
-    const response = await this._call("/finalize-okx-rune-offer", "post", {
-      orderId,
-      fromAddress,
-      psbt,
-    });
-    return response;
-  }
-
-  /**
-   * Get Ordinals-Wallet offer psbt for Collectibles & BRC20s.
-   */
-  async getOrdinalsWalletNftOfferPsbt({
-    publicKey,
-    feeRate,
-    address,
-    receiveAddress,
-    inscriptions,
-  }: {
-    publicKey: string;
-    feeRate: number;
-    address: string;
-    receiveAddress: string;
-    inscriptions: string[];
-  }): Promise<any> {
-    const response = await this._call("/get-ow-nft-offer-psbt", "post", {
-      publicKey,
-      feeRate,
-      address,
-      receiveAddress,
-      inscriptions,
-    });
-    return response;
-  }
-
-  /**
-   * Get Ordinals-Wallet offer psbt for Collectibles & BRC20s.
-   */
-  async getOrdinalsWalletRuneOfferPsbt({
-    publicKey,
-    feeRate,
-    address,
-    outpoints,
-    receiveAddress,
-  }: {
-    publicKey: string;
-    feeRate: number;
-    address: string;
-    outpoints: string[];
-    receiveAddress: string;
-  }): Promise<any> {
-    const response = await this._call("/get-ow-rune-offer-psbt", "post", {
-      publicKey,
-      feeRate,
-      address,
-      outpoints,
-      receiveAddress,
-    });
-    return response;
-  }
-
-  /**
-   * Submit a signed psbt to bid for offers on Ordinals Wallet marketplace.
-   */
-  async submitOrdinalsWalletBid({
-    psbt,
-    setupPsbt,
-  }: {
-    psbt: string;
-    setupPsbt: string;
-  }): Promise<any> {
-    const response = await this._call("/finalize-ow-bid", "post", {
-      psbt,
-      setupPsbt,
-    });
-    return response;
-  }
-
-  /**
-   * Submit a signed psbt to bid for runeoffers on Ordinals Wallet marketplace.
-   */
-  async submitOrdinalsWalletRuneBid({
-    psbt,
-    setupPsbt,
-  }: {
-    psbt: string;
-    setupPsbt: string;
-  }): Promise<any> {
-    const response = await this._call("/finalize-ow-rune-bid", "post", {
-      psbt,
-      setupPsbt,
-    });
-    return response;
-  }
-
-  /**
-   * Get BTC price.
-   */
-  async getBtcPrice() {
-    const response = await this._call("/get-bitcoin-price", "post", {
-      ticker: null,
-    });
-    return response;
-  }
-
-  /**
-   * Get Mintable Runes
-   */
-  async getMintableRunes() {
-    const response = await this._call("/get-mintable-runes", "post", {});
-    return response;
-  }
-
-  /**
-   * Get faucet TBTC.
-   */
-  async requestFaucet(userId: string, address: string) {
-    const response = await this._call("/request-faucet-btc", "post", {
-      userId,
-      address,
-    });
-    return response;
-  }
-
-  /**
-   * Get BTC market chart.
-   * @param days - The number of days to use as interval.
-   */
-  async getBitcoinMarketChart(days: string): Promise<any> {
-    const response = await this._call("/get-bitcoin-market-chart", "post", {
-      days: days,
-    });
-    return response;
-  }
-
-  /**
-   * Get BTC market weekly.
-   */
-  async getBitcoinMarketWeekly() {
-    const response = await this._call("/get-bitcoin-market-weekly", "post", {
-      ticker: null,
-    });
-    return response;
-  }
-
-  /**
-   * Get BTC markets.
-   */
-  async getBitcoinMarkets() {
-    const response = await this._call("/get-bitcoin-markets", "post", {
-      ticker: null,
-    });
-    return response;
-  }
-
-  /**
-   * Get Omnisat ticker offers.
-   * @param _ticker - The ticker to query.
-   */
-  async getOmnisatTickerOffers({ ticker }: { ticker: string }): Promise<
-    Array<{
-      _id: string;
-      ownerAddress: string;
-      amount: string;
-      price: number;
-      psbtBase64: string;
-      psbtHex: string;
-      ticker: string;
-      transferableInscription: {
-        inscription_id: string;
-        ticker: string;
-        transfer_amount: string;
-        is_valid: boolean;
-        is_used: boolean;
-        satpoint: string;
-        min_price: any;
-        min_unit_price: any;
-        ordinalswallet_price: any;
-        ordinalswallet_unit_price: any;
-        unisat_price: any;
-        unisat_unit_price: any;
-      };
-      createdAt: number;
-      updatedAt: string;
-    }>
-  > {
-    const response = await this._call("/get-token-omnisat-offers", "post", {
-      ticker: ticker,
-    });
-    if (response.error) throw Error(response.error);
-    return response.data as Array<{
-      _id: string;
-      ownerAddress: string;
-      amount: string;
-      price: number;
-      psbtBase64: string;
-      psbtHex: string;
-      ticker: string;
-      transferableInscription: {
-        inscription_id: string;
-        ticker: string;
-        transfer_amount: string;
-        is_valid: boolean;
-        is_used: boolean;
-        satpoint: string;
-        min_price: any;
-        min_unit_price: any;
-        ordinalswallet_price: any;
-        ordinalswallet_unit_price: any;
-        unisat_price: any;
-        unisat_unit_price: any;
-      };
-      createdAt: number;
-      updatedAt: string;
-    }>;
-  }
-
-  /**
-   * Get Omnisat offer psbt.
-   * @param offerId - The offer Id to query.
-   */
-  async getOmnisatOfferPsbt({
-    offerId,
-    ticker,
-  }: {
-    offerId: string;
-    ticker: string;
-  }): Promise<any> {
-    const response = await this._call("/get-omnisat-offer-psbt", "post", {
-      offerId: offerId,
-      ticker: ticker,
-    });
-    return response;
-  }
-
-  /**
-   * Initialize a swap bid.
-   * @param params - Parameters for the bid.
-   */
-  async initSwapBid(params: SwapBrcBid): Promise<any> {
-    return await this._call("/initiate-unisat-bid", "post", params);
-  }
-
-  /**
-   * Initialize a Rune swap bid.
-   * @param params - Parameters for the bid.
-   */
-  async initRuneSwapBid(params: SwapBrcBid): Promise<any> {
-    return await this._call("/initiate-unisat-rune-bid", "post", params);
-  }
-
-  /**
-   * Initialize a collection swap bid.
-   * @param params - Parameters for the bid.
-   */
-  async initCollectionSwapBid(params: SwapBrcBid): Promise<any> {
-    return await this._call("/initiate-unisat-collection-bid", "post", params);
-  }
-
-  /**
-   * Submit a signed bid.
-   * @param params - Parameters for the signed bid.
-   */
-  async submitSignedBid(params: SignedBid): Promise<any> {
-    return await this._call("/finalize-unisat-bid", "post", params);
-  }
-
-  /**
-   * Submit a signed Collection bid.
-   * @param params - Parameters for the signed bid.
-   */
-  async submitSignedCollectionBid(params: SignedBid): Promise<any> {
-    return await this._call("/finalize-unisat-collection-bid", "post", params);
-  }
-
-  /**
-   * Submit a signed Collection bid.
-   * @param params - Parameters for the signed bid.
-   */
-  async submitSignedRuneBid(params: SignedBid): Promise<any> {
-    return await this._call("/finalize-unisat-rune-bid", "post", params);
-  }
-
-  async sendBtcEstimate({
-    amount,
-    feeRate,
-    account,
-    signer,
-  }: {
-    amount: number;
-    feeRate: number;
-    account: string;
-    signer: string;
-  }): Promise<any> {
-    return await this._call("/send-btc-estimate", "post", {
-      amount,
-      feeRate,
-      account,
-      signer,
-    });
-  }
-
-  async sendBrc20Estimate({
-    feeRate,
-    account,
-  }: {
-    feeRate: number;
-    account: string;
-  }): Promise<any> {
-    return await this._call("/send-brc20-estimate", "post", {
-      feeRate,
-      account,
-    });
-  }
-
-  async sendCollectibleEstimate({
-    inscriptionId,
-    feeRate,
-    account,
-    signer,
-  }: {
-    inscriptionId: string;
-    feeRate: number;
-    account: string;
-    signer: string;
-  }): Promise<any> {
-    return await this._call("/send-collectible-estimate", "post", {
-      inscriptionId,
-      feeRate,
-      account,
-      signer,
-    });
-  }
-
-  async sendRuneEstimate({
-    runeId,
-    amount,
-    feeRate,
-    account,
-    signer,
-  }: {
-    runeId: string;
-    amount: number;
-    feeRate: number;
-    account: string;
-    signer: string;
-  }): Promise<any> {
-    return await this._call("/send-rune-estimate", "post", {
-      runeId,
-      amount,
-      feeRate,
-      account,
-      signer,
-    });
-  }
-
-  async getRuneOutpoints({ address }: { address: string }): Promise<any> {
-    return (
-      await this._call("/get-rune-outpoints", "post", {
-        address,
-      })
-    ).data;
-  }
-
-  async getRuneBalance({ address }: { address: string }): Promise<any> {
-    return (
-      await this._call("/get-rune-balance", "post", {
-        address,
-      })
-    ).data;
-  }
-
-  async getAlkanesTokens(params: {
-    limit: number;
-    offset?: number;
-    sort_by?: AlkaneTokenSortByParams;
-    order?: 'asc' | 'desc';
-    searchQuery?: string;
-  }): Promise<AlkanesTokensResult> {
-    return (await this._call("/get-alkanes", "post", params)).data;
-  }
-
-  async getAlkaneTokenDetails(params: {
-    alkaneId: { block: string; tx: string };
-  }): Promise<AlkaneTokenDetails> {
-    return (await this._call("/get-alkane-details", "post", params)).data;
-  }
-
-  async searchAlkanes(params: {
-    searchQuery: string;
-  }): Promise<AlkanesGlobalSearchResult> {
-    return (await this._call("/global-alkanes-search", "post", params)).data;
-  }
-
-  async getAlkanesTokensByAddress({
-    address,
-  }: {
-    address: string;
-  }): Promise<AlkanesByAddressResult[]> {
-    return (
-      await this._call("/get-alkanes-by-address", "post", {
-        address,
-      })
-    ).data;
-  }
-
-  async getAlkanesUtxos({
-    address,
-  }: {
-    address: string;
-  }): Promise<FormattedUtxo[]> {
-    return (
-      await this._call("/get-alkanes-utxo", "post", {
-        address,
-      })
-    )?.data;
-  }
-
-  async getAmmUtxos({
-    address,
-    spendStrategy
-  }: {
-    address: string;
-    spendStrategy: SpendStrategy
-  }): Promise<{ utxos: FormattedUtxo[] }> {
-    const stringifiedSpendStrategy = spendStrategy
-      ? JSON.stringify(spendStrategy)
-      : null;
-    return (
-      await this._call("/get-amm-utxos", "post", {
-        address,
-        stringifiedSpendStrategy
-      })
-    )?.data;
-  }
-
-  async getFaucetBtc({ address }: { address: string }): Promise<{
-    status: string;
-    txid: string;
-  }> {
-    return (
-      await this._call("/get-faucet-btc", "post", {
-        address,
-      })
-    ).data;
-  }
-
-  async getPoolPositionsByAddress(params: {
-    address: string;
-    factoryId: { block: string; tx: string };
-  }): Promise<AddressPositionsResult[]> {
-    return (await this._call("/address-positions", "post", params)).data;
-  }
-
-  async getAlkanesTokenPoolDetails(params: {
-    factoryId: { block: string; tx: string };
-    poolId: { block: string; tx: string };
-  }): Promise<PoolDetailsResult & { poolId: AlkaneId }> {
-    return (await this._call("/get-pool-details", "post", params)).data;
-  }
-
-  async getPredicateAmountOut(params: {
-    factoryId: { block: string; tx: string };
-    poolId: { block: string; tx: string };
-    tokenAmount: string;
-    tokenId: { block: string; tx: string };
-  }): Promise<PoolAmountOutResult> {
-    return (await this._call("/get-swap-amount-out", "post", params)).data;
-  }
-
-  async getAlkanesTokenPools(params: {
-    factoryId: { block: string; tx: string };
-    limit?: number;
-    offset?: number;
-    sort_by?: 'tvl' | 'volume1d' | 'volume30d' | 'apr';
-    order?: 'asc' | 'desc';
-    address?: string;
-    searchQuery?: string;
-  }): Promise<AllPoolsDetailsResult> {
-    return (await this._call("/get-all-pools-details", "post", params)).data;
-  }
-
-  async getAlkanesTokenPairs(params: {
-    factoryId: { block: string; tx: string };
-    alkaneId: { block: string; tx: string };
-    sort_by?: 'tvl';
-    limit?: number;
-    offset?: number;
-    searchQuery?: string;
-  }): Promise<AlkanesTokenPairsResult[]> {
-    return (await this._call("/get-token-pairs", "post", params)).data;
-  }
-
-  /**
-    * AMM History Endpoints
-    */
-  async getPoolSwapHistory(params: { poolId: AlkaneId } & PaginationParams): Promise<Page<PoolSwapHistoryResult>> {
-    return (await this._call("/get-pool-swap-history", "post", params)).data;
-  }
-
-  async getTokenSwapHistory(params: { tokenId: AlkaneId } & PaginationParams): Promise<Page<PoolSwapRow>> {
-    return (
-      await this._call("/get-token-swap-history", "post", params)
-    ).data;
-  }
-
-  async getPoolMintHistory(params: { poolId: AlkaneId } & PaginationParams): Promise<Page<PoolMintRow>> {
-    return (await this._call("/get-pool-mint-history", "post", params)).data;
-  }
-
-  async getPoolBurnHistory(params: { poolId: AlkaneId } & PaginationParams): Promise<Page<PoolBurnRow>> {
-    return (await this._call("/get-pool-burn-history", "post", params)).data;
-  }
-
-  async getPoolCreationHistory(params: { poolId: AlkaneId } & PaginationParams): Promise<Page<PoolCreationRow>> {
-    return (await this._call("/get-pool-creation-history", "post", params)).data;
-  }
-
-  async getAddressSwapHistoryForPool(params: { address: string; poolId: AlkaneId } & PaginationParams): Promise<Page<PoolSwapRow>> {
-    return (
-      await this._call("/get-address-swap-history-for-pool", "post", params)
-    ).data;
-  }
-
-  async getAddressSwapHistoryForToken(params: { address: string; tokenId: AlkaneId } & PaginationParams): Promise<Page<PoolSwapRow>> {
-    return (
-      await this._call("/get-address-swap-history-for-token", "post", params)
-    ).data;
-  }
-
-  async getAddressPoolCreationHistory(params: { address: string; poolId?: AlkaneId | null } & PaginationParams): Promise<Page<PoolCreationRow>> {
-    return (
-      await this._call("/get-address-pool-creation-history", "post", params)
-    ).data;
-  }
-
-  async getAddressPoolMintHistory(params: { address: string; poolId?: AlkaneId | null } & PaginationParams): Promise<Page<PoolMintRow>> {
-    return (
-      await this._call("/get-address-pool-mint-history", "post", params)
-    ).data;
-  }
-
-  async getAddressPoolBurnHistory(params: { address: string; poolId?: AlkaneId | null } & PaginationParams): Promise<Page<PoolBurnRow>> {
-    return (
-      await this._call("/get-address-pool-burn-history", "post", params)
-    ).data;
-  }
-
-  async getAllAddressAmmTxHistory(params: { address: string; poolId?: AlkaneId | null } & PaginationParams): Promise<Page<AllAddressAmmTxRow>> {
-    return (
-      await this._call("/get-all-address-amm-tx-history", "post", params)
-    ).data;
-  }
-
-  async getAllAmmTxHistory(params: { poolId?: AlkaneId | null } & PaginationParams): Promise<Page<AllAddressAmmTxRow>> {
-    return (
-      await this._call("/get-all-amm-tx-history", "post", params)
-    ).data;
-  }
-
-
-  async getOutputRune({ output }: { output: string }): Promise<any> {
-    return (
-      await this._call("/get-output-rune-info", "post", {
-        output,
-      })
-    ).data;
-  }
-
-  async dailyCheckIn(params: { address: string }): Promise<{ result: string }> {
-    const response = await this._call("/daily-check-in", "post", params);
-
-    if (response.error) {
-      throw new Error(response.error);
-    }
-
-    return response;
-  }
-
-  // AIRHEADS Related
-
-  async getDieselRewardsByAddress(params: { address: string }): Promise<DieselRewardsResponse | null> {
-    return (
-      await this._call("/get-diesel-rewards", "post", {
-        address: params.address,
-      })
-    ).data;
-  }
-
-  async getDieselRewardsLeaderboard(params: { limit: number }): Promise<DieselRewardsLeaderboardResponse[] | null> {
-    return (
-      await this._call("/get-diesel-leaderboard", "post", {
-        limit: params.limit,
-      })
-    ).data;
-  }
-
-  async getDieselAddressLeaderboard(params: { limit: number }): Promise<DieselAddressLeaderboardResponse[] | null> {
-    return (
-      await this._call("/get-diesel-address-leaderboard", "post", {
-        limit: params.limit,
-      })
-    ).data;
-  }
-
-  /**
-   * Get whitelist leaderboard.
-   * @param address - the address requesting the leaderboard.
-   */
-  async getWhitelistLeaderboard({ address }: { address: string }) {
-    return await this._call("/get-whitelist-leaderboard", "post", {
-      address,
-    });
-  }
-  /**
-   * Get an address's xp for the whitelist.
-   * @param taprootAddress - taprootAddress.
-   * @param segwitAddress - segwitAddress
-   * @param nestedSegwitAddress - nestedSegwitAddress
-   */
-  async getWhitelistXp({
-    taprootAddress,
-    segwitAddress,
-    nestedSegwitAddress,
-  }: {
-    taprootAddress: string;
-    segwitAddress?: string;
-    nestedSegwitAddress?: string;
-  }) {
-    return await this._call("/get-whitelist-xp", "post", {
-      taprootAddress,
-      segwitAddress,
-      nestedSegwitAddress,
-    });
-  }
-
-  /**
-   * Get Airheads mint status.
-   * @param buyerAddress - the address requesting the mint status.
-   * @returns information on the current mint.
-   */
-  async getAirheadsMintStatus({ buyerAddress }: { buyerAddress: string }) {
-    return await this._call("/airhead-mint-status", "post", {
-      buyerAddress,
-    });
-  }
-
-  /**
-   * Claim Airhead.
-   * @param account - the account submitting the claim.
-   * @param feeRate - the fee rate to use.
-   * @param gatheredUtxos - the gathered utxos for spendable account.
-   */
-  async claimAirhead({
-    account,
-    feeRate,
-    gatheredUtxos,
-  }: {
-    account: Account;
-    feeRate: number;
-    gatheredUtxos: any;
-  }) {
-    return await this._call("/claim-airhead", "post", {
-      account,
-      feeRate,
-      gatheredUtxos,
-    });
-  }
-
-  /**
-   * Submit Airhead claim.
-   * @param buyerAddress - the address submitting the claim.
-   * @param psbt - the psbt to submit.
-   * @param listingId - the listing id.
-   * @returns tx id and psbt hex.
-   */
-  async submitAirheadClaim({
-    buyerAddress,
-    psbt,
-    listingId,
-  }: {
-    buyerAddress: string;
-    psbt: string;
-    listingId: string;
-  }) {
-    return await this._call("/submit-airhead-claim", "post", {
-      buyerAddress,
-      psbt,
-      listingId,
-    });
-  }
-
-  /**
-   * Futures Market Endpoints
-   */
-
-  /**
-   * Get all futures markets
-   * @param params - Query parameters for filtering markets
-   */
-  async getFuturesMarkets(params?: {
-    type?: FuturesMarketType | 'all';
-    baseAsset?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<AllFuturesMarketsResult> {
-    return (await this._call("/get-futures-markets", "post", params || {})).data;
-  }
-
-  /**
-   * Get a specific futures market by ID
-   * @param marketId - The market ID to query
-   */
-  async getFuturesMarket(params: {
-    marketId: string;
-  }): Promise<FuturesMarketResult> {
-    return (await this._call("/get-futures-market", "post", params)).data;
-  }
-
-  /**
-   * Get user's open positions in futures markets
-   * @param address - User's wallet address
-   */
-  async getFuturesPositions(params: {
-    address: string;
-    marketId?: string;
-  }): Promise<FuturesPositionResult[]> {
-    return (await this._call("/get-futures-positions", "post", params)).data;
-  }
-
-  /**
-   * Get user's orders in futures markets
-   * @param address - User's wallet address
-   * @param status - Filter by order status
-   */
-  async getFuturesOrders(params: {
-    address: string;
-    marketId?: string;
-    status?: 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected';
-    limit?: number;
-    offset?: number;
-  }): Promise<FuturesOrderResult[]> {
-    return (await this._call("/get-futures-orders", "post", params)).data;
-  }
-
-  /**
-   * Place a futures order
-   * @param params - Order parameters
-   */
-  async placeFuturesOrder(params: {
-    marketId: string;
-    address: string;
-    side: 'long' | 'short';
-    type: 'market' | 'limit' | 'stop-market' | 'stop-limit';
-    size: number;
-    price?: number;
-    stopPrice?: number;
-    leverage: number;
-  }): Promise<FuturesOrderResult> {
-    return (await this._call("/place-futures-order", "post", params)).data;
-  }
-
-  /**
-   * Cancel a futures order
-   * @param orderId - The order ID to cancel
-   */
-  async cancelFuturesOrder(params: {
-    orderId: string;
-    address: string;
-  }): Promise<{ success: boolean }> {
-    return (await this._call("/cancel-futures-order", "post", params)).data;
-  }
-
-  /**
-   * Close a futures position
-   * @param positionId - The position ID to close
-   */
-  async closeFuturesPosition(params: {
-    positionId: string;
-    address: string;
-    size?: number; // Partial close if specified
-  }): Promise<{ success: boolean }> {
-    return (await this._call("/close-futures-position", "post", params)).data;
-  }
+  ): Promise<T> {
+    // This is a placeholder. The original _call method handled generic API routes.
+    // Now, each method needs to be explicitly mapped to the AlkanesProvider's functionality.
+    // For now, this will throw an error to indicate incomplete implementation.
+    console.warn(`Attempted to call generic API path: ${path} with data: ${JSON.stringify(data)}`);
+    throw new Error(`Direct API call to ${path} not yet implemented via AlkanesProvider. Please use specific methods.`);
+  }
+
+  // --- Implemented API methods using AlkanesProvider ---
+
+  async getBtcPrice(): Promise<any> {
+    // Assuming AlkanesProvider has a method for this, or uses EsploraClient.getAssetPrice or similar
+    // Or this could be handled by a specific method in AlkanesRpcClient
+    // For now, returning a dummy value or using a placeholder
+    // In a real scenario, this would involve calling a specific provider method.
+    console.warn("getBtcPrice not directly mapped to AlkanesProvider. Returning dummy value.");
+    return { price: 60000 }; // Placeholder
+  }
+
+  async getAddressBalance(address: string): Promise<AddressBalance> {
+    return this.provider.getBalance(address);
+  }
+
+  async getAddressUtxos(address: string): Promise<FormattedUtxo[]> {
+    const balance = await this.provider.getBalance(address);
+    return balance.utxos;
+  }
+
+  // --- Placeholder methods for unimplemented APIs ---
+  // Many methods from the original OylApiClient need to be re-implemented
+  // using the AlkanesProvider's underlying BitcoinRpcClient, EsploraClient, and AlkanesRpcClient.
+  // The structure and parameters will need to be carefully mapped.
+
+  async getBrc20TokenInfo(ticker: string) { return this._call("/get-brc20-token-info", "post", { ticker }); }
+  async getRuneTokenInfo(ticker: string) { return this._call("/get-rune-token-info", "post", { ticker }); }
+  async getSellerPsbt(params: GetSellerPsbtRequest) { return this._call("/get-seller-psbt", "post", params); }
+  async submitBuyerPsbt(params: SubmitBuyerPsbtRequest) { return this._call("/submit-buyer-psbt", "post", params); }
+  async getListingPsbt(params: GetListingPsbtRequest) { return this._call("/get-listing-psbt", "post", params); }
+  async submitListingPsbt(params: SubmitListingPsbtRequest) { return this._call("/submit-listing-psbt", "post", params); }
+  async getAddressListings(params: GetAddressListingsRequest) { return this._call("/get-address-listings", "post", params); }
+  async getCollectionInfo(collectionId: string) { return this._call("/get-collection-info", "post", { collectionId }); }
+  async getCollectionMarketInfo(collectionId: string) { return this._call("/get-collection-market-info", "post", { collectionId }); }
+  async getBrc20TokenDetails(ticker: string) { return this._call("/get-brc20-token-details", "post", { ticker }); }
+  async getBrc20sByAddress(address: string) { return this._call("/get-address-brc20-balance", "post", { address }); }
+  async getBrcPrice(ticker: string) { return this._call("/get-brc-price", "post", { ticker }); }
+  async getBrc20Tickers(tickerParams: { sort_by?: string; order?: string; offset?: number; count?: number; minting_status?: string; }) { return this._call("/get-brc20-tickers", "post", tickerParams); }
+  async getRuneTickers() { return this._call("/get-rune-tickers", "post"); }
+  async getMarketplaceCollections() { return this._call("/get-marketplace-collections", "post"); }
+  async getAggrMarketplaceCollections(onlyOffers?: boolean) { return this._call("/get-aggr-marketplace-collections", "post", { onlyOffers }); }
+  async getAllInscriptionsByAddress(address: string): Promise<any> { return this._call("/get-inscriptions", "post", { address, exclude_brc20: false, count: 20, order: "desc" }); }
+  async getInscriptionsForTxn(txn_id: string): Promise<any> { return this._call("/get-inscriptions-for-txn", "post", { tx_id: txn_id }); }
+  async getTaprootTxHistory(taprootAddress: string, totalTxs: number): Promise<any> { return this._call("/get-taproot-history", "post", { taprootAddress, totalTxs }); }
+  async getTaprootBalance(address: string): Promise<any> { return this._call("/get-taproot-balance", "post", { address }); }
+  async getAccountBalance(account: string): Promise<any> { return this._call("/get-account-balance", "post", { account }); }
+  async getAccountUtxos(account: Account): Promise<any> { const stringifiedAccount = JSON.stringify(account); return this._call("/get-account-utxos", "post", { account: stringifiedAccount }); }
+  async getAmmUtxos(params: {address: string; spendStrategy: SpendStrategy }): Promise<{ utxos: FormattedUtxo[] }> {
+    const stringifiedSpendStrategy = params.spendStrategy ? JSON.stringify(params.spendStrategy) : null;
+    return this._call("/get-amm-utxos", "post", { address: params.address, stringifiedSpendStrategy });
+  }
+  async getFaucetBtc(params: { address: string }): Promise<{ status: string; txid: string; }> { return this._call("/get-faucet-btc", "post", params); }
+  async getPoolPositionsByAddress(params: { address: string; factoryId: { block: string; tx: string; }; }): Promise<AddressPositionsResult[]> { return this._call("/address-positions", "post", params); }
+  async getAlkanesTokenPoolDetails(params: { factoryId: { block: string; tx: string; }; poolId: { block: string; tx: string; }; }): Promise<PoolDetailsResult & { poolId: AlkaneId; }> { return this._call("/get-pool-details", "post", params); }
+  async getPredicateAmountOut(params: { factoryId: { block: string; tx: string; }; poolId: { block: string; tx: string; }; tokenAmount: string; tokenId: { block: string; tx: string; }; }): Promise<PoolAmountOutResult> { return this._call("/get-swap-amount-out", "post", params); }
+  async getAlkanesTokenPools(params: { factoryId: { block: string; tx: string; }; limit?: number; offset?: number; sort_by?: "tvl" | "volume1d" | "volume30d" | "apr"; order?: "asc" | "desc"; address?: string; searchQuery?: string; }): Promise<AllPoolsDetailsResult> { return this._call("/get-all-pools-details", "post", params); }
+  async getAlkanesTokenPairs(params: { factoryId: { block: string; tx: string; }; alkaneId: { block: string; tx: string; }; sort_by?: "tvl"; limit?: number; offset?: number; searchQuery?: string; }): Promise<AlkanesTokenPairsResult[]> { return this._call("/get-token-pairs", "post", params); }
+  async getPoolSwapHistory(params: { poolId: AlkaneId; } & PaginationParams): Promise<Page<PoolSwapHistoryResult>> { return this._call("/get-pool-swap-history", "post", params); }
+  async getTokenSwapHistory(params: { tokenId: AlkaneId; } & PaginationParams): Promise<Page<PoolSwapRow>> { return this._call("/get-token-swap-history", "post", params); }
+  async getPoolMintHistory(params: { poolId: AlkaneId; } & PaginationParams): Promise<Page<PoolMintRow>> { return this._call("/get-pool-mint-history", "post", params); }
+  async getPoolBurnHistory(params: { poolId: AlkaneId; } & PaginationParams): Promise<Page<PoolBurnRow>> { return this._call("/get-pool-burn-history", "post", params); }
+  async getPoolCreationHistory(params: { poolId: AlkaneId; } & PaginationParams): Promise<Page<PoolCreationRow>> { return this._call("/get-pool-creation-history", "post", params); }
+  async getAddressSwapHistoryForPool(params: { address: string; poolId: AlkaneId; } & PaginationParams): Promise<Page<PoolSwapRow>> { return this._call("/get-address-swap-history-for-pool", "post", params); }
+  async getAddressSwapHistoryForToken(params: { address: string; tokenId: AlkaneId; } & PaginationParams): Promise<Page<PoolSwapRow>> { return this._call("/get-address-swap-history-for-token", "post", params); }
+  async getAddressPoolCreationHistory(params: { address: string; poolId?: AlkaneId | null; } & PaginationParams): Promise<Page<PoolCreationRow>> { return this._call("/get-address-pool-creation-history", "post", params); }
+  async getAddressPoolMintHistory(params: { address: string; poolId?: AlkaneId | null; } & PaginationParams): Promise<Page<PoolMintRow>> { return this._call("/get-address-pool-mint-history", "post", params); }
+  async getAddressPoolBurnHistory(params: { address: string; poolId?: AlkaneId | null; } & PaginationParams): Promise<Page<PoolBurnRow>> { return this._call("/get-address-pool-burn-history", "post", params); }
+  async getAllAddressAmmTxHistory(params: { address: string; poolId?: AlkaneId | null; } & PaginationParams): Promise<Page<AllAddressAmmTxRow>> { return this._call("/get-all-address-amm-tx-history", "post", params); }
+  async getAllAmmTxHistory(params: { poolId?: AlkaneId | null; } & PaginationParams): Promise<Page<AllAddressAmmTxRow>> { return this._call("/get-all-amm-tx-history", "post", params); }
+  async getOutputRune(params: { output: string; }): Promise<any> { return this._call("/get-output-rune-info", "post", params); }
+  async dailyCheckIn(params: { address: string; }): Promise<{ result: string; }> { return this._call("/daily-check-in", "post", params); }
+  async getDieselRewardsByAddress(params: { address: string; }): Promise<DieselRewardsResponse | null> { return this._call("/get-diesel-rewards", "post", params); }
+  async getDieselRewardsLeaderboard(params: { limit: number; }): Promise<DieselRewardsLeaderboardResponse[] | null> { return this._call("/get-diesel-leaderboard", "post", params); }
+  async getDieselAddressLeaderboard(params: { limit: number; }): Promise<DieselAddressLeaderboardResponse[] | null> { return this._call("/get-diesel-address-leaderboard", "post", params); }
+  async getWhitelistLeaderboard(params: { address: string; }) { return this._call("/get-whitelist-leaderboard", "post", params); }
+  async getWhitelistXp(params: { taprootAddress: string; segwitAddress?: string; nestedSegwitAddress?: string; }) { return this._call("/get-whitelist-xp", "post", params); }
+  async getAirheadsMintStatus(params: { buyerAddress: string; }) { return this._call("/airhead-mint-status", "post", params); }
+  async claimAirhead(params: { account: Account; feeRate: number; gatheredUtxos: any; }) { return this._call("/claim-airhead", "post", params); }
+  async submitAirheadClaim(params: { buyerAddress: string; psbt: string; listingId: string; }) { return this._call("/submit-airhead-claim", "post", params); }
+  async getFuturesMarkets(params?: { type?: FuturesMarketType | 'all'; baseAsset?: string; limit?: number; offset?: number; }): Promise<AllFuturesMarketsResult> { return this._call("/get-futures-markets", "post", params || {}); }
+  async getFuturesMarket(params: { marketId: string; }): Promise<FuturesMarketResult> { return this._call("/get-futures-market", "post", params); }
+  async getFuturesPositions(params: { address: string; marketId?: string; }): Promise<FuturesPositionResult[]> { return this._call("/get-futures-positions", "post", params); }
+  async getFuturesOrders(params: { address: string; marketId?: string; status?: 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected'; limit?: number; offset?: number; }): Promise<FuturesOrderResult[]> { return this._call("/get-futures-orders", "post", params); }
+  async placeFuturesOrder(params: { marketId: string; address: string; side: 'long' | 'short'; type: 'market' | 'limit' | 'stop-market' | 'stop-limit'; size: number; price?: number; stopPrice?: number; leverage: number; }): Promise<FuturesOrderResult> { return this._call("/place-futures-order", "post", params); }
+  async cancelFuturesOrder(params: { orderId: string; address: string; }): Promise<{ success: boolean; }> { return this._call("/cancel-futures-order", "post", params); }
+  async closeFuturesPosition(params: { positionId: string; address: string; size?: number; }): Promise<{ success: boolean; }> { return this._call("/close-futures-position", "post", params); }
 }

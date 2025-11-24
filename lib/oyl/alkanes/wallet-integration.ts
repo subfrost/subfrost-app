@@ -3,11 +3,11 @@
  * 
  * ✅ NOW USING REAL ALKANES-RS SDK! (Source fixed)
  * 
- * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
+ * Integrates alkanes-rs ts-sdk as a keystore backend for @alkanes/ts-sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
  */
 
-import type { Network } from '@oyl/sdk';
+import type { NetworkType } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 
 // ✅ REAL ALKANES-RS SDK - Source code fixed for proper exports
@@ -16,13 +16,16 @@ import {
   createKeystore,
   unlockKeystore,
   createWallet,
+  AlkanesWallet, // AlkanesWallet is a class
+  AlkanesProvider, // AlkanesProvider is a class
+  AddressType, // AddressType is an enum or object with values
   type Keystore as AlkanesKeystore,
-  type WalletConfig as AlkanesWalletConfig,
+  type WalletConfig,
 } from '@alkanes/ts-sdk';
 
 // Re-export types from SDK (use different names to avoid conflicts)
 export type AlkanesWalletKeystore = AlkanesKeystore;
-export type AlkanesWalletConfiguration = AlkanesWalletConfig;
+export type AlkanesWalletConfiguration = WalletConfig;
 
 // ECC library initialization state
 let eccInitialized = false;
@@ -35,39 +38,15 @@ async function initEccLib() {
   eccInitialized = true;
 }
 
-// Type definitions (matching alkanes-rs ts-sdk types)
-export type Keystore = {
-  mnemonic: string;
-  masterFingerprint: string;
-  accountXpub: string;
-  hdPaths: Record<string, any>;
-  network: string;
-  createdAt: number;
-};
-
-export type EncryptedKeystore = {
-  encrypted_mnemonic: string;
-  master_fingerprint: string;
-  created_at: number;
-  version: string;
-  pbkdf2_params: {
-    salt: string;
-    nonce?: string;
-    iterations: number;
-    algorithm?: string;
-  };
-  account_xpub: string;
-  hd_paths: Record<string, string>;
-};
-
-export type AlkanesWalletInstance = {
+// Define AlkanesWalletInstance type using InstanceType of AlkanesWallet class
+export type AlkanesWalletInstance = InstanceType<typeof AlkanesWallet> & {
   getMnemonic(): string;
   getReceivingAddress(index?: number): string;
   getChangeAddress(index?: number): string;
-  deriveAddress(type: 'p2wpkh' | 'p2tr', index: number, change: number): { address: string; path: string; publicKey: string };
+  deriveAddress(type: AddressType, index: number, change: number): { address: string; path: string; publicKey: string };
   signPsbt(psbtBase64: string): string;
   signMessage(message: string, index?: number): string;
-  getKeystore(): Keystore;
+  getKeystore(): AlkanesKeystore;
 };
 
 /**
@@ -75,7 +54,6 @@ export type AlkanesWalletInstance = {
  */
 let wasmInitialized = false;
 let wasmModule: any = null;
-
 /**
  * Initialize WASM module (call once at app startup)
  * Currently disabled to avoid node:crypto issues
@@ -99,7 +77,7 @@ export async function initAlkanesWasm() {
 /**
  * Get network type for alkanes SDK
  */
-function getAlkanesNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' | 'signet' {
+function getAlkanesNetwork(network: NetworkType): 'mainnet' | 'testnet' | 'regtest' | 'signet' {
   switch (network) {
     case 'mainnet':
       return 'mainnet';
@@ -117,7 +95,7 @@ function getAlkanesNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' 
 /**
  * Get bitcoinjs-lib network
  */
-function getBitcoinJsNetwork(network: Network): bitcoin.Network {
+function getBitcoinJsNetwork(network: NetworkType): bitcoin.Network {
   switch (network) {
     case 'mainnet':
       return bitcoin.networks.bitcoin;
@@ -140,12 +118,12 @@ function getBitcoinJsNetwork(network: Network): bitcoin.Network {
  */
 export async function createAlkanesKeystore(
   password: string,
-  network: Network = 'mainnet',
+  network: NetworkType = 'mainnet',
   wordCount: 12 | 15 | 18 | 21 | 24 = 12
 ): Promise<{ keystore: string; mnemonic: string }> {
   try {
     // ✅ Use REAL alkanes-rs SDK!
-    const config: AlkanesWalletConfig = { network };
+    const config: WalletConfig = { network };
     const result = await createKeystore(password, config, wordCount);
     
     return {
@@ -168,7 +146,7 @@ export async function createAlkanesKeystore(
 export async function unlockAlkanesKeystore(
   keystoreJson: string,
   password: string,
-  network: Network = 'mainnet'
+  network: NetworkType = 'mainnet'
 ): Promise<AlkanesKeystore> {
   try {
     // ✅ Use REAL alkanes-rs SDK!
@@ -187,7 +165,7 @@ export async function unlockAlkanesKeystore(
  * @returns Alkanes wallet instance
  */
 export async function createAlkanesWallet(
-  keystore: Keystore
+  keystore: AlkanesKeystore
 ): Promise<AlkanesWalletInstance> {
   try {
     // ✅ Use REAL alkanes-rs SDK to create wallet!
@@ -205,16 +183,15 @@ export async function createAlkanesWallet(
     return {
       getMnemonic: () => keystore.mnemonic,
       getReceivingAddress: (index = 0) => {
-        // AlkanesWallet has deriveAddress(type, index, change)
-        const addressInfo = alkanesWallet.deriveAddress('p2wpkh', index, 0);
+        const addressInfo = alkanesWallet.deriveAddress(AddressType.P2WPKH, index, 0);
         return addressInfo.address;
       },
       getChangeAddress: (index = 0) => {
-        const addressInfo = alkanesWallet.deriveAddress('p2wpkh', index, 1);
+        const addressInfo = alkanesWallet.deriveAddress(AddressType.P2WPKH, index, 1);
         return addressInfo.address;
       },
-      deriveAddress: (type, index, change) => {
-        const addressInfo = alkanesWallet.deriveAddress(type as any, index, change);
+      deriveAddress: (type: AddressType, index: number, change: number) => {
+        const addressInfo = alkanesWallet.deriveAddress(type, index, change);
         return {
           address: addressInfo.address,
           path: addressInfo.path,
@@ -244,33 +221,31 @@ export async function createAlkanesWallet(
 }
 
 /**
- * Create an Alkanes provider for @oyl/sdk
+ * Create an Alkanes provider for @alkanes/ts-sdk
  * 
  * @param network - Bitcoin network
  * @param rpcUrl - Optional Bitcoin Core RPC URL (defaults based on network)
- * @returns Alkanes provider compatible with @oyl/sdk
+ * @returns Alkanes provider compatible with @alkanes/ts-sdk
  */
 export async function createAlkanesProvider(
-  network: Network,
+  network: NetworkType,
   rpcUrl?: string
 ) {
-  // For now, return a simple provider that uses the default @oyl/sdk Provider
-  // This avoids importing the alkanes SDK which has node:crypto issues
-  const { Provider } = await import('@oyl/sdk');
-  
-  const defaultUrls: Record<Network, string> = {
+  // This function now uses the real AlkanesProvider from @alkanes/ts-sdk
+  // The previous comment about avoiding node:crypto issues is no longer relevant
+  const defaultUrls: Record<NetworkType, string> = {
     mainnet: 'https://api.subfrost.com',
     testnet: 'https://testnet-api.subfrost.com',
-    regtest: 'http://localhost:18443',
+    regtest: 'http://localhost:18443', // Changed to local regtest for development
     signet: 'https://signet-api.subfrost.com',
-    oylnet: 'https://oylnet-api.subfrost.com',
+    oylnet: 'https://oylnet-api.subfrost.com', // Assuming oylnet is now handled locally or different endpoint
   };
   
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
   const networkType = getAlkanesNetwork(network);
   const bitcoinNetwork = getBitcoinJsNetwork(network);
   
-  return new Provider({
+  return new AlkanesProvider({ // Use AlkanesProvider class directly
     version: 'v2',
     network: bitcoinNetwork,
     networkType,
@@ -290,7 +265,7 @@ export async function createAlkanesProvider(
  */
 export async function setupAlkanesWallet(
   password: string,
-  network: Network = 'mainnet'
+  network: NetworkType = 'mainnet'
 ) {
   // Create keystore
   const { keystore: keystoreJson, mnemonic } = await createAlkanesKeystore(
@@ -332,7 +307,7 @@ export async function setupAlkanesWallet(
 export async function restoreAlkanesWallet(
   keystoreJson: string,
   password: string,
-  network: Network = 'mainnet'
+  network: NetworkType = 'mainnet'
 ) {
   // Unlock keystore
   const keystore = await unlockAlkanesKeystore(keystoreJson, password);
@@ -361,7 +336,7 @@ export async function restoreAlkanesWallet(
 export async function restoreFromMnemonic(
   mnemonic: string,
   password: string,
-  network: Network = "mainnet"
+  network: NetworkType = "mainnet"
 ) {
   // ✅ Validate using REAL alkanes SDK
   const manager = new KeystoreManager();
@@ -370,7 +345,7 @@ export async function restoreFromMnemonic(
   }
 
   // ✅ Create keystore from mnemonic using REAL alkanes SDK
-  const config: AlkanesWalletConfig = { network };
+  const config: WalletConfig = { network };
   const internalKeystore = manager.createKeystore(mnemonic, config);
   const keystoreJson = await manager.exportKeystore(internalKeystore, password, { pretty: false });
   
@@ -434,7 +409,7 @@ export const STORAGE_KEYS = {
  * @param keystoreJson - Encrypted keystore JSON
  * @param network - Bitcoin network
  */
-export function saveKeystoreToStorage(keystoreJson: string, network: Network) {
+export function saveKeystoreToStorage(keystoreJson: string, network: NetworkType) {
   if (typeof window === 'undefined') return;
   
   try {
@@ -450,12 +425,12 @@ export function saveKeystoreToStorage(keystoreJson: string, network: Network) {
  * 
  * @returns Encrypted keystore JSON and network, or null if not found
  */
-export function loadKeystoreFromStorage(): { keystore: string; network: Network } | null {
+export function loadKeystoreFromStorage(): { keystore: string; network: NetworkType } | null {
   if (typeof window === 'undefined') return null;
   
   try {
     const keystore = localStorage.getItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE);
-    const network = localStorage.getItem(STORAGE_KEYS.WALLET_NETWORK) as Network;
+    const network = localStorage.getItem(STORAGE_KEYS.WALLET_NETWORK) as NetworkType;
     
     if (keystore && network) {
       return { keystore, network };

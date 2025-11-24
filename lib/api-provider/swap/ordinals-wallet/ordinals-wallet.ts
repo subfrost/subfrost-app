@@ -3,7 +3,7 @@ import {
   Provider,
   AssetType,
   timeout,
-} from  "@oyl/sdk"
+} from  "@alkanes/ts-sdk"
 import * as bitcoin from 'bitcoinjs-lib'
 
 export interface UnsignedOrdinalsWalletBid {

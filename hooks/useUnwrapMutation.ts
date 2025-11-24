@@ -1,6 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { amm } from '@oyl/sdk';
-import { unwrapBtc } from '@oyl/sdk/lib/alkanes';
+import { amm, unwrapBtc } from '@alkanes/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useSignerShim } from './useSignerShim';

@@ -1,11 +1,6 @@
-import {
-    AssetType,
-    timeout,
-    getAddressType
-} from "@oyl/sdk"
-
-import { prepareAddressForDummyUtxos, updateUtxos } from "../helpers";
-import { GetSellerPsbtRequest, GetSellerPsbtResponse, Marketplaces, ProcessOfferOptions, SubmitBuyerPsbtRequest, SubmitBuyerPsbtResponse, ProcessOfferResponse } from "../types";
+import { delay } from "@alkanes/ts-sdk"; // Import delay from @alkanes/ts-sdk
+import { AssetType, Provider, Marketplaces, ProcessOfferOptions, ProcessOfferResponse, GetSellerPsbtRequest, GetSellerPsbtResponse, SubmitBuyerPsbtRequest, SubmitBuyerPsbtResponse } from "../types"; // Import types from local types
+import { getAddressType, prepareAddressForDummyUtxos, updateUtxos } from "../helpers";
 
 export async function processMagisatOffer({
     address,
@@ -23,7 +18,7 @@ export async function processMagisatOffer({
     let purchaseTxId: string | null = null;
     const addressType = getAddressType(address);
 
-    const network = provider.network
+    const network = provider.networkType // Use networkType from AlkanesProvider
     let nUtxos = 0;
     const orders = [];
     if (Array.isArray(offer.offerId)) {
@@ -74,7 +69,7 @@ export async function processMagisatOffer({
 
         const { txId } = await provider.pushPsbt({ psbtBase64: signedPsbt })
         dummyTxId = txId;
-        await timeout(60000)
+        await delay(60000) // Use delay from @alkanes/ts-sdk
         utxos = await updateUtxos({
             originalUtxos: utxos,
             txId,
@@ -92,13 +87,13 @@ export async function processMagisatOffer({
         feeRate,
         receiveAddress
     }
-    const sellerPsbtResponse = await provider.api.getSellerPsbt(magisatGetSellerPsbt);
+    const sellerPsbtResponse = await provider.api.getSellerPsbt(magisatGetSellerPsbt); // provider.api will now be AlkanesProvider's api property
     if (sellerPsbtResponse.statusCode != 200) {
         throw new Error(`Failed to get seller psbt: ${sellerPsbtResponse.error}`)
     }
     const sellerPsbt: GetSellerPsbtResponse = sellerPsbtResponse.data;
     const { signedPsbt } = await signer.signAllInputs({
-        rawPsbtHex: sellerPsbt.psbt,
+        rawPsbt: sellerPsbt.psbt, // Corrected from rawPsbtHex
         finalize: false,
     })
 
@@ -111,7 +106,7 @@ export async function processMagisatOffer({
         receiveAddress,
         psbt: signedPsbt
     }
-    const submitBuyerPsbtResponse = await provider.api.submitBuyerPsbt(magisatSubmitBuyerPsbt);
+    const submitBuyerPsbtResponse = await provider.api.submitBuyerPsbt(magisatSubmitBuyerPsbt); // provider.api will now be AlkanesProvider's api property
     if (submitBuyerPsbtResponse.statusCode != 200) {
         throw new Error(`Failed to submit buyer psbt: ${submitBuyerPsbtResponse.error}`)
     }

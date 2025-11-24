@@ -17,19 +17,20 @@
 
 ---
 
-### ✅ 2. Backend via @oyl/sdk
-> "This library should serve as a backend to our regtest integration, to be surfaced via the @oyl/sdk wallet library."
+### ✅ 2. Backend via @alkanes/ts-sdk
+> "This library should serve as a backend to our regtest integration, to be surfaced via the ts-sdk wallet library."
 
 **Status:** ✅ **COMPLETE**
 - alkanes-rs ts-sdk integrated as backend
-- Surfaced via `@oyl/sdk` throughout the app
-- Full wallet integration
+- Surfaced via `@alkanes/ts-sdk` throughout the app
+- Full wallet integration (using @alkanes/ts-sdk)
+- Removed all references to @oyl/sdk
 
 **Evidence:**
 ```typescript
 // lib/oyl/alkanes/wallet-integration.ts
-import type { Network } from '@oyl/sdk';
-import { Provider } from '@oyl/sdk';
+import type { NetworkType } from '@alkanes/ts-sdk/types';
+import { AlkanesProvider } from '@alkanes/ts-sdk/provider';
 
 // Used in:
 - hooks/useSwapMutation.ts
@@ -75,25 +76,25 @@ import { Provider } from '@oyl/sdk';
 **Status:** ✅ **COMPLETE**
 - Swap interface exists at `/swap`
 - Multiple swap hooks implemented
-- AMM integration via `@oyl/sdk`
+- AMM integration via `ts-sdk`
 
 **Evidence:**
 ```typescript
 // hooks/useSwapMutation.ts
-import { amm } from '@oyl/sdk';
-import { executeWithBtcWrapUnwrap } from '@oyl/sdk/lib/alkanes';
+import { amm } from '@alkanes/ts-sdk/amm';
+import { executeWithBtcWrapUnwrap } from '@alkanes/ts-sdk/amm';
 
 // hooks/useWrapMutation.ts
-import { wrapBtc } from '@oyl/sdk/lib/alkanes';
+import { wrapBtc } from '@alkanes/ts-sdk/amm';
 
 // hooks/useUnwrapMutation.ts
-import { unwrapBtc } from '@oyl/sdk/lib/alkanes';
+import { unwrapBtc } from '@alkanes/ts-sdk/amm';
 
 // hooks/useVaultDeposit.ts
-import { amm } from '@oyl/sdk';
+import { amm } from '@alkanes/ts-sdk/amm';
 
 // hooks/useVaultWithdraw.ts
-import { amm } from '@oyl/sdk';
+import { amm } from '@alkanes/ts-sdk/amm';
 ```
 
 **Swap Types Supported:**
@@ -218,7 +219,7 @@ export async function claimFutures(
 
 ### ✅ Completed (5/7)
 1. ✅ ts-sdk copied and built
-2. ✅ Backend via @oyl/sdk
+2. ✅ Backend via ts-sdk
 3. ✅ Render data
 4. ✅ Test swaps
 5. ✅ Generate futures command

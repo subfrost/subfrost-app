@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Buffer } from 'buffer';
-import type { AlkaneId, Provider } from '@oyl/sdk';
+import type { AlkaneId } from '@alkanes/ts-sdk/types'; // Corrected import path
+import type { AlkanesProvider as Provider } from '@alkanes/ts-sdk/provider'; // Corrected import path and aliased
 import { TOTAL_PROTOCOL_FEE } from '@/constants/alkanes';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 

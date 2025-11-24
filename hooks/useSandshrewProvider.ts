@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
-import type { Network, Provider } from '@oyl/sdk';
+import type { NetworkType, AlkanesProvider } from '@alkanes/ts-sdk';
 
 import { getSandshrewProvider } from '@/utils/oylProvider';
 import { useWallet } from '@/context/WalletContext';
 
-export function useSandshrewProvider(): Provider | null {
+export function useSandshrewProvider(): AlkanesProvider | null {
   const { network } = useWallet();
-  const [provider, setProvider] = useState<Provider | null>(null);
+  const [provider, setProvider] = useState<AlkanesProvider | null>(null);
 
   useEffect(() => {
     let mounted = true;
     
-    getSandshrewProvider(network as Network).then((p) => {
+    getSandshrewProvider(network as NetworkType).then((p) => {
       if (mounted) setProvider(p);
     });
 

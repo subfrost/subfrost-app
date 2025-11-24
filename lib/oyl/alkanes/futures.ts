@@ -43,7 +43,7 @@ export interface FutureToken {
  * @param rpcUrl - Bitcoin RPC URL (e.g., http://localhost:18443)
  * @returns Block hash of the generated block
  */
-export async function generateFuture(rpcUrl: string = 'http://localhost:18443'): Promise<string> {
+export async function generateFuture(rpcUrl: string = 'https://regtest.subfrost.io/v4/jsonrpc'): Promise<string> {
   // Call our Next.js API route which uses alkanes-cli to generate futures
   // This is the most reliable approach as it uses the exact same CLI command
   const response = await fetch('/api/futures/generate-via-cli', {

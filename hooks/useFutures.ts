@@ -9,18 +9,18 @@ import {
   getCurrentBlockHeight,
   type FutureToken,
 } from '@/lib/oyl/alkanes/futures';
+import * as bitcoin from 'bitcoinjs-lib';
+// import { AlkanesProvider } from '@alkanes/ts-sdk/provider'; // Temporarily commented out
+// import { NetworkType } from '@alkanes/ts-sdk/types'; // Temporarily commented out
 
 // Create a simple provider for reading public blockchain data (no wallet needed)
 async function createReadOnlyProvider() {
-  const { Provider } = await import('@oyl/sdk');
-  const bitcoin = await import('bitcoinjs-lib');
-  
-  // Create provider using the @oyl/sdk Provider class
-  const provider = new Provider({
-    url: 'http://localhost:18888', // metashrew RPC
+  // TODO: Revisit AlkanesProvider typing after ts-sdk rebuild
+  const provider = new (await import('@alkanes/ts-sdk/provider')).AlkanesProvider({
+    url: 'https://regtest.subfrost.io/v4/jsonrpc', // metashrew RPC
     projectId: 'regtest-local',
     network: bitcoin.networks.regtest,
-    networkType: 'regtest',
+    networkType: 'regtest' as any, // Temporarily set to any
   });
   
   return provider;
@@ -87,7 +87,7 @@ export function useFutures() {
     } finally {
       setLoading(false);
     }
-  }, [provider, currentBlock]);
+  }, [provider]);
 
   // Generate a new future (regtest only)
   const handleGenerateFuture = useCallback(async (rpcUrl?: string) => {
