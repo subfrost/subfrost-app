@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@alkanes/ts-sdk": [
+        "./ts-sdk/src"
       ]
     }
   },
@@ -40,6 +43,5 @@
   "exclude": [
     "node_modules",
     "reference",
-    "ts-sdk"
   ]
 }

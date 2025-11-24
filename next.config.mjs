@@ -15,15 +15,12 @@ const nextConfig = {
 
     config.resolve.alias = {
       ...config.resolve.alias,
+      'env': path.resolve(__dirname, './utils/empty-module.mjs'), // Alias 'env' to our empty ES module
     };
-
-    // Use NormalModuleReplacementPlugin to point 'env' to an empty module
-    // This addresses the `import * as __wbg_star0 from 'env';` issue in wasm-bindgen generated code
+    
     config.plugins.push(new webpack.NormalModuleReplacementPlugin(
-      /^env$/,
-      resource => {
-        resource.request = require.resolve('./utils/empty-module.js'); // Point to a dummy module
-      }
+      /^(env)$/,
+      path.resolve(__dirname, './utils/empty-module.mjs')
     ));
     
     // Add a rule to handle .wasm files directly

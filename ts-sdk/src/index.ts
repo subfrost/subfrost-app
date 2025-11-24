@@ -13,7 +13,7 @@
  * 
  * @example
  * ```typescript
- * import { createKeystore, unlockKeystore, createWallet, createProvider } from '@alkanes/ts-sdk';
+ import { createKeystore, unlockKeystore, createWallet, createProvider, initSDK } from '@alkanes/ts-sdk';
  * 
  * // Create a new wallet
  * const { keystore, mnemonic } = await createKeystore('password123');
@@ -133,41 +133,58 @@ export const VERSION = '0.1.0';
  * const sdk = initSDK(wasm);
  * ```
  */
-export async function initSDK() {
-  // Import dynamically to avoid circular dependencies
-  const { KeystoreManager, createKeystore, unlockKeystore } = await import('./keystore');
-  const { AlkanesWallet, createWallet, createWalletFromMnemonic } = await import('./wallet');
-  const { AlkanesProvider, createProvider } = await import('./provider');
-  
-  return {
-    KeystoreManager,
-    AlkanesWallet,
-    AlkanesProvider,
-    createKeystore,
-    unlockKeystore,
-    createWallet,
-    createWalletFromMnemonic,
-    createProvider: (config: any) => createProvider(config),
-    version: VERSION,
-  };
+import init, { initSync, InitOutput } from './wasm/alkanes';
+ 
+export { init, initSync };
+ 
+/**
+ * Initialize the SDK with WASM module
+ *
+ * @example
+ * ```typescript
+ * import init, * as wasm from '@alkanes/ts-sdk/wasm/alkanes';
+ * import { initSDK } from '@alkanes/ts-sdk';
+ *
+ * await init();
+ * const sdk = initSDK(wasm);
+ * ```
+ */
+export async function initSDK(wasm: InitOutput) {
+ // Import dynamically to avoid circular dependencies
+ const { KeystoreManager, createKeystore, unlockKeystore } = await import('./keystore');
+ const { AlkanesWallet, createWallet, createWalletFromMnemonic } = await import('./wallet');
+ const { AlkanesProvider, createProvider } = await import('./provider');
+
+ return {
+   KeystoreManager,
+   AlkanesWallet,
+   AlkanesProvider,
+   createKeystore,
+   unlockKeystore,
+   createWallet,
+   createWalletFromMnemonic,
+   createProvider: (config: any) => createProvider(config),
+   version: VERSION,
+   wasm, // Export the WASM module
+ };
 }
 
 // Default export - function that returns SDK object at call time (not module load time)
 export default async function getAlkanesSDK() {
-  const { KeystoreManager, createKeystore, unlockKeystore } = await import('./keystore');
-  const { AlkanesWallet, createWallet, createWalletFromMnemonic } = await import('./wallet');
-  const { AlkanesProvider, createProvider } = await import('./provider');
-  
-  return {
-    KeystoreManager,
-    AlkanesWallet,
-    AlkanesProvider,
-    createKeystore,
-    unlockKeystore,
-    createWallet,
-    createWalletFromMnemonic,
-    createProvider,
-    initSDK,
-    VERSION,
-  };
+ const { KeystoreManager, createKeystore, unlockKeystore } = await import('./keystore');
+ const { AlkanesWallet, createWallet, createWalletFromMnemonic } = await import('./wallet');
+ const { AlkanesProvider, createProvider } = await import('./provider');
+
+ return {
+   KeystoreManager,
+   AlkanesWallet,
+   AlkanesProvider,
+   createKeystore,
+   unlockKeystore,
+   createWallet,
+   createWalletFromMnemonic,
+   createProvider,
+   initSDK,
+   VERSION,
+ };
 }

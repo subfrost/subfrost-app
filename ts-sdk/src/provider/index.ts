@@ -146,6 +146,124 @@ export class AlkanesRpcClient {
     const result = wasm.simulate_alkane_call(JSON.stringify(params));
     return JSON.parse(result);
   }
+
+  // Raw WASM function wrappers
+  async multiSimulate(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.multisimluate(data);
+    // TODO: Implement proper data retrieval from WASM memory
+    return resultPtr; // Placeholder
+  }
+
+  async simulateRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.simulate(data);
+    return resultPtr; // Placeholder
+  }
+
+  async sequence(): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.sequence();
+    return resultPtr; // Placeholder
+  }
+
+  async metaRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.meta(data);
+    return resultPtr; // Placeholder
+  }
+
+  async runesByAddressRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.runesbyaddress(data);
+    return resultPtr; // Placeholder
+  }
+
+  async unwrap(): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.unwrap();
+    return resultPtr; // Placeholder
+  }
+
+  async runesByOutpointRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.runesbyoutpoint(data);
+    return resultPtr; // Placeholder
+  }
+
+  async spendablesByAddressRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.spendablesbyaddress(data);
+    return resultPtr; // Placeholder
+  }
+
+  async protorunesByAddressRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.protorunesbyaddress(data);
+    return resultPtr; // Placeholder
+  }
+
+  async getBlockRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.getblock(data);
+    return resultPtr; // Placeholder
+  }
+
+  async protorunesByHeightRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.protorunesbyheight(data);
+    return resultPtr; // Placeholder
+  }
+
+  async alkanesIdToOutpointRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.alkanes_id_to_outpoint(data);
+    return resultPtr; // Placeholder
+  }
+
+  async traceBlockRaw(height: number): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.traceblock(height);
+    return resultPtr; // Placeholder
+  }
+
+  async traceRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.trace(data);
+    return resultPtr; // Placeholder
+  }
+
+  async getBytecodeRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.getbytecode(data);
+    return resultPtr; // Placeholder
+  }
+
+  // protorunesbyoutpoint is a duplicate of runesbyoutpoint in the d.ts, will treat it as a separate function if needed later
+  // For now, I'll add a placeholder to indicate its presence.
+  async protorunesByOutpointRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.protorunesbyoutpoint(data);
+    return resultPtr; // Placeholder
+  }
+
+  async runesByHeightRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.runesbyheight(data);
+    return resultPtr; // Placeholder
+  }
+
+  async getInventoryRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.getinventory(data);
+    return resultPtr; // Placeholder
+  }
+
+  async getStorageAtRaw(data: Uint8Array): Promise<any> {
+    if (!wasmInitialized) { wasm = await init(); wasmInitialized = true; }
+    const resultPtr = wasm.getstorageat(data);
+    return resultPtr; // Placeholder
+  }
 }
 
 /**
