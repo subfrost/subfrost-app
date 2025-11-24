@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { NetworkType as Network } from '@alkanes/ts-sdk/types'; // Corrected import for Network
+import type { NetworkType as Network } from '@alkanes/ts-sdk';
 
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';

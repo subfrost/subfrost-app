@@ -96,7 +96,7 @@ export default function SwapShell() {
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
 
   // User tokens (for FROM selector)
-  const { data: userCurrencies = [], isFetching: isFetchingUserCurrencies } = useSellableCurrencies(address);
+  const { data: userCurrencies = [], isFetching: isFetchingUserCurrencies } = useSellableCurrencies(address || undefined);
   const idToUserCurrency = useMemo(() => {
     const map = new Map<string, any>();
     userCurrencies.forEach((c: any) => map.set(c.id, c));

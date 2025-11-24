@@ -1,3 +1,9 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const nextConfig = {
   reactStrictMode: true,
   typescript: {
@@ -7,7 +13,7 @@ const nextConfig = {
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
-      layers: true, // Enable Webpack layers for WASM if not already
+      layers: true,
     };
 
     config.output.webassemblyModuleFilename =
@@ -15,7 +21,7 @@ const nextConfig = {
 
     config.resolve.alias = {
       ...config.resolve.alias,
-      'env': path.resolve(__dirname, './utils/empty-module.mjs'), // Alias 'env' to our empty ES module
+      'env': path.resolve(__dirname, './utils/empty-module.mjs'),
     };
     
     config.plugins.push(new webpack.NormalModuleReplacementPlugin(

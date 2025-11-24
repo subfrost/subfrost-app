@@ -10,17 +10,16 @@ import {
   type FutureToken,
 } from '@/lib/oyl/alkanes/futures';
 import * as bitcoin from 'bitcoinjs-lib';
-// import { AlkanesProvider } from '@alkanes/ts-sdk/provider'; // Temporarily commented out
-// import { NetworkType } from '@alkanes/ts-sdk/types'; // Temporarily commented out
+import { AlkanesProvider, NetworkType } from '@alkanes/ts-sdk';
 
 // Create a simple provider for reading public blockchain data (no wallet needed)
 async function createReadOnlyProvider() {
-  // TODO: Revisit AlkanesProvider typing after ts-sdk rebuild
-  const provider = new (await import('@alkanes/ts-sdk/provider')).AlkanesProvider({
+  const { AlkanesProvider: Provider } = await import('@alkanes/ts-sdk');
+  const provider = new Provider({
     url: 'https://regtest.subfrost.io/v4/jsonrpc', // metashrew RPC
     projectId: 'regtest-local',
     network: bitcoin.networks.regtest,
-    networkType: 'regtest' as any, // Temporarily set to any
+    networkType: 'regtest' as NetworkType,
   });
   
   return provider;

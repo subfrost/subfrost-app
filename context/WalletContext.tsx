@@ -1,23 +1,33 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 
 import { NetworkMap } from '@/utils/constants';
 
 import { getApiProvider } from '@/utils/oylProvider';
 import { Loader2 } from 'lucide-react';
 
-import { Account, AddressType, NetworkType, UTXO } from '@/utils/types';
+import { Account, AddressType, UTXO } from '@/utils/types';
 import { getAddressType } from '@/utils/wallet';
+import type { NetworkType } from '@/ts-sdk/src/types';
+import { createWallet, AlkanesWallet, AddressType as SdkAddressType } from '@/ts-sdk/src/wallet';
+import { unlockKeystore } from '@/ts-sdk/src/keystore';
+
+type WalletType = 'keystore' | 'browser';
 
 type WalletContextType = {
   isConnectModalOpen: boolean;
   onConnectModalOpenChange: (isOpen: boolean) => void;
   isConnected: boolean;
   address: string | null;
+  addresses: {
+    p2wpkh?: string;
+    p2tr?: string;
+  };
   publicKey: string | null;
-  finalizeConnect: (walletName: string) => void;
+  connectKeystore: (keystoreJson: string, mnemonic: string, network: NetworkType, derivationPath?: string) => void;
+  connectBrowserWallet: (walletId: string) => Promise<void>;
   disconnect: () => void;
   getUtxos: () => Promise<UTXO[]>;
   getSpendableUtxos: () => Promise<UTXO[]>;
@@ -27,6 +37,7 @@ type WalletContextType = {
   signPsbt: (psbt: string) => Promise<string>;
   signMessage: (message: string) => Promise<string>;
   provider: string;
+  walletType: WalletType | null;
 };
 
 const WalletContext = createContext<
@@ -36,18 +47,108 @@ const WalletContext = createContext<
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
+  const [addresses, setAddresses] = useState<{ p2wpkh?: string; p2tr?: string }>({});
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [network, setNetwork] = useState<NetworkType>('mainnet'); // Default network
+  const [network, setNetwork] = useState<NetworkType>('mainnet');
+  const [walletType, setWalletType] = useState<WalletType | null>(null);
+  const [alkanesWallet, setAlkanesWallet] = useState<AlkanesWallet | null>(null);
+  const [browserWalletProvider, setBrowserWalletProvider] = useState<any>(null);
 
-  const handleConnect = async (walletName: string) => {
+  const connectKeystore = async (
+    keystoreJson: string,
+    mnemonic: string,
+    selectedNetwork: NetworkType,
+    derivationPath?: string
+  ) => {
     try {
-      setAddress('bc1qxxxxxxxxx'); // Mock address
-      setPublicKey('02xxxxxxxx'); // Mock public key
+      const keystore = await unlockKeystore(keystoreJson, 'dummy');
+      keystore.network = selectedNetwork;
+      keystore.mnemonic = mnemonic;
+
+      const wallet = createWallet(keystore);
+      setAlkanesWallet(wallet);
+      
+      const p2wpkhAddress = wallet.getReceivingAddress(0, SdkAddressType.P2WPKH);
+      const p2trAddress = wallet.getReceivingAddress(0, SdkAddressType.P2TR);
+      
+      setAddresses({
+        p2wpkh: p2wpkhAddress,
+        p2tr: p2trAddress,
+      });
+      setAddress(p2wpkhAddress);
+      
+      const addressInfo = wallet.deriveAddress(SdkAddressType.P2WPKH, 0, 0);
+      setPublicKey(addressInfo.publicKey);
+      
+      setNetwork(selectedNetwork);
+      setWalletType('keystore');
       setIsConnected(true);
-      setIsConnectModalOpen(false);
+      
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
     } catch (error) {
-      console.error('Error connecting wallet:', error);
+      console.error('Error connecting keystore:', error);
+      throw error;
+    }
+  };
+
+  const connectBrowserWallet = async (walletId: string) => {
+    try {
+      let provider: any;
+      let connectedAddress: string;
+      let connectedPublicKey: string;
+
+      switch (walletId) {
+        case 'unisat':
+          if (!(window as any).unisat) {
+            throw new Error('Unisat wallet not detected');
+          }
+          provider = (window as any).unisat;
+          const unisatAccounts = await provider.requestAccounts();
+          connectedAddress = unisatAccounts[0];
+          connectedPublicKey = await provider.getPublicKey();
+          setAddresses({ p2tr: connectedAddress });
+          break;
+
+        case 'xverse':
+          if (!(window as any).XverseProviders) {
+            throw new Error('Xverse wallet not detected');
+          }
+          provider = (window as any).XverseProviders;
+          throw new Error('Xverse integration not yet implemented');
+
+        case 'phantom':
+          if (!(window as any).phantom?.bitcoin) {
+            throw new Error('Phantom wallet not detected');
+          }
+          provider = (window as any).phantom.bitcoin;
+          throw new Error('Phantom integration not yet implemented');
+
+        case 'okx':
+          if (!(window as any).okxwallet) {
+            throw new Error('OKX wallet not detected');
+          }
+          provider = (window as any).okxwallet;
+          throw new Error('OKX integration not yet implemented');
+
+        default:
+          throw new Error(`Unknown wallet: ${walletId}`);
+      }
+
+      setBrowserWalletProvider(provider);
+      setAddress(connectedAddress);
+      setPublicKey(connectedPublicKey);
+      setWalletType('browser');
+      setIsConnected(true);
+      
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error(`Error connecting ${walletId}:`, error);
+      throw error;
     }
   };
 
@@ -186,13 +287,39 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return spendableTotalBalance;
   };
 
-  if (false) { // isInitializing removed for now
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 size={32} color="#449CFF" className="animate-spin" />
-      </div>
-    );
-  }
+  const signPsbt = async (psbt: string): Promise<string> => {
+    if (walletType === 'keystore' && alkanesWallet) {
+      return alkanesWallet.signPsbt(psbt);
+    } else if (walletType === 'browser' && browserWalletProvider) {
+      if (browserWalletProvider.signPsbt) {
+        return await browserWalletProvider.signPsbt(psbt);
+      }
+      throw new Error('Browser wallet does not support signPsbt');
+    }
+    throw new Error('No wallet connected');
+  };
+
+  const signMessage = async (message: string): Promise<string> => {
+    if (walletType === 'keystore' && alkanesWallet) {
+      return alkanesWallet.signMessage(message, 0);
+    } else if (walletType === 'browser' && browserWalletProvider) {
+      if (browserWalletProvider.signMessage) {
+        return await browserWalletProvider.signMessage(message);
+      }
+      throw new Error('Browser wallet does not support signMessage');
+    }
+    throw new Error('No wallet connected');
+  };
+
+  const disconnect = () => {
+    setIsConnected(false);
+    setAddress(null);
+    setAddresses({});
+    setPublicKey(null);
+    setWalletType(null);
+    setAlkanesWallet(null);
+    setBrowserWalletProvider(null);
+  };
 
   return (
     <WalletContext.Provider
@@ -202,16 +329,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         getSpendableUtxos,
         getSpendableTotalBalance,
         address,
+        addresses,
         publicKey,
         account,
         network,
+        walletType,
         onConnectModalOpenChange: (isOpen) => setIsConnectModalOpen(isOpen),
-        finalizeConnect: handleConnect,
+        connectKeystore,
+        connectBrowserWallet,
         isConnected,
-        signPsbt: async (psbt: string) => { console.log('Mock signPsbt', psbt); return 'mock_signed_psbt'; },
-        signMessage: async (message: string) => { console.log('Mock signMessage', message); return 'mock_signed_message'; },
-        provider: 'AlkanesWallet',
-        disconnect: () => { setIsConnected(false); setAddress(null); setPublicKey(null); },
+        signPsbt,
+        signMessage,
+        provider: walletType === 'keystore' ? 'Alkanes Keystore' : walletType === 'browser' ? 'Browser Wallet' : 'None',
+        disconnect,
       }}
     >
       {children}

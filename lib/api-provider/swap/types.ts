@@ -1,7 +1,7 @@
 import { Psbt } from 'bitcoinjs-lib'
 import * as bitcoin from 'bitcoinjs-lib'
 import { AddressType } from "@alkanes/ts-sdk/wallet";
-import { AlkanesProvider as Provider } from "@alkanes/ts-sdk/provider";
+import { AlkanesProvider as Provider } from "@alkanes/ts-sdk";
 import { UTXO as FormattedUtxo } from "@alkanes/ts-sdk/types";
 
 // Temporarily defining placeholder types until exact source is identified in @alkanes/ts-sdk
