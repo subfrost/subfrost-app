@@ -149,7 +149,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           <BoostSection vault={currentVault} />
 
           {/* Right Column: Info Tabs - starts in column 2 after Boosted APY */}
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm h-fit lg:col-start-2 lg:row-start-3">
+          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm h-fit lg:col-start-2 lg:row-start-4">
         <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
           {['about', 'strategies', 'info', 'risk'].map((tab) => (
             <button
