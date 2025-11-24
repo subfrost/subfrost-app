@@ -26,7 +26,7 @@ type WalletContextType = {
     p2tr?: string;
   };
   publicKey: string | null;
-  connectKeystore: (keystoreJson: string, mnemonic: string, network: NetworkType, derivationPath?: string) => void;
+  connectKeystore: (mnemonic: string, network: NetworkType, derivationPath?: string) => void;
   connectBrowserWallet: (walletId: string) => Promise<void>;
   disconnect: () => void;
   getUtxos: () => Promise<UTXO[]>;
@@ -56,15 +56,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [browserWalletProvider, setBrowserWalletProvider] = useState<any>(null);
 
   const connectKeystore = async (
-    keystoreJson: string,
     mnemonic: string,
     selectedNetwork: NetworkType,
     derivationPath?: string
   ) => {
     try {
-      const keystore = await unlockKeystore(keystoreJson, 'dummy');
-      keystore.network = selectedNetwork;
-      keystore.mnemonic = mnemonic;
+      // Create wallet directly from mnemonic (no need for keystore encryption/decryption here)
+      const { KeystoreManager } = await import('@/ts-sdk/src/keystore');
+      const { createWallet } = await import('@/ts-sdk/src/wallet');
+      
+      const manager = new KeystoreManager();
+      const keystore = manager.createKeystore(mnemonic, { 
+        network: selectedNetwork,
+        derivationPath 
+      });
 
       const wallet = createWallet(keystore);
       setAlkanesWallet(wallet);

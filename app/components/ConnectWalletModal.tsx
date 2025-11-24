@@ -95,7 +95,6 @@ export default function ConnectWalletModal() {
     if (pendingKeystoreData) {
       // Complete the keystore connection with network config
       connectKeystore(
-        pendingKeystoreData.keystoreJson,
         pendingKeystoreData.mnemonic,
         configNetwork,
         derivationPath
@@ -111,7 +110,7 @@ export default function ConnectWalletModal() {
     createdNetwork: NetworkType
   ) => {
     setShowCreateKeystore(false);
-    connectKeystore(keystoreJson, mnemonic, createdNetwork);
+    connectKeystore(mnemonic, createdNetwork);
     onConnectModalOpenChange(false);
   };
 
@@ -121,7 +120,7 @@ export default function ConnectWalletModal() {
     importedNetwork: NetworkType
   ) => {
     setShowImportKeystore(false);
-    connectKeystore(keystoreJson, mnemonic, importedNetwork);
+    connectKeystore(mnemonic, importedNetwork);
     onConnectModalOpenChange(false);
   };
 
