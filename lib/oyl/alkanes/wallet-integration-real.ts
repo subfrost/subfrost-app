@@ -4,7 +4,7 @@
  * This file uses the actual alkanes-rs SDK (now properly bundled for browser)
  */
 
-import { AlkanesProvider as Provider } from '@/ts-sdk';
+// AlkanesProvider imported dynamically when needed to avoid WASM SSR issues
 
 // Define Network type locally to avoid import issues with ts-sdk
 type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
@@ -134,14 +134,17 @@ export async function createAlkanesProvider(
     signet: 'https://signet-api.subfrost.com',
     oylnet: 'https://oylnet-api.subfrost.com',
   };
-  
+
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
-  
+
   // Use default Provider for now (alkanes provider integration pending)
   const networkType = network === 'oylnet' ? 'regtest' : network;
   const bitcoinNetwork = network === 'mainnet' ? 'bitcoin' : network;
-  
-  return new Provider({
+
+  // Dynamic import to avoid WASM loading at SSR time
+  const { AlkanesProvider } = await import('@/ts-sdk/dist/provider');
+
+  return new AlkanesProvider({
     version: 'v2',
     network: bitcoinNetwork as any,
     networkType: networkType as any,

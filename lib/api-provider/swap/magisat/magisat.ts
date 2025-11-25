@@ -2,7 +2,7 @@ import {
     AssetType,
     timeout,
     getAddressType,
-} from "@/ts-sdk";
+} from "@/ts-sdk/dist/lite";
 
 import { prepareAddressForDummyUtxos, updateUtxos } from "../helpers";
 import { GetSellerPsbtRequest, GetSellerPsbtResponse, Marketplaces, ProcessOfferOptions, SubmitBuyerPsbtRequest, SubmitBuyerPsbtResponse, ProcessOfferResponse } from "../types";

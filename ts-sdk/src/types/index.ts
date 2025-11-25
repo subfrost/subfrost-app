@@ -221,13 +221,17 @@ export interface SpendStrategy {
 
 /**
  * Formatted UTXO (compatible with @oyl/sdk)
+ * Supports both naming conventions for cross-compatibility
  */
 export interface FormattedUtxo {
-  txid: string;
-  vout: number;
-  value: number;
-  satoshis: number;
-  scriptPubKey: string;
+  txid?: string;
+  txId?: string;  // Alternative naming
+  vout?: number;
+  outputIndex?: number;  // Alternative naming
+  value?: number;
+  satoshis?: number;
+  scriptPubKey?: string;
+  scriptPk?: string;  // Alternative naming
   address: string;
   addressType?: string;
   confirmations?: number;

@@ -1,10 +1,55 @@
-import type { FormattedUtxo, Provider } from "@/ts-sdk";
-import {
-  AddressTypeEnum as AddressType,
-  assertHex,
-  UTXO_DUST,
-  getAddressType,
-} from "@/ts-sdk";
+// Import types from ts-sdk sub-modules to avoid WASM dependency
+import type { FormattedUtxo } from "@/ts-sdk/dist/types";
+
+import * as bitcoin from 'bitcoinjs-lib';
+
+// Define Provider type locally
+type Provider = {
+  esplora: {
+    getFeeEstimates: () => Promise<Record<string, number>>;
+    getTxInfo: (txId: string) => Promise<any>;
+  };
+};
+
+// Local definitions (these were originally from @oyl/sdk)
+export const UTXO_DUST = 546;
+
+export enum AddressType {
+  P2PKH = 'p2pkh',
+  P2SH_P2WPKH = 'p2sh-p2wpkh',
+  P2WPKH = 'p2wpkh',
+  P2TR = 'p2tr',
+}
+
+export function assertHex(buffer: Buffer): Buffer {
+  // Remove leading 0x02/0x03 prefix for taproot keys
+  if (buffer.length === 33 && (buffer[0] === 0x02 || buffer[0] === 0x03)) {
+    return buffer.subarray(1);
+  }
+  return buffer;
+}
+
+export function getAddressType(address: string): AddressType | null {
+  try {
+    // Try to decode as different address types
+    if (address.startsWith('bc1p') || address.startsWith('tb1p') || address.startsWith('bcrt1p')) {
+      return AddressType.P2TR;
+    }
+    if (address.startsWith('bc1q') || address.startsWith('tb1q') || address.startsWith('bcrt1q')) {
+      return AddressType.P2WPKH;
+    }
+    if (address.startsWith('3') || address.startsWith('2')) {
+      return AddressType.P2SH_P2WPKH;
+    }
+    if (address.startsWith('1') || address.startsWith('m') || address.startsWith('n')) {
+      return AddressType.P2PKH;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 import {
   BidAffordabilityCheck,
   BidAffordabilityCheckResponse,
@@ -24,8 +69,6 @@ import {
   UtxosToCoverAmount,
   marketplaceName,
 } from './types'
-
-import * as bitcoin from 'bitcoinjs-lib'
 
 
 export const maxTxSizeForOffers: number = 482

@@ -18,8 +18,8 @@ export async function getSandshrewProvider(network: Network): Promise<any> {
     return alkanesProvider;
   } catch (error) {
     console.error('Failed to create Alkanes provider, falling back to default:', error);
-    // Lazy import ts-sdk Provider as fallback
-    const { AlkanesProvider } = await import('@/ts-sdk');
+    // Lazy import ts-sdk Provider from sub-module to avoid WASM dependency
+    const { AlkanesProvider } = await import('@/ts-sdk/dist/provider');
     const mappedNetwork = NetworkMap[network] ?? NetworkMap.mainnet!;
     const networkType = ((network as any) === 'oylnet' ? 'regtest' : (network as any)) as
       | 'mainnet'

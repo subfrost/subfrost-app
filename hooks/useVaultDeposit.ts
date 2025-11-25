@@ -1,6 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm, executeWithBtcWrapUnwrap } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useSignerShim } from '@/hooks/useSignerShim';
@@ -31,6 +30,9 @@ export function useVaultDeposit() {
     mutationFn: async (depositData: VaultDepositData) => {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
+
+      // Dynamic import to avoid WASM loading at SSR time
+      const { amm, executeWithBtcWrapUnwrap } = await import('@/ts-sdk');
 
       const vaultId = parseAlkaneId(depositData.vaultContractId);
       const tokenId = parseAlkaneId(depositData.tokenId);

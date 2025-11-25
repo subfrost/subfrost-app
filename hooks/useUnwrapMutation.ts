@@ -1,5 +1,4 @@
 import { useMutation } from '@tanstack/react-query';
-import { amm, unwrapBtc } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useSignerShim } from './useSignerShim';
@@ -31,6 +30,9 @@ export function useUnwrapMutation() {
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
+
+      // Dynamic import to avoid WASM loading at SSR time
+      const { amm, unwrapBtc } = await import('@/ts-sdk');
 
       const utxos = await getUtxos();
 

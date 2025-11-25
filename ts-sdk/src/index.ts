@@ -49,6 +49,17 @@ export {
   unlockKeystore,
 } from './keystore';
 
+// Re-export bip39 functions through KeystoreManager
+import * as bip39 from 'bip39';
+export const generateMnemonic = (wordCount: 12 | 15 | 18 | 21 | 24 = 12): string => {
+  const strength = wordCount === 12 ? 128 :
+                  wordCount === 15 ? 160 :
+                  wordCount === 18 ? 192 :
+                  wordCount === 21 ? 224 : 256;
+  return bip39.generateMnemonic(strength);
+};
+export const validateMnemonic = (mnemonic: string): boolean => bip39.validateMnemonic(mnemonic);
+
 // Wallet exports
 export {
   AlkanesWallet,
@@ -84,8 +95,6 @@ export {
   amm,
   factory,
   splitAlkaneUtxos,
-  filterAlkaneUtxos,
-  getAlkaneBalanceFromUtxos,
   type AlkaneTokenAllocation,
   type SplitAlkaneUtxosResult,
 } from './amm';
@@ -98,9 +107,6 @@ export {
   signet,
   oylnet,
   regtest,
-  getNetworkConfig,
-  getBitcoinNetwork,
-  type Network,
   type NetworkConfig,
 } from './networks';
 

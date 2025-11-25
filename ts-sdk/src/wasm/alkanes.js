@@ -75,7 +75,9 @@ async function __wbg_init(input) {
     if (wasm !== undefined) return wasm;
 
     if (typeof input === 'undefined') {
-        input = new URL('alkanes_bg.wasm', import.meta.url);
+        // Use absolute path for browser environments (Next.js serves from /public)
+        // SSR should never reach here - WASM functions should only be called client-side
+        input = '/wasm/alkanes_bg.wasm';
     }
     const imports = __wbg_get_imports();
 

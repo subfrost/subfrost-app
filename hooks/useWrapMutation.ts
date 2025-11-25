@@ -2,7 +2,6 @@ import { useMutation } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useSignerShim } from './useSignerShim';
-import { wrapBtc } from '@/ts-sdk';
 
 export type WrapTransactionBaseData = {
   amount: string; // display units (BTC)
@@ -29,6 +28,9 @@ export function useWrapMutation() {
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
+
+      // Dynamic import to avoid WASM loading at SSR time
+      const { wrapBtc } = await import('@/ts-sdk');
 
       const utxos = await getSpendableUtxos();
 

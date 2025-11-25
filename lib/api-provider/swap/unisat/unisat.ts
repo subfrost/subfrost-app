@@ -1,10 +1,10 @@
-import type { Provider, Signer } from "@/ts-sdk";
+import type { Provider, Signer } from "@/ts-sdk/dist/lite";
 import {
   AssetType,
   AddressTypeEnum as AddressType,
   OylTransactionError,
   getAddressType,
-} from "@/ts-sdk";
+} from "@/ts-sdk/dist/lite";
 import { signBip322Message } from "./BIP322";
 import {
   GetListingPsbtRequest,

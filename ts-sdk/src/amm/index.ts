@@ -46,7 +46,8 @@ export function splitAlkaneUtxos(
 
     for (const token of tokens) {
       const alkaneIdStr = `${token.alkaneId.block}:${token.alkaneId.tx}`;
-      const alkaneEntry = utxo.alkanes[alkaneIdStr];
+      const alkanes = utxo.alkanes as unknown as Record<string, { value: string; name: string; symbol: string }>;
+      const alkaneEntry = alkanes[alkaneIdStr];
 
       if (alkaneEntry && alkaneEntry.value) {
         hasRequestedToken = true;

@@ -5,9 +5,16 @@ import type {
   FormattedUtxo,
   Provider,
   Signer,
-  Account,
-} from "@/ts-sdk";
-import { AddressTypeEnum as AddressType, AssetType } from "@/ts-sdk";
+  SpendStrategy,
+} from "@/ts-sdk/dist/lite";
+import { AddressTypeEnum as AddressType, AssetType } from "@/ts-sdk/dist/lite";
+
+// Account type
+interface Account {
+  taproot?: { address: string; pubkey: string };
+  nativeSegwit?: { address: string; pubkey: string };
+  spendStrategy: SpendStrategy;
+}
 
 export interface ConditionalInput {
   hash: string

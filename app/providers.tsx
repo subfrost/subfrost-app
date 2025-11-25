@@ -3,14 +3,13 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { LaserEyesProvider } from '@omnisat/lasereyes-react';
 
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
 
-// Define Network type locally to avoid importing @oyl/sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet';
+// Define Network type locally
+type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
 
 // Detect network once at module level to avoid re-detection on re-renders
 function detectNetwork(): Network {
@@ -20,13 +19,12 @@ function detectNetwork(): Network {
   if (!process.env.NEXT_PUBLIC_NETWORK) {
     if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
       return 'signet';
-    } else if (host.startsWith('oylnet.') || host.startsWith('staging-oylnet.')) {
-      return 'oylnet';
+    } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
+      return 'regtest';
     }
     return 'mainnet';
   }
-  const envNet = process.env.NEXT_PUBLIC_NETWORK as Network;
-  return (envNet as any) === 'regtest' ? 'mainnet' : envNet;
+  return process.env.NEXT_PUBLIC_NETWORK as Network;
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
@@ -61,14 +59,9 @@ export default function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <GlobalStore>
         <ModalStore>
-          {/* @ts-ignore - LaserEyes expects its own network type */}
-          <LaserEyesProvider config={{ network }}>
-            <WalletProvider>{children}</WalletProvider>
-          </LaserEyesProvider>
+          <WalletProvider network={network}>{children}</WalletProvider>
         </ModalStore>
       </GlobalStore>
     </QueryClientProvider>
   );
 }
-
-

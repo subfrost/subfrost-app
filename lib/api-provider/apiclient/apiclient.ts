@@ -4,12 +4,18 @@ import type {
   OkxBid,
   GetOffersParams,
   GetCollectionOffersParams,
-  Account,
   SpendStrategy,
   AlkaneId,
   FormattedUtxo,
   AccountUtxoPortfolio,
-} from "@/ts-sdk";
+} from "@/ts-sdk/dist/lite";
+
+// Account type is not in lite, define locally
+interface Account {
+  taproot?: { address: string; pubkey: string };
+  nativeSegwit?: { address: string; pubkey: string };
+  spendStrategy: SpendStrategy;
+}
 import {
   GetAddressListingsRequest,
   GetListingPsbtRequest,
