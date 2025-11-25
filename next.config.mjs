@@ -5,10 +5,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const nextConfig = {
-  /* config options here */
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  reactStrictMode: true,
   typescript: {
     ignoreBuildErrors: false,
   },
@@ -18,37 +15,41 @@ const nextConfig = {
     },
   },
   webpack: (config, { isServer, webpack }) => {
+    // Add WASM support
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
       layers: true,
     };
+
     config.output.webassemblyModuleFilename =
       (isServer ? "../" : "") + "static/wasm/[modulehash].wasm";
-    
-    // Fix @noble/hashes module resolution for @oyl/sdk
-    // @oyl/sdk imports '@noble/hashes/sha2' but package exports require '.js' extension
+
+    // Fallback for 'env' imports in WASM (wasm-bindgen specific)
+    config.externals.push({
+      'env': 'env', // Ignore 'env' module for WASM imports
+    });
+
     config.resolve.alias = {
       ...config.resolve.alias,
       '@noble/hashes/sha2': '@noble/hashes/sha2.js',
       'env': path.resolve(__dirname, './utils/empty-module.mjs'),
+      // Ensure 'stream' is aliased for browser compatibility
+      stream: 'stream-browserify',
     };
-    
+
     config.plugins.push(new webpack.NormalModuleReplacementPlugin(
       /^(env)$/,
       path.resolve(__dirname, './utils/empty-module.mjs')
     ));
-    
+
     // Add a rule to handle .wasm files directly
     config.module.rules.push({
       test: /\.wasm$/,
-      type: "asset/resource",
+      type: "webassembly/async",
       exclude: [/node_modules/],
-      generator: {
-        filename: "static/wasm/[name].[hash][ext]",
-      },
     });
-    
+
     // Add polyfills for browser
     if (!isServer) {
       config.plugins.push(
@@ -58,7 +59,7 @@ const nextConfig = {
           process: 'process/browser',
         })
       );
-      
+
       config.resolve.fallback = {
         ...config.resolve.fallback,
         crypto: false,
@@ -71,7 +72,7 @@ const nextConfig = {
         process: 'process/browser',
       };
     }
-    
+
     return config;
   },
 };

@@ -1,7 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm } from '@oyl/sdk';
-import { executeWithBtcWrapUnwrap } from '@oyl/sdk/lib/alkanes';
+import { amm, executeWithBtcWrapUnwrap } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useSignerShim } from '@/hooks/useSignerShim';
@@ -35,7 +34,7 @@ export function useSwapMutation() {
   const signerShim = useSignerShim();
   const provider = useSandshrewProvider();
   const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID, FRBTC_ALKANE_ID } = getConfig(network);
-  
+
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
   const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
@@ -114,11 +113,11 @@ export function useSwapMutation() {
         const swapToken = [
           {
             alkaneId: parseAlkaneId(sellCurrency),
-            amount: BigInt(new BigNumber(swapData.sellAmount).toFixed()),
+            amount: new BigNumber(swapData.sellAmount).toFixed(),
           },
         ];
-        const { utxos: splitUtxos } = amm.factory.splitAlkaneUtxos(swapToken, utxos);
-        alkanesUtxos = splitUtxos;
+        const { selectedUtxos } = amm.factory.splitAlkaneUtxos(swapToken, utxos);
+        alkanesUtxos = selectedUtxos;
         assertAlkaneUtxosAreClean(alkanesUtxos);
       }
 
@@ -146,5 +145,3 @@ export function useSwapMutation() {
     },
   });
 }
-
-

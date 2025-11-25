@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, memo } from 'react'
 
 interface Particle {
   x: number
@@ -11,22 +11,13 @@ interface Particle {
   type: 'snowflake' | 'bitcoin'
 }
 
-export function SnowflakeWatermark() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [isMobile, setIsMobile] = useState(false)
+// Reduce particle count for better performance
+const PARTICLE_COUNT = 50
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const checkMobile = () => {
-        setIsMobile(window.innerWidth < 768)
-      }
-      
-      checkMobile()
-      window.addEventListener('resize', checkMobile)
-      
-      return () => window.removeEventListener('resize', checkMobile)
-    }
-  }, [])
+function SnowflakeWatermarkComponent() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const animationRef = useRef<number | null>(null)
+  const particlesRef = useRef<Particle[]>([])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -35,21 +26,29 @@ export function SnowflakeWatermark() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-
-    const particles: Particle[] = []
-
-    for (let i = 0; i < 100; i++) {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        radius: Math.random() * 4 + 2,
-        speed: Math.random() * 0.5 + 0.1,
-        opacity: Math.random() * 0.7 + 0.3,
-        type: Math.random() < 0.95 ? 'snowflake' : 'bitcoin'
-      })
+    // Set canvas size
+    const setCanvasSize = () => {
+      if (!canvas) return
+      canvas.width = window.innerWidth
+      canvas.height = window.innerHeight
     }
+    setCanvasSize()
+
+    // Initialize particles only once
+    if (particlesRef.current.length === 0) {
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particlesRef.current.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          radius: Math.random() * 4 + 2,
+          speed: Math.random() * 0.5 + 0.1,
+          opacity: Math.random() * 0.7 + 0.3,
+          type: Math.random() < 0.95 ? 'snowflake' : 'bitcoin'
+        })
+      }
+    }
+
+    const particles = particlesRef.current
 
     function drawSnowflake(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, opacity: number) {
       ctx.beginPath()
@@ -77,8 +76,8 @@ export function SnowflakeWatermark() {
     }
 
     function animate() {
-      if (!ctx || !canvas) return;
-      
+      if (!ctx || !canvas) return
+
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       particles.forEach(particle => {
@@ -96,21 +95,30 @@ export function SnowflakeWatermark() {
         }
       })
 
-      requestAnimationFrame(animate)
+      // Store animation frame ID for cleanup
+      animationRef.current = requestAnimationFrame(animate)
     }
 
-    animate()
+    // Start animation
+    animationRef.current = requestAnimationFrame(animate)
 
+    // Throttled resize handler
+    let resizeTimeout: NodeJS.Timeout
     const handleResize = () => {
-      if (!canvas) return;
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
+      clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(setCanvasSize, 100)
     }
 
     window.addEventListener('resize', handleResize)
 
+    // Cleanup function - CRITICAL: cancel animation frame
     return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current)
+        animationRef.current = null
+      }
       window.removeEventListener('resize', handleResize)
+      clearTimeout(resizeTimeout)
     }
   }, [])
 
@@ -132,3 +140,6 @@ export function SnowflakeWatermark() {
     />
   )
 }
+
+// Memoize to prevent re-renders from parent
+export const SnowflakeWatermark = memo(SnowflakeWatermarkComponent)

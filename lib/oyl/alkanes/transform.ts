@@ -1,16 +1,21 @@
-import type { AlkaneId } from '@oyl/sdk';
+// Define AlkaneId types locally to avoid import issues with ts-sdk
+type AlkaneIdInput = { block: number | string; tx: number | string };
+type AlkaneIdString = { block: string; tx: string };
 
-export function formatAlkaneId({ block, tx }: AlkaneId): string {
+export function formatAlkaneId({ block, tx }: AlkaneIdInput): string {
   return `${block}:${tx}`;
 }
 
-export function parseAlkaneId(alkaneId: string): AlkaneId {
+export function parseAlkaneId(alkaneId: string): AlkaneIdString {
   const [block, tx] = alkaneId.split(':');
   if (!block || !tx) {
     throw new Error(`Invalid alkaneId format ${alkaneId}`);
   }
   return { block, tx };
 }
+
+// Re-export the input type for other files that need it
+export type AlkaneId = AlkaneIdInput;
 
 
 export interface SimulateRequest {

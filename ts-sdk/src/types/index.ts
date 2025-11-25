@@ -204,3 +204,91 @@ export interface ImportOptions {
   validate?: boolean;
   network?: NetworkType;
 }
+
+/**
+ * Network type extended to include oylnet
+ */
+export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
+
+/**
+ * Spend strategy for UTXO selection (compatible with @oyl/sdk)
+ */
+export interface SpendStrategy {
+  addressOrder: string[];
+  utxoSortGreatestToLeast: boolean;
+  changeAddress: string;
+}
+
+/**
+ * Formatted UTXO (compatible with @oyl/sdk)
+ */
+export interface FormattedUtxo {
+  txid: string;
+  vout: number;
+  value: number;
+  satoshis: number;
+  scriptPubKey: string;
+  address: string;
+  addressType?: string;
+  confirmations?: number;
+  inscriptions?: any[];
+  runes?: any[];
+  alkanes?: any[];
+}
+
+/**
+ * Account UTXO portfolio (compatible with @oyl/sdk)
+ */
+export interface AccountUtxoPortfolio {
+  utxos: FormattedUtxo[];
+  spendableUtxos: FormattedUtxo[];
+  spendableTotalBalance: number;
+  totalBalance: number;
+}
+
+/**
+ * AMM swap parameters
+ */
+export interface SwapParams {
+  sellCurrency: string;
+  buyCurrency: string;
+  direction: 'sell' | 'buy';
+  sellAmount: string;
+  buyAmount: string;
+  maxSlippage: number;
+  feeRate: number;
+  tokenPath?: string[];
+  deadlineBlocks?: number;
+}
+
+/**
+ * AMM liquidity parameters
+ */
+export interface LiquidityParams {
+  token0: string;
+  token1: string;
+  amount0: string;
+  amount1: string;
+  feeRate: number;
+  slippage?: number;
+}
+
+/**
+ * Wrap/Unwrap BTC parameters
+ */
+export interface WrapParams {
+  amount: string;
+  feeRate: number;
+  address?: string;
+}
+
+/**
+ * Execute with wrap/unwrap parameters
+ */
+export interface ExecuteWithWrapParams {
+  operation: 'swap' | 'addLiquidity' | 'removeLiquidity';
+  params: SwapParams | LiquidityParams;
+  account: any;
+  provider: any;
+  signer: any;
+}

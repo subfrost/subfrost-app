@@ -1,4 +1,4 @@
-import {
+import type {
   SwapBrcBid,
   SignedBid,
   OkxBid,
@@ -8,7 +8,8 @@ import {
   SpendStrategy,
   AlkaneId,
   FormattedUtxo,
-} from "@oyl/sdk";
+  AccountUtxoPortfolio,
+} from "@/ts-sdk";
 import {
   GetAddressListingsRequest,
   GetListingPsbtRequest,
@@ -16,7 +17,6 @@ import {
   SubmitBuyerPsbtRequest,
   SubmitListingPsbtRequest,
 } from "../swap/types";
-import { AccountUtxoPortfolio } from "@oyl/sdk/lib/utxo";
 import {
   AddressPositionsResult,
   AlkanesByAddressResult,

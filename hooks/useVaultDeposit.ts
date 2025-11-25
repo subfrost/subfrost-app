@@ -1,7 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm } from '@oyl/sdk';
-import { executeWithBtcWrapUnwrap } from '@oyl/sdk/lib/alkanes';
+import { amm, executeWithBtcWrapUnwrap } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useSignerShim } from '@/hooks/useSignerShim';
@@ -48,21 +47,21 @@ export function useVaultDeposit() {
 
       // Get UTXOs and prepare alkane inputs
       const utxos = await getUtxos();
-      
+
       // Split alkane UTXOs for the deposit token
       const depositTokens = [
         {
           alkaneId: tokenId,
-          amount: BigInt(new BigNumber(depositData.amount).toFixed()),
+          amount: new BigNumber(depositData.amount).toFixed(),
         },
       ];
-      const { utxos: splitUtxos } = amm.factory.splitAlkaneUtxos(depositTokens, utxos);
-      assertAlkaneUtxosAreClean(splitUtxos);
+      const { selectedUtxos } = amm.factory.splitAlkaneUtxos(depositTokens, utxos);
+      assertAlkaneUtxosAreClean(selectedUtxos);
 
       // Execute transaction
       const { executeResult } = await executeWithBtcWrapUnwrap({
         utxos,
-        alkanesUtxos: splitUtxos,
+        alkanesUtxos: selectedUtxos,
         calldata,
         feeRate: depositData.feeRate,
         account,
@@ -73,9 +72,9 @@ export function useVaultDeposit() {
         addDieselMint: false,
       });
 
-      return { 
-        success: true, 
-        transactionId: executeResult?.txId 
+      return {
+        success: true,
+        transactionId: executeResult?.txId
       } as {
         success: boolean;
         transactionId?: string;

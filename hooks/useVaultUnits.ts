@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
-import type { AlkaneId } from '@oyl/sdk';
+
+// Define AlkaneId type locally to avoid import issues with ts-sdk
+type AlkaneId = { block: number | string; tx: number | string };
 
 export interface VaultUnit {
   alkaneId: string; // Full alkane ID like "2:124"
@@ -13,7 +15,7 @@ export interface VaultUnit {
  * Hook to fetch user's vault unit tokens
  * Vault units are created when depositing to a vault (opcode 1: Purchase)
  * Each unit has a unique alkane ID in the same block as the vault template
- * 
+ *
  * @param vaultTemplateId - The vault's unit template ID (e.g., "2:0" for block 2)
  */
 export function useVaultUnits(vaultTemplateId: string) {
@@ -29,7 +31,7 @@ export function useVaultUnits(vaultTemplateId: string) {
       try {
         const utxos = await getUtxos();
         const templateId = parseAlkaneId(vaultTemplateId);
-        
+
         // Group vault units by alkane ID
         const unitMap = new Map<string, { amount: bigint; count: number }>();
 
@@ -41,21 +43,21 @@ export function useVaultUnits(vaultTemplateId: string) {
               // Parse the alkane ID
               const alkaneIdParts = alkaneId.split(':');
               if (alkaneIdParts.length !== 2) continue;
-              
+
               const [blockStr, txStr] = alkaneIdParts;
               const block = blockStr;
-              
+
               // Check if this alkane is from the same block as the vault template
               // Vault units are created in the same block as the template
               if (block === templateId.block) {
                 const existing = unitMap.get(alkaneId);
-                
+
                 if (existing) {
-                  existing.amount += BigInt(alkaneEntry.value);
+                  existing.amount += BigInt((alkaneEntry as any).value);
                   existing.count += 1;
                 } else {
                   unitMap.set(alkaneId, {
-                    amount: BigInt(alkaneEntry.value),
+                    amount: BigInt((alkaneEntry as any).value),
                     count: 1,
                   });
                 }

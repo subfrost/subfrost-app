@@ -43,6 +43,10 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
     'bUSD / DIESEL LP',
     'METHANE / bUSD LP',
     'bUSD / METHANE LP',
+    'ALKAMIST / bUSD LP',
+    'bUSD / ALKAMIST LP',
+    'GOLD DUST / bUSD LP',
+    'bUSD / GOLD DUST LP',
   ]), []);
 
   const sortedPools = useMemo(() => {
@@ -128,9 +132,9 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
   };
 
   return (
-    <div className="mt-8">
-      <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
+    <div>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setMarketFilter('all')}
             className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all ${
@@ -162,14 +166,14 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
             USD
           </button>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-3 min-w-0 flex-1 justify-end">
+          <div className="relative w-full max-w-xs">
             <input
               type="text"
               placeholder="Search pools..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-64 rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-white pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
+              className="h-10 w-full rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-white pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
             />
             <svg 
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--sf-text)]/40"
@@ -216,62 +220,67 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
 
       {/* Desktop Table View */}
       {filteredPools.length > 0 && (
-        <div className="hidden lg:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+        <div className="hidden md:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+        <div className="px-4 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-base font-bold text-[color:var(--sf-text)]">Markets</h3>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrencyDisplay('usd')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    currencyDisplay === 'usd' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  $
+                </button>
+                <span className="text-[color:var(--sf-text)]/30">|</span>
+                <button
+                  onClick={() => setCurrencyDisplay('btc')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    currencyDisplay === 'btc' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  ₿
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setVolumePeriod('24h')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    volumePeriod === '24h' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  24H
+                </button>
+                <span className="text-[color:var(--sf-text)]/30">|</span>
+                <button
+                  onClick={() => setVolumePeriod('30d')}
+                  className={`text-xs font-bold uppercase tracking-wider transition-colors ${
+                    volumePeriod === '30d' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
+                  }`}
+                >
+                  30D
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-[35%]" />
+              <col className="w-[22%]" />
+              <col className="w-[22%]" />
+              <col className="w-[21%]" />
+            </colgroup>
             <thead>
-              <tr className="h-9">
-                <th className="px-6"></th>
-                <th className="px-6">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button
-                      onClick={() => setCurrencyDisplay('usd')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        currencyDisplay === 'usd' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      $
-                    </button>
-                    <span className="text-[color:var(--sf-text)]/30">|</span>
-                    <button
-                      onClick={() => setCurrencyDisplay('btc')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        currencyDisplay === 'btc' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      ₿
-                    </button>
-                  </div>
-                </th>
-                <th className="px-6">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button
-                      onClick={() => setVolumePeriod('24h')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        volumePeriod === '24h' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      24H
-                    </button>
-                    <span className="text-[color:var(--sf-text)]/30">|</span>
-                    <button
-                      onClick={() => setVolumePeriod('30d')}
-                      className={`text-xs font-bold uppercase tracking-wider transition-colors ${
-                        volumePeriod === '30d' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                      }`}
-                    >
-                      30D
-                    </button>
-                  </div>
-                </th>
-                <th className="px-6"></th>
-              </tr>
               <tr className="border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
-                <th className="px-6 py-4 text-right">
+                <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
+                <th className="px-2 py-3 text-right">
                   <button
                     onClick={() => handleSort('tvl')}
-                    className={`inline-flex items-center gap-2 font-bold uppercase tracking-wider text-xs transition-colors ${
+                    className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-colors ${
                       sortField === 'tvl' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
                     }`}
                   >
@@ -289,14 +298,14 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                     </span>
                   </button>
                 </th>
-                <th className="px-6 py-4 text-right">
+                <th className="px-2 py-3 text-right">
                   <button
                     onClick={() => handleSort('volume')}
-                    className={`inline-flex items-center gap-2 font-bold uppercase tracking-wider text-xs transition-colors ${
+                    className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-colors ${
                       sortField === 'volume' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
                     }`}
                   >
-                    <span>VOLUME</span>
+                    <span>VOL</span>
                     <span className={`transition-all ${sortField === 'volume' ? 'opacity-100' : 'opacity-30'}`}>
                       {sortField === 'volume' && sortOrder === 'desc' ? (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -310,7 +319,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                     </span>
                   </button>
                 </th>
-                <SortableHeader label="APR" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="right" />
+                <SortableHeader label="APR" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--sf-glass-border)]">
@@ -322,7 +331,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                   }`}
                   onClick={() => handleSelectPool(pool)}
                 >
-                  <td className="px-6 py-4">
+                  <td className="px-3 py-3">
                     <div className="flex flex-col items-center gap-2">
                       <div className="flex -space-x-2">
                         <div className="relative">
@@ -332,22 +341,22 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                           <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="xl" network={network} />
                         </div>
                       </div>
-                      <span className="text-sm font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-colors whitespace-nowrap">
+                      <span className="text-xs font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-colors whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">
                         {pool.pairLabel.replace(/ LP$/, '')}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className="font-semibold text-[color:var(--sf-text)]">
+                  <td className="px-2 py-3 text-right">
+                    <span className="text-xs font-semibold text-[color:var(--sf-text)]">
                       {formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right font-semibold text-[color:var(--sf-text)]">
+                  <td className="px-2 py-3 text-right text-xs font-semibold text-[color:var(--sf-text)]">
                     {volumePeriod === '24h' && formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice)}
                     {volumePeriod === '30d' && formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice)}
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-bold text-green-700">
+                  <td className="px-2 py-3 text-center">
+                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700">
                       {formatPercent(pool.apr)}
                     </span>
                   </td>
@@ -361,7 +370,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
 
       {/* Mobile/Tablet Card View */}
       {filteredPools.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:hidden">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
         {displayedPools.map((pool) => (
           <button
             key={pool.id}
@@ -398,16 +407,16 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                   <div className="h-full flex">
                     <div 
                       className="h-full bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary)]/70"
-                      style={{ width: '50%' }}
+                      style={{ width: `${getToken0Percentage(pool)}%` }}
                     />
                     <div 
                       className="h-full bg-gradient-to-r from-blue-400 to-blue-300"
-                      style={{ width: '50%' }}
+                      style={{ width: `${getToken1Percentage(pool)}%` }}
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-[10px] font-medium text-[color:var(--sf-text)]/60">
-                  <span>50/50</span>
+                  <span>{getToken0Percentage(pool).toFixed(1)}/{getToken1Percentage(pool).toFixed(1)}</span>
                 </div>
               </div>
             </div>
@@ -443,16 +452,23 @@ function SortableHeader({
   currentField: SortField;
   sortOrder: SortOrder;
   onSort: (field: SortField) => void;
-  align?: 'left' | 'right';
+  align?: 'left' | 'right' | 'center';
 }) {
   const isActive = currentField === field;
-  const alignClass = align === 'right' ? 'text-right justify-end' : 'text-left justify-start';
+  const alignClass = 
+    align === 'right' ? 'text-right justify-end' : 
+    align === 'center' ? 'text-center justify-center' : 
+    'text-left justify-start';
+  const thAlignClass = 
+    align === 'right' ? 'text-right' : 
+    align === 'center' ? 'text-center' : 
+    'text-left';
 
   return (
-    <th className={`px-6 py-4 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+    <th className={`px-2 py-3 ${thAlignClass}`}>
       <button
         onClick={() => onSort(field)}
-        className={`inline-flex items-center gap-2 font-bold uppercase tracking-wider text-xs transition-colors sf-focus-ring ${alignClass} ${
+        className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-colors outline-none ${alignClass} ${
           isActive ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
         }`}
       >
@@ -488,6 +504,20 @@ function formatCurrency(v?: number, currency: CurrencyDisplay = 'usd', btcPrice?
 function formatPercent(v?: number) {
   if (v == null) return "-";
   return `${v.toFixed(2)}%`;
+}
+
+function getToken0Percentage(pool: PoolSummary): number {
+  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
+  const total = pool.token0TvlUsd + pool.token1TvlUsd;
+  if (total === 0) return 50;
+  return (pool.token0TvlUsd / total) * 100;
+}
+
+function getToken1Percentage(pool: PoolSummary): number {
+  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
+  const total = pool.token0TvlUsd + pool.token1TvlUsd;
+  if (total === 0) return 50;
+  return (pool.token1TvlUsd / total) * 100;
 }
 
 

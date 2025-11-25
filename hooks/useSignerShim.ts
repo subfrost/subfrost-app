@@ -25,8 +25,8 @@ export function useSignerShim() {
   };
 
   const signerShim = {
-    signAllInputs: async ({ rawPsbt }: { rawPsbt: string }) => {
-      const signedPsbtResponse = await signPsbt(rawPsbt);
+    signAllInputs: async ({ rawPsbtHex }: { rawPsbtHex: string }) => {
+      const signedPsbtResponse = await signPsbt(rawPsbtHex);
       return finalizePsbt(signedPsbtResponse?.signedPsbtBase64);
     },
     signAllInputsMultiplePsbts: async ({ rawPsbts, rawPsbtsHex }: { rawPsbts?: string[]; rawPsbtsHex?: string[] }) => {

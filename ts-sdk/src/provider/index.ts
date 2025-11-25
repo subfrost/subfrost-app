@@ -1,9 +1,26 @@
 /**
  * Provider integration for Alkanes SDK
- * 
+ *
  * Compatible with @oyl/sdk Provider interface.
  * Integrates with alkanes-web-sys WASM backend for alkanes-specific functionality.
  */
+
+// WASM is loaded dynamically to avoid SSR issues
+let wasmInitialized = false; // Flag to ensure WASM initializes only once
+let wasm: any; // To store the initialized WASM module exports
+
+// Dynamic WASM initialization (client-side only)
+async function initWasm() {
+  if (wasmInitialized) return wasm;
+  if (typeof window === 'undefined') {
+    // Skip WASM on server-side
+    return null;
+  }
+  const init = (await import('../wasm/alkanes')).default;
+  wasm = await init();
+  wasmInitialized = true;
+  return wasm;
+}
 
 import * as bitcoin from 'bitcoinjs-lib';
 import {
@@ -17,10 +34,6 @@ import {
   AlkaneCallParams,
   AlkaneId,
 } from '../types';
-
-// Import WASM module types
-// @ts-ignore - WASM types are available at runtime
-import type * as AlkanesWasm from '../../build/wasm/alkanes_web_sys';
 
 /**
  * RPC client for Bitcoin Core / Sandshrew
@@ -124,80 +137,36 @@ export class EsploraClient {
  * Alkanes RPC client (integrates with WASM)
  */
 export class AlkanesRpcClient {
-  private wasm?: typeof AlkanesWasm;
-
   constructor(
     private metashrewUrl: string,
     private sandshrewUrl?: string,
-    wasmModule?: typeof AlkanesWasm
-  ) {
-    this.wasm = wasmModule;
-  }
+  ) {}
 
   async getAlkaneBalance(address: string, alkaneId: AlkaneId): Promise<AlkaneBalance> {
-    // Use WASM backend if available
-    if (this.wasm) {
-      const provider = new this.wasm.WebProvider(this.metashrewUrl, this.sandshrewUrl || '');
-      const balance = await provider.getAlkaneBalance(
-        address,
-        JSON.stringify(alkaneId)
-      );
-      return JSON.parse(balance);
+    const wasmModule = await initWasm();
+    if (!wasmModule) {
+      throw new Error('WASM not available (server-side rendering)');
     }
-
-    // Fallback to direct HTTP call
-    const response = await fetch(`${this.metashrewUrl}/alkanes/balance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address, alkaneId }),
-    });
-
-    return response.json();
+    const result = wasmModule.get_alkane_balance(address, alkaneId);
+    return JSON.parse(result);
   }
 
   async getAlkaneBytecode(alkaneId: AlkaneId, blockTag?: string): Promise<string> {
-    if (this.wasm) {
-      return this.wasm.get_alkane_bytecode(
-        'mainnet',
-        alkaneId.block,
-        alkaneId.tx,
-        blockTag || ''
-      ) as any; // Cast needed as Promise return
+    const wasmModule = await initWasm();
+    if (!wasmModule) {
+      throw new Error('WASM not available (server-side rendering)');
     }
-
-    const response = await fetch(`${this.metashrewUrl}/alkanes/bytecode`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alkaneId, blockTag }),
-    });
-
-    const data = await response.json();
-    return data.bytecode;
+    const result = wasmModule.get_alkane_bytecode(alkaneId, blockTag);
+    return result;
   }
 
   async simulateAlkaneCall(params: AlkaneCallParams): Promise<any> {
-    if (this.wasm) {
-      // Get bytecode first
-      const bytecode = await this.getAlkaneBytecode(params.alkaneId);
-      
-      // Simulate using WASM
-      const result = await this.wasm.simulate_alkane_call(
-        JSON.stringify(params.alkaneId),
-        bytecode,
-        '0x' // Empty cellpack for now
-      );
-      
-      return JSON.parse(result as any);
+    const wasmModule = await initWasm();
+    if (!wasmModule) {
+      throw new Error('WASM not available (server-side rendering)');
     }
-
-    // Fallback
-    const response = await fetch(`${this.metashrewUrl}/alkanes/simulate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
-
-    return response.json();
+    const result = wasmModule.simulate_alkane_call(JSON.stringify(params));
+    return JSON.parse(result);
   }
 }
 
@@ -212,12 +181,12 @@ export class AlkanesProvider {
   public networkType: NetworkType;
   public url: string;
 
-  constructor(config: ProviderConfig, wasmModule?: typeof AlkanesWasm) {
+  constructor(config: ProviderConfig) {
     this.network = config.network;
     this.networkType = config.networkType;
     this.url = config.url;
 
-    const masterUrl = config.projectId ? 
+    const masterUrl = config.projectId ?
       `${config.url}/${config.version || 'v1'}/${config.projectId}` :
       config.url;
 
@@ -226,14 +195,13 @@ export class AlkanesProvider {
     this.alkanes = new AlkanesRpcClient(
       masterUrl,
       undefined,
-      wasmModule
     );
   }
 
   /**
    * Push a PSBT to the network (compatible with @oyl/sdk)
    */
-  async pushPsbt({ psbtHex, psbtBase64 }: { 
+  async pushPsbt({ psbtHex, psbtBase64 }: {
     psbtHex?: string;
     psbtBase64?: string;
   }): Promise<TransactionResult> {
@@ -288,7 +256,7 @@ export class AlkanesProvider {
       // Fallback to esplora
       await new Promise(resolve => setTimeout(resolve, 1000));
       const tx = await this.esplora.getTxInfo(txId);
-      
+
       return {
         txId,
         rawTx,
@@ -342,14 +310,12 @@ export class AlkanesProvider {
 
 /**
  * Create an Alkanes provider instance
- * 
+ *
  * @param config - Provider configuration
- * @param wasmModule - Optional WASM module for alkanes functionality
  * @returns AlkanesProvider instance compatible with @oyl/sdk
  */
 export function createProvider(
   config: ProviderConfig,
-  wasmModule?: typeof AlkanesWasm
 ): AlkanesProvider {
-  return new AlkanesProvider(config, wasmModule);
+  return new AlkanesProvider(config);
 }

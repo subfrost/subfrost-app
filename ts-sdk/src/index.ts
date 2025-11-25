@@ -1,39 +1,40 @@
 /**
  * @alkanes/ts-sdk
- * 
+ *
  * TypeScript SDK for Alkanes - Bitcoin smart contracts
- * 
+ *
  * This SDK provides:
  * - Wallet management with HD derivation (BIP32/44/84/86)
  * - Keystore encryption (ethers.js compatible)
  * - PSBT creation and signing
  * - Provider integration (@oyl/sdk compatible)
  * - Alkanes contract interaction
+ * - AMM operations (swap, liquidity)
  * - WASM backend integration (alkanes-web-sys)
- * 
+ *
  * @example
  * ```typescript
  * import { createKeystore, unlockKeystore, createWallet, createProvider } from '@alkanes/ts-sdk';
- * 
+ *
  * // Create a new wallet
  * const { keystore, mnemonic } = await createKeystore('password123');
  * console.log('Save this mnemonic:', mnemonic);
- * 
+ *
  * // Later, unlock the keystore
  * const unlockedKeystore = await unlockKeystore(keystore, 'password123');
  * const wallet = createWallet(unlockedKeystore);
- * 
+ *
  * // Get addresses
  * const address = wallet.getReceivingAddress(0);
  * console.log('Address:', address);
- * 
+ *
  * // Create provider
  * const provider = createProvider({
  *   url: 'https://api.example.com',
  *   network: bitcoin.networks.bitcoin,
  *   networkType: 'mainnet',
  * });
- * 
+ *
  * // Get balance
  * const balance = await provider.getBalance(address);
  * console.log('Balance:', balance);
@@ -65,6 +66,43 @@ export {
   createProvider,
 } from './provider';
 
+// Alkanes-specific exports
+export {
+  wrapBtc,
+  unwrapBtc,
+  executeWithBtcWrapUnwrap,
+  estimateTxSize,
+  type Signer,
+  type Account,
+  type ExecuteResult,
+  type ExecuteWithBtcWrapUnwrapParams,
+} from './alkanes';
+
+// AMM exports
+export {
+  amm,
+  factory,
+  splitAlkaneUtxos,
+  filterAlkaneUtxos,
+  getAlkaneBalanceFromUtxos,
+  type AlkaneTokenAllocation,
+  type SplitAlkaneUtxosResult,
+} from './amm';
+
+// Network exports
+export {
+  networks,
+  mainnet,
+  testnet,
+  signet,
+  oylnet,
+  regtest,
+  getNetworkConfig,
+  getBitcoinNetwork,
+  type Network,
+  type NetworkConfig,
+} from './networks';
+
 // Type exports
 export type {
   NetworkType,
@@ -87,6 +125,12 @@ export type {
   AddressBalance,
   ExportOptions,
   ImportOptions,
+  FormattedUtxo,
+  SpendStrategy,
+  AccountUtxoPortfolio,
+  SwapParams,
+  LiquidityParams,
+  WrapParams,
 } from './types';
 
 // Utility exports
@@ -100,7 +144,6 @@ export {
   delay,
   retry,
   calculateFee,
-  estimateTxSize,
   hexToBytes,
   bytesToHex,
   reverseBytes,
@@ -118,22 +161,24 @@ export const VERSION = '0.1.0';
 
 /**
  * Initialize the SDK with WASM module
- * 
+ *
  * @example
  * ```typescript
  * import init, * as wasm from '@alkanes/ts-sdk/wasm';
  * import { initSDK } from '@alkanes/ts-sdk';
- * 
+ *
  * await init();
  * const sdk = initSDK(wasm);
  * ```
  */
-export async function initSDK(wasmModule?: any) {
+export async function initSDK() {
   // Import dynamically to avoid circular dependencies
   const { KeystoreManager, createKeystore, unlockKeystore } = await import('./keystore');
   const { AlkanesWallet, createWallet, createWalletFromMnemonic } = await import('./wallet');
   const { AlkanesProvider, createProvider } = await import('./provider');
-  
+  const { amm } = await import('./amm');
+  const { networks } = await import('./networks');
+
   return {
     KeystoreManager,
     AlkanesWallet,
@@ -142,7 +187,9 @@ export async function initSDK(wasmModule?: any) {
     unlockKeystore,
     createWallet,
     createWalletFromMnemonic,
-    createProvider: (config: any) => createProvider(config, wasmModule),
+    createProvider: (config: any) => createProvider(config),
+    amm,
+    networks,
     version: VERSION,
   };
 }
@@ -152,7 +199,9 @@ export default async function getAlkanesSDK() {
   const { KeystoreManager, createKeystore, unlockKeystore } = await import('./keystore');
   const { AlkanesWallet, createWallet, createWalletFromMnemonic } = await import('./wallet');
   const { AlkanesProvider, createProvider } = await import('./provider');
-  
+  const { amm } = await import('./amm');
+  const { networks } = await import('./networks');
+
   return {
     KeystoreManager,
     AlkanesWallet,
@@ -162,6 +211,8 @@ export default async function getAlkanesSDK() {
     createWallet,
     createWalletFromMnemonic,
     createProvider,
+    amm,
+    networks,
     initSDK,
     VERSION,
   };

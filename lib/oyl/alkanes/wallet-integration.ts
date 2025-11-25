@@ -1,14 +1,16 @@
 /**
  * Alkanes-RS Wallet Integration
- * 
+ *
  * ✅ NOW USING REAL ALKANES-RS SDK! (Source fixed)
- * 
+ *
  * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
  */
 
-import type { Network } from '@oyl/sdk';
 import * as bitcoin from 'bitcoinjs-lib';
+
+// Define Network type locally to avoid import issues with ts-sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 // ✅ REAL ALKANES-RS SDK - Source code fixed for proper exports
 import {
@@ -244,38 +246,37 @@ export async function createAlkanesWallet(
 }
 
 /**
- * Create an Alkanes provider for @oyl/sdk
- * 
+ * Create an Alkanes provider (using local ts-sdk - no @oyl/sdk dependency)
+ *
  * @param network - Bitcoin network
  * @param rpcUrl - Optional Bitcoin Core RPC URL (defaults based on network)
- * @returns Alkanes provider compatible with @oyl/sdk
+ * @returns Alkanes provider compatible with @oyl/sdk interface
  */
 export async function createAlkanesProvider(
   network: Network,
   rpcUrl?: string
 ) {
-  // For now, return a simple provider that uses the default @oyl/sdk Provider
-  // This avoids importing the alkanes SDK which has node:crypto issues
-  const { Provider } = await import('@oyl/sdk');
-  
+  // Use local ts-sdk AlkanesProvider instead of @oyl/sdk
+  const { AlkanesProvider } = await import('@/ts-sdk');
+
   const defaultUrls: Record<Network, string> = {
-    mainnet: 'https://api.subfrost.com',
-    testnet: 'https://testnet-api.subfrost.com',
-    regtest: 'http://localhost:18443',
-    signet: 'https://signet-api.subfrost.com',
-    oylnet: 'https://oylnet-api.subfrost.com',
+    mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',
+    testnet: 'https://testnet.sandshrew.io/v4/wrlckwrld',
+    regtest: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
+    signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
+    oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
   };
-  
+
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
   const networkType = getAlkanesNetwork(network);
   const bitcoinNetwork = getBitcoinJsNetwork(network);
-  
-  return new Provider({
-    version: 'v2',
+
+  return new AlkanesProvider({
+    version: '',
     network: bitcoinNetwork,
     networkType,
     url,
-    projectId: network === 'oylnet' ? 'regtest' : 'subfrost',
+    projectId: '',
   });
 }
 

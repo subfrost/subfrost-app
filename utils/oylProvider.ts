@@ -1,33 +1,37 @@
 import { OylApiClient } from '@/lib/api-provider';
-import type { Network } from '@oyl/sdk';
-import { Provider } from '@oyl/sdk';
-import { createAlkanesProvider } from '@/lib/oyl/alkanes/wallet-integration';
+// All heavy SDK imports are now dynamic to avoid blocking initial page load
 
 import { SANDSHREW_PROJECT_ID } from '@/constants';
 import type { OylConnectProviderAPI } from '@/types';
 import { NetworkMap, SandshrewUrlMap } from '@/utils/constants';
 import { getConfig } from '@/utils/getConfig';
 
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet';
+
 export async function getSandshrewProvider(network: Network): Promise<any> {
-  const url = SandshrewUrlMap[network] ?? SandshrewUrlMap.mainnet!;
-  
+  const baseUrl = SandshrewUrlMap[network] ?? SandshrewUrlMap.mainnet!;
+
   try {
-    const alkanesProvider = await createAlkanesProvider(network, url);
+    // Lazy import to avoid loading @alkanes/ts-sdk on initial page load
+    const { createAlkanesProvider } = await import('@/lib/oyl/alkanes/wallet-integration');
+    const alkanesProvider = await createAlkanesProvider(network, baseUrl);
     return alkanesProvider;
   } catch (error) {
     console.error('Failed to create Alkanes provider, falling back to default:', error);
+    // Lazy import ts-sdk Provider as fallback
+    const { AlkanesProvider } = await import('@/ts-sdk');
     const mappedNetwork = NetworkMap[network] ?? NetworkMap.mainnet!;
     const networkType = ((network as any) === 'oylnet' ? 'regtest' : (network as any)) as
       | 'mainnet'
       | 'testnet'
       | 'regtest'
       | 'signet';
-    return new Provider({
-      version: 'v2',
+    return new AlkanesProvider({
+      version: '',
       network: mappedNetwork,
       networkType,
-      url,
-      projectId: (network as any) === 'oylnet' ? 'regtest' : SANDSHREW_PROJECT_ID,
+      url: baseUrl,
+      projectId: '',
     });
   }
 }

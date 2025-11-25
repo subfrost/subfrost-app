@@ -99,41 +99,52 @@ export default function SwapInputs({
       <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Pay</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-          <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-            <NumberField placeholder={"0.00"} align="left" value={fromAmount} onChange={onChangeFromAmount} />
-            <button
-              type="button"
-              onClick={() => openTokenSelector('from')}
-              className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
-            >
-              {from && (
-                <TokenIcon 
-                  key={`from-${from.id}-${from.symbol}`} 
-                  symbol={from.symbol} 
-                  id={from.id} 
-                  iconUrl={from.iconUrl} 
-                  size="sm" 
-                  network={network} 
-                />
-              )}
-              <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                {from?.symbol ?? 'Select'}
-              </span>
-              <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-            </button>
-            <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
-            <div className="text-right">
-              <div className="mb-2">
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
-                  {fromBalanceText}
-                  {balanceUsage > 0 && (
-                    <span className="ml-1.5 text-[10px] font-bold">
-                      ({balanceUsage.toFixed(1)}%)
-                    </span>
-                  )}
-                </div>
+          <div className="flex flex-col gap-2">
+            {/* Row 1: Input + Token Selector */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <NumberField placeholder={"0.00"} align="left" value={fromAmount} onChange={onChangeFromAmount} />
+              </div>
+              <button
+                type="button"
+                onClick={() => openTokenSelector('from')}
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring flex-shrink-0"
+              >
+                {from && (
+                  <TokenIcon 
+                    key={`from-${from.id}-${from.symbol}`} 
+                    symbol={from.symbol} 
+                    id={from.id} 
+                    iconUrl={from.iconUrl} 
+                    size="sm" 
+                    network={network} 
+                  />
+                )}
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {from?.symbol ?? 'Select'}
+                </span>
+                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+              </button>
+            </div>
+            
+            {/* Row 2: Fiat + Balance */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                {fromBalanceText}
                 {balanceUsage > 0 && (
-                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <span className="ml-1.5 text-[10px] font-bold">
+                    ({balanceUsage.toFixed(1)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            {/* Row 3: Balance Bar + Percentage Buttons */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1">
+                {balanceUsage > 0 && (
+                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                     <div 
                       className={`h-full ${getBalanceColor()} transition-all duration-300 ease-out`}
                       style={{ width: `${balanceUsage}%` }}
@@ -141,7 +152,7 @@ export default function SwapInputs({
                   </div>
                 )}
               </div>
-              <div className="flex items-center justify-end gap-1.5">
+              <div className="flex items-center gap-1.5">
                 {onPercentFrom && (
                   <>
                     <button
@@ -182,18 +193,15 @@ export default function SwapInputs({
       </div>
 
       {/* Invert button – centered between cards */}
-      <div className="relative my-3 z-20 flex items-center justify-center">
+      <div className="relative -my-1 z-20 flex items-center justify-center">
         <button
           type="button"
           onClick={onInvert}
-          className="group flex h-11 w-11 items-center justify-center rounded-full border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-b from-white to-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(40,67,114,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.25)] hover:border-[color:var(--sf-primary)]/40 hover:scale-105 active:scale-95 sf-focus-ring"
+          className="group flex h-11 w-11 items-center justify-center rounded-full border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-b from-white to-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(40,67,114,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.25)] hover:border-[color:var(--sf-primary)]/40 hover:scale-105 active:scale-95 outline-none"
           aria-label="Invert swap direction"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform group-hover:rotate-180 duration-300">
-            <path d="M8 5l-4 4 4 4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M4 9h12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-            <path d="M16 19l4-4-4-4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M20 15H8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform group-hover:-rotate-180 duration-300">
+            <path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
       </div>
@@ -202,36 +210,40 @@ export default function SwapInputs({
       <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Receive</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-          <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-            <NumberField placeholder={"0.00"} align="left" value={toAmount} onChange={onChangeToAmount} />
-            <button
-              type="button"
-              onClick={() => openTokenSelector('to')}
-              className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
-            >
-              {to && (
-                <TokenIcon 
-                  key={`to-${to.id}-${to.symbol}`} 
-                  symbol={to.symbol} 
-                  id={to.id} 
-                  iconUrl={to.iconUrl} 
-                  size="sm" 
-                  network={network} 
-                />
-              )}
-              <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                {to?.symbol ?? 'Select'}
-              </span>
-              <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-            </button>
-            <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{toFiatText}</div>
-            <div className="text-right text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
+          <div className="flex flex-col gap-2">
+            {/* Row 1: Input + Token Selector */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <NumberField placeholder={"0.00"} align="left" value={toAmount} onChange={onChangeToAmount} />
+              </div>
+              <button
+                type="button"
+                onClick={() => openTokenSelector('to')}
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring flex-shrink-0"
+              >
+                {to && (
+                  <TokenIcon 
+                    key={`to-${to.id}-${to.symbol}`} 
+                    symbol={to.symbol} 
+                    id={to.id} 
+                    iconUrl={to.iconUrl} 
+                    size="sm" 
+                    network={network} 
+                  />
+                )}
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {to?.symbol ?? 'Select'}
+                </span>
+                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+              </button>
+            </div>
+            
+            {/* Row 2: Fiat + Balance */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{toFiatText}</div>
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
+            </div>
           </div>
-        </div>
-
-        {/* Settings chip */}
-        <div className="mt-3 flex items-center justify-end">
-          <SettingsButton />
         </div>
       </div>
 
@@ -252,23 +264,3 @@ export default function SwapInputs({
     </div>
   );
 }
-
-function SettingsButton() {
-  const { openTxSettings } = useModalStore();
-  return (
-    <button
-      type="button"
-      onClick={() => openTxSettings()}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-      <span>Settings</span>
-    </button>
-  );
-}
-
-
-

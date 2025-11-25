@@ -92,6 +92,7 @@ export function useFrbtcPremium() {
         };
       }
     },
+    enabled: !!provider,
     staleTime: 60_000, // Cache for 1 minute (premium can change)
     retry: 3,
     retryDelay: 1000,

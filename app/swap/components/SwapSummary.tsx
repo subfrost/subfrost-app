@@ -10,6 +10,7 @@ import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 import { useMemo } from 'react';
+import { useModalStore } from '@/stores/modals';
 
 type Props = {
   sellId: string;
@@ -27,6 +28,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
+  const { openTxSettings } = useModalStore();
   const normalizedSell = sellId === 'btc' ? FRBTC_ALKANE_ID : sellId;
   const normalizedBuy = buyId === 'btc' ? FRBTC_ALKANE_ID : buyId;
   
@@ -58,7 +60,10 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           .integerValue(BigNumber.ROUND_FLOOR)
       : BigNumber(quote.sellAmount);
     const feeAmount = ammSellAmount.multipliedBy(poolFee);
-    poolFeeText = `${formatAlks(feeAmount.toString())} ${sellName ?? sellId}`;
+    // Use 8 decimals for BTC/frBTC, 2 for other tokens
+    const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
+    const decimals = isBtcToken ? 8 : 2;
+    poolFeeText = `${formatAlks(feeAmount.toString(), decimals, decimals)} ${sellName ?? sellId}`;
   }
 
   // Calculate slippage tolerance (difference between quote and minimum/maximum)
@@ -127,6 +132,14 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
       ];
     }
     
+    // Handle direct swaps - show route for all pairs
+    if (sellId && buyId && quote) {
+      return [
+        { id: sellId, symbol: sellName || sellId, label: sellName || sellId },
+        { id: buyId, symbol: buyName || buyId, label: buyName || buyId }
+      ];
+    }
+    
     return null;
   };
 
@@ -142,15 +155,6 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
         <SkeletonLines />
       ) : quote ? (
         <>
-          {(isDirectWrap || isDirectUnwrap) && (
-            <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-1">Swap Route</div>
-              <div className="text-xs font-semibold text-blue-900">
-                {isDirectWrap && 'Wrap BTC → frBTC'}
-                {isDirectUnwrap && 'Unwrap frBTC → BTC'}
-              </div>
-            </div>
-          )}
           {swapRoute && (
             <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-2">
@@ -173,28 +177,56 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                   </div>
                 ))}
               </div>
-              <div className="mt-1.5 text-[10px] text-blue-700">
-                {quote?.hops === 2 && swapRoute.length === 3 && (
-                  <>
-                    {swapRoute[1].id === BUSD_ALKANE_ID && '⚡ Using bUSD as bridge token'}
-                    {swapRoute[1].id === FRBTC_ALKANE_ID && '⚡ Using frBTC as bridge token'}
-                  </>
-                )}
-                {sellId === 'btc' && buyId !== 'frbtc' && '🔄 BTC will be wrapped to frBTC before swap'}
-                {buyId === 'btc' && sellId !== 'frbtc' && '🔄 frBTC will be unwrapped to BTC after swap'}
-                {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
-              </div>
+              {(quote?.hops === 2 || sellId === 'btc' || buyId === 'btc') && (
+                <div className="mt-1.5 text-[10px] text-blue-700">
+                  {quote?.hops === 2 && swapRoute.length === 3 && (
+                    <>
+                      {swapRoute[1].id === BUSD_ALKANE_ID && '⚡ Using bUSD as bridge token'}
+                      {swapRoute[1].id === FRBTC_ALKANE_ID && '⚡ Using frBTC as bridge token'}
+                    </>
+                  )}
+                  {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && 'BTC will seamlessly wrap to frBTC in this Tx.'}
+                  {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
+                  {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && 'NOTE: frBTC will be unwrapped to BTC in this Tx. BTC will be sent to your wallet after 3 block confirmations.'}
+                  {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
+                  {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
+                </div>
+              )}
             </div>
           )}
+          
+          {/* Settings button */}
+          <div className="flex items-center justify-end mb-2">
+            <button
+              type="button"
+              onClick={() => openTxSettings()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>Settings</span>
+            </button>
+          </div>
+          
           <Row 
             label="Exchange Rate" 
-            value={`1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate)} ${buyName ?? buyId}`}
+            value={`1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
             highlight
           />
           {direction === 'sell' ? (
-            <Row label="Minimum Received" value={`${formatAlks(quote.minimumReceived)} ${buyName ?? buyId}`} />
+            <Row label="Minimum Received" value={`${(() => {
+              const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
+              const decimals = isBtcToken ? 8 : 2;
+              return formatAlks(quote.minimumReceived, decimals, decimals);
+            })()} ${buyName ?? buyId}`} />
           ) : (
-            <Row label="Maximum Sent" value={`${formatAlks(quote.maximumSent)} ${sellName ?? sellId}`} />
+            <Row label="Maximum Sent" value={`${(() => {
+              const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
+              const decimals = isBtcToken ? 8 : 2;
+              return formatAlks(quote.maximumSent, decimals, decimals);
+            })()} ${sellName ?? sellId}`} />
           )}
           {slippagePercent !== null && (
             <Row 
@@ -266,9 +298,12 @@ function SkeletonLines() {
   );
 }
 
-function formatRate(v: string) {
+function formatRate(v: string, tokenId?: string, tokenName?: string) {
   try {
-    return new BigNumber(v || '0').toFixed(8);
+    // Use 8 decimals for BTC/frBTC, 2 for other tokens
+    const isBtcToken = tokenId === 'btc' || tokenName === 'BTC' || tokenName === 'frBTC';
+    const decimals = isBtcToken ? 8 : 2;
+    return new BigNumber(v || '0').toFixed(decimals);
   } catch {
     return '0';
   }
