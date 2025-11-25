@@ -220,20 +220,29 @@ export interface SpendStrategy {
 }
 
 /**
- * Formatted UTXO (compatible with @oyl/sdk)
+ * Formatted UTXO (compatible with @oyl/sdk and wallet-integration)
+ * Supports both naming conventions (txid/txId, vout/outputIndex, etc.)
  */
 export interface FormattedUtxo {
-  txid: string;
-  vout: number;
-  value: number;
-  satoshis: number;
-  scriptPubKey: string;
+  // Transaction ID - both naming conventions
+  txid?: string;
+  txId?: string;
+  // Output index - both naming conventions
+  vout?: number;
+  outputIndex?: number;
+  // Value in satoshis - both naming conventions
+  value?: number;
+  satoshis?: number;
+  // Script pubkey - both naming conventions
+  scriptPubKey?: string;
+  scriptPk?: string;
   address: string;
   addressType?: string;
   confirmations?: number;
+  indexed?: boolean;
   inscriptions?: any[];
   runes?: any[];
-  alkanes?: Record<string, { value: string }>;
+  alkanes?: Record<string, { value: string; name?: string; symbol?: string }>;
 }
 
 /**

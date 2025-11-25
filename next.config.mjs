@@ -43,11 +43,10 @@ const nextConfig = {
       path.resolve(__dirname, './utils/empty-module.mjs')
     ));
 
-    // Add a rule to handle .wasm files directly
+    // Add a rule to handle .wasm files directly (include ts-sdk)
     config.module.rules.push({
       test: /\.wasm$/,
       type: "webassembly/async",
-      exclude: [/node_modules/],
     });
 
     // Add polyfills for browser
