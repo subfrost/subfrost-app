@@ -121,10 +121,43 @@ export class EsploraClient {
 }
 
 /**
+ * Simulate request structure for alkanes.simulate()
+ */
+export interface SimulateRequest {
+  alkanes?: string[];
+  transaction?: string;
+  block?: string;
+  height?: string;
+  txindex?: number;
+  target?: { block: number | string; tx: number | string };
+  inputs?: string[];
+  pointer?: number;
+  refundPointer?: number;
+  vout?: number;
+}
+
+/**
+ * Simulate response structure
+ */
+export interface SimulateResponse {
+  execution?: {
+    data?: number[];
+    error?: string;
+  };
+  parsed?: {
+    le?: number;
+    be?: number;
+    hex?: string;
+  };
+  error?: string;
+}
+
+/**
  * Alkanes RPC client (integrates with WASM)
  */
 export class AlkanesRpcClient {
   private wasm?: typeof AlkanesWasm;
+  public alkanesUrl: string;
 
   constructor(
     private metashrewUrl: string,
@@ -132,6 +165,54 @@ export class AlkanesRpcClient {
     wasmModule?: typeof AlkanesWasm
   ) {
     this.wasm = wasmModule;
+    this.alkanesUrl = metashrewUrl;
+  }
+
+  /**
+   * Generic RPC call method for alkanes methods
+   * Used by usePoolFee for alkanes_getstorageatstring
+   */
+  async _call(method: string, params: any[] = []): Promise<any> {
+    const response = await fetch(this.metashrewUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params,
+      }),
+    });
+
+    const json = await response.json();
+    if (json.error) {
+      throw new Error(`RPC error: ${json.error.message}`);
+    }
+    return json.result;
+  }
+
+  /**
+   * Simulate an alkanes contract call
+   * Compatible with @oyl/sdk provider.alkanes.simulate()
+   * Used by useFrbtcPremium and useVaultStats
+   */
+  async simulate(request: SimulateRequest): Promise<SimulateResponse> {
+    const response = await fetch(this.metashrewUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'alkanes_simulate',
+        params: [request],
+      }),
+    });
+
+    const json = await response.json();
+    if (json.error) {
+      throw new Error(`Simulate error: ${json.error.message}`);
+    }
+    return json.result;
   }
 
   async getAlkaneBalance(address: string, alkaneId: AlkaneId): Promise<AlkaneBalance> {

@@ -64,6 +64,10 @@ export {
   AlkanesRpcClient,
   createProvider,
 } from './provider';
+export type {
+  SimulateRequest,
+  SimulateResponse,
+} from './provider';
 
 // AMM exports
 export {
