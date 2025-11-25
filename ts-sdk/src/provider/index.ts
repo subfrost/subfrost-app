@@ -2,25 +2,8 @@
  * Provider integration for Alkanes SDK
  *
  * Compatible with @oyl/sdk Provider interface.
- * Integrates with alkanes-web-sys WASM backend for alkanes-specific functionality.
+ * Uses HTTP RPC for alkanes operations.
  */
-
-// WASM is loaded dynamically to avoid SSR issues
-let wasmInitialized = false; // Flag to ensure WASM initializes only once
-let wasm: any; // To store the initialized WASM module exports
-
-// Dynamic WASM initialization (client-side only)
-async function initWasm() {
-  if (wasmInitialized) return wasm;
-  if (typeof window === 'undefined') {
-    // Skip WASM on server-side
-    return null;
-  }
-  const init = (await import('../wasm/alkanes')).default;
-  wasm = await init();
-  wasmInitialized = true;
-  return wasm;
-}
 
 import * as bitcoin from 'bitcoinjs-lib';
 import {
@@ -134,7 +117,46 @@ export class EsploraClient {
 }
 
 /**
- * Alkanes RPC client (integrates with WASM)
+ * Simulate request interface (compatible with @oyl/sdk)
+ */
+export interface SimulateRequest {
+  alkanes?: Array<{
+    id: { block: string; tx: string };
+    amount: string;
+  }>;
+  transaction?: string;
+  block?: string;
+  height?: string;
+  txindex?: number;
+  target: { block: string; tx: string };
+  inputs: string[];
+  pointer?: number;
+  refund_pointer?: number;
+  vout?: number;
+}
+
+/**
+ * Simulate response interface (compatible with @oyl/sdk)
+ */
+export interface SimulateResponse {
+  status: number;
+  gasUsed: number;
+  execution: {
+    data: number[];
+  };
+  alkanes: Array<{
+    id: { block: string; tx: string };
+    amount: string;
+  }>;
+  storage: Array<{ key: string; value: string }>;
+  parsed?: {
+    le: string;
+    be: string;
+  };
+}
+
+/**
+ * Alkanes RPC client (uses HTTP RPC)
  */
 export class AlkanesRpcClient {
   constructor(
@@ -142,31 +164,57 @@ export class AlkanesRpcClient {
     private sandshrewUrl?: string,
   ) {}
 
-  async getAlkaneBalance(address: string, alkaneId: AlkaneId): Promise<AlkaneBalance> {
-    const wasmModule = await initWasm();
-    if (!wasmModule) {
-      throw new Error('WASM not available (server-side rendering)');
+  /**
+   * Generic RPC call method
+   */
+  async _call(method: string, params: any[] = []): Promise<any> {
+    const response = await fetch(this.metashrewUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params,
+      }),
+    });
+
+    const json = await response.json();
+    if (json.error) {
+      throw new Error(`Alkanes RPC error: ${json.error.message}`);
     }
-    const result = wasmModule.get_alkane_balance(address, alkaneId);
-    return JSON.parse(result);
+    return json.result;
+  }
+
+  /**
+   * Simulate an alkanes contract call (compatible with @oyl/sdk)
+   */
+  async simulate(request: SimulateRequest): Promise<SimulateResponse> {
+    const result = await this._call('alkanes_simulate', [request]);
+    return result;
+  }
+
+  async getAlkaneBalance(address: string, alkaneId: AlkaneId): Promise<AlkaneBalance> {
+    const result = await this._call('alkanes_getbalance', [address, alkaneId]);
+    return result;
   }
 
   async getAlkaneBytecode(alkaneId: AlkaneId, blockTag?: string): Promise<string> {
-    const wasmModule = await initWasm();
-    if (!wasmModule) {
-      throw new Error('WASM not available (server-side rendering)');
-    }
-    const result = wasmModule.get_alkane_bytecode(alkaneId, blockTag);
+    const params = blockTag ? [alkaneId, blockTag] : [alkaneId];
+    const result = await this._call('alkanes_getbytecode', params);
     return result;
   }
 
   async simulateAlkaneCall(params: AlkaneCallParams): Promise<any> {
-    const wasmModule = await initWasm();
-    if (!wasmModule) {
-      throw new Error('WASM not available (server-side rendering)');
-    }
-    const result = wasmModule.simulate_alkane_call(JSON.stringify(params));
-    return JSON.parse(result);
+    return this._call('alkanes_simulate', [params]);
+  }
+
+  /**
+   * Get storage value at a string key (for usePoolFee)
+   */
+  async getStorageAtString(alkaneId: AlkaneId, key: string): Promise<string> {
+    const result = await this._call('alkanes_getstorageatstring', [alkaneId, key]);
+    return result;
   }
 }
 

@@ -5,6 +5,89 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { NetworkType, AlkaneId } from '../types';
 
+// Re-export AddressType enum that mirrors wallet's enum but with uppercase keys for compatibility
+export enum AddressTypeEnum {
+  P2PKH = 'p2pkh',      // Legacy
+  P2SH = 'p2sh',        // Script hash
+  P2SH_P2WPKH = 'p2sh-p2wpkh', // Nested SegWit
+  P2WPKH = 'p2wpkh',    // Native SegWit
+  P2TR = 'p2tr',        // Taproot
+}
+
+// Dust threshold for UTXOs
+export const UTXO_DUST = 546;
+
+/**
+ * Asset type enumeration for swap operations
+ */
+export enum AssetType {
+  BRC20 = 'brc20',
+  RUNES = 'runes',
+  COLLECTIBLE = 'collectible',
+  ALKANE = 'alkane',
+}
+
+/**
+ * Transaction error class for swap operations
+ */
+export class OylTransactionError extends Error {
+  public code?: string;
+  public txId?: string;
+
+  constructor(message: string, code?: string, txId?: string) {
+    super(message);
+    this.name = 'OylTransactionError';
+    this.code = code;
+    this.txId = txId;
+  }
+}
+
+/**
+ * Assert and convert a buffer to proper format for PSBT operations
+ */
+export function assertHex(buffer: Buffer): Buffer {
+  if (buffer.length === 33) {
+    // Remove prefix byte for x-only pubkey
+    return buffer.slice(1, 33);
+  }
+  return buffer;
+}
+
+/**
+ * Get address type from a Bitcoin address string
+ */
+export function getAddressType(address: string): AddressTypeEnum | null {
+  try {
+    // Check for mainnet taproot (bc1p)
+    if (address.startsWith('bc1p') || address.startsWith('tb1p')) {
+      return AddressTypeEnum.P2TR;
+    }
+    // Check for native segwit (bc1q)
+    if (address.startsWith('bc1q') || address.startsWith('tb1q')) {
+      return AddressTypeEnum.P2WPKH;
+    }
+    // Check for nested segwit (starts with 3 on mainnet, 2 on testnet)
+    if (address.startsWith('3') || address.startsWith('2')) {
+      return AddressTypeEnum.P2SH_P2WPKH;
+    }
+    // Check for legacy (starts with 1 on mainnet, m/n on testnet)
+    if (address.startsWith('1') || address.startsWith('m') || address.startsWith('n')) {
+      return AddressTypeEnum.P2PKH;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Timeout/sleep utility - returns a promise that resolves after specified ms
+ * Used for adding delays between operations
+ */
+export function timeout(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Convert network type string to bitcoinjs-lib network object
  */

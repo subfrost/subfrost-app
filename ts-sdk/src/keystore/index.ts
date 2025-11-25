@@ -22,9 +22,7 @@ import {
   ImportOptions,
 } from '../types';
 
-// Re-export the WASM keystore functions
-// @ts-ignore - WASM types are available at runtime
-import type * as AlkanesWasm from '../../build/wasm/alkanes_web_sys';
+// WASM support disabled - using pure JS implementation
 
 /**
  * Default PBKDF2 parameters (matching ethers.js defaults)
@@ -45,15 +43,13 @@ export const DERIVATION_PATHS = {
 
 /**
  * Keystore manager class
- * 
+ *
  * Manages wallet mnemonics with encryption compatible with ethers.js format.
- * Can be used standalone or integrated with WASM backend.
+ * Uses pure JS implementation.
  */
 export class KeystoreManager {
-  private wasm?: typeof AlkanesWasm;
-
-  constructor(wasmModule?: typeof AlkanesWasm) {
-    this.wasm = wasmModule;
+  constructor() {
+    // Pure JS implementation - no WASM
   }
 
   /**
@@ -140,12 +136,7 @@ export class KeystoreManager {
       throw new Error('Password must be at least 8 characters');
     }
 
-    // Use WASM implementation if available
-    if (this.wasm) {
-      return this.exportKeystoreWasm(keystore, password, options);
-    }
-
-    // Fallback to pure JS implementation
+    // Use pure JS implementation
     return this.exportKeystoreJS(keystore, password, options);
   }
 
@@ -168,91 +159,12 @@ export class KeystoreManager {
       throw new Error('Invalid keystore format');
     }
 
-    // Use WASM implementation if available
-    if (this.wasm) {
-      return this.importKeystoreWasm(encrypted, password, options);
-    }
-
-    // Fallback to pure JS implementation
+    // Use pure JS implementation
     return this.importKeystoreJS(encrypted, password, options);
   }
 
   /**
-   * Export using WASM backend (delegates to alkanes-web-sys)
-   */
-  private async exportKeystoreWasm(
-    keystore: Keystore,
-    password: string,
-    options: ExportOptions
-  ): Promise<string | EncryptedKeystore> {
-    if (!this.wasm) {
-      throw new Error('WASM module not loaded');
-    }
-
-    // Convert to WASM keystore format
-    const wasmKeystore = new this.wasm.Keystore({
-      encrypted_mnemonic: '', // Will be encrypted by WASM
-      master_fingerprint: keystore.masterFingerprint,
-      created_at: keystore.createdAt,
-      version: '1.0',
-      pbkdf2_params: {
-        salt: '',
-        iterations: DEFAULT_PBKDF2_ITERATIONS,
-      },
-      account_xpub: keystore.accountXpub,
-      hd_paths: this.serializeHdPaths(keystore.hdPaths),
-      seed: null,
-    });
-
-    // Call WASM encrypt method
-    const encryptedJson = await wasmKeystore.encrypt(password);
-    
-    if (options.format === 'json') {
-      return JSON.parse(encryptedJson);
-    }
-
-    return options.pretty ? 
-      JSON.stringify(JSON.parse(encryptedJson), null, 2) : 
-      encryptedJson;
-  }
-
-  /**
-   * Import using WASM backend (delegates to alkanes-web-sys)
-   */
-  private async importKeystoreWasm(
-    encrypted: EncryptedKeystore,
-    password: string,
-    options: ImportOptions
-  ): Promise<Keystore> {
-    if (!this.wasm) {
-      throw new Error('WASM module not loaded');
-    }
-
-    // Create WASM keystore from encrypted data
-    const wasmKeystore = new this.wasm.Keystore(encrypted);
-    
-    // Decrypt
-    await wasmKeystore.decrypt(password);
-    
-    // Extract decrypted data
-    const mnemonic = wasmKeystore.getMnemonic();
-    
-    if (options.validate && !this.validateMnemonic(mnemonic)) {
-      throw new Error('Decrypted mnemonic is invalid');
-    }
-
-    return {
-      mnemonic,
-      masterFingerprint: encrypted.master_fingerprint,
-      accountXpub: encrypted.account_xpub,
-      hdPaths: this.deserializeHdPaths(encrypted.hd_paths),
-      network: options.network || 'mainnet',
-      createdAt: encrypted.created_at,
-    };
-  }
-
-  /**
-   * Pure JS encryption implementation (fallback)
+   * Pure JS encryption implementation
    */
   private async exportKeystoreJS(
     keystore: Keystore,

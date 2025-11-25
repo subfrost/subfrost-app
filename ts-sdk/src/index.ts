@@ -64,6 +64,8 @@ export {
   EsploraClient,
   AlkanesRpcClient,
   createProvider,
+  type SimulateRequest,
+  type SimulateResponse,
 } from './provider';
 
 // Alkanes-specific exports
@@ -83,8 +85,6 @@ export {
   amm,
   factory,
   splitAlkaneUtxos,
-  filterAlkaneUtxos,
-  getAlkaneBalanceFromUtxos,
   type AlkaneTokenAllocation,
   type SplitAlkaneUtxosResult,
 } from './amm';
@@ -97,9 +97,6 @@ export {
   signet,
   oylnet,
   regtest,
-  getNetworkConfig,
-  getBitcoinNetwork,
-  type Network,
   type NetworkConfig,
 } from './networks';
 
@@ -154,6 +151,14 @@ export {
   formatTimestamp,
   calculateWeight,
   weightToVsize,
+  // Swap helper utilities
+  AddressTypeEnum,
+  UTXO_DUST,
+  AssetType,
+  OylTransactionError,
+  assertHex,
+  getAddressType,
+  timeout,
 } from './utils';
 
 // Version

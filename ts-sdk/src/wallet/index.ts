@@ -34,9 +34,13 @@ const ECPair = ECPairFactory(ecc);
 export enum AddressType {
   P2PKH = 'p2pkh',      // Legacy
   P2SH = 'p2sh',        // Script hash
+  P2SH_P2WPKH = 'p2sh-p2wpkh', // Nested SegWit
   P2WPKH = 'p2wpkh',    // Native SegWit
   P2TR = 'p2tr',        // Taproot
 }
+
+// Alias for compatibility with @oyl/sdk
+export { AddressType as AddressTypeEnum };
 
 /**
  * Wallet class for managing Bitcoin addresses and transactions

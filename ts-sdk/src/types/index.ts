@@ -233,7 +233,7 @@ export interface FormattedUtxo {
   confirmations?: number;
   inscriptions?: any[];
   runes?: any[];
-  alkanes?: any[];
+  alkanes?: Record<string, { value: string }>;
 }
 
 /**
