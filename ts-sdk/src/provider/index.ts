@@ -312,6 +312,14 @@ export class AlkanesProvider {
   async simulateAlkaneCall(params: AlkaneCallParams): Promise<any> {
     return this.alkanes.simulateAlkaneCall(params);
   }
+
+  /**
+   * Get current block height
+   * Convenience method that wraps bitcoin.getBlockCount()
+   */
+  async getBlockHeight(): Promise<number> {
+    return this.bitcoin.getBlockCount();
+  }
 }
 
 /**
