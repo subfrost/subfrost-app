@@ -2,12 +2,12 @@
 
  import Link from "next/link";
  import Image from "next/image";
- import { useEffect, useMemo, useRef, useState } from "react";
+ import { useEffect, useMemo, useRef, useState, useCallback, memo } from "react";
  import { usePathname } from "next/navigation";
  import { useWallet } from "@/context/WalletContext";
  import { Menu, X } from "lucide-react";
 
- function FallingSnowflakes() {
+ const FallingSnowflakes = memo(function FallingSnowflakes() {
    const snowflakes = useMemo(() => {
      const positions = [20, 40, 60, 80];
      const delays = [0, 1.5, 3, 4.5];
@@ -63,7 +63,7 @@
        ))}
      </>
    );
- }
+ });
 
  export default function Header() {
   const { connected, isConnected, address, onConnectModalOpenChange, disconnect } = useWallet() as any;
@@ -75,12 +75,12 @@
    const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
-   const isActive = (path: string) => {
+   const isActive = useCallback((path: string) => {
      if (path === '/') {
        return pathname === '/';
      }
      return pathname.startsWith(path);
-   };
+   }, [pathname]);
 
    useEffect(() => {
      if (!menuOpen) return;

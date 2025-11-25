@@ -6,7 +6,7 @@ import {
   type ProviderType,
 } from '@omnisat/lasereyes-react';
 import type { ReactNode } from 'react';
-import { createContext, useContext, useMemo, useState, useEffect } from 'react';
+import { createContext, useContext, useMemo, useState, useCallback } from 'react';
 
 import { NetworkMap } from '@/utils/constants';
 import { Loader2 } from 'lucide-react';
@@ -78,7 +78,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const laserEyesContext = useLaserEyes();
   const network = laserEyesContext.network as Network;
 
-  const handleConnect = async (walletName: ProviderType) => {
+  const handleConnect = useCallback(async (walletName: ProviderType) => {
     try {
       if (laserEyesContext.provider === walletName) {
         laserEyesContext.disconnect();
@@ -90,7 +90,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error connecting wallet:', error);
     }
-  };
+  }, [laserEyesContext]);
 
   // @ts-ignore
   const account: Account = useMemo(() => {
@@ -182,7 +182,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     laserEyesContext.network,
   ]);
 
-  const getUtxos = async () => {
+  const getUtxos = useCallback(async () => {
     // Lazy import to avoid loading @oyl/sdk on initial page load
     const { getApiProvider } = await import('@/utils/oylProvider');
     const api = getApiProvider(network);
@@ -205,9 +205,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const results = await Promise.all(promises);
     return results.flatMap(result => result.utxos);
-  };
+  }, [network, account]);
 
-  const getSpendableUtxos = async () => {
+  const getSpendableUtxos = useCallback(async () => {
     // Lazy import to avoid loading @oyl/sdk on initial page load
     const { getApiProvider } = await import('@/utils/oylProvider');
     const api = getApiProvider(network);
@@ -221,9 +221,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     )
 
     return spendableUtxos;
-  };
+  }, [network, account, laserEyesContext.paymentAddress]);
 
-  const getSpendableTotalBalance = async () => {
+  const getSpendableTotalBalance = useCallback(async () => {
     // Lazy import to avoid loading @oyl/sdk on initial page load
     const { getApiProvider } = await import('@/utils/oylProvider');
     const api = getApiProvider(network);
@@ -231,7 +231,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const {spendableTotalBalance} = await api.getAddressUtxos(laserEyesContext.paymentAddress, account.spendStrategy)
 
     return spendableTotalBalance;
-  };
+  }, [network, account, laserEyesContext.paymentAddress]);
+
+  const onConnectModalOpenChange = useCallback((isOpen: boolean) => {
+    setIsConnectModalOpen(isOpen);
+  }, []);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(
+    () => ({
+      ...laserEyesContext,
+      isConnectModalOpen,
+      getUtxos,
+      getSpendableUtxos,
+      getSpendableTotalBalance,
+      account,
+      network,
+      onConnectModalOpenChange,
+      finalizeConnect: handleConnect,
+      isConnected: laserEyesContext.connected,
+    }),
+    [
+      laserEyesContext,
+      isConnectModalOpen,
+      getUtxos,
+      getSpendableUtxos,
+      getSpendableTotalBalance,
+      account,
+      network,
+      onConnectModalOpenChange,
+      handleConnect,
+    ]
+  );
 
   if (laserEyesContext.isInitializing) {
     return (
@@ -242,20 +273,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <WalletContext.Provider
-      value={{
-        ...laserEyesContext,
-        isConnectModalOpen,
-        getUtxos,
-        getSpendableUtxos,
-        getSpendableTotalBalance,
-        account,
-        network,
-        onConnectModalOpenChange: (isOpen) => setIsConnectModalOpen(isOpen),
-        finalizeConnect: handleConnect,
-        isConnected: laserEyesContext.connected,
-      }}
-    >
+    <WalletContext.Provider value={contextValue}>
       {children}
     </WalletContext.Provider>
   );
