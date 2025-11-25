@@ -1,14 +1,16 @@
 /**
  * Alkanes-RS Wallet Integration
- * 
+ *
  * ✅ NOW USING REAL ALKANES-RS SDK! (Source fixed)
- * 
+ *
  * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
  */
 
-import type { Network } from '@oyl/sdk';
 import * as bitcoin from 'bitcoinjs-lib';
+
+// Define Network type locally to avoid import issues with ts-sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 // ✅ REAL ALKANES-RS SDK - Source code fixed for proper exports
 import {

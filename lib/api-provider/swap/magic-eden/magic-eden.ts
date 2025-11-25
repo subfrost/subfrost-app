@@ -1,8 +1,8 @@
 import {
     AssetType,
     timeout,
-    getAddressType
-} from "@oyl/sdk"
+    getAddressType,
+} from "@/ts-sdk";
 
 import { prepareAddressForDummyUtxos, updateUtxos } from "../helpers";
 import { GetSellerPsbtRequest, GetSellerPsbtResponse, marketplaceName, Marketplaces, ProcessOfferOptions, SubmitBuyerPsbtRequest, SubmitBuyerPsbtResponse, ProcessOfferResponse } from "../types";
@@ -72,7 +72,7 @@ export async function processMagicEdenOffer({
     if (psbtForDummyUtxos != null) {
         const { psbtBase64, inputTemplate, outputTemplate } = psbtForDummyUtxos
         const { signedPsbt } = await signer.signAllInputs({
-            rawPsbt: psbtBase64,
+            rawPsbtHex: psbtBase64,
             finalize: true,
         })
 
@@ -106,7 +106,7 @@ export async function processMagicEdenOffer({
     }
     const sellerPsbt: GetSellerPsbtResponse = sellerPsbtResponse.data;
     const { signedPsbt } = await signer.signAllInputs({
-        rawPsbt: sellerPsbt.psbt,
+        rawPsbtHex: sellerPsbt.psbt,
         finalize: false,
     })
 

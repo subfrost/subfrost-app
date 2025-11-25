@@ -1,8 +1,12 @@
-import type { ReactNode } from 'react';
+'use client';
+
+import { lazy, Suspense, type ReactNode } from 'react';
 import Header from '@/app/components/Header';
 import Footer from '@/app/components/Footer';
 import FloatingActions from '@/app/components/FloatingActions';
-import ConnectWalletModal from '@/app/components/ConnectWalletModal';
+
+// Lazy load modal - not needed until user clicks connect
+const ConnectWalletModal = lazy(() => import('@/app/components/ConnectWalletModal'));
 
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -17,9 +21,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </main>
       <Footer />
       <FloatingActions />
-      <ConnectWalletModal />
+      <Suspense fallback={null}>
+        <ConnectWalletModal />
+      </Suspense>
     </div>
   );
 }
-
-

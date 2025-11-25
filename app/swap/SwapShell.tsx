@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
-import SwapInputs from "./components/SwapInputs";
-import LiquidityInputs from "./components/LiquidityInputs";
-import MarketsGrid from "./components/MarketsGrid";
-import PoolDetailsCard from "./components/PoolDetailsCard";
+import { useMemo, useState, useEffect, useRef, lazy, Suspense } from "react";
 import type { PoolSummary, TokenMeta } from "./types";
+import type { TokenOption } from "@/app/components/TokenSelectorModal";
+import type { LPPosition } from "./components/LiquidityInputs";
+
+// Critical path imports - needed immediately
 import SwapHeaderTabs from "./components/SwapHeaderTabs";
 import { useSwapQuotes } from "@/hooks/useSwapQuotes";
 import { useSwapMutation } from "@/hooks/useSwapMutation";
@@ -16,19 +16,41 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
-import SwapSummary from "./components/SwapSummary";
-import TransactionSettingsModal from "@/app/components/TransactionSettingsModal";
-import TokenSelectorModal from "@/app/components/TokenSelectorModal";
-import type { TokenOption } from "@/app/components/TokenSelectorModal";
-import LPPositionSelectorModal from "./components/LPPositionSelectorModal";
-import type { LPPosition } from "./components/LiquidityInputs";
-import LoadingOverlay from "@/app/components/LoadingOverlay";
 import { usePools } from "@/hooks/usePools";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
-import SwapSuccessNotification from "@/app/components/SwapSuccessNotification";
-import MyWalletSwaps from "./components/MyWalletSwaps";
+import LoadingOverlay from "@/app/components/LoadingOverlay";
+
+// Lazy loaded components - split into separate chunks
+const SwapInputs = lazy(() => import("./components/SwapInputs"));
+const LiquidityInputs = lazy(() => import("./components/LiquidityInputs"));
+const MarketsGrid = lazy(() => import("./components/MarketsGrid"));
+const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
+const SwapSummary = lazy(() => import("./components/SwapSummary"));
+const TransactionSettingsModal = lazy(() => import("@/app/components/TransactionSettingsModal"));
+const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModal"));
+const LPPositionSelectorModal = lazy(() => import("./components/LPPositionSelectorModal"));
+const SwapSuccessNotification = lazy(() => import("@/app/components/SwapSuccessNotification"));
+const MyWalletSwaps = lazy(() => import("./components/MyWalletSwaps"));
+
+// Loading skeleton for swap form
+const SwapFormSkeleton = () => (
+  <div className="animate-pulse space-y-4">
+    <div className="h-24 bg-white/10 rounded-xl" />
+    <div className="h-10 w-10 mx-auto bg-white/10 rounded-full" />
+    <div className="h-24 bg-white/10 rounded-xl" />
+    <div className="h-14 bg-white/10 rounded-xl" />
+  </div>
+);
+
+// Loading skeleton for markets grid
+const MarketsSkeleton = () => (
+  <div className="animate-pulse space-y-3">
+    <div className="h-20 bg-white/10 rounded-xl" />
+    <div className="h-32 bg-white/10 rounded-xl" />
+  </div>
+);
 
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
@@ -695,13 +717,15 @@ export default function SwapShell() {
 
   return (
     <div className="flex w-full flex-col gap-8 h-full">
-      {successTxId && (
-        <SwapSuccessNotification
-          txId={successTxId}
-          onClose={() => setSuccessTxId(null)}
-        />
-      )}
-      
+      <Suspense fallback={null}>
+        {successTxId && (
+          <SwapSuccessNotification
+            txId={successTxId}
+            onClose={() => setSuccessTxId(null)}
+          />
+        )}
+      </Suspense>
+
       <div className="flex flex-col md:grid md:grid-cols-2 gap-8 flex-1 min-h-0">
         {/* Left Column: Swap/LP Module + My Wallet Swaps */}
         <div className="flex flex-col min-h-0 md:min-h-0">
@@ -728,6 +752,7 @@ export default function SwapShell() {
 
           <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl flex-shrink-0">
           {isBalancesLoading && <LoadingOverlay />}
+          <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (
             <SwapInputs
               from={fromToken}
@@ -820,15 +845,19 @@ export default function SwapShell() {
               onChangeRemoveAmount={setRemoveAmount}
             />
           )}
+          </Suspense>
           </section>
 
           {/* My Wallet Swaps - under swap modal */}
           <div className="mt-8">
-            <MyWalletSwaps />
+            <Suspense fallback={<div className="animate-pulse h-32 bg-white/10 rounded-xl" />}>
+              <MyWalletSwaps />
+            </Suspense>
           </div>
         </div>
 
         {/* Right Column: TVL and Markets */}
+        <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
           <PoolDetailsCard 
             pool={selectedTab === 'lp' && poolToken0 && poolToken1 
@@ -856,8 +885,10 @@ export default function SwapShell() {
           />
           <MarketsGrid pools={markets} onSelect={handleSelectPool} />
         </div>
+        </Suspense>
       </div>
 
+      <Suspense fallback={null}>
       <TransactionSettingsModal
         selection={fee.selection}
         setSelection={fee.setSelection}
@@ -903,6 +934,7 @@ export default function SwapShell() {
         onSelectPosition={setSelectedLPPosition}
         selectedPositionId={selectedLPPosition?.id}
       />
+      </Suspense>
     </div>
   );
 }

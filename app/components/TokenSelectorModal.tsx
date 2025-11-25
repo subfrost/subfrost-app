@@ -2,8 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import TokenIcon from './TokenIcon';
-import type { Network } from '@oyl/sdk';
 import { Search, X } from 'lucide-react';
+
+// Define Network type locally to avoid import issues with ts-sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 export type TokenOption = {
   id: string;

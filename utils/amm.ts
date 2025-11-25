@@ -1,5 +1,30 @@
 import BigNumber from 'bignumber.js';
-import type { FormattedUtxo, Provider } from '@oyl/sdk';
+
+// Define FormattedUtxo type locally to avoid import issues with ts-sdk
+type FormattedUtxo = {
+  txId: string;
+  outputIndex: number;
+  satoshis: number;
+  scriptPk: string;
+  address: string;
+  inscriptions: any[];
+  runes: any[];
+  alkanes: Record<string, { value: string; name: string; symbol: string }>;
+  indexed: boolean;
+  confirmations: number;
+};
+
+// Provider type for getFutureBlockHeight
+interface Provider {
+  sandshrew?: {
+    bitcoindRpc?: {
+      getBlockCount?: () => Promise<number>;
+    };
+  };
+  bitcoin?: {
+    getBlockCount?: () => Promise<number>;
+  };
+}
 
 export function calculateMinimumFromSlippage({
   amount,
@@ -30,7 +55,15 @@ export function calculateMaximumFromSlippage({
 }
 
 export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
-  const currentBlockHeight = await provider.sandshrew.bitcoindRpc.getBlockCount!();
+  // Try sandshrew provider first, then bitcoin provider
+  const getBlockCount = provider.sandshrew?.bitcoindRpc?.getBlockCount
+    || provider.bitcoin?.getBlockCount;
+
+  if (!getBlockCount) {
+    throw new Error('No getBlockCount method available on provider');
+  }
+
+  const currentBlockHeight = await getBlockCount();
   return currentBlockHeight + blocks;
 };
 
@@ -47,5 +80,3 @@ export const assertAlkaneUtxosAreClean = (utxos: FormattedUtxo[]): void => {
     );
   }
 };
-
-

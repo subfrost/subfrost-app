@@ -355,7 +355,7 @@ export class KeystoreManager {
     const key = await crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt,
+        salt: salt as BufferSource,
         iterations: encrypted.pbkdf2_params.iterations,
         hash: 'SHA-256',
       },
@@ -364,14 +364,14 @@ export class KeystoreManager {
       false,
       ['decrypt']
     );
-    
+
     // Decrypt mnemonic
     try {
       const encryptedBuffer = this.hexToBuffer(encrypted.encrypted_mnemonic);
       const decryptedBuffer = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: nonce },
+        { name: 'AES-GCM', iv: nonce as BufferSource },
         key,
-        encryptedBuffer
+        encryptedBuffer as BufferSource
       );
       
       const mnemonic = decoder.decode(decryptedBuffer);
@@ -445,17 +445,17 @@ export class KeystoreManager {
     );
   }
 
-  private async getCrypto(): Promise<SubtleCrypto & { getRandomValues: (arr: Uint8Array) => Uint8Array }> {
+  private async getCrypto(): Promise<Crypto> {
     // Always use browser crypto API
     if (typeof window !== 'undefined' && window.crypto) {
-      return window.crypto as any;
+      return window.crypto;
     }
-    
+
     // For Node.js/SSR, use global crypto (Node 19+)
     if (typeof globalThis !== 'undefined' && (globalThis as any).crypto) {
-      return (globalThis as any).crypto as any;
+      return (globalThis as any).crypto as Crypto;
     }
-    
+
     throw new Error('Web Crypto API not available. Please use a modern browser or Node.js 19+');
   }
 

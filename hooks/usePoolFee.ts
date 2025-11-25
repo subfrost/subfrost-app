@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Buffer } from 'buffer';
-import type { AlkaneId, Provider } from '@oyl/sdk';
 import { TOTAL_PROTOCOL_FEE } from '@/constants/alkanes';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+
+// Define types locally to avoid import issues with ts-sdk
+type AlkaneId = { block: number | string; tx: number | string };
+type Provider = any;
 
 export const queryPoolFee = async (provider: Provider, alkaneId?: AlkaneId) => {
   if (!provider || !alkaneId) return TOTAL_PROTOCOL_FEE;
@@ -12,13 +15,13 @@ export const queryPoolFee = async (provider: Provider, alkaneId?: AlkaneId) => {
       alkaneId,
       method: 'alkanes_getstorageatstring',
     });
-    
+
     const result = await provider.alkanes._call('alkanes_getstorageatstring', [
       { id: { block: Number(alkaneId.block), tx: Number(alkaneId.tx) }, path: '/totalfeeper1000' },
     ]);
-    
+
     console.log('[usePoolFee] Received result:', result);
-    
+
     if (result && result.length > 0 && result !== '0x') {
       const buf = Buffer.from(result.slice(2), 'hex');
       const fee = buf.readUInt32LE(0) / Number(1000);
@@ -51,5 +54,3 @@ export const usePoolFee = (alkaneId?: AlkaneId) => {
     enabled: !!provider && !!alkaneId,
   });
 };
-
-

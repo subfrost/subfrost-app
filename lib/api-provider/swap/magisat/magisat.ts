@@ -1,8 +1,8 @@
 import {
     AssetType,
     timeout,
-    getAddressType
-} from "@oyl/sdk"
+    getAddressType,
+} from "@/ts-sdk";
 
 import { prepareAddressForDummyUtxos, updateUtxos } from "../helpers";
 import { GetSellerPsbtRequest, GetSellerPsbtResponse, Marketplaces, ProcessOfferOptions, SubmitBuyerPsbtRequest, SubmitBuyerPsbtResponse, ProcessOfferResponse } from "../types";
@@ -68,7 +68,7 @@ export async function processMagisatOffer({
     if (psbtForDummyUtxos != null) {
         const { psbtBase64, inputTemplate, outputTemplate } = psbtForDummyUtxos
         const { signedPsbt } = await signer.signAllInputs({
-            rawPsbt: psbtBase64,
+            rawPsbtHex: psbtBase64,
             finalize: true,
         })
 

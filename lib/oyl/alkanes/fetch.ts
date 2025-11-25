@@ -1,5 +1,7 @@
-import type { Network } from '@oyl/sdk';
 import { getApiProvider } from '@/utils/oylProvider';
+
+// Define Network type locally to avoid import issues with ts-sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 import { parseAlkaneId } from './transform';
 
 export type AlkaneDetailsDisplayData = {
@@ -50,7 +52,8 @@ export async function fetchAlkane(id: string, network: Network) {
     return btcDetails;
   }
   const alkaneId = parseAlkaneId(id);
-  const provider = getApiProvider(network);
+  // Cast network to exclude 'regtest' since getApiProvider doesn't support it
+  const provider = getApiProvider(network as 'mainnet' | 'testnet' | 'signet' | 'oylnet');
   const response: any = await provider.getAlkaneTokenDetails({ alkaneId });
   response.name = response.name?.replace?.('SUBFROST BTC', 'frBTC') ?? response.name;
   return response as AlkaneDetailsDisplayData;

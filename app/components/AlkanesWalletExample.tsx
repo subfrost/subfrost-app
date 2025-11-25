@@ -9,7 +9,6 @@
 
 import { useState } from 'react';
 import { useAlkanesWallet } from '@/hooks/useAlkanesWallet';
-import type { Network } from '@oyl/sdk';
 
 export function AlkanesWalletExample() {
   const [password, setPassword] = useState('');
@@ -18,7 +17,7 @@ export function AlkanesWalletExample() {
   const [restoreMnemonic, setRestoreMnemonic] = useState('');
   const [showRestore, setShowRestore] = useState(false);
 
-  const wallet = useAlkanesWallet('mainnet' as Network);
+  const wallet = useAlkanesWallet('mainnet');
 
   const handleCreateWallet = async () => {
     try {

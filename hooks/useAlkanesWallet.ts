@@ -1,11 +1,10 @@
 /**
  * React hook for Alkanes wallet integration
- * 
+ *
  * Provides access to Alkanes keystore functionality within React components
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import type { Network } from '@oyl/sdk';
 import {
   setupAlkanesWallet,
   restoreAlkanesWallet,
@@ -18,6 +17,9 @@ import {
   hasStoredKeystore,
   type AlkanesWalletInstance,
 } from '@/lib/oyl/alkanes/wallet-integration';
+
+// Define Network type locally to avoid import issues with ts-sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 export type AlkanesWalletState = {
   wallet: AlkanesWalletInstance | null;

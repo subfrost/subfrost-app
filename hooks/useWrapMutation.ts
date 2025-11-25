@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useSignerShim } from './useSignerShim';
-import { wrapBtc } from '@oyl/sdk/lib/alkanes';
+import { wrapBtc } from '@/ts-sdk';
 
 export type WrapTransactionBaseData = {
   amount: string; // display units (BTC)

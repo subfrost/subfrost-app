@@ -1,11 +1,10 @@
+import type { FormattedUtxo, Provider } from "@/ts-sdk";
 import {
-  AddressType,
-  FormattedUtxo,
-  Provider,
+  AddressTypeEnum as AddressType,
   assertHex,
   UTXO_DUST,
   getAddressType,
-} from  "@oyl/sdk"
+} from "@/ts-sdk";
 import {
   BidAffordabilityCheck,
   BidAffordabilityCheckResponse,
@@ -400,7 +399,7 @@ export async function updateUtxos({
 }): Promise<FormattedUtxo[]> {
   const txInfo = await provider.esplora.getTxInfo(txId)
 
-  const spentInputs = txInfo.vin.map((input) => ({
+  const spentInputs: Array<{ txId: string; outputIndex: number }> = txInfo.vin.map((input: { txid: string; vout: number }) => ({
     txId: input.txid,
     outputIndex: input.vout,
   }))
@@ -414,7 +413,7 @@ export async function updateUtxos({
   )
 
   // Add new UTXOs
-  txInfo.vout.forEach((output, index) => {
+  txInfo.vout.forEach((output: { scriptpubkey_address: string; value: number; scriptpubkey: string }, index: number) => {
     if (
       output.scriptpubkey_address === spendAddress &&
       output.value > UTXO_DUST

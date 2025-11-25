@@ -65,6 +65,41 @@ export {
   createProvider,
 } from './provider';
 
+// AMM exports
+export {
+  amm,
+  factory,
+  splitAlkaneUtxos,
+} from './amm';
+export type {
+  AlkaneTokenAllocation,
+  SplitAlkaneUtxosResult,
+} from './amm';
+
+// Networks exports
+export {
+  networks,
+  mainnet,
+  testnet,
+  signet,
+  regtest,
+  oylnet,
+} from './networks';
+export type { NetworkConfig } from './networks';
+
+// Alkanes operations exports
+export {
+  wrapBtc,
+  unwrapBtc,
+  executeWithBtcWrapUnwrap,
+} from './alkanes';
+export type {
+  ExecuteResult,
+  WrapBtcParams,
+  UnwrapBtcParams,
+  ExecuteWithBtcWrapUnwrapParams,
+} from './alkanes';
+
 // Type exports
 export type {
   NetworkType,
@@ -87,6 +122,29 @@ export type {
   AddressBalance,
   ExportOptions,
   ImportOptions,
+  FormattedUtxo,
+  AccountUtxoPortfolio,
+  SpendStrategy,
+  Account,
+  Signer,
+  Provider,
+  GetOffersParams,
+  GetCollectionOffersParams,
+  SwapBrcBid,
+  SignedBid,
+  OkxBid,
+  Network,
+} from './types';
+
+// Value exports from types (enums, constants, functions, classes)
+export {
+  AddressType as AddressTypeEnum,
+  AssetType,
+  UTXO_DUST,
+  OylTransactionError,
+  getAddressType,
+  assertHex,
+  timeout,
 } from './types';
 
 // Utility exports

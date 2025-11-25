@@ -1038,7 +1038,7 @@
     jsontokens "^4.0.1"
     valibot "0.42.1"
 
-"@oyl/sdk@*", "@oyl/sdk@^1.16.0", "@oyl/sdk@git+https://github.com/Oyl-Wallet/oyl-sdk":
+"@oyl/sdk@*", "@oyl/sdk@^1.16.0":
   version "1.18.1"
   resolved "git+ssh://git@github.com/Oyl-Wallet/oyl-sdk.git#7bc1d3ad9ec86c36509cf46a2eb3f29fe5599ecb"
   dependencies:

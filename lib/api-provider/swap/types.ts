@@ -1,14 +1,13 @@
 
 import { Psbt } from 'bitcoinjs-lib'
 import * as bitcoin from 'bitcoinjs-lib'
-import {
-  AddressType,
-  AssetType,
+import type {
   FormattedUtxo,
   Provider,
   Signer,
   Account,
-} from  "@oyl/sdk"
+} from "@/ts-sdk";
+import { AddressTypeEnum as AddressType, AssetType } from "@/ts-sdk";
 
 export interface ConditionalInput {
   hash: string

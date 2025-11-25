@@ -4,11 +4,13 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LaserEyesProvider } from '@omnisat/lasereyes-react';
-import type { Network } from '@oyl/sdk';
 
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
+
+// Define Network type locally to avoid importing @oyl/sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet';
 
 const queryClient = new QueryClient({
   defaultOptions: {

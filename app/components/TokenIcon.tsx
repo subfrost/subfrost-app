@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import type { Network } from '@oyl/sdk';
+
+// Define Network type locally to avoid import issues with ts-sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 type TokenIconProps = {
   symbol: string;

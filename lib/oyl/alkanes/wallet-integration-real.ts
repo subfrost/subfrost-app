@@ -1,11 +1,13 @@
 /**
  * Real Alkanes-RS Integration
- * 
+ *
  * This file uses the actual alkanes-rs SDK (now properly bundled for browser)
  */
 
-import type { Network } from '@oyl/sdk';
-import { Provider } from '@oyl/sdk';
+import { AlkanesProvider as Provider } from '@/ts-sdk';
+
+// Define Network type locally to avoid import issues with ts-sdk
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 // Import from the browser-bundled alkanes SDK
 // @ts-ignore - No type definitions available yet

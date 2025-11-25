@@ -7,9 +7,11 @@ import {
   SUPPORTED_WALLETS,
   WalletIcon,
 } from '@omnisat/lasereyes-react';
-import type { Network } from '@oyl/sdk';
 
 import { useWallet } from '@/context/WalletContext';
+
+// Define Network type locally to avoid import issues
+type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 type WalletMap = typeof SUPPORTED_WALLETS;
 type OptionalWalletMap = { [K in keyof WalletMap]?: WalletMap[K] };

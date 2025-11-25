@@ -1,6 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { amm } from '@oyl/sdk';
-import { unwrapBtc } from '@oyl/sdk/lib/alkanes';
+import { amm, unwrapBtc } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useSignerShim } from './useSignerShim';
@@ -38,22 +37,20 @@ export function useUnwrapMutation() {
       const token = [
         {
           alkaneId: parseAlkaneId(FRBTC_ALKANE_ID),
-          amount: BigInt(toAlks(unwrapData.amount)),
+          amount: toAlks(unwrapData.amount),
         },
       ];
 
-      const { utxos: splitUtxos } = amm.factory.splitAlkaneUtxos(token, utxos);
-      const alkaneUtxos = splitUtxos;
-      assertAlkaneUtxosAreClean(alkaneUtxos);
+      const { selectedUtxos } = amm.factory.splitAlkaneUtxos(token, utxos);
+      assertAlkaneUtxosAreClean(selectedUtxos);
 
       const transaction = await unwrapBtc({
-        alkaneUtxos,
         utxos,
         account,
         provider,
         signer: signerShim,
         feeRate: unwrapData.feeRate,
-        unwrapAmount: BigInt(toAlks(unwrapData.amount)),
+        unwrapAmount: Number(toAlks(unwrapData.amount)),
       });
 
       return {
