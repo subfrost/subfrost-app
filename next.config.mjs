@@ -1,42 +1,40 @@
+import path from 'path';
+
 const nextConfig = {
-  /* config options here */
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  reactStrictMode: true,
   typescript: {
     ignoreBuildErrors: false,
   },
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Content-Security-Policy',
-            value: process.env.NODE_ENV === 'development'
-              ? "default-src 'self' 'unsafe-eval' 'unsafe-inline'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https://r2cdn.perplexity.ai; connect-src 'self' https:;"
-              : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https://r2cdn.perplexity.ai; connect-src 'self' https:;",
-          },
-        ],
-      },
-    ];
-  },
   webpack: (config, { isServer, webpack }) => {
+    // Add WASM support
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
+      layers: true,
     };
+
     config.output.webassemblyModuleFilename =
       (isServer ? "../" : "") + "static/wasm/[modulehash].wasm";
-    
-    // Fix @noble/hashes module resolution for @oyl/sdk
-    // @oyl/sdk imports '@noble/hashes/sha2' but package exports require '.js' extension
+
+    // Fallback for 'env' imports in WASM (wasm-bindgen specific)
+    config.externals.push({
+      'env': 'env', // Ignore 'env' module for WASM imports
+    });
+
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@noble/hashes/sha2': '@noble/hashes/sha2.js',
+      // Ensure 'stream' is aliased for browser compatibility
+      stream: 'stream-browserify',
     };
     
-    // Add polyfills for browser
+    // Add a rule to handle .wasm files directly
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: "webassembly/async",
+      exclude: [/node_modules/],
+    });
+
+    // Add polyfills for browser (existing)
     if (!isServer) {
       config.plugins.push(
         new webpack.ProvidePlugin({

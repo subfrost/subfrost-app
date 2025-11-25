@@ -206,52 +206,12 @@ export interface ImportOptions {
 }
 
 /**
- * Address type enum (@oyl/sdk compatibility)
+ * Network type extended to include oylnet
  */
-export enum AddressType {
-  P2PKH = 'p2pkh',
-  P2SH_P2WPKH = 'p2sh-p2wpkh',
-  P2WPKH = 'p2wpkh',
-  P2TR = 'p2tr',
-}
+export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 /**
- * Asset type enum (@oyl/sdk compatibility)
- */
-export enum AssetType {
-  BRC20 = 'brc20',
-  RUNES = 'runes',
-  COLLECTIBLE = 'collectible',
-  ALKANES = 'alkanes',
-}
-
-/**
- * Formatted UTXO with alkanes support (@oyl/sdk compatibility)
- */
-export interface FormattedUtxo {
-  txId: string;
-  outputIndex: number;
-  satoshis: number;
-  scriptPk: string;
-  address: string;
-  inscriptions: any[];
-  runes: any[];
-  alkanes: Record<string, { value: string; name: string; symbol: string }>;
-  indexed: boolean;
-  confirmations: number;
-}
-
-/**
- * Account UTXO portfolio (@oyl/sdk compatibility)
- */
-export interface AccountUtxoPortfolio {
-  utxos: FormattedUtxo[];
-  spendableUtxos: FormattedUtxo[];
-  spendableTotalBalance: number;
-}
-
-/**
- * Spend strategy (@oyl/sdk compatibility)
+ * Spend strategy for UTXO selection (compatible with @oyl/sdk)
  */
 export interface SpendStrategy {
   addressOrder: string[];
@@ -260,173 +220,75 @@ export interface SpendStrategy {
 }
 
 /**
- * Account structure (@oyl/sdk compatibility)
+ * Formatted UTXO (compatible with @oyl/sdk)
  */
-export interface Account {
-  taproot?: {
-    address: string;
-    pubkey: string;
-    pubKeyXOnly?: string;
-    hdPath?: string;
-  };
-  nativeSegwit?: {
-    address: string;
-    pubkey: string;
-    hdPath?: string;
-  };
-  nestedSegwit?: {
-    address: string;
-    pubkey: string;
-    hdPath?: string;
-  };
-  legacy?: {
-    address: string;
-    pubkey: string;
-    hdPath?: string;
-  };
-  spendStrategy: SpendStrategy;
-  network: bitcoin.networks.Network;
-  [key: string]: any;
-}
-
-/**
- * Signer interface (@oyl/sdk compatibility)
- */
-export interface Signer {
-  taprootKeyPair: any;
-  segwitKeyPair: any;
-  signAllInputs(params: { rawPsbtHex: string; finalize?: boolean }): Promise<{
-    signedPsbt: string;
-    signedHexPsbt: string;
-  }>;
-  signMessage?(message: string): Promise<string>;
-}
-
-/**
- * Provider interface (@oyl/sdk compatibility)
- */
-export interface Provider {
-  networkType: string;
-  network: bitcoin.networks.Network;
-  api: any;
-  esplora: {
-    getFeeEstimates(): Promise<Record<string, number>>;
-    getTxInfo(txId: string): Promise<any>;
-  };
-  pushPsbt(params: { psbtBase64: string }): Promise<{ txId: string }>;
-}
-
-/**
- * Get offers params (@oyl/sdk compatibility)
- */
-export interface GetOffersParams {
-  ticker: string;
-  limit?: number;
-  sort_by?: string;
-  order?: string;
-  offset?: number;
-}
-
-/**
- * Get collection offers params (@oyl/sdk compatibility)
- */
-export interface GetCollectionOffersParams {
-  collectionId: string;
-  limit?: number;
-  sort_by?: string;
-  order?: string;
-  offset?: number;
-}
-
-/**
- * Swap BRC bid (@oyl/sdk compatibility)
- */
-export interface SwapBrcBid {
+export interface FormattedUtxo {
+  txid: string;
+  vout: number;
+  value: number;
+  satoshis: number;
+  scriptPubKey: string;
   address: string;
-  auctionId: string | string[];
-  bidPrice: number | number[];
-  pubKey: string;
-  receiveAddress: string;
-  feerate: number;
+  addressType?: string;
+  confirmations?: number;
+  inscriptions?: any[];
+  runes?: any[];
+  alkanes?: any[];
 }
 
 /**
- * Signed bid (@oyl/sdk compatibility)
+ * Account UTXO portfolio (compatible with @oyl/sdk)
  */
-export interface SignedBid {
-  psbtBid: string;
-  auctionId: string;
-  bidId: string;
+export interface AccountUtxoPortfolio {
+  utxos: FormattedUtxo[];
+  spendableUtxos: FormattedUtxo[];
+  spendableTotalBalance: number;
+  totalBalance: number;
 }
 
 /**
- * OKX bid (@oyl/sdk compatibility)
+ * AMM swap parameters
  */
-export interface OkxBid {
-  orderId: number;
-  fromAddress: string;
-  psbt: string;
+export interface SwapParams {
+  sellCurrency: string;
+  buyCurrency: string;
+  direction: 'sell' | 'buy';
+  sellAmount: string;
+  buyAmount: string;
+  maxSlippage: number;
+  feeRate: number;
+  tokenPath?: string[];
+  deadlineBlocks?: number;
 }
 
 /**
- * UTXO dust constant (@oyl/sdk compatibility)
+ * AMM liquidity parameters
  */
-export const UTXO_DUST = 546;
-
-/**
- * Network type for string-based operations
- */
-export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
-
-/**
- * OYL Transaction Error (@oyl/sdk compatibility)
- */
-export class OylTransactionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'OylTransactionError';
-  }
+export interface LiquidityParams {
+  token0: string;
+  token1: string;
+  amount0: string;
+  amount1: string;
+  feeRate: number;
+  slippage?: number;
 }
 
 /**
- * Get address type from address string (@oyl/sdk compatibility)
+ * Wrap/Unwrap BTC parameters
  */
-export function getAddressType(address: string): AddressType | undefined {
-  if (!address) return undefined;
-
-  // Taproot addresses
-  if (address.startsWith('bc1p') || address.startsWith('tb1p')) {
-    return AddressType.P2TR;
-  }
-
-  // Native SegWit addresses
-  if (address.startsWith('bc1q') || address.startsWith('tb1q')) {
-    return AddressType.P2WPKH;
-  }
-
-  // Nested SegWit addresses (P2SH-P2WPKH)
-  if (address.startsWith('3') || address.startsWith('2')) {
-    return AddressType.P2SH_P2WPKH;
-  }
-
-  // Legacy addresses (P2PKH)
-  if (address.startsWith('1') || address.startsWith('m') || address.startsWith('n')) {
-    return AddressType.P2PKH;
-  }
-
-  return undefined;
+export interface WrapParams {
+  amount: string;
+  feeRate: number;
+  address?: string;
 }
 
 /**
- * Assert hex buffer (@oyl/sdk compatibility)
+ * Execute with wrap/unwrap parameters
  */
-export function assertHex(buffer: Buffer): Buffer {
-  return buffer.subarray(1, 33);
-}
-
-/**
- * Timeout utility (@oyl/sdk compatibility)
- */
-export function timeout(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export interface ExecuteWithWrapParams {
+  operation: 'swap' | 'addLiquidity' | 'removeLiquidity';
+  params: SwapParams | LiquidityParams;
+  account: any;
+  provider: any;
+  signer: any;
 }

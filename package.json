@@ -16,7 +16,8 @@
     "test:integration": "npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
     "test:e2e:vault": "npx tsx e2e/vault-e2e.test.ts",
     "test:e2e:swap": "npx tsx e2e/swap-e2e.test.ts",
-    "test:e2e": "npm run test:e2e:swap && npm run test:e2e:vault"
+    "test:e2e:wallet": "npx tsx e2e/wallet-e2e.test.ts",
+    "test:e2e": "npm run test:e2e:wallet && npm run test:e2e:swap && npm run test:e2e:vault"
   },
   "dependencies": {
     "@alkanes/ts-sdk": "file:./ts-sdk",
