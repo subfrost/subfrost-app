@@ -131,6 +131,11 @@ export class EsploraClient {
     });
     return response.text();
   }
+
+  async getFeeEstimates(): Promise<Record<string, number>> {
+    const response = await fetch(`${this.baseUrl}/fee-estimates`);
+    return response.json();
+  }
 }
 
 /**
@@ -180,6 +185,7 @@ export class AlkanesProvider {
   public network: bitcoin.networks.Network;
   public networkType: NetworkType;
   public url: string;
+  public api?: any; // Optional API client for marketplace integrations
 
   constructor(config: ProviderConfig) {
     this.network = config.network;

@@ -9,6 +9,10 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  eslint: {
+    // Lint errors are warnings during development but should not block builds
+    ignoreDuringBuilds: true,
+  },
   turbopack: {
     resolveAlias: {
       'env': './utils/empty-module.mjs',

@@ -60,6 +60,7 @@ export {
 // Provider exports
 export {
   AlkanesProvider,
+  AlkanesProvider as Provider,
   BitcoinRpcClient,
   EsploraClient,
   AlkanesRpcClient,
@@ -131,6 +132,11 @@ export type {
   SwapParams,
   LiquidityParams,
   WrapParams,
+  SwapBrcBid,
+  SignedBid,
+  OkxBid,
+  GetOffersParams,
+  GetCollectionOffersParams,
 } from './types';
 
 // Utility exports

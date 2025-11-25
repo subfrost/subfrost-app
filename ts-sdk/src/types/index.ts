@@ -292,3 +292,62 @@ export interface ExecuteWithWrapParams {
   provider: any;
   signer: any;
 }
+
+/**
+ * BRC-20 swap bid type (for marketplace)
+ */
+export interface SwapBrcBid {
+  id?: string;
+  ticker?: string;
+  amount?: string;
+  price?: string;
+  orderId?: string;
+  inscriptionId?: string;
+  address?: string;
+  psbt?: string;
+  signedPsbt?: string;
+}
+
+/**
+ * Signed bid for marketplace
+ */
+export interface SignedBid {
+  bid: SwapBrcBid;
+  signature?: string;
+  psbt?: string;
+  signedPsbt?: string;
+}
+
+/**
+ * OKX bid type
+ */
+export interface OkxBid {
+  orderId: string;
+  ticker?: string;
+  amount?: string;
+  unitPrice?: string;
+  totalPrice?: string;
+}
+
+/**
+ * Parameters for getting offers
+ */
+export interface GetOffersParams {
+  ticker?: string;
+  limit?: number;
+  offset?: number;
+  sort?: 'price' | 'amount';
+  sort_by?: string;
+  order?: 'asc' | 'desc';
+}
+
+/**
+ * Parameters for getting collection offers
+ */
+export interface GetCollectionOffersParams {
+  collectionId: string;
+  limit?: number;
+  offset?: number;
+  sort_by?: string;
+  order?: 'asc' | 'desc';
+}

@@ -1,17 +1,21 @@
 import BigNumber from 'bignumber.js';
 
-// Define FormattedUtxo type locally to avoid import issues with ts-sdk
+// Define FormattedUtxo type locally - supports both naming conventions
 type FormattedUtxo = {
-  txId: string;
-  outputIndex: number;
-  satoshis: number;
-  scriptPk: string;
+  txId?: string;
+  txid?: string;
+  outputIndex?: number;
+  vout?: number;
+  satoshis?: number;
+  value?: number;
+  scriptPk?: string;
+  scriptPubKey?: string;
   address: string;
-  inscriptions: any[];
-  runes: any[];
-  alkanes: Record<string, { value: string; name: string; symbol: string }>;
-  indexed: boolean;
-  confirmations: number;
+  inscriptions?: any[];
+  runes?: any[] | Record<string, any>;
+  alkanes?: Record<string, { value: string; name?: string; symbol?: string }>;
+  indexed?: boolean;
+  confirmations?: number;
 };
 
 // Provider type for getFutureBlockHeight
@@ -67,8 +71,13 @@ export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
   return currentBlockHeight + blocks;
 };
 
-const alkaneUtxohasInscriptionsOrRunes = (u: FormattedUtxo): boolean =>
-  (u.inscriptions?.length ?? 0) > 0 || Object.keys(u.runes ?? {}).length > 0;
+const alkaneUtxohasInscriptionsOrRunes = (u: FormattedUtxo): boolean => {
+  const hasInscriptions = Array.isArray(u.inscriptions) && u.inscriptions.length > 0;
+  const hasRunes = Array.isArray(u.runes)
+    ? u.runes.length > 0
+    : !!(u.runes && typeof u.runes === 'object' && Object.keys(u.runes).length > 0);
+  return hasInscriptions || hasRunes;
+};
 
 export const assertAlkaneUtxosAreClean = (utxos: FormattedUtxo[]): void => {
   const offendingIndex = utxos.findIndex(alkaneUtxohasInscriptionsOrRunes);

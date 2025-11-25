@@ -206,7 +206,7 @@ export async function decryptBrowserKeystore(
       network,
       createdAt: encrypted.createdAt,
     };
-  } catch (error) {
+  } catch {
     throw new Error('Decryption failed: incorrect password');
   }
 }

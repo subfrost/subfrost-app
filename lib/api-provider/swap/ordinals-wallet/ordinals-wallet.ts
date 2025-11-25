@@ -87,7 +87,7 @@ export async function processOrdinalsWalletOffer({
   utxos,
   signer,
 }: ProcessOfferOptions): Promise<ProcessOfferResponse> {
-  let dummyTxId: string | null = null
+  const dummyTxId: string | null = null
   let purchaseTxId: string | null = null
 
   let setupTx: string | null = null

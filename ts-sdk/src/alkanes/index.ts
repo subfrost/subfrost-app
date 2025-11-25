@@ -14,6 +14,10 @@ import * as bitcoin from 'bitcoinjs-lib';
  */
 export interface Signer {
   sign: (psbtBase64: string, finalize?: boolean) => Promise<string>;
+  signAllInputs: (params: { rawPsbtHex: string; finalize?: boolean }) => Promise<{ signedPsbt: string; signedHexPsbt: string }>;
+  // Optional key pairs for message signing (used by marketplace integrations)
+  segwitKeyPair?: { privateKey?: Buffer; publicKey?: Buffer };
+  taprootKeyPair?: { privateKey?: Buffer; publicKey?: Buffer };
 }
 
 /**
@@ -249,7 +253,7 @@ async function buildAndBroadcastAlkaneTransaction({
   // First add alkane UTXOs if any
   if (alkanesUtxos && alkanesUtxos.length > 0) {
     selectedUtxos.push(...alkanesUtxos);
-    totalValue += alkanesUtxos.reduce((sum, u) => sum + (u.satoshis || u.value), 0);
+    totalValue += alkanesUtxos.reduce((sum, u) => sum + (u.satoshis ?? u.value ?? 0), 0);
   }
 
   // Then add regular UTXOs for funding
@@ -257,13 +261,15 @@ async function buildAndBroadcastAlkaneTransaction({
     if (totalValue >= requiredValue) break;
 
     // Skip UTXOs already in alkanes list
+    const utxoTxid = utxo.txid || utxo.txId;
+    const utxoVout = utxo.vout ?? utxo.outputIndex;
     const alreadySelected = selectedUtxos.some(
-      s => s.txid === utxo.txid && s.vout === utxo.vout
+      s => (s.txid || s.txId) === utxoTxid && (s.vout ?? s.outputIndex) === utxoVout
     );
     if (alreadySelected) continue;
 
     selectedUtxos.push(utxo);
-    totalValue += utxo.satoshis || utxo.value;
+    totalValue += utxo.satoshis ?? utxo.value ?? 0;
   }
 
   if (totalValue < requiredValue) {
@@ -275,14 +281,22 @@ async function buildAndBroadcastAlkaneTransaction({
 
   // Add inputs
   for (const utxo of selectedUtxos) {
-    const scriptPubKey = Buffer.from(utxo.scriptPubKey, 'hex');
+    const scriptPk = utxo.scriptPubKey || utxo.scriptPk;
+    if (!scriptPk) throw new Error('UTXO missing scriptPubKey');
+    const scriptPubKey = Buffer.from(scriptPk, 'hex');
+    const txid = utxo.txid || utxo.txId;
+    if (!txid) throw new Error('UTXO missing txid');
+    const vout = utxo.vout ?? utxo.outputIndex;
+    if (vout === undefined) throw new Error('UTXO missing vout');
+    const value = utxo.satoshis ?? utxo.value;
+    if (value === undefined) throw new Error('UTXO missing value');
 
     psbt.addInput({
-      hash: utxo.txid,
-      index: utxo.vout,
+      hash: txid,
+      index: vout,
       witnessUtxo: {
         script: scriptPubKey,
-        value: utxo.satoshis || utxo.value,
+        value,
       },
     });
   }
@@ -419,6 +433,14 @@ function createSignerFromWallet(wallet: AlkanesWallet): Signer {
     sign: async (psbtBase64: string, finalize?: boolean) => {
       const signed = wallet.signPsbt(psbtBase64);
       return signed;
+    },
+    signAllInputs: async ({ rawPsbtHex, finalize }: { rawPsbtHex: string; finalize?: boolean }) => {
+      // Convert hex to base64 for signing
+      const psbtBase64 = Buffer.from(rawPsbtHex, 'hex').toString('base64');
+      const signedPsbtBase64 = wallet.signPsbt(psbtBase64);
+      // Convert back to hex
+      const signedHexPsbt = Buffer.from(signedPsbtBase64, 'base64').toString('hex');
+      return { signedPsbt: signedPsbtBase64, signedHexPsbt };
     },
   };
 }
