@@ -16,8 +16,9 @@ export default function BoostSection({ vault }: Props) {
   const userVeTokenBalance = "1,250.50";
   const totalVxTokenStaked = "850.00";
   const baseApy = vault.estimatedApy || "0";
-  const boostedApy = "7.8"; // Calculate based on boost
-  const boostMultiplier = "1.5x";
+  const multiplier = vault.boostMultiplier || 1.5;
+  const boostedApy = (parseFloat(baseApy) * multiplier).toFixed(1);
+  const boostMultiplier = `${multiplier}x`;
 
   // Check if this is the special dxBTC vault with FROST
   const isComingSoon = vault.isBoostComingSoon;
@@ -36,9 +37,9 @@ export default function BoostSection({ vault }: Props) {
   }
 
   return (
-    <div className="space-y-4 lg:space-y-0 lg:contents">
-      {/* Boost Header - Spans both columns on lg+ */}
-      <div className="flex items-center justify-between lg:col-span-2 lg:row-start-1">
+    <div className="space-y-4 md:space-y-0 md:contents">
+      {/* Boost Header - Spans both columns on md+ */}
+      <div className="flex items-center justify-between md:col-span-2 md:row-start-1">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
             <TrendingUp size={20} className="text-white" />
@@ -60,7 +61,7 @@ export default function BoostSection({ vault }: Props) {
       </div>
 
       {isComingSoon && (
-        <div className="rounded-xl border-2 border-amber-500/30 bg-amber-50 p-4 lg:col-span-2 lg:row-start-2">
+        <div className="rounded-xl border-2 border-amber-500/30 bg-amber-50 p-4 md:col-span-2 md:row-start-2">
           <div className="flex items-center gap-2 text-amber-800">
             <Lock size={18} />
             <span className="text-sm font-semibold">Coming Soon</span>
@@ -71,17 +72,17 @@ export default function BoostSection({ vault }: Props) {
         </div>
       )}
 
-      {/* APY Comparison - Grid on mobile, split columns on lg+ */}
-      <div className="grid grid-cols-2 gap-4 lg:contents">
-        <div className="rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/60 p-4 lg:col-start-1 lg:row-start-3">
+      {/* APY Comparison - Grid on mobile, split columns on md+ */}
+      <div className="grid grid-cols-2 gap-4 md:contents">
+        <div className="rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/60 p-4 md:col-start-1 md:row-start-3">
           <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
-            Base APY
+            Est. Base APY
           </p>
           <p className="text-2xl font-bold text-[color:var(--sf-text)]">
             {baseApy}%
           </p>
         </div>
-        <div className="rounded-xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-50 to-pink-50 p-4 lg:col-start-2 lg:row-start-3">
+        <div className="rounded-xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-50 to-pink-50 p-4 md:col-start-2 md:row-start-3">
           <p className="text-xs font-medium text-purple-700 mb-1">
             Boosted APY
           </p>
@@ -91,8 +92,8 @@ export default function BoostSection({ vault }: Props) {
         </div>
       </div>
 
-      {/* Boost Stats - Will be in left column on lg+ */}
-      <div className={`rounded-2xl border-2 border-[color:var(--sf-outline)] bg-white/40 backdrop-blur-sm p-6 lg:col-start-1 lg:row-start-4 ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
+      {/* Boost Stats - Will be in left column on md+ */}
+      <div className={`rounded-2xl border-2 border-[color:var(--sf-outline)] bg-white/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4 ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
@@ -174,9 +175,9 @@ export default function BoostSection({ vault }: Props) {
         </div>
       </div>
 
-      {/* Positions List (if has multiple positions) - Will be in left column on lg+ */}
+      {/* Positions List (if has multiple positions) - Will be in left column on md+ */}
       {vault.hasBoost && !isComingSoon && (
-        <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-white/40 backdrop-blur-sm p-6 lg:col-start-1 lg:row-start-5">
+        <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-white/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-5">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-bold text-[color:var(--sf-text)]">
               Your Boosted Positions

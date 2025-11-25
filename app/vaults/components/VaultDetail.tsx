@@ -96,7 +96,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   return (
     <div className="space-y-6">
       {/* Grid Layout: Deposit Panel (Left) + Vault Info (Right) - 50/50 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left: Deposit Interface */}
         <VaultDepositInterface
           mode={mode}
@@ -112,7 +112,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         />
 
         {/* Right: Vault Info - Card on mobile, Hero on desktop */}
-        <div className="lg:hidden">
+        <div className="md:hidden">
           <VaultListItem
             vault={currentVault}
             isSelected={false}
@@ -120,36 +120,38 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             interactive={false}
           />
         </div>
-        <div className="hidden lg:block">
+        <div className="hidden md:flex md:flex-col">
           <VaultHero
             tokenId={currentVault.tokenId}
             tokenName={currentVault.tokenSymbol}
             tokenSymbol={currentVault.tokenSymbol}
             vaultSymbol={currentVault.outputAsset}
+            iconPath={currentVault.iconPath}
             contractAddress={currentVault.contractAddress}
             tvl={stats.tvl}
             apy={stats.apy}
+            historicalApy={currentVault.historicalApy}
             userBalance={stats.userBalance}
-            badges={[currentVault.tokenSymbol, currentVault.badge || 'Bitcoin']}
+            badges={currentVault.badge ? [currentVault.tokenSymbol, currentVault.badge] : [currentVault.tokenSymbol]}
             riskLevel={currentVault.riskLevel}
           />
         </div>
       </div>
 
-      {/* Responsive Grid Layout: 2 columns on lg+, stacked on smaller screens */}
-      <div className="space-y-6 lg:space-y-0">
+      {/* Responsive Grid Layout: 2 columns on md+, stacked on smaller screens */}
+      <div className="space-y-6 md:space-y-0">
         {/* Boost Section - Integrated Gauges */}
-        <div className="lg:hidden">
+        <div className="md:hidden">
           <BoostSection vault={currentVault} />
         </div>
 
-        {/* Two Column Grid for lg+ screens */}
-        <div className="hidden lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+        {/* Two Column Grid for md+ screens */}
+        <div className="hidden md:grid md:grid-cols-2 md:gap-6 md:items-start">
           {/* Boost Section contents will distribute across columns */}
           <BoostSection vault={currentVault} />
 
           {/* Right Column: Info Tabs - starts in column 2 after Boosted APY */}
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm h-fit lg:col-start-2 lg:row-start-4">
+          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm h-fit md:col-start-2 md:row-start-4">
         <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
           {['about', 'strategies', 'info', 'risk'].map((tab) => (
             <button
@@ -294,7 +296,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         </div>
 
         {/* Info Tabs Section - Mobile/Tablet Only */}
-        <div className="lg:hidden rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
+        <div className="md:hidden rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
           <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
             {['about', 'strategies', 'info', 'risk'].map((tab) => (
               <button

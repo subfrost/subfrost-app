@@ -40,6 +40,12 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths; // Return early to prevent .svg fallback
     }
     
+    // Priority 2b: Special handling for frUSD - use usdt_empty.svg
+    if (symbol?.toLowerCase() === 'frusd' || id === 'frUSD') {
+      paths.push('/tokens/usdt_empty.svg');
+      return paths;
+    }
+    
     // Priority 3: Special handling for BTC (local file)
     if (symbol?.toLowerCase() === 'btc' || id === 'btc') {
       paths.push('/tokens/btc.svg');
@@ -104,6 +110,9 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
   const gradient = getGradientColors(symbol || id || 'BTC');
   const sizeClass = sizeMap[size];
   const displayText = (symbol || id || '??').slice(0, 2).toUpperCase();
+  
+  // Check if this token should be displayed as a circle
+  const shouldBeCircular = symbol === 'ALKAMIST' || symbol === 'GOLD DUST';
 
   const handleError = () => {
     // Try next path if available
@@ -118,16 +127,16 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
 
   if (hasError || !currentPath) {
     return (
-      <div className={`${sizeClass} ${className} inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white shadow-sm`}>
+      <div className={`${sizeClass} ${className} inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white`}>
         {displayText}
       </div>
     );
   }
 
   return (
-    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center`}>
+    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center ${shouldBeCircular ? 'overflow-hidden rounded-full' : ''}`}>
       {isLoading && (
-        <div className={`absolute inset-0 inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white shadow-sm`}>
+        <div className={`absolute inset-0 inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white`}>
           {displayText}
         </div>
       )}
@@ -135,7 +144,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}
-        className={`${sizeClass} rounded-full object-cover shadow-sm transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        className={`${sizeClass} ${className} object-contain transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
         onError={handleError}
       />

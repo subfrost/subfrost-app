@@ -162,72 +162,102 @@ export default function VaultDepositInterface({
           <div className="relative z-30 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">From Wallet</span>
             <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-                <NumberField placeholder={"0.00"} align="left" value={amount} onChange={setAmount} />
-                <div className="relative" ref={selectorRef}>
+              <div className="flex flex-col gap-2">
+                {/* Row 1: Input + Token Selector */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <NumberField placeholder={"0.00"} align="left" value={amount} onChange={setAmount} />
+                  </div>
+                  <div className="relative" ref={selectorRef}>
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenSelector(!showTokenSelector)}
+                      className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring flex-shrink-0"
+                    >
+                      <TokenIcon 
+                        key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
+                        symbol={selectedInputToken.symbol}
+                        id={selectedInputToken.id}
+                        size="sm"
+                        network={network}
+                      />
+                      <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                        {selectedInputToken.symbol}
+                      </span>
+                      <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+                    </button>
+                    
+                    {/* Token Selector Dropdown */}
+                    {showTokenSelector && (
+                      <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-white shadow-[0_8px_32px_rgba(40,67,114,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
+                        {ALL_VAULT_TOKENS.map((token) => {
+                          const tokenVault = getVaultForInputToken(token.id);
+                          return (
+                            <button
+                              key={token.id}
+                              type="button"
+                              onClick={() => handleInputTokenSelect(token)}
+                              className={`w-full px-4 py-3 text-left text-sm font-semibold transition-colors first:rounded-t-xl last:rounded-b-xl ${
+                                selectedInputToken.id === token.id
+                                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <TokenIcon 
+                                  symbol={token.symbol}
+                                  id={token.id}
+                                  size="sm"
+                                  network={network}
+                                />
+                                <div className="flex-1">
+                                  <div className="font-semibold">{token.symbol}</div>
+                                  {tokenVault && (
+                                    <div className="text-[10px] text-[color:var(--sf-text)]/50">
+                                      → {tokenVault.outputAsset}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Row 2: Fiat + Balance */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                    Balance {userBalance}
+                  </div>
+                </div>
+                
+                {/* Row 3: Percentage Buttons */}
+                <div className="flex items-center justify-end gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setShowTokenSelector(!showTokenSelector)}
-                    className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+                    onClick={() => setAmount((parseFloat(userBalance) * 0.25).toString())}
+                    className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                   >
-                    <TokenIcon 
-                      key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
-                      symbol={selectedInputToken.symbol}
-                      id={selectedInputToken.id}
-                      size="sm"
-                      network={network}
-                    />
-                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                      {selectedInputToken.symbol}
-                    </span>
-                    <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+                    25%
                   </button>
-                  
-                  {/* Token Selector Dropdown */}
-                  {showTokenSelector && (
-                    <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-white shadow-[0_8px_32px_rgba(40,67,114,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
-                      {ALL_VAULT_TOKENS.map((token) => {
-                        const tokenVault = getVaultForInputToken(token.id);
-                        return (
-                          <button
-                            key={token.id}
-                            type="button"
-                            onClick={() => handleInputTokenSelect(token)}
-                            className={`w-full px-4 py-3 text-left text-sm font-semibold transition-colors first:rounded-t-xl last:rounded-b-xl ${
-                              selectedInputToken.id === token.id
-                                ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <TokenIcon 
-                                symbol={token.symbol}
-                                id={token.id}
-                                size="sm"
-                                network={network}
-                              />
-                              <div className="flex-1">
-                                <div className="font-semibold">{token.symbol}</div>
-                                {tokenVault && (
-                                  <div className="text-[10px] text-[color:var(--sf-text)]/50">
-                                    → {tokenVault.outputAsset}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
-                <div className="text-right">
-                  <div className="mb-1">
-                    <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                      Balance {userBalance}
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAmount((parseFloat(userBalance) * 0.5).toString())}
+                    className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmount((parseFloat(userBalance) * 0.75).toString())}
+                    className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                  >
+                    75%
+                  </button>
                   <button
                     type="button"
                     onClick={() => setAmount(userBalance)}
@@ -251,6 +281,7 @@ export default function VaultDepositInterface({
                     key={`vault-${vault.id}-${vault.outputAsset}`}
                     symbol={vault.outputAsset}
                     id={vault.tokenId}
+                    iconUrl={vault.iconPath}
                     size="sm"
                     network={network}
                   />

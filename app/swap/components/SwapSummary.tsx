@@ -155,15 +155,6 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
         <SkeletonLines />
       ) : quote ? (
         <>
-          {(isDirectWrap || isDirectUnwrap) && (
-            <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-1">Swap Route</div>
-              <div className="text-xs font-semibold text-blue-900">
-                {isDirectWrap && 'Wrap BTC → frBTC'}
-                {isDirectUnwrap && 'Unwrap frBTC → BTC'}
-              </div>
-            </div>
-          )}
           {swapRoute && (
             <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-2">
@@ -194,8 +185,10 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                       {swapRoute[1].id === FRBTC_ALKANE_ID && '⚡ Using frBTC as bridge token'}
                     </>
                   )}
-                  {sellId === 'btc' && buyId !== 'frbtc' && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
-                  {buyId === 'btc' && sellId !== 'frbtc' && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
+                  {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && 'BTC will seamlessly wrap to frBTC in this Tx.'}
+                  {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
+                  {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && 'NOTE: frBTC will be unwrapped to BTC in this Tx. BTC will be sent to your wallet after 3 block confirmations.'}
+                  {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
                   {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
                 </div>
               )}

@@ -29,9 +29,9 @@ export default function GaugeVault() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
       {/* Main Info */}
-      <div className="lg:col-span-2 space-y-6">
+      <div className="md:col-span-2 space-y-6">
         {/* Gauge Header */}
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
           <div className="flex items-start justify-between">
@@ -210,7 +210,7 @@ export default function GaugeVault() {
       </div>
 
       {/* Action Panel */}
-      <div className="lg:col-span-1">
+      <div className="md:col-span-1">
         <VaultActionPanel
           mode={mode}
           onModeChange={setMode}

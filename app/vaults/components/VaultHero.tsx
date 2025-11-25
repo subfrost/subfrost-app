@@ -2,15 +2,78 @@
 
 import { useWallet } from "@/context/WalletContext";
 import TokenIcon from "@/app/components/TokenIcon";
+import Image from "next/image";
+import { useMemo } from "react";
+
+function FallingSnowflakes() {
+  const snowflakes = useMemo(() => {
+    const positions = [10, 22, 35, 48, 60, 72, 85, 95, 5, 65, 43, 28, 78, 50, 18, 88];
+    const delays = [0, 5.2, 3.5, 12.2, 1.2, 8.8, 10.5, 6.2, 16, 10, 15, 25, 26, 27, 1, 2];
+    const durations = [15, 18, 12, 20, 14, 17, 13, 19, 14, 14, 12, 16, 13, 18, 17, 15];
+    const sizes = [14, 19, 11, 16, 10, 18, 15, 12, 19, 12, 16, 13, 17, 11, 14, 16];
+    
+    return Array.from({ length: 16 }, (_, i) => ({
+      id: i,
+      left: positions[i],
+      delay: delays[i],
+      duration: durations[i],
+      size: sizes[i],
+    }));
+  }, []);
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes snowfallVault {
+            0% {
+              transform: translateY(-30px) rotate(0deg);
+              opacity: 0;
+            }
+            10% {
+              opacity: 1;
+            }
+            90% {
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(calc(100vh)) rotate(360deg);
+              opacity: 0;
+            }
+          }
+        `
+      }} />
+      {snowflakes.map((flake) => (
+        <Image
+          key={flake.id}
+          src="/brand/snowflake-mark.svg"
+          alt=""
+          width={flake.size}
+          height={flake.size}
+          className="pointer-events-none absolute"
+          style={{
+            left: `${flake.left}%`,
+            top: '-10px',
+            opacity: 0,
+            animation: `snowfallVault ${flake.duration}s linear ${flake.delay}s infinite`,
+            filter: 'brightness(0) invert(1) drop-shadow(0 0 3px rgba(255,255,255,0.9))',
+          }}
+        />
+      ))}
+    </>
+  );
+}
 
 type Props = {
   tokenId: string; // Alkane ID like "2:0"
   tokenName: string;
   tokenSymbol: string;
   vaultSymbol: string;
+  iconPath?: string; // Direct path to token icon
   contractAddress: string;
   tvl: string;
   apy: string;
+  historicalApy?: string;
   userBalance: string;
   badges?: string[];
   riskLevel?: 'low' | 'medium' | 'high' | 'very-high';
@@ -21,9 +84,11 @@ export default function VaultHero({
   tokenName,
   tokenSymbol,
   vaultSymbol,
+  iconPath,
   contractAddress,
   tvl,
   apy,
+  historicalApy,
   userBalance,
   badges = [],
   riskLevel = 'medium',
@@ -32,26 +97,28 @@ export default function VaultHero({
   
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#A8C5E8] to-[#8BB4E0] p-6 text-[#1A2B3D] shadow-lg w-full flex flex-col">
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#A8C5E8] to-[#8BB4E0] p-6 text-[#1A2B3D] shadow-lg w-full h-full flex flex-col">
+      {/* Falling Snowflakes Animation */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <FallingSnowflakes />
+      </div>
+      
       {/* Token Icon */}
-      <div className="mb-4 flex justify-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/40 backdrop-blur-sm overflow-hidden border border-white/60 p-2">
-          <TokenIcon 
-            key={`hero-${tokenId}-${tokenSymbol}`}
-            symbol={tokenSymbol}
-            id={tokenId}
-            size="xl"
-            network={network}
-            className="rounded-xl"
+      <div className="mb-4 flex justify-center items-center relative z-10">
+        <div className="w-40 h-40 flex items-center justify-center">
+          <img
+            src={iconPath || `/tokens/${tokenSymbol.toLowerCase()}.svg`}
+            alt={`${tokenSymbol} icon`}
+            className={`object-contain rounded-2xl ${tokenSymbol === 'DIESEL' ? 'w-32 h-32' : 'w-40 h-40'}`}
           />
         </div>
       </div>
 
       {/* Vault Name */}
-      <h1 className="text-center text-3xl font-bold mb-2 text-white drop-shadow-lg">{vaultSymbol}</h1>
+      <h1 className="text-center text-3xl font-bold mb-2 text-white drop-shadow-lg relative z-10">{vaultSymbol}</h1>
       
       {/* Contract Address */}
-      <div className="flex justify-center mb-3">
+      <div className="flex justify-center mb-3 relative z-10">
         <button className="text-xs text-white/80 hover:text-white font-mono transition-colors">
           {contractAddress.slice(0, 6)}...{contractAddress.slice(-4)}
         </button>
@@ -59,20 +126,41 @@ export default function VaultHero({
 
       {/* Badges */}
       {badges.length > 0 && (
-        <div className="flex justify-center gap-2 mb-6">
-          {badges.map((badge, i) => (
-            <span
-              key={i}
-              className="rounded-full bg-white/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border border-white/50 shadow-md"
-            >
-              {badge}
-            </span>
-          ))}
+        <div className="flex flex-col items-center gap-2 mb-6 relative z-10">
+          {badges.map((badge, i) => {
+            let badgeClassName = "";
+            
+            // Determine badge styling based on content
+            if (badge === 'Coming Soon') {
+              badgeClassName = "rounded-full bg-gray-400 text-gray-300 px-3 py-1 text-xs font-bold shadow-md border-2 border-gray-400";
+            } else if (badge === 'BTC' || badge === 'Bitcoin') {
+              badgeClassName = "rounded-full bg-[#F7931A] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#F7931A]";
+            } else if (badge === 'USD' || badge === 'bUSD') {
+              badgeClassName = "rounded-full bg-[#539393] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#539393]";
+            } else if (badge === 'DIESEL') {
+              badgeClassName = "rounded-full bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 text-white border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+            } else if (badge === 'ETH' || badge === 'Ethereum') {
+              badgeClassName = "rounded-full bg-[#987fd9] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#987fd9]";
+            } else if (badge === 'ZEC' || badge === 'Zcash') {
+              badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
+            } else if (badge === 'METHANE') {
+              badgeClassName = "rounded-full bg-white text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+            } else {
+              // Default styling for other badges
+              badgeClassName = "rounded-full bg-white/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
+            }
+            
+            return (
+              <span key={i} className={badgeClassName}>
+                {badge}
+              </span>
+            );
+          })}
         </div>
       )}
 
       {/* Stats - 2 Column Grid */}
-      <div className="space-y-4">
+      <div className="space-y-4 relative z-10">
         {/* Row 1: Total deposited and Your Balance */}
         <div className="grid grid-cols-2 gap-4">
           <div className="text-center">
@@ -90,8 +178,8 @@ export default function VaultHero({
         {/* Row 2: Historical APY and Est. APY */}
         <div className="grid grid-cols-2 gap-4">
           <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Historical APY</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{apy}%</div>
+            <div className="text-xs text-white/80 mb-1 font-semibold">Hist. APY</div>
+            <div className="text-2xl font-bold text-white drop-shadow-lg">{historicalApy ? `${historicalApy}%` : '-'}</div>
           </div>
           <div className="text-center">
             <div className="text-xs text-white/80 mb-1 font-semibold">Est. APY</div>

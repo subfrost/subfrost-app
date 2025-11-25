@@ -27,7 +27,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   };
 
   const badgeColors = {
-    'Coming Soon': 'bg-gray-400 text-gray-900',
+    'Coming Soon': 'bg-gray-400 text-gray-300',
     'BTC Yield': 'bg-orange-400 text-orange-900',
     'USD Yield': 'bg-green-400 text-green-900',
     'Migrate': 'bg-yellow-400 text-yellow-900',
@@ -51,13 +51,11 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
       {/* Card layout for small screens */}
       <div className="md:hidden p-4">
         <div className="flex items-center gap-3 mb-3">
-          <div className="h-10 w-10 rounded-full border border-white/60 bg-gradient-to-br from-[#A8C5E8] to-[#7AA8D8] p-1 flex-shrink-0">
-            <TokenIcon 
-              symbol={vault.tokenSymbol}
-              id={vault.tokenId}
-              size="md"
-              network={network}
-              className="rounded-full"
+          <div className="h-10 w-10 flex-shrink-0 flex items-center justify-center">
+            <img
+              src={vault.iconPath || `/tokens/${vault.tokenSymbol.toLowerCase()}.svg`}
+              alt={`${vault.tokenSymbol} icon`}
+              className={`object-contain ${vault.tokenSymbol === 'DIESEL' ? 'w-8 h-8' : 'w-full h-full'}`}
             />
           </div>
           <div className="min-w-0 flex-1 text-left">
@@ -122,13 +120,11 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
       <div className="hidden md:flex items-center gap-2 md:gap-3 lg:gap-4 p-4">
         {/* Vault Icon */}
         <div className="relative flex-shrink-0">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#A8C5E8] to-[#7AA8D8] overflow-hidden border border-white/60 p-1">
-            <TokenIcon 
-              symbol={vault.tokenSymbol}
-              id={vault.tokenId}
-              size="lg"
-              network={network}
-              className="rounded-full"
+          <div className="flex h-12 w-12 items-center justify-center">
+            <img
+              src={vault.iconPath || `/tokens/${vault.tokenSymbol.toLowerCase()}.svg`}
+              alt={`${vault.tokenSymbol} icon`}
+              className={`object-contain ${vault.tokenSymbol === 'DIESEL' ? 'w-10 h-10' : 'w-full h-full'}`}
             />
           </div>
         </div>

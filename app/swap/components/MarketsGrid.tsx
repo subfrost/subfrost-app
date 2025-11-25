@@ -133,8 +133,8 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setMarketFilter('all')}
             className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all ${
@@ -166,14 +166,14 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
             USD
           </button>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-3 min-w-0 flex-1 justify-end">
+          <div className="relative w-full max-w-xs">
             <input
               type="text"
               placeholder="Search pools..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-64 rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-white pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
+              className="h-10 w-full rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-white pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
             />
             <svg 
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--sf-text)]/40"
@@ -220,7 +220,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
 
       {/* Desktop Table View */}
       {filteredPools.length > 0 && (
-        <div className="hidden lg:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+        <div className="hidden md:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
         <div className="px-4 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">Markets</h3>
@@ -370,7 +370,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
 
       {/* Mobile/Tablet Card View */}
       {filteredPools.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:hidden">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
         {displayedPools.map((pool) => (
           <button
             key={pool.id}
