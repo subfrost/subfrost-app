@@ -84,7 +84,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         laserEyesContext.disconnect();
       } else {
         setIsConnectModalOpen(false);
-        await laserEyesContext.switchNetwork(laserEyesContext.network);
+        // Only call connect - switchNetwork is not needed when connecting
+        // since the network is already configured in LaserEyesProvider
         await laserEyesContext.connect(walletName);
       }
     } catch (error) {

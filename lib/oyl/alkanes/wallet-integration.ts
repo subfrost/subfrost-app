@@ -246,18 +246,19 @@ export async function createAlkanesWallet(
 }
 
 /**
- * Create an Alkanes provider for @oyl/sdk
- * 
+ * Create an Alkanes provider (using local ts-sdk - no @oyl/sdk dependency)
+ *
  * @param network - Bitcoin network
  * @param rpcUrl - Optional Bitcoin Core RPC URL (defaults based on network)
- * @returns Alkanes provider compatible with @oyl/sdk
+ * @returns Alkanes provider compatible with @oyl/sdk interface
  */
 export async function createAlkanesProvider(
   network: Network,
   rpcUrl?: string
 ) {
-  const { Provider } = await import('@oyl/sdk');
-  
+  // Use local ts-sdk AlkanesProvider instead of @oyl/sdk
+  const { AlkanesProvider } = await import('@/ts-sdk');
+
   const defaultUrls: Record<Network, string> = {
     mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',
     testnet: 'https://testnet.sandshrew.io/v4/wrlckwrld',
@@ -265,12 +266,12 @@ export async function createAlkanesProvider(
     signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
     oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
   };
-  
+
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
   const networkType = getAlkanesNetwork(network);
   const bitcoinNetwork = getBitcoinJsNetwork(network);
-  
-  return new Provider({
+
+  return new AlkanesProvider({
     version: '',
     network: bitcoinNetwork,
     networkType,
