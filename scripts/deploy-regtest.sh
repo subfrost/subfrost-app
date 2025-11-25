@@ -14,7 +14,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-ALKANES_DIR="../alkanes-rs"
+ALKANES_DIR="$HOME/alkanes-rs"
+CLI_BINARY="${ALKANES_CLI:-$ALKANES_DIR/target/release/alkanes-cli}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WASM_DIR="$SCRIPT_DIR/../prod_wasms"
 WALLET_FILE="$HOME/.alkanes/regtest-wallet.json"
@@ -45,15 +46,24 @@ log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-# Check if subfrost-cli exists
+# Check if CLI exists
 check_cli() {
-    if ! command -v subfrost-cli &> /dev/null; then
-        log_error "subfrost-cli not found in PATH"
-        log_info "Please ensure subfrost-cli is built and in your PATH"
-        log_info "Try: cd $ALKANES_DIR && cargo build --release"
-        exit 1
+    if [ -f "$CLI_BINARY" ]; then
+        log_success "Found CLI at: $CLI_BINARY"
+        return 0
     fi
-    log_success "Found subfrost-cli: $(which subfrost-cli)"
+    
+    # Fallback to PATH
+    if command -v subfrost-cli &> /dev/null; then
+        CLI_BINARY="subfrost-cli"
+        log_success "Found subfrost-cli in PATH: $(which subfrost-cli)"
+        return 0
+    fi
+    
+    log_error "CLI not found at: $CLI_BINARY"
+    log_info "Please build the CLI first:"
+    log_info "  cd $ALKANES_DIR && cargo build --release"
+    exit 1
 }
 
 # Check if regtest node is running
@@ -90,14 +100,14 @@ setup_wallet() {
     if [ ! -f "$WALLET_FILE" ]; then
         log_info "Creating new wallet..."
         mkdir -p "$(dirname "$WALLET_FILE")"
-        subfrost-cli -p regtest wallet new > "$WALLET_FILE"
+        "$CLI_BINARY" -p regtest wallet new > "$WALLET_FILE"
         log_success "Wallet created at $WALLET_FILE"
     else
         log_success "Using existing wallet at $WALLET_FILE"
     fi
     
     # Get wallet address
-    WALLET_ADDRESS=$(subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet address)
+    WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet address)
     log_info "Wallet address: $WALLET_ADDRESS"
 }
 
@@ -106,24 +116,24 @@ fund_wallet() {
     log_info "Checking wallet balance..."
     
     # Sync wallet first
-    subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet sync > /dev/null 2>&1 || true
+    "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet sync > /dev/null 2>&1 || true
     
-    BALANCE=$(subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
+    BALANCE=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
     
     if [ "$BALANCE" -lt "1000000000" ]; then # Less than 10 BTC
         log_info "Wallet balance low ($BALANCE sats), mining blocks to fund wallet..."
-        WALLET_ADDRESS=$(subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet address)
+        WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet address)
         
         # Mine blocks using bitcoin-cli (regtest mode allows instant mining)
         # This assumes bitcoin-cli is configured for the regtest network
         for i in {1..10}; do
-            subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet mine 10 > /dev/null 2>&1 || true
+            "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet mine 10 > /dev/null 2>&1 || true
         done
         
         # Sync wallet again
-        subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet sync > /dev/null 2>&1 || true
+        "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet sync > /dev/null 2>&1 || true
         
-        BALANCE=$(subfrost-cli -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
+        BALANCE=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
         log_success "Wallet funded! Balance: $BALANCE sats"
     else
         log_success "Wallet balance: $BALANCE sats"
@@ -151,8 +161,8 @@ deploy_contract() {
     
     log_info "  Protostone: $PROTOSTONE"
     
-    # Deploy using subfrost-cli with envelope and protostone
-    subfrost-cli -p regtest \
+    # Deploy using CLI with envelope and protostone
+    "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$PROTOSTONE" \
         --envelope "$WASM_FILE" \
@@ -182,7 +192,7 @@ initialize_contract() {
     # Build the protostone format: [block:tx:opcode,args...]
     local PROTOSTONE="[$ALKANE_ID:0$([ -n "$ARGS" ] && echo ",$ARGS" || echo "")]"
     
-    subfrost-cli -p regtest \
+    "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$PROTOSTONE" \
         --fee-rate 1 \
@@ -343,7 +353,7 @@ main() {
     PROTOSTONE="[6,$((0x1f21)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
     
-    subfrost-cli -p regtest \
+    "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$PROTOSTONE" \
         --fee-rate 1 \
@@ -366,7 +376,7 @@ main() {
     PROTOSTONE="[6,$((0x1f22)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
     
-    subfrost-cli -p regtest \
+    "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$PROTOSTONE" \
         --fee-rate 1 \
@@ -390,7 +400,7 @@ main() {
     PROTOSTONE="[6,$((0x1f23)),0,2,0,2,1,100]"  # [6, template_tx, opcode, lp_token, ve_token, reward_rate]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
     
-    subfrost-cli -p regtest \
+    "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$PROTOSTONE" \
         --fee-rate 1 \
@@ -413,7 +423,7 @@ main() {
     INIT_PROTOSTONE="[4,$((0x1f00)),0,32,0,4,$((0x1f01))]"
     log_info "  Protostone: $INIT_PROTOSTONE"
     
-    subfrost-cli -p regtest \
+    "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$INIT_PROTOSTONE" \
         --fee-rate 1 \
@@ -466,7 +476,7 @@ main() {
     INIT_PROTOSTONE="[4,$AMM_FACTORY_PROXY_TX,0,$POOL_BEACON_PROXY_TX,4,$POOL_UPGRADEABLE_BEACON_TX]:v0:v0"
     log_info "  Protostone: $INIT_PROTOSTONE"
     
-    subfrost-cli -p regtest \
+    "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
         alkanes execute "$INIT_PROTOSTONE" \
         --fee-rate 1 \
@@ -542,13 +552,13 @@ main() {
     log_info "Example commands:"
     echo ""
     echo "# Check balances:"
-    echo "subfrost-cli -p regtest --wallet-file $WALLET_FILE alkanes getbalance"
+    echo "$CLI_BINARY -p regtest --wallet-file $WALLET_FILE alkanes getbalance"
     echo ""
     echo "# Inspect a contract:"
-    echo "subfrost-cli -p regtest alkanes inspect 4:10"
+    echo "$CLI_BINARY -p regtest alkanes inspect 4:10"
     echo ""
     echo "# Execute a contract call (e.g., transfer FROST):"
-    echo "subfrost-cli -p regtest --wallet-file $WALLET_FILE alkanes execute '[4:10:1,1000,0,0]' --mine -y"
+    echo "$CLI_BINARY -p regtest --wallet-file $WALLET_FILE alkanes execute '[4:10:1,1000,0,0]' --mine -y"
     echo ""
     
     log_success "Deployment complete! Your regtest environment is ready."

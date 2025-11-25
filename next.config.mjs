@@ -1,9 +1,18 @@
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const nextConfig = {
   reactStrictMode: true,
   typescript: {
     ignoreBuildErrors: false,
+  },
+  turbopack: {
+    resolveAlias: {
+      'env': './utils/empty-module.mjs',
+    },
   },
   webpack: (config, { isServer, webpack }) => {
     // Add WASM support
@@ -23,10 +32,17 @@ const nextConfig = {
 
     config.resolve.alias = {
       ...config.resolve.alias,
+      '@noble/hashes/sha2': '@noble/hashes/sha2.js',
+      'env': path.resolve(__dirname, './utils/empty-module.mjs'),
       // Ensure 'stream' is aliased for browser compatibility
       stream: 'stream-browserify',
     };
-    
+
+    config.plugins.push(new webpack.NormalModuleReplacementPlugin(
+      /^(env)$/,
+      path.resolve(__dirname, './utils/empty-module.mjs')
+    ));
+
     // Add a rule to handle .wasm files directly
     config.module.rules.push({
       test: /\.wasm$/,
@@ -34,7 +50,7 @@ const nextConfig = {
       exclude: [/node_modules/],
     });
 
-    // Add polyfills for browser (existing)
+    // Add polyfills for browser
     if (!isServer) {
       config.plugins.push(
         new webpack.ProvidePlugin({
@@ -43,7 +59,7 @@ const nextConfig = {
           process: 'process/browser',
         })
       );
-      
+
       config.resolve.fallback = {
         ...config.resolve.fallback,
         crypto: false,
@@ -56,7 +72,7 @@ const nextConfig = {
         process: 'process/browser',
       };
     }
-    
+
     return config;
   },
 };
