@@ -9,6 +9,11 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  turbopack: {
+    resolveAlias: {
+      'env': './utils/empty-module.mjs',
+    },
+  },
   webpack: (config, { isServer, webpack }) => {
     config.experiments = {
       ...config.experiments,
