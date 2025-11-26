@@ -257,44 +257,52 @@ function buildAlkanesWebSys() {
   buildAlkanesWebSysInDir(alkanesWebSysDir);
 }
 
+// Get macOS build environment with Homebrew LLVM
+function getMacOSBuildEnv() {
+  const buildEnv = { ...process.env };
+  
+  if (os.platform() !== 'darwin') {
+    return buildEnv;
+  }
+  
+  console.log('📦 Configuring macOS build environment for Homebrew LLVM...');
+  
+  // Check for Homebrew LLVM installation
+  const homebrewPrefixes = ['/opt/homebrew', '/usr/local'];
+  let llvmPath = null;
+  
+  for (const prefix of homebrewPrefixes) {
+    const testPath = path.join(prefix, 'opt', 'llvm', 'bin', 'clang');
+    if (fs.existsSync(testPath)) {
+      llvmPath = path.join(prefix, 'opt', 'llvm');
+      console.log(`  ✓ Found Homebrew LLVM at: ${llvmPath}`);
+      break;
+    }
+  }
+  
+  if (llvmPath) {
+    // Set AR and CC to use Homebrew LLVM
+    buildEnv.AR = path.join(llvmPath, 'bin', 'llvm-ar');
+    buildEnv.CC = path.join(llvmPath, 'bin', 'clang');
+    
+    // Prepend Homebrew LLVM bin to PATH to prioritize over Xcode clang
+    buildEnv.PATH = `${path.join(llvmPath, 'bin')}:${buildEnv.PATH}`;
+    
+    console.log(`  ✓ AR=${buildEnv.AR}`);
+    console.log(`  ✓ CC=${buildEnv.CC}`);
+    console.log(`  ✓ PATH updated to prioritize Homebrew LLVM`);
+  } else {
+    console.warn('  ⚠️  Homebrew LLVM not found. Install with: brew install llvm');
+    console.warn('  ⚠️  Build may fail on macOS without Homebrew LLVM toolchain');
+  }
+  
+  return buildEnv;
+}
+
 function buildAlkanesWebSysInDir(dir) {
   console.log(`Building in: ${dir}`);
   
-  // Set up environment for macOS builds
-  const buildEnv = { ...process.env };
-  
-  if (os.platform() === 'darwin') {
-    console.log('📦 Configuring macOS build environment for Homebrew LLVM...');
-    
-    // Check for Homebrew LLVM installation
-    const homebrewPrefixes = ['/opt/homebrew', '/usr/local'];
-    let llvmPath = null;
-    
-    for (const prefix of homebrewPrefixes) {
-      const testPath = path.join(prefix, 'opt', 'llvm', 'bin', 'clang');
-      if (fs.existsSync(testPath)) {
-        llvmPath = path.join(prefix, 'opt', 'llvm');
-        console.log(`  ✓ Found Homebrew LLVM at: ${llvmPath}`);
-        break;
-      }
-    }
-    
-    if (llvmPath) {
-      // Set AR and CC to use Homebrew LLVM
-      buildEnv.AR = path.join(llvmPath, 'bin', 'llvm-ar');
-      buildEnv.CC = path.join(llvmPath, 'bin', 'clang');
-      
-      // Prepend Homebrew LLVM bin to PATH to prioritize over Xcode clang
-      buildEnv.PATH = `${path.join(llvmPath, 'bin')}:${buildEnv.PATH}`;
-      
-      console.log(`  ✓ AR=${buildEnv.AR}`);
-      console.log(`  ✓ CC=${buildEnv.CC}`);
-      console.log(`  ✓ PATH updated to prioritize Homebrew LLVM`);
-    } else {
-      console.warn('  ⚠️  Homebrew LLVM not found. Install with: brew install llvm');
-      console.warn('  ⚠️  Build may fail on macOS without Homebrew LLVM toolchain');
-    }
-  }
+  const buildEnv = getMacOSBuildEnv();
   
   // Build with wasm-pack using the configured environment
   exec('wasm-pack build --target web --out-dir ../../ts-sdk/build/wasm', { 
@@ -314,10 +322,13 @@ function buildTsSdk() {
     throw new Error('ts-sdk not found in alkanes-rs repository');
   }
   
+  // Get the macOS build environment (for any WASM compilation that may happen)
+  const buildEnv = getMacOSBuildEnv();
+  
   // Install dependencies if needed
   if (!fs.existsSync(path.join(TS_SDK_SOURCE, 'node_modules'))) {
     console.log('Installing ts-sdk dependencies...');
-    exec('npm install', { cwd: TS_SDK_SOURCE });
+    exec('npm install', { cwd: TS_SDK_SOURCE, env: buildEnv });
   }
   
   // Ensure tsup.config.ts has dts: false (due to WASM binding issues)
@@ -331,8 +342,8 @@ function buildTsSdk() {
     }
   }
   
-  // Run the build script
-  exec('npm run build', { cwd: TS_SDK_SOURCE });
+  // Run the build script with the macOS build environment
+  exec('npm run build', { cwd: TS_SDK_SOURCE, env: buildEnv });
   
   console.log('✓ ts-sdk built successfully');
 }
