@@ -1,13 +1,40 @@
 
 import { Psbt } from 'bitcoinjs-lib'
 import * as bitcoin from 'bitcoinjs-lib'
-import type {
-  FormattedUtxo,
-  Provider,
-  Signer,
-  SpendStrategy,
-} from "@/ts-sdk/dist/lite";
-import { AddressTypeEnum as AddressType, AssetType } from "@/ts-sdk/dist/lite";
+
+// TODO: These types were previously from @oyl/sdk - need to be defined or imported from proper source
+// For now, defining minimal types needed for compilation
+export type FormattedUtxo = {
+  txid: string;
+  vout: number;
+  value: number;
+  status?: {
+    confirmed: boolean;
+    block_height?: number;
+  };
+};
+
+export type Provider = any; // TODO: Define proper provider interface
+export type Signer = any; // TODO: Define proper signer interface  
+export type SpendStrategy = 'merge' | 'split' | 'default' | { addressOrder: string[]; utxoSortGreatestToLeast: boolean; changeAddress: string };
+
+// Export AddressType from helpers to avoid duplicate
+export { AddressType, getAddressType } from './helpers';
+
+// Utility function needed by some files
+export const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms));
+
+export enum AssetType {
+  BRC20 = 'brc20',
+  RUNES = 'runes',
+  ORDINALS = 'ordinals',
+  BTC = 'btc',
+}
+
+export interface AccountUtxoPortfolio {
+  taproot: FormattedUtxo[];
+  nativeSegwit: FormattedUtxo[];
+}
 
 // Account type
 interface Account {

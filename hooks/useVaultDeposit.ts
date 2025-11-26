@@ -32,7 +32,7 @@ export function useVaultDeposit() {
       if (!provider) throw new Error('Provider not available');
 
       // Dynamic import to avoid WASM loading at SSR time
-      const { amm, executeWithBtcWrapUnwrap } = await import('@/ts-sdk');
+      const { amm, executeWithBtcWrapUnwrap } = await import('@alkanes/ts-sdk');
 
       const vaultId = parseAlkaneId(depositData.vaultContractId);
       const tokenId = parseAlkaneId(depositData.tokenId);

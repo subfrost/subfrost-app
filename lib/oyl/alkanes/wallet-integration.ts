@@ -12,19 +12,17 @@ import * as bitcoin from 'bitcoinjs-lib';
 // Define Network type locally to avoid import issues with ts-sdk
 type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
-// ✅ REAL ALKANES-RS SDK - Import from sub-modules to avoid WASM dependency
+// ✅ REAL ALKANES-RS SDK - Import from @alkanes/ts-sdk package
 import {
   KeystoreManager,
   createKeystore,
   unlockKeystore,
-} from '@/ts-sdk/dist/keystore';
-import {
   createWallet,
-} from '@/ts-sdk/dist/wallet';
+} from '@alkanes/ts-sdk';
 import type {
   Keystore as AlkanesKeystore,
   WalletConfig as AlkanesWalletConfig,
-} from '@/ts-sdk/dist/types';
+} from '@alkanes/ts-sdk';
 
 // Re-export types from SDK (use different names to avoid conflicts)
 export type AlkanesWalletKeystore = AlkanesKeystore;
@@ -262,7 +260,7 @@ export async function createAlkanesProvider(
 ) {
   // Use local ts-sdk AlkanesProvider instead of @oyl/sdk
   // Import from sub-module to avoid WASM dependency
-  const { AlkanesProvider } = await import('@/ts-sdk/dist/provider');
+  const { AlkanesProvider } = await import('@alkanes/ts-sdk');
 
   const defaultUrls: Record<Network, string> = {
     mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',

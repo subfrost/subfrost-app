@@ -31,7 +31,7 @@ export function useVaultWithdraw() {
       if (!provider) throw new Error('Provider not available');
 
       // Dynamic import to avoid WASM loading at SSR time
-      const { amm, executeWithBtcWrapUnwrap } = await import('@/ts-sdk');
+      const { amm, executeWithBtcWrapUnwrap } = await import('@alkanes/ts-sdk');
 
       const vaultId = parseAlkaneId(withdrawData.vaultContractId);
       const vaultUnitId = parseAlkaneId(withdrawData.vaultUnitId);

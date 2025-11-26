@@ -1,5 +1,5 @@
 // Import types from ts-sdk sub-modules to avoid WASM dependency
-import type { FormattedUtxo } from "@/ts-sdk/dist/types";
+import type { FormattedUtxo } from "./types";
 
 import * as bitcoin from 'bitcoinjs-lib';
 

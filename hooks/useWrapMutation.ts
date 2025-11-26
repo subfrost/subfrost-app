@@ -30,7 +30,7 @@ export function useWrapMutation() {
       if (!provider) throw new Error('Provider not available');
 
       // Dynamic import to avoid WASM loading at SSR time
-      const { wrapBtc } = await import('@/ts-sdk');
+      const { wrapBtc } = await import('@alkanes/ts-sdk');
 
       const utxos = await getSpendableUtxos();
 

@@ -8,7 +8,7 @@ import type {
   AlkaneId,
   FormattedUtxo,
   AccountUtxoPortfolio,
-} from "@/ts-sdk/dist/lite";
+} from "../swap/types";
 
 // Account type is not in lite, define locally
 interface Account {

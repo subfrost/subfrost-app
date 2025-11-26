@@ -4,13 +4,10 @@ import type { ReactNode } from 'react';
 import { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
-import { NetworkMap } from '@/utils/constants';
+import { NetworkMap, type Network } from '@/utils/constants';
 // Import directly from sub-modules to avoid WASM dependency
-import { AlkanesWallet, AddressType, createWallet, createWalletFromMnemonic } from '@/ts-sdk/dist/wallet';
-import { KeystoreManager, createKeystore, unlockKeystore } from '@/ts-sdk/dist/keystore';
-
-// Types
-type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
+import { AlkanesWallet, AddressType, createWallet, createWalletFromMnemonic } from '@alkanes/ts-sdk';
+import { KeystoreManager, createKeystore, unlockKeystore } from '@alkanes/ts-sdk';
 
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
@@ -60,6 +57,7 @@ type WalletContextType = {
   restoreWallet: (mnemonic: string, password: string) => Promise<void>;
   disconnect: () => void;
   signPsbt: (psbtBase64: string) => Promise<string>;
+  signPsbts: (params: { psbts: string[] }) => Promise<{ signedPsbts: string[] }>;
   signMessage: (message: string) => Promise<string>;
 
   // UTXO methods
@@ -207,6 +205,15 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     return wallet.signPsbt(psbtBase64);
   }, [wallet]);
 
+  // Sign multiple PSBTs
+  const signPsbts = useCallback(async (params: { psbts: string[] }): Promise<{ signedPsbts: string[] }> => {
+    if (!wallet) {
+      throw new Error('Wallet not connected');
+    }
+    const signedPsbts = await Promise.all(params.psbts.map(psbt => wallet.signPsbt(psbt)));
+    return { signedPsbts };
+  }, [wallet]);
+
   // Sign message
   const signMessage = useCallback(async (message: string): Promise<string> => {
     if (!wallet) {
@@ -305,6 +312,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       restoreWallet,
       disconnect,
       signPsbt,
+      signPsbts,
       signMessage,
 
       getUtxos,
@@ -326,6 +334,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       restoreWallet,
       disconnect,
       signPsbt,
+      signPsbts,
       signMessage,
       getUtxos,
       getSpendableUtxos,

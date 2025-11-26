@@ -1,7 +1,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 
-// Define types locally to avoid import issues with ts-sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
+// Define and export Network type to use across the app
+export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 // NetworkMap maps to bitcoin.networks.Network objects using bitcoinjs-lib directly
 export const NetworkMap: Partial<Record<Network, bitcoin.networks.Network>> = {

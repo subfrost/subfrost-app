@@ -43,7 +43,7 @@ export function useSwapMutation() {
       if (!isConnected) throw new Error('Wallet not connected');
 
       // Dynamic import to avoid WASM loading at SSR time
-      const { amm, executeWithBtcWrapUnwrap } = await import('@/ts-sdk');
+      const { amm, executeWithBtcWrapUnwrap } = await import('@alkanes/ts-sdk');
 
       const sellCurrency = swapData.sellCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.sellCurrency;
       const buyCurrency = swapData.buyCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.buyCurrency;

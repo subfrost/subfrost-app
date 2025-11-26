@@ -32,7 +32,7 @@ export function useUnwrapMutation() {
       if (!provider) throw new Error('Provider not available');
 
       // Dynamic import to avoid WASM loading at SSR time
-      const { amm, unwrapBtc } = await import('@/ts-sdk');
+      const { amm, unwrapBtc } = await import('@alkanes/ts-sdk');
 
       const utxos = await getUtxos();
 

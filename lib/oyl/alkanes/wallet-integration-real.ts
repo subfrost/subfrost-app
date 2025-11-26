@@ -142,7 +142,7 @@ export async function createAlkanesProvider(
   const bitcoinNetwork = network === 'mainnet' ? 'bitcoin' : network;
 
   // Dynamic import to avoid WASM loading at SSR time
-  const { AlkanesProvider } = await import('@/ts-sdk/dist/provider');
+  const { AlkanesProvider } = await import('@alkanes/ts-sdk');
 
   return new AlkanesProvider({
     version: 'v2',

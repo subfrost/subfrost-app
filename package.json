@@ -24,7 +24,7 @@
     "test:e2e": "npm run test:e2e:wallet && npm run test:e2e:swap && npm run test:e2e:vault"
   },
   "dependencies": {
-    "@alkanes/ts-sdk": "file:./ts-sdk",
+    "@alkanes/ts-sdk": "file:./.subfrost-build/alkanes-rs/ts-sdk",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@noble/hashes": "^2.0.1",
     "@omnisat/lasereyes-core": "^0.0.82",

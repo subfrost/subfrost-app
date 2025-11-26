@@ -23,7 +23,6 @@ const BUILD_DIR = path.join(PROJECT_ROOT, '.subfrost-build');
 const ALKANES_RS_DIR = path.join(BUILD_DIR, 'alkanes-rs');
 const ALKANES_RS_REPO = 'https://github.com/kungfuflex/alkanes-rs.git';
 const TS_SDK_SOURCE = path.join(ALKANES_RS_DIR, 'ts-sdk');
-const TS_SDK_TARGET = path.join(PROJECT_ROOT, 'ts-sdk');
 
 // Read package.json to get sdkBranch
 function getSdkBranch() {
@@ -286,50 +285,49 @@ function buildTsSdk() {
     exec('npm install', { cwd: TS_SDK_SOURCE });
   }
   
+  // Ensure tsup.config.ts has dts: false (due to WASM binding issues)
+  const tsupConfigPath = path.join(TS_SDK_SOURCE, 'tsup.config.ts');
+  if (fs.existsSync(tsupConfigPath)) {
+    let tsupConfig = fs.readFileSync(tsupConfigPath, 'utf8');
+    if (tsupConfig.includes('dts: true')) {
+      console.log('Resetting tsup.config.ts to skip TypeScript declarations (WASM binding issues)...');
+      tsupConfig = tsupConfig.replace('dts: true', 'dts: false');
+      fs.writeFileSync(tsupConfigPath, tsupConfig);
+    }
+  }
+  
   // Run the build script
   exec('npm run build', { cwd: TS_SDK_SOURCE });
   
   console.log('✓ ts-sdk built successfully');
 }
 
-// Copy built ts-sdk to project
-function updateLocalTsSdk() {
-  console.log('\n📦 Updating local ts-sdk...');
+// Update ts-sdk package.json to use hand-written type declarations
+function updateTsSdkTypes() {
+  console.log('\n📦 Updating ts-sdk type declarations...');
   
-  // Ensure target directory exists
-  ensureDir(TS_SDK_TARGET);
+  // Copy the hand-written type declaration file from project root
+  const projectDtsPath = path.join(PROJECT_ROOT, 'ts-sdk-types.d.ts');
+  const targetDtsPath = path.join(TS_SDK_SOURCE, 'index.d.ts');
   
-  // Copy essential directories and files
-  const itemsToCopy = [
-    'build',
-    'dist',
-    'src',
-    'package.json',
-    'tsconfig.json',
-    'tsup.config.ts'
-  ];
+  if (fs.existsSync(projectDtsPath)) {
+    fs.copyFileSync(projectDtsPath, targetDtsPath);
+    console.log('  ✓ Copied type declarations');
+  } else {
+    console.warn('  ⚠️  Type declaration file not found, skipping...');
+  }
   
-  itemsToCopy.forEach(item => {
-    const source = path.join(TS_SDK_SOURCE, item);
-    const target = path.join(TS_SDK_TARGET, item);
-    
-    if (fs.existsSync(source)) {
-      if (fs.lstatSync(source).isDirectory()) {
-        // Remove target if exists
-        if (fs.existsSync(target)) {
-          fs.rmSync(target, { recursive: true, force: true });
-        }
-        // Copy directory
-        copyDir(source, target);
-      } else {
-        // Copy file
-        fs.copyFileSync(source, target);
-      }
-      console.log(`  ✓ ${item}`);
-    }
-  });
+  // Update package.json to point to the declaration file
+  const packageJsonPath = path.join(TS_SDK_SOURCE, 'package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    packageJson.exports['.'].types = './index.d.ts';
+    packageJson.types = './index.d.ts';
+    fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
+    console.log('  ✓ Updated package.json types');
+  }
   
-  console.log('✓ Local ts-sdk updated');
+  console.log('✓ ts-sdk types updated');
 }
 
 // Recursively copy directory
@@ -366,8 +364,8 @@ function main() {
     buildAlkanesWebSys();
     buildTsSdk();
     
-    // Update local ts-sdk
-    updateLocalTsSdk();
+    // Update ts-sdk type declarations
+    updateTsSdkTypes();
     
     console.log('\n' + '='.repeat(60));
     console.log('✅ Build completed successfully!');

@@ -3,10 +3,8 @@ import { OylApiClient } from '@/lib/api-provider';
 
 import { SANDSHREW_PROJECT_ID } from '@/constants';
 import type { OylConnectProviderAPI } from '@/types';
-import { NetworkMap, SandshrewUrlMap } from '@/utils/constants';
+import { NetworkMap, SandshrewUrlMap, type Network } from '@/utils/constants';
 import { getConfig } from '@/utils/getConfig';
-
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet';
 
 export async function getSandshrewProvider(network: Network): Promise<any> {
   const baseUrl = SandshrewUrlMap[network] ?? SandshrewUrlMap.mainnet!;
@@ -19,7 +17,7 @@ export async function getSandshrewProvider(network: Network): Promise<any> {
   } catch (error) {
     console.error('Failed to create Alkanes provider, falling back to default:', error);
     // Lazy import ts-sdk Provider from sub-module to avoid WASM dependency
-    const { AlkanesProvider } = await import('@/ts-sdk/dist/provider');
+    const { AlkanesProvider } = await import('@alkanes/ts-sdk');
     const mappedNetwork = NetworkMap[network] ?? NetworkMap.mainnet!;
     const networkType = ((network as any) === 'oylnet' ? 'regtest' : (network as any)) as
       | 'mainnet'

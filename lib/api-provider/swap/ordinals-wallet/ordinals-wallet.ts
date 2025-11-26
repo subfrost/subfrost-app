@@ -1,6 +1,6 @@
 import { ProcessOfferOptions, ProcessOfferResponse } from '../types'
-import type { Provider } from "@/ts-sdk/dist/lite";
-import { AssetType, timeout } from "@/ts-sdk/dist/lite";
+import type { Provider } from "../types";
+import { AssetType, timeout } from "../types";
 import * as bitcoin from 'bitcoinjs-lib'
 
 export interface UnsignedOrdinalsWalletBid {

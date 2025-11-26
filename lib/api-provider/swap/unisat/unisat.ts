@@ -1,10 +1,17 @@
-import type { Provider, Signer } from "@/ts-sdk/dist/lite";
+import type { Provider, Signer } from "../types";
 import {
   AssetType,
-  AddressTypeEnum as AddressType,
-  OylTransactionError,
+  AddressType,
   getAddressType,
-} from "@/ts-sdk/dist/lite";
+} from "../types";
+
+// TODO: Import this from proper source or define it
+class OylTransactionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OylTransactionError';
+  }
+}
 import { signBip322Message } from "./BIP322";
 import {
   GetListingPsbtRequest,
