@@ -32,8 +32,8 @@ export async function createAlkanesKeystore(
 ): Promise<{ keystore: string; mnemonic: string }> {
   try {
     // Use real alkanes SDK
-    const config = { network };
-    const result = await createKeystore(password, config, wordCount);
+    const config = { network, wordCount };
+    const result = await createKeystore(password, config);
     
     return {
       keystore: result.keystore,
@@ -168,7 +168,7 @@ export async function restoreFromMnemonic(
   }
 
   // Create new keystore from mnemonic
-  const { keystore: keystoreJson } = await createKeystore(password, { network }, 12);
+  const { keystore: keystoreJson } = await createKeystore(password, { network, wordCount: 12 });
   
   // But use the provided mnemonic instead
   const keystore: AlkanesKeystore = {
@@ -186,7 +186,7 @@ export async function restoreFromMnemonic(
   const taprootAddress = wallet.deriveAddress('p2tr', 0, 0).address;
 
   // Encrypt the keystore properly
-  const encrypted = await createKeystore(password, { network }, 12);
+  const encrypted = await createKeystore(password, { network, wordCount: 12 });
   
   return {
     wallet,

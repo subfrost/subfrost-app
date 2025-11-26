@@ -6,20 +6,39 @@ import * as bitcoin from 'bitcoinjs-lib'
 // For now, defining minimal types needed for compilation
 export type FormattedUtxo = {
   txid: string;
+  txId?: string; // Alias for txid
   vout: number;
+  outputIndex?: number; // Alias for vout
   value: number;
+  satoshis?: number; // Alias for value
+  address?: string; // Address associated with this UTXO
+  scriptPk?: string; // Script public key
+  scriptPubKey?: string; // Alias for scriptPk
   status?: {
     confirmed: boolean;
     block_height?: number;
   };
+  confirmations?: number;
+  inscriptions?: any[]; // Inscriptions data
+  runes?: any[]; // Runes data
+  alkanes?: any; // Alkanes data
+  indexed?: boolean; // Whether UTXO has been indexed
 };
+
+// Define AddressType here to avoid circular dependency with helpers
+export enum AddressType {
+  P2PKH = 'p2pkh',
+  P2SH_P2WPKH = 'p2sh-p2wpkh',
+  P2WPKH = 'p2wpkh',
+  P2TR = 'p2tr',
+}
+
+// Re-export getAddressType from helpers
+export { getAddressType } from './helpers';
 
 export type Provider = any; // TODO: Define proper provider interface
 export type Signer = any; // TODO: Define proper signer interface  
 export type SpendStrategy = 'merge' | 'split' | 'default' | { addressOrder: string[]; utxoSortGreatestToLeast: boolean; changeAddress: string };
-
-// Export AddressType from helpers to avoid duplicate
-export { AddressType, getAddressType } from './helpers';
 
 // Utility function needed by some files
 export const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms));
@@ -28,6 +47,7 @@ export enum AssetType {
   BRC20 = 'brc20',
   RUNES = 'runes',
   ORDINALS = 'ordinals',
+  COLLECTIBLE = 'collectible',
   BTC = 'btc',
 }
 
@@ -35,6 +55,13 @@ export interface AccountUtxoPortfolio {
   taproot: FormattedUtxo[];
   nativeSegwit: FormattedUtxo[];
 }
+
+// Additional type stubs for API client
+export type SwapBrcBid = any;
+export type SignedBid = any;
+export type OkxBid = any;
+export type GetOffersParams = any;
+export type GetCollectionOffersParams = any;
 
 // Account type
 interface Account {

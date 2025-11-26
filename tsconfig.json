@@ -40,6 +40,7 @@
   "exclude": [
     "node_modules",
     "reference",
-    "ts-sdk"
+    "ts-sdk",
+    "lib/api-provider"
   ]
 }

@@ -7,7 +7,7 @@ declare module '@alkanes/ts-sdk' {
   // Wallet exports
   export class AlkanesWallet {
     constructor(config: any);
-    deriveAddress(addressType: AddressType, change: number, index: number): {
+    deriveAddress(addressType: AddressType | string, change: number, index: number): {
       address: string;
       publicKey: string;
       path: string;
@@ -34,9 +34,10 @@ declare module '@alkanes/ts-sdk' {
     validateMnemonic(mnemonic: string): boolean;
     createKeystore(mnemonic: string, options?: any): any;
     exportKeystore(keystore: any, password: string, options?: any): Promise<any>;
+    deriveAddress(keystore: any, path: string, network?: any, options?: any): any;
   }
   
-  export function createKeystore(password: string, options?: string | { network?: string }): Promise<{
+  export function createKeystore(password: string, options?: string | { network?: string; wordCount?: number; [key: string]: any }): Promise<{
     keystore: any;
     mnemonic: string;
   }>;
@@ -45,13 +46,30 @@ declare module '@alkanes/ts-sdk' {
   
   // Provider exports
   export class AlkanesProvider {
-    constructor(config: any);
+    constructor(config: {
+      url: string;
+      dataApiUrl?: string;
+      network: any;
+      networkType: string;
+      projectId?: string;
+      version?: string;
+      [key: string]: any; // Allow additional properties
+    });
     getBalance(address: string): Promise<number>;
     getUtxos(address: string): Promise<any[]>;
+    getAddressUtxos(address: string, spendStrategy?: any): Promise<any>;
     broadcastTx(txHex: string): Promise<string>;
+    // Data API methods via alkanes_web_sys.dataapi namespace
+    [key: string]: any; // Allow dynamic access to data API methods
   }
   
   export function createProvider(config: any, wasmModule?: any): AlkanesProvider;
+  
+  // AMM and utility exports
+  export const amm: any;
+  export function executeWithBtcWrapUnwrap(...args: any[]): Promise<any>;
+  export function wrapBtc(...args: any[]): Promise<any>;
+  export function unwrapBtc(...args: any[]): Promise<any>;
   
   // Other exports
   export const VERSION: string;

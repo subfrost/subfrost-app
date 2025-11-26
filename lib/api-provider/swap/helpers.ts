@@ -1,5 +1,6 @@
 // Import types from ts-sdk sub-modules to avoid WASM dependency
 import type { FormattedUtxo } from "./types";
+import { AddressType } from "./types";
 
 import * as bitcoin from 'bitcoinjs-lib';
 
@@ -13,13 +14,6 @@ type Provider = {
 
 // Local definitions (these were originally from @oyl/sdk)
 export const UTXO_DUST = 546;
-
-export enum AddressType {
-  P2PKH = 'p2pkh',
-  P2SH_P2WPKH = 'p2sh-p2wpkh',
-  P2WPKH = 'p2wpkh',
-  P2TR = 'p2tr',
-}
 
 export function assertHex(buffer: Buffer): Buffer {
   // Remove leading 0x02/0x03 prefix for taproot keys
@@ -285,8 +279,9 @@ export async function selectSpendAddress({
 }: SelectSpendAddress): Promise<SelectSpendAddressResponse> {
   feeRate = await sanitizeFeeRate(provider, feeRate)
   const estimatedCost = getBidCostEstimate(offers, feeRate)
-  for (let i = 0; i < account.spendStrategy.addressOrder.length; i++) {
-    const addrType = account.spendStrategy.addressOrder[i] as 'taproot' | 'nativeSegwit';
+  const spendStrategy = account.spendStrategy as any; // Type assertion for complex spend strategy
+  for (let i = 0; i < spendStrategy.addressOrder.length; i++) {
+    const addrType = spendStrategy.addressOrder[i] as 'taproot' | 'nativeSegwit';
     if (addrType === 'taproot' || addrType === 'nativeSegwit') {
       const accountAddr = account[addrType];
       if (!accountAddr) continue;
@@ -469,8 +464,11 @@ export async function updateUtxos({
       output.value > UTXO_DUST
     ) {
       const newUtxo: FormattedUtxo = {
+        txid: txId,
         txId: txId,
+        vout: index,
         outputIndex: index,
+        value: output.value,
         satoshis: output.value,
         scriptPk: output.scriptpubkey,
         address: output.scriptpubkey_address,

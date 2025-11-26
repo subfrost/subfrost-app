@@ -149,8 +149,8 @@ export async function createAlkanesKeystore(
 ): Promise<{ keystore: string; mnemonic: string }> {
   try {
     // ✅ Use REAL alkanes-rs SDK!
-    const config: AlkanesWalletConfig = { network };
-    const result = await createKeystore(password, config, wordCount);
+    const config: AlkanesWalletConfig = { network, wordCount };
+    const result = await createKeystore(password, config);
     
     return {
       keystore: result.keystore,
@@ -225,16 +225,16 @@ export async function createAlkanesWallet(
           publicKey: addressInfo.publicKey || '',
         };
       },
-      signPsbt: (psbtBase64: string) => {
+      signPsbt: (psbtBase64: string): any => {
         if (typeof alkanesWallet.signPsbt === 'function') {
           return alkanesWallet.signPsbt(psbtBase64);
         } else {
           throw new Error('signPsbt method not found on wallet');
         }
       },
-      signMessage: (message: string, index = 0) => {
+      signMessage: (message: string, index = 0): any => {
         if (typeof alkanesWallet.signMessage === 'function') {
-          return alkanesWallet.signMessage(message, 0, index);
+          return alkanesWallet.signMessage(message, index);
         } else {
           throw new Error('signMessage method not found on wallet');
         }

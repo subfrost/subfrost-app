@@ -228,8 +228,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       return [];
     }
 
-    const { getApiProvider } = await import('@/utils/oylProvider');
-    const api = getApiProvider(network);
+    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
+    const api = await getAlkanesProvider(network);
     const promises: Promise<any>[] = [];
 
     if (account.taproot?.address) {
@@ -254,8 +254,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       return [];
     }
 
-    const { getApiProvider } = await import('@/utils/oylProvider');
-    const api = getApiProvider(network);
+    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
+    const api = await getAlkanesProvider(network);
 
     const { spendableUtxos } = await api.getAddressUtxos(
       account.nativeSegwit.address,
@@ -277,8 +277,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       return 0;
     }
 
-    const { getApiProvider } = await import('@/utils/oylProvider');
-    const api = getApiProvider(network);
+    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
+    const api = await getAlkanesProvider(network);
 
     const { spendableTotalBalance } = await api.getAddressUtxos(
       account.nativeSegwit.address,

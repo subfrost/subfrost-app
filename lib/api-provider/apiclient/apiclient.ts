@@ -5,10 +5,11 @@ import type {
   GetOffersParams,
   GetCollectionOffersParams,
   SpendStrategy,
-  AlkaneId,
   FormattedUtxo,
   AccountUtxoPortfolio,
 } from "../swap/types";
+
+import type { AlkaneId } from "./types";
 
 // Account type is not in lite, define locally
 interface Account {

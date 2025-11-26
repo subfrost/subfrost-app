@@ -45,7 +45,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
 
   const { data: sellPairs } = useAlkanesTokenPairs(normalizedSell);
   const directPair = sellPairs?.find(
-    (p) =>
+    (p: any) =>
       (p.token0.id === normalizedSell && p.token1.id === normalizedBuy) ||
       (p.token0.id === normalizedBuy && p.token1.id === normalizedSell),
   );
