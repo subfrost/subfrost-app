@@ -224,12 +224,8 @@ function setupAlkanesRepo() {
 // Add wasm32 target
 function addWasm32Target() {
   console.log('\n📦 Adding wasm32-unknown-unknown target...');
-  try {
-    exec('rustup target add wasm32-unknown-unknown');
-    console.log('✓ wasm32-unknown-unknown target ready');
-  } catch (error) {
-    console.warn('⚠️  Failed to add wasm32 target, but continuing...');
-  }
+  exec('rustup target add wasm32-unknown-unknown');
+  console.log('✓ wasm32-unknown-unknown target ready');
 }
 
 // Build alkanes-web-sys WASM
