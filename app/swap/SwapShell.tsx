@@ -730,24 +730,24 @@ export default function SwapShell() {
         {/* Left Column: Swap/LP Module + My Wallet Swaps */}
         <div className="flex flex-col min-h-0 md:min-h-0">
           {/* Swap/Liquidity Tabs */}
-          <div className="relative flex w-full items-center justify-center mb-4">
+          <div className="flex w-full items-center justify-center gap-1 mb-4">
+            {/* Invisible spacer to balance the +/- button and keep tabs centered */}
+            <div className="w-10 h-10" />
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
-            {selectedTab === 'lp' && (
-              <button
-                type="button"
-                onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
-                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-white/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
-                title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {liquidityMode === 'provide' ? (
-                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  ) : (
-                    <path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  )}
-                </svg>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
+              className={`flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-white/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring ${selectedTab !== 'lp' ? 'invisible' : ''}`}
+              title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {liquidityMode === 'provide' ? (
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                ) : (
+                  <path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                )}
+              </svg>
+            </button>
           </div>
 
           <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl flex-shrink-0">

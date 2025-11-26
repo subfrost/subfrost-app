@@ -57,15 +57,14 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
   const filteredContracts = contracts;
 
   return (
-    <div className="space-y-6">
-      {/* Title */}
-      <h2 className="text-2xl font-bold tracking-wide text-[color:var(--sf-text)]">
-        Active Unlockable Positions
-      </h2>
+    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+      {/* Header */}
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+        <h3 className="text-base font-bold text-[color:var(--sf-text)]">Active Unlockable Positions</h3>
+      </div>
 
       {/* Main Table */}
-      <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[color:var(--sf-glass-border)]">
@@ -305,7 +304,6 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
               })}
             </tbody>
           </table>
-        </div>
       </div>
     </div>
   );
