@@ -33,7 +33,7 @@ type FormattedUtxo = {
 const STORAGE_KEYS = {
   ENCRYPTED_KEYSTORE: 'subfrost_encrypted_keystore',
   WALLET_NETWORK: 'subfrost_wallet_network',
-  WALLET_UNLOCKED: 'subfrost_wallet_unlocked',
+  SESSION_MNEMONIC: 'subfrost_session_mnemonic', // Session-only storage for active wallet
 } as const;
 
 type WalletContextType = {
@@ -82,17 +82,32 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const [wallet, setWallet] = useState<AlkanesWallet | null>(null);
   const [hasStoredKeystore, setHasStoredKeystore] = useState(false);
 
-  // Check for stored keystore on mount
+  // Check for stored keystore and restore session on mount
   useEffect(() => {
-    const checkStoredKeystore = () => {
+    const initializeWallet = async () => {
       if (typeof window === 'undefined') return;
+
       const stored = localStorage.getItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE);
       setHasStoredKeystore(!!stored);
+
+      // Check for active session (survives page navigation but not tab close)
+      const sessionMnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
+      if (sessionMnemonic && stored) {
+        try {
+          // Restore wallet from session mnemonic
+          const restoredWallet = createWalletFromMnemonic(sessionMnemonic, network);
+          setWallet(restoredWallet);
+        } catch (error) {
+          // Session invalid, clear it
+          sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
+        }
+      }
+
       setIsInitializing(false);
     };
 
-    checkStoredKeystore();
-  }, []);
+    initializeWallet();
+  }, [network]);
 
   // Derive addresses from wallet
   const addresses = useMemo(() => {
@@ -147,6 +162,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     localStorage.setItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE, encrypted);
     localStorage.setItem(STORAGE_KEYS.WALLET_NETWORK, network);
 
+    // Store mnemonic in session for page navigation persistence
+    sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, mnemonic);
+
     setWallet(newWallet);
     setHasStoredKeystore(true);
 
@@ -163,6 +181,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const keystore = await unlockKeystore(encrypted, password);
     const unlockedWallet = createWalletFromMnemonic(keystore.mnemonic, network);
 
+    // Store mnemonic in session for page navigation persistence
+    sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, keystore.mnemonic);
+
     setWallet(unlockedWallet);
   }, [network]);
 
@@ -171,21 +192,26 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Create keystore manager and use its validateMnemonic method
     const manager = new KeystoreManager();
 
+    const trimmedMnemonic = mnemonic.trim();
+
     // Validate mnemonic
-    if (!manager.validateMnemonic(mnemonic)) {
+    if (!manager.validateMnemonic(trimmedMnemonic)) {
       throw new Error('Invalid mnemonic phrase');
     }
 
     // Create wallet
-    const restoredWallet = createWalletFromMnemonic(mnemonic.trim(), network);
+    const restoredWallet = createWalletFromMnemonic(trimmedMnemonic, network);
 
     // Create keystore and encrypt
-    const keystore = manager.createKeystore(mnemonic.trim(), { network });
+    const keystore = manager.createKeystore(trimmedMnemonic, { network });
     const encrypted = await manager.exportKeystore(keystore, password, { pretty: true });
     const encryptedStr = typeof encrypted === 'string' ? encrypted : JSON.stringify(encrypted, null, 2);
 
     localStorage.setItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE, encryptedStr);
     localStorage.setItem(STORAGE_KEYS.WALLET_NETWORK, network);
+
+    // Store mnemonic in session for page navigation persistence
+    sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, trimmedMnemonic);
 
     setWallet(restoredWallet);
     setHasStoredKeystore(true);
@@ -193,6 +219,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Disconnect (lock) wallet
   const disconnect = useCallback(() => {
+    // Clear session mnemonic so wallet doesn't auto-reconnect on navigation
+    sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
     setWallet(null);
     setIsConnectModalOpen(false);
   }, []);
@@ -280,12 +308,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
     const api = await getAlkanesProvider(network);
 
-    const { spendableTotalBalance } = await api.getAddressUtxos(
-      account.nativeSegwit.address,
-      account.spendStrategy
-    );
-
-    return spendableTotalBalance;
+    try {
+      const result = await api.getAddressUtxos(
+        account.nativeSegwit.address,
+        account.spendStrategy
+      );
+      return result.spendableTotalBalance;
+    } catch (error) {
+      console.error('[WalletContext] Error fetching balance:', error);
+      return 0;
+    }
   }, [wallet, account, network]);
 
   const onConnectModalOpenChange = useCallback((isOpen: boolean) => {

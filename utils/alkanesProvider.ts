@@ -20,12 +20,12 @@ const SubfrostUrlMap: Record<Network, { rpc: string; api: string }> = {
     api: 'https://signet.subfrost.io/v4/api',
   },
   oylnet: {
-    rpc: 'https://regtest.subfrost.io/v4/jsonrpc',
-    api: 'https://regtest.subfrost.io/v4/api',
+    rpc: 'http://localhost:18888',
+    api: 'http://localhost:50010',
   },
   regtest: {
-    rpc: 'https://regtest.subfrost.io/v4/jsonrpc',
-    api: 'https://regtest.subfrost.io/v4/api',
+    rpc: 'http://localhost:18888',
+    api: 'http://localhost:50010',
   },
 };
 
