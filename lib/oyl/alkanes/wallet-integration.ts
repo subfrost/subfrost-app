@@ -1,10 +1,8 @@
 /**
  * Alkanes-RS Wallet Integration
  *
- * ✅ NOW USING REAL ALKANES-RS SDK! (Source fixed)
- *
- * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
+ * using the @alkanes/ts-sdk package.
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
@@ -248,18 +246,16 @@ export async function createAlkanesWallet(
 }
 
 /**
- * Create an Alkanes provider (using local ts-sdk - no @oyl/sdk dependency)
+ * Create an Alkanes provider using @alkanes/ts-sdk
  *
  * @param network - Bitcoin network
  * @param rpcUrl - Optional Bitcoin Core RPC URL (defaults based on network)
- * @returns Alkanes provider compatible with @oyl/sdk interface
+ * @returns Alkanes provider instance
  */
 export async function createAlkanesProvider(
   network: Network,
   rpcUrl?: string
 ) {
-  // Use local ts-sdk AlkanesProvider instead of @oyl/sdk
-  // Import from sub-module to avoid WASM dependency
   const { AlkanesProvider } = await import('@alkanes/ts-sdk');
 
   const defaultUrls: Record<Network, string> = {

@@ -2,8 +2,7 @@
 import { Psbt } from 'bitcoinjs-lib'
 import * as bitcoin from 'bitcoinjs-lib'
 
-// TODO: These types were previously from @oyl/sdk - need to be defined or imported from proper source
-// For now, defining minimal types needed for compilation
+// Local type definitions for swap operations
 export type FormattedUtxo = {
   txid: string;
   txId?: string; // Alias for txid

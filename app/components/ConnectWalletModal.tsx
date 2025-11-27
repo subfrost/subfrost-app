@@ -4,15 +4,6 @@ import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check } from 'lucide-
 import { useState, useEffect } from 'react';
 
 import { useWallet } from '@/context/WalletContext';
-import {
-  setupAlkanesWallet,
-  restoreAlkanesWallet,
-  restoreFromMnemonic,
-  hasStoredKeystore,
-  loadKeystoreFromStorage,
-  saveKeystoreToStorage,
-  clearKeystoreFromStorage,
-} from '@/lib/oyl/alkanes/wallet-integration';
 
 type WalletView = 'select' | 'create' | 'restore-mnemonic' | 'unlock' | 'show-mnemonic';
 
@@ -21,7 +12,11 @@ export default function ConnectWalletModal() {
     network,
     isConnectModalOpen,
     onConnectModalOpenChange,
-
+    hasStoredKeystore: hasExistingKeystoreFromContext,
+    createWallet: createWalletFromContext,
+    unlockWallet: unlockWalletFromContext,
+    restoreWallet: restoreWalletFromContext,
+    disconnect,
   } = useWallet();
 
   const [view, setView] = useState<WalletView>('select');
@@ -38,11 +33,11 @@ export default function ConnectWalletModal() {
 
   useEffect(() => {
     if (isConnectModalOpen) {
-      setHasExistingKeystore(hasStoredKeystore());
+      setHasExistingKeystore(hasExistingKeystoreFromContext);
       setView('select');
       resetForm();
     }
-  }, [isConnectModalOpen]);
+  }, [isConnectModalOpen, hasExistingKeystoreFromContext]);
 
   const resetForm = () => {
     setPassword('');
@@ -75,9 +70,9 @@ export default function ConnectWalletModal() {
     setError(null);
 
     try {
-      const result = await setupAlkanesWallet(password, network);
+      // Use WalletContext's createWallet which handles storage correctly
+      const result = await createWalletFromContext(password);
       setGeneratedMnemonic(result.mnemonic);
-      saveKeystoreToStorage(result.keystore, network);
       setView('show-mnemonic');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create wallet');
@@ -104,8 +99,8 @@ export default function ConnectWalletModal() {
     setError(null);
 
     try {
-      const result = await restoreFromMnemonic(mnemonic.trim(), password, network);
-      saveKeystoreToStorage(result.keystore, network);
+      // Use WalletContext's restoreWallet which handles storage correctly
+      await restoreWalletFromContext(mnemonic.trim(), password);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
@@ -124,13 +119,8 @@ export default function ConnectWalletModal() {
     setError(null);
 
     try {
-      const stored = loadKeystoreFromStorage();
-      if (!stored) {
-        setError('No stored keystore found');
-        return;
-      }
-
-      await restoreAlkanesWallet(stored.keystore, password, stored.network);
+      // Use WalletContext's unlockWallet which handles storage correctly
+      await unlockWalletFromContext(password);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to unlock wallet');
@@ -140,7 +130,16 @@ export default function ConnectWalletModal() {
   };
 
   const handleDeleteKeystore = () => {
-    clearKeystoreFromStorage();
+    // Clear the subfrost keystore from localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('subfrost_encrypted_keystore');
+      localStorage.removeItem('subfrost_wallet_network');
+      localStorage.removeItem('subfrost_wallet_unlocked');
+      // Also clear old alkanes keys for backwards compatibility
+      localStorage.removeItem('alkanes_encrypted_keystore');
+      localStorage.removeItem('alkanes_wallet_network');
+    }
+    disconnect();
     setHasExistingKeystore(false);
     setView('select');
   };

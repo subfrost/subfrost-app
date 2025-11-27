@@ -41,3 +41,6 @@ e2e/screenshots/*.png
 
 # external build artifacts
 .subfrost-build/
+scripts/rust-deployer/target/
+ts-sdk/node_modules/
+ts-sdk/dist/

@@ -121,7 +121,7 @@ export async function createAlkanesWallet(keystore: AlkanesKeystore) {
 }
 
 /**
- * Create provider for @oyl/sdk
+ * Create Alkanes provider
  */
 export async function createAlkanesProvider(
   network: Network,

@@ -12,7 +12,7 @@ type Provider = {
   };
 };
 
-// Local definitions (these were originally from @oyl/sdk)
+// Local definitions for swap helpers
 export const UTXO_DUST = 546;
 
 export function assertHex(buffer: Buffer): Buffer {
