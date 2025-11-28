@@ -28,7 +28,7 @@ export default function WalletTestPage() {
           Alkanes Wallet Integration Test
         </h1>
         <p className="text-gray-600">
-          Test the alkanes-rs keystore backend for @oyl/sdk
+          Test the alkanes-rs keystore backend
         </p>
       </div>
 
@@ -60,7 +60,7 @@ export default function WalletTestPage() {
           <li>✅ Wallet integration module created</li>
           <li>✅ React hook (useAlkanesWallet) available</li>
           <li>✅ Storage persistence enabled (localStorage)</li>
-          <li>✅ Compatible with @oyl/sdk provider interface</li>
+          <li>✅ Compatible with alkanes provider interface</li>
         </ul>
       </div>
 

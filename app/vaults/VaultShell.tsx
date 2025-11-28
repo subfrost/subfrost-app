@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useWallet } from "@/context/WalletContext";
 import { AVAILABLE_VAULTS, VaultConfig } from "./constants";
 import VaultListItem from "./components/VaultListItem";
 import VaultDetail from "./components/VaultDetail";
@@ -9,6 +10,7 @@ type SortField = 'estimatedApy' | 'historicalApy' | 'riskLevel' | 'available' | 
 type SortDirection = 'asc' | 'desc' | null;
 
 export default function VaultShell() {
+  const { network } = useWallet();
   const [selectedVault, setSelectedVault] = useState<VaultConfig | null>(null);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
@@ -30,8 +32,13 @@ export default function VaultShell() {
     }
   };
 
+  // Show yv-frbtc on regtest/oylnet for testing, hide on mainnet
+  const isTestNetwork = network === 'regtest' || network === 'oylnet';
+
   const filteredVaults = useMemo(() => {
-    let vaults = AVAILABLE_VAULTS.filter(vault => vault.id !== 'yv-frbtc');
+    let vaults = isTestNetwork
+      ? AVAILABLE_VAULTS
+      : AVAILABLE_VAULTS.filter(vault => vault.id !== 'yv-frbtc');
     
     if (sortField && sortDirection) {
       vaults = [...vaults].sort((a, b) => {
@@ -76,7 +83,7 @@ export default function VaultShell() {
     }
     
     return vaults;
-  }, [sortField, sortDirection]);
+  }, [sortField, sortDirection, isTestNetwork]);
 
   return (
     <div className="flex w-full flex-col gap-6">

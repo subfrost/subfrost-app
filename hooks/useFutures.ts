@@ -12,11 +12,11 @@ import {
 
 // Create a simple provider for reading public blockchain data (no wallet needed)
 async function createReadOnlyProvider() {
-  const { Provider } = await import('@oyl/sdk');
+  const { AlkanesProvider } = await import('@alkanes/ts-sdk');
   const bitcoin = await import('bitcoinjs-lib');
   
-  // Create provider using the @oyl/sdk Provider class
-  const provider = new Provider({
+  // Create provider using the AlkanesProvider class
+  const provider = new AlkanesProvider({
     url: 'http://localhost:18888', // metashrew RPC
     projectId: 'regtest-local',
     network: bitcoin.networks.regtest,

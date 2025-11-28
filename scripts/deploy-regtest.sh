@@ -14,11 +14,11 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-ALKANES_DIR="$HOME/alkanes-rs"
-CLI_BINARY="${ALKANES_CLI:-$ALKANES_DIR/target/release/alkanes-cli}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ALKANES_DIR="${ALKANES_DIR:-$SCRIPT_DIR/../.subfrost-build/alkanes-rs}"
+CLI_BINARY="${ALKANES_CLI:-$ALKANES_DIR/target/release/alkanes-cli}"
 WASM_DIR="$SCRIPT_DIR/../prod_wasms"
-WALLET_FILE="$HOME/.alkanes/regtest-wallet.json"
+WALLET_FILE="${WALLET_FILE:-$HOME/.alkanes/regtest-wallet.json}"
 RPC_URL="http://localhost:18888"
 
 # OYL AMM Constants (matching oyl-protocol deployment)
@@ -100,43 +100,45 @@ setup_wallet() {
     if [ ! -f "$WALLET_FILE" ]; then
         log_info "Creating new wallet..."
         mkdir -p "$(dirname "$WALLET_FILE")"
-        "$CLI_BINARY" -p regtest wallet new > "$WALLET_FILE"
+        # Create wallet interactively - user must provide passphrase
+        log_warn "Please enter passphrase when prompted (use: ${DEPLOY_PASSWORD:-testtesttest})"
+        "$CLI_BINARY" -p regtest wallet create -o "$WALLET_FILE"
         log_success "Wallet created at $WALLET_FILE"
     else
         log_success "Using existing wallet at $WALLET_FILE"
     fi
-    
-    # Get wallet address
-    WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet address)
+
+    # Get wallet address using passphrase flag
+    WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "${DEPLOY_PASSWORD:-testtesttest}" wallet addresses p2tr:0 2>/dev/null | grep -oE 'bcrt1[a-z0-9]+' | head -1)
+
+    if [ -z "$WALLET_ADDRESS" ]; then
+        log_warn "Could not get wallet address automatically, using default taproot"
+        WALLET_ADDRESS="p2tr:0"
+    fi
     log_info "Wallet address: $WALLET_ADDRESS"
 }
 
 # Fund wallet with regtest coins
 fund_wallet() {
-    log_info "Checking wallet balance..."
-    
-    # Sync wallet first
-    "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet sync > /dev/null 2>&1 || true
-    
-    BALANCE=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
-    
-    if [ "$BALANCE" -lt "1000000000" ]; then # Less than 10 BTC
-        log_info "Wallet balance low ($BALANCE sats), mining blocks to fund wallet..."
-        WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet address)
-        
-        # Mine blocks using bitcoin-cli (regtest mode allows instant mining)
-        # This assumes bitcoin-cli is configured for the regtest network
-        for i in {1..10}; do
-            "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet mine 10 > /dev/null 2>&1 || true
-        done
-        
-        # Sync wallet again
-        "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet sync > /dev/null 2>&1 || true
-        
-        BALANCE=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" wallet balance 2>/dev/null | grep -oP '\d+' | head -1 || echo "0")
-        log_success "Wallet funded! Balance: $BALANCE sats"
+    log_info "Checking wallet funding status..."
+    local PASS="${DEPLOY_PASSWORD:-testtesttest}"
+
+    # Check if we have UTXOs via esplora (more reliable than wallet balance which has a bug)
+    UTXO_COUNT=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "$PASS" esplora address-utxo bcrt1p9ny9x5rlra0pl38fqw4ds74a5p56cjyce4pf84tznxx72x50pnps59jcgv 2>/dev/null | grep -c '"txid"' || echo "0")
+
+    if [ "$UTXO_COUNT" -lt "10" ]; then # Less than 10 UTXOs
+        log_info "Wallet needs funding (only $UTXO_COUNT UTXOs), mining blocks..."
+
+        # Mine blocks to wallet's taproot address
+        "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "$PASS" bitcoind generatetoaddress 201 p2tr:0 > /dev/null 2>&1
+
+        # Wait for indexer
+        sleep 10
+
+        UTXO_COUNT=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "$PASS" esplora address-utxo bcrt1p9ny9x5rlra0pl38fqw4ds74a5p56cjyce4pf84tznxx72x50pnps59jcgv 2>/dev/null | grep -c '"txid"' || echo "0")
+        log_success "Wallet funded! UTXOs: $UTXO_COUNT"
     else
-        log_success "Wallet balance: $BALANCE sats"
+        log_success "Wallet already funded with $UTXO_COUNT UTXOs"
     fi
 }
 
@@ -147,31 +149,36 @@ deploy_contract() {
     local TARGET_TX=$3
     shift 3
     local INIT_ARGS="$@"
-    
+    local PASS="${DEPLOY_PASSWORD:-testtesttest}"
+
     log_info "Deploying $CONTRACT_NAME to [3, $TARGET_TX] -> [4, $TARGET_TX]..."
-    
+
     if [ ! -f "$WASM_FILE" ]; then
         log_error "WASM file not found: $WASM_FILE"
         return 1
     fi
-    
+
     # Build protostone: [3,tx,init_args...]:v0:v0 for deployment
     # Opcode is first in init_args if provided
     local PROTOSTONE="[3,$TARGET_TX$([ -n "$INIT_ARGS" ] && echo ",$INIT_ARGS" || echo "")]:v0:v0"
-    
+
     log_info "  Protostone: $PROTOSTONE"
-    
-    # Deploy using CLI with envelope and protostone
+
+    # Deploy using CLI with envelope and protostone - use --passphrase flag
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
+        --passphrase "$PASS" \
         alkanes execute "$PROTOSTONE" \
         --envelope "$WASM_FILE" \
+        --to p2tr:0 \
+        --from p2tr:0 \
+        --change p2tr:0 \
         --fee-rate 1 \
         --mine \
         --trace \
         -y \
-        > /dev/null 2>&1
-    
+        2>&1
+
     if [ $? -eq 0 ]; then
         log_success "$CONTRACT_NAME deployed at [4, $TARGET_TX]"
     else
@@ -186,21 +193,26 @@ initialize_contract() {
     local ALKANE_ID=$2
     shift 2
     local ARGS="$@"
-    
+    local PASS="${DEPLOY_PASSWORD:-testtesttest}"
+
     log_info "Initializing $CONTRACT_NAME at $ALKANE_ID..."
-    
+
     # Build the protostone format: [block:tx:opcode,args...]
     local PROTOSTONE="[$ALKANE_ID:0$([ -n "$ARGS" ] && echo ",$ARGS" || echo "")]"
-    
+
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
+        --passphrase "$PASS" \
         alkanes execute "$PROTOSTONE" \
+        --to p2tr:0 \
+        --from p2tr:0 \
+        --change p2tr:0 \
         --fee-rate 1 \
         --mine \
         --trace \
         -y \
-        > /dev/null 2>&1
-    
+        2>&1
+
     if [ $? -eq 0 ]; then
         log_success "$CONTRACT_NAME initialized"
     else
@@ -355,83 +367,99 @@ main() {
     
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
+        --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$PROTOSTONE" \
+        --to p2tr:0 \
+        --from p2tr:0 \
+        --change p2tr:0 \
         --fee-rate 1 \
         --mine \
         --trace \
         -y \
-        > /dev/null 2>&1
-    
+        2>&1
+
     if [ $? -eq 0 ]; then
         log_success "veDIESEL instantiated at [2, n]"
     else
         log_warn "Failed to instantiate veDIESEL"
     fi
-    
+
     echo ""
-    
+
     # Instantiate yveDIESEL from yve-token-nft-template at [4, 0x1f22]
     # Using [6, 0x1f22] cellpack creates instance at [2, n]
     log_info "Instantiating yveDIESEL from template [4, 0x1f22]..."
     PROTOSTONE="[6,$((0x1f22)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
-    
+
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
+        --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$PROTOSTONE" \
+        --to p2tr:0 \
+        --from p2tr:0 \
+        --change p2tr:0 \
         --fee-rate 1 \
         --mine \
         --trace \
         -y \
-        > /dev/null 2>&1
-    
+        2>&1
+
     if [ $? -eq 0 ]; then
         log_success "yveDIESEL instantiated at [2, n]"
     else
         log_warn "Failed to instantiate yveDIESEL"
     fi
-    
+
     echo ""
-    
+
     # Instantiate vxDIESEL gauge from vx-token-gauge-template at [4, 0x1f23]
     # Using [6, 0x1f23] cellpack creates instance at [2, n]
     log_info "Instantiating vxDIESEL Gauge from template [4, 0x1f23]..."
     # TODO: Update with correct LP token ID and reward rate
     PROTOSTONE="[6,$((0x1f23)),0,2,0,2,1,100]"  # [6, template_tx, opcode, lp_token, ve_token, reward_rate]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
-    
+
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
+        --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$PROTOSTONE" \
+        --to p2tr:0 \
+        --from p2tr:0 \
+        --change p2tr:0 \
         --fee-rate 1 \
         --mine \
         --trace \
         -y \
-        > /dev/null 2>&1
-    
+        2>&1
+
     if [ $? -eq 0 ]; then
         log_success "vxDIESEL Gauge instantiated at [2, n]"
     else
         log_warn "Failed to instantiate vxDIESEL Gauge"
     fi
-    
+
     # NOTE: ftr-btc at [31, 0] is deployed automatically in alkanes-rs genesis (setup_ftrbtc)
     # NOTE: dx-btc and yv-fr-btc-vault are now deployed above in the reserved range
-    
+
     # Initialize dx-btc at [4, 0x1f00] with frBTC[32,0] and yv-fr-btc-vault[4,0x1f01]
     log_info "Initializing dxBTC at [4, 0x1f00]..."
     INIT_PROTOSTONE="[4,$((0x1f00)),0,32,0,4,$((0x1f01))]"
     log_info "  Protostone: $INIT_PROTOSTONE"
-    
+
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
+        --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$INIT_PROTOSTONE" \
+        --to p2tr:0 \
+        --from p2tr:0 \
+        --change p2tr:0 \
         --fee-rate 1 \
         --mine \
         --trace \
         -y \
-        > /dev/null 2>&1
-    
+        2>&1
+
     if [ $? -eq 0 ]; then
         log_success "dxBTC initialized"
     else
@@ -478,13 +506,17 @@ main() {
     
     "$CLI_BINARY" -p regtest \
         --wallet-file "$WALLET_FILE" \
+        --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$INIT_PROTOSTONE" \
+        --to p2tr:0 \
+        --from p2tr:0 \
+        --change p2tr:0 \
         --fee-rate 1 \
         --mine \
         --trace \
         -y \
-        > /dev/null 2>&1
-    
+        2>&1
+
     if [ $? -eq 0 ]; then
         log_success "OYL Factory initialized"
     else

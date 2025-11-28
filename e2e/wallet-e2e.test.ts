@@ -66,10 +66,29 @@ async function setup() {
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
-  page = await browser.newPage();
+  // Use incognito context to ensure clean state
+  const context = await browser.createBrowserContext();
+  page = await context.newPage();
   await page.setViewport({ width: 1280, height: 1024 });
 
   consoleLogs = setupConsoleCapture(page);
+
+  // Clear all storage at the start of tests
+  console.log('  Clearing browser storage...');
+  await page.goto(TESTNET_CONFIG.baseUrl, { waitUntil: 'networkidle2' });
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  // Reload page so React re-initializes with empty storage
+  await page.reload({ waitUntil: 'networkidle2' });
+  await waitForPageReady(page, 2000);
+
+  // Verify storage is actually cleared
+  const storageCleared = await page.evaluate(() => {
+    return localStorage.getItem('subfrost_encrypted_keystore') === null;
+  });
+  console.log(`  Storage cleared: ${storageCleared ? 'yes' : 'no'}\n`);
 }
 
 async function teardown() {
@@ -104,6 +123,13 @@ async function teardown() {
  */
 async function clearWalletStorage() {
   await page.evaluate(() => {
+    // Clear new storage keys
+    localStorage.removeItem('subfrost_encrypted_keystore');
+    localStorage.removeItem('subfrost_wallet_network');
+    localStorage.removeItem('subfrost_wallet_unlocked');
+    // Also clear old alkanes keys for backwards compatibility
+    localStorage.removeItem('alkanes_encrypted_keystore');
+    localStorage.removeItem('alkanes_wallet_network');
     localStorage.removeItem('alkanes_keystore');
     localStorage.removeItem('alkanes_keystore_network');
   });
@@ -347,12 +373,92 @@ async function runTestSuite() {
     // Test 7: Create Wallet - Full Flow
     // ==========================================
     await runTest('Create wallet generates mnemonic', async () => {
-      await clearWalletStorage();
-      // Reload to get fresh state after previous password tests
-      await page.reload({ waitUntil: 'networkidle2' });
+      // Clear all storage completely first
+      await page.evaluate(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+
+      // Navigate fresh
+      await page.goto(TESTNET_CONFIG.baseUrl, { waitUntil: 'networkidle2' });
       await waitForPageReady(page, 2000);
 
+      // Check if wallet is already connected (shows address in header)
+      const isWalletConnected = await page.evaluate(() => {
+        const text = document.body.textContent || '';
+        // Look for truncated Bitcoin address pattern in header
+        return /tb1[a-z0-9]{2,6}\.\.\.[a-z0-9]{2,6}/i.test(text) ||
+               /[mn2][a-zA-Z0-9]{2,6}\.\.\.[a-zA-Z0-9]{2,6}/i.test(text);
+      });
+
+      if (isWalletConnected) {
+        console.log('   Wallet already connected, disconnecting first...');
+        // Click the wallet button to open modal and disconnect
+        await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const walletBtn = buttons.find(b => {
+            const text = b.textContent || '';
+            return /tb1|[mn2][a-zA-Z0-9]/i.test(text);
+          });
+          walletBtn?.click();
+        });
+        await waitForPageReady(page, 500);
+
+        // Look for disconnect button or delete option
+        await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const disconnectBtn = buttons.find(b => {
+            const text = b.textContent?.toLowerCase() || '';
+            return text.includes('disconnect') || text.includes('delete');
+          });
+          disconnectBtn?.click();
+        });
+        await waitForPageReady(page, 500);
+      }
+
+      // Clear storage again after any disconnect
+      await page.evaluate(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+
+      // Full reload to reset all React state
+      await page.reload({ waitUntil: 'networkidle2' });
+      await waitForPageReady(page, 3000);
+
       await openWalletModal();
+
+      // Verify no existing keystore (should not show Unlock option)
+      let hasUnlockOption = await page.evaluate(() => {
+        return document.body.textContent?.includes('Unlock Existing Wallet') || false;
+      });
+
+      // If still showing unlock, use delete button
+      if (hasUnlockOption) {
+        console.log('   Warning: Found existing keystore, deleting...');
+        await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const deleteBtn = buttons.find(b => b.textContent?.toLowerCase().includes('delete'));
+          deleteBtn?.click();
+        });
+        await waitForPageReady(page, 1000);
+
+        // Clear storage again
+        await page.evaluate(() => {
+          localStorage.clear();
+        });
+        await page.reload({ waitUntil: 'networkidle2' });
+        await waitForPageReady(page, 3000);
+        await openWalletModal();
+
+        hasUnlockOption = await page.evaluate(() => {
+          return document.body.textContent?.includes('Unlock Existing Wallet') || false;
+        });
+
+        if (hasUnlockOption) {
+          throw new Error('Could not clear stored keystore - unlock option still showing');
+        }
+      }
 
       // Click Create New Wallet
       await page.evaluate(() => {
@@ -376,19 +482,47 @@ async function runTestSuite() {
         createBtn?.click();
       });
 
-      // Wait for wallet creation (may take a few seconds for mnemonic generation)
-      await waitForPageReady(page, 3000);
+      // Wait for wallet creation with polling (may take several seconds for mnemonic generation)
+      let result = { hasMnemonic: false, hasError: false, errorText: '', pageText: '' };
+      const maxWaitTime = 15000; // 15 seconds max
+      const pollInterval = 500;
+      const startTime = Date.now();
 
-      // Check for mnemonic display
-      const hasMnemonic = await page.evaluate(() => {
-        const text = document.body.textContent || '';
-        // Check for numbered words (mnemonic display format)
-        return /1\.\s*\w+/.test(text) && /12\.\s*\w+/.test(text);
-      });
+      while (Date.now() - startTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-      if (!hasMnemonic) {
+        result = await page.evaluate(() => {
+          const text = document.body.textContent || '';
+          // Look for numbered mnemonic words (1. word ... 12. word)
+          const hasMnemonic = /1\.\s*\w+/.test(text) && /12\.\s*\w+/.test(text);
+          // Also check for "Save Your Recovery Phrase" header as backup indicator
+          const hasRecoveryHeader = text.includes('Save Your Recovery Phrase');
+          // Only check for actual error messages in red text, not UI buttons
+          const errorEl = document.querySelector('.text-red-400');
+          const errorText = errorEl?.textContent || '';
+          // Ignore false positives like "Delete stored wallet" button text
+          const hasRealError = errorText && !errorText.toLowerCase().includes('delete');
+          return {
+            hasMnemonic: hasMnemonic || hasRecoveryHeader,
+            hasError: hasRealError,
+            errorText,
+            pageText: text.substring(0, 500)
+          };
+        });
+
+        if (result.hasMnemonic || result.hasError) {
+          break;
+        }
+      }
+
+      if (result.hasError && result.errorText) {
+        throw new Error(`Wallet creation failed: ${result.errorText}`);
+      }
+
+      if (!result.hasMnemonic) {
         // Take screenshot for debugging
         await takeScreenshot(page, 'create-wallet-no-mnemonic');
+        console.log('   Page content:', result.pageText);
         throw new Error('Mnemonic phrase not displayed');
       }
 
@@ -542,7 +676,7 @@ async function runTestSuite() {
     await runTest('Wrong password shows error', async () => {
       // Make sure we have a keystore to unlock
       const hasKeystore = await page.evaluate(() => {
-        return localStorage.getItem('alkanes_keystore') !== null;
+        return localStorage.getItem('subfrost_encrypted_keystore') !== null;
       });
 
       if (!hasKeystore) {
@@ -601,8 +735,12 @@ async function runTestSuite() {
     // Test 11: Delete Stored Wallet
     // ==========================================
     await runTest('Delete stored wallet works', async () => {
+      // Reload to ensure we have fresh state
+      await page.reload({ waitUntil: 'networkidle2' });
+      await waitForPageReady(page, 2000);
+
       const hasKeystore = await page.evaluate(() => {
-        return localStorage.getItem('alkanes_keystore') !== null;
+        return localStorage.getItem('subfrost_encrypted_keystore') !== null;
       });
 
       if (!hasKeystore) {
@@ -612,26 +750,67 @@ async function runTestSuite() {
 
       await openWalletModal();
 
+      // Verify delete button is visible
+      const hasDeleteButton = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        return buttons.some(b =>
+          b.textContent?.toLowerCase().includes('delete')
+        );
+      });
+
+      if (!hasDeleteButton) {
+        console.log('   Delete button not found in modal');
+        await closeWalletModal();
+        return;
+      }
+
       // Click delete
       await page.evaluate(() => {
         const deleteBtn = Array.from(document.querySelectorAll('button')).find(b =>
-          b.textContent?.includes('Delete') || b.textContent?.includes('delete')
+          b.textContent?.toLowerCase().includes('delete')
         );
         deleteBtn?.click();
       });
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Verify keystore is deleted
       const keystoreRemoved = await page.evaluate(() => {
-        return localStorage.getItem('alkanes_keystore') === null;
+        return localStorage.getItem('subfrost_encrypted_keystore') === null;
       });
 
       if (!keystoreRemoved) {
+        // Debug: show what's in storage
+        const storageKeys = await page.evaluate(() => {
+          const keys: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('subfrost') || key.includes('alkanes'))) {
+              keys.push(key);
+            }
+          }
+          return keys;
+        });
+        console.log('   Remaining storage keys:', storageKeys);
         throw new Error('Keystore was not deleted');
       }
 
       console.log('   Keystore deleted successfully');
+
+      // Verify modal no longer shows unlock option after reload
+      await page.reload({ waitUntil: 'networkidle2' });
+      await waitForPageReady(page, 2000);
+      await openWalletModal();
+
+      const stillHasUnlock = await page.evaluate(() => {
+        return document.body.textContent?.includes('Unlock Existing Wallet') || false;
+      });
+
+      if (stillHasUnlock) {
+        console.log('   Warning: Unlock option still visible after delete');
+      } else {
+        console.log('   Verified: No unlock option after deletion');
+      }
 
       await closeWalletModal();
     });

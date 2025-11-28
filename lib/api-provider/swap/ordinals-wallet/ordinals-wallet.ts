@@ -1,6 +1,6 @@
 import { ProcessOfferOptions, ProcessOfferResponse } from '../types'
-import type { Provider } from "@/ts-sdk";
-import { AssetType, timeout } from "@/ts-sdk";
+import type { Provider } from "../types";
+import { AssetType, timeout } from "../types";
 import * as bitcoin from 'bitcoinjs-lib'
 
 export interface UnsignedOrdinalsWalletBid {
@@ -87,7 +87,7 @@ export async function processOrdinalsWalletOffer({
   utxos,
   signer,
 }: ProcessOfferOptions): Promise<ProcessOfferResponse> {
-  let dummyTxId: string | null = null
+  const dummyTxId: string | null = null
   let purchaseTxId: string | null = null
 
   let setupTx: string | null = null

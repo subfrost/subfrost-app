@@ -233,10 +233,19 @@ function formatBlocksToTime(blocks: number): string {
 
 /**
  * Get current block height from provider
+ * Uses the new AlkanesProvider API (provider.getBlockHeight() or provider.bitcoin.getBlockCount())
  */
 export async function getCurrentBlockHeight(provider: any): Promise<number> {
   try {
-    return await provider.sandshrew.bitcoindRpc.getBlockCount();
+    // Try the new AlkanesProvider method first
+    if (typeof provider.getBlockHeight === 'function') {
+      return await provider.getBlockHeight();
+    }
+    // Fallback to bitcoin RPC client
+    if (provider.bitcoin && typeof provider.bitcoin.getBlockCount === 'function') {
+      return await provider.bitcoin.getBlockCount();
+    }
+    throw new Error('Provider does not support getBlockHeight or bitcoin.getBlockCount');
   } catch (error) {
     console.error('Failed to get block height:', error);
     throw error;

@@ -26,8 +26,8 @@ export function useSignerShim() {
 
   const signerShim = {
     signAllInputs: async ({ rawPsbtHex }: { rawPsbtHex: string }) => {
-      const signedPsbtResponse = await signPsbt(rawPsbtHex);
-      return finalizePsbt(signedPsbtResponse?.signedPsbtBase64);
+      const signedPsbt = await signPsbt(rawPsbtHex);
+      return finalizePsbt(signedPsbt);
     },
     signAllInputsMultiplePsbts: async ({ rawPsbts, rawPsbtsHex }: { rawPsbts?: string[]; rawPsbtsHex?: string[] }) => {
       if (!rawPsbtsHex) {
@@ -35,7 +35,7 @@ export function useSignerShim() {
         rawPsbtsHex = rawPsbts.map((psbt) => Buffer.from(psbt, 'base64').toString('hex'));
       }
       const signedPsbtResponse = await signPsbts({ psbts: rawPsbtsHex });
-      const finalizedPsbts = signedPsbtResponse?.signedPsbts.map((res: any) => finalizePsbt(res.signedPsbtBase64));
+      const finalizedPsbts = signedPsbtResponse.signedPsbts.map((signedPsbt: string) => finalizePsbt(signedPsbt));
       return finalizedPsbts;
     },
     taprootKeyPair: provider ? ECPair.makeRandom({ network: provider.network }) : undefined,

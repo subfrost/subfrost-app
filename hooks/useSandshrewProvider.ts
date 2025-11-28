@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { getSandshrewProvider } from '@/utils/oylProvider';
+import { getAlkanesProvider } from '@/utils/alkanesProvider';
 import { useWallet } from '@/context/WalletContext';
 
-// Define types locally - Network without 'regtest' to match getSandshrewProvider signature
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet';
 type Provider = any;
 
 export function useSandshrewProvider(): Provider | null {
@@ -14,7 +12,7 @@ export function useSandshrewProvider(): Provider | null {
   useEffect(() => {
     let mounted = true;
 
-    getSandshrewProvider(network as Network).then((p) => {
+    getAlkanesProvider(network).then((p) => {
       if (mounted) setProvider(p);
     });
 

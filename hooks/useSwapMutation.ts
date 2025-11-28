@@ -1,6 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm, executeWithBtcWrapUnwrap } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useSignerShim } from '@/hooks/useSignerShim';
@@ -42,6 +41,9 @@ export function useSwapMutation() {
   return useMutation({
     mutationFn: async (swapData: SwapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+
+      // Dynamic import to avoid WASM loading at SSR time
+      const { amm, executeWithBtcWrapUnwrap } = await import('@alkanes/ts-sdk');
 
       const sellCurrency = swapData.sellCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.sellCurrency;
       const buyCurrency = swapData.buyCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.buyCurrency;
