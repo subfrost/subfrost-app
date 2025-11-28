@@ -41,6 +41,8 @@
     "node_modules",
     "reference",
     "ts-sdk",
-    "lib/api-provider"
+    "lib/api-provider",
+    "scripts",
+    "e2e"
   ]
 }

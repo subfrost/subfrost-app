@@ -78,6 +78,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.1.16
+      '@types/bip32':
+        specifier: ^2.0.4
+        version: 2.0.4(typescript@5.9.3)
       '@types/bip39':
         specifier: ^3.0.4
         version: 3.0.4
@@ -93,6 +96,9 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.2(@types/react@19.2.2)
+      bip32:
+        specifier: ^5.0.0
+        version: 5.0.0(typescript@5.9.3)
       bip39:
         specifier: ^3.1.0
         version: 3.1.0
@@ -1085,6 +1091,10 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/bip32@2.0.4':
+    resolution: {integrity: sha512-5VE8jtDlFx94IyopdhtkcZ/6oCSvpLS1yOcwkUgi9/zwL9LG99q4+nYv6N/HntPGqB9wcE6osxrtmErt75sjxA==}
+    deprecated: This is a stub types definition. bip32 provides its own type definitions, so you do not need this installed.
+
   '@types/bip39@3.0.4':
     resolution: {integrity: sha512-kgmgxd14vTUMqcKu/gRi7adMchm7teKnOzdkeP0oQ5QovXpbUJISU0KUtBt84DdxCws/YuNlSCIoZqgXexe6KQ==}
     deprecated: This is a stub types definition. bip39 provides its own type definitions, so you do not need this installed.
@@ -1541,6 +1551,10 @@ packages:
   bip32@4.0.0:
     resolution: {integrity: sha512-aOGy88DDlVUhspIXJN+dVEtclhIsfAUppD43V0j40cPTld3pv/0X/MlrZSZ6jowIaQQzFwP8M6rFU2z2mVYjDQ==}
     engines: {node: '>=6.0.0'}
+
+  bip32@5.0.0:
+    resolution: {integrity: sha512-h043yQ9n3iU4WZ8KLRpEECMl3j1yx2DQ1kcPlzWg8VZC0PtukbDiyLDKbe6Jm79mL6Tfg+WFuZMYxnzVyr/Hyw==}
+    engines: {node: '>=18.0.0'}
 
   bip32@5.0.0-rc.0:
     resolution: {integrity: sha512-5hVFGrdCnF8GB1Lj2eEo4PRE7+jp+3xBLnfNjydivOkMvKmUKeJ9GG8uOy8prmWl3Oh154uzgfudR1FRkNBudA==}
@@ -4909,6 +4923,12 @@ snapshots:
     dependencies:
       '@babel/types': 7.28.5
 
+  '@types/bip32@2.0.4(typescript@5.9.3)':
+    dependencies:
+      bip32: 5.0.0(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
   '@types/bip39@3.0.4':
     dependencies:
       bip39: 3.1.0
@@ -5143,7 +5163,7 @@ snapshots:
       '@scure/btc-signer': 1.8.1
       axios: 1.13.2
       binaryen: 118.0.0
-      bip32: 5.0.0-rc.0(typescript@5.9.3)
+      bip32: 5.0.0(typescript@5.9.3)
       bip39: 3.1.0
       body-parser: 1.20.3
       borsh: 2.0.0
@@ -5411,6 +5431,16 @@ snapshots:
       '@scure/base': 1.2.6
       typeforce: 1.18.0
       wif: 2.0.6
+
+  bip32@5.0.0(typescript@5.9.3):
+    dependencies:
+      '@noble/hashes': 1.8.0
+      '@scure/base': 1.2.6
+      uint8array-tools: 0.0.8
+      valibot: 0.37.0(typescript@5.9.3)
+      wif: 5.0.0
+    transitivePeerDependencies:
+      - typescript
 
   bip32@5.0.0-rc.0(typescript@5.9.3):
     dependencies:
