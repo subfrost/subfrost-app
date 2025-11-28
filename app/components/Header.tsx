@@ -6,6 +6,7 @@
  import { usePathname } from "next/navigation";
  import { useWallet } from "@/context/WalletContext";
  import { Menu, X } from "lucide-react";
+ import AddressAvatar from "./AddressAvatar";
 
  const FallingSnowflakes = memo(function FallingSnowflakes() {
    const snowflakes = useMemo(() => {
@@ -170,12 +171,20 @@
                <button
                  type="button"
                  onClick={() => setMenuOpen((v) => !v)}
-                 className="rounded-full bg-white px-6 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] shadow-[0_2px_0_rgba(40,67,114,0.2),0_6px_14px_rgba(40,67,114,0.12)] transition-colors hover:bg-white/95 border border-[color:var(--sf-outline)] sf-focus-ring"
+                 className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] shadow-[0_2px_0_rgba(40,67,114,0.2),0_6px_14px_rgba(40,67,114,0.12)] transition-colors hover:bg-white/95 border border-[color:var(--sf-outline)] sf-focus-ring"
                >
-                 {truncate(address)}
+                 <AddressAvatar address={address} size={24} />
+                 <span className="hidden sm:inline">{truncate(address)}</span>
                </button>
                {menuOpen ? (
                  <div className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                  <Link
+                    href="/wallet"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-white/10 block"
+                  >
+                    Wallet Dashboard
+                  </Link>
                   <button
                     type="button"
                     onClick={async () => {
@@ -256,7 +265,10 @@
                  {walletConnected ? (
                    <div className="px-6 py-4">
                      <div className="mb-2 text-xs text-[color:var(--sf-text)]/70">Connected</div>
-                     <div className="mb-3 text-sm font-semibold text-[color:var(--sf-text)]">{truncate(address)}</div>
+                     <div className="mb-3 flex items-center gap-2">
+                       <AddressAvatar address={address} size={24} />
+                       <span className="text-sm font-semibold text-[color:var(--sf-text)]">{truncate(address)}</span>
+                     </div>
                      <button
                        type="button"
                        onClick={async () => {
