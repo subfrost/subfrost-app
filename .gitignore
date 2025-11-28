@@ -40,7 +40,9 @@ reference
 e2e/screenshots/*.png
 
 # external build artifacts
+# .external-build is ignored (only used for local builds)
+# ./ts-sdk is NOT ignored (committed to repo for Vercel deployment)
+.external-build/
 .subfrost-build/
 scripts/rust-deployer/target/
 ts-sdk/node_modules/
-ts-sdk/dist/

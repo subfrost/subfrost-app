@@ -19,10 +19,11 @@ const os = require('os');
 
 // Configuration
 const PROJECT_ROOT = __dirname;
-const BUILD_DIR = path.join(PROJECT_ROOT, '.subfrost-build');
+const BUILD_DIR = path.join(PROJECT_ROOT, '.external-build');
 const ALKANES_RS_DIR = path.join(BUILD_DIR, 'alkanes-rs');
 const ALKANES_RS_REPO = 'https://github.com/kungfuflex/alkanes-rs.git';
 const TS_SDK_SOURCE = path.join(ALKANES_RS_DIR, 'ts-sdk');
+const TS_SDK_DEST = path.join(PROJECT_ROOT, 'ts-sdk');
 
 // Read package.json to get sdkBranch
 function getSdkBranch() {
@@ -393,6 +394,56 @@ function copyDir(src, dest) {
   }
 }
 
+// Copy only built artifacts from ts-sdk to project root
+function copyTsSdkArtifacts() {
+  console.log('\n📦 Copying ts-sdk artifacts to ./ts-sdk...');
+  
+  if (!fs.existsSync(TS_SDK_SOURCE)) {
+    throw new Error(`ts-sdk source not found at ${TS_SDK_SOURCE}`);
+  }
+  
+  // Remove existing destination if it exists
+  if (fs.existsSync(TS_SDK_DEST)) {
+    console.log('Removing existing ts-sdk directory...');
+    fs.rmSync(TS_SDK_DEST, { recursive: true, force: true });
+  }
+  
+  ensureDir(TS_SDK_DEST);
+  
+  // Files and directories to copy (only built artifacts)
+  const itemsToCopy = [
+    'dist',           // Compiled TypeScript output
+    'build',          // WASM build output
+    'package.json',   // Package metadata
+    'index.d.ts',     // Type declarations
+    'polyfills.js',   // Polyfills
+    'esbuild.browser.mjs', // Build config (if needed)
+    '.npmignore',     // NPM ignore file
+    'README.md'       // Documentation
+  ];
+  
+  for (const item of itemsToCopy) {
+    const srcPath = path.join(TS_SDK_SOURCE, item);
+    const destPath = path.join(TS_SDK_DEST, item);
+    
+    if (!fs.existsSync(srcPath)) {
+      console.log(`⚠️  Skipping ${item} (not found)`);
+      continue;
+    }
+    
+    const stats = fs.statSync(srcPath);
+    if (stats.isDirectory()) {
+      copyDir(srcPath, destPath);
+      console.log(`  ✓ Copied directory: ${item}`);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+      console.log(`  ✓ Copied file: ${item}`);
+    }
+  }
+  
+  console.log('✅ ts-sdk artifacts copied successfully!');
+}
+
 // Main execution
 function main() {
   console.log('🚀 Building external dependencies for subfrost-app\n');
@@ -413,9 +464,12 @@ function main() {
     // Update ts-sdk type declarations
     updateTsSdkTypes();
     
+    // Copy built artifacts to ./ts-sdk
+    copyTsSdkArtifacts();
+    
     console.log('\n' + '='.repeat(60));
     console.log('✅ Build completed successfully!');
-    console.log('\nThe ts-sdk has been updated with the latest WASM build.');
+    console.log('\nThe ts-sdk artifacts have been copied to ./ts-sdk');
     console.log('You can now run your regular build process.');
     
   } catch (error) {
