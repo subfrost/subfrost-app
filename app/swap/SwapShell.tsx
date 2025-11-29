@@ -737,7 +737,7 @@ export default function SwapShell() {
             <button
               type="button"
               onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-white/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring ${selectedTab !== 'lp' ? 'invisible' : ''}`}
+              className={`flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-white/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md focus:outline-none ${selectedTab !== 'lp' ? 'invisible' : ''}`}
               title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -137,30 +137,30 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setMarketFilter('all')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all ${
+            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
               marketFilter === 'all'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-2 border-[color:var(--sf-glass-border)]'
+                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
             }`}
           >
             All
           </button>
           <button
             onClick={() => setMarketFilter('btc')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all ${
+            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
               marketFilter === 'btc'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-2 border-[color:var(--sf-glass-border)]'
+                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
             }`}
           >
             BTC
           </button>
           <button
             onClick={() => setMarketFilter('usd')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all ${
+            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
               marketFilter === 'usd'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-2 border-[color:var(--sf-glass-border)]'
+                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
             }`}
           >
             USD

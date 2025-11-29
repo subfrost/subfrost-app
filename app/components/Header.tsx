@@ -7,7 +7,7 @@
  import { useWallet } from "@/context/WalletContext";
  import { Menu, X } from "lucide-react";
 
- const FallingSnowflakes = memo(function FallingSnowflakes() {
+ const FallingSnowflakes = memo(function FallingSnowflakes({ white = false }: { white?: boolean }) {
    const snowflakes = useMemo(() => {
      const positions = [20, 40, 60, 80];
      const delays = [0, 1.5, 3, 4.5];
@@ -56,8 +56,9 @@
            style={{
              left: `${flake.left}%`,
              top: '-10px',
+             opacity: 0,
              animation: `snowfall ${flake.duration}s linear ${flake.delay}s infinite`,
-             filter: 'drop-shadow(0 0 2px rgba(255,255,255,0.8)) brightness(1.5)',
+             filter: white ? 'brightness(0) invert(1)' : 'drop-shadow(0 0 2px rgba(255,255,255,0.8)) brightness(1.5)',
            }}
          />
        ))}
@@ -281,11 +282,11 @@
                          onConnectModalOpenChange(true);
                          setMobileMenuOpen(false);
                        }}
-                       className="relative w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[color:var(--sf-text)] hover:bg-white/90 overflow-hidden"
+                       className="relative w-full rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--sf-primary-pressed)] overflow-hidden"
                      >
                        <span className="relative z-10">CONNECT WALLET</span>
                        <div className="absolute inset-0 pointer-events-none">
-                         <FallingSnowflakes />
+                         <FallingSnowflakes white />
                        </div>
                      </button>
                    </div>

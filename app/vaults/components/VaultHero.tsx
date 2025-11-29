@@ -145,6 +145,8 @@ export default function VaultHero({
               badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
             } else if (badge === 'METHANE') {
               badgeClassName = "rounded-full bg-white text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+            } else if (badge === 'ORDI') {
+              badgeClassName = "rounded-full bg-black text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-black";
             } else {
               // Default styling for other badges
               badgeClassName = "rounded-full bg-white/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";

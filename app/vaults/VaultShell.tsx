@@ -7,11 +7,17 @@ import VaultDetail from "./components/VaultDetail";
 
 type SortField = 'estimatedApy' | 'historicalApy' | 'riskLevel' | 'available' | 'deposits';
 type SortDirection = 'asc' | 'desc' | null;
+type VaultFilter = 'all' | 'mains' | 'alts';
+
+// Vault category definitions
+const MAINS_VAULT_IDS = ['dx-btc', 've-usd', 've-zec', 've-eth'];
+const ALTS_VAULT_IDS = ['ve-diesel', 've-ordi', 've-methane'];
 
 export default function VaultShell() {
   const [selectedVault, setSelectedVault] = useState<VaultConfig | null>(null);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [vaultFilter, setVaultFilter] = useState<VaultFilter>('all');
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -32,6 +38,13 @@ export default function VaultShell() {
 
   const filteredVaults = useMemo(() => {
     let vaults = AVAILABLE_VAULTS.filter(vault => vault.id !== 'yv-frbtc');
+    
+    // Apply vault category filter
+    if (vaultFilter === 'mains') {
+      vaults = vaults.filter(vault => MAINS_VAULT_IDS.includes(vault.id));
+    } else if (vaultFilter === 'alts') {
+      vaults = vaults.filter(vault => ALTS_VAULT_IDS.includes(vault.id));
+    }
     
     if (sortField && sortDirection) {
       vaults = [...vaults].sort((a, b) => {
@@ -76,7 +89,7 @@ export default function VaultShell() {
     }
     
     return vaults;
-  }, [sortField, sortDirection]);
+  }, [sortField, sortDirection, vaultFilter]);
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -99,6 +112,40 @@ export default function VaultShell() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-col gap-3">
+          {/* Filter Buttons - mobile only */}
+          <div className="col-span-full flex items-center gap-2 mb-2 md:hidden">
+            <button
+              onClick={() => setVaultFilter('all')}
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+                vaultFilter === 'all'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                  : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setVaultFilter('mains')}
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+                vaultFilter === 'mains'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                  : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
+              }`}
+            >
+              Mains
+            </button>
+            <button
+              onClick={() => setVaultFilter('alts')}
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+                vaultFilter === 'alts'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                  : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
+              }`}
+            >
+              Alts
+            </button>
+          </div>
+
           {/* Sorting Header - only visible on md+ screens */}
           <div className="hidden md:flex items-center gap-2 md:gap-3 lg:gap-4 px-4 pb-1 bg-transparent w-full lg:w-auto lg:mx-auto">
             {/* Empty space for icon - matches VaultListItem icon */}
@@ -106,8 +153,39 @@ export default function VaultShell() {
               <div className="h-12 w-12"></div>
             </div>
 
-            {/* Empty space for vault info - matches VaultListItem info section */}
-            <div className="min-w-[200px] max-w-[300px] lg:max-w-[400px] text-left"></div>
+            {/* Filter Buttons in vault info space */}
+            <div className="min-w-[200px] max-w-[300px] lg:max-w-[400px] text-left flex items-center gap-2">
+              <button
+                onClick={() => setVaultFilter('all')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                  vaultFilter === 'all'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                    : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setVaultFilter('mains')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                  vaultFilter === 'mains'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                    : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
+                }`}
+              >
+                Mains
+              </button>
+              <button
+                onClick={() => setVaultFilter('alts')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                  vaultFilter === 'alts'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
+                    : 'bg-white/60 text-[color:var(--sf-text)] hover:bg-white/80 border-[color:var(--sf-glass-border)]'
+                }`}
+              >
+                Alts
+              </button>
+            </div>
 
             {/* Est. APY */}
             <button
