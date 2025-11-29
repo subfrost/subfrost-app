@@ -33,11 +33,11 @@ export default function WalletDashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background text-white p-6">
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Wallet Dashboard</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Wallet Dashboard</h1>
           <div className="flex items-center gap-3">
             <AddressAvatar address={address} size={32} />
             <span className="text-lg text-white/80">{address}</span>

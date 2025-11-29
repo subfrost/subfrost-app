@@ -450,7 +450,7 @@ export default function ConnectWalletModal() {
           {view === 'show-mnemonic' && (
             <div className="flex flex-col gap-4">
               <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200">
-                Write down these words in order and store them safely. This is the only way to recover your wallet.
+                ⚠️ Write down these words in order and store them safely. This is the only way to recover your wallet.
               </div>
 
               <div className="relative rounded-lg border border-white/10 bg-white/5 p-4">
@@ -458,19 +458,20 @@ export default function ConnectWalletModal() {
                   {generatedMnemonic.split(' ').map((word, i) => (
                     <div key={i} className="flex gap-2">
                       <span className="text-white/40">{i + 1}.</span>
-                      <span>{word}</span>
+                      <span className="text-white">{word}</span>
                     </div>
                   ))}
                 </div>
                 <button
                   onClick={copyMnemonic}
                   className="absolute right-2 top-2 rounded p-1 text-white/40 hover:bg-white/10 hover:text-white/60"
+                  title="Copy to clipboard"
                 >
                   {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
                 </button>
               </div>
 
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-white/80">
                 <input
                   type="checkbox"
                   checked={mnemonicConfirmed}
@@ -487,32 +488,43 @@ export default function ConnectWalletModal() {
               )}
 
               {driveConfigured && (
-                <button
-                  onClick={handleBackupToDrive}
-                  disabled={isLoading}
-                  className="w-full rounded-lg border border-blue-500 bg-blue-500/10 py-3 font-medium transition-colors hover:bg-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <Cloud className="animate-pulse" size={18} />
-                      Backing up...
-                    </>
-                  ) : (
-                    <>
-                      <Cloud size={18} />
-                      Backup to Google Drive (Optional)
-                    </>
-                  )}
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={handleBackupToDrive}
+                    disabled={isLoading}
+                    className="w-full rounded-lg border border-blue-500 bg-blue-500/10 py-3 font-medium transition-colors hover:bg-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Cloud className="animate-pulse" size={18} />
+                        Backing up...
+                      </>
+                    ) : (
+                      <>
+                        <Cloud size={18} />
+                        Backup to Google Drive
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleConfirmMnemonic}
+                    disabled={!mnemonicConfirmed}
+                    className="text-sm text-white/60 hover:text-white/80 py-2"
+                  >
+                    Skip backup
+                  </button>
+                </div>
               )}
 
-              <button
-                onClick={handleConfirmMnemonic}
-                disabled={!mnemonicConfirmed}
-                className="rounded-lg bg-blue-600 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-50"
-              >
-                Continue to Wallet
-              </button>
+              {!driveConfigured && (
+                <button
+                  onClick={handleConfirmMnemonic}
+                  disabled={!mnemonicConfirmed}
+                  className="rounded-lg bg-blue-600 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Continue to Wallet
+                </button>
+              )}
             </div>
           )}
 

@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
+import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
 
 // Define Network type locally
 type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
@@ -59,7 +60,9 @@ export default function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <GlobalStore>
         <ModalStore>
-          <WalletProvider network={network}>{children}</WalletProvider>
+          <AlkanesSDKProvider network={network}>
+            <WalletProvider network={network}>{children}</WalletProvider>
+          </AlkanesSDKProvider>
         </ModalStore>
       </GlobalStore>
     </QueryClientProvider>
