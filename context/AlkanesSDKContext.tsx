@@ -40,16 +40,16 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
           mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
           testnet: 'https://testnet.subfrost.io/v4/subfrost',
           signet: 'https://signet.subfrost.io/v4/subfrost',
-          regtest: 'http://localhost:18888',
-          oylnet: 'https://oylnet.subfrost.io/v4/subfrost',
+          regtest: 'https://regtest.subfrost.io/v4/subfrost',  // Subfrost Regtest
+          oylnet: 'http://localhost:18888',  // Local Regtest
         };
 
         const dataApiUrls: Record<Network, string> = {
           mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
           testnet: 'https://testnet.subfrost.io/v4/subfrost',
           signet: 'https://signet.subfrost.io/v4/subfrost',
-          regtest: 'http://localhost:3000',
-          oylnet: 'https://oylnet.subfrost.io/v4/subfrost',
+          regtest: 'https://regtest.subfrost.io/v4/subfrost',  // Subfrost Regtest
+          oylnet: 'http://localhost:18888',  // Local Regtest
         };
 
         const networkConfig = NetworkMap[network];
