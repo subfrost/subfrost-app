@@ -7,6 +7,17 @@ export function get_alkane_bytecode(network: string, block: number, tx: number, 
  * Asynchronously encrypts data using the Web Crypto API.
  */
 export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
+export interface PoolWithDetails {
+    pool_id_block: number;
+    pool_id_tx: number;
+    details: PoolDetails | null;
+}
+
+export interface BatchPoolsResponse {
+    pool_count: number;
+    pools: PoolWithDetails[];
+}
+
 /**
  * Represents the entire JSON keystore, compatible with wasm-bindgen.
  */
@@ -104,6 +115,38 @@ export class WebProvider {
    * Execute an alkanes smart contract
    */
   alkanesExecute(params_json: string): Promise<any>;
+  /**
+   * Resume execution after user confirmation (for simple transactions)
+   */
+  alkanesResumeExecution(state_json: string, params_json: string): Promise<any>;
+  /**
+   * Resume execution after commit transaction confirmation
+   */
+  alkanesResumeCommitExecution(state_json: string): Promise<any>;
+  /**
+   * Resume execution after reveal transaction confirmation
+   */
+  alkanesResumeRevealExecution(state_json: string): Promise<any>;
+  /**
+   * Simulate an alkanes contract call (read-only)
+   */
+  alkanesSimulate(contract_id: string, context_json: string, block_tag?: string | null): Promise<any>;
+  /**
+   * Get alkanes contract balance for an address
+   */
+  alkanesBalance(address?: string | null): Promise<any>;
+  /**
+   * Get alkanes contract bytecode
+   */
+  alkanesBytecode(alkane_id: string, block_tag?: string | null): Promise<any>;
+  /**
+   * Get all pools with details from an AMM factory (parallel optimized for browser)
+   */
+  alkanesGetAllPoolsWithDetails(factory_id: string, chunk_size?: number | null, max_concurrent?: number | null): Promise<any>;
+  /**
+   * Get all pools from a factory (lightweight, IDs only)
+   */
+  alkanesGetAllPools(factory_id: string): Promise<any>;
   alkanesTrace(outpoint: string): Promise<any>;
   alkanesByAddress(address: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;
   alkanesByOutpoint(outpoint: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;

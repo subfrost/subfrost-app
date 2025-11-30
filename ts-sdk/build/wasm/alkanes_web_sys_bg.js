@@ -635,6 +635,108 @@ export class WebProvider {
         return ret;
     }
     /**
+     * Resume execution after user confirmation (for simple transactions)
+     * @param {string} state_json
+     * @param {string} params_json
+     * @returns {Promise<any>}
+     */
+    alkanesResumeExecution(state_json, params_json) {
+        const ptr0 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesResumeExecution(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret;
+    }
+    /**
+     * Resume execution after commit transaction confirmation
+     * @param {string} state_json
+     * @returns {Promise<any>}
+     */
+    alkanesResumeCommitExecution(state_json) {
+        const ptr0 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesResumeCommitExecution(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Resume execution after reveal transaction confirmation
+     * @param {string} state_json
+     * @returns {Promise<any>}
+     */
+    alkanesResumeRevealExecution(state_json) {
+        const ptr0 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesResumeRevealExecution(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Simulate an alkanes contract call (read-only)
+     * @param {string} contract_id
+     * @param {string} context_json
+     * @param {string | null} [block_tag]
+     * @returns {Promise<any>}
+     */
+    alkanesSimulate(contract_id, context_json, block_tag) {
+        const ptr0 = passStringToWasm0(contract_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(context_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        var ptr2 = isLikeNone(block_tag) ? 0 : passStringToWasm0(block_tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len2 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesSimulate(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
+        return ret;
+    }
+    /**
+     * Get alkanes contract balance for an address
+     * @param {string | null} [address]
+     * @returns {Promise<any>}
+     */
+    alkanesBalance(address) {
+        var ptr0 = isLikeNone(address) ? 0 : passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesBalance(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get alkanes contract bytecode
+     * @param {string} alkane_id
+     * @param {string | null} [block_tag]
+     * @returns {Promise<any>}
+     */
+    alkanesBytecode(alkane_id, block_tag) {
+        const ptr0 = passStringToWasm0(alkane_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(block_tag) ? 0 : passStringToWasm0(block_tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesBytecode(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret;
+    }
+    /**
+     * Get all pools with details from an AMM factory (parallel optimized for browser)
+     * @param {string} factory_id
+     * @param {number | null} [chunk_size]
+     * @param {number | null} [max_concurrent]
+     * @returns {Promise<any>}
+     */
+    alkanesGetAllPoolsWithDetails(factory_id, chunk_size, max_concurrent) {
+        const ptr0 = passStringToWasm0(factory_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesGetAllPoolsWithDetails(this.__wbg_ptr, ptr0, len0, !isLikeNone(chunk_size), isLikeNone(chunk_size) ? 0 : chunk_size, !isLikeNone(max_concurrent), isLikeNone(max_concurrent) ? 0 : max_concurrent);
+        return ret;
+    }
+    /**
+     * Get all pools from a factory (lightweight, IDs only)
+     * @param {string} factory_id
+     * @returns {Promise<any>}
+     */
+    alkanesGetAllPools(factory_id) {
+        const ptr0 = passStringToWasm0(factory_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesGetAllPools(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
      * @param {string} outpoint
      * @returns {Promise<any>}
      */
@@ -1358,6 +1460,12 @@ export function __wbindgen_cast_9ae0607507abb057(arg0) {
     return ret;
 };
 
+export function __wbindgen_cast_af4c559eab0c66a3(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 1963, function: Function { arguments: [Externref], shim_idx: 1964, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
+    return ret;
+};
+
 export function __wbindgen_cast_cb9088102bce6b30(arg0, arg1) {
     // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
     const ret = getArrayU8FromWasm0(arg0, arg1);
@@ -1367,12 +1475,6 @@ export function __wbindgen_cast_cb9088102bce6b30(arg0, arg1) {
 export function __wbindgen_cast_d6cd19b81560fd6e(arg0) {
     // Cast intrinsic for `F64 -> Externref`.
     const ret = arg0;
-    return ret;
-};
-
-export function __wbindgen_cast_daf7e97ed012313a(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 1909, function: Function { arguments: [Externref], shim_idx: 1910, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
     return ret;
 };
 

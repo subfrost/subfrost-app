@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 
-type NetworkType = 'mainnet' | 'signet' | 'subfrost' | 'regtest' | 'custom';
+type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'oylnet' | 'custom';
 
 interface DerivationConfig {
   accountIndex: number;
@@ -62,7 +62,6 @@ export default function WalletSettings() {
   }, [wallet, taprootConfig, segwitConfig]);
 
   const handleSave = () => {
-    // TODO: Implement actual settings save
     console.log('Saving settings:', {
       network,
       customDataApiUrl,
@@ -72,6 +71,13 @@ export default function WalletSettings() {
       taprootConfig,
       segwitConfig,
     });
+    
+    // Save network to localStorage
+    localStorage.setItem('subfrost_selected_network', network);
+    
+    // Dispatch custom event to notify other components (same tab)
+    window.dispatchEvent(new CustomEvent('network-changed', { detail: network }));
+    
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -99,13 +105,13 @@ export default function WalletSettings() {
             <select
               value={network}
               onChange={(e) => setNetwork(e.target.value as NetworkType)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-blue-500"
             >
-              <option value="mainnet">Mainnet</option>
-              <option value="signet">Signet</option>
-              <option value="subfrost">Subfrost Network</option>
-              <option value="regtest">Regtest</option>
-              <option value="custom">Custom</option>
+              <option value="mainnet" className="bg-gray-900 text-white">Mainnet</option>
+              <option value="signet" className="bg-gray-900 text-white">Signet</option>
+              <option value="regtest" className="bg-gray-900 text-white">Subfrost Regtest</option>
+              <option value="oylnet" className="bg-gray-900 text-white">Local Regtest</option>
+              <option value="custom" className="bg-gray-900 text-white">Custom</option>
             </select>
           </div>
 

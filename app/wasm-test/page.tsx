@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react';
 
+// Disable static generation for this page since it uses WASM
+export const dynamic = 'force-dynamic';
+
 export default function WasmTestPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [wasmModule, setWasmModule] = useState<any>(null);

@@ -8,14 +8,24 @@ import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
 import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
+import { ExchangeProvider } from '@/context/ExchangeContext';
 
 // Define Network type locally
 type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
 
-// Detect network once at module level to avoid re-detection on re-renders
+const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
+
+// Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'mainnet';
 
+  // First check localStorage for user selection
+  const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest'].includes(stored)) {
+    return stored as Network;
+  }
+
+  // Then check hostname
   const host = window.location.host;
   if (!process.env.NEXT_PUBLIC_NETWORK) {
     if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
@@ -30,6 +40,7 @@ function detectNetwork(): Network {
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
+  const [network, setNetwork] = useState<Network>('mainnet');
 
   // Memoize QueryClient to prevent recreation on re-renders
   const queryClient = useMemo(
@@ -47,8 +58,36 @@ export default function Providers({ children }: { children: ReactNode }) {
     []
   );
 
-  // Memoize network detection - only runs once
-  const network = useMemo(() => detectNetwork(), []);
+  // Initialize network on mount and listen for storage changes
+  useEffect(() => {
+    const initialNetwork = detectNetwork();
+    setNetwork(initialNetwork);
+
+    // Listen for network changes from other tabs/components
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === NETWORK_STORAGE_KEY && e.newValue) {
+        setNetwork(e.newValue as Network);
+        // Invalidate all queries to refetch with new network
+        queryClient.invalidateQueries();
+      }
+    };
+
+    // Listen for custom events from same tab
+    const handleNetworkChange = (e: CustomEvent) => {
+      const newNetwork = e.detail as Network;
+      setNetwork(newNetwork);
+      // Invalidate all queries to refetch with new network
+      queryClient.invalidateQueries();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('network-changed' as any, handleNetworkChange as any);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('network-changed' as any, handleNetworkChange as any);
+    };
+  }, [queryClient]);
 
   useEffect(() => {
     setMounted(true);
@@ -61,7 +100,11 @@ export default function Providers({ children }: { children: ReactNode }) {
       <GlobalStore>
         <ModalStore>
           <AlkanesSDKProvider network={network}>
-            <WalletProvider network={network}>{children}</WalletProvider>
+            <WalletProvider network={network}>
+              <ExchangeProvider>
+                {children}
+              </ExchangeProvider>
+            </WalletProvider>
           </AlkanesSDKProvider>
         </ModalStore>
       </GlobalStore>

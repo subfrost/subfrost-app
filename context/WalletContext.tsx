@@ -305,15 +305,26 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       return 0;
     }
 
-    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
-    const api = await getAlkanesProvider(network);
-
     try {
-      const result = await api.getAddressUtxos(
-        account.nativeSegwit.address,
-        account.spendStrategy
-      );
-      return result.spendableTotalBalance;
+      const { getNetworkUrls } = await import('@/utils/alkanesProvider');
+      const networkUrls = getNetworkUrls(network);
+      
+      // Dynamic import WASM to avoid SSR issues
+      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
+      const provider = new WebProvider(networkUrls.rpc, null);
+      
+      // Get enriched balances which includes spendable/assets/pending categorization
+      const enriched = await provider.getEnrichedBalances(account.nativeSegwit.address, '1');
+      
+      // enriched.spendable is an array of UTXOs
+      // Calculate total balance from spendable UTXOs
+      if (enriched && enriched.spendable && Array.isArray(enriched.spendable)) {
+        return enriched.spendable.reduce((total: number, utxo: any) => {
+          return total + (utxo.value || 0);
+        }, 0);
+      }
+      
+      return 0;
     } catch (error) {
       console.error('[WalletContext] Error fetching balance:', error);
       return 0;

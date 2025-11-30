@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import * as AlkanesWasm from '@/ts-sdk/build/wasm/alkanes_web_sys';
 
 export interface TransactionInput {
   txid: string;
@@ -61,6 +60,9 @@ export function useTransactionHistory(address?: string) {
         if (!sandshrewUrl) {
           throw new Error('Provider URL not configured');
         }
+        
+        // Dynamic import to avoid WASM loading at SSR time
+        const AlkanesWasm = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
         
         // Create WASM WebProvider instance
         const wasmProvider = new AlkanesWasm.WebProvider(sandshrewUrl, esploraUrl);

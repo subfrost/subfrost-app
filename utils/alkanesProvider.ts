@@ -6,26 +6,27 @@
 import type { Network } from '@/utils/constants';
 
 // Backend URL mapping for different networks
+// ALL networks use /v4/subfrost as the unified RPC endpoint (Sandshrew/Metashrew/Esplora combined)
 const SubfrostUrlMap: Record<Network, { rpc: string; api: string }> = {
   mainnet: {
-    rpc: 'https://mainnet.subfrost.io/v4/jsonrpc',
-    api: 'https://mainnet.subfrost.io/v4/api',
+    rpc: 'https://mainnet.subfrost.io/v4/subfrost',
+    api: 'https://mainnet.subfrost.io/v4/subfrost',
   },
   testnet: {
-    rpc: 'https://testnet.subfrost.io/v4/jsonrpc',
-    api: 'https://testnet.subfrost.io/v4/api',
+    rpc: 'https://testnet.subfrost.io/v4/subfrost',
+    api: 'https://testnet.subfrost.io/v4/subfrost',
   },
   signet: {
-    rpc: 'https://signet.subfrost.io/v4/jsonrpc',
-    api: 'https://signet.subfrost.io/v4/api',
+    rpc: 'https://signet.subfrost.io/v4/subfrost',
+    api: 'https://signet.subfrost.io/v4/subfrost',
   },
   oylnet: {
     rpc: 'http://localhost:18888',
-    api: 'http://localhost:50010',
+    api: 'http://localhost:18888',
   },
   regtest: {
-    rpc: 'http://localhost:18888',
-    api: 'http://localhost:50010',
+    rpc: 'https://regtest.subfrost.io/v4/subfrost',
+    api: 'https://regtest.subfrost.io/v4/subfrost',
   },
 };
 

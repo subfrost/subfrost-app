@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import * as AlkanesWasm from '@/ts-sdk/build/wasm/alkanes_web_sys';
 
 export interface AlkaneAsset {
   alkaneId: string;
@@ -114,6 +113,9 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       const esploraUrl = (provider as any).esplora?.baseUrl;
       
       console.log('[useEnrichedWalletData] Creating WebProvider with:', { sandshrewUrl, esploraUrl });
+      
+      // Dynamic import to avoid WASM loading at SSR time
+      const AlkanesWasm = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
       
       // Create WASM WebProvider instance
       const wasmProvider = new AlkanesWasm.WebProvider(sandshrewUrl, esploraUrl);
