@@ -1,12 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
-export function analyze_psbt(psbt_base64: string): string;
-export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
-export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 /**
  * Asynchronously encrypts data using the Web Crypto API.
  */
 export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
+export function analyze_psbt(psbt_base64: string): string;
+export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
+export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 export interface PoolWithDetails {
     pool_id_block: number;
     pool_id_tx: number;
@@ -73,9 +73,29 @@ export class WebProvider {
   free(): void;
   [Symbol.dispose](): void;
   /**
-   * Create a new WebProvider with given URLs
+   * Create a new WebProvider from provider name and optional config overrides
+   * 
+   * # Arguments
+   * * `provider` - Network provider: "mainnet", "signet", "subfrost-regtest", "regtest"
+   * * `config` - Optional JS object with RpcConfig fields to override defaults
+   *
+   * # Example (JavaScript)
+   * ```js
+   * // Simple - uses all defaults for signet
+   * const provider = new WebProvider("signet");
+   * 
+   * // With overrides
+   * const provider = new WebProvider("signet", {
+   *   bitcoin_rpc_url: "https://custom-rpc.example.com",
+   *   esplora_url: "https://custom-esplora.example.com"
+   * });
+   * ```
    */
-  constructor(sandshrew_rpc_url: string, esplora_rpc_url?: string | null);
+  constructor(provider: string, config?: any | null);
+  sandshrew_rpc_url(): string;
+  esplora_rpc_url(): string | undefined;
+  bitcoin_rpc_url(): string;
+  brc20_prog_rpc_url(): string;
   /**
    * Get enriched wallet balances using the balances.lua script
    * 
@@ -155,9 +175,50 @@ export class WebProvider {
   esploraGetAddressInfo(address: string): Promise<any>;
   esploraGetBlocksTipHeight(): Promise<any>;
   esploraGetBlocksTipHash(): Promise<any>;
+  esploraGetAddressUtxo(address: string): Promise<any>;
+  esploraGetAddressTxs(address: string): Promise<any>;
+  esploraBroadcastTx(tx_hex: string): Promise<any>;
+  esploraGetTxHex(txid: string): Promise<any>;
   bitcoindGetBlockCount(): Promise<any>;
   bitcoindSendRawTransaction(tx_hex: string): Promise<any>;
+  bitcoindGenerateToAddress(nblocks: number, address: string): Promise<any>;
+  bitcoindGenerateFuture(address: string): Promise<any>;
+  bitcoindGetBlockchainInfo(): Promise<any>;
+  bitcoindGetNetworkInfo(): Promise<any>;
+  bitcoindGetRawTransaction(txid: string, block_hash?: string | null): Promise<any>;
+  bitcoindGetBlock(hash: string, raw: boolean): Promise<any>;
+  bitcoindGetBlockHash(height: number): Promise<any>;
+  bitcoindGetBlockHeader(hash: string): Promise<any>;
+  bitcoindGetBlockStats(hash: string): Promise<any>;
+  bitcoindGetMempoolInfo(): Promise<any>;
+  bitcoindEstimateSmartFee(target: number): Promise<any>;
+  bitcoindGetChainTips(): Promise<any>;
+  alkanesView(contract_id: string, view_fn: string, params?: Uint8Array | null, block_tag?: string | null): Promise<any>;
+  alkanesInspect(target: string, config: any): Promise<any>;
+  alkanesPendingUnwraps(block_tag?: string | null): Promise<any>;
+  brc20progCall(to: string, data: string, block?: string | null): Promise<any>;
+  brc20progGetBalance(address: string, block?: string | null): Promise<any>;
+  brc20progGetCode(address: string): Promise<any>;
+  brc20progGetTransactionCount(address: string, block?: string | null): Promise<any>;
+  brc20progBlockNumber(): Promise<any>;
+  brc20progChainId(): Promise<any>;
+  brc20progGetTransactionReceipt(tx_hash: string): Promise<any>;
+  brc20progGetTransactionByHash(tx_hash: string): Promise<any>;
+  brc20progGetBlockByNumber(block: string, full_tx: boolean): Promise<any>;
+  brc20progEstimateGas(to: string, data: string, block?: string | null): Promise<any>;
+  brc20progGetLogs(filter: any): Promise<any>;
+  brc20progWeb3ClientVersion(): Promise<any>;
   metashrewHeight(): Promise<any>;
   metashrewStateRoot(height?: number | null): Promise<any>;
+  metashrewGetBlockHash(height: number): Promise<any>;
+  luaEvalScript(script: string): Promise<any>;
+  ordList(outpoint: string): Promise<any>;
+  ordFind(sat: number): Promise<any>;
+  runestoneDecodeTx(txid: string): Promise<any>;
+  runestoneAnalyzeTx(txid: string): Promise<any>;
+  protorunesDecodeTx(txid: string): Promise<any>;
+  protorunesAnalyzeTx(txid: string): Promise<any>;
   walletCreatePsbt(params_json: string): Promise<any>;
+  walletExport(): Promise<any>;
+  walletBackup(): Promise<any>;
 }

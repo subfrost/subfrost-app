@@ -9,6 +9,7 @@ import BalancesPanel from './components/BalancesPanel';
 import UTXOManagement from './components/UTXOManagement';
 import TransactionHistory from './components/TransactionHistory';
 import WalletSettings from './components/WalletSettings';
+import RegtestControls from './components/RegtestControls';
 
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
@@ -74,6 +75,9 @@ export default function WalletDashboardPage() {
           {activeTab === 'transactions' && <TransactionHistory />}
           {activeTab === 'settings' && <WalletSettings />}
         </div>
+
+        {/* Regtest Controls - Only show for regtest networks */}
+        <RegtestControls />
       </div>
     </div>
   );
