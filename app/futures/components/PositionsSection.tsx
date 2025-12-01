@@ -99,7 +99,7 @@ export default function PositionsSection() {
                   const rows = [
                     <tr
                       key={position.contract}
-                      className="border-b border-[color:var(--sf-glass-border)] hover:bg-white/10 transition-colors cursor-pointer"
+                      className="border-b border-[color:var(--sf-glass-border)] hover:bg-[color:var(--sf-primary)]/10 transition-colors cursor-pointer"
                       onClick={() => toggleRow(position.contract)}
                     >
                       <td className="px-6 py-4">
@@ -151,7 +151,7 @@ export default function PositionsSection() {
 
                   if (isExpanded) {
                     rows.push(
-                      <tr key={`${position.contract}-details`} className="bg-white/5">
+                      <tr key={`${position.contract}-details`} className="bg-[color:var(--sf-primary)]/5">
                         <td colSpan={6} className="px-6 py-4">
                           <div className="space-y-3">
                             <div className="text-sm text-[color:var(--sf-text)]/80">

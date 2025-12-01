@@ -37,18 +37,18 @@ const MyWalletSwaps = lazy(() => import("./components/MyWalletSwaps"));
 // Loading skeleton for swap form
 const SwapFormSkeleton = () => (
   <div className="animate-pulse space-y-4">
-    <div className="h-24 bg-white/10 rounded-xl" />
-    <div className="h-10 w-10 mx-auto bg-white/10 rounded-full" />
-    <div className="h-24 bg-white/10 rounded-xl" />
-    <div className="h-14 bg-white/10 rounded-xl" />
+    <div className="h-24 bg-[color:var(--sf-primary)]/10 rounded-xl" />
+    <div className="h-10 w-10 mx-auto bg-[color:var(--sf-primary)]/10 rounded-full" />
+    <div className="h-24 bg-[color:var(--sf-primary)]/10 rounded-xl" />
+    <div className="h-14 bg-[color:var(--sf-primary)]/10 rounded-xl" />
   </div>
 );
 
 // Loading skeleton for markets grid
 const MarketsSkeleton = () => (
   <div className="animate-pulse space-y-3">
-    <div className="h-20 bg-white/10 rounded-xl" />
-    <div className="h-32 bg-white/10 rounded-xl" />
+    <div className="h-20 bg-[color:var(--sf-primary)]/10 rounded-xl" />
+    <div className="h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />
   </div>
 );
 
@@ -205,7 +205,7 @@ export default function SwapShell() {
     // Build the full list of options (always selectable)
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
-    
+
     // Always add BTC first (unless FROM token is BTC)
     if (!fromToken || fromToken.id !== 'btc') {
       opts.push({
@@ -216,7 +216,18 @@ export default function SwapShell() {
       });
       seen.add('btc');
     }
-    
+
+    // Always add frBTC (for wrap/unwrap functionality) if FROM is BTC
+    if (fromToken?.id === 'btc' && !seen.has(FRBTC_ALKANE_ID)) {
+      opts.push({
+        id: FRBTC_ALKANE_ID,
+        symbol: 'frBTC',
+        name: 'frBTC',
+        isAvailable: true
+      });
+      seen.add(FRBTC_ALKANE_ID);
+    }
+
     // Add all allowed tokens from pool map
     if (fromToken) {
       Array.from(poolTokenMap.values()).forEach((poolToken) => {
@@ -240,9 +251,9 @@ export default function SwapShell() {
         }
       });
     }
-    
+
     return opts;
-  }, [fromToken, allowedTokenSymbols, poolTokenMap]);
+  }, [fromToken, allowedTokenSymbols, poolTokenMap, FRBTC_ALKANE_ID]);
 
   // Balances
   const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
@@ -315,10 +326,26 @@ export default function SwapShell() {
   const isUnwrapPair = useMemo(() => fromToken?.id === FRBTC_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
 
   const handleSwap = async () => {
-    if (!fromToken || !toToken) return;
+    console.log('[SwapShell] handleSwap called', {
+      fromToken: fromToken?.id,
+      fromSymbol: fromToken?.symbol,
+      toToken: toToken?.id,
+      toSymbol: toToken?.symbol,
+      isWrapPair,
+      isUnwrapPair,
+      FRBTC_ALKANE_ID,
+      fromAmount,
+      toAmount,
+      direction,
+    });
+    if (!fromToken || !toToken) {
+      console.log('[SwapShell] Missing fromToken or toToken, returning');
+      return;
+    }
 
     // Wrap/Unwrap direct pairs
     if (isWrapPair) {
+      console.log('[SwapShell] isWrapPair detected, calling wrapMutation');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
@@ -736,7 +763,7 @@ export default function SwapShell() {
               <button
                 type="button"
                 onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
-                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-white/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
                 title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -750,7 +777,7 @@ export default function SwapShell() {
             )}
           </div>
 
-          <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl flex-shrink-0">
+          <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(0,0,0,0.18)] backdrop-blur-xl flex-shrink-0">
           {isBalancesLoading && <LoadingOverlay />}
           <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (
@@ -850,7 +877,7 @@ export default function SwapShell() {
 
           {/* My Wallet Swaps - under swap modal */}
           <div className="mt-8">
-            <Suspense fallback={<div className="animate-pulse h-32 bg-white/10 rounded-xl" />}>
+            <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
               <MyWalletSwaps />
             </Suspense>
           </div>

@@ -77,7 +77,7 @@ export default function BalancesPanel() {
           <button
             onClick={refresh}
             disabled={isLoading}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white/80 disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-white/60 hover:text-white/80 disabled:opacity-50"
             title="Refresh balances"
           >
             <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
@@ -86,7 +86,7 @@ export default function BalancesPanel() {
 
         {/* Address Breakdown */}
         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
-          <div className="rounded-lg bg-white/5 p-3">
+          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-white/60 mb-1">Native SegWit (P2WPKH)</div>
             <div className="font-mono text-sm text-white">{formatBTC(balances.bitcoin.p2wpkh)} BTC</div>
             {account?.nativeSegwit && (
@@ -95,7 +95,7 @@ export default function BalancesPanel() {
               </div>
             )}
           </div>
-          <div className="rounded-lg bg-white/5 p-3">
+          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-white/60 mb-1">Taproot (P2TR)</div>
             <div className="font-mono text-sm text-white">{formatBTC(balances.bitcoin.p2tr)} BTC</div>
             {account?.taproot && (
@@ -121,7 +121,7 @@ export default function BalancesPanel() {
             {balances.alkanes.map((alkane) => (
               <div
                 key={alkane.alkaneId}
-                className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-white/10 hover:bg-[color:var(--sf-primary)]/10 transition-colors"
               >
                 <div>
                   <div className="font-medium text-white">{alkane.name}</div>

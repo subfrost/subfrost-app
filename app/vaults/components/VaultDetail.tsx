@@ -151,7 +151,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           <BoostSection vault={currentVault} />
 
           {/* Right Column: Info Tabs - starts in column 2 after Boosted APY */}
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm h-fit md:col-start-2 md:row-start-4">
+          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit md:col-start-2 md:row-start-4">
         <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
           {['about', 'strategies', 'info', 'risk'].map((tab) => (
             <button
@@ -202,7 +202,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                   Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                 </div>
                 <div className="text-xs text-[color:var(--sf-text)]/70">
-                  Formula: <code className="bg-white px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                  Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
                 </div>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
@@ -296,7 +296,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         </div>
 
         {/* Info Tabs Section - Mobile/Tablet Only */}
-        <div className="md:hidden rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
+        <div className="md:hidden rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
           <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
             {['about', 'strategies', 'info', 'risk'].map((tab) => (
               <button
@@ -347,7 +347,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                     Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                   </div>
                   <div className="text-xs text-[color:var(--sf-text)]/70">
-                    Formula: <code className="bg-white px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                    Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
                   </div>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">

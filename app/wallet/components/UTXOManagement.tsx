@@ -80,7 +80,7 @@ export default function UTXOManagement() {
         <button
           onClick={refresh}
           disabled={isLoading}
-          className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white/80 disabled:opacity-50"
+          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-white/60 hover:text-white/80 disabled:opacity-50"
           title="Refresh UTXOs"
         >
           <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
@@ -108,7 +108,7 @@ export default function UTXOManagement() {
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 filter === f.id
                   ? 'bg-blue-600 text-white'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'
+                  : 'bg-[color:var(--sf-primary)]/5 text-white/60 hover:bg-[color:var(--sf-primary)]/10 hover:text-white/80'
               }`}
             >
               {f.label}
@@ -147,11 +147,11 @@ export default function UTXOManagement() {
             return (
               <div
                 key={utxoKey}
-                className="rounded-xl border border-white/10 bg-white/5 overflow-hidden"
+                className="rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 overflow-hidden"
               >
                 <button
                   onClick={() => toggleUtxo(utxoKey)}
-                  className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+                  className="w-full p-4 flex items-center justify-between hover:bg-[color:var(--sf-primary)]/5 transition-colors"
                 >
                   <div className="flex items-center gap-4">
                     <Box size={20} className="text-blue-400" />
@@ -219,7 +219,7 @@ export default function UTXOManagement() {
                         <div className="text-sm font-medium text-white/80 mb-2">Alkanes:</div>
                         <div className="space-y-1">
                           {Object.entries(utxo.alkanes).map(([alkaneId, alkane]) => (
-                            <div key={alkaneId} className="flex justify-between text-sm p-2 rounded bg-white/5">
+                            <div key={alkaneId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
                               <div>
                                 <div className="font-medium text-white">{alkane.symbol || alkane.name}</div>
                                 <div className="text-xs text-white/40">{alkaneId}</div>
@@ -237,7 +237,7 @@ export default function UTXOManagement() {
                         <div className="text-sm font-medium text-white/80 mb-2">Runes:</div>
                         <div className="space-y-1">
                           {Object.entries(utxo.runes).map(([runeId, rune]) => (
-                            <div key={runeId} className="flex justify-between text-sm p-2 rounded bg-white/5">
+                            <div key={runeId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
                               <span className="text-white">{rune.symbol}</span>
                               <span className="font-mono text-white">{rune.amount}</span>
                             </div>
@@ -252,7 +252,7 @@ export default function UTXOManagement() {
                         <div className="text-sm font-medium text-white/80 mb-2">Inscriptions:</div>
                         <div className="space-y-1">
                           {utxo.inscriptions.map((inscription, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-sm p-2 rounded bg-white/5">
+                            <div key={idx} className="flex justify-between items-center text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
                               <span className="font-mono text-xs">{inscription.id}</span>
                               <span className="text-white/60">#{inscription.number}</span>
                             </div>
