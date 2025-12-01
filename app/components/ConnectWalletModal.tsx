@@ -282,7 +282,7 @@ export default function ConnectWalletModal() {
                 {hasExistingKeystore && (
                   <button
                     onClick={() => setView('unlock')}
-                    className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 mb-2 transition-colors hover:bg-white/10"
+                    className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-4 mb-2 transition-colors hover:bg-[color:var(--sf-primary)]/10"
                   >
                     <div className="flex items-center gap-3">
                       <Lock size={24} className="text-blue-400" />
@@ -297,7 +297,7 @@ export default function ConnectWalletModal() {
 
                 <button
                   onClick={() => setView('create')}
-                  className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 mb-2 transition-colors hover:bg-white/10"
+                  className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-4 mb-2 transition-colors hover:bg-[color:var(--sf-primary)]/10"
                 >
                   <div className="flex items-center gap-3">
                     <Plus size={24} className="text-green-400" />
@@ -311,7 +311,7 @@ export default function ConnectWalletModal() {
 
                 <button
                   onClick={() => setView('restore-mnemonic')}
-                  className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 mb-2 transition-colors hover:bg-white/10"
+                  className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-4 mb-2 transition-colors hover:bg-[color:var(--sf-primary)]/10"
                 >
                   <div className="flex items-center gap-3">
                     <Key size={24} className="text-yellow-400" />
@@ -326,7 +326,7 @@ export default function ConnectWalletModal() {
                 {driveConfigured && (
                   <button
                     onClick={() => setView('restore-drive-picker')}
-                    className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 transition-colors hover:bg-white/10"
+                    className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-4 transition-colors hover:bg-[color:var(--sf-primary)]/10"
                   >
                     <div className="flex items-center gap-3">
                       <Cloud size={24} className="text-blue-400" />
@@ -345,7 +345,7 @@ export default function ConnectWalletModal() {
                 <div className="mb-2 text-sm font-medium text-white/60">Browser Extension</div>
                 <button
                   onClick={() => setView('browser-extension')}
-                  className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 transition-colors hover:bg-white/10"
+                  className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-4 transition-colors hover:bg-[color:var(--sf-primary)]/10"
                 >
                   <div className="flex items-center gap-3">
                     <Download size={24} className="text-purple-400" />
@@ -382,7 +382,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
                     placeholder="Enter password"
                   />
                   <button
@@ -401,7 +401,7 @@ export default function ConnectWalletModal() {
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 outline-none focus:border-blue-500"
                   placeholder="Confirm password"
                 />
               </div>
@@ -418,7 +418,7 @@ export default function ConnectWalletModal() {
                     type="text"
                     value={passwordHintInput}
                     onChange={(e) => setPasswordHintInput(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 outline-none focus:border-blue-500"
                     placeholder="e.g., My cat's name + birth year"
                   />
                   <div className="mt-1 text-xs text-gray-500">
@@ -432,7 +432,7 @@ export default function ConnectWalletModal() {
               <div className="flex gap-3">
                 <button
                   onClick={() => { setView('select'); resetForm(); }}
-                  className="flex-1 rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-white/5"
+                  className="flex-1 rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
                 >
                   Back
                 </button>
@@ -453,7 +453,7 @@ export default function ConnectWalletModal() {
                 ⚠️ Write down these words in order and store them safely. This is the only way to recover your wallet.
               </div>
 
-              <div className="relative rounded-lg border border-white/10 bg-white/5 p-4">
+              <div className="relative rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 p-4">
                 <div className="grid grid-cols-3 gap-2 font-mono text-sm">
                   {generatedMnemonic.split(' ').map((word, i) => (
                     <div key={i} className="flex gap-2">
@@ -464,7 +464,7 @@ export default function ConnectWalletModal() {
                 </div>
                 <button
                   onClick={copyMnemonic}
-                  className="absolute right-2 top-2 rounded p-1 text-white/40 hover:bg-white/10 hover:text-white/60"
+                  className="absolute right-2 top-2 rounded p-1 text-white/40 hover:bg-[color:var(--sf-primary)]/10 hover:text-white/60"
                   title="Copy to clipboard"
                 >
                   {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
@@ -535,7 +535,7 @@ export default function ConnectWalletModal() {
                 <textarea
                   value={mnemonic}
                   onChange={(e) => setMnemonic(e.target.value)}
-                  className="h-24 w-full resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-3 outline-none focus:border-blue-500"
+                  className="h-24 w-full resize-none rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 outline-none focus:border-blue-500"
                   placeholder="Enter your 12 or 24 word recovery phrase"
                 />
               </div>
@@ -547,7 +547,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
                     placeholder="Create a password"
                   />
                   <button
@@ -565,7 +565,7 @@ export default function ConnectWalletModal() {
               <div className="flex gap-3">
                 <button
                   onClick={() => { setView('select'); resetForm(); }}
-                  className="flex-1 rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-white/5"
+                  className="flex-1 rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
                 >
                   Back
                 </button>
@@ -607,7 +607,7 @@ export default function ConnectWalletModal() {
                         }
                       }}
                       disabled={isLoading}
-                      className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 transition-colors hover:bg-white/10 disabled:opacity-50"
+                      className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-4 transition-colors hover:bg-[color:var(--sf-primary)]/10 disabled:opacity-50"
                     >
                       <div className="flex items-center gap-3">
                         <img src={wallet.icon} alt={wallet.name} className="w-8 h-8" />
@@ -634,7 +634,7 @@ export default function ConnectWalletModal() {
                         href={wallet.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors"
+                        className="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-[color:var(--sf-primary)]/5 transition-colors"
                       >
                         <img src={wallet.icon} alt={wallet.name} className="w-6 h-6" />
                         <span className="flex-1 text-left text-sm">{wallet.name}</span>
@@ -649,7 +649,7 @@ export default function ConnectWalletModal() {
 
               <button
                 onClick={() => { setView('select'); resetForm(); }}
-                className="w-full rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-white/5"
+                className="w-full rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
               >
                 Back
               </button>
@@ -686,7 +686,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
                     placeholder="Enter wallet password"
                     onKeyDown={(e) => e.key === 'Enter' && handleRestoreFromDrive()}
                   />
@@ -716,7 +716,7 @@ export default function ConnectWalletModal() {
 
               <button
                 onClick={() => { setView('restore-drive-picker'); resetForm(); }}
-                className="w-full rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-white/5"
+                className="w-full rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
               >
                 Back
               </button>
@@ -732,7 +732,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 pr-10 outline-none focus:border-blue-500"
                     placeholder="Enter your password"
                     onKeyDown={(e) => e.key === 'Enter' && handleUnlockKeystore()}
                   />
@@ -751,7 +751,7 @@ export default function ConnectWalletModal() {
               <div className="flex gap-3">
                 <button
                   onClick={() => { setView('select'); resetForm(); }}
-                  className="flex-1 rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-white/5"
+                  className="flex-1 rounded-lg border border-white/10 py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
                 >
                   Back
                 </button>

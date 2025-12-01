@@ -91,7 +91,7 @@ export default function WalletSettings() {
   return (
     <div className="space-y-6">
       {/* Network Selection */}
-      <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+      <div className="rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-6">
         <div className="flex items-center gap-3 mb-4">
           <Network size={24} className="text-blue-400" />
           <h3 className="text-xl font-bold">Network Configuration</h3>
@@ -105,7 +105,7 @@ export default function WalletSettings() {
             <select
               value={network}
               onChange={(e) => setNetwork(e.target.value as NetworkType)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 text-white outline-none focus:border-blue-500"
             >
               <option value="mainnet" className="bg-gray-900 text-white">Mainnet</option>
               <option value="signet" className="bg-gray-900 text-white">Signet</option>
@@ -126,7 +126,7 @@ export default function WalletSettings() {
                   value={customDataApiUrl}
                   onChange={(e) => setCustomDataApiUrl(e.target.value)}
                   placeholder="https://your-dataapi.com"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -139,7 +139,7 @@ export default function WalletSettings() {
                   value={customSandshrewUrl}
                   onChange={(e) => setCustomSandshrewUrl(e.target.value)}
                   placeholder="https://your-sandshrew-rpc.com"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 outline-none focus:border-blue-500"
+                  className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-4 py-3 outline-none focus:border-blue-500"
                 />
               </div>
             </>
@@ -163,11 +163,11 @@ export default function WalletSettings() {
         ) : (
           <div className="space-y-6">
             {/* Current Addresses Display */}
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <div className="rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 p-4">
               <div className="text-sm font-medium text-white/80 mb-3">Current Active Addresses:</div>
               <div className="space-y-3">
                 {account?.taproot && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
                     <div>
                       <div className="text-xs text-white/60 mb-1">Taproot (P2TR)</div>
                       <div className="font-mono text-sm text-white break-all">{account.taproot.address}</div>
@@ -176,7 +176,7 @@ export default function WalletSettings() {
                   </div>
                 )}
                 {account?.nativeSegwit && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
                     <div>
                       <div className="text-xs text-white/60 mb-1">Native SegWit (P2WPKH)</div>
                       <div className="font-mono text-sm text-white break-all">{account.nativeSegwit.address}</div>
@@ -204,7 +204,7 @@ export default function WalletSettings() {
                     max="2147483647"
                     value={taprootConfig.accountIndex}
                     onChange={(e) => setTaprootConfig({ ...taprootConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -212,7 +212,7 @@ export default function WalletSettings() {
                   <select
                     value={taprootConfig.changeIndex}
                     onChange={(e) => setTaprootConfig({ ...taprootConfig, changeIndex: parseInt(e.target.value) })}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   >
                     <option value="0">External (0)</option>
                     <option value="1">Change (1)</option>
@@ -226,7 +226,7 @@ export default function WalletSettings() {
                     max="2147483647"
                     value={taprootConfig.addressIndex}
                     onChange={(e) => setTaprootConfig({ ...taprootConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -239,7 +239,7 @@ export default function WalletSettings() {
                   </div>
                   <button
                     onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
-                    className="p-2 rounded hover:bg-white/10 transition-colors"
+                    className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-colors"
                     title="Copy address"
                   >
                     {copiedAddress === 'taproot' ? (
@@ -269,7 +269,7 @@ export default function WalletSettings() {
                     max="2147483647"
                     value={segwitConfig.accountIndex}
                     onChange={(e) => setSegwitConfig({ ...segwitConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
@@ -277,7 +277,7 @@ export default function WalletSettings() {
                   <select
                     value={segwitConfig.changeIndex}
                     onChange={(e) => setSegwitConfig({ ...segwitConfig, changeIndex: parseInt(e.target.value) })}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   >
                     <option value="0">External (0)</option>
                     <option value="1">Change (1)</option>
@@ -291,7 +291,7 @@ export default function WalletSettings() {
                     max="2147483647"
                     value={segwitConfig.addressIndex}
                     onChange={(e) => setSegwitConfig({ ...segwitConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-white/10 bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -304,7 +304,7 @@ export default function WalletSettings() {
                   </div>
                   <button
                     onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
-                    className="p-2 rounded hover:bg-white/10 transition-colors"
+                    className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-colors"
                     title="Copy address"
                   >
                     {copiedAddress === 'segwit' ? (

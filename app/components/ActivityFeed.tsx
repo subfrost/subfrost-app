@@ -51,11 +51,11 @@ function PairIcon({
 }) {
   return (
     <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 h-8 w-8 rounded-full border border-white/20 bg-white/5">
+      <div className="absolute left-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
         {/* TokenIcon expects network via WalletContext, handled app-wide */}
         <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="md" />
       </div>
-      <div className="absolute right-0 top-0 h-8 w-8 rounded-full border border-white/20 bg-white/5">
+      <div className="absolute right-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
         <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="md" />
       </div>
     </div>
@@ -110,13 +110,13 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
   };
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">Global Activity</h3>
             <select
-              className="rounded-md border border-white/20 bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)]"
+              className="rounded-md border border-[color:var(--sf-glass-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)]"
               value={txFilter}
               onChange={(e) => setTxFilter(e.target.value as any)}
             >
@@ -143,7 +143,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
         {/* Header */}
-        <div className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-white/40 border-b-2 border-[color:var(--sf-glass-border)]">
+        <div className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)]">
           <div>Txn</div>
           <div>Pair</div>
           <div className="text-right">Amounts</div>
@@ -208,7 +208,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-4 px-6 py-4 transition-all hover:bg-white/20 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
+              className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-4 px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
             >
               <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 

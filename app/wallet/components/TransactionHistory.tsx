@@ -55,7 +55,7 @@ export default function TransactionHistory() {
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             viewMode === 'visual'
               ? 'bg-blue-600 text-white'
-              : 'bg-white/5 text-white/60 hover:text-white/80'
+              : 'bg-[color:var(--sf-primary)]/5 text-white/60 hover:text-white/80'
           }`}
         >
           Visual
@@ -65,7 +65,7 @@ export default function TransactionHistory() {
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             viewMode === 'raw'
               ? 'bg-blue-600 text-white'
-              : 'bg-white/5 text-white/60 hover:text-white/80'
+              : 'bg-[color:var(--sf-primary)]/5 text-white/60 hover:text-white/80'
           }`}
         >
           Raw JSON
@@ -78,7 +78,7 @@ export default function TransactionHistory() {
           transactions.map((tx) => (
             <div
               key={tx.txid}
-              className="rounded-xl border border-white/10 bg-white/5 p-6"
+              className="rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-6"
             >
               {/* Transaction Header */}
               <div className="flex items-start justify-between mb-4">
@@ -174,7 +174,7 @@ export default function TransactionHistory() {
                           {tx.outputs.map((output, idx) => (
                             <div
                               key={idx}
-                              className="flex items-center justify-between p-3 rounded-lg bg-white/5"
+                              className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5"
                             >
                               <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <span className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 whitespace-nowrap">
