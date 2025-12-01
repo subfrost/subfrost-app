@@ -1,8 +1,10 @@
 /**
  * React hook for futures trading functionality
+ * Uses the shared AlkanesSDKContext provider for better performance
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import {
   getAllFutures,
   generateFuture,
@@ -10,46 +12,17 @@ import {
   type FutureToken,
 } from '@/lib/oyl/alkanes/futures';
 
-// Create a simple provider for reading public blockchain data (no wallet needed)
-async function createReadOnlyProvider() {
-  const { AlkanesProvider } = await import('@alkanes/ts-sdk');
-  const bitcoin = await import('bitcoinjs-lib');
-  
-  // Create provider using the AlkanesProvider class
-  const provider = new AlkanesProvider({
-    url: 'http://localhost:18888', // metashrew RPC
-    projectId: 'regtest-local',
-    network: bitcoin.networks.regtest,
-    networkType: 'regtest',
-  });
-  
-  return provider;
-}
-
 export function useFutures() {
-  const [provider, setProvider] = useState<any>(null);
+  // Use shared provider from context instead of creating a new one
+  const { provider, isInitialized } = useAlkanesSDK();
   const [futures, setFutures] = useState<FutureToken[]>([]);
   const [currentBlock, setCurrentBlock] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize provider on mount (no wallet needed for viewing futures)
-  useEffect(() => {
-    createReadOnlyProvider()
-      .then(p => {
-        console.log('[useFutures] Provider initialized:', !!p);
-        setProvider(p);
-      })
-      .catch(err => {
-        console.error('[useFutures] Failed to create provider:', err);
-        setError('Failed to initialize provider');
-      });
-  }, []);
-
   // Fetch current block height
   const fetchBlockHeight = useCallback(async () => {
-    if (!provider) {
-      console.log('[useFutures] No provider, skipping block height fetch');
+    if (!provider || !isInitialized) {
       return;
     }
 
@@ -61,7 +34,7 @@ export function useFutures() {
       console.error('[useFutures] Failed to fetch block height:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch block height');
     }
-  }, [provider]);
+  }, [provider, isInitialized]);
 
   // Fetch all futures (public data, no wallet needed)
   const fetchFutures = useCallback(async () => {
