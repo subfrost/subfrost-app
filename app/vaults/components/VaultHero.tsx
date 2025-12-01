@@ -145,6 +145,8 @@ export default function VaultHero({
               badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
             } else if (badge === 'METHANE') {
               badgeClassName = "rounded-full bg-[color:var(--sf-surface)] text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+            } else if (badge === 'ORDI') {
+              badgeClassName = "rounded-full bg-black text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-black";
             } else {
               // Default styling for other badges
               badgeClassName = "rounded-full bg-[color:var(--sf-surface)]/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
@@ -160,47 +162,49 @@ export default function VaultHero({
       )}
 
       {/* Stats - 2 Column Grid */}
-      <div className="space-y-4 relative z-10">
-        {/* Row 1: Total deposited and Your Balance */}
-        <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 relative z-10">
+        {/* Left Column: Est. APY, Hist. APY, Boosted APY */}
+        <div className="space-y-4">
           <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Total deposited {vaultSymbol}</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{tvl}</div>
-            <div className="text-xs text-white/90">${tvl}</div>
+            <div className="text-xs text-white/80 mb-1 font-semibold">Est. APY</div>
+            <div className="text-2xl font-bold text-white drop-shadow-lg">{apy}%</div>
           </div>
-          <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Your {vaultSymbol} Balance</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{userBalance}</div>
-            <div className="text-xs text-white/90">$0.00</div>
-          </div>
-        </div>
-        
-        {/* Row 2: Historical APY and Est. APY */}
-        <div className="grid grid-cols-2 gap-4">
           <div className="text-center">
             <div className="text-xs text-white/80 mb-1 font-semibold">Hist. APY</div>
             <div className="text-2xl font-bold text-white drop-shadow-lg">{historicalApy ? `${historicalApy}%` : '-'}</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Est. APY</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{apy}%</div>
+            <div className="text-xs text-white/80 mb-1 font-semibold">Boosted APY</div>
+            <div className="text-2xl font-bold text-white drop-shadow-lg">-</div>
           </div>
         </div>
         
-        {/* Row 3: Risk Level (centered, full width) */}
-        <div className="text-center pt-2">
-          <div className="text-xs text-white/80 mb-2 font-semibold">Risk Level</div>
-          <div className="flex gap-1 justify-center">
-            {[1, 2, 3, 4, 5].map((level) => (
-              <div 
-                key={level}
-                className={`w-2 h-5 rounded-sm ${
-                  level <= riskValue 
-                    ? riskLevel === 'low' ? 'bg-green-400' : riskLevel === 'medium' ? 'bg-yellow-400' : riskLevel === 'high' ? 'bg-orange-400' : 'bg-red-400'
-                    : 'bg-[color:var(--sf-surface)]/30'
-                }`}
-              />
-            ))}
+        {/* Right Column: Risk Level, Total Deposited, Your Balance */}
+        <div className="space-y-4">
+          <div className="text-center">
+            <div className="text-xs text-white/80 mb-1 font-semibold">Risk Level</div>
+            <div className="flex gap-1 justify-center">
+              {[1, 2, 3, 4, 5].map((level) => (
+                <div 
+                  key={level}
+                  className={`w-2 h-5 rounded-sm shadow-md ${
+                    level <= riskValue 
+                      ? riskLevel === 'low' ? 'bg-green-400' : riskLevel === 'medium' ? 'bg-yellow-400' : riskLevel === 'high' ? 'bg-orange-400' : 'bg-red-400'
+                      : 'bg-[color:var(--sf-surface)]/30'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-white/80 mb-1 font-semibold">Total Deposited</div>
+            <div className="text-2xl font-bold text-white drop-shadow-lg">{tvl}</div>
+            <div className="text-xs text-white/90">${tvl}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-white/80 mb-1 font-semibold">Your Balance</div>
+            <div className="text-2xl font-bold text-white drop-shadow-lg">{userBalance}</div>
+            <div className="text-xs text-white/90">$0.00</div>
           </div>
         </div>
       </div>

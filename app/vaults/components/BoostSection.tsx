@@ -74,7 +74,7 @@ export default function BoostSection({ vault }: Props) {
 
       {/* APY Comparison - Grid on mobile, split columns on md+ */}
       <div className="grid grid-cols-2 gap-4 md:contents">
-        <div className="rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 md:col-start-1 md:row-start-3">
+        <div className={`rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 md:col-start-1 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
           <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
             Est. Base APY
           </p>
@@ -82,7 +82,7 @@ export default function BoostSection({ vault }: Props) {
             {baseApy}%
           </p>
         </div>
-        <div className="rounded-xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-50 to-pink-50 p-4 md:col-start-2 md:row-start-3">
+        <div className={`rounded-xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-50 to-pink-50 p-4 md:col-start-2 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
           <p className="text-xs font-medium text-purple-700 mb-1">
             Boosted APY
           </p>
@@ -93,7 +93,7 @@ export default function BoostSection({ vault }: Props) {
       </div>
 
       {/* Boost Stats - Will be in left column on md+ */}
-      <div className={`rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4 ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 ${isComingSoon ? 'md:row-start-4' : 'md:row-start-3'} ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
@@ -168,16 +168,17 @@ export default function BoostSection({ vault }: Props) {
 
           <button
             disabled={isComingSoon}
-            className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 font-bold text-white transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 font-bold text-white transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {activeTab === "stake" ? "Stake to Boost" : "Unstake"}
+            <span className="relative z-10">{activeTab === "stake" ? "Stake to Boost" : "Unstake"}</span>
+            <div className="absolute inset-0 animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-purple-300/40 to-transparent group-disabled:animate-none" />
           </button>
         </div>
       </div>
 
       {/* Positions List (if has multiple positions) - Will be in left column on md+ */}
       {vault.hasBoost && !isComingSoon && (
-        <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-5">
+        <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-bold text-[color:var(--sf-text)]">
               Your Boosted Positions

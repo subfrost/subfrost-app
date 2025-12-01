@@ -210,54 +210,59 @@ export default function LiquidityInputs({
             </span>
             
             {/* Side-by-side token selectors */}
-            <div className="flex items-center gap-3">
-          {/* Token 0 selector */}
-          <button
-            type="button"
-            onClick={() => openTokenSelector('pool0')}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
-          >
-            {token0 && (
-              <TokenIcon 
-                key={`pool0-${token0.id}-${token0.symbol}`} 
-                symbol={token0.symbol} 
-                id={token0.id} 
-                iconUrl={token0.iconUrl} 
-                size="sm" 
-                network={network} 
-              />
-            )}
-            <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {token0?.symbol ?? 'Select Token'}
-            </span>
-            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-          </button>
+            <div className="flex flex-row md:flex-col lg:flex-row items-center md:items-start lg:items-center gap-3">
+              {/* Token 0 selector + divider row */}
+              <div className="contents md:flex md:items-center md:gap-3 lg:contents">
+                <button
+                  type="button"
+                  onClick={() => openTokenSelector('pool0')}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
+                >
+                  {token0 && (
+                    <TokenIcon 
+                      key={`pool0-${token0.id}-${token0.symbol}`} 
+                      symbol={token0.symbol} 
+                      id={token0.id} 
+                      iconUrl={token0.iconUrl} 
+                      size="sm" 
+                      network={network} 
+                    />
+                  )}
+                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                    {token0?.symbol ?? 'Select Token'}
+                  </span>
+                  <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+                </button>
 
-          {/* Divider */}
-          <span className="text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
+                {/* Divider - visible only on medium screens (with token0) */}
+                <span className="hidden md:block lg:hidden text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
+              </div>
 
-          {/* Token 1 selector */}
-          <button
-            type="button"
-            onClick={() => openTokenSelector('pool1')}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
-          >
-            {token1 && (
-              <TokenIcon 
-                key={`pool1-${token1.id}-${token1.symbol}`} 
-                symbol={token1.symbol} 
-                id={token1.id} 
-                iconUrl={token1.iconUrl} 
-                size="sm" 
-                network={network} 
-              />
-            )}
-            <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {token1?.symbol ?? 'BTC'}
-            </span>
-            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-          </button>
-        </div>
+              {/* Divider - visible on small and large screens (between selectors) */}
+              <span className="md:hidden lg:block text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
+
+              {/* Token 1 selector */}
+              <button
+                type="button"
+                onClick={() => openTokenSelector('pool1')}
+                className="flex-1 md:flex-none lg:flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
+              >
+                {token1 && (
+                  <TokenIcon 
+                    key={`pool1-${token1.id}-${token1.symbol}`} 
+                    symbol={token1.symbol} 
+                    id={token1.id} 
+                    iconUrl={token1.iconUrl} 
+                    size="sm" 
+                    network={network} 
+                  />
+                )}
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {token1?.symbol ?? 'BTC'}
+                </span>
+                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+              </button>
+            </div>
       </div>
 
           {/* Token Amount Inputs - Side by Side */}

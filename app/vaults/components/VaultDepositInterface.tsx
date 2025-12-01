@@ -19,6 +19,7 @@ const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
   { id: '2:16', symbol: 'METHANE' },
   { id: 'frUSD', symbol: 'frUSD' },
   { id: 'zec_empty', symbol: 'frZEC' },
+  { id: 'ordi', symbol: 'ORDI' },
 ];
 
 // Get the corresponding vault for an input token
@@ -32,6 +33,7 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
     'frUSD': 've-usd',     // frUSD -> veUSD
     'zec_empty': 've-zec', // frZEC -> veZEC
     'eth_empty': 've-eth', // frETH -> veETH
+    'ordi': 've-ordi',     // ORDI -> veORDI
   };
   
   const vaultId = tokenToVaultMap[tokenId];
@@ -51,6 +53,7 @@ const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol:
     'veZEC': { id: 'zec_empty', symbol: 'frZEC' },
     'veETH': { id: 'eth_empty', symbol: 'frETH' },
     'yvfrBTC': { id: '32:0', symbol: 'frBTC' },
+    'veORDI': { id: 'ordi', symbol: 'ORDI' },
   };
   
   return defaultInputMap[vault.outputAsset] || { id: vault.tokenId, symbol: vault.inputAsset };
@@ -261,7 +264,7 @@ export default function VaultDepositInterface({
                   <button
                     type="button"
                     onClick={() => setAmount(userBalance)}
-                    className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50"
+                    className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50"
                   >
                     Max
                   </button>
