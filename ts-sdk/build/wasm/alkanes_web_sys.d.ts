@@ -221,4 +221,20 @@ export class WebProvider {
   walletCreatePsbt(params_json: string): Promise<any>;
   walletExport(): Promise<any>;
   walletBackup(): Promise<any>;
+  dataApiGetPoolHistory(pool_id: string, category?: string | null, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetPools(factory_id: string): Promise<any>;
+  dataApiGetAlkanesByAddress(address: string): Promise<any>;
+  dataApiGetAddressBalances(address: string, include_outpoints: boolean): Promise<any>;
+  dataApiGetAllHistory(pool_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetSwapHistory(pool_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetMintHistory(pool_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetBurnHistory(pool_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetTrades(pool: string, start_time?: number | null, end_time?: number | null, limit?: bigint | null): Promise<any>;
+  dataApiGetCandles(pool: string, interval: string, start_time?: number | null, end_time?: number | null, limit?: bigint | null): Promise<any>;
+  dataApiGetReserves(pool: string): Promise<any>;
+  dataApiGetHolders(alkane: string, page: bigint, limit: bigint): Promise<any>;
+  dataApiGetHoldersCount(alkane: string): Promise<any>;
+  dataApiGetKeys(alkane: string, prefix: string | null | undefined, limit: bigint): Promise<any>;
+  dataApiGetBitcoinPrice(): Promise<any>;
+  dataApiGetBitcoinMarketChart(days: string): Promise<any>;
 }

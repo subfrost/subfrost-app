@@ -1348,6 +1348,192 @@ export class WebProvider {
         const ret = wasm.webprovider_walletBackup(this.__wbg_ptr);
         return ret;
     }
+    /**
+     * @param {string} pool_id
+     * @param {string | null} [category]
+     * @param {bigint | null} [limit]
+     * @param {bigint | null} [offset]
+     * @returns {Promise<any>}
+     */
+    dataApiGetPoolHistory(pool_id, category, limit, offset) {
+        const ptr0 = passStringToWasm0(pool_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(category) ? 0 : passStringToWasm0(category, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetPoolHistory(this.__wbg_ptr, ptr0, len0, ptr1, len1, !isLikeNone(limit), isLikeNone(limit) ? BigInt(0) : limit, !isLikeNone(offset), isLikeNone(offset) ? BigInt(0) : offset);
+        return ret;
+    }
+    /**
+     * @param {string} factory_id
+     * @returns {Promise<any>}
+     */
+    dataApiGetPools(factory_id) {
+        const ptr0 = passStringToWasm0(factory_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetPools(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * @param {string} address
+     * @returns {Promise<any>}
+     */
+    dataApiGetAlkanesByAddress(address) {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetAlkanesByAddress(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * @param {string} address
+     * @param {boolean} include_outpoints
+     * @returns {Promise<any>}
+     */
+    dataApiGetAddressBalances(address, include_outpoints) {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetAddressBalances(this.__wbg_ptr, ptr0, len0, include_outpoints);
+        return ret;
+    }
+    /**
+     * @param {string} pool_id
+     * @param {bigint | null} [limit]
+     * @param {bigint | null} [offset]
+     * @returns {Promise<any>}
+     */
+    dataApiGetAllHistory(pool_id, limit, offset) {
+        const ptr0 = passStringToWasm0(pool_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetAllHistory(this.__wbg_ptr, ptr0, len0, !isLikeNone(limit), isLikeNone(limit) ? BigInt(0) : limit, !isLikeNone(offset), isLikeNone(offset) ? BigInt(0) : offset);
+        return ret;
+    }
+    /**
+     * @param {string} pool_id
+     * @param {bigint | null} [limit]
+     * @param {bigint | null} [offset]
+     * @returns {Promise<any>}
+     */
+    dataApiGetSwapHistory(pool_id, limit, offset) {
+        const ptr0 = passStringToWasm0(pool_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetSwapHistory(this.__wbg_ptr, ptr0, len0, !isLikeNone(limit), isLikeNone(limit) ? BigInt(0) : limit, !isLikeNone(offset), isLikeNone(offset) ? BigInt(0) : offset);
+        return ret;
+    }
+    /**
+     * @param {string} pool_id
+     * @param {bigint | null} [limit]
+     * @param {bigint | null} [offset]
+     * @returns {Promise<any>}
+     */
+    dataApiGetMintHistory(pool_id, limit, offset) {
+        const ptr0 = passStringToWasm0(pool_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetMintHistory(this.__wbg_ptr, ptr0, len0, !isLikeNone(limit), isLikeNone(limit) ? BigInt(0) : limit, !isLikeNone(offset), isLikeNone(offset) ? BigInt(0) : offset);
+        return ret;
+    }
+    /**
+     * @param {string} pool_id
+     * @param {bigint | null} [limit]
+     * @param {bigint | null} [offset]
+     * @returns {Promise<any>}
+     */
+    dataApiGetBurnHistory(pool_id, limit, offset) {
+        const ptr0 = passStringToWasm0(pool_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetBurnHistory(this.__wbg_ptr, ptr0, len0, !isLikeNone(limit), isLikeNone(limit) ? BigInt(0) : limit, !isLikeNone(offset), isLikeNone(offset) ? BigInt(0) : offset);
+        return ret;
+    }
+    /**
+     * @param {string} pool
+     * @param {number | null} [start_time]
+     * @param {number | null} [end_time]
+     * @param {bigint | null} [limit]
+     * @returns {Promise<any>}
+     */
+    dataApiGetTrades(pool, start_time, end_time, limit) {
+        const ptr0 = passStringToWasm0(pool, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetTrades(this.__wbg_ptr, ptr0, len0, !isLikeNone(start_time), isLikeNone(start_time) ? 0 : start_time, !isLikeNone(end_time), isLikeNone(end_time) ? 0 : end_time, !isLikeNone(limit), isLikeNone(limit) ? BigInt(0) : limit);
+        return ret;
+    }
+    /**
+     * @param {string} pool
+     * @param {string} interval
+     * @param {number | null} [start_time]
+     * @param {number | null} [end_time]
+     * @param {bigint | null} [limit]
+     * @returns {Promise<any>}
+     */
+    dataApiGetCandles(pool, interval, start_time, end_time, limit) {
+        const ptr0 = passStringToWasm0(pool, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(interval, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetCandles(this.__wbg_ptr, ptr0, len0, ptr1, len1, !isLikeNone(start_time), isLikeNone(start_time) ? 0 : start_time, !isLikeNone(end_time), isLikeNone(end_time) ? 0 : end_time, !isLikeNone(limit), isLikeNone(limit) ? BigInt(0) : limit);
+        return ret;
+    }
+    /**
+     * @param {string} pool
+     * @returns {Promise<any>}
+     */
+    dataApiGetReserves(pool) {
+        const ptr0 = passStringToWasm0(pool, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetReserves(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * @param {string} alkane
+     * @param {bigint} page
+     * @param {bigint} limit
+     * @returns {Promise<any>}
+     */
+    dataApiGetHolders(alkane, page, limit) {
+        const ptr0 = passStringToWasm0(alkane, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetHolders(this.__wbg_ptr, ptr0, len0, page, limit);
+        return ret;
+    }
+    /**
+     * @param {string} alkane
+     * @returns {Promise<any>}
+     */
+    dataApiGetHoldersCount(alkane) {
+        const ptr0 = passStringToWasm0(alkane, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetHoldersCount(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * @param {string} alkane
+     * @param {string | null | undefined} prefix
+     * @param {bigint} limit
+     * @returns {Promise<any>}
+     */
+    dataApiGetKeys(alkane, prefix, limit) {
+        const ptr0 = passStringToWasm0(alkane, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(prefix) ? 0 : passStringToWasm0(prefix, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetKeys(this.__wbg_ptr, ptr0, len0, ptr1, len1, limit);
+        return ret;
+    }
+    /**
+     * @returns {Promise<any>}
+     */
+    dataApiGetBitcoinPrice() {
+        const ret = wasm.webprovider_dataApiGetBitcoinPrice(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {string} days
+     * @returns {Promise<any>}
+     */
+    dataApiGetBitcoinMarketChart(days) {
+        const ptr0 = passStringToWasm0(days, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_dataApiGetBitcoinMarketChart(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
 }
 if (Symbol.dispose) WebProvider.prototype[Symbol.dispose] = WebProvider.prototype.free;
 
@@ -1983,8 +2169,8 @@ export function __wbindgen_cast_4625c577ab2ec9ee(arg0) {
     return ret;
 };
 
-export function __wbindgen_cast_6211035ff6a96c39(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 2122, function: Function { arguments: [Externref], shim_idx: 2123, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+export function __wbindgen_cast_5df02db44e22fd89(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 2172, function: Function { arguments: [Externref], shim_idx: 2173, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
     const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
     return ret;
 };
