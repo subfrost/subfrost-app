@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { getNetworkUrls } from '@/utils/alkanesProvider';
 
 export interface AlkaneAsset {
   alkaneId: string;
@@ -73,9 +74,9 @@ export interface EnrichedWalletData {
  * This combines Bitcoin UTXOs with alkanes/runes/inscriptions data
  */
 export function useEnrichedWalletData(): EnrichedWalletData {
-  const { account, isConnected } = useWallet() as any;
+  const { account, isConnected, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
-  
+
   const [data, setData] = useState<Omit<EnrichedWalletData, 'refresh'>>({
     balances: {
       bitcoin: { p2wpkh: 0, p2tr: 0, total: 0 },
@@ -108,25 +109,53 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         throw new Error('No wallet addresses available');
       }
 
-      // Get network URLs from provider
-      const sandshrewUrl = (provider as any).bitcoin?.url || (provider as any).url;
-      const esploraUrl = (provider as any).esplora?.baseUrl;
-      
-      console.log('[useEnrichedWalletData] Creating WebProvider with:', { sandshrewUrl, esploraUrl });
-      
-      // Dynamic import to avoid WASM loading at SSR time
-      const AlkanesWasm = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      
-      // Create WASM WebProvider instance
-      const wasmProvider = new AlkanesWasm.WebProvider(sandshrewUrl, esploraUrl);
-      
-      // Call the enriched balances method from WASM
-      // This uses the built-in balances.lua script with automatic hash-based caching
+      // Get network URLs from provider or centralized config
+      const urls = getNetworkUrls(network || 'regtest');
+      const sandshrewUrl = (provider as any).bitcoin?.url || (provider as any).url || urls.rpc;
+      const esploraUrl = (provider as any).esploraUrl || (provider as any).esplora?.baseUrl || urls.esplora;
+
+      console.log('[useEnrichedWalletData] Network:', network, 'URLs:', { sandshrewUrl, esploraUrl });
+
+      // Always try esplora proxy first - it's the most reliable for local dev
+      // The /api/esplora proxy handles CORS and works for all networks
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
-          console.log('[useEnrichedWalletData] Fetching enriched balances for:', address);
+          console.log('[useEnrichedWalletData] Fetching balance for:', address);
+
+          // Try esplora fetch first via our proxy (works for all networks)
+          try {
+            // Add cache-busting to prevent stale data after mining
+            const cacheBuster = Date.now();
+            const esploraResponse = await fetch(`/api/esplora/address/${address}?_=${cacheBuster}`, {
+              cache: 'no-store',
+              headers: { 'Cache-Control': 'no-cache' },
+            });
+            if (esploraResponse.ok) {
+              const esploraData = await esploraResponse.json();
+              const funded = esploraData.chain_stats?.funded_txo_sum || 0;
+              const spent = esploraData.chain_stats?.spent_txo_sum || 0;
+              const balance = funded - spent;
+              console.log('[useEnrichedWalletData] Esplora balance for', address, ':', balance, 'sats (', balance / 100000000, 'BTC)');
+              return {
+                address,
+                data: {
+                  spendable: [{
+                    outpoint: 'esplora:0',
+                    value: balance,
+                    height: 1,
+                  }],
+                },
+              };
+            }
+          } catch (esploraError) {
+            console.warn('[useEnrichedWalletData] Esplora fetch failed, trying WASM:', esploraError);
+          }
+
+          // Fall back to WASM for production networks or if esplora fails
+          const AlkanesWasm = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
+          const wasmProvider = new AlkanesWasm.WebProvider(sandshrewUrl, esploraUrl);
           const result = await wasmProvider.getEnrichedBalances(address, "1");
-          console.log('[useEnrichedWalletData] Enriched balances result:', result);
+          console.log('[useEnrichedWalletData] WASM enriched balances result:', result);
           return { address, data: result };
         } catch (error) {
           console.error(`Failed to fetch enriched data for ${address}:`, error);
@@ -135,6 +164,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       });
 
       const enrichedResults = await Promise.all(enrichedDataPromises);
+      console.log('[useEnrichedWalletData] enrichedResults:', JSON.stringify(enrichedResults, null, 2));
 
       // Process results
       let totalBtc = 0;
@@ -230,6 +260,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
+      console.log('[useEnrichedWalletData] FINAL BALANCES: total=', totalBtc, 'p2wpkh=', p2wpkhBtc, 'p2tr=', p2trBtc);
       setData({
         balances: {
           bitcoin: {
@@ -256,7 +287,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         error: error instanceof Error ? error.message : 'Failed to fetch wallet data',
       }));
     }
-  }, [provider, isInitialized, account, isConnected]);
+  }, [provider, isInitialized, account, isConnected, network]);
 
   // Initial fetch
   useEffect(() => {

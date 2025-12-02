@@ -231,21 +231,6 @@ function passArray8ToWasm0(arg, malloc) {
     return ptr;
 }
 /**
- * Asynchronously encrypts data using the Web Crypto API.
- * @param {string} mnemonic
- * @param {string} passphrase
- * @returns {Promise<any>}
- */
-export function encryptMnemonic(mnemonic, passphrase) {
-    const ptr0 = passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.encryptMnemonic(ptr0, len0, ptr1, len1);
-    return ret;
-}
-
-/**
  * @param {string} psbt_base64
  * @returns {string}
  */
@@ -303,12 +288,145 @@ export function get_alkane_bytecode(network, block, tx, block_tag) {
     return ret;
 }
 
-function wasm_bindgen__convert__closures_____invoke__h5943629905d90057(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h5943629905d90057(arg0, arg1, arg2);
+/**
+ * Wrap BTC to frBTC
+ *
+ * This function wraps BTC into frBTC by calling opcode 77 on the frBTC alkane {32, 0}.
+ *
+ * # Arguments
+ * * `network` - Network name: "mainnet", "signet", "regtest", etc.
+ * * `params_json` - JSON string containing WrapBtcParamsJs
+ *
+ * # Returns
+ * Promise resolving to JSON string containing WrapBtcResultJs
+ *
+ * # Example (JavaScript)
+ * ```js
+ * const params = {
+ *   amount: 100000, // 0.001 BTC in sats
+ *   to_address: "bc1p...",
+ *   fee_rate: 5.0
+ * };
+ * const result = await wrap_btc("mainnet", JSON.stringify(params));
+ * const { reveal_txid } = JSON.parse(result);
+ * ```
+ * @param {string} network
+ * @param {string} params_json
+ * @returns {Promise<any>}
+ */
+export function wrap_btc(network, params_json) {
+    const ptr0 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.wrap_btc(ptr0, len0, ptr1, len1);
+    return ret;
 }
 
-function wasm_bindgen__convert__closures_____invoke__h95fdbac5e4c1bfb6(arg0, arg1, arg2, arg3) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h95fdbac5e4c1bfb6(arg0, arg1, arg2, arg3);
+/**
+ * Get the subfrost signer address for frBTC
+ *
+ * Derives the P2TR address that holds BTC backing frBTC by calling GET_SIGNER opcode (103)
+ * on the frBTC contract at {32, 0}.
+ *
+ * # Arguments
+ * * `network` - Network name: "mainnet", "signet", "regtest", etc.
+ *
+ * # Returns
+ * Promise resolving to the subfrost signer address string (P2TR format)
+ *
+ * # Example (JavaScript)
+ * ```js
+ * const address = await get_subfrost_address("mainnet");
+ * console.log(address); // "bc1p..."
+ * ```
+ * @param {string} network
+ * @returns {Promise<any>}
+ */
+export function get_subfrost_address(network) {
+    const ptr0 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.get_subfrost_address(ptr0, len0);
+    return ret;
+}
+
+/**
+ * Get pending unwraps from the alkanes indexer
+ *
+ * Queries the metashrew indexer for pending frBTC → BTC unwrap requests.
+ *
+ * # Arguments
+ * * `network` - Network name: "mainnet", "signet", "regtest", etc.
+ * * `confirmations` - Number of confirmations required before unwraps are returned
+ *
+ * # Returns
+ * Promise resolving to JSON array of PendingUnwrapJs objects
+ *
+ * # Example (JavaScript)
+ * ```js
+ * const unwraps = JSON.parse(await get_pending_unwraps("mainnet", 6));
+ * for (const u of unwraps) {
+ *   console.log(`${u.txid}:${u.vout} - ${u.amount} sats`);
+ * }
+ * ```
+ * @param {string} network
+ * @param {bigint} confirmations
+ * @returns {Promise<any>}
+ */
+export function get_pending_unwraps(network, confirmations) {
+    const ptr0 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.get_pending_unwraps(ptr0, len0, confirmations);
+    return ret;
+}
+
+/**
+ * Get the total supply of frBTC
+ *
+ * Queries the alkanes indexer for the total frBTC supply.
+ *
+ * # Arguments
+ * * `network` - Network name: "mainnet", "signet", "regtest", etc.
+ *
+ * # Returns
+ * Promise resolving to total supply in satoshis as a string (to avoid JS number precision issues)
+ *
+ * # Example (JavaScript)
+ * ```js
+ * const totalSupply = await get_frbtc_total_supply("mainnet");
+ * console.log(`Total frBTC: ${totalSupply} sats`);
+ * ```
+ * @param {string} network
+ * @returns {Promise<any>}
+ */
+export function get_frbtc_total_supply(network) {
+    const ptr0 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.get_frbtc_total_supply(ptr0, len0);
+    return ret;
+}
+
+/**
+ * Asynchronously encrypts data using the Web Crypto API.
+ * @param {string} mnemonic
+ * @param {string} passphrase
+ * @returns {Promise<any>}
+ */
+export function encryptMnemonic(mnemonic, passphrase) {
+    const ptr0 = passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.encryptMnemonic(ptr0, len0, ptr1, len1);
+    return ret;
+}
+
+function wasm_bindgen__convert__closures_____invoke__h4a94c7d4879bc9ea(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h4a94c7d4879bc9ea(arg0, arg1, arg2);
+}
+
+function wasm_bindgen__convert__closures_____invoke__h53c04da2837a08e3(arg0, arg1, arg2, arg3) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h53c04da2837a08e3(arg0, arg1, arg2, arg3);
 }
 
 const __wbindgen_enum_RequestMode = ["same-origin", "no-cors", "cors", "navigate"];
@@ -1348,6 +1466,502 @@ export class WebProvider {
         const ret = wasm.webprovider_walletBackup(this.__wbg_ptr);
         return ret;
     }
+    /**
+     * Wrap BTC to frBTC - returns base64-encoded PSBT for signing
+     *
+     * # Arguments
+     * * `amount` - Amount in satoshis to wrap
+     * * `address` - Optional source address (uses wallet if not provided)
+     * * `fee_rate` - Optional fee rate in sat/vB
+     *
+     * # Returns
+     * Promise resolving to base64-encoded PSBT
+     * @param {number} amount
+     * @param {string | null} [address]
+     * @param {number | null} [fee_rate]
+     * @returns {Promise<any>}
+     */
+    wrapBtc(amount, address, fee_rate) {
+        var ptr0 = isLikeNone(address) ? 0 : passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_wrapBtc(this.__wbg_ptr, amount, ptr0, len0, isLikeNone(fee_rate) ? 0x100000001 : Math.fround(fee_rate));
+        return ret;
+    }
+    /**
+     * Unwrap frBTC to BTC - returns base64-encoded PSBT for signing
+     *
+     * # Arguments
+     * * `amount` - Amount in satoshis to unwrap
+     * * `address` - Optional source address (uses wallet if not provided)
+     *
+     * # Returns
+     * Promise resolving to base64-encoded PSBT
+     * @param {number} amount
+     * @param {string | null} [address]
+     * @returns {Promise<any>}
+     */
+    unwrapBtc(amount, address) {
+        var ptr0 = isLikeNone(address) ? 0 : passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_unwrapBtc(this.__wbg_ptr, amount, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Send BTC from one wallet to another - returns base64-encoded PSBT for signing
+     *
+     * # Arguments
+     * * `to_address` - Destination Bitcoin address
+     * * `amount` - Amount in satoshis to send
+     * * `from_address` - Optional source address (uses wallet if not provided)
+     * * `fee_rate` - Optional fee rate in sat/vB
+     * * `send_all` - If true, sends entire balance (ignores amount)
+     *
+     * # Returns
+     * Promise resolving to base64-encoded PSBT
+     *
+     * # Example (JavaScript)
+     * ```js
+     * const provider = new WebProvider("signet");
+     * const psbt = await provider.sendBtc(
+     *   "tb1p...",  // destination address
+     *   100000,     // amount in sats
+     *   "tb1q...",  // optional: source address
+     *   5.0,        // optional: fee rate
+     *   false       // optional: send all
+     * );
+     * // psbt is base64-encoded, ready for signing
+     * ```
+     * @param {string} to_address
+     * @param {number} amount
+     * @param {string | null} [from_address]
+     * @param {number | null} [fee_rate]
+     * @param {boolean | null} [send_all]
+     * @returns {Promise<any>}
+     */
+    sendBtc(to_address, amount, from_address, fee_rate, send_all) {
+        const ptr0 = passStringToWasm0(to_address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(from_address) ? 0 : passStringToWasm0(from_address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_sendBtc(this.__wbg_ptr, ptr0, len0, amount, ptr1, len1, isLikeNone(fee_rate) ? 0x100000001 : Math.fround(fee_rate), isLikeNone(send_all) ? 0xFFFFFF : send_all ? 1 : 0);
+        return ret;
+    }
+    /**
+     * Get the subfrost signer address for frBTC
+     *
+     * # Returns
+     * Promise resolving to the subfrost signer address string (P2TR format)
+     * @returns {Promise<any>}
+     */
+    getSubfrostAddress() {
+        const ret = wasm.webprovider_getSubfrostAddress(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get the total supply of frBTC
+     *
+     * # Returns
+     * Promise resolving to total supply in satoshis as a string
+     * @returns {Promise<any>}
+     */
+    getFrbtcTotalSupply() {
+        const ret = wasm.webprovider_getFrbtcTotalSupply(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get blocks starting from a height
+     * @param {bigint | null} [start_height]
+     * @returns {Promise<any>}
+     */
+    esploraGetBlocks(start_height) {
+        const ret = wasm.webprovider_esploraGetBlocks(this.__wbg_ptr, !isLikeNone(start_height), isLikeNone(start_height) ? BigInt(0) : start_height);
+        return ret;
+    }
+    /**
+     * Get block by height
+     * @param {bigint} height
+     * @returns {Promise<any>}
+     */
+    esploraGetBlockByHeight(height) {
+        const ret = wasm.webprovider_esploraGetBlockByHeight(this.__wbg_ptr, height);
+        return ret;
+    }
+    /**
+     * Get block by hash
+     * @param {string} hash
+     * @returns {Promise<any>}
+     */
+    esploraGetBlock(hash) {
+        const ptr0 = passStringToWasm0(hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetBlock(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get block status
+     * @param {string} hash
+     * @returns {Promise<any>}
+     */
+    esploraGetBlockStatus(hash) {
+        const ptr0 = passStringToWasm0(hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetBlockStatus(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get block transaction IDs
+     * @param {string} hash
+     * @returns {Promise<any>}
+     */
+    esploraGetBlockTxids(hash) {
+        const ptr0 = passStringToWasm0(hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetBlockTxids(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get block header
+     * @param {string} hash
+     * @returns {Promise<any>}
+     */
+    esploraGetBlockHeader(hash) {
+        const ptr0 = passStringToWasm0(hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetBlockHeader(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get raw block
+     * @param {string} hash
+     * @returns {Promise<any>}
+     */
+    esploraGetBlockRaw(hash) {
+        const ptr0 = passStringToWasm0(hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetBlockRaw(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get block txid by index
+     * @param {string} hash
+     * @param {number} index
+     * @returns {Promise<any>}
+     */
+    esploraGetBlockTxid(hash, index) {
+        const ptr0 = passStringToWasm0(hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetBlockTxid(this.__wbg_ptr, ptr0, len0, index);
+        return ret;
+    }
+    /**
+     * Get block transactions
+     * @param {string} hash
+     * @param {number | null} [start_index]
+     * @returns {Promise<any>}
+     */
+    esploraGetBlockTxs(hash, start_index) {
+        const ptr0 = passStringToWasm0(hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetBlockTxs(this.__wbg_ptr, ptr0, len0, isLikeNone(start_index) ? 0x100000001 : (start_index) >>> 0);
+        return ret;
+    }
+    /**
+     * Get address transactions with pagination (chain)
+     * @param {string} address
+     * @param {string | null} [last_seen_txid]
+     * @returns {Promise<any>}
+     */
+    esploraGetAddressTxsChain(address, last_seen_txid) {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(last_seen_txid) ? 0 : passStringToWasm0(last_seen_txid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetAddressTxsChain(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret;
+    }
+    /**
+     * Get address mempool transactions
+     * @param {string} address
+     * @returns {Promise<any>}
+     */
+    esploraGetAddressTxsMempool(address) {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetAddressTxsMempool(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get raw transaction
+     * @param {string} txid
+     * @returns {Promise<any>}
+     */
+    esploraGetTxRaw(txid) {
+        const ptr0 = passStringToWasm0(txid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetTxRaw(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get transaction merkle proof
+     * @param {string} txid
+     * @returns {Promise<any>}
+     */
+    esploraGetTxMerkleProof(txid) {
+        const ptr0 = passStringToWasm0(txid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetTxMerkleProof(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get transaction outspend
+     * @param {string} txid
+     * @param {number} index
+     * @returns {Promise<any>}
+     */
+    esploraGetTxOutspend(txid, index) {
+        const ptr0 = passStringToWasm0(txid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetTxOutspend(this.__wbg_ptr, ptr0, len0, index);
+        return ret;
+    }
+    /**
+     * Get all transaction outspends
+     * @param {string} txid
+     * @returns {Promise<any>}
+     */
+    esploraGetTxOutspends(txid) {
+        const ptr0 = passStringToWasm0(txid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_esploraGetTxOutspends(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get mempool info
+     * @returns {Promise<any>}
+     */
+    esploraGetMempool() {
+        const ret = wasm.webprovider_esploraGetMempool(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get mempool transaction IDs
+     * @returns {Promise<any>}
+     */
+    esploraGetMempoolTxids() {
+        const ret = wasm.webprovider_esploraGetMempoolTxids(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get recent mempool transactions
+     * @returns {Promise<any>}
+     */
+    esploraGetMempoolRecent() {
+        const ret = wasm.webprovider_esploraGetMempoolRecent(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get fee estimates
+     * @returns {Promise<any>}
+     */
+    esploraGetFeeEstimates() {
+        const ret = wasm.webprovider_esploraGetFeeEstimates(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get alkanes block by height
+     * @param {bigint} height
+     * @returns {Promise<any>}
+     */
+    alkanesGetBlock(height) {
+        const ret = wasm.webprovider_alkanesGetBlock(this.__wbg_ptr, height);
+        return ret;
+    }
+    /**
+     * Get alkanes sequence
+     * @param {string | null} [block_tag]
+     * @returns {Promise<any>}
+     */
+    alkanesSequence(block_tag) {
+        var ptr0 = isLikeNone(block_tag) ? 0 : passStringToWasm0(block_tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesSequence(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get spendables by address
+     * @param {string} address
+     * @returns {Promise<any>}
+     */
+    alkanesSpendablesByAddress(address) {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesSpendablesByAddress(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Trace alkanes block
+     * @param {bigint} height
+     * @returns {Promise<any>}
+     */
+    alkanesTraceBlock(height) {
+        const ret = wasm.webprovider_alkanesTraceBlock(this.__wbg_ptr, height);
+        return ret;
+    }
+    /**
+     * Get alkane storage
+     * @param {string} contract_id
+     * @param {string} key
+     * @param {string | null} [block_tag]
+     * @returns {Promise<any>}
+     */
+    alkanesGetStorage(contract_id, key, block_tag) {
+        const ptr0 = passStringToWasm0(contract_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        var ptr2 = isLikeNone(block_tag) ? 0 : passStringToWasm0(block_tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len2 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesGetStorage(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
+        return ret;
+    }
+    /**
+     * Get pool details by ID using view call with opcode 999
+     * @param {bigint} pool_block
+     * @param {bigint} pool_tx
+     * @returns {Promise<any>}
+     */
+    alkanesPoolDetails(pool_block, pool_tx) {
+        const ret = wasm.webprovider_alkanesPoolDetails(this.__wbg_ptr, pool_block, pool_tx);
+        return ret;
+    }
+    /**
+     * Get inscriptions in a block
+     * @param {string} block_hash
+     * @returns {Promise<any>}
+     */
+    ordInscriptionsInBlock(block_hash) {
+        const ptr0 = passStringToWasm0(block_hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ordInscriptionsInBlock(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get ord address info
+     * @param {string} address
+     * @returns {Promise<any>}
+     */
+    ordAddressInfo(address) {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ordAddressInfo(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get ord block info
+     * @param {string} query
+     * @returns {Promise<any>}
+     */
+    ordBlockInfo(query) {
+        const ptr0 = passStringToWasm0(query, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ordBlockInfo(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get ord block count
+     * @returns {Promise<any>}
+     */
+    ordBlockCount() {
+        const ret = wasm.webprovider_ordBlockCount(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get inscription children
+     * @param {string} inscription_id
+     * @param {number | null} [page]
+     * @returns {Promise<any>}
+     */
+    ordChildren(inscription_id, page) {
+        const ptr0 = passStringToWasm0(inscription_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ordChildren(this.__wbg_ptr, ptr0, len0, isLikeNone(page) ? 0x100000001 : (page) >>> 0);
+        return ret;
+    }
+    /**
+     * Get inscription content
+     * @param {string} inscription_id
+     * @returns {Promise<any>}
+     */
+    ordContent(inscription_id) {
+        const ptr0 = passStringToWasm0(inscription_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ordContent(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get inscription parents
+     * @param {string} inscription_id
+     * @param {number | null} [page]
+     * @returns {Promise<any>}
+     */
+    ordParents(inscription_id, page) {
+        const ptr0 = passStringToWasm0(inscription_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ordParents(this.__wbg_ptr, ptr0, len0, isLikeNone(page) ? 0x100000001 : (page) >>> 0);
+        return ret;
+    }
+    /**
+     * Get all runes
+     * @param {number | null} [page]
+     * @returns {Promise<any>}
+     */
+    ordRunes(page) {
+        const ret = wasm.webprovider_ordRunes(this.__wbg_ptr, isLikeNone(page) ? 0x100000001 : (page) >>> 0);
+        return ret;
+    }
+    /**
+     * Get transaction info from ord
+     * @param {string} txid
+     * @returns {Promise<any>}
+     */
+    ordTxInfo(txid) {
+        const ptr0 = passStringToWasm0(txid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ordTxInfo(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Decode raw transaction
+     * @param {string} tx_hex
+     * @returns {Promise<any>}
+     */
+    bitcoindDecodeRawTransaction(tx_hex) {
+        const ptr0 = passStringToWasm0(tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_bitcoindDecodeRawTransaction(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get raw mempool
+     * @returns {Promise<any>}
+     */
+    bitcoindGetRawMempool() {
+        const ret = wasm.webprovider_bitcoindGetRawMempool(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get transaction output
+     * @param {string} txid
+     * @param {number} vout
+     * @param {boolean} include_mempool
+     * @returns {Promise<any>}
+     */
+    bitcoindGetTxOut(txid, vout, include_mempool) {
+        const ptr0 = passStringToWasm0(txid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_bitcoindGetTxOut(this.__wbg_ptr, ptr0, len0, vout, include_mempool);
+        return ret;
+    }
 }
 if (Symbol.dispose) WebProvider.prototype[Symbol.dispose] = WebProvider.prototype.free;
 
@@ -1725,7 +2339,7 @@ export function __wbg_new_3c3d849046688a66(arg0, arg1) {
             const a = state0.a;
             state0.a = 0;
             try {
-                return wasm_bindgen__convert__closures_____invoke__h95fdbac5e4c1bfb6(a, state0.b, arg0, arg1);
+                return wasm_bindgen__convert__closures_____invoke__h53c04da2837a08e3(a, state0.b, arg0, arg1);
             } finally {
                 state0.a = a;
             }
@@ -1977,15 +2591,15 @@ export function __wbindgen_cast_2241b6af4c4b2941(arg0, arg1) {
     return ret;
 };
 
-export function __wbindgen_cast_4625c577ab2ec9ee(arg0) {
-    // Cast intrinsic for `U64 -> Externref`.
-    const ret = BigInt.asUintN(64, arg0);
+export function __wbindgen_cast_4348324a59eec88d(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 2313, function: Function { arguments: [Externref], shim_idx: 2314, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hda0b27b5b04387b3, wasm_bindgen__convert__closures_____invoke__h4a94c7d4879bc9ea);
     return ret;
 };
 
-export function __wbindgen_cast_6211035ff6a96c39(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 2122, function: Function { arguments: [Externref], shim_idx: 2123, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
+export function __wbindgen_cast_4625c577ab2ec9ee(arg0) {
+    // Cast intrinsic for `U64 -> Externref`.
+    const ret = BigInt.asUintN(64, arg0);
     return ret;
 };
 
