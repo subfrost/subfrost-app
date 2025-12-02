@@ -114,14 +114,14 @@ export default function LiquidityInputs({
         {liquidityMode === 'remove' ? (
         /* Remove Mode: LP Position Selector */
         <>
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select LP Position to Remove
             </span>
             <button
               type="button"
               onClick={onOpenLPSelector}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
             >
               <span className="font-bold text-sm text-[color:var(--sf-text)]">
                 {selectedLPPosition ? `${selectedLPPosition.amount} ${selectedLPPosition.token0Symbol}/${selectedLPPosition.token1Symbol} LP` : 'Select Position'}
@@ -133,7 +133,7 @@ export default function LiquidityInputs({
           {/* Remove Amount Input */}
           {selectedLPPosition && (
             <>
-              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md">
+              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
                   <button
@@ -165,7 +165,7 @@ export default function LiquidityInputs({
               </div>
 
               {/* LP Details */}
-              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md">
+              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
                 <span className="mb-4 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">LP Details</span>
                 
                 <div className="space-y-3">
@@ -204,7 +204,7 @@ export default function LiquidityInputs({
         /* Provide Mode: Token Pair Selection */
         <>
           {/* Select Pair Panel */}
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select Pair to Provide
             </span>
@@ -215,7 +215,7 @@ export default function LiquidityInputs({
           <button
             type="button"
             onClick={() => openTokenSelector('pool0')}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
           >
             {token0 && (
               <TokenIcon 
@@ -240,7 +240,7 @@ export default function LiquidityInputs({
           <button
             type="button"
             onClick={() => openTokenSelector('pool1')}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
           >
             {token1 && (
               <TokenIcon 
@@ -265,7 +265,7 @@ export default function LiquidityInputs({
             <>
               <div className="relative z-20 grid grid-cols-2 gap-3">
             {/* Token 0 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
                 <TokenIcon 
                   symbol={token0.symbol} 
@@ -283,7 +283,7 @@ export default function LiquidityInputs({
             </div>
 
             {/* Token 1 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
                 <TokenIcon 
                   symbol={token1.symbol} 
@@ -302,7 +302,7 @@ export default function LiquidityInputs({
           </div>
 
           {/* Fee Component */}
-          <div className="relative z-10 rounded-xl border border-[color:var(--sf-glass-border)] bg-white/40 p-4 backdrop-blur-sm">
+          <div className="relative z-10 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 p-4 backdrop-blur-sm">
             {/* Minimum Received with Settings Button */}
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
@@ -329,7 +329,7 @@ export default function LiquidityInputs({
                       value={customFee}
                       onChange={(e) => setCustomFee(e.target.value)}
                       placeholder="0"
-                      className="h-9 w-full rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                      className="h-9 w-full rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">Sats / vByte</span>
                   </div>
@@ -368,7 +368,7 @@ export default function LiquidityInputs({
           type="button"
           onClick={onCtaClick}
           disabled={!canAddLiquidity && isConnected}
-          className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(40,67,114,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(40,67,114,0.3)]"
+          className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
         >
           {ctaText}
         </button>
@@ -383,7 +383,7 @@ function SettingsButton() {
     <button
       type="button"
       onClick={() => openTxSettings()}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -438,14 +438,14 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg border-2 border-[color:var(--sf-glass-border)] bg-white shadow-[0_8px_32px_rgba(40,67,114,0.2)] backdrop-blur-xl">
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
           {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
             <button
               key={option}

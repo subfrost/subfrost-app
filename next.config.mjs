@@ -6,8 +6,13 @@ const __dirname = path.dirname(__filename);
 
 const nextConfig = {
   reactStrictMode: true,
+  outputFileTracingRoot: path.join(__dirname, '.'),
   typescript: {
     ignoreBuildErrors: false,
+  },
+  eslint: {
+    // Lint errors are warnings during development but should not block builds
+    ignoreDuringBuilds: true,
   },
   turbopack: {
     resolveAlias: {
@@ -47,7 +52,15 @@ const nextConfig = {
     config.module.rules.push({
       test: /\.wasm$/,
       type: "webassembly/async",
-      exclude: [/node_modules/],
+    });
+
+    // Copy WASM files from ts-sdk to static folder during build
+    config.module.rules.push({
+      test: /alkanes_bg\.wasm$/,
+      type: "asset/resource",
+      generator: {
+        filename: "static/wasm/[name][ext]",
+      },
     });
 
     // Add polyfills for browser

@@ -32,7 +32,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200" onClick={close}>
       <div
-        className="w-[540px] max-w-[92vw] overflow-hidden rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-gradient-to-br from-white to-[color:var(--sf-surface)] p-8 shadow-[0_16px_64px_rgba(40,67,114,0.3)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+        className="w-[540px] max-w-[92vw] overflow-hidden rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-gradient-to-br from-white to-[color:var(--sf-surface)] p-8 shadow-[0_16px_64px_rgba(0,0,0,0.3)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -64,7 +64,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                   className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
                     maxSlippage === p 
                       ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
-                      : 'border-[color:var(--sf-outline)] bg-white text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                      : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
                   }`}
                 >
                   {p}%
@@ -83,7 +83,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                     const n = Math.max(0, Math.min(50, Number(v)));
                     if (Number.isFinite(n)) setMaxSlippage(String(n));
                   }}
-                  className="h-10 w-28 rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 pr-10 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                  className="h-10 w-28 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-10 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
               </div>
@@ -104,7 +104,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                 const n = Math.max(1, Math.min(10, Number(e.target.value)));
                 if (Number.isFinite(n)) setDeadlineBlocks(n);
               }}
-              className="h-10 w-32 rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+              className="h-10 w-32 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
             />
           </section>
 
@@ -120,7 +120,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                   className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all ${
                     selection === s 
                       ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
-                      : 'border-[color:var(--sf-outline)] bg-white text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                      : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
                   }`}
                 >
                   {s}
@@ -132,7 +132,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                 className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
                   selection === 'custom' 
                     ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
-                    : 'border-[color:var(--sf-outline)] bg-white text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                    : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
                 }`}
               >
                 Custom
@@ -148,7 +148,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                     value={custom}
                     onChange={(e) => setCustom(e.target.value)}
                     placeholder="0"
-                    className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                    className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
                   />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sats/vB</span>
                 </div>

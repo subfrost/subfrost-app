@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "description": "TypeScript SDK for Alkanes - Bitcoin smart contracts",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "./index.d.ts",
   "module": "dist/index.mjs",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js",
       "default": "./dist/index.mjs"
@@ -26,17 +26,16 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "npm run build:ts && npm run copy:wasm",
-    "build:wasm": "echo 'WASM already built and vendored in build/ directory'",
-    "build:vendor": "echo 'WASM already vendored in build/ directory'",
-    "build:ts": "tsup src/index.ts src/provider/index.ts src/types/index.ts src/wallet/index.ts src/keystore/index.ts --format cjs,esm --dts --clean",
-    "copy:wasm": "cp src/wasm/alkanes_bg.wasm dist/",
+    "build": "npm run build:wasm && npm run build:vendor && npm run build:ts",
+    "build:wasm": "cd ../crates/alkanes-web-sys && wasm-pack build --target bundler --out-dir ../../ts-sdk/build/wasm",
+    "build:vendor": "node scripts/vendor-wasms.js",
+    "build:ts": "tsup src/index.ts --format cjs,esm --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "test": "jest",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "clean": "rm -rf dist build",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "alkanes",

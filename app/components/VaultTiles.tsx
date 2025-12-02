@@ -15,8 +15,8 @@ export default function VaultTiles() {
   const featured = filteredVaults.slice(0, 3);
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-[color:var(--sf-text)]">Trending Vaults</h3>
           <Link href="/vaults" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors">View all</Link>
@@ -28,10 +28,10 @@ export default function VaultTiles() {
             <Link
               key={v.id}
               href="/vaults"
-              className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(40,67,114,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-white/20 sf-focus-ring"
+              className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 sf-focus-ring"
             >
               <div className="flex items-center gap-3 mb-3">
-                <div className="h-10 w-10 rounded-full border border-white/20 bg-white/10 p-1">
+                <div className="h-10 w-10 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/10 p-1">
                   <TokenIcon id={v.tokenId} symbol={v.tokenSymbol} size="md" />
                 </div>
                 <div className="min-w-0 flex-1">

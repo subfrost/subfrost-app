@@ -66,18 +66,18 @@ export default function TokenSelectorModal({
       onClick={onClose}
     >
       <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(40,67,114,0.4)] backdrop-blur-xl"
+        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="border-b-2 border-[color:var(--sf-glass-border)] bg-white/40 px-6 py-5">
+        <div className="border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 px-6 py-5">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
               {title}
             </h2>
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-white/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-white hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
               aria-label="Close"
             >
               <X size={18} />
@@ -89,7 +89,7 @@ export default function TokenSelectorModal({
         </div>
 
         {/* Search */}
-        <div className="border-b border-[color:var(--sf-glass-border)] bg-white/20 px-6 py-4">
+        <div className="border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/20 px-6 py-4">
           <div className="relative">
             <Search
               size={18}
@@ -100,7 +100,7 @@ export default function TokenSelectorModal({
               placeholder="Search by name or symbol..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-white/90 py-3 pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:border-[color:var(--sf-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 transition-all"
+              className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 py-3 pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:border-[color:var(--sf-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 transition-all"
             />
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function TokenSelectorModal({
                         ? 'border-transparent bg-gray-300/50 opacity-50 cursor-not-allowed'
                         : isSelected
                         ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 hover:shadow-md'
-                        : 'border-transparent bg-white/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-white/60 hover:shadow-md'
+                        : 'border-transparent bg-[color:var(--sf-surface)]/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-[color:var(--sf-surface)]/60 hover:shadow-md'
                     }`}
                     disabled={!isAvailable}
                   >

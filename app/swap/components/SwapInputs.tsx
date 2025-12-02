@@ -96,7 +96,7 @@ export default function SwapInputs({
   return (
     <div className="relative flex flex-col gap-3">
       {/* Sell panel */}
-      <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+      <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Pay</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
           <div className="flex flex-col gap-2">
@@ -108,7 +108,7 @@ export default function SwapInputs({
               <button
                 type="button"
                 onClick={() => openTokenSelector('from')}
-                className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring flex-shrink-0"
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring flex-shrink-0"
               >
                 {from && (
                   <TokenIcon 
@@ -158,21 +158,21 @@ export default function SwapInputs({
                     <button
                       type="button"
                       onClick={() => onPercentFrom(0.25)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                     >
                       25%
                     </button>
                     <button
                       type="button"
                       onClick={() => onPercentFrom(0.5)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                     >
                       50%
                     </button>
                     <button
                       type="button"
                       onClick={() => onPercentFrom(0.75)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                     >
                       75%
                     </button>
@@ -197,7 +197,7 @@ export default function SwapInputs({
         <button
           type="button"
           onClick={onInvert}
-          className="group flex h-11 w-11 items-center justify-center rounded-full border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-b from-white to-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(40,67,114,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.25)] hover:border-[color:var(--sf-primary)]/40 hover:scale-105 active:scale-95 outline-none"
+          className="group flex h-11 w-11 items-center justify-center rounded-full border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-b from-white to-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.25)] hover:border-[color:var(--sf-primary)]/40 hover:scale-105 active:scale-95 outline-none"
           aria-label="Invert swap direction"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform group-hover:-rotate-180 duration-300">
@@ -207,7 +207,7 @@ export default function SwapInputs({
       </div>
 
       {/* Receive panel */}
-      <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+      <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
         <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Receive</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
           <div className="flex flex-col gap-2">
@@ -219,7 +219,7 @@ export default function SwapInputs({
               <button
                 type="button"
                 onClick={() => openTokenSelector('to')}
-                className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring flex-shrink-0"
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring flex-shrink-0"
               >
                 {to && (
                   <TokenIcon 
@@ -257,7 +257,7 @@ export default function SwapInputs({
         type="button"
         onClick={onCtaClick}
         disabled={!canSwap && isConnected}
-        className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(40,67,114,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(40,67,114,0.3)]"
+        className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
       >
         {ctaText}
       </button>

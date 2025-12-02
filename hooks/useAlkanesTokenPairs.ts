@@ -37,7 +37,7 @@ export function useAlkanesTokenPairs(
         searchQuery,
       });
 
-      return response.map((tokenPair): AlkanesTokenPair => ({
+      return response.map((tokenPair: any): AlkanesTokenPair => ({
         ...tokenPair,
         token0: {
           ...tokenPair.token0,

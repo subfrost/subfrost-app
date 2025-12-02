@@ -1,18 +1,13 @@
 'use client';
 
-import {
-  useLaserEyes,
-  type LaserEyesContextType,
-  type ProviderType,
-} from '@omnisat/lasereyes-react';
 import type { ReactNode } from 'react';
-import { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 
-import { NetworkMap } from '@/utils/constants';
-import { Loader2 } from 'lucide-react';
+import { NetworkMap, type Network } from '@/utils/constants';
+// Import directly from sub-modules to avoid WASM dependency
+import { AlkanesWallet, AddressType, createWallet, createWalletFromMnemonic } from '@alkanes/ts-sdk';
+import { KeystoreManager, createKeystore, unlockKeystore } from '@alkanes/ts-sdk';
 
-// Types only - no runtime import of @oyl/sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet';
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
   nativeSegwit?: { address: string; pubkey: string; hdPath: string };
@@ -20,7 +15,6 @@ type Account = {
   network: any;
 };
 
-// FormattedUtxo type for UTXO handling
 type FormattedUtxo = {
   txId: string;
   outputIndex: number;
@@ -34,245 +28,386 @@ type FormattedUtxo = {
   confirmations: number;
 };
 
-// AddressType enum values - avoid importing from @oyl/sdk
-const AddressType = {
-  P2TR: 'p2tr',
-  P2WPKH: 'p2wpkh',
+// Storage keys
+const STORAGE_KEYS = {
+  ENCRYPTED_KEYSTORE: 'subfrost_encrypted_keystore',
+  WALLET_NETWORK: 'subfrost_wallet_network',
+  SESSION_MNEMONIC: 'subfrost_session_mnemonic', // Session-only storage for active wallet
 } as const;
 
-// Simple address type detection without importing @oyl/sdk
-function detectAddressType(address: string): string | undefined {
-  if (!address) return undefined;
-  // Taproot addresses start with bc1p (mainnet) or tb1p (testnet/signet)
-  if (address.startsWith('bc1p') || address.startsWith('tb1p')) {
-    return AddressType.P2TR;
-  }
-  // Native SegWit addresses start with bc1q (mainnet) or tb1q (testnet/signet)
-  if (address.startsWith('bc1q') || address.startsWith('tb1q')) {
-    return AddressType.P2WPKH;
-  }
-  return undefined;
-}
-
 type WalletContextType = {
+  // Connection state
   isConnectModalOpen: boolean;
   onConnectModalOpenChange: (isOpen: boolean) => void;
   isConnected: boolean;
+  isInitializing: boolean;
+
+  // Wallet data
   address: string;
+  paymentAddress: string;
   publicKey: string;
-  finalizeConnect: (walletName: ProviderType) => void;
+  account: Account;
+  network: Network;
+  wallet: AlkanesWallet | null;
+
+  // Actions
+  createWallet: (password: string) => Promise<{ mnemonic: string }>;
+  unlockWallet: (password: string) => Promise<void>;
+  restoreWallet: (mnemonic: string, password: string) => Promise<void>;
   disconnect: () => void;
+  signPsbt: (psbtBase64: string) => Promise<string>;
+  signPsbts: (params: { psbts: string[] }) => Promise<{ signedPsbts: string[] }>;
+  signMessage: (message: string) => Promise<string>;
+
+  // UTXO methods
   getUtxos: () => Promise<FormattedUtxo[]>;
   getSpendableUtxos: () => Promise<FormattedUtxo[]>;
   getSpendableTotalBalance: () => Promise<number>;
-  account: Account;
-  network: Network;
+
+  // For compatibility with existing code
+  hasStoredKeystore: boolean;
 };
 
-const WalletContext = createContext<
-  (WalletContextType & Omit<LaserEyesContextType, 'connect' | 'network'>) | null
->(null);
+const WalletContext = createContext<WalletContextType | null>(null);
 
-export function WalletProvider({ children }: { children: ReactNode }) {
+interface WalletProviderProps {
+  children: ReactNode;
+  network: Network;
+}
+
+export function WalletProvider({ children, network }: WalletProviderProps) {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
-  const laserEyesContext = useLaserEyes();
-  const network = laserEyesContext.network as Network;
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [wallet, setWallet] = useState<AlkanesWallet | null>(null);
+  const [hasStoredKeystore, setHasStoredKeystore] = useState(false);
 
-  const handleConnect = useCallback(async (walletName: ProviderType) => {
-    try {
-      if (laserEyesContext.provider === walletName) {
-        laserEyesContext.disconnect();
-      } else {
-        setIsConnectModalOpen(false);
-        // Only call connect - switchNetwork is not needed when connecting
-        // since the network is already configured in LaserEyesProvider
-        await laserEyesContext.connect(walletName);
+  // Check for stored keystore and restore session on mount
+  useEffect(() => {
+    const initializeWallet = async () => {
+      if (typeof window === 'undefined') return;
+
+      const stored = localStorage.getItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE);
+      setHasStoredKeystore(!!stored);
+
+      // Check for active session (survives page navigation but not tab close)
+      const sessionMnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
+      if (sessionMnemonic && stored) {
+        try {
+          // Restore wallet from session mnemonic
+          const restoredWallet = createWalletFromMnemonic(sessionMnemonic, network);
+          setWallet(restoredWallet);
+        } catch (error) {
+          // Session invalid, clear it
+          sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
+        }
       }
-    } catch (error) {
-      console.error('Error connecting wallet:', error);
-    }
-  }, [laserEyesContext]);
 
-  // @ts-ignore
+      setIsInitializing(false);
+    };
+
+    initializeWallet();
+  }, [network]);
+
+  // Derive addresses from wallet
+  const addresses = useMemo(() => {
+    if (!wallet) {
+      return {
+        nativeSegwit: { address: '', pubkey: '', hdPath: '' },
+        taproot: { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
+      };
+    }
+
+    const segwitInfo = wallet.deriveAddress(AddressType.P2WPKH, 0, 0);
+    const taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
+
+    return {
+      nativeSegwit: {
+        address: segwitInfo.address,
+        pubkey: segwitInfo.publicKey,
+        hdPath: segwitInfo.path,
+      },
+      taproot: {
+        address: taprootInfo.address,
+        pubkey: taprootInfo.publicKey,
+        pubKeyXOnly: taprootInfo.publicKey.slice(2), // Remove prefix for x-only
+        hdPath: taprootInfo.path,
+      },
+    };
+  }, [wallet]);
+
+  // Build account structure
   const account: Account = useMemo(() => {
-    // Detect address types independently for both addresses
-    const addressType = detectAddressType(laserEyesContext.address);
-    const paymentAddressType = detectAddressType(laserEyesContext.paymentAddress);
-
-    // Determine which address is which type
-    let taprootAddress: string | undefined;
-    let taprootPubkey: string | undefined;
-    let nativeSegwitAddress: string | undefined;
-    let nativeSegwitPubkey: string | undefined;
-
-    if (addressType === AddressType.P2TR) {
-      taprootAddress = laserEyesContext.address;
-      taprootPubkey = laserEyesContext.publicKey;
-    } else if (paymentAddressType === AddressType.P2TR) {
-      taprootAddress = laserEyesContext.paymentAddress;
-      taprootPubkey = laserEyesContext.paymentPublicKey;
-    }
-
-    if (addressType === AddressType.P2WPKH) {
-      nativeSegwitAddress = laserEyesContext.address;
-      nativeSegwitPubkey = laserEyesContext.publicKey;
-    } else if (paymentAddressType === AddressType.P2WPKH) {
-      nativeSegwitAddress = laserEyesContext.paymentAddress;
-      nativeSegwitPubkey = laserEyesContext.paymentPublicKey;
-    }
-    
-    // Build account structure dynamically based on what's found
-    const accountStructure: any = {
+    return {
+      nativeSegwit: addresses.nativeSegwit.address ? addresses.nativeSegwit : undefined,
+      taproot: addresses.taproot.address ? addresses.taproot : undefined,
       spendStrategy: {
         addressOrder: ['nativeSegwit', 'taproot'],
         utxoSortGreatestToLeast: true,
         changeAddress: 'nativeSegwit',
       },
-      network: NetworkMap[laserEyesContext.network as Network],
+      network: NetworkMap[network],
     };
-    
-    // Add taproot if found in either address
-    if (taprootAddress) {
-      accountStructure.taproot = {
-        address: taprootAddress,
-        pubkey: taprootPubkey,
-        pubKeyXOnly: '',
-        hdPath: '',
-      };
+  }, [addresses, network]);
+
+  // Create new wallet
+  const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {
+    // createKeystore generates mnemonic and returns both encrypted keystore and mnemonic
+    const { keystore: encrypted, mnemonic } = await createKeystore(password, { network });
+
+    // Create wallet from mnemonic
+    const newWallet = createWalletFromMnemonic(mnemonic, network);
+
+    // Store encrypted keystore
+    localStorage.setItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE, encrypted);
+    localStorage.setItem(STORAGE_KEYS.WALLET_NETWORK, network);
+
+    // Store mnemonic in session for page navigation persistence
+    sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, mnemonic);
+
+    setWallet(newWallet);
+    setHasStoredKeystore(true);
+
+    return { mnemonic };
+  }, [network]);
+
+  // Unlock existing wallet
+  const unlockWallet = useCallback(async (password: string): Promise<void> => {
+    const encrypted = localStorage.getItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE);
+    if (!encrypted) {
+      throw new Error('No wallet found. Please create or restore a wallet first.');
     }
 
-    // Add native segwit if found in either address
-    if (nativeSegwitAddress) {
-      accountStructure.nativeSegwit = {
-        address: nativeSegwitAddress,
-        pubkey: nativeSegwitPubkey,
-        hdPath: '',
-      };
-    }
-    
-    // Fallback: if no addresses were detected, use the main address as native segwit
-    // This ensures we always have at least one address available
-    if (!taprootAddress && !nativeSegwitAddress) {
-      console.warn('No supported address types detected, using main address as native segwit fallback');
-      accountStructure.nativeSegwit = {
-        address: laserEyesContext.address,
-        pubkey: laserEyesContext.publicKey,
-        hdPath: '',
-      };
-    }
-    
-    // Set spend strategy based on available address types
-    const availableTypes: string[] = [];
-    if (accountStructure.nativeSegwit) availableTypes.push('nativeSegwit');
-    if (accountStructure.taproot) availableTypes.push('taproot');
-    
-    if (availableTypes.length > 0) {
-      accountStructure.spendStrategy.addressOrder = availableTypes;
-      // Set change address to the first available type (usually nativeSegwit if available)
-      accountStructure.spendStrategy.changeAddress = availableTypes[0];
-    } else {
-      throw new Error('No valid addresses found in wallet');
-    }
-    
-    return accountStructure;
-  }, [
-    laserEyesContext.address,
-    laserEyesContext.paymentAddress,
-    laserEyesContext.publicKey,
-    laserEyesContext.paymentPublicKey,
-    laserEyesContext.network,
-  ]);
+    const keystore = await unlockKeystore(encrypted, password);
+    const unlockedWallet = createWalletFromMnemonic(keystore.mnemonic, network);
 
-  const getUtxos = useCallback(async () => {
-    // Lazy import to avoid loading @oyl/sdk on initial page load
-    const { getApiProvider } = await import('@/utils/oylProvider');
-    const api = getApiProvider(network);
+    // Store mnemonic in session for page navigation persistence
+    sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, keystore.mnemonic);
+
+    setWallet(unlockedWallet);
+  }, [network]);
+
+  // Restore wallet from mnemonic
+  const restoreWallet = useCallback(async (mnemonic: string, password: string): Promise<void> => {
+    // Create keystore manager and use its validateMnemonic method
+    const manager = new KeystoreManager();
+
+    const trimmedMnemonic = mnemonic.trim();
+
+    // Validate mnemonic
+    if (!manager.validateMnemonic(trimmedMnemonic)) {
+      throw new Error('Invalid mnemonic phrase');
+    }
+
+    // Create wallet
+    const restoredWallet = createWalletFromMnemonic(trimmedMnemonic, network);
+
+    // Create keystore and encrypt
+    const keystore = manager.createKeystore(trimmedMnemonic, { network });
+    const encrypted = await manager.exportKeystore(keystore, password, { pretty: true });
+    const encryptedStr = typeof encrypted === 'string' ? encrypted : JSON.stringify(encrypted, null, 2);
+
+    localStorage.setItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE, encryptedStr);
+    localStorage.setItem(STORAGE_KEYS.WALLET_NETWORK, network);
+
+    // Store mnemonic in session for page navigation persistence
+    sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, trimmedMnemonic);
+
+    setWallet(restoredWallet);
+    setHasStoredKeystore(true);
+  }, [network]);
+
+  // Disconnect (lock) wallet
+  const disconnect = useCallback(() => {
+    // Clear session mnemonic so wallet doesn't auto-reconnect on navigation
+    sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
+    setWallet(null);
+    setIsConnectModalOpen(false);
+  }, []);
+
+  // Sign PSBT
+  const signPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
+    if (!wallet) {
+      throw new Error('Wallet not connected');
+    }
+    return wallet.signPsbt(psbtBase64);
+  }, [wallet]);
+
+  // Sign multiple PSBTs
+  const signPsbts = useCallback(async (params: { psbts: string[] }): Promise<{ signedPsbts: string[] }> => {
+    if (!wallet) {
+      throw new Error('Wallet not connected');
+    }
+    const signedPsbts = await Promise.all(params.psbts.map(psbt => wallet.signPsbt(psbt)));
+    return { signedPsbts };
+  }, [wallet]);
+
+  // Sign message
+  const signMessage = useCallback(async (message: string): Promise<string> => {
+    if (!wallet) {
+      throw new Error('Wallet not connected');
+    }
+    return wallet.signMessage(message, 0);
+  }, [wallet]);
+
+  // Get UTXOs
+  const getUtxos = useCallback(async (): Promise<FormattedUtxo[]> => {
+    if (!wallet || !account.nativeSegwit) {
+      return [];
+    }
+
+    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
+    const api = await getAlkanesProvider(network);
     const promises: Promise<any>[] = [];
 
-    // Fetch UTXOs from taproot address if it exists
-    if (account.taproot) {
+    if (account.taproot?.address) {
       promises.push(api.getAddressUtxos(account.taproot.address, account.spendStrategy));
     }
 
-    // Fetch UTXOs from native segwit address if it exists
-    if (account.nativeSegwit) {
+    if (account.nativeSegwit?.address) {
       promises.push(api.getAddressUtxos(account.nativeSegwit.address, account.spendStrategy));
     }
 
-    // If no addresses found, return empty array
     if (promises.length === 0) {
       return [];
     }
 
     const results = await Promise.all(promises);
-    return results.flatMap(result => result.utxos);
-  }, [network, account]);
+    return results.flatMap(result => result.utxos || []);
+  }, [wallet, account, network]);
 
-  const getSpendableUtxos = useCallback(async () => {
-    // Lazy import to avoid loading @oyl/sdk on initial page load
-    const { getApiProvider } = await import('@/utils/oylProvider');
-    const api = getApiProvider(network);
+  // Get spendable UTXOs
+  const getSpendableUtxos = useCallback(async (): Promise<FormattedUtxo[]> => {
+    if (!wallet || !account.nativeSegwit?.address) {
+      return [];
+    }
 
-    const {spendableUtxos} = await api.getAddressUtxos(laserEyesContext.paymentAddress, account.spendStrategy)
+    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
+    const api = await getAlkanesProvider(network);
+
+    const { spendableUtxos } = await api.getAddressUtxos(
+      account.nativeSegwit.address,
+      account.spendStrategy
+    );
 
     spendableUtxos.sort((a: any, b: any) =>
       account.spendStrategy.utxoSortGreatestToLeast
         ? b.satoshis - a.satoshis
         : a.satoshis - b.satoshis
-    )
+    );
 
     return spendableUtxos;
-  }, [network, account, laserEyesContext.paymentAddress]);
+  }, [wallet, account, network]);
 
-  const getSpendableTotalBalance = useCallback(async () => {
-    // Lazy import to avoid loading @oyl/sdk on initial page load
-    const { getApiProvider } = await import('@/utils/oylProvider');
-    const api = getApiProvider(network);
+  // Get spendable balance - uses simple esplora API for speed
+  const getSpendableTotalBalance = useCallback(async (): Promise<number> => {
+    if (!wallet || !account.nativeSegwit?.address) {
+      return 0;
+    }
 
-    const {spendableTotalBalance} = await api.getAddressUtxos(laserEyesContext.paymentAddress, account.spendStrategy)
+    try {
+      const { getNetworkUrls } = await import('@/utils/alkanesProvider');
+      const networkUrls = getNetworkUrls(network);
 
-    return spendableTotalBalance;
-  }, [network, account, laserEyesContext.paymentAddress]);
+      // Use esplora REST API directly for fast balance lookup
+      // For regtest, esplora is on port 50010
+      const esploraUrl = process.env.NEXT_PUBLIC_ESPLORA_URL || networkUrls.rpc;
+
+      let totalBalance = 0;
+      const addresses = [account.nativeSegwit?.address, account.taproot?.address].filter(Boolean);
+
+      for (const address of addresses) {
+        try {
+          // Try REST endpoint first (esplora on port 50010)
+          const restResponse = await fetch(`${esploraUrl}/address/${address}/utxo`);
+          if (restResponse.ok) {
+            const utxos = await restResponse.json();
+            if (Array.isArray(utxos)) {
+              totalBalance += utxos.reduce((sum: number, utxo: any) => sum + (utxo.value || 0), 0);
+            }
+          }
+        } catch {
+          // Fallback to RPC method
+          const rpcResponse = await fetch(networkUrls.rpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'esplora_address::utxo',
+              params: [address],
+            }),
+          });
+          const data = await rpcResponse.json();
+          if (data.result && Array.isArray(data.result)) {
+            totalBalance += data.result.reduce((sum: number, utxo: any) => sum + (utxo.value || 0), 0);
+          }
+        }
+      }
+
+      return totalBalance;
+    } catch (error) {
+      console.error('[WalletContext] Error fetching balance:', error);
+      return 0;
+    }
+  }, [wallet, account, network]);
 
   const onConnectModalOpenChange = useCallback((isOpen: boolean) => {
     setIsConnectModalOpen(isOpen);
   }, []);
 
-  // Memoize context value to prevent unnecessary re-renders
-  const contextValue = useMemo(
+  // Build context value
+  const contextValue = useMemo<WalletContextType>(
     () => ({
-      ...laserEyesContext,
       isConnectModalOpen,
+      onConnectModalOpenChange,
+      isConnected: !!wallet,
+      isInitializing,
+
+      address: addresses.taproot.address || addresses.nativeSegwit.address,
+      paymentAddress: addresses.nativeSegwit.address,
+      publicKey: addresses.nativeSegwit.pubkey,
+      account,
+      network,
+      wallet,
+
+      createWallet: createNewWallet,
+      unlockWallet,
+      restoreWallet,
+      disconnect,
+      signPsbt,
+      signPsbts,
+      signMessage,
+
       getUtxos,
       getSpendableUtxos,
       getSpendableTotalBalance,
-      account,
-      network,
-      onConnectModalOpenChange,
-      finalizeConnect: handleConnect,
-      isConnected: laserEyesContext.connected,
+
+      hasStoredKeystore,
     }),
     [
-      laserEyesContext,
       isConnectModalOpen,
+      onConnectModalOpenChange,
+      wallet,
+      isInitializing,
+      addresses,
+      account,
+      network,
+      createNewWallet,
+      unlockWallet,
+      restoreWallet,
+      disconnect,
+      signPsbt,
+      signPsbts,
+      signMessage,
       getUtxos,
       getSpendableUtxos,
       getSpendableTotalBalance,
-      account,
-      network,
-      onConnectModalOpenChange,
-      handleConnect,
+      hasStoredKeystore,
     ]
   );
 
-  if (laserEyesContext.isInitializing) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 size={32} color="#449CFF" className="animate-spin" />
-      </div>
-    );
-  }
-
+  // Render children even during initialization - components can handle
+  // the unconnected state. This prevents blocking navigation.
   return (
     <WalletContext.Provider value={contextValue}>
       {children}
@@ -287,5 +422,3 @@ export function useWallet() {
   }
   return context;
 }
-
-

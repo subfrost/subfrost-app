@@ -1,10 +1,8 @@
 /**
  * UTXO Parsing and Vault Unit Detection Tests
- * 
- * These tests verify our UTXO parsing logic matches the Oyl SDK structure
+ *
+ * These tests verify our UTXO parsing logic matches the alkanes SDK structure
  * and that our vault unit detection correctly filters alkanes.
- * 
- * Based on: @oyl/sdk/lib/utxo/types.d.ts
  */
 
 // Mock FormattedUtxo structure based on SDK
@@ -88,7 +86,7 @@ console.log('🧪 Testing UTXO Parsing and Vault Unit Detection\n');
 let testsPassed = 0;
 let testsFailed = 0;
 
-function test(name: string, fn: () => void) {
+function runTest(name: string, fn: () => void) {
   try {
     fn();
     console.log(`✅ ${name}`);
@@ -100,7 +98,7 @@ function test(name: string, fn: () => void) {
   }
 }
 
-function expect(actual: any) {
+function assertThat(actual: unknown) {
   return {
     toBe(expected: any) {
       if (actual !== expected) {
@@ -113,8 +111,9 @@ function expect(actual: any) {
       }
     },
     toHaveLength(expected: number) {
-      if (actual.length !== expected) {
-        throw new Error(`Expected length ${expected}, got ${actual.length}`);
+      const arr = actual as { length: number };
+      if (arr.length !== expected) {
+        throw new Error(`Expected length ${expected}, got ${arr.length}`);
       }
     },
     toContain(expected: any) {
@@ -141,7 +140,7 @@ function expect(actual: any) {
 // ==========================================
 console.log('📦 Test Suite 1: UTXO Structure Parsing\n');
 
-test('Should correctly parse alkanes Record from UTXO', () => {
+runTest('Should correctly parse alkanes Record from UTXO', () => {
   const mockUtxo: FormattedUtxo = {
     txid: 'abc123',
     vout: 0,
@@ -155,12 +154,12 @@ test('Should correctly parse alkanes Record from UTXO', () => {
   };
 
   const alkaneIds = Object.keys(mockUtxo.alkanes);
-  expect(alkaneIds).toHaveLength(2);
-  expect(alkaneIds).toContain('2:100');
-  expect(alkaneIds).toContain('2:101');
+  assertThat(alkaneIds).toHaveLength(2);
+  assertThat(alkaneIds).toContain('2:100');
+  assertThat(alkaneIds).toContain('2:101');
 });
 
-test('Should access alkaneEntry.value correctly', () => {
+runTest('Should access alkaneEntry.value correctly', () => {
   const mockUtxo: FormattedUtxo = {
     txid: 'abc123',
     vout: 0,
@@ -173,12 +172,12 @@ test('Should access alkaneEntry.value correctly', () => {
   };
 
   const entry = mockUtxo.alkanes['2:100'];
-  expect(entry.value).toBe('123456789');
-  expect(entry.name).toBe('Test');
-  expect(entry.symbol).toBe('TEST');
+  assertThat(entry.value).toBe('123456789');
+  assertThat(entry.name).toBe('Test');
+  assertThat(entry.symbol).toBe('TEST');
 });
 
-test('Should handle UTXO with no alkanes', () => {
+runTest('Should handle UTXO with no alkanes', () => {
   const mockUtxo: FormattedUtxo = {
     txid: 'abc123',
     vout: 0,
@@ -189,7 +188,7 @@ test('Should handle UTXO with no alkanes', () => {
   };
 
   const alkaneIds = Object.keys(mockUtxo.alkanes);
-  expect(alkaneIds).toHaveLength(0);
+  assertThat(alkaneIds).toHaveLength(0);
 });
 
 console.log('');
@@ -199,7 +198,7 @@ console.log('');
 // ==========================================
 console.log('📦 Test Suite 2: Vault Unit Detection Logic\n');
 
-test('Should detect vault units in same block as template', () => {
+runTest('Should detect vault units in same block as template', () => {
   const mockUtxos: FormattedUtxo[] = [
     {
       txid: 'tx1',
@@ -216,12 +215,12 @@ test('Should detect vault units in same block as template', () => {
 
   const vaultUnits = extractVaultUnits(mockUtxos, '2');
   
-  expect(vaultUnits).toHaveLength(2);
-  expect(vaultUnits[0].alkaneId).toBe('2:101'); // Sorted descending by tx
-  expect(vaultUnits[1].alkaneId).toBe('2:100');
+  assertThat(vaultUnits).toHaveLength(2);
+  assertThat(vaultUnits[0].alkaneId).toBe('2:101'); // Sorted descending by tx
+  assertThat(vaultUnits[1].alkaneId).toBe('2:100');
 });
 
-test('Should filter out alkanes from different blocks', () => {
+runTest('Should filter out alkanes from different blocks', () => {
   const mockUtxos: FormattedUtxo[] = [
     {
       txid: 'tx1',
@@ -240,11 +239,11 @@ test('Should filter out alkanes from different blocks', () => {
   const vaultUnits = extractVaultUnits(mockUtxos, '2');
   
   // Should only include block 2 alkanes
-  expect(vaultUnits).toHaveLength(1);
-  expect(vaultUnits[0].alkaneId).toBe('2:100');
+  assertThat(vaultUnits).toHaveLength(1);
+  assertThat(vaultUnits[0].alkaneId).toBe('2:100');
 });
 
-test('Should aggregate amounts across multiple UTXOs', () => {
+runTest('Should aggregate amounts across multiple UTXOs', () => {
   const mockUtxos: FormattedUtxo[] = [
     {
       txid: 'tx1',
@@ -271,14 +270,14 @@ test('Should aggregate amounts across multiple UTXOs', () => {
   const vaultUnits = extractVaultUnits(mockUtxos, '2');
   
   // Same unit in 2 UTXOs should aggregate
-  expect(vaultUnits).toHaveLength(1);
-  expect(vaultUnits[0].amount).toBe('2'); // 1 + 1
-  expect(vaultUnits[0].utxoCount).toBe(2);
+  assertThat(vaultUnits).toHaveLength(1);
+  assertThat(vaultUnits[0].amount).toBe('2'); // 1 + 1
+  assertThat(vaultUnits[0].utxoCount).toBe(2);
 });
 
-test('Should handle empty UTXO array', () => {
+runTest('Should handle empty UTXO array', () => {
   const vaultUnits = extractVaultUnits([], '2');
-  expect(vaultUnits).toHaveLength(0);
+  assertThat(vaultUnits).toHaveLength(0);
 });
 
 console.log('');
@@ -288,7 +287,7 @@ console.log('');
 // ==========================================
 console.log('📦 Test Suite 3: Unit Sorting Logic\n');
 
-test('Should sort units by tx number descending (newest first)', () => {
+runTest('Should sort units by tx number descending (newest first)', () => {
   const mockUtxos: FormattedUtxo[] = [
     {
       txid: 'tx1',
@@ -306,10 +305,10 @@ test('Should sort units by tx number descending (newest first)', () => {
 
   const vaultUnits = extractVaultUnits(mockUtxos, '2');
   
-  expect(vaultUnits).toHaveLength(3);
-  expect(vaultUnits[0].alkaneId).toBe('2:105'); // Newest
-  expect(vaultUnits[1].alkaneId).toBe('2:102');
-  expect(vaultUnits[2].alkaneId).toBe('2:100'); // Oldest
+  assertThat(vaultUnits).toHaveLength(3);
+  assertThat(vaultUnits[0].alkaneId).toBe('2:105'); // Newest
+  assertThat(vaultUnits[1].alkaneId).toBe('2:102');
+  assertThat(vaultUnits[2].alkaneId).toBe('2:100'); // Oldest
 });
 
 console.log('');
@@ -319,7 +318,7 @@ console.log('');
 // ==========================================
 console.log('📦 Test Suite 4: Edge Cases\n');
 
-test('Should handle malformed alkane IDs gracefully', () => {
+runTest('Should handle malformed alkane IDs gracefully', () => {
   const mockUtxos: FormattedUtxo[] = [
     {
       txid: 'tx1',
@@ -338,11 +337,11 @@ test('Should handle malformed alkane IDs gracefully', () => {
   const vaultUnits = extractVaultUnits(mockUtxos, '2');
   
   // Should only include valid format
-  expect(vaultUnits).toHaveLength(1);
-  expect(vaultUnits[0].alkaneId).toBe('2:100');
+  assertThat(vaultUnits).toHaveLength(1);
+  assertThat(vaultUnits[0].alkaneId).toBe('2:100');
 });
 
-test('Should handle very large amounts', () => {
+runTest('Should handle very large amounts', () => {
   const mockUtxos: FormattedUtxo[] = [
     {
       txid: 'tx1',
@@ -358,11 +357,11 @@ test('Should handle very large amounts', () => {
 
   const vaultUnits = extractVaultUnits(mockUtxos, '2');
   
-  expect(vaultUnits).toHaveLength(1);
-  expect(vaultUnits[0].amount).toBe('999999999999999999');
+  assertThat(vaultUnits).toHaveLength(1);
+  assertThat(vaultUnits[0].amount).toBe('999999999999999999');
 });
 
-test('Should handle zero value alkanes', () => {
+runTest('Should handle zero value alkanes', () => {
   const mockUtxos: FormattedUtxo[] = [
     {
       txid: 'tx1',
@@ -379,8 +378,8 @@ test('Should handle zero value alkanes', () => {
   const vaultUnits = extractVaultUnits(mockUtxos, '2');
   
   // Should still detect it (value validation happens elsewhere)
-  expect(vaultUnits).toHaveLength(1);
-  expect(vaultUnits[0].amount).toBe('0');
+  assertThat(vaultUnits).toHaveLength(1);
+  assertThat(vaultUnits[0].amount).toBe('0');
 });
 
 console.log('');
@@ -390,29 +389,29 @@ console.log('');
 // ==========================================
 console.log('📦 Test Suite 5: AlkaneId Parsing\n');
 
-test('Should correctly parse valid alkane ID', () => {
+runTest('Should correctly parse valid alkane ID', () => {
   const id = '2:100';
   const parsed = parseAlkaneId(id);
   
-  expect(parsed.block).toBe('2');
-  expect(parsed.tx).toBe('100');
+  assertThat(parsed.block).toBe('2');
+  assertThat(parsed.tx).toBe('100');
 });
 
-test('Should throw on invalid alkane ID format', () => {
+runTest('Should throw on invalid alkane ID format', () => {
   try {
     parseAlkaneId('invalid');
     throw new Error('Should have thrown');
   } catch (error) {
-    expect((error as Error).message).toContain('Invalid alkaneId format');
+    assertThat((error as Error).message).toContain('Invalid alkaneId format');
   }
 });
 
-test('Should throw on empty parts', () => {
+runTest('Should throw on empty parts', () => {
   try {
     parseAlkaneId(':100');
     throw new Error('Should have thrown');
   } catch (error) {
-    expect((error as Error).message).toContain('Invalid alkaneId format');
+    assertThat((error as Error).message).toContain('Invalid alkaneId format');
   }
 });
 
@@ -431,8 +430,7 @@ console.log(`🎯 Success Rate: ${((testsPassed / (testsPassed + testsFailed)) *
 console.log('═══════════════════════════════════════\n');
 
 if (testsFailed === 0) {
-  console.log('✅ All UTXO parsing logic matches SDK structure!');
-  console.log('📋 Verified against: @oyl/sdk/lib/utxo/types.d.ts\n');
+  console.log('✅ All UTXO parsing logic matches alkanes SDK structure!\n');
   process.exit(0);
 } else {
   console.log('⚠️  Some tests failed. Review errors above.\n');

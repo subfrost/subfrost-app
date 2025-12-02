@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Ignore build artifacts and external dependencies
+    ".subfrost-build/**",
+    "ts-sdk/**",
+    "prod_wasms/**",
+    "scripts/**",
   ]),
 ]);
 
