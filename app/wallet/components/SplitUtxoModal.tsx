@@ -90,20 +90,26 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
           {
             txid: utxo.txid,
             vout: utxo.vout,
+            value: utxo.value,
+            address: address, // The address that owns this UTXO
           },
         ],
         outputs: txOutputs,
+        changeAddress: address,
         feeRate: 10,
       };
 
-      const psbtResult = await provider.walletCreatePsbt(JSON.stringify(psbtParams));
-      const psbtBase64 = psbtResult.psbt;
+      console.log('[SplitUtxoModal] Creating PSBT with params:', psbtParams);
 
-      // Sign PSBT
-      const signedPsbt = await wallet.signPsbt(psbtBase64);
+      // wallet.createPsbt returns a signed PSBT base64 string
+      const signedPsbt = await wallet.createPsbt(psbtParams);
 
-      // Broadcast
-      const result = await provider.broadcastTransaction(signedPsbt);
+      console.log('[SplitUtxoModal] PSBT created and signed');
+
+      // Broadcast using provider
+      const result = await provider.pushPsbt({ psbtBase64: signedPsbt });
+      
+      console.log('[SplitUtxoModal] Transaction broadcast result:', result);
       
       setTxid(result.txid || result);
       setStep('success');

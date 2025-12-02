@@ -36,6 +36,9 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const [txid, setTxid] = useState('');
   const [autoSelectUtxos, setAutoSelectUtxos] = useState(true);
   const [showFrozenUtxos, setShowFrozenUtxos] = useState(false);
+  const [showFeeWarning, setShowFeeWarning] = useState(false);
+  const [estimatedFee, setEstimatedFee] = useState(0);
+  const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
 
   // Load frozen UTXOs from localStorage
   const getFrozenUtxos = (): Set<string> => {
@@ -52,8 +55,11 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
   const frozenUtxos = getFrozenUtxos();
 
-  // Filter available UTXOs (exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
+  // Filter available UTXOs (only from current address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
+    // Only include UTXOs from the current address
+    if (utxo.address !== address) return false;
+    
     const utxoKey = `${utxo.txid}:${utxo.vout}`;
     if (frozenUtxos.has(utxoKey)) return showFrozenUtxos;
     if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
@@ -61,6 +67,16 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     if (utxo.alkanes && Object.keys(utxo.alkanes).length > 0) return false;
     return true;
   });
+
+  // Debug: Log UTXO distribution
+  console.log('[SendModal] Current address:', address);
+  console.log('[SendModal] Total UTXOs:', utxos.all.length);
+  console.log('[SendModal] UTXOs by address:', {
+    currentAddress: utxos.all.filter(u => u.address === address).length,
+    otherAddresses: utxos.all.filter(u => u.address !== address).length,
+  });
+  console.log('[SendModal] Available UTXOs for current address:', availableUtxos.length);
+  console.log('[SendModal] Total value available:', (availableUtxos.reduce((sum, u) => sum + u.value, 0) / 1e8).toFixed(8), 'BTC');
 
   const totalSelectedValue = Array.from(selectedUtxos)
     .map((key) => {
@@ -126,21 +142,58 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       }
 
       if (autoSelectUtxos) {
-        // Auto-select UTXOs using simple largest-first algorithm
+        // Auto-select UTXOs using smart algorithm
+        // Strategy: Use largest UTXOs first, but limit total count to keep tx size reasonable
         const sorted = [...availableUtxos].sort((a, b) => b.value - a.value);
         let total = 0;
         const selected = new Set<string>();
         
+        // Estimate fee based on number of inputs
+        // Each input is ~180 vbytes, output is ~34 vbytes
+        const estimateFee = (numInputs: number) => {
+          const size = numInputs * 180 + 2 * 34 + 10; // 2 outputs (recipient + change)
+          return size * feeRateNum;
+        };
+        
+        const MAX_UTXOS = 100; // Hard limit to keep transaction size reasonable
+        
         for (const utxo of sorted) {
-          if (total >= amountSats + 1000) break; // Rough fee estimate
+          const potentialFee = estimateFee(selected.size + 1);
+          const needed = amountSats + potentialFee;
+          
           selected.add(`${utxo.txid}:${utxo.vout}`);
           total += utxo.value;
+          
+          // Stop if we have enough + fee buffer
+          if (total >= needed + 10000) break; // 10k sats buffer
+          
+          // Hard limit: Don't select more than MAX_UTXOS
+          if (selected.size >= MAX_UTXOS) {
+            console.warn(`[SendModal] Hit ${MAX_UTXOS} UTXO limit, checking if sufficient...`);
+            break;
+          }
         }
 
-        if (total < amountSats) {
-          setError('Insufficient funds');
+        const finalFee = estimateFee(selected.size);
+        const required = amountSats + finalFee;
+
+        if (total < required) {
+          // Check if we have enough total balance
+          const totalAvailable = availableUtxos.reduce((sum, u) => sum + u.value, 0);
+          if (totalAvailable >= required) {
+            setError(
+              `Cannot send this amount using auto-select (hit ${MAX_UTXOS} UTXO limit). ` +
+              `Need ${(required / 100000000).toFixed(8)} BTC, but can only use ${(total / 100000000).toFixed(8)} BTC with ${MAX_UTXOS} UTXOs. ` +
+              `Total available: ${(totalAvailable / 100000000).toFixed(8)} BTC. ` +
+              `Try manual UTXO selection or send a smaller amount.`
+            );
+          } else {
+            setError(`Insufficient funds. Need ${(required / 100000000).toFixed(8)} BTC, have ${(totalAvailable / 100000000).toFixed(8)} BTC`);
+          }
           return;
         }
+
+        console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, estimated fee: ${(finalFee / 100000000).toFixed(8)} BTC`);
 
         setSelectedUtxos(selected);
         setStep('confirm');
@@ -155,8 +208,48 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       }
       setStep('confirm');
     } else if (step === 'confirm') {
+      // Check if fee looks suspicious before broadcasting
+      checkFeeAndBroadcast();
+    }
+  };
+
+  const checkFeeAndBroadcast = () => {
+    const amountSats = Math.floor(parseFloat(amount) * 100000000);
+    const feeRateNum = parseInt(feeRate);
+    
+    // Estimate transaction size: ~180 bytes per input + ~34 bytes per output + ~10 bytes overhead
+    const numInputs = selectedUtxos.size;
+    const numOutputs = 2; // recipient + change
+    const estimatedSize = numInputs * 180 + numOutputs * 34 + 10;
+    const estimatedFeeSats = estimatedSize * feeRateNum;
+    const calculatedFeeRate = totalSelectedValue > amountSats 
+      ? estimatedFeeSats / (totalSelectedValue - amountSats) 
+      : 0;
+
+    setEstimatedFee(estimatedFeeSats);
+    setEstimatedFeeRate(calculatedFeeRate);
+
+    // Safety checks:
+    // 1. Fee is more than 1% of amount
+    // 2. Fee is more than 0.01 BTC
+    // 3. Fee rate is more than 1000 sat/vbyte
+    // 4. Using more than 100 UTXOs
+    const feePercentage = (estimatedFeeSats / amountSats) * 100;
+    const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // 0.01 BTC
+    const feeRateTooHigh = feeRateNum > 1000;
+    const tooManyInputs = numInputs > 100;
+    const feePercentageTooHigh = feePercentage > 1;
+
+    if (feeTooHigh || feeRateTooHigh || tooManyInputs || feePercentageTooHigh) {
+      setShowFeeWarning(true);
+    } else {
       handleBroadcast();
     }
+  };
+
+  const proceedWithHighFee = () => {
+    setShowFeeWarning(false);
+    handleBroadcast();
   };
 
   const handleBroadcast = async () => {
@@ -172,12 +265,38 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       const amountSats = Math.floor(parseFloat(amount) * 100000000);
       const feeRateNum = parseInt(feeRate);
 
-      // Build transaction params
+      // Build transaction inputs with full UTXO data
+      // For now, let's use the provider to get proper UTXO data if needed
       const inputs = Array.from(selectedUtxos).map((key) => {
         const [txid, vout] = key.split(':');
-        return { txid, vout: parseInt(vout) };
+        const utxo = availableUtxos.find((u) => u.txid === txid && u.vout.toString() === vout);
+        if (!utxo) throw new Error(`UTXO not found: ${key}`);
+        
+        return {
+          txid,
+          vout: parseInt(vout),
+          value: utxo.value,
+          address: address, // The address that owns this UTXO
+        };
       });
 
+      // Calculate change manually to avoid SDK fee calculation issues
+      const totalInput = inputs.reduce((sum, i) => sum + i.value, 0);
+      const estimatedSize = inputs.length * 180 + 2 * 34 + 10;
+      const estimatedFee = Math.ceil(estimatedSize * feeRateNum);
+      const changeAmount = totalInput - amountSats - estimatedFee;
+
+      console.log('[SendModal] Manual fee calculation:');
+      console.log('  Total input:', totalInput, 'sats');
+      console.log('  Amount to send:', amountSats, 'sats');
+      console.log('  Estimated fee:', estimatedFee, 'sats');
+      console.log('  Change amount:', changeAmount, 'sats');
+
+      if (changeAmount < 0) {
+        throw new Error('Insufficient funds for transaction + fees');
+      }
+
+      // Build outputs with explicit change
       const outputs = [
         {
           address: recipientAddress,
@@ -185,31 +304,63 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         },
       ];
 
-      // Create PSBT using walletCreatePsbt
+      // Only add change output if it's above dust threshold (546 sats)
+      if (changeAmount >= 546) {
+        outputs.push({
+          address: address, // Change goes back to sender
+          value: changeAmount,
+        });
+      } else {
+        console.log('[SendModal] Change below dust threshold, adding to fee');
+      }
+
+      // Create PSBT using wallet.createPsbt (SDK method)
+      // Don't specify feeRate - we're handling it manually via change calculation
       const psbtParams = {
         inputs,
         outputs,
-        changeAddress: address,
-        feeRate: feeRateNum,
+        // NO feeRate - we calculated change manually
+        // NO changeAddress - we added change output manually
       };
 
-      const psbtResult = await provider.walletCreatePsbt(JSON.stringify(psbtParams));
-      const psbtBase64 = psbtResult.psbt;
-
-      // Sign PSBT
-      if (!wallet.signPsbt) {
-        setError('Wallet does not support PSBT signing');
-        return;
+      console.log('[SendModal] Creating PSBT with params:', psbtParams);
+      console.log('[SendModal] Inputs:', inputs);
+      console.log('[SendModal] Outputs:', outputs);
+      console.log('[SendModal] Total input value:', inputs.reduce((sum, i) => sum + i.value, 0));
+      console.log('[SendModal] Total output value:', outputs.reduce((sum, o) => sum + o.value, 0));
+      console.log('[SendModal] Number of inputs:', inputs.length);
+      console.log('[SendModal] Number of outputs:', outputs.length);
+      
+      // wallet.createPsbt returns a signed PSBT base64 string
+      // Note: The SDK uses bitcoinjs-lib Psbt internally which has a maximumFeeRate check
+      // We need to handle the fee validation error and extract transaction anyway
+      let signedPsbt: string;
+      try {
+        signedPsbt = await wallet.createPsbt(psbtParams);
+        console.log('[SendModal] PSBT created and signed, length:', signedPsbt.length);
+      } catch (err: any) {
+        // Handle various PSBT creation errors
+        if (err.message && err.message.includes('maximumFeeRate')) {
+          throw new Error(
+            'Transaction fee is too high for safety limits. ' +
+            'Please reduce the number of UTXOs (currently: ' + selectedUtxos.size + '). ' +
+            'Try manually selecting fewer, larger UTXOs.'
+          );
+        }
+        if (err.message && err.message.includes('Witness program hash mismatch')) {
+          throw new Error(
+            'Witness script error. This can happen with complex transactions. ' +
+            'Try: 1) Selecting fewer UTXOs (< 10), 2) Using manual UTXO selection, ' +
+            '3) Sending a smaller amount. Currently using ' + selectedUtxos.size + ' UTXOs.'
+          );
+        }
+        throw err;
       }
 
-      const signedPsbt = await wallet.signPsbt(psbtBase64);
-
-      // Finalize and extract transaction
-      // Note: In production, you'd use bitcoinjs-lib to finalize the PSBT
-      // For now, we'll assume the signed PSBT can be broadcast directly
+      // Broadcast transaction using provider
+      const result = await provider.pushPsbt({ psbtBase64: signedPsbt });
       
-      // Broadcast transaction
-      const result = await provider.broadcastTransaction(signedPsbt);
+      console.log('[SendModal] Transaction broadcast result:', result);
       
       setTxid(result.txid || result);
       setStep('success');
@@ -219,8 +370,20 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         refresh();
       }, 1000);
     } catch (err: any) {
-      console.error('Transaction failed:', err);
-      setError(err.message || 'Failed to broadcast transaction');
+      console.error('[SendModal] Transaction failed:', err);
+      
+      // Provide helpful error messages
+      let errorMessage = err.message || 'Failed to broadcast transaction';
+      
+      if (errorMessage.includes('Witness program hash mismatch')) {
+        errorMessage = 'Transaction failed: Witness script error. ' +
+          'This is a known issue with complex taproot transactions. ' +
+          'Workarounds: 1) Try with 2-3 UTXOs only, 2) Use a smaller amount, ' +
+          '3) Use testnet instead of regtest. ' +
+          'See KNOWN_ISSUES.md for details.';
+      }
+      
+      setError(errorMessage);
       setStep('confirm');
     }
   };
@@ -559,6 +722,83 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           {step === 'success' && renderSuccess()}
         </div>
       </div>
+
+      {/* Fee Warning Modal */}
+      {showFeeWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
+          <div className="relative bg-[#0a0a0a] border-2 border-red-500/50 rounded-lg w-full max-w-md m-4 shadow-2xl">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 text-red-500">
+                <AlertCircle size={32} />
+                <h3 className="text-xl font-bold">High Fee Warning!</h3>
+              </div>
+
+              <div className="space-y-2 text-white/80">
+                <p className="text-sm">
+                  This transaction has unusually high fees. Please review carefully:
+                </p>
+
+                <div className="bg-red-500/10 border border-red-500/30 rounded p-3 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/60">Estimated Fee:</span>
+                    <span className="text-red-400 font-mono">
+                      {(estimatedFee / 100000000).toFixed(8)} BTC
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/60">Fee Rate:</span>
+                    <span className="text-red-400 font-mono">{feeRate} sat/vB</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/60">Number of Inputs:</span>
+                    <span className="text-red-400 font-mono">{selectedUtxos.size}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/60">Fee Percentage:</span>
+                    <span className="text-red-400 font-mono">
+                      {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
+                  <p className="text-xs text-yellow-400">
+                    <strong>⚠️ Recommendations:</strong>
+                  </p>
+                  <ul className="text-xs text-yellow-300/80 mt-1 space-y-1 list-disc list-inside">
+                    {selectedUtxos.size > 100 && (
+                      <li>Reduce the number of UTXOs ({selectedUtxos.size} selected)</li>
+                    )}
+                    {parseInt(feeRate) > 1000 && (
+                      <li>Lower the fee rate (currently {feeRate} sat/vB)</li>
+                    )}
+                    {estimatedFee > 0.01 * 100000000 && (
+                      <li>Consider sending a smaller amount</li>
+                    )}
+                    <li>Manually select fewer UTXOs instead of using auto-select</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowFeeWarning(false)}
+                  className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors font-medium"
+                >
+                  Go Back
+                </button>
+                <button
+                  onClick={proceedWithHighFee}
+                  className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-colors font-medium"
+                >
+                  Proceed Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
