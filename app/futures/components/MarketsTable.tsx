@@ -59,7 +59,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
   return (
     <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
       {/* Header */}
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-white/40">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
         <h3 className="text-base font-bold text-[color:var(--sf-text)]">Active Unlockable Positions</h3>
       </div>
 

@@ -32,29 +32,32 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200" onClick={close}>
       <div
-        className="w-[540px] max-w-[92vw] overflow-hidden rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-gradient-to-br from-white to-[color:var(--sf-surface)] p-8 shadow-[0_16px_64px_rgba(0,0,0,0.3)] animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+        className="w-[540px] max-w-[92vw] overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Transaction Settings"
       >
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-2xl font-extrabold text-[color:var(--sf-text)]">Transaction Settings</h2>
-          <button 
-            onClick={close}
-            className="h-8 w-8 rounded-full hover:bg-[color:var(--sf-primary)]/10 transition-colors flex items-center justify-center text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-primary)]"
-            aria-label="Close"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+        {/* Header */}
+        <div className="border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 px-6 py-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Transaction Settings</h2>
+            <button 
+              onClick={close}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30"
+              aria-label="Close"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-5 p-6">
           {/* Slippage */}
-          <section className="rounded-xl bg-[color:var(--sf-glass-bg)] p-4 backdrop-blur-sm">
-            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Max Slippage</div>
+          <section className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Max Slippage</div>
             <div className="flex items-center gap-2 flex-wrap">
               {['0.1', '0.5', '1'].map((p) => (
                 <button
@@ -91,8 +94,8 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
           </section>
 
           {/* Deadline */}
-          <section className="rounded-xl bg-[color:var(--sf-glass-bg)] p-4 backdrop-blur-sm">
-            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Deadline (blocks)</div>
+          <section className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Deadline (blocks)</div>
             <input
               aria-label="Deadline in blocks"
               type="number"
@@ -109,8 +112,8 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
           </section>
 
           {/* Miner Fee */}
-          <section className="rounded-xl bg-[color:var(--sf-glass-bg)] p-4 backdrop-blur-sm">
-            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Miner Fee</div>
+          <section className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Miner Fee</div>
             <div className="flex flex-wrap items-center gap-2">
               {(['slow', 'medium', 'fast'] as FeeSelection[]).map((s) => (
                 <button

@@ -97,6 +97,26 @@ export default function VaultDepositInterface({
     ? (isConnected && amount && parseFloat(amount) > 0)
     : (isConnected && selectedUnitId !== '');
 
+  // Check if current amount matches a specific percentage of balance
+  const getActivePercent = (): number | null => {
+    if (!amount || !userBalance) return null;
+    
+    const balance = parseFloat(userBalance);
+    const amountNum = parseFloat(amount);
+    
+    if (!balance || balance === 0 || !amountNum) return null;
+    
+    const tolerance = 0.0001;
+    if (Math.abs(amountNum - balance * 0.25) < tolerance) return 0.25;
+    if (Math.abs(amountNum - balance * 0.5) < tolerance) return 0.5;
+    if (Math.abs(amountNum - balance * 0.75) < tolerance) return 0.75;
+    if (Math.abs(amountNum - balance) < tolerance) return 1;
+    
+    return null;
+  };
+
+  const activePercent = getActivePercent();
+
   // Close token selector when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -243,28 +263,28 @@ export default function VaultDepositInterface({
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.25).toString())}
-                    className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.25 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
                   >
                     25%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.5).toString())}
-                    className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.5 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
                   >
                     50%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.75).toString())}
-                    className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.75 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
                   >
                     75%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount(userBalance)}
-                    className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50"
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 1 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
                   >
                     Max
                   </button>

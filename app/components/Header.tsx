@@ -5,6 +5,7 @@
  import { useEffect, useMemo, useRef, useState, useCallback, memo } from "react";
  import { usePathname } from "next/navigation";
  import { useWallet } from "@/context/WalletContext";
+import { useTheme } from "@/context/ThemeContext";
  import { Menu, X } from "lucide-react";
  import AddressAvatar from "./AddressAvatar";
 
@@ -69,6 +70,7 @@
 
  export default function Header() {
   const { connected, isConnected, address, onConnectModalOpenChange, disconnect } = useWallet() as any;
+  const { theme } = useTheme();
    const pathname = usePathname();
    const [menuOpen, setMenuOpen] = useState(false);
    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -145,7 +147,7 @@
             width={180}
             height={24}
             priority
-            className="transition-opacity hover:opacity-80 h-6 w-auto"
+            className="transition-opacity hover:opacity-80 h-6 w-auto sf-wordmark"
           />
         </Link>
 
@@ -212,9 +214,11 @@
                  className="relative rounded-lg bg-[color:var(--sf-surface)] px-6 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] sf-focus-ring overflow-hidden"
                >
                  <span className="relative z-10">CONNECT WALLET</span>
-                 <div className="absolute inset-0 pointer-events-none">
-                   <FallingSnowflakes />
-                 </div>
+                 {theme === 'light' && (
+                   <div className="absolute inset-0 pointer-events-none">
+                     <FallingSnowflakes />
+                   </div>
+                 )}
                </button>
              </div>
            )}
@@ -297,9 +301,11 @@
                        className="relative w-full rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--sf-primary-pressed)] overflow-hidden"
                      >
                        <span className="relative z-10">CONNECT WALLET</span>
-                       <div className="absolute inset-0 pointer-events-none">
-                         <FallingSnowflakes white />
-                       </div>
+                       {theme === 'light' && (
+                         <div className="absolute inset-0 pointer-events-none">
+                           <FallingSnowflakes white />
+                         </div>
+                       )}
                      </button>
                    </div>
                  )}

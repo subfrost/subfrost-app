@@ -156,21 +156,21 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
       ) : quote ? (
         <>
           {swapRoute && (
-            <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-900 mb-2">
+            <div className="mb-2 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/20 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)] mb-2">
                 {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {swapRoute.map((step, index) => (
                   <div key={`${step.id}-${index}`} className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-[10px] font-bold text-[color:var(--sf-primary)]">
                         {index + 1}
                       </div>
-                      <span className="text-xs font-semibold text-blue-900">{step.symbol}</span>
+                      <span className="text-xs font-semibold text-[color:var(--sf-text)]">{step.symbol}</span>
                     </div>
                     {index < swapRoute.length - 1 && (
-                      <svg className="h-3 w-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-3 w-3 text-[color:var(--sf-primary)]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
                       </svg>
                     )}
@@ -178,7 +178,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 ))}
               </div>
               {(quote?.hops === 2 || sellId === 'btc' || buyId === 'btc') && (
-                <div className="mt-1.5 text-[10px] text-blue-700">
+                <div className="mt-1.5 text-[10px] text-[color:var(--sf-text)]/70">
                   {quote?.hops === 2 && swapRoute.length === 3 && (
                     <>
                       {swapRoute[1].id === BUSD_ALKANE_ID && '⚡ Using bUSD as bridge token'}
@@ -240,13 +240,13 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
           
           {hasHighSlippage && slippagePercent !== null && (
-            <div className="mt-2 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
-              <svg className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="mt-2 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3">
+              <svg className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <div className="flex-1">
-                <p className="text-xs font-bold text-red-900 mb-1">High Slippage Warning</p>
-                <p className="text-xs text-red-700">This swap has high slippage ({slippagePercent.toFixed(2)}%). You may receive significantly less than expected.</p>
+                <p className="text-xs font-bold text-red-500 mb-1">High Slippage Warning</p>
+                <p className="text-xs text-red-500/80">This swap has high slippage ({slippagePercent.toFixed(2)}%). You may receive significantly less than expected.</p>
               </div>
             </div>
           )}

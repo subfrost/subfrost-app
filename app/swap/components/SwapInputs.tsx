@@ -93,6 +93,29 @@ export default function SwapInputs({
     return 'bg-red-500';
   };
 
+  // Check if current amount matches a specific percentage of balance
+  const getActivePercent = (): number | null => {
+    if (!fromAmount || !fromBalanceText) return null;
+    
+    const balanceMatch = fromBalanceText.match(/[\d.]+/);
+    if (!balanceMatch) return null;
+    
+    const balance = parseFloat(balanceMatch[0]);
+    const amount = parseFloat(fromAmount);
+    
+    if (!balance || balance === 0 || !amount) return null;
+    
+    const tolerance = 0.0001; // Small tolerance for floating point comparison
+    if (Math.abs(amount - balance * 0.25) < tolerance) return 0.25;
+    if (Math.abs(amount - balance * 0.5) < tolerance) return 0.5;
+    if (Math.abs(amount - balance * 0.75) < tolerance) return 0.75;
+    if (Math.abs(amount - balance) < tolerance) return 1;
+    
+    return null;
+  };
+
+  const activePercent = getActivePercent();
+
   return (
     <div className="relative flex flex-col gap-3">
       {/* Sell panel */}
@@ -158,21 +181,21 @@ export default function SwapInputs({
                     <button
                       type="button"
                       onClick={() => onPercentFrom(0.25)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.25 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
                     >
                       25%
                     </button>
                     <button
                       type="button"
                       onClick={() => onPercentFrom(0.5)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.5 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
                     >
                       50%
                     </button>
                     <button
                       type="button"
                       onClick={() => onPercentFrom(0.75)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.75 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
                     >
                       75%
                     </button>
@@ -181,7 +204,7 @@ export default function SwapInputs({
                 <button
                   type="button"
                   onClick={onMaxFrom}
-                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none ${onMaxFrom ? "border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50" : "opacity-40 cursor-not-allowed border border-transparent"}`}
+                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none ${onMaxFrom ? (activePercent === 1 ? "border border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]" : "border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40") : "opacity-40 cursor-not-allowed border border-transparent"}`}
                   disabled={!onMaxFrom}
                 >
                   Max
@@ -197,7 +220,7 @@ export default function SwapInputs({
         <button
           type="button"
           onClick={onInvert}
-          className="group flex h-11 w-11 items-center justify-center rounded-full border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-b from-white to-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.25)] hover:border-[color:var(--sf-primary)]/40 hover:scale-105 active:scale-95 outline-none"
+          className="group flex h-11 w-11 items-center justify-center rounded-full border-2 border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.25)] hover:border-[color:var(--sf-primary)]/40 hover:scale-105 active:scale-95 outline-none"
           aria-label="Invert swap direction"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform group-hover:-rotate-180 duration-300">

@@ -27,7 +27,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   };
 
   const badgeColors = {
-    'Coming Soon': 'bg-gray-400 text-gray-300',
+    'Coming Soon': 'bg-[color:var(--sf-badge-coming-soon-bg)] border border-[color:var(--sf-badge-coming-soon-border)] text-[color:var(--sf-badge-coming-soon-text)]',
     'BTC Yield': 'bg-orange-400 text-orange-900',
     'USD Yield': 'bg-green-400 text-green-900',
     'Migrate': 'bg-yellow-400 text-yellow-900',
@@ -76,7 +76,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           <div className="space-y-3">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
-              <div className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-bold text-green-700">
+              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-3 py-1 text-sm font-bold text-[color:var(--sf-info-green-title)]">
                 {vault.estimatedApy ? `${vault.estimatedApy}%` : '-'}
               </div>
             </div>

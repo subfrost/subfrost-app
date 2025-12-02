@@ -41,7 +41,10 @@ export default function BoostSection({ vault }: Props) {
       {/* Boost Header - Spans both columns on md+ */}
       <div className="flex items-center justify-between md:col-span-2 md:row-start-1">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
+          <div 
+            className="flex h-10 w-10 items-center justify-center rounded-full"
+            style={{ background: `linear-gradient(to bottom right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
+          >
             <TrendingUp size={20} className="text-white" />
           </div>
           <div>
@@ -55,18 +58,21 @@ export default function BoostSection({ vault }: Props) {
         </div>
 
         {/* Boost Multiplier Badge */}
-        <div className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-1.5">
+        <div 
+          className="rounded-full px-4 py-1.5"
+          style={{ background: `linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
+        >
           <span className="text-sm font-bold text-white">{boostMultiplier}</span>
         </div>
       </div>
 
       {isComingSoon && (
-        <div className="rounded-xl border-2 border-amber-500/30 bg-amber-50 p-4 md:col-span-2 md:row-start-2">
-          <div className="flex items-center gap-2 text-amber-800">
+        <div className="rounded-xl border-2 border-amber-500/30 bg-[color:var(--sf-coming-soon-bg)] p-4 md:col-span-2 md:row-start-2">
+          <div className="flex items-center gap-2 text-[color:var(--sf-coming-soon-title)]">
             <Lock size={18} />
             <span className="text-sm font-semibold">Coming Soon</span>
           </div>
-          <p className="mt-1 text-xs text-amber-700">
+          <p className="mt-1 text-xs text-[color:var(--sf-coming-soon-text)]">
             FROST token features are not yet available. Stay tuned for the TGE announcement!
           </p>
         </div>
@@ -82,11 +88,14 @@ export default function BoostSection({ vault }: Props) {
             {baseApy}%
           </p>
         </div>
-        <div className={`rounded-xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-50 to-pink-50 p-4 md:col-start-2 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
-          <p className="text-xs font-medium text-purple-700 mb-1">
+        <div 
+          className={`rounded-xl border-2 border-purple-500/30 p-4 md:col-start-2 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}
+          style={{ background: `linear-gradient(to bottom right, var(--sf-boost-bg-from), var(--sf-boost-bg-to))` }}
+        >
+          <p className="text-xs font-medium text-[color:var(--sf-boost-label)] mb-1">
             Boosted APY
           </p>
-          <p className="text-2xl font-bold text-purple-600">
+          <p className="text-2xl font-bold text-[color:var(--sf-boost-value)]">
             {boostedApy}%
           </p>
         </div>

@@ -134,66 +134,96 @@ export default function LiquidityInputs({
           {selectedLPPosition && (
             <>
               <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
-                  <button
-                    type="button"
-                    onClick={() => onChangeRemoveAmount?.(selectedLPPosition.amount)}
-                    className="text-xs font-bold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors"
-                  >
-                    MAX
-                  </button>
-                </div>
+                <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
                 <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-                  <NumberField 
-                    placeholder="0.00" 
-                    align="left" 
-                    value={removeAmount} 
-                    onChange={onChangeRemoveAmount || (() => {})} 
-                  />
-                  <div className="mt-1 flex items-center justify-between text-xs">
-                    <span className="font-medium text-[color:var(--sf-text)]/60">
-                      Available: {selectedLPPosition.amount}
-                    </span>
-                    {removeAmount && parseFloat(removeAmount) > 0 && (
-                      <span className="font-semibold text-[color:var(--sf-text)]/80">
-                        {((parseFloat(removeAmount) / parseFloat(selectedLPPosition.amount)) * 100).toFixed(1)}%
+                  <div className="flex flex-col gap-2">
+                    {/* Row 1: Input */}
+                    <NumberField 
+                      placeholder="0.00" 
+                      align="left" 
+                      value={removeAmount} 
+                      onChange={onChangeRemoveAmount || (() => {})} 
+                    />
+                    
+                    {/* Row 2: USD Value + Balance */}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-[color:var(--sf-text)]/50">
+                        ${selectedLPPosition.valueUSD}
                       </span>
-                    )}
+                      <span className="font-medium text-[color:var(--sf-text)]/60">
+                        Balance: {selectedLPPosition.amount}
+                      </span>
+                    </div>
+                    
+                    {/* Row 3: Percentage Buttons */}
+                    <div className="flex items-center justify-end gap-1.5">
+                      {[
+                        { label: '25%', value: 0.25 },
+                        { label: '50%', value: 0.5 },
+                        { label: '75%', value: 0.75 },
+                        { label: 'Max', value: 1 },
+                      ].map(({ label, value }) => {
+                        const targetAmount = (parseFloat(selectedLPPosition.amount) * value).toString();
+                        const isActive = removeAmount && Math.abs(parseFloat(removeAmount) - parseFloat(targetAmount)) < 0.0001;
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => onChangeRemoveAmount?.(targetAmount)}
+                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${isActive ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* LP Details */}
-              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
-                <span className="mb-4 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">LP Details</span>
-                
-                <div className="space-y-3">
-                  {/* Value */}
-                  <div>
-                    <div className="text-sm font-semibold text-[color:var(--sf-text)]/60 mb-2">Value</div>
-                    <div className="text-sm font-bold text-[color:var(--sf-text)]">
+              {/* LP Details - Swap Summary Style */}
+              <div className="relative z-20 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 text-sm backdrop-blur-sm transition-all">
+                {/* Header row - LP Details title + Settings button */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Details</span>
+                  <SettingsButton />
+                </div>
+
+                <div className="flex flex-col gap-2.5">
+                  {/* VALUE row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-primary)]">
+                      Value
+                    </span>
+                    <span className="font-semibold text-[color:var(--sf-primary)]">
                       ${selectedLPPosition.valueUSD}
-                    </div>
+                    </span>
                   </div>
 
-                  {/* Gain/Loss */}
-                  <div>
-                    <div className="text-sm font-semibold text-[color:var(--sf-text)]/60 mb-2">Gain/Loss</div>
-                    <div className="space-y-1.5">
-                      <div className={`flex items-center justify-between text-sm font-bold ${
-                        selectedLPPosition.gainLoss.token0.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        <span>{selectedLPPosition.gainLoss.token0.symbol}</span>
-                        <span>{selectedLPPosition.gainLoss.token0.amount}</span>
-                      </div>
-                      <div className={`flex items-center justify-between text-sm font-bold ${
-                        selectedLPPosition.gainLoss.token1.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        <span>{selectedLPPosition.gainLoss.token1.symbol}</span>
-                        <span>{selectedLPPosition.gainLoss.token1.amount}</span>
-                      </div>
-                    </div>
+                  {/* GAIN/LOSS row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Gain/Loss
+                    </span>
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      <span className={selectedLPPosition.gainLoss.token0.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'}>
+                        {selectedLPPosition.gainLoss.token0.amount} {selectedLPPosition.gainLoss.token0.symbol}
+                      </span>
+                      {' / '}
+                      <span className={selectedLPPosition.gainLoss.token1.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'}>
+                        {selectedLPPosition.gainLoss.token1.amount} {selectedLPPosition.gainLoss.token1.symbol}
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Miner Fee Rate - bottom row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Miner Fee Rate
+                    </span>
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      {feeRate} sats/vB
+                    </span>
                   </div>
                 </div>
               </div>

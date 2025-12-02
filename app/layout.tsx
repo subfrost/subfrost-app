@@ -4,7 +4,6 @@ import localFont from "next/font/local";
 import "./globals.css";
 import Providers from "@/app/providers";
 import AppShell from "@/app/components/AppShell";
-import { SnowflakeWatermark } from "@/app/components/SnowflakeWatermark";
 import { AlkanesWasmInitializer } from "@/app/components/AlkanesWasmInitializer";
 
 const satoshi = localFont({
@@ -56,7 +55,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark">
       <head>
         {/* Google Drive API for client-side OAuth */}
         <script src="https://apis.google.com/js/api.js" async defer></script>
@@ -65,7 +64,6 @@ export default function RootLayout({
       <body className={`${satoshi.variable} ${geistMono.variable} antialiased`}>
         <AlkanesWasmInitializer />
         <Providers>
-          <SnowflakeWatermark />
           <AppShell>{children}</AppShell>
         </Providers>
       </body>

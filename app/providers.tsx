@@ -9,6 +9,7 @@ import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
 import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
 import { ExchangeProvider } from '@/context/ExchangeContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 
 // Define Network type locally
 type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
@@ -99,13 +100,15 @@ export default function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <GlobalStore>
         <ModalStore>
-          <AlkanesSDKProvider network={network}>
-            <WalletProvider network={network}>
-              <ExchangeProvider>
-                {children}
-              </ExchangeProvider>
-            </WalletProvider>
-          </AlkanesSDKProvider>
+          <ThemeProvider>
+            <AlkanesSDKProvider network={network}>
+              <WalletProvider network={network}>
+                <ExchangeProvider>
+                  {children}
+                </ExchangeProvider>
+              </WalletProvider>
+            </AlkanesSDKProvider>
+          </ThemeProvider>
         </ModalStore>
       </GlobalStore>
     </QueryClientProvider>

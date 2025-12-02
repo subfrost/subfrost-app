@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import NumberField from '@/app/components/NumberField';
+import { useTheme } from '@/context/ThemeContext';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)
@@ -43,6 +44,7 @@ export default function ContractDetailModal({
   const [amount, setAmount] = useState('1.00');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+  const { theme } = useTheme();
   
   // Calculate exercise values
   const exercisePremium = calculateExercisePremium(blocksLeft);
@@ -189,7 +191,11 @@ export default function ContractDetailModal({
                 </button>
                 <button
                   type="button"
-                  className="flex-1 px-6 py-3 rounded-lg bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] font-bold tracking-[0.08em] uppercase border-2 border-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/5 transition-colors"
+                  className={`flex-1 px-6 py-3 rounded-lg font-bold tracking-[0.08em] uppercase transition-colors ${
+                    theme === 'dark'
+                      ? 'border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                      : 'border-2 border-[color:var(--sf-primary)] bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/5'
+                  }`}
                 >
                   Sell ftrBTC
                 </button>

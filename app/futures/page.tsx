@@ -122,6 +122,18 @@ export default function FuturesPage() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                onClick={handleGenerateFuture}
+                disabled={loading}
+                className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Generate a new future on regtest (requires local node)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline-block">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span className="ml-2">Generate Future</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleRefresh}
                 disabled={loading}
                 className="px-3 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -131,18 +143,6 @@ export default function FuturesPage() {
                   <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
                 </svg>
                 <span className="ml-2">Refresh</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleGenerateFuture}
-                disabled={loading}
-                className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Generate a new future on regtest (requires local node)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline-block">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <span className="ml-2">Generate Future</span>
               </button>
               <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
@@ -161,8 +161,8 @@ export default function FuturesPage() {
                     <line x1="12" y1="17" x2="12.01" y2="17"/>
                   </svg>
                   <div>
-                    <div className="font-semibold text-blue-900 mb-1">No Futures Found</div>
-                    <div className="text-sm text-blue-900/80">
+                    <div className="font-semibold text-[color:var(--sf-no-futures-title)] mb-1">No Futures Found</div>
+                    <div className="text-sm text-[color:var(--sf-no-futures-text)]/80">
                       No deployed futures detected on the blockchain. Click "Generate Future" to create one, or displaying mock data for demo purposes.
                     </div>
                   </div>
