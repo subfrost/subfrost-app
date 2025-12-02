@@ -3,13 +3,15 @@
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter } from 'next/navigation';
-import { Wallet, Activity, Settings, BarChart2 } from 'lucide-react';
+import { Wallet, Activity, Settings, BarChart2, Send, QrCode } from 'lucide-react';
 import AddressAvatar from '@/app/components/AddressAvatar';
 import BalancesPanel from './components/BalancesPanel';
 import UTXOManagement from './components/UTXOManagement';
 import TransactionHistory from './components/TransactionHistory';
 import WalletSettings from './components/WalletSettings';
 import RegtestControls from './components/RegtestControls';
+import ReceiveModal from './components/ReceiveModal';
+import SendModal from './components/SendModal';
 
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
@@ -17,6 +19,8 @@ export default function WalletDashboardPage() {
   const { connected, isConnected, address } = useWallet() as any;
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabView>('balances');
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
 
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
@@ -38,7 +42,25 @@ export default function WalletDashboardPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Wallet Dashboard</h1>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-3xl font-bold text-white">Wallet Dashboard</h1>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowSendModal(true)}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors text-white font-medium flex items-center gap-2"
+              >
+                <Send size={18} />
+                Send
+              </button>
+              <button
+                onClick={() => setShowReceiveModal(true)}
+                className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition-colors text-white font-medium flex items-center gap-2"
+              >
+                <QrCode size={18} />
+                Receive
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <AddressAvatar address={address} size={32} />
             <span className="text-lg text-white/80">{address}</span>
@@ -79,6 +101,16 @@ export default function WalletDashboardPage() {
         {/* Regtest Controls - Only show for regtest networks */}
         <RegtestControls />
       </div>
+
+      {/* Modals */}
+      <SendModal
+        isOpen={showSendModal}
+        onClose={() => setShowSendModal(false)}
+      />
+      <ReceiveModal
+        isOpen={showReceiveModal}
+        onClose={() => setShowReceiveModal(false)}
+      />
     </div>
   );
 }

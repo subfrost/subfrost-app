@@ -108,28 +108,77 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         throw new Error('No wallet addresses available');
       }
 
-      // Get network URLs from provider
-      const sandshrewUrl = (provider as any).bitcoin?.url || (provider as any).url;
-      const esploraUrl = (provider as any).esplora?.baseUrl;
+      console.log('[useEnrichedWalletData] Fetching balances for addresses:', addresses);
       
-      console.log('[useEnrichedWalletData] Creating WebProvider with:', { sandshrewUrl, esploraUrl });
-      
-      // Dynamic import to avoid WASM loading at SSR time
-      const AlkanesWasm = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      
-      // Create WASM WebProvider instance
-      const wasmProvider = new AlkanesWasm.WebProvider(sandshrewUrl, esploraUrl);
-      
-      // Call the enriched balances method from WASM
-      // This uses the built-in balances.lua script with automatic hash-based caching
+      // Use esplora_address::utxo JSON-RPC method (works on local alkanes-rs)
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
-          console.log('[useEnrichedWalletData] Fetching enriched balances for:', address);
-          const result = await wasmProvider.getEnrichedBalances(address, "1");
-          console.log('[useEnrichedWalletData] Enriched balances result:', result);
-          return { address, data: result };
+          const rpcUrl = (provider as any).url;
+          
+          console.log('[useEnrichedWalletData] Fetching UTXOs for:', address);
+          
+          // Get UTXOs using esplora method
+          const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'esplora_address::utxo',
+              params: [address],
+              id: 1
+            })
+          });
+          
+          if (!response.ok) {
+            console.error('[useEnrichedWalletData] HTTP error:', response.status, response.statusText);
+            return { address, data: null };
+          }
+          
+          const json = await response.json();
+          
+          // Check for JSON-RPC error
+          if (json.error) {
+            console.error('[useEnrichedWalletData] RPC error:', json.error);
+            return { address, data: null };
+          }
+          
+          // Check if result exists
+          if (!json.result || !Array.isArray(json.result)) {
+            console.warn('[useEnrichedWalletData] No UTXOs returned for', address);
+            return { 
+              address, 
+              data: {
+                spendable: [],
+                assets: [],
+                pending: [],
+                ordHeight: 0,
+                metashrewHeight: 0
+              }
+            };
+          }
+          
+          console.log('[useEnrichedWalletData] Found', json.result.length, 'UTXOs for', address);
+          
+          // Convert esplora UTXOs to enriched format
+          const utxos = json.result;
+          const enrichedData = {
+            spendable: utxos.map((utxo: any) => ({
+              outpoint: `${utxo.txid}:${utxo.vout}`,
+              value: utxo.value,
+              height: utxo.status?.block_height
+            })),
+            assets: [],
+            pending: utxos.filter((utxo: any) => !utxo.status?.confirmed).map((utxo: any) => ({
+              outpoint: `${utxo.txid}:${utxo.vout}`,
+              value: utxo.value
+            })),
+            ordHeight: 0,
+            metashrewHeight: 0
+          };
+          
+          return { address, data: enrichedData };
         } catch (error) {
-          console.error(`Failed to fetch enriched data for ${address}:`, error);
+          console.error(`[useEnrichedWalletData] Failed to fetch data for ${address}:`, error);
           return { address, data: null };
         }
       });

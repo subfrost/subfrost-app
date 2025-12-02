@@ -84,9 +84,21 @@ export default function BalancesPanel() {
           </button>
         </div>
 
+        {/* Balance Breakdown - Note: confirmed/pending/spendable will be added in future */}
+        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/10">
+          <div className="rounded-lg bg-white/5 p-3">
+            <div className="text-xs text-white/60 mb-1">Total Balance</div>
+            <div className="font-mono text-sm text-white">{formatBTC(balances.bitcoin.total)} BTC</div>
+          </div>
+          <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-3">
+            <div className="text-xs text-green-400/80 mb-1">Spendable</div>
+            <div className="font-mono text-sm text-green-400">{formatBTC(balances.bitcoin.total)} BTC</div>
+          </div>
+        </div>
+
         {/* Address Breakdown */}
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
-          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
+        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10 mt-4">
+          <div className="rounded-lg bg-white/5 p-3">
             <div className="text-xs text-white/60 mb-1">Native SegWit (P2WPKH)</div>
             <div className="font-mono text-sm text-white">{formatBTC(balances.bitcoin.p2wpkh)} BTC</div>
             {account?.nativeSegwit && (
