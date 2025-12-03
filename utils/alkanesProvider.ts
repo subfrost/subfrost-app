@@ -25,8 +25,8 @@ const SubfrostUrlMap: Record<Network, { rpc: string; api: string }> = {
     api: 'http://localhost:18888',
   },
   regtest: {
-    rpc: 'https://regtest.subfrost.io/v4/subfrost',
-    api: 'https://regtest.subfrost.io/v4/subfrost',
+    rpc: 'http://localhost:18888',  // Local alkanes-rs
+    api: 'http://localhost:18888',  // Local alkanes-rs
   },
 };
 

@@ -14,6 +14,14 @@ const nextConfig = {
     // Lint errors are warnings during development but should not block builds
     ignoreDuringBuilds: true,
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/regtest/:path*',
+        destination: 'https://regtest.subfrost.io/v4/subfrost/:path*',
+      },
+    ];
+  },
   turbopack: {
     resolveAlias: {
       'env': './utils/empty-module.mjs',
