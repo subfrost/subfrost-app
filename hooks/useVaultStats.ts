@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
-import { createSimulateRequestObject } from '@/lib/oyl/alkanes/transform';
+import { getNetworkUrls } from '@/utils/alkanesProvider';
 import BigNumber from 'bignumber.js';
 
 interface VaultStats {
@@ -21,15 +20,15 @@ interface VaultStats {
  * Uses alkanes.simulate to query vault contract state
  */
 export function useVaultStats(vaultContractId: string, baseTokenId: string, enabled: boolean = true) {
-  const { account, isConnected } = useWallet();
-  const provider = useSandshrewProvider();
+  const { account, isConnected, network } = useWallet();
 
   return useQuery({
-    queryKey: ['vaultStats', vaultContractId, baseTokenId, account],
+    queryKey: ['vaultStats', vaultContractId, baseTokenId, account, network],
     queryFn: async (): Promise<VaultStats> => {
       try {
         const vaultId = parseAlkaneId(vaultContractId);
         const baseId = parseAlkaneId(baseTokenId);
+        const networkUrls = getNetworkUrls(network);
 
         // Get user balance if connected (opcode 4: GetVeDieselBalance)
         let userBalance = '0';
@@ -37,14 +36,32 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
         
         if (isConnected && account) {
           try {
-            const userBalanceRequest = createSimulateRequestObject({
-              target: { block: vaultId.block, tx: vaultId.tx },
-              inputs: ['4'], // GetVeDieselBalance opcode
+            // Dynamic import WASM to avoid SSR issues
+            const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
+            const provider = new WebProvider(networkUrls.rpc, null);
+            
+            // Opcode 4 for GetVeDieselBalance
+            const contractId = `${vaultId.block}:${vaultId.tx}`;
+            
+            // Create minimal context for simulate
+            // calldata must be an array of bytes, not a hex string
+            const context = JSON.stringify({
+              calldata: [4], // Opcode 4 as byte array
+              height: 1000000,
+              txindex: 0,
+              pointer: 0,
+              refund_pointer: 0,
+              vout: 0,
+              transaction: '0x',
+              block: '0x',
+              atomic: null,
+              runes: [],
+              sheets: {},
+              runtime_balances: {},
+              trace: null
             });
-            if (!provider) {
-              throw new Error('Provider not available');
-            }
-            const userBalanceResult = await provider.alkanes.simulate(userBalanceRequest);
+            
+            const userBalanceResult = await provider.alkanesSimulate(contractId, context, 'latest');
             
             if (userBalanceResult && userBalanceResult.execution?.data) {
               userBalance = parseU128FromBytes(userBalanceResult.execution.data);

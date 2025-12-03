@@ -59,7 +59,7 @@ export function useFuturesMarkets(params: UseFuturesMarketsParams = {}) {
         });
 
         // Transform API response to match our FuturesMarket type
-        const markets: FuturesMarket[] = response.markets.map((m) => ({
+        const markets: FuturesMarket[] = response.markets.map((m: any) => ({
           id: m.id,
           symbol: m.symbol,
           type: m.type,

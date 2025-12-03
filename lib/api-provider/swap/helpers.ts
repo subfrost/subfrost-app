@@ -1,10 +1,49 @@
-import type { FormattedUtxo, Provider } from "@/ts-sdk";
-import {
-  AddressTypeEnum as AddressType,
-  assertHex,
-  UTXO_DUST,
-  getAddressType,
-} from "@/ts-sdk";
+// Import types from ts-sdk sub-modules to avoid WASM dependency
+import type { FormattedUtxo } from "./types";
+import { AddressType } from "./types";
+
+import * as bitcoin from 'bitcoinjs-lib';
+
+// Define Provider type locally
+type Provider = {
+  esplora: {
+    getFeeEstimates: () => Promise<Record<string, number>>;
+    getTxInfo: (txId: string) => Promise<any>;
+  };
+};
+
+// Local definitions for swap helpers
+export const UTXO_DUST = 546;
+
+export function assertHex(buffer: Buffer): Buffer {
+  // Remove leading 0x02/0x03 prefix for taproot keys
+  if (buffer.length === 33 && (buffer[0] === 0x02 || buffer[0] === 0x03)) {
+    return buffer.subarray(1);
+  }
+  return buffer;
+}
+
+export function getAddressType(address: string): AddressType | null {
+  try {
+    // Try to decode as different address types
+    if (address.startsWith('bc1p') || address.startsWith('tb1p') || address.startsWith('bcrt1p')) {
+      return AddressType.P2TR;
+    }
+    if (address.startsWith('bc1q') || address.startsWith('tb1q') || address.startsWith('bcrt1q')) {
+      return AddressType.P2WPKH;
+    }
+    if (address.startsWith('3') || address.startsWith('2')) {
+      return AddressType.P2SH_P2WPKH;
+    }
+    if (address.startsWith('1') || address.startsWith('m') || address.startsWith('n')) {
+      return AddressType.P2PKH;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 import {
   BidAffordabilityCheck,
   BidAffordabilityCheckResponse,
@@ -24,8 +63,6 @@ import {
   UtxosToCoverAmount,
   marketplaceName,
 } from './types'
-
-import * as bitcoin from 'bitcoinjs-lib'
 
 
 export const maxTxSizeForOffers: number = 482
@@ -49,7 +86,7 @@ function checkPaymentType(
   return (script: Buffer) => {
     try {
       return payment({ output: script, network: network })
-    } catch (error) {
+    } catch {
       return false
     }
   }
@@ -124,7 +161,7 @@ export function getUTXOsToCoverAmount({
   try {
     let sum = 0
     const result: FormattedUtxo[] = []
-    for (let utxo of utxos) {
+    for (const utxo of utxos) {
       if (isExcludedUtxo(utxo, excludedUtxos)) {
         // Check if the UTXO should be excluded
         continue
@@ -133,7 +170,7 @@ export function getUTXOsToCoverAmount({
         continue
       }
       const currentUTXO = utxo
-      sum += currentUTXO.satoshis
+      sum += currentUTXO.satoshis ?? currentUTXO.value ?? 0
       result.push(currentUTXO)
       if (sum > amountNeeded) {
         return result
@@ -148,7 +185,7 @@ export function getUTXOsToCoverAmount({
 export function isExcludedUtxo(
   utxo: FormattedUtxo,
   excludedUtxos: FormattedUtxo[]
-): Boolean {
+): boolean {
   return excludedUtxos?.some(
     (excluded) =>
       excluded?.txId === utxo?.txId &&
@@ -228,7 +265,7 @@ export async function canAddressAffordBid({
 
 export function calculateAmountGathered(utxoArray: FormattedUtxo[]): number {
   return utxoArray?.reduce(
-    (prev, currentValue) => prev + currentValue.satoshis,
+    (prev, currentValue) => prev + (currentValue.satoshis ?? currentValue.value ?? 0),
     0
   )
 }
@@ -242,13 +279,14 @@ export async function selectSpendAddress({
 }: SelectSpendAddress): Promise<SelectSpendAddressResponse> {
   feeRate = await sanitizeFeeRate(provider, feeRate)
   const estimatedCost = getBidCostEstimate(offers, feeRate)
-  for (let i = 0; i < account.spendStrategy.addressOrder.length; i++) {
-    if (
-      account.spendStrategy.addressOrder[i] === 'taproot' ||
-      account.spendStrategy.addressOrder[i] === 'nativeSegwit'
-    ) {
-      const address = account[account.spendStrategy.addressOrder[i]].address
-      let pubkey: string = account[account.spendStrategy.addressOrder[i]].pubkey
+  const spendStrategy = account.spendStrategy as any; // Type assertion for complex spend strategy
+  for (let i = 0; i < spendStrategy.addressOrder.length; i++) {
+    const addrType = spendStrategy.addressOrder[i] as 'taproot' | 'nativeSegwit';
+    if (addrType === 'taproot' || addrType === 'nativeSegwit') {
+      const accountAddr = account[addrType];
+      if (!accountAddr) continue;
+      const address = accountAddr.address
+      const pubkey: string = accountAddr.pubkey
       const addrUtxos = utxos.filter((utxo) => utxo.address === address)
       const afford = await canAddressAffordBid({
         estimatedCost,
@@ -343,13 +381,20 @@ export function dummyUtxosPsbt({
   }
   
   retrievedUtxos.forEach((utxo) => {
+    const hash = utxo.txId || utxo.txid;
+    const index = utxo.outputIndex ?? utxo.vout;
+    const value = utxo.satoshis ?? utxo.value ?? 0;
+    const scriptPk = utxo.scriptPk || utxo.scriptPubKey;
+    if (!hash || index === undefined || !scriptPk) {
+      throw new Error('Invalid UTXO data');
+    }
     const input = addInputConditionally(
       {
-        hash: utxo.txId,
-        index: utxo.outputIndex,
+        hash,
+        index,
         witnessUtxo: {
-          value: BigInt(utxo.satoshis),
-          script: Buffer.from(utxo.scriptPk, 'hex'),
+          value: BigInt(value),
+          script: Buffer.from(scriptPk, 'hex'),
         },
       },
       addressType,
@@ -419,8 +464,11 @@ export async function updateUtxos({
       output.value > UTXO_DUST
     ) {
       const newUtxo: FormattedUtxo = {
+        txid: txId,
         txId: txId,
+        vout: index,
         outputIndex: index,
+        value: output.value,
         satoshis: output.value,
         scriptPk: output.scriptpubkey,
         address: output.scriptpubkey_address,
@@ -651,7 +699,7 @@ export function buildPsbtWithFee({
   const finalTxSize = estimatePsbtFee({ txAddressTypes })
   const finalFee = parseInt((finalTxSize * feeRate).toFixed(0))
 
-  let newAmountNeeded = spendAmount + finalFee
+  const newAmountNeeded = spendAmount + finalFee
   let changeAmount = amountRetrieved - newAmountNeeded
 
   if (changeAmount < 0) {
@@ -665,13 +713,20 @@ export function buildPsbtWithFee({
       // Merge new UTXOs with existing ones and create new templates for recursion
       retrievedUtxos = retrievedUtxos.concat(additionalUtxos)
       additionalUtxos.forEach((utxo) => {
+        const hash = utxo.txId || utxo.txid;
+        const index = utxo.outputIndex ?? utxo.vout;
+        const value = utxo.satoshis ?? utxo.value ?? 0;
+        const scriptPk = utxo.scriptPk || utxo.scriptPubKey;
+        if (!hash || index === undefined || !scriptPk) {
+          throw new Error('Invalid UTXO data');
+        }
         const input = addInputConditionally(
           {
-            hash: utxo.txId,
-            index: utxo.outputIndex,
+            hash,
+            index,
             witnessUtxo: {
-              value: BigInt(utxo.satoshis),
-              script: Buffer.from(utxo.scriptPk, 'hex'),
+              value: BigInt(value),
+              script: Buffer.from(scriptPk, 'hex'),
             },
           },
           addressType,

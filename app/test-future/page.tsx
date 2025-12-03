@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default function TestFuturePage() {
   const [result, setResult] = useState<string>('');
   const [loading, setLoading] = useState(false);

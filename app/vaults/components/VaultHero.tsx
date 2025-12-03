@@ -144,10 +144,10 @@ export default function VaultHero({
             } else if (badge === 'ZEC' || badge === 'Zcash') {
               badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
             } else if (badge === 'METHANE') {
-              badgeClassName = "rounded-full bg-white text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+              badgeClassName = "rounded-full bg-[color:var(--sf-surface)] text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
             } else {
               // Default styling for other badges
-              badgeClassName = "rounded-full bg-white/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
+              badgeClassName = "rounded-full bg-[color:var(--sf-surface)]/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
             }
             
             return (
@@ -197,7 +197,7 @@ export default function VaultHero({
                 className={`w-2 h-5 rounded-sm ${
                   level <= riskValue 
                     ? riskLevel === 'low' ? 'bg-green-400' : riskLevel === 'medium' ? 'bg-yellow-400' : riskLevel === 'high' ? 'bg-orange-400' : 'bg-red-400'
-                    : 'bg-white/30'
+                    : 'bg-[color:var(--sf-surface)]/30'
                 }`}
               />
             ))}

@@ -5,7 +5,7 @@ import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 import { useAlkanesTokenPairs, type AlkanesTokenPair } from '@/hooks/useAlkanesTokenPairs';
 import { queryPoolFee } from '@/hooks/usePoolFee';
-import { getSandshrewProvider } from '@/utils/oylProvider';
+import { getAlkanesProvider } from '@/utils/alkanesProvider';
 import { FRBTC_UNWRAP_FEE_PER_1000, FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/utils/amm';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
@@ -93,8 +93,7 @@ async function calculateSwapPrice(
   wrapFee: number = FRBTC_WRAP_FEE_PER_1000,
   unwrapFee: number = FRBTC_UNWRAP_FEE_PER_1000,
 ) {
-  const provider = await getSandshrewProvider(network);
-  const poolFee = await queryPoolFee(provider, pool.poolId);
+  const poolFee = await queryPoolFee(network, pool.poolId);
   let buyAmount: string;
   let sellAmount: string;
   const amountInAlks = toAlks(amount);
@@ -309,7 +308,7 @@ export function useSwapQuotes(
       }
 
       const direct = sellPairs.find(
-        (p) =>
+        (p: any) =>
           (p.token0.id === sellCurrencyId && p.token1.id === buyCurrencyId) ||
           (p.token0.id === buyCurrencyId && p.token1.id === sellCurrencyId),
       );
@@ -329,18 +328,18 @@ export function useSwapQuotes(
 
       // BUSD bridge route
       const sellToBusd = sellPairs.find(
-        (p) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
+        (p: any) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
       );
       const buyToBusd = buyPairs.find(
-        (p) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
+        (p: any) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
       );
       
       // frBTC bridge route
       const sellToFrbtc = sellPairs.find(
-        (p) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
+        (p: any) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
       );
       const buyToFrbtc = buyPairs.find(
-        (p) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
+        (p: any) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
       );
       
       // Try both bridge routes and compare
