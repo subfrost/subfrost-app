@@ -143,7 +143,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
         {/* Header */}
-        <div className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)]">
+        <div className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] min-w-fit">
           <div>Txn</div>
           <div>Pair</div>
           <div className="text-right">Amounts</div>
