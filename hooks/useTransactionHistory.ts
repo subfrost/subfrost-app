@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useWallet } from '@/context/WalletContext';
 
 export interface TransactionInput {
   txid: string;
@@ -30,7 +31,8 @@ export interface EnrichedTransaction {
 }
 
 export function useTransactionHistory(address?: string) {
-  const { provider, network } = useAlkanesSDK();
+  const { provider } = useAlkanesSDK();
+  const { network } = useWallet();
   const [transactions, setTransactions] = useState<EnrichedTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

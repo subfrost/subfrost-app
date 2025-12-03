@@ -49,7 +49,6 @@ export function useUnwrapMutation() {
       const transaction = await unwrapBtc({
         alkaneUtxos: selectedUtxos,
         utxos,
-        alkaneUtxos: selectedUtxos,
         account,
         provider,
         signer: signerShim,
