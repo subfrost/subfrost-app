@@ -8,27 +8,41 @@ import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
 import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
-import type { Network } from '@/utils/constants';
+import { ExchangeProvider } from '@/context/ExchangeContext';
 
-// Detect network from environment
+// Define Network type locally
+type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
+
+const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
+
+// Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
-  const envNetwork = process.env.NEXT_PUBLIC_NETWORK as Network | undefined;
-  if (envNetwork && ['mainnet', 'testnet', 'signet', 'oylnet', 'regtest'].includes(envNetwork)) {
-    return envNetwork;
+  if (typeof window === 'undefined') return 'mainnet';
+
+  // First check localStorage for user selection
+  const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest'].includes(stored)) {
+    return stored as Network;
   }
-  // Check if running locally (regtest)
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+
+  // Then check hostname
+  const host = window.location.host;
+  if (!process.env.NEXT_PUBLIC_NETWORK) {
+    if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
+      return 'signet';
+    } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
+      return 'regtest';
+    } else if (host === 'localhost' || host.includes('localhost:') || host === '127.0.0.1') {
       return 'regtest';
     }
+    return 'mainnet';
   }
-  return 'mainnet';
+  return process.env.NEXT_PUBLIC_NETWORK as Network;
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const network = useMemo(() => detectNetwork(), []);
+  const [network, setNetwork] = useState<Network>('mainnet');
 
   // Memoize QueryClient to prevent recreation on re-renders
   const queryClient = useMemo(
@@ -46,6 +60,37 @@ export default function Providers({ children }: { children: ReactNode }) {
     []
   );
 
+  // Initialize network on mount and listen for storage changes
+  useEffect(() => {
+    const initialNetwork = detectNetwork();
+    setNetwork(initialNetwork);
+
+    // Listen for network changes from other tabs/components
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === NETWORK_STORAGE_KEY && e.newValue) {
+        setNetwork(e.newValue as Network);
+        // Invalidate all queries to refetch with new network
+        queryClient.invalidateQueries();
+      }
+    };
+
+    // Listen for custom events from same tab
+    const handleNetworkChange = (e: CustomEvent) => {
+      const newNetwork = e.detail as Network;
+      setNetwork(newNetwork);
+      // Invalidate all queries to refetch with new network
+      queryClient.invalidateQueries();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('network-changed' as any, handleNetworkChange as any);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('network-changed' as any, handleNetworkChange as any);
+    };
+  }, [queryClient]);
+
   // Standard hydration-safe mounting pattern
   useEffect(() => {
     setMounted(true);
@@ -55,13 +100,17 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AlkanesSDKProvider network={network}>
-        <GlobalStore>
-          <ModalStore>
-            <WalletProvider>{children}</WalletProvider>
-          </ModalStore>
-        </GlobalStore>
-      </AlkanesSDKProvider>
+      <GlobalStore>
+        <ModalStore>
+          <AlkanesSDKProvider network={network}>
+            <WalletProvider network={network}>
+              <ExchangeProvider>
+                {children}
+              </ExchangeProvider>
+            </WalletProvider>
+          </AlkanesSDKProvider>
+        </ModalStore>
+      </GlobalStore>
     </QueryClientProvider>
   );
 }

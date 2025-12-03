@@ -1,6 +1,6 @@
 import BigNumber from 'bignumber.js';
 
-// Define FormattedUtxo type locally to accept both camelCase and snake_case formats
+// Define FormattedUtxo type locally - supports both naming conventions
 type FormattedUtxo = {
   txId?: string;
   txid?: string;
@@ -13,7 +13,7 @@ type FormattedUtxo = {
   address: string;
   inscriptions?: any[];
   runes?: any[] | Record<string, any>;
-  alkanes?: Record<string, { value: string | number; name?: string; symbol?: string }>;
+  alkanes?: Record<string, { value: string; name?: string; symbol?: string }>;
   indexed?: boolean;
   confirmations?: number;
 };
@@ -72,10 +72,10 @@ export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
 };
 
 const alkaneUtxohasInscriptionsOrRunes = (u: FormattedUtxo): boolean => {
-  const hasInscriptions = (u.inscriptions?.length ?? 0) > 0;
-  // Handle runes as both array and object formats
-  const runes = u.runes;
-  const hasRunes = Array.isArray(runes) ? runes.length > 0 : Object.keys(runes ?? {}).length > 0;
+  const hasInscriptions = Array.isArray(u.inscriptions) && u.inscriptions.length > 0;
+  const hasRunes = Array.isArray(u.runes)
+    ? u.runes.length > 0
+    : !!(u.runes && typeof u.runes === 'object' && Object.keys(u.runes).length > 0);
   return hasInscriptions || hasRunes;
 };
 

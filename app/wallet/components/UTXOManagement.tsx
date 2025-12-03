@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
-import { Box, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, Filter } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, Filter, Lock, Unlock, Scissors } from 'lucide-react';
+import InscriptionRenderer from '@/app/components/InscriptionRenderer';
+import SplitUtxoModal from './SplitUtxoModal';
 
 type UTXOFilterType = 'all' | 'p2wpkh' | 'p2tr' | 'alkanes' | 'runes' | 'inscriptions';
 
@@ -12,10 +14,41 @@ export default function UTXOManagement() {
   const [showInscriptions, setShowInscriptions] = useState(true);
   const [expandedUtxo, setExpandedUtxo] = useState<string | null>(null);
   const [filter, setFilter] = useState<UTXOFilterType>('all');
+  const [frozenUtxos, setFrozenUtxos] = useState<Set<string>>(new Set());
+  const [splitUtxo, setSplitUtxo] = useState<any | null>(null);
+
+  // Load frozen UTXOs from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('subfrost_frozen_utxos');
+    if (stored) {
+      try {
+        setFrozenUtxos(new Set(JSON.parse(stored)));
+      } catch (err) {
+        console.error('Failed to load frozen UTXOs:', err);
+      }
+    }
+  }, []);
+
+  // Save frozen UTXOs to localStorage
+  useEffect(() => {
+    localStorage.setItem('subfrost_frozen_utxos', JSON.stringify(Array.from(frozenUtxos)));
+  }, [frozenUtxos]);
 
   const toggleUtxo = (utxoKey: string) => {
     setExpandedUtxo(expandedUtxo === utxoKey ? null : utxoKey);
   };
+
+  const toggleFreezeUtxo = (utxoKey: string) => {
+    const newFrozen = new Set(frozenUtxos);
+    if (newFrozen.has(utxoKey)) {
+      newFrozen.delete(utxoKey);
+    } else {
+      newFrozen.add(utxoKey);
+    }
+    setFrozenUtxos(newFrozen);
+  };
+
+  const isFrozen = (utxoKey: string) => frozenUtxos.has(utxoKey);
 
   // Filter UTXOs based on selected filter
   const filteredUtxos = (() => {
@@ -156,8 +189,13 @@ export default function UTXOManagement() {
                   <div className="flex items-center gap-4">
                     <Box size={20} className="text-blue-400" />
                     <div className="text-left">
-                      <div className="font-mono text-sm">
-                        {utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}
+                      <div className="font-mono text-sm flex items-center gap-2">
+                        <span>{utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}</span>
+                        {isFrozen(utxoKey) && (
+                          <span title="Frozen UTXO">
+                            <Lock size={14} className="text-yellow-400" />
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-white/60">
                         {(utxo.value / 100000000).toFixed(8)} BTC
@@ -184,6 +222,40 @@ export default function UTXOManagement() {
 
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-3 border-t border-white/10 pt-3">
+                    {/* UTXO Actions */}
+                    <div className="flex gap-2 pb-3 border-b border-white/10">
+                      <button
+                        onClick={() => toggleFreezeUtxo(utxoKey)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          isFrozen(utxoKey)
+                            ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
+                            : 'bg-white/5 text-white/80 hover:bg-white/10'
+                        }`}
+                      >
+                        {isFrozen(utxoKey) ? (
+                          <>
+                            <Lock size={16} />
+                            Frozen
+                          </>
+                        ) : (
+                          <>
+                            <Unlock size={16} />
+                            Freeze
+                          </>
+                        )}
+                      </button>
+
+                      {utxo.inscriptions && utxo.inscriptions.length > 0 && (
+                        <button
+                          onClick={() => setSplitUtxo(utxo)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 text-white/80 hover:bg-white/10 text-sm transition-colors"
+                        >
+                          <Scissors size={16} />
+                          Split Ordinals
+                        </button>
+                      )}
+                    </div>
+
                     {/* UTXO Details */}
                     <div className="space-y-2 text-sm">
                       <div>
@@ -250,12 +322,14 @@ export default function UTXOManagement() {
                     {showInscriptions && utxo.inscriptions && utxo.inscriptions.length > 0 && (
                       <div>
                         <div className="text-sm font-medium text-white/80 mb-2">Inscriptions:</div>
-                        <div className="space-y-1">
+                        <div className="space-y-3">
                           {utxo.inscriptions.map((inscription, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
-                              <span className="font-mono text-xs">{inscription.id}</span>
-                              <span className="text-white/60">#{inscription.number}</span>
-                            </div>
+                            <InscriptionRenderer
+                              key={idx}
+                              inscriptionId={inscription.id}
+                              inscriptionNumber={inscription.number}
+                              showMetadata={true}
+                            />
                           ))}
                         </div>
                       </div>
@@ -271,6 +345,16 @@ export default function UTXOManagement() {
           </div>
         )}
       </div>
+
+      {/* Split UTXO Modal */}
+      <SplitUtxoModal
+        isOpen={splitUtxo !== null}
+        onClose={() => {
+          setSplitUtxo(null);
+          refresh(); // Refresh UTXOs after splitting
+        }}
+        utxo={splitUtxo}
+      />
     </div>
   );
 }

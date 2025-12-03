@@ -3,13 +3,19 @@
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionHistory } from '@/hooks/useTransactionHistory';
-import { ExternalLink, Clock, CheckCircle, Code, RefreshCw, Zap } from 'lucide-react';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { ExternalLink, Clock, CheckCircle, Code, RefreshCw, Zap, Search, Sparkles } from 'lucide-react';
 
 export default function TransactionHistory() {
   const { address } = useWallet() as any;
+  const { provider } = useAlkanesSDK();
   const { transactions, loading, error } = useTransactionHistory(address);
   const [viewMode, setViewMode] = useState<'visual' | 'raw'>('visual');
   const [expandedTxs, setExpandedTxs] = useState<Set<string>>(new Set());
+  const [inspectingTx, setInspectingTx] = useState<string | null>(null);
+  const [inspectionData, setInspectionData] = useState<any>(null);
+  const [inspectionLoading, setInspectionLoading] = useState(false);
+  const [inspectionError, setInspectionError] = useState<string | null>(null);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleString();
@@ -27,6 +33,57 @@ export default function TransactionHistory() {
       newExpanded.add(txid);
     }
     setExpandedTxs(newExpanded);
+  };
+
+  const inspectTransaction = async (txid: string) => {
+    setInspectingTx(txid);
+    setInspectionLoading(true);
+    setInspectionError(null);
+    setInspectionData(null);
+
+    try {
+      // Helper to safely call provider methods that may not exist
+      const safeCall = async (fn: any, ...args: any[]) => {
+        if (typeof fn !== 'function') return null;
+        try {
+          return await fn(...args);
+        } catch {
+          return null;
+        }
+      };
+
+      // Try both runestone and protorunes analysis if provider exists
+      const [runestoneDecode, protorunesDecode, runestoneAnalyze, protorunesAnalyze] = await Promise.allSettled([
+        safeCall(provider?.runestoneDecodeTx?.bind(provider), txid),
+        safeCall(provider?.protorunesDecodeTx?.bind(provider), txid),
+        safeCall(provider?.runestoneAnalyzeTx?.bind(provider), txid),
+        safeCall(provider?.protorunesAnalyzeTx?.bind(provider), txid),
+      ]);
+
+      const data = {
+        runestone: {
+          decode: runestoneDecode.status === 'fulfilled' ? runestoneDecode.value : null,
+          analyze: runestoneAnalyze.status === 'fulfilled' ? runestoneAnalyze.value : null,
+        },
+        protorunes: {
+          decode: protorunesDecode.status === 'fulfilled' ? protorunesDecode.value : null,
+          analyze: protorunesAnalyze.status === 'fulfilled' ? protorunesAnalyze.value : null,
+        },
+      };
+
+      setInspectionData(data);
+    } catch (err: any) {
+      console.error('Transaction inspection failed:', err);
+      setInspectionError(err.message || 'Failed to inspect transaction');
+    } finally {
+      setInspectionLoading(false);
+    }
+  };
+
+  const closeInspection = () => {
+    setInspectingTx(null);
+    setInspectionData(null);
+    setInspectionError(null);
   };
 
   if (loading) {
@@ -156,13 +213,22 @@ export default function TransactionHistory() {
                     </div>
                   </div>
 
-                  {/* Toggle Details Button */}
-                  <button
-                    onClick={() => toggleExpanded(tx.txid)}
-                    className="text-sm text-blue-400 hover:text-blue-300 mb-4"
-                  >
-                    {expandedTxs.has(tx.txid) ? '▼ Hide Details' : '▶ Show Details'}
-                  </button>
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => toggleExpanded(tx.txid)}
+                      className="text-sm text-blue-400 hover:text-blue-300"
+                    >
+                      {expandedTxs.has(tx.txid) ? '▼ Hide Details' : '▶ Show Details'}
+                    </button>
+                    <button
+                      onClick={() => inspectTransaction(tx.txid)}
+                      className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300"
+                    >
+                      <Search size={14} />
+                      Inspect Runes/Alkanes
+                    </button>
+                  </div>
 
                   {/* Expanded Details */}
                   {expandedTxs.has(tx.txid) && (
@@ -249,6 +315,127 @@ export default function TransactionHistory() {
           </div>
         )}
       </div>
+
+      {/* Transaction Inspection Modal */}
+      {inspectingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1a1a1a] rounded-2xl border border-white/10 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-[#1a1a1a] z-10">
+              <div className="flex items-center gap-3">
+                <Sparkles size={24} className="text-purple-400" />
+                <div>
+                  <h2 className="text-xl font-bold text-white">Transaction Analysis</h2>
+                  <div className="font-mono text-xs text-white/60 mt-1">
+                    {inspectingTx.slice(0, 16)}...{inspectingTx.slice(-16)}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={closeInspection}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {inspectionLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="animate-spin text-purple-400 mr-2" size={20} />
+                  <div className="text-white/60">Analyzing transaction...</div>
+                </div>
+              ) : inspectionError ? (
+                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400">
+                  {inspectionError}
+                </div>
+              ) : inspectionData ? (
+                <div className="space-y-6">
+                  {/* Runestone Analysis */}
+                  {(inspectionData.runestone.decode || inspectionData.runestone.analyze) && (
+                    <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Zap size={20} className="text-orange-400" />
+                        <h3 className="text-lg font-bold text-white">Runestone Data</h3>
+                      </div>
+
+                      {inspectionData.runestone.decode && (
+                        <div className="mb-4">
+                          <div className="text-sm font-medium text-white/80 mb-2">Decoded:</div>
+                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                            {JSON.stringify(inspectionData.runestone.decode, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {inspectionData.runestone.analyze && (
+                        <div>
+                          <div className="text-sm font-medium text-white/80 mb-2">Analysis:</div>
+                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                            {JSON.stringify(inspectionData.runestone.analyze, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Protorunes/Alkanes Analysis */}
+                  {(inspectionData.protorunes.decode || inspectionData.protorunes.analyze) && (
+                    <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Sparkles size={20} className="text-purple-400" />
+                        <h3 className="text-lg font-bold text-white">Alkanes/Protorunes Data</h3>
+                      </div>
+
+                      {inspectionData.protorunes.decode && (
+                        <div className="mb-4">
+                          <div className="text-sm font-medium text-white/80 mb-2">Decoded:</div>
+                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                            {JSON.stringify(inspectionData.protorunes.decode, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {inspectionData.protorunes.analyze && (
+                        <div>
+                          <div className="text-sm font-medium text-white/80 mb-2">Analysis:</div>
+                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                            {JSON.stringify(inspectionData.protorunes.analyze, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* No data found */}
+                  {!inspectionData.runestone.decode &&
+                    !inspectionData.runestone.analyze &&
+                    !inspectionData.protorunes.decode &&
+                    !inspectionData.protorunes.analyze && (
+                      <div className="p-8 text-center text-white/60">
+                        <div className="mb-2">No Runes or Alkanes data found</div>
+                        <div className="text-sm text-white/40">
+                          This transaction does not contain runestone or protostone data
+                        </div>
+                      </div>
+                    )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-white/10 sticky bottom-0 bg-[#1a1a1a]">
+              <button
+                onClick={closeInspection}
+                className="w-full px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

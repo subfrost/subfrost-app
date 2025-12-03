@@ -14,7 +14,7 @@ export default function VaultHeaderTabs({ activeTab, onTabChange }: Props) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-1.5 backdrop-blur-sm">
+      <div className="flex gap-2 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-1.5 backdrop-blur-sm">
         <button
           onClick={() => onTabChange('yve-diesel')}
           className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${

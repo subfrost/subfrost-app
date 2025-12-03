@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { AlkanesProvider, createProvider } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import { Network, NetworkMap } from '@/utils/constants';
-import { getNetworkUrls } from '@/utils/alkanesProvider';
 
 interface BitcoinPrice {
   usd: number;
@@ -35,25 +34,33 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     const initProvider = async () => {
       try {
         console.log('[AlkanesSDK] Initializing provider for network:', network);
+        
+        // Determine URLs based on network
+        const baseUrls: Record<Network, string> = {
+          mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+          testnet: 'https://testnet.subfrost.io/v4/subfrost',
+          signet: 'https://signet.subfrost.io/v4/subfrost',
+          regtest: 'http://localhost:18888',  // Local alkanes-rs
+          oylnet: 'http://localhost:18888',  // Local Regtest
+        };
 
-        // Get URLs from centralized config (uses env vars for regtest)
-        const urls = getNetworkUrls(network);
-        console.log('[AlkanesSDK] Using URLs:', urls);
+        const dataApiUrls: Record<Network, string> = {
+          mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+          testnet: 'https://testnet.subfrost.io/v4/subfrost',
+          signet: 'https://signet.subfrost.io/v4/subfrost',
+          regtest: 'http://localhost:18888',  // Local alkanes-rs
+          oylnet: 'http://localhost:18888',  // Local Regtest
+        };
 
         const networkConfig = NetworkMap[network];
-
+        
         // Create provider - the SDK handles internal initialization
         const providerInstance = createProvider({
-          url: urls.rpc,
+          url: baseUrls[network],
           network: networkConfig,
           networkType: network,
           version: 'v4',
         });
-
-        // Store the URLs on the provider for downstream use
-        (providerInstance as any).url = urls.rpc;
-        (providerInstance as any).dataApiUrl = urls.api;
-        (providerInstance as any).esploraUrl = urls.esplora;
 
         console.log('[AlkanesSDK] Provider created successfully');
         setProvider(providerInstance);

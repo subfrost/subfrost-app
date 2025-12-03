@@ -16,7 +16,7 @@ export default function StakeCard() {
   const isStakeDisabled = isConnected && (!amount || !isFinite(parseFloat(amount)) || parseFloat(amount) <= 0);
 
   return (
-    <section className="w-full max-w-[460px] rounded-[22px] border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-8 sm:p-10 shadow-[0_8px_36px_rgba(40,67,114,0.14)] backdrop-blur-md">
+    <section className="w-full max-w-[460px] rounded-[22px] border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-8 sm:p-10 shadow-[0_8px_36px_rgba(0,0,0,0.14)] backdrop-blur-md">
       <div className="flex flex-col items-center gap-4 text-center">
         <h1 className="text-[32px] sm:text-[36px] font-extrabold tracking-[0.01em] leading-tight text-[color:var(--sf-text)]">
           STAKE BTC,

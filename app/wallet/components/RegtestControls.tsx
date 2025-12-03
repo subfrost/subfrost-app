@@ -2,89 +2,48 @@
 
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
+import { getNetworkUrls } from '@/utils/alkanesProvider';
 import { Pickaxe, Clock, Zap } from 'lucide-react';
 
 export default function RegtestControls() {
-  const { network, account } = useWallet();
+  const { network, account } = useWallet() as any;
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
   // Only show for regtest networks
-  if (network !== 'regtest') {
+  if (network !== 'regtest' && network !== 'oylnet') {
     return null;
   }
 
   const showMessage = (msg: string, duration = 3000) => {
     setMessage(msg);
-    if (duration > 0) {
-      setTimeout(() => setMessage(''), duration);
-    }
-  };
-
-  // Poll esplora until it reaches the expected block height
-  const waitForEsploraSync = async (expectedHeight: number, maxWaitMs = 60000): Promise<boolean> => {
-    const startTime = Date.now();
-    const pollInterval = 500; // Check every 500ms
-
-    while (Date.now() - startTime < maxWaitMs) {
-      try {
-        const response = await fetch('/api/esplora/blocks/tip/height');
-        if (response.ok) {
-          const text = await response.text();
-          const currentHeight = parseInt(text, 10);
-          console.log(`[RegtestControls] Esplora height: ${currentHeight}, expected: ${expectedHeight}`);
-
-          if (currentHeight >= expectedHeight) {
-            return true;
-          }
-        }
-      } catch (e) {
-        console.warn('[RegtestControls] Error checking esplora height:', e);
-      }
-
-      // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    console.warn(`[RegtestControls] Esplora sync timeout after ${maxWaitMs}ms`);
-    return false;
+    setTimeout(() => setMessage(''), duration);
   };
 
   const mineBlocks = async (count: number) => {
     setMining(true);
     try {
-      // Get taproot address from account (already available from useWallet at top level)
+      // Get taproot address (p2tr:0)
       const address = account?.taproot?.address;
       if (!address) {
         throw new Error('No taproot address available. Please connect wallet first.');
       }
-
-      // Use the API route to mine blocks via Docker
-      const response = await fetch('/api/regtest/mine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, blocks: count }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to mine blocks');
-      }
-
+      
+      // Dynamic import WASM to avoid SSR issues
+      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
+      
+      // Create WebProvider with network URL
+      const networkUrls = getNetworkUrls(network);
+      const provider = new WebProvider(networkUrls.rpc, null);
+      
+      // Call bitcoindGenerateToAddress (uses alkanes-cli-common code path)
+      const result = await provider.bitcoindGenerateToAddress(count, address);
+      
       console.log('[RegtestControls] Mined blocks:', result);
-      showMessage(`✅ Mined ${count} block(s)! Waiting for indexer to sync...`, 0);
-
-      // Wait for esplora to sync to the new block height
-      const synced = await waitForEsploraSync(result.newBlockHeight);
-
-      if (synced) {
-        showMessage(`✅ Indexer synced! Refreshing...`);
-        setTimeout(() => window.location.reload(), 500);
-      } else {
-        showMessage(`⚠️ Indexer still syncing. Refreshing anyway...`);
-        setTimeout(() => window.location.reload(), 1000);
-      }
+      showMessage(`✅ Mined ${count} block(s) successfully!`);
+      
+      // Trigger a refetch of balances
+      setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
       console.error('Mining error:', error);
       showMessage(`❌ Failed to mine blocks: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
@@ -96,24 +55,20 @@ export default function RegtestControls() {
   const generateFuture = async () => {
     setMining(true);
     try {
-      // Dynamic import WASM from public directory
-      // @ts-expect-error - Dynamic import from public folder at runtime
-      const wasm = await import(/* webpackIgnore: true */ '/wasm/alkanes_web_sys.js');
-      await wasm.default();
-
-      const { getNetworkUrls } = await import('@/utils/alkanesProvider');
-
-      // Create WebProvider
+      // Dynamic import WASM to avoid SSR issues
+      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
+      
+      // Create WebProvider with network URL
       const networkUrls = getNetworkUrls(network);
-      const provider = new wasm.WebProvider(network);
-
+      const provider = new WebProvider(networkUrls.rpc, null);
+      
       // Call bitcoindGenerateFuture (automatically computes Subfrost address from frBTC signer)
       // The address parameter is ignored - it will call frBTC [32:0] GET_SIGNER to get the address
       const result = await provider.bitcoindGenerateFuture('');
-
+      
       console.log('[RegtestControls] Generated future:', result);
       showMessage(`✅ Generated future block with Subfrost address!`);
-
+      
       // Trigger a refetch
       setTimeout(() => window.location.reload(), 1000);
     } catch (error) {

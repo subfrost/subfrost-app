@@ -1,6 +1,6 @@
 import { ProcessOfferOptions, ProcessOfferResponse } from '../types'
-import type { Provider } from "@/ts-sdk";
-import { AssetType, delay } from "@/ts-sdk";
+import type { Provider } from "../types";
+import { AssetType, timeout } from "../types";
 import * as bitcoin from 'bitcoinjs-lib'
 
 export interface UnsignedOrdinalsWalletBid {
@@ -32,12 +32,9 @@ export async function getSellerPsbt(unsignedBid: UnsignedOrdinalsWalletBid) {
     outpoints,
     receiveAddress,
   } = unsignedBid
-  if (!provider.api) {
-    throw new Error('Provider api is not available')
-  }
   switch (assetType) {
     case AssetType.BRC20:
-      return await provider.api.getOrdinalsWalletNftOfferPsbt!({
+      return await provider.api.getOrdinalsWalletNftOfferPsbt({
         address,
         publicKey,
         feeRate,
@@ -46,7 +43,7 @@ export async function getSellerPsbt(unsignedBid: UnsignedOrdinalsWalletBid) {
       })
 
     case AssetType.RUNES:
-      return await provider.api.getOrdinalsWalletRuneOfferPsbt!({
+      return await provider.api.getOrdinalsWalletRuneOfferPsbt({
         address,
         publicKey,
         feeRate,
@@ -55,7 +52,7 @@ export async function getSellerPsbt(unsignedBid: UnsignedOrdinalsWalletBid) {
       })
 
     case AssetType.COLLECTIBLE:
-      return await provider.api.getOrdinalsWalletNftOfferPsbt!({
+      return await provider.api.getOrdinalsWalletNftOfferPsbt({
         address,
         publicKey,
         feeRate,
@@ -67,18 +64,15 @@ export async function getSellerPsbt(unsignedBid: UnsignedOrdinalsWalletBid) {
 
 export async function submitPsbt(signedBid: signedOrdinalsWalletBid) {
   const { assetType, psbt, provider, setupPsbt } = signedBid
-  if (!provider.api) {
-    throw new Error('Provider api is not available')
-  }
   switch (assetType) {
     case AssetType.BRC20:
-      return await provider.api.submitOrdinalsWalletBid!({ psbt, setupPsbt })
+      return await provider.api.submitOrdinalsWalletBid({ psbt, setupPsbt })
 
     case AssetType.RUNES:
-      return await provider.api.submitOrdinalsWalletRuneBid!({ psbt, setupPsbt })
+      return await provider.api.submitOrdinalsWalletRuneBid({ psbt, setupPsbt })
 
     case AssetType.COLLECTIBLE:
-      return await provider.api.submitOrdinalsWalletBid!({ psbt, setupPsbt })
+      return await provider.api.submitOrdinalsWalletBid({ psbt, setupPsbt })
   }
 }
 
@@ -93,7 +87,7 @@ export async function processOrdinalsWalletOffer({
   utxos,
   signer,
 }: ProcessOfferOptions): Promise<ProcessOfferResponse> {
-  let dummyTxId: string | null = null
+  const dummyTxId: string | null = null
   let purchaseTxId: string | null = null
 
   let setupTx: string | null = null
@@ -145,7 +139,7 @@ export async function processOrdinalsWalletOffer({
   const data = finalizeResponse.data
   if (data.success) {
     purchaseTxId = data.purchase
-    if (setupTx) await delay(5000)
+    if (setupTx) await timeout(5000)
   }
   if (!purchaseTxId) {
     throw new Error('Purchase transaction ID is missing');

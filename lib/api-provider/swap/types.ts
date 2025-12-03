@@ -1,15 +1,73 @@
 
 import { Psbt } from 'bitcoinjs-lib'
 import * as bitcoin from 'bitcoinjs-lib'
-import type {
-  FormattedUtxo,
-  Provider,
-  SwapSigner as Signer,
-  Account,
-} from "@/ts-sdk";
-import { AddressTypeEnum as AddressType, AssetType } from "@/ts-sdk";
 
-type AddressTypeValue = typeof AddressType[keyof typeof AddressType];
+// Local type definitions for swap operations
+export type FormattedUtxo = {
+  txid: string;
+  txId?: string; // Alias for txid
+  vout: number;
+  outputIndex?: number; // Alias for vout
+  value: number;
+  satoshis?: number; // Alias for value
+  address?: string; // Address associated with this UTXO
+  scriptPk?: string; // Script public key
+  scriptPubKey?: string; // Alias for scriptPk
+  status?: {
+    confirmed: boolean;
+    block_height?: number;
+  };
+  confirmations?: number;
+  inscriptions?: any[]; // Inscriptions data
+  runes?: any[]; // Runes data
+  alkanes?: any; // Alkanes data
+  indexed?: boolean; // Whether UTXO has been indexed
+};
+
+// Define AddressType here to avoid circular dependency with helpers
+export enum AddressType {
+  P2PKH = 'p2pkh',
+  P2SH_P2WPKH = 'p2sh-p2wpkh',
+  P2WPKH = 'p2wpkh',
+  P2TR = 'p2tr',
+}
+
+// Re-export getAddressType from helpers
+export { getAddressType } from './helpers';
+
+export type Provider = any; // TODO: Define proper provider interface
+export type Signer = any; // TODO: Define proper signer interface  
+export type SpendStrategy = 'merge' | 'split' | 'default' | { addressOrder: string[]; utxoSortGreatestToLeast: boolean; changeAddress: string };
+
+// Utility function needed by some files
+export const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms));
+
+export enum AssetType {
+  BRC20 = 'brc20',
+  RUNES = 'runes',
+  ORDINALS = 'ordinals',
+  COLLECTIBLE = 'collectible',
+  BTC = 'btc',
+}
+
+export interface AccountUtxoPortfolio {
+  taproot: FormattedUtxo[];
+  nativeSegwit: FormattedUtxo[];
+}
+
+// Additional type stubs for API client
+export type SwapBrcBid = any;
+export type SignedBid = any;
+export type OkxBid = any;
+export type GetOffersParams = any;
+export type GetCollectionOffersParams = any;
+
+// Account type
+interface Account {
+  taproot?: { address: string; pubkey: string };
+  nativeSegwit?: { address: string; pubkey: string };
+  spendStrategy: SpendStrategy;
+}
 
 export interface ConditionalInput {
   hash: string
@@ -31,7 +89,7 @@ export interface DummyUtxoOptions {
   pubKey: string
   nUtxos?: number
   network: bitcoin.Network
-  addressType: AddressTypeValue
+  addressType: AddressType
 }
 
 export interface PaymentUtxoOptions {
@@ -50,7 +108,7 @@ export interface PrepareAddressForDummyUtxos {
   pubKey: string
   nUtxos?: number
   utxos?: FormattedUtxo[]
-  addressType: AddressTypeValue
+  addressType: AddressType
 }
 
 export interface SignedOkxBid {
@@ -74,7 +132,7 @@ export interface GenOkxBrcAndCollectibleUnsignedPsbt {
   receiveAddress: string
   network: bitcoin.Network
   pubKey: string
-  addressType: AddressTypeValue
+  addressType: AddressType
   sellerPsbt: string
   orderPrice: number
 }
@@ -87,7 +145,7 @@ export interface GenOkxRuneUnsignedPsbt {
   receiveAddress: string
   network: bitcoin.Network
   pubKey: string
-  addressType: AddressTypeValue
+  addressType: AddressType
   sellerPsbt: string
   sellerAddress: string
   orderPrice: number
@@ -100,7 +158,7 @@ export interface UnsignedPsbt {
   receiveAddress: string
   network: bitcoin.Network
   pubKey: string
-  addressType: AddressTypeValue
+  addressType: AddressType
   signer?: Signer
   decodedPsbt?: any
   sellerPsbt: string
@@ -122,7 +180,7 @@ export interface SelectSpendAddressResponse {
   utxos: FormattedUtxo[]
   address: string
   pubKey: string
-  addressType: AddressTypeValue
+  addressType: AddressType
 }
 
 export interface MarketplaceOffer {
@@ -172,7 +230,7 @@ export interface PsbtBuilder {
   spendAddress: string
   spendPubKey: string
   spendAmount: number
-  addressType: AddressTypeValue
+  addressType: AddressType
   feeRate: number
 }
 
@@ -344,8 +402,8 @@ export interface OutputTxCheck {
 }
 
 export interface TxAddressTypes {
-  inputAddressTypes: AddressTypeValue[]
-  outputAddressTypes: AddressTypeValue[]
+  inputAddressTypes: AddressType[]
+  outputAddressTypes: AddressType[]
 }
 
 export interface UpdateUtxos {

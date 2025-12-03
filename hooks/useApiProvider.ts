@@ -1,11 +1,22 @@
-import { getApiProvider } from '@/utils/oylProvider';
+import { getAlkanesProvider } from '@/utils/alkanesProvider';
 import { useWallet } from '@/context/WalletContext';
+import { useEffect, useState } from 'react';
 
 export function useApiProvider() {
   const { network } = useWallet();
-  // Cast network to handle regtest which is used in WalletContext but not in oylProvider
-  const networkForApi = network === 'regtest' ? 'oylnet' : network;
-  return getApiProvider(networkForApi as 'mainnet' | 'testnet' | 'signet' | 'oylnet');
+  const [provider, setProvider] = useState<any>(null);
+  
+  useEffect(() => {
+    let mounted = true;
+    getAlkanesProvider(network).then((p) => {
+      if (mounted) setProvider(p);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [network]);
+  
+  return provider;
 }
 
 

@@ -26,18 +26,16 @@ export function useSignerShim() {
 
   const signerShim = {
     signAllInputs: async ({ rawPsbtHex }: { rawPsbtHex: string }) => {
-      // signPsbt now returns string directly (base64 signed PSBT)
-      const signedPsbtBase64 = await signPsbt(rawPsbtHex);
-      return finalizePsbt(signedPsbtBase64);
+      const signedPsbt = await signPsbt(rawPsbtHex);
+      return finalizePsbt(signedPsbt);
     },
     signAllInputsMultiplePsbts: async ({ rawPsbts, rawPsbtsHex }: { rawPsbts?: string[]; rawPsbtsHex?: string[] }) => {
       if (!rawPsbtsHex) {
         if (!rawPsbts) throw new Error('Either rawPsbts or rawPsbtsHex must be provided');
         rawPsbtsHex = rawPsbts.map((psbt) => Buffer.from(psbt, 'base64').toString('hex'));
       }
-      // signPsbts now returns string[] directly (base64 signed PSBTs)
-      const signedPsbtsBase64 = await signPsbts(rawPsbtsHex);
-      const finalizedPsbts = signedPsbtsBase64.map((signedPsbt) => finalizePsbt(signedPsbt));
+      const signedPsbtResponse = await signPsbts({ psbts: rawPsbtsHex });
+      const finalizedPsbts = signedPsbtResponse.signedPsbts.map((signedPsbt: string) => finalizePsbt(signedPsbt));
       return finalizedPsbts;
     },
     taprootKeyPair: provider ? ECPair.makeRandom({ network: provider.network }) : undefined,

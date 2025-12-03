@@ -57,6 +57,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Google Drive API for client-side OAuth */}
+        <script src="https://apis.google.com/js/api.js" async defer></script>
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+      </head>
       <body className={`${satoshi.variable} ${geistMono.variable} antialiased`}>
         <AlkanesWasmInitializer />
         <Providers>
