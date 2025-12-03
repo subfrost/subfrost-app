@@ -2,7 +2,7 @@
   "name": "subfrost-app",
   "version": "0.1.0",
   "private": true,
-  "sdkBranch": "kungfuflex/develop",
+  "sdkBranch": "develop",
   "scripts": {
     "dev": "next dev",
     "dev:turbo": "next dev --turbopack",
