@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Send, AlertCircle, CheckCircle, Loader2, Lock, Unlock } from 'lucide-react';
+import { X, Send, AlertCircle, CheckCircle, Loader2, Lock } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 
 interface SendModalProps {
@@ -23,8 +22,7 @@ interface UTXO {
 }
 
 export default function SendModal({ isOpen, onClose }: SendModalProps) {
-  const { address, wallet } = useWallet() as any;
-  const { provider } = useAlkanesSDK();
+  const { address, network } = useWallet() as any;
   const { utxos, refresh } = useEnrichedWalletData();
 
   const [recipientAddress, setRecipientAddress] = useState('');
@@ -253,136 +251,61 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   };
 
   const handleBroadcast = async () => {
-    if (!provider || !wallet) {
-      setError('Wallet not initialized');
-      return;
-    }
-
     setStep('broadcasting');
     setError('');
 
     try {
-      const amountSats = Math.floor(parseFloat(amount) * 100000000);
+      // Get mnemonic from session storage (set by WalletContext on unlock)
+      const mnemonic = sessionStorage.getItem('subfrost_session_mnemonic');
+      if (!mnemonic) {
+        throw new Error('Wallet session not found. Please reconnect your wallet.');
+      }
+
       const feeRateNum = parseInt(feeRate);
 
-      // Build transaction inputs with full UTXO data
-      // For now, let's use the provider to get proper UTXO data if needed
-      const inputs = Array.from(selectedUtxos).map((key) => {
-        const [txid, vout] = key.split(':');
-        const utxo = availableUtxos.find((u) => u.txid === txid && u.vout.toString() === vout);
-        if (!utxo) throw new Error(`UTXO not found: ${key}`);
-        
-        return {
-          txid,
-          vout: parseInt(vout),
-          value: utxo.value,
-          address: address, // The address that owns this UTXO
-        };
+      console.log('[SendModal] Sending via CLI API...');
+      console.log('[SendModal] Recipient:', recipientAddress);
+      console.log('[SendModal] Amount:', amount, 'BTC');
+      console.log('[SendModal] Fee rate:', feeRateNum, 'sat/vB');
+      console.log('[SendModal] From address:', address);
+
+      // Call the CLI-based API route
+      const response = await fetch('/api/wallet/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mnemonic,
+          recipient: recipientAddress,
+          amount: amount, // BTC as string
+          feeRate: feeRateNum,
+          fromAddresses: [address], // Send from current address
+          lockAlkanes: true, // Protect alkane UTXOs
+          network: network || 'regtest',
+        }),
       });
 
-      // Calculate change manually to avoid SDK fee calculation issues
-      const totalInput = inputs.reduce((sum, i) => sum + i.value, 0);
-      const estimatedSize = inputs.length * 180 + 2 * 34 + 10;
-      const estimatedFee = Math.ceil(estimatedSize * feeRateNum);
-      const changeAmount = totalInput - amountSats - estimatedFee;
+      const result = await response.json();
 
-      console.log('[SendModal] Manual fee calculation:');
-      console.log('  Total input:', totalInput, 'sats');
-      console.log('  Amount to send:', amountSats, 'sats');
-      console.log('  Estimated fee:', estimatedFee, 'sats');
-      console.log('  Change amount:', changeAmount, 'sats');
-
-      if (changeAmount < 0) {
-        throw new Error('Insufficient funds for transaction + fees');
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send transaction');
       }
 
-      // Build outputs with explicit change
-      const outputs = [
-        {
-          address: recipientAddress,
-          value: amountSats,
-        },
-      ];
-
-      // Only add change output if it's above dust threshold (546 sats)
-      if (changeAmount >= 546) {
-        outputs.push({
-          address: address, // Change goes back to sender
-          value: changeAmount,
-        });
-      } else {
-        console.log('[SendModal] Change below dust threshold, adding to fee');
-      }
-
-      // Create PSBT using wallet.createPsbt (SDK method)
-      // Don't specify feeRate - we're handling it manually via change calculation
-      const psbtParams = {
-        inputs,
-        outputs,
-        // NO feeRate - we calculated change manually
-        // NO changeAddress - we added change output manually
-      };
-
-      console.log('[SendModal] Creating PSBT with params:', psbtParams);
-      console.log('[SendModal] Inputs:', inputs);
-      console.log('[SendModal] Outputs:', outputs);
-      console.log('[SendModal] Total input value:', inputs.reduce((sum, i) => sum + i.value, 0));
-      console.log('[SendModal] Total output value:', outputs.reduce((sum, o) => sum + o.value, 0));
-      console.log('[SendModal] Number of inputs:', inputs.length);
-      console.log('[SendModal] Number of outputs:', outputs.length);
-      
-      // wallet.createPsbt returns a signed PSBT base64 string
-      // Note: The SDK uses bitcoinjs-lib Psbt internally which has a maximumFeeRate check
-      // We need to handle the fee validation error and extract transaction anyway
-      let signedPsbt: string;
-      try {
-        signedPsbt = await wallet.createPsbt(psbtParams);
-        console.log('[SendModal] PSBT created and signed, length:', signedPsbt.length);
-      } catch (err: any) {
-        // Handle various PSBT creation errors
-        if (err.message && err.message.includes('maximumFeeRate')) {
-          throw new Error(
-            'Transaction fee is too high for safety limits. ' +
-            'Please reduce the number of UTXOs (currently: ' + selectedUtxos.size + '). ' +
-            'Try manually selecting fewer, larger UTXOs.'
-          );
-        }
-        if (err.message && err.message.includes('Witness program hash mismatch')) {
-          throw new Error(
-            'Witness script error. This can happen with complex transactions. ' +
-            'Try: 1) Selecting fewer UTXOs (< 10), 2) Using manual UTXO selection, ' +
-            '3) Sending a smaller amount. Currently using ' + selectedUtxos.size + ' UTXOs.'
-          );
-        }
-        throw err;
-      }
-
-      // Broadcast transaction using provider
-      const result = await provider.pushPsbt({ psbtBase64: signedPsbt });
-      
       console.log('[SendModal] Transaction broadcast result:', result);
-      
-      setTxid(result.txid || result);
+
+      setTxid(result.txid);
       setStep('success');
-      
+
       // Refresh wallet data
       setTimeout(() => {
         refresh();
       }, 1000);
     } catch (err: any) {
       console.error('[SendModal] Transaction failed:', err);
-      
-      // Provide helpful error messages
+
       let errorMessage = err.message || 'Failed to broadcast transaction';
-      
-      if (errorMessage.includes('Witness program hash mismatch')) {
-        errorMessage = 'Transaction failed: Witness script error. ' +
-          'This is a known issue with complex taproot transactions. ' +
-          'Workarounds: 1) Try with 2-3 UTXOs only, 2) Use a smaller amount, ' +
-          '3) Use testnet instead of regtest. ' +
-          'See KNOWN_ISSUES.md for details.';
-      }
-      
+
       setError(errorMessage);
       setStep('confirm');
     }

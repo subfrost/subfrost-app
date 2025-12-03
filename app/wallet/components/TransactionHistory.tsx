@@ -36,20 +36,28 @@ export default function TransactionHistory() {
   };
 
   const inspectTransaction = async (txid: string) => {
-    if (!provider) return;
-
     setInspectingTx(txid);
     setInspectionLoading(true);
     setInspectionError(null);
     setInspectionData(null);
 
     try {
-      // Try both runestone and protorunes analysis
+      // Helper to safely call provider methods that may not exist
+      const safeCall = async (fn: any, ...args: any[]) => {
+        if (typeof fn !== 'function') return null;
+        try {
+          return await fn(...args);
+        } catch {
+          return null;
+        }
+      };
+
+      // Try both runestone and protorunes analysis if provider exists
       const [runestoneDecode, protorunesDecode, runestoneAnalyze, protorunesAnalyze] = await Promise.allSettled([
-        provider.runestoneDecodeTx(txid).catch(() => null),
-        provider.protorunesDecodeTx(txid).catch(() => null),
-        provider.runestoneAnalyzeTx(txid).catch(() => null),
-        provider.protorunesAnalyzeTx(txid).catch(() => null),
+        safeCall(provider?.runestoneDecodeTx?.bind(provider), txid),
+        safeCall(provider?.protorunesDecodeTx?.bind(provider), txid),
+        safeCall(provider?.runestoneAnalyzeTx?.bind(provider), txid),
+        safeCall(provider?.protorunesAnalyzeTx?.bind(provider), txid),
       ]);
 
       const data = {

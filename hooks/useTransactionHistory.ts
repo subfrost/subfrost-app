@@ -30,13 +30,13 @@ export interface EnrichedTransaction {
 }
 
 export function useTransactionHistory(address?: string) {
-  const { provider } = useAlkanesSDK();
+  const { provider, network } = useAlkanesSDK();
   const [transactions, setTransactions] = useState<EnrichedTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!address || !provider) {
+    if (!address) {
       setTransactions([]);
       return;
     }
@@ -44,7 +44,7 @@ export function useTransactionHistory(address?: string) {
     let cancelled = false;
 
     async function fetchTransactions() {
-      if (!provider || !address) {
+      if (!address) {
         setLoading(false);
         return;
       }
@@ -53,30 +53,40 @@ export function useTransactionHistory(address?: string) {
       setError(null);
 
       try {
-        // Get network URLs from provider
-        const sandshrewUrl = (provider as any).bitcoin?.url || (provider as any).url;
-        const esploraUrl = (provider as any).esplora?.baseUrl || null;
-        
-        if (!sandshrewUrl) {
-          throw new Error('Provider URL not configured');
+        // Use the API route which uses alkanes-cli
+        const response = await fetch('/api/wallet/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            address,
+            network: network || 'regtest',
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
         }
-        
-        // Dynamic import to avoid WASM loading at SSR time
-        const AlkanesWasm = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-        
-        // Create WASM WebProvider instance
-        const wasmProvider = new AlkanesWasm.WebProvider(sandshrewUrl, esploraUrl);
-        
-        // Fetch transaction history with runestone traces
-        // This uses the complete alkanes-cli implementation: esplora address-txs --runestone-trace
-        const enrichedTxs = await wasmProvider.getAddressTxsWithTraces(address, false);
-        
+
+        const data = await response.json();
+
         if (cancelled) return;
 
-        // Parse the enriched transactions
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        const rawTxs = data.transactions || [];
+
+        // Parse the transactions from CLI output
         const parsedTxs: EnrichedTransaction[] = [];
 
-        for (const tx of enrichedTxs as any[]) {
+        for (const tx of rawTxs) {
+          // Skip malformed transactions
+          if (!tx || !tx.txid) continue;
+
+          const vin = tx.vin || [];
+          const vout = tx.vout || [];
+
           const enrichedTx: EnrichedTransaction = {
             txid: tx.txid,
             blockHeight: tx.status?.block_height,
@@ -84,21 +94,20 @@ export function useTransactionHistory(address?: string) {
             confirmed: tx.status?.confirmed || false,
             fee: tx.fee,
             weight: tx.weight,
-            inputs: tx.vin.map((inp: any) => ({
+            inputs: vin.map((inp: any) => ({
               txid: inp.txid,
               vout: inp.vout,
               address: inp.prevout?.scriptpubkey_address || '',
               amount: inp.prevout?.value || 0,
             })),
-            outputs: tx.vout.map((out: any) => ({
+            outputs: vout.map((out: any) => ({
               address: out.scriptpubkey_address || '',
-              amount: out.value,
+              amount: out.value || 0,
               scriptPubKey: out.scriptpubkey || '',
             })),
-            hasOpReturn: tx.vout.some((v: any) => v.scriptpubkey_type === 'op_return'),
+            hasOpReturn: vout.some((v: any) => v.scriptpubkey_type === 'op_return'),
             hasProtostones: !!tx.alkanes_traces && tx.alkanes_traces.length > 0,
-            isRbf: tx.vin.some((v: any) => v.sequence < 0xfffffffe),
-            // Alkanes traces are already included from WASM processing
+            isRbf: vin.some((v: any) => v.sequence < 0xfffffffe),
             protostoneTraces: tx.alkanes_traces || [],
           };
 
@@ -125,7 +134,7 @@ export function useTransactionHistory(address?: string) {
     return () => {
       cancelled = true;
     };
-  }, [address, provider]);
+  }, [address, network]);
 
   return { transactions, loading, error };
 }
