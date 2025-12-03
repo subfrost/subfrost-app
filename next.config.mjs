@@ -6,8 +6,16 @@ const __dirname = path.dirname(__filename);
 
 const nextConfig = {
   reactStrictMode: true,
+  // Disable React Compiler for now (experimental feature causing issues with hydration patterns)
+  experimental: {
+    reactCompiler: false,
+  },
   typescript: {
     ignoreBuildErrors: false,
+  },
+  eslint: {
+    // Disable ESLint errors failing the build (warnings still show)
+    ignoreDuringBuilds: false,
   },
   turbopack: {
     resolveAlias: {

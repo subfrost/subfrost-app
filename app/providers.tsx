@@ -3,31 +3,10 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { LaserEyesProvider } from '@omnisat/lasereyes-react';
 
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
-
-// Define Network type locally to avoid importing @oyl/sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet';
-
-// Detect network once at module level to avoid re-detection on re-renders
-function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'mainnet';
-
-  const host = window.location.host;
-  if (!process.env.NEXT_PUBLIC_NETWORK) {
-    if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
-      return 'signet';
-    } else if (host.startsWith('oylnet.') || host.startsWith('staging-oylnet.')) {
-      return 'oylnet';
-    }
-    return 'mainnet';
-  }
-  const envNet = process.env.NEXT_PUBLIC_NETWORK as Network;
-  return (envNet as any) === 'regtest' ? 'mainnet' : envNet;
-}
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -48,9 +27,7 @@ export default function Providers({ children }: { children: ReactNode }) {
     []
   );
 
-  // Memoize network detection - only runs once
-  const network = useMemo(() => detectNetwork(), []);
-
+  // Standard hydration-safe mounting pattern
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -61,14 +38,9 @@ export default function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <GlobalStore>
         <ModalStore>
-          {/* @ts-ignore - LaserEyes expects its own network type */}
-          <LaserEyesProvider config={{ network }}>
-            <WalletProvider>{children}</WalletProvider>
-          </LaserEyesProvider>
+          <WalletProvider>{children}</WalletProvider>
         </ModalStore>
       </GlobalStore>
     </QueryClientProvider>
   );
 }
-
-

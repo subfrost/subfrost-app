@@ -4,10 +4,12 @@ import * as bitcoin from 'bitcoinjs-lib'
 import type {
   FormattedUtxo,
   Provider,
-  Signer,
+  SwapSigner as Signer,
   Account,
 } from "@/ts-sdk";
 import { AddressTypeEnum as AddressType, AssetType } from "@/ts-sdk";
+
+type AddressTypeValue = typeof AddressType[keyof typeof AddressType];
 
 export interface ConditionalInput {
   hash: string
@@ -29,7 +31,7 @@ export interface DummyUtxoOptions {
   pubKey: string
   nUtxos?: number
   network: bitcoin.Network
-  addressType: AddressType
+  addressType: AddressTypeValue
 }
 
 export interface PaymentUtxoOptions {
@@ -48,7 +50,7 @@ export interface PrepareAddressForDummyUtxos {
   pubKey: string
   nUtxos?: number
   utxos?: FormattedUtxo[]
-  addressType: AddressType
+  addressType: AddressTypeValue
 }
 
 export interface SignedOkxBid {
@@ -72,7 +74,7 @@ export interface GenOkxBrcAndCollectibleUnsignedPsbt {
   receiveAddress: string
   network: bitcoin.Network
   pubKey: string
-  addressType: AddressType
+  addressType: AddressTypeValue
   sellerPsbt: string
   orderPrice: number
 }
@@ -85,7 +87,7 @@ export interface GenOkxRuneUnsignedPsbt {
   receiveAddress: string
   network: bitcoin.Network
   pubKey: string
-  addressType: AddressType
+  addressType: AddressTypeValue
   sellerPsbt: string
   sellerAddress: string
   orderPrice: number
@@ -98,7 +100,7 @@ export interface UnsignedPsbt {
   receiveAddress: string
   network: bitcoin.Network
   pubKey: string
-  addressType: AddressType
+  addressType: AddressTypeValue
   signer?: Signer
   decodedPsbt?: any
   sellerPsbt: string
@@ -120,7 +122,7 @@ export interface SelectSpendAddressResponse {
   utxos: FormattedUtxo[]
   address: string
   pubKey: string
-  addressType: AddressType
+  addressType: AddressTypeValue
 }
 
 export interface MarketplaceOffer {
@@ -170,7 +172,7 @@ export interface PsbtBuilder {
   spendAddress: string
   spendPubKey: string
   spendAmount: number
-  addressType: AddressType
+  addressType: AddressTypeValue
   feeRate: number
 }
 
@@ -342,8 +344,8 @@ export interface OutputTxCheck {
 }
 
 export interface TxAddressTypes {
-  inputAddressTypes: AddressType[]
-  outputAddressTypes: AddressType[]
+  inputAddressTypes: AddressTypeValue[]
+  outputAddressTypes: AddressTypeValue[]
 }
 
 export interface UpdateUtxos {

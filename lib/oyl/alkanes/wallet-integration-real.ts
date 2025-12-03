@@ -10,7 +10,6 @@ import { AlkanesProvider as Provider } from '@/ts-sdk';
 type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
 
 // Import from the browser-bundled alkanes SDK
-// @ts-ignore - No type definitions available yet
 import { createKeystore, unlockKeystore, KeystoreManager } from '@alkanes/ts-sdk';
 
 export type { Network };

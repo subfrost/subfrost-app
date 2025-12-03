@@ -83,8 +83,6 @@ export {
   amm,
   factory,
   splitAlkaneUtxos,
-  filterAlkaneUtxos,
-  getAlkaneBalanceFromUtxos,
   type AlkaneTokenAllocation,
   type SplitAlkaneUtxosResult,
 } from './amm';
@@ -97,9 +95,6 @@ export {
   signet,
   oylnet,
   regtest,
-  getNetworkConfig,
-  getBitcoinNetwork,
-  type Network,
   type NetworkConfig,
 } from './networks';
 
@@ -133,8 +128,26 @@ export type {
   WrapParams,
 } from './types';
 
+// Asset type and error exports (for swap module compatibility)
+export { AssetType, OylTransactionError } from './types';
+
+// Legacy OYL swap types (compatibility stubs)
+export type {
+  SwapBrcBid,
+  SignedBid,
+  OkxBid,
+  GetOffersParams,
+  GetCollectionOffersParams,
+  Provider,
+  SwapSigner,
+} from './types';
+
 // Utility exports
 export {
+  AddressTypeEnum,
+  UTXO_DUST,
+  assertHex,
+  getAddressType,
   getNetwork,
   validateAddress,
   satoshisToBTC,
@@ -154,6 +167,7 @@ export {
   formatTimestamp,
   calculateWeight,
   weightToVsize,
+  timeout,
 } from './utils';
 
 // Version

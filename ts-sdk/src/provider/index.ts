@@ -10,16 +10,18 @@ let wasmInitialized = false; // Flag to ensure WASM initializes only once
 let wasm: any; // To store the initialized WASM module exports
 
 // Dynamic WASM initialization (client-side only)
+// Note: The metashrew WASM is not bundled. Use alkanes-web-sys from public/wasm/ for WASM functionality.
 async function initWasm() {
   if (wasmInitialized) return wasm;
   if (typeof window === 'undefined') {
     // Skip WASM on server-side
     return null;
   }
-  const init = (await import('../wasm/alkanes')).default;
-  wasm = await init();
+  // WASM disabled - use alkanes-web-sys from public/wasm/ instead
+  // The metashrew wasm (alkanes_bg.wasm) is not available in this build
+  console.warn('ts-sdk: metashrew WASM not available. Use alkanes-web-sys from /wasm/ for full functionality.');
   wasmInitialized = true;
-  return wasm;
+  return null;
 }
 
 import * as bitcoin from 'bitcoinjs-lib';

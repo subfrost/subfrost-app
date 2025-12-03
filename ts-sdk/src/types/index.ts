@@ -220,20 +220,32 @@ export interface SpendStrategy {
 }
 
 /**
- * Formatted UTXO (compatible with @oyl/sdk)
+ * Formatted UTXO (compatible with API response format)
+ * Supports both camelCase (API) and snake_case naming conventions
  */
 export interface FormattedUtxo {
-  txid: string;
-  vout: number;
-  value: number;
-  satoshis: number;
-  scriptPubKey: string;
+  // Transaction ID - support both conventions
+  txid?: string;
+  txId?: string;
+  // Output index - support both conventions
+  vout?: number;
+  outputIndex?: number;
+  // Value in satoshis - support both conventions
+  value?: number;
+  satoshis?: number;
+  // Script public key - support both conventions
+  scriptPubKey?: string;
+  scriptPk?: string;
+  // Address
   address: string;
   addressType?: string;
+  // Confirmation status
   confirmations?: number;
+  indexed?: boolean;
+  // Inscriptions and tokens
   inscriptions?: any[];
   runes?: any[];
-  alkanes?: any[];
+  alkanes?: Record<string, { value: string | number; name?: string; symbol?: string }>;
 }
 
 /**
@@ -291,4 +303,120 @@ export interface ExecuteWithWrapParams {
   account: any;
   provider: any;
   signer: any;
+}
+
+/**
+ * Asset type enumeration for swap operations
+ */
+export enum AssetType {
+  BRC20 = 'brc20',
+  RUNES = 'runes',
+  COLLECTIBLE = 'collectible',
+  ALKANES = 'alkanes',
+}
+
+/**
+ * Custom error class for OYL transactions
+ */
+export class OylTransactionError extends Error {
+  public code?: string;
+  public details?: any;
+
+  constructor(message: string, code?: string, details?: any) {
+    super(message);
+    this.name = 'OylTransactionError';
+    this.code = code;
+    this.details = details;
+    Object.setPrototypeOf(this, OylTransactionError.prototype);
+  }
+}
+
+/**
+ * Swap/marketplace types (legacy OYL compatibility stubs)
+ */
+export interface SwapBrcBid {
+  address: string;
+  auctionId: string;
+  bidPrice: number;
+  pubKey: string;
+  receiveAddress: string;
+  feerate: number;
+}
+
+export interface SignedBid {
+  psbtHex: string;
+  auctionId: string;
+  bidId: string;
+}
+
+export interface OkxBid {
+  orderId: string;
+  psbtBase64: string;
+}
+
+export interface GetOffersParams {
+  ticker?: string;
+  address?: string;
+  limit?: number;
+  offset?: number;
+  sort?: string;
+  sort_by?: string;
+  order?: string;
+}
+
+export interface GetCollectionOffersParams {
+  collectionId?: string;
+  address?: string;
+  limit?: number;
+  offset?: number;
+  sort?: string;
+  sort_by?: string;
+  order?: string;
+}
+
+/**
+ * Provider interface (legacy OYL compatibility)
+ */
+export interface Provider {
+  network?: any;
+  networkType?: string;
+  api?: {
+    initSwapBid?: (params: any) => Promise<any>;
+    initRuneSwapBid?: (params: any) => Promise<any>;
+    initCollectionSwapBid?: (params: any) => Promise<any>;
+    submitSignedBid?: (params: any) => Promise<any>;
+    submitSignedRuneBid?: (params: any) => Promise<any>;
+    submitSignedCollectionBid?: (params: any) => Promise<any>;
+    getListingPsbt?: (params: any) => Promise<any>;
+    submitListingPsbt?: (params: any) => Promise<any>;
+    getSellerPsbt?: (params: any) => Promise<any>;
+    submitBuyerPsbt?: (params: any) => Promise<any>;
+    getOrdinalsWalletNftOfferPsbt?: (params: any) => Promise<any>;
+    getOrdinalsWalletRuneOfferPsbt?: (params: any) => Promise<any>;
+    submitOrdinalsWalletBid?: (params: any) => Promise<any>;
+    submitOrdinalsWalletRuneBid?: (params: any) => Promise<any>;
+  };
+  esplora?: {
+    getFeeEstimates?: () => Promise<Record<string, number>>;
+    getTxInfo?: (txId: string) => Promise<any>;
+  };
+  pushPsbt?: (params: { psbtBase64: string }) => Promise<any>;
+}
+
+/**
+ * SwapSigner interface (legacy OYL compatibility for swap operations)
+ */
+export interface SwapSigner {
+  segwitKeyPair?: {
+    privateKey?: Buffer;
+    publicKey?: Buffer;
+  };
+  taprootKeyPair?: {
+    privateKey?: Buffer;
+    publicKey?: Buffer;
+  };
+  signAllInputs: (params: { rawPsbtHex: string; finalize?: boolean }) => Promise<{
+    signedPsbt: string;
+    signedHexPsbt: string;
+  }>;
 }

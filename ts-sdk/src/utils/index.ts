@@ -6,6 +6,74 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { NetworkType, AlkaneId } from '../types';
 
 /**
+ * Address type enumeration
+ */
+export const AddressTypeEnum = {
+  P2PKH: 'p2pkh',
+  P2SH: 'p2sh',
+  P2SH_P2WPKH: 'p2sh-p2wpkh',
+  P2WPKH: 'p2wpkh',
+  P2WSH: 'p2wsh',
+  P2TR: 'p2tr',
+} as const;
+
+export type AddressTypeEnumType = typeof AddressTypeEnum[keyof typeof AddressTypeEnum];
+
+/**
+ * UTXO dust threshold (546 satoshis standard)
+ */
+export const UTXO_DUST = 546;
+
+/**
+ * Assert that a value is a valid hex string
+ */
+export function assertHex(value: string, name = 'value'): asserts value is string {
+  const hexRegex = /^(0x)?[0-9a-fA-F]*$/;
+  if (!hexRegex.test(value)) {
+    throw new Error(`${name} must be a valid hex string`);
+  }
+}
+
+/**
+ * Get address type from a Bitcoin address
+ */
+export function getAddressType(address: string, network?: bitcoin.networks.Network): AddressTypeEnumType | undefined {
+  const net = network || bitcoin.networks.bitcoin;
+
+  try {
+    // Try P2WPKH (bc1q...)
+    const p2wpkh = bitcoin.payments.p2wpkh({ address, network: net });
+    if (p2wpkh.output) return AddressTypeEnum.P2WPKH;
+  } catch {}
+
+  try {
+    // Try P2TR (bc1p...)
+    const p2tr = bitcoin.payments.p2tr({ address, network: net });
+    if (p2tr.output) return AddressTypeEnum.P2TR;
+  } catch {}
+
+  try {
+    // Try P2PKH (1...)
+    const p2pkh = bitcoin.payments.p2pkh({ address, network: net });
+    if (p2pkh.output) return AddressTypeEnum.P2PKH;
+  } catch {}
+
+  try {
+    // Try P2SH (3...)
+    const p2sh = bitcoin.payments.p2sh({ address, network: net });
+    if (p2sh.output) return AddressTypeEnum.P2SH;
+  } catch {}
+
+  try {
+    // Try P2WSH
+    const p2wsh = bitcoin.payments.p2wsh({ address, network: net });
+    if (p2wsh.output) return AddressTypeEnum.P2WSH;
+  } catch {}
+
+  return undefined;
+}
+
+/**
  * Convert network type string to bitcoinjs-lib network object
  */
 export function getNetwork(networkType: NetworkType): bitcoin.networks.Network {
@@ -212,4 +280,17 @@ export function calculateWeight(baseSize: number, witnessSize: number): number {
  */
 export function weightToVsize(weight: number): number {
   return Math.ceil(weight / 4);
+}
+
+/**
+ * Promise-based timeout utility
+ * Returns a promise that rejects after the specified time
+ */
+export function timeout<T>(promise: Promise<T>, ms: number, message?: string): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(message || `Operation timed out after ${ms}ms`));
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]);
 }

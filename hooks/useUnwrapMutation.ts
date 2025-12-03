@@ -46,11 +46,12 @@ export function useUnwrapMutation() {
 
       const transaction = await unwrapBtc({
         utxos,
+        alkaneUtxos: selectedUtxos,
         account,
         provider,
         signer: signerShim,
         feeRate: unwrapData.feeRate,
-        unwrapAmount: Number(toAlks(unwrapData.amount)),
+        unwrapAmount: BigInt(toAlks(unwrapData.amount)),
       });
 
       return {

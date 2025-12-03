@@ -1,6 +1,6 @@
 import {
     AssetType,
-    timeout,
+    delay,
     getAddressType,
 } from "@/ts-sdk";
 
@@ -19,6 +19,10 @@ export async function processMagisatOffer({
     signer
 }: ProcessOfferOptions
 ): Promise<ProcessOfferResponse> {
+    if (!provider.api?.getSellerPsbt || !provider.api?.submitBuyerPsbt) {
+        throw new Error('Provider api methods (getSellerPsbt, submitBuyerPsbt) are not available')
+    }
+
     let dummyTxId: string | null = null;
     let purchaseTxId: string | null = null;
     const addressType = getAddressType(address);
@@ -72,9 +76,12 @@ export async function processMagisatOffer({
             finalize: true,
         })
 
+        if (!provider.pushPsbt) {
+            throw new Error('Provider pushPsbt is not available')
+        }
         const { txId } = await provider.pushPsbt({ psbtBase64: signedPsbt })
         dummyTxId = txId;
-        await timeout(60000)
+        await delay(60000)
         utxos = await updateUtxos({
             originalUtxos: utxos,
             txId,

@@ -96,21 +96,24 @@ export default function RegtestControls() {
   const generateFuture = async () => {
     setMining(true);
     try {
-      // Dynamic import WASM to avoid SSR issues
-      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
+      // Dynamic import WASM from public directory
+      // @ts-expect-error - Dynamic import from public folder at runtime
+      const wasm = await import(/* webpackIgnore: true */ '/wasm/alkanes_web_sys.js');
+      await wasm.default();
+
       const { getNetworkUrls } = await import('@/utils/alkanesProvider');
-      
+
       // Create WebProvider
       const networkUrls = getNetworkUrls(network);
-      const provider = new WebProvider(networkUrls.rpc, null);
-      
+      const provider = new wasm.WebProvider(network);
+
       // Call bitcoindGenerateFuture (automatically computes Subfrost address from frBTC signer)
       // The address parameter is ignored - it will call frBTC [32:0] GET_SIGNER to get the address
       const result = await provider.bitcoindGenerateFuture('');
-      
+
       console.log('[RegtestControls] Generated future:', result);
       showMessage(`✅ Generated future block with Subfrost address!`);
-      
+
       // Trigger a refetch
       setTimeout(() => window.location.reload(), 1000);
     } catch (error) {

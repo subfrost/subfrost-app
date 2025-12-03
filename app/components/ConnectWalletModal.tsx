@@ -21,7 +21,8 @@ export default function ConnectWalletModal() {
     network,
     isConnectModalOpen,
     onConnectModalOpenChange,
-    finalizeConnect,
+    connectWithAddress,
+    setWallet,
   } = useWallet();
 
   const [view, setView] = useState<WalletView>('select');
@@ -29,6 +30,9 @@ export default function ConnectWalletModal() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [mnemonic, setMnemonic] = useState('');
   const [generatedMnemonic, setGeneratedMnemonic] = useState('');
+  const [createdWalletAddress, setCreatedWalletAddress] = useState('');
+  const [createdTaprootAddress, setCreatedTaprootAddress] = useState('');
+  const [createdWallet, setCreatedWallet] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -49,6 +53,9 @@ export default function ConnectWalletModal() {
     setConfirmPassword('');
     setMnemonic('');
     setGeneratedMnemonic('');
+    setCreatedWalletAddress('');
+    setCreatedTaprootAddress('');
+    setCreatedWallet(null);
     setError(null);
     setIsLoading(false);
     setShowPassword(false);
@@ -77,6 +84,9 @@ export default function ConnectWalletModal() {
     try {
       const result = await setupAlkanesWallet(password, network);
       setGeneratedMnemonic(result.mnemonic);
+      setCreatedWalletAddress(result.address);
+      setCreatedTaprootAddress(result.taprootAddress);
+      setCreatedWallet(result.wallet);
       saveKeystoreToStorage(result.keystore, network);
       setView('show-mnemonic');
     } catch (err) {
@@ -87,7 +97,11 @@ export default function ConnectWalletModal() {
   };
 
   const handleConfirmMnemonic = () => {
-    finalizeConnect('AlkanesWallet');
+    // Connect with the created wallet addresses
+    if (createdWalletAddress) {
+      setWallet(createdWallet);
+      connectWithAddress(createdWalletAddress, createdTaprootAddress);
+    }
     handleClose();
   };
 
@@ -107,7 +121,8 @@ export default function ConnectWalletModal() {
     try {
       const result = await restoreFromMnemonic(mnemonic.trim(), password, network);
       saveKeystoreToStorage(result.keystore, network);
-      finalizeConnect('AlkanesWallet');
+      setWallet(result.wallet);
+      connectWithAddress(result.address, result.taprootAddress);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
@@ -132,8 +147,9 @@ export default function ConnectWalletModal() {
         return;
       }
 
-      await restoreAlkanesWallet(stored.keystore, password, stored.network);
-      finalizeConnect('AlkanesWallet');
+      const result = await restoreAlkanesWallet(stored.keystore, password, stored.network);
+      setWallet(result.wallet);
+      connectWithAddress(result.address, result.taprootAddress);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to unlock wallet');

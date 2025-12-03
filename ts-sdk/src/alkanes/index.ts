@@ -249,7 +249,7 @@ async function buildAndBroadcastAlkaneTransaction({
   // First add alkane UTXOs if any
   if (alkanesUtxos && alkanesUtxos.length > 0) {
     selectedUtxos.push(...alkanesUtxos);
-    totalValue += alkanesUtxos.reduce((sum, u) => sum + (u.satoshis || u.value), 0);
+    totalValue += alkanesUtxos.reduce((sum, u) => sum + (u.satoshis || u.value || 0), 0);
   }
 
   // Then add regular UTXOs for funding
@@ -257,13 +257,15 @@ async function buildAndBroadcastAlkaneTransaction({
     if (totalValue >= requiredValue) break;
 
     // Skip UTXOs already in alkanes list
+    const utxoTxid = utxo.txid || utxo.txId;
+    const utxoVout = utxo.vout ?? utxo.outputIndex;
     const alreadySelected = selectedUtxos.some(
-      s => s.txid === utxo.txid && s.vout === utxo.vout
+      s => (s.txid || s.txId) === utxoTxid && (s.vout ?? s.outputIndex) === utxoVout
     );
     if (alreadySelected) continue;
 
     selectedUtxos.push(utxo);
-    totalValue += utxo.satoshis || utxo.value;
+    totalValue += utxo.satoshis || utxo.value || 0;
   }
 
   if (totalValue < requiredValue) {
@@ -275,14 +277,18 @@ async function buildAndBroadcastAlkaneTransaction({
 
   // Add inputs
   for (const utxo of selectedUtxos) {
-    const scriptPubKey = Buffer.from(utxo.scriptPubKey, 'hex');
+    const scriptPk = utxo.scriptPubKey || utxo.scriptPk || '';
+    const scriptPubKey = Buffer.from(scriptPk, 'hex');
+    const txid = utxo.txid || utxo.txId || '';
+    const vout = utxo.vout ?? utxo.outputIndex ?? 0;
+    const value = utxo.satoshis || utxo.value || 0;
 
     psbt.addInput({
-      hash: utxo.txid,
-      index: utxo.vout,
+      hash: txid,
+      index: vout,
       witnessUtxo: {
         script: scriptPubKey,
-        value: utxo.satoshis || utxo.value,
+        value: value,
       },
     });
   }

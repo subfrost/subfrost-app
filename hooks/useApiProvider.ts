@@ -3,7 +3,9 @@ import { useWallet } from '@/context/WalletContext';
 
 export function useApiProvider() {
   const { network } = useWallet();
-  return getApiProvider(network);
+  // Cast network to handle regtest which is used in WalletContext but not in oylProvider
+  const networkForApi = network === 'regtest' ? 'oylnet' : network;
+  return getApiProvider(networkForApi as 'mainnet' | 'testnet' | 'signet' | 'oylnet');
 }
 
 

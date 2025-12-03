@@ -179,45 +179,22 @@ export class KeystoreManager {
 
   /**
    * Export using WASM backend (delegates to alkanes-web-sys)
+   * Note: Currently falls back to JS implementation as WASM Keystore
+   * uses a different API (decryptMnemonic instead of encrypt/decrypt)
    */
   private async exportKeystoreWasm(
     keystore: Keystore,
     password: string,
     options: ExportOptions
   ): Promise<string | EncryptedKeystore> {
-    if (!this.wasm) {
-      throw new Error('WASM module not loaded');
-    }
-
-    // Convert to WASM keystore format
-    const wasmKeystore = new this.wasm.Keystore({
-      encrypted_mnemonic: '', // Will be encrypted by WASM
-      master_fingerprint: keystore.masterFingerprint,
-      created_at: keystore.createdAt,
-      version: '1.0',
-      pbkdf2_params: {
-        salt: '',
-        iterations: DEFAULT_PBKDF2_ITERATIONS,
-      },
-      account_xpub: keystore.accountXpub,
-      hd_paths: this.serializeHdPaths(keystore.hdPaths),
-      seed: null,
-    });
-
-    // Call WASM encrypt method
-    const encryptedJson = await wasmKeystore.encrypt(password);
-    
-    if (options.format === 'json') {
-      return JSON.parse(encryptedJson);
-    }
-
-    return options.pretty ? 
-      JSON.stringify(JSON.parse(encryptedJson), null, 2) : 
-      encryptedJson;
+    // WASM Keystore class uses decryptMnemonic() not encrypt()
+    // Fall back to JS implementation for encryption
+    return this.exportKeystoreJS(keystore, password, options);
   }
 
   /**
    * Import using WASM backend (delegates to alkanes-web-sys)
+   * Note: Uses the WASM Keystore.decryptMnemonic() API
    */
   private async importKeystoreWasm(
     encrypted: EncryptedKeystore,
@@ -230,13 +207,10 @@ export class KeystoreManager {
 
     // Create WASM keystore from encrypted data
     const wasmKeystore = new this.wasm.Keystore(encrypted);
-    
-    // Decrypt
-    await wasmKeystore.decrypt(password);
-    
-    // Extract decrypted data
-    const mnemonic = wasmKeystore.getMnemonic();
-    
+
+    // Decrypt mnemonic using the correct WASM API
+    const mnemonic = await wasmKeystore.decryptMnemonic(password);
+
     if (options.validate && !this.validateMnemonic(mnemonic)) {
       throw new Error('Decrypted mnemonic is invalid');
     }

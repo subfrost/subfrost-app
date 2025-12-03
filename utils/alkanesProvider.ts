@@ -45,9 +45,9 @@ const SubfrostUrlMap: Record<Network, { rpc: string; api: string; esplora: strin
  * Get Alkanes provider configured for the specified network
  */
 export async function getAlkanesProvider(network: Network, customUrls?: { rpc?: string; api?: string }) {
-  const { AlkanesProvider } = await import('@alkanes/ts-sdk');
+  const { createProvider } = await import('@alkanes/ts-sdk');
   const { NetworkMap } = await import('@/utils/constants');
-  
+
   const defaultUrls = SubfrostUrlMap[network] || SubfrostUrlMap.mainnet;
   const urls = {
     rpc: customUrls?.rpc || defaultUrls.rpc,
@@ -55,8 +55,8 @@ export async function getAlkanesProvider(network: Network, customUrls?: { rpc?: 
   };
   const bitcoinNetwork = NetworkMap[network] || NetworkMap.mainnet;
   const networkType = network;
-  
-  return new AlkanesProvider({
+
+  return createProvider({
     url: urls.rpc,
     dataApiUrl: urls.api,
     network: bitcoinNetwork!,

@@ -1,4 +1,4 @@
-import type { Provider, Signer } from "@/ts-sdk";
+import type { Provider, SwapSigner as Signer } from "@/ts-sdk";
 import {
   AssetType,
   AddressTypeEnum as AddressType,
@@ -39,34 +39,40 @@ export interface SignedUnisatBid {
 }
 
 export async function getSellerPsbt(unsignedBid: UnsignedUnisatBid) {
+  if (!unsignedBid.provider.api) {
+    throw new Error('Provider api is not available');
+  }
   switch (unsignedBid.assetType) {
     case AssetType.BRC20:
-      return await unsignedBid.provider.api.initSwapBid(unsignedBid);
+      return await unsignedBid.provider.api.initSwapBid!(unsignedBid);
 
     case AssetType.RUNES:
-      return await unsignedBid.provider.api.initRuneSwapBid(unsignedBid);
+      return await unsignedBid.provider.api.initRuneSwapBid!(unsignedBid);
 
     case AssetType.COLLECTIBLE:
-      return await unsignedBid.provider.api.initCollectionSwapBid(unsignedBid);
+      return await unsignedBid.provider.api.initCollectionSwapBid!(unsignedBid);
   }
 }
 
 export async function submitBuyerPsbt(signedBid: SignedUnisatBid) {
+  if (!signedBid.provider.api) {
+    throw new Error('Provider api is not available');
+  }
   switch (signedBid.assetType) {
     case AssetType.BRC20:
-      return await signedBid.provider.api.submitSignedBid({
+      return await signedBid.provider.api.submitSignedBid!({
         ...signedBid,
         psbtBid: signedBid.psbtHex,
       });
 
     case AssetType.RUNES:
-      return await signedBid.provider.api.submitSignedRuneBid({
+      return await signedBid.provider.api.submitSignedRuneBid!({
         ...signedBid,
         psbtBid: signedBid.psbtHex,
       });
 
     case AssetType.COLLECTIBLE:
-      return await signedBid.provider.api.submitSignedCollectionBid({
+      return await signedBid.provider.api.submitSignedCollectionBid!({
         ...signedBid,
         psbtBid: signedBid.psbtHex,
       });
@@ -84,7 +90,7 @@ export async function processUnisatOffer({
   utxos,
   signer,
 }: ProcessOfferOptions): Promise<ProcessOfferResponse> {
-  let dummyTxId: string | null = null;
+  const dummyTxId: string | null = null;
   let purchaseTxId: string | null = null;
   const unsignedBid: UnsignedUnisatBid = {
     address,
@@ -111,6 +117,9 @@ export async function processUnisatOffer({
     throw new OylTransactionError(psbt_?.error);
   }
   if (psbt_.psbtDummy) {
+    if (!provider.pushPsbt) {
+      throw new Error('Provider pushPsbt is not available');
+    }
     const unsignedDummyPsbt = psbt_.psbtDummy;
     const signedDummyPsbt = await signer.signAllInputs({
       rawPsbtHex: unsignedDummyPsbt,
@@ -173,6 +182,9 @@ export async function processUnisatListing({
     listings,
   };
 
+  if (!provider.api?.getListingPsbt || !provider.api?.submitListingPsbt) {
+    throw new Error('Provider api methods (getListingPsbt, submitListingPsbt) are not available');
+  }
   const listingPsbtResponse =
     await provider.api.getListingPsbt(unisatGetListingPsbt);
   if (listingPsbtResponse.statusCode != 200) {
@@ -230,10 +242,10 @@ export async function getMessageSignature({
   const message = `Please confirm that\nPayment Address: ${address}\nOrdinals Address: ${receiveAddress}`;
   if (getAddressType(receiveAddress) == AddressType.P2WPKH) {
     const keyPair = signer.segwitKeyPair;
-    const privateKey = keyPair.privateKey;
-    if (!privateKey) {
+    if (!keyPair?.privateKey) {
       throw new Error('Private key is missing');
     }
+    const privateKey = keyPair.privateKey;
     const signature = await signBip322Message({
       message,
       network: provider.networkType as 'Mainnet' | 'Testnet',
@@ -243,10 +255,10 @@ export async function getMessageSignature({
     return signature;
   } else if (getAddressType(receiveAddress) == AddressType.P2TR) {
     const keyPair = signer.taprootKeyPair;
-    const privateKey = keyPair.privateKey;
-    if (!privateKey) {
+    if (!keyPair?.privateKey) {
       throw new Error('Private key is missing');
     }
+    const privateKey = keyPair.privateKey;
     const signature = await signBip322Message({
       message,
       network: provider.networkType as 'Mainnet' | 'Testnet',

@@ -152,10 +152,12 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           }
 
           // Fall back to WASM for production networks or if esplora fails
-          const AlkanesWasm = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-          const wasmProvider = new AlkanesWasm.WebProvider(sandshrewUrl, esploraUrl);
-          const result = await wasmProvider.getEnrichedBalances(address, "1");
-          console.log('[useEnrichedWalletData] WASM enriched balances result:', result);
+          // @ts-expect-error - Dynamic import from public folder at runtime
+          const wasm = await import(/* webpackIgnore: true */ '/wasm/alkanes_web_sys.js');
+          await wasm.default();
+          const wasmProvider = new wasm.WebProvider(network || 'regtest');
+          const result = await wasmProvider.alkanesBalance(address);
+          console.log('[useEnrichedWalletData] WASM balance result:', result);
           return { address, data: result };
         } catch (error) {
           console.error(`Failed to fetch enriched data for ${address}:`, error);
