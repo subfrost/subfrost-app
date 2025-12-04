@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X, Scissors, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useWallet } from '@/context/WalletContext';
+import * as bitcoin from 'bitcoinjs-lib';
 
 interface SplitUtxoModalProps {
   isOpen: boolean;
@@ -106,12 +107,18 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
       console.log('[SplitUtxoModal] PSBT created and signed');
 
-      // Broadcast using provider
-      const result = await provider.pushPsbt({ psbtBase64: signedPsbt });
-      
+      // Extract transaction from signed PSBT and broadcast
+      const psbt = bitcoin.Psbt.fromBase64(signedPsbt);
+      const tx = psbt.extractTransaction();
+      const txHex = tx.toHex();
+
+      console.log('[SplitUtxoModal] Broadcasting transaction:', tx.getId());
+
+      const result = await provider.broadcastTransaction(txHex);
+
       console.log('[SplitUtxoModal] Transaction broadcast result:', result);
-      
-      setTxid(result.txid || result);
+
+      setTxid(tx.getId());
       setStep('success');
     } catch (err: any) {
       console.error('UTXO split failed:', err);

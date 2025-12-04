@@ -8,7 +8,8 @@ export default function TestMethodsPage() {
   const [results, setResults] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
-  const testMethod = async (name: string, testFn: () => Promise<any>) => {
+  const testMethod = async (name: string, testFn: () => Promise<any> | undefined) => {
+    if (!testFn) return;
     setLoading((prev) => ({ ...prev, [name]: true }));
     try {
       const result = await testFn();

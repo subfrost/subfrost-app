@@ -92,9 +92,8 @@ export async function getAlkanesProvider(network: Network, customUrls?: { rpc?: 
     return cachedProvider;
   }
 
-  // Create provider
+  // Create provider (no async initialization needed - constructor handles setup)
   const provider = new AlkanesProvider(config);
-  await provider.initialize();
 
   // Cache if not using custom URLs
   if (!hasCustomUrls) {

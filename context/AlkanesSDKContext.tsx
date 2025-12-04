@@ -1,9 +1,10 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { AlkanesProvider, createProvider } from '@alkanes/ts-sdk';
-import * as bitcoin from 'bitcoinjs-lib';
-import { Network, NetworkMap } from '@/utils/constants';
+import { Network } from '@/utils/constants';
+
+// Import the WASM WebProvider type
+type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
 interface BitcoinPrice {
   usd: number;
@@ -11,7 +12,7 @@ interface BitcoinPrice {
 }
 
 interface AlkanesSDKContextType {
-  provider: AlkanesProvider | null;
+  provider: WebProvider | null;
   isInitialized: boolean;
   bitcoinPrice: BitcoinPrice | null;
   refreshBitcoinPrice: () => Promise<void>;
@@ -25,8 +26,32 @@ interface AlkanesSDKProviderProps {
   network: Network;
 }
 
+// Map network names to WebProvider preset names
+const NETWORK_TO_PROVIDER: Record<Network, string> = {
+  mainnet: 'mainnet',
+  testnet: 'testnet',
+  signet: 'signet',
+  regtest: 'regtest',
+  oylnet: 'regtest',
+  'subfrost-regtest': 'subfrost-regtest',
+};
+
+// Custom URL overrides for networks
+const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
+  mainnet: undefined, // Uses defaults
+  testnet: undefined,
+  signet: undefined,
+  regtest: {
+    jsonrpc_url: 'http://localhost:18888',
+  },
+  oylnet: {
+    jsonrpc_url: 'http://localhost:18888',
+  },
+  'subfrost-regtest': undefined, // Uses subfrost-regtest preset defaults
+};
+
 export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProps) {
-  const [provider, setProvider] = useState<AlkanesProvider | null>(null);
+  const [provider, setProvider] = useState<WebProvider | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [bitcoinPrice, setBitcoinPrice] = useState<BitcoinPrice | null>(null);
 
@@ -34,42 +59,25 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
   useEffect(() => {
     const initProvider = async () => {
       try {
-        console.log('[AlkanesSDK] Initializing provider for network:', network);
-        
-        // Determine URLs based on network
-        const baseUrls: Record<Network, string> = {
-          mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-          testnet: 'https://testnet.subfrost.io/v4/subfrost',
-          signet: 'https://signet.subfrost.io/v4/subfrost',
-          regtest: 'http://localhost:18888',  // Local alkanes-rs
-          oylnet: 'http://localhost:18888',  // Local Regtest
-          'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-        };
+        console.log('[AlkanesSDK] Initializing WASM WebProvider for network:', network);
 
-        const dataApiUrls: Record<Network, string> = {
-          mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-          testnet: 'https://testnet.subfrost.io/v4/subfrost',
-          signet: 'https://signet.subfrost.io/v4/subfrost',
-          regtest: 'http://localhost:18888',  // Local alkanes-rs
-          oylnet: 'http://localhost:18888',  // Local Regtest
-          'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-        };
+        // Dynamically import the WASM module
+        const wasm = await import('@alkanes/ts-sdk/wasm');
 
-        const networkConfig = NetworkMap[network];
-        
-        // Create provider - the SDK handles internal initialization
-        const providerInstance = createProvider({
-          url: baseUrls[network],
-          network: networkConfig,
-          networkType: network,
-          version: 'v4',
-        });
+        // Get provider preset name and config overrides
+        const providerName = NETWORK_TO_PROVIDER[network] || 'mainnet';
+        const configOverrides = NETWORK_CONFIG[network];
 
-        console.log('[AlkanesSDK] Provider created successfully');
+        // Create the WASM WebProvider
+        const providerInstance = new wasm.WebProvider(providerName, configOverrides);
+
+        console.log('[AlkanesSDK] WASM WebProvider created successfully');
+        console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
+
         setProvider(providerInstance);
         setIsInitialized(true);
       } catch (error) {
-        console.error('[AlkanesSDK] Failed to initialize provider:', error);
+        console.error('[AlkanesSDK] Failed to initialize WASM provider:', error);
       }
     };
 
@@ -78,14 +86,13 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
 
   // Poll Bitcoin price every 30 seconds
   const refreshBitcoinPrice = async () => {
-    if (!provider?.dataApiUrl) return;
+    if (!provider) return;
 
     try {
-      const response = await fetch(`${provider.dataApiUrl}/get-bitcoin-price`);
-      if (response.ok) {
-        const data = await response.json();
+      const priceData = await provider.dataApiGetBitcoinPrice();
+      if (priceData) {
         setBitcoinPrice({
-          usd: data.usd || data.price || 0,
+          usd: priceData.usd || priceData.price || 0,
           lastUpdated: Date.now(),
         });
       }

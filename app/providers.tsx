@@ -18,11 +18,11 @@ const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
 // Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'mainnet';
+  if (typeof window === 'undefined') return 'subfrost-regtest';
 
   // First check localStorage for user selection
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'subfrost-regtest', 'oylnet'].includes(stored)) {
     return stored as Network;
   }
 
@@ -32,7 +32,10 @@ function detectNetwork(): Network {
     if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
       return 'signet';
     } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
-      return 'regtest';
+      return 'subfrost-regtest';
+    } else if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      // Default to subfrost-regtest for local development
+      return 'subfrost-regtest';
     }
     return 'mainnet';
   }
