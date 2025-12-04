@@ -27974,7 +27974,7 @@ var require_address = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toOutputScript = exports.fromOutputScript = exports.toBech32 = exports.toBase58Check = exports.fromBech32 = exports.fromBase58Check = void 0;
-    var networks4 = require_networks();
+    var networks5 = require_networks();
     var payments2 = require_payments();
     var bscript = require_script();
     var types_1 = require_types();
@@ -28048,7 +28048,7 @@ var require_address = __commonJS({
     }
     exports.toBech32 = toBech32;
     function fromOutputScript(output, network) {
-      network = network || networks4.bitcoin;
+      network = network || networks5.bitcoin;
       try {
         return payments2.p2pkh({ output, network }).address;
       } catch (e) {
@@ -28077,7 +28077,7 @@ var require_address = __commonJS({
     }
     exports.fromOutputScript = fromOutputScript;
     function toOutputScript(address2, network) {
-      network = network || networks4.bitcoin;
+      network = network || networks5.bitcoin;
       let decodeBase58;
       let decodeBech32;
       try {
@@ -30689,7 +30689,7 @@ var require_psbt = __commonJS({
     var parser_1 = require_parser();
     var typeFields_1 = require_typeFields();
     var utils_1 = require_utils2();
-    var Psbt3 = class {
+    var Psbt2 = class {
       constructor(tx) {
         this.inputs = [];
         this.outputs = [];
@@ -30825,7 +30825,7 @@ var require_psbt = __commonJS({
         return this.globalMap.unsignedTx.toBuffer();
       }
     };
-    exports.Psbt = Psbt3;
+    exports.Psbt = Psbt2;
   }
 });
 
@@ -31243,7 +31243,7 @@ var require_psbt2 = __commonJS({
       maximumFeeRate: 5e3
       // satoshi per byte
     };
-    var Psbt3 = class _Psbt {
+    var Psbt2 = class _Psbt {
       static fromBase64(data, opts = {}) {
         const buffer = Buffer.from(data, "base64");
         return this.fromBuffer(buffer, opts);
@@ -32006,7 +32006,7 @@ var require_psbt2 = __commonJS({
         return this;
       }
     };
-    exports.Psbt = Psbt3;
+    exports.Psbt = Psbt2;
     var transactionFromBuffer = (buffer) => new PsbtTransaction(buffer);
     var PsbtTransaction = class {
       constructor(buffer = Buffer.from([2, 0, 0, 0, 0, 0, 0, 0, 0, 0])) {
@@ -32717,8 +32717,8 @@ var require_src3 = __commonJS({
     exports.address = address2;
     var crypto2 = require_crypto2();
     exports.crypto = crypto2;
-    var networks4 = require_networks();
-    exports.networks = networks4;
+    var networks5 = require_networks();
+    exports.networks = networks5;
     var payments2 = require_payments();
     exports.payments = payments2;
     var script = require_script();
@@ -45815,8 +45815,8 @@ var require_ecpair = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ECPairFactory = exports.networks = void 0;
-    var networks4 = require_networks2();
-    exports.networks = networks4;
+    var networks5 = require_networks2();
+    exports.networks = networks5;
     var types = require_types2();
     var randomBytes = require_browser3();
     var wif = require_wif();
@@ -45854,7 +45854,7 @@ var require_ecpair = __commonJS({
           }).pop();
           if (!network) throw new Error("Unknown network version");
         } else {
-          network = network || networks4.bitcoin;
+          network = network || networks5.bitcoin;
           if (version !== network.wif) throw new Error("Invalid network version");
         }
         return fromPrivateKey(decoded.privateKey, {
@@ -45885,7 +45885,7 @@ var require_ecpair = __commonJS({
           this.lowR = false;
           if (options === void 0) options = {};
           this.compressed = options.compressed === void 0 ? true : options.compressed;
-          this.network = options.network || networks4.bitcoin;
+          this.network = options.network || networks5.bitcoin;
           if (__Q !== void 0)
             this.__Q = Buffer.from(ecc3.pointCompress(__Q, this.compressed));
         }
@@ -46262,267 +46262,465 @@ __export(provider_exports, {
   AlkanesProvider: () => AlkanesProvider,
   AlkanesRpcClient: () => AlkanesRpcClient,
   BitcoinRpcClient: () => BitcoinRpcClient,
+  DataApiClient: () => DataApiClient,
   EsploraClient: () => EsploraClient,
+  NETWORK_PRESETS: () => NETWORK_PRESETS,
   createProvider: () => createProvider
 });
-function createProvider(config, wasmModule) {
-  return new AlkanesProvider(config, wasmModule);
+function createProvider(config) {
+  return new AlkanesProvider(config);
 }
-var bitcoin3, BitcoinRpcClient, EsploraClient, AlkanesRpcClient, AlkanesProvider;
+var bitcoin3, NETWORK_PRESETS, BitcoinRpcClient, EsploraClient, AlkanesRpcClient, DataApiClient, AlkanesProvider;
 var init_provider = __esm({
   "src/provider/index.ts"() {
     "use strict";
     bitcoin3 = __toESM(require_src3());
-    BitcoinRpcClient = class {
-      constructor(url) {
-        this.url = url;
+    NETWORK_PRESETS = {
+      "mainnet": {
+        rpcUrl: "https://mainnet.subfrost.io/v4/subfrost",
+        dataApiUrl: "https://mainnet.subfrost.io/v4/subfrost",
+        networkType: "mainnet"
+      },
+      "testnet": {
+        rpcUrl: "https://testnet.subfrost.io/v4/subfrost",
+        dataApiUrl: "https://testnet.subfrost.io/v4/subfrost",
+        networkType: "testnet"
+      },
+      "signet": {
+        rpcUrl: "https://signet.subfrost.io/v4/subfrost",
+        dataApiUrl: "https://signet.subfrost.io/v4/subfrost",
+        networkType: "signet"
+      },
+      "subfrost-regtest": {
+        rpcUrl: "https://regtest.subfrost.io/v4/subfrost",
+        dataApiUrl: "https://regtest.subfrost.io/v4/subfrost",
+        networkType: "regtest"
+      },
+      "regtest": {
+        rpcUrl: "http://localhost:18888",
+        dataApiUrl: "http://localhost:18888",
+        networkType: "regtest"
+      },
+      "local": {
+        rpcUrl: "http://localhost:18888",
+        dataApiUrl: "http://localhost:18888",
+        networkType: "regtest"
       }
-      async call(method, params = []) {
-        const response = await fetch(this.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: Date.now(),
-            method,
-            params
-          })
-        });
-        const json = await response.json();
-        if (json.error) {
-          throw new Error(`RPC error: ${json.error.message}`);
-        }
-        return json.result;
+    };
+    BitcoinRpcClient = class {
+      constructor(provider) {
+        this.provider = provider;
       }
       async getBlockCount() {
-        return this.call("getblockcount");
+        return this.provider.bitcoindGetBlockCount();
       }
       async getBlockHash(height) {
-        return this.call("getblockhash", [height]);
+        return this.provider.bitcoindGetBlockHash(height);
       }
-      async getBlock(hash) {
-        return this.call("getblock", [hash, 2]);
+      async getBlock(hash, raw = false) {
+        return this.provider.bitcoindGetBlock(hash, raw);
       }
       async sendRawTransaction(hex) {
-        return this.call("sendrawtransaction", [hex]);
+        return this.provider.bitcoindSendRawTransaction(hex);
       }
-      async getTransaction(txid) {
-        return this.call("getrawtransaction", [txid, true]);
+      async getTransaction(txid, blockHash) {
+        return this.provider.bitcoindGetRawTransaction(txid, blockHash);
       }
-      async testMempoolAccept(txHex) {
-        return this.call("testmempoolaccept", [txHex]);
+      async getBlockchainInfo() {
+        return this.provider.bitcoindGetBlockchainInfo();
       }
-      async getMempoolEntry(txid) {
-        return this.call("getmempoolentry", [txid]);
+      async getNetworkInfo() {
+        return this.provider.bitcoindGetNetworkInfo();
       }
-      /**
-       * Execute a Lua script on the Sandshrew RPC
-       * @param script - The full Lua script content
-       * @param args - Arguments to pass to the script
-       */
-      async lua_evalscript(script, ...args) {
-        return this.call("lua_evalscript", [script, ...args]);
+      async getMempoolInfo() {
+        return this.provider.bitcoindGetMempoolInfo();
       }
-      /**
-       * Execute a cached Lua script by hash on the Sandshrew RPC
-       * @param hash - The SHA256 hash of the script
-       * @param args - Arguments to pass to the script
-       */
-      async lua_evalsaved(hash, ...args) {
-        return this.call("lua_evalsaved", [hash, ...args]);
+      async estimateSmartFee(target) {
+        return this.provider.bitcoindEstimateSmartFee(target);
+      }
+      async generateToAddress(nblocks, address2) {
+        return this.provider.bitcoindGenerateToAddress(nblocks, address2);
       }
     };
     EsploraClient = class {
-      constructor(baseUrl) {
-        this.baseUrl = baseUrl;
+      constructor(provider) {
+        this.provider = provider;
       }
       async getAddressInfo(address2) {
-        const response = await fetch(`${this.baseUrl}/address/${address2}`);
-        return response.json();
+        return this.provider.esploraGetAddressInfo(address2);
       }
       async getAddressUtxos(address2) {
-        const response = await fetch(`${this.baseUrl}/address/${address2}/utxo`);
-        return response.json();
+        return this.provider.esploraGetAddressUtxo(address2);
       }
-      async getAddressBalance(address2) {
-        const [info, utxos] = await Promise.all([
-          this.getAddressInfo(address2),
-          this.getAddressUtxos(address2)
-        ]);
-        return {
-          address: address2,
-          confirmed: info.chain_stats.funded_txo_sum - info.chain_stats.spent_txo_sum,
-          unconfirmed: info.mempool_stats.funded_txo_sum - info.mempool_stats.spent_txo_sum,
-          utxos
-        };
+      async getAddressTxs(address2) {
+        return this.provider.esploraGetAddressTxs(address2);
       }
-      async getTxInfo(txid) {
-        const response = await fetch(`${this.baseUrl}/tx/${txid}`);
-        return response.json();
+      async getTx(txid) {
+        return this.provider.esploraGetTx(txid);
+      }
+      async getTxStatus(txid) {
+        return this.provider.esploraGetTxStatus(txid);
+      }
+      async getTxHex(txid) {
+        return this.provider.esploraGetTxHex(txid);
+      }
+      async getBlocksTipHeight() {
+        return this.provider.esploraGetBlocksTipHeight();
+      }
+      async getBlocksTipHash() {
+        return this.provider.esploraGetBlocksTipHash();
       }
       async broadcastTx(txHex) {
-        const response = await fetch(`${this.baseUrl}/tx`, {
-          method: "POST",
-          body: txHex
-        });
-        return response.text();
+        return this.provider.esploraBroadcastTx(txHex);
       }
     };
     AlkanesRpcClient = class {
-      constructor(metashrewUrl, sandshrewUrl, wasmModule) {
-        this.metashrewUrl = metashrewUrl;
-        this.sandshrewUrl = sandshrewUrl;
-        this.wasm = wasmModule;
+      constructor(provider) {
+        this.provider = provider;
       }
-      async getAlkaneBalance(address2, alkaneId) {
-        if (this.wasm) {
-          const provider = new this.wasm.WebProvider(this.metashrewUrl, this.sandshrewUrl || "");
-          const balance = await provider.getAlkaneBalance(
-            address2,
-            JSON.stringify(alkaneId)
-          );
-          return JSON.parse(balance);
-        }
-        const response = await fetch(`${this.metashrewUrl}/alkanes/balance`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address: address2, alkaneId })
-        });
-        return response.json();
+      async getBalance(address2) {
+        return this.provider.alkanesBalance(address2);
       }
-      async getAlkaneBytecode(alkaneId, blockTag) {
-        if (this.wasm) {
-          return this.wasm.get_alkane_bytecode(
-            "mainnet",
-            alkaneId.block,
-            alkaneId.tx,
-            blockTag || ""
-          );
-        }
-        const response = await fetch(`${this.metashrewUrl}/alkanes/bytecode`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ alkaneId, blockTag })
-        });
-        const data = await response.json();
-        return data.bytecode;
+      async getByAddress(address2, blockTag, protocolTag) {
+        return this.provider.alkanesByAddress(address2, blockTag, protocolTag);
       }
-      async simulateAlkaneCall(params) {
-        if (this.wasm) {
-          const bytecode = await this.getAlkaneBytecode(params.alkaneId);
-          const result = await this.wasm.simulate_alkane_call(
-            JSON.stringify(params.alkaneId),
-            bytecode,
-            "0x"
-            // Empty cellpack for now
-          );
-          return JSON.parse(result);
-        }
-        const response = await fetch(`${this.metashrewUrl}/alkanes/simulate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(params)
-        });
-        return response.json();
+      async getByOutpoint(outpoint, blockTag, protocolTag) {
+        return this.provider.alkanesByOutpoint(outpoint, blockTag, protocolTag);
+      }
+      async getBytecode(alkaneId, blockTag) {
+        return this.provider.alkanesBytecode(alkaneId, blockTag);
+      }
+      async simulate(contractId, contextJson, blockTag) {
+        return this.provider.alkanesSimulate(contractId, contextJson, blockTag);
+      }
+      async execute(paramsJson) {
+        return this.provider.alkanesExecute(paramsJson);
+      }
+      async trace(outpoint) {
+        return this.provider.alkanesTrace(outpoint);
+      }
+      async view(contractId, viewFn, params, blockTag) {
+        return this.provider.alkanesView(contractId, viewFn, params, blockTag);
+      }
+      async getAllPools(factoryId) {
+        return this.provider.alkanesGetAllPools(factoryId);
+      }
+      async getAllPoolsWithDetails(factoryId, chunkSize, maxConcurrent) {
+        return this.provider.alkanesGetAllPoolsWithDetails(factoryId, chunkSize, maxConcurrent);
+      }
+      async getPendingUnwraps(blockTag) {
+        return this.provider.alkanesPendingUnwraps(blockTag);
+      }
+    };
+    DataApiClient = class {
+      constructor(provider) {
+        this.provider = provider;
+      }
+      // Pool operations
+      async getPools(factoryId) {
+        return this.provider.dataApiGetPools(factoryId);
+      }
+      async getPoolHistory(poolId, category, limit, offset) {
+        return this.provider.dataApiGetPoolHistory(poolId, category, limit ? BigInt(limit) : void 0, offset ? BigInt(offset) : void 0);
+      }
+      async getAllHistory(poolId, limit, offset) {
+        return this.provider.dataApiGetAllHistory(poolId, limit ? BigInt(limit) : void 0, offset ? BigInt(offset) : void 0);
+      }
+      async getSwapHistory(poolId, limit, offset) {
+        return this.provider.dataApiGetSwapHistory(poolId, limit ? BigInt(limit) : void 0, offset ? BigInt(offset) : void 0);
+      }
+      async getMintHistory(poolId, limit, offset) {
+        return this.provider.dataApiGetMintHistory(poolId, limit ? BigInt(limit) : void 0, offset ? BigInt(offset) : void 0);
+      }
+      async getBurnHistory(poolId, limit, offset) {
+        return this.provider.dataApiGetBurnHistory(poolId, limit ? BigInt(limit) : void 0, offset ? BigInt(offset) : void 0);
+      }
+      // Trading data
+      async getTrades(pool, startTime, endTime, limit) {
+        return this.provider.dataApiGetTrades(pool, startTime, endTime, limit ? BigInt(limit) : void 0);
+      }
+      async getCandles(pool, interval, startTime, endTime, limit) {
+        return this.provider.dataApiGetCandles(pool, interval, startTime, endTime, limit ? BigInt(limit) : void 0);
+      }
+      async getReserves(pool) {
+        return this.provider.dataApiGetReserves(pool);
+      }
+      // Balance operations
+      async getAlkanesByAddress(address2) {
+        return this.provider.dataApiGetAlkanesByAddress(address2);
+      }
+      async getAddressBalances(address2, includeOutpoints = false) {
+        return this.provider.dataApiGetAddressBalances(address2, includeOutpoints);
+      }
+      // Token operations
+      async getHolders(alkane, page = 0, limit = 100) {
+        return this.provider.dataApiGetHolders(alkane, BigInt(page), BigInt(limit));
+      }
+      async getHoldersCount(alkane) {
+        return this.provider.dataApiGetHoldersCount(alkane);
+      }
+      async getKeys(alkane, prefix, limit = 100) {
+        return this.provider.dataApiGetKeys(alkane, prefix, BigInt(limit));
+      }
+      // Market data
+      async getBitcoinPrice() {
+        return this.provider.dataApiGetBitcoinPrice();
+      }
+      async getBitcoinMarketChart(days) {
+        return this.provider.dataApiGetBitcoinMarketChart(days);
       }
     };
     AlkanesProvider = class {
-      constructor(config, wasmModule) {
-        this.network = config.network;
-        this.networkType = config.networkType;
-        this.url = config.url;
-        const masterUrl = config.projectId ? `${config.url}/${config.version || "v1"}/${config.projectId}` : config.url;
-        this.bitcoin = new BitcoinRpcClient(masterUrl);
-        this.esplora = new EsploraClient(masterUrl);
-        this.alkanes = new AlkanesRpcClient(
-          masterUrl,
-          void 0,
-          wasmModule
+      constructor(config) {
+        this._provider = null;
+        this._bitcoin = null;
+        this._esplora = null;
+        this._alkanes = null;
+        this._dataApi = null;
+        const preset = NETWORK_PRESETS[config.network] || NETWORK_PRESETS["mainnet"];
+        this.networkPreset = config.network;
+        this.networkType = preset.networkType;
+        this.rpcUrl = config.rpcUrl || preset.rpcUrl;
+        this.dataApiUrl = config.dataApiUrl || config.rpcUrl || preset.dataApiUrl;
+        if (config.bitcoinNetwork) {
+          this.network = config.bitcoinNetwork;
+        } else {
+          switch (this.networkType) {
+            case "mainnet":
+              this.network = bitcoin3.networks.bitcoin;
+              break;
+            case "testnet":
+            case "signet":
+              this.network = bitcoin3.networks.testnet;
+              break;
+            case "regtest":
+            default:
+              this.network = bitcoin3.networks.regtest;
+          }
+        }
+      }
+      /**
+       * Initialize the provider (loads WASM if needed)
+       */
+      async initialize() {
+        if (this._provider) return;
+        const wasm = await import("@alkanes/ts-sdk/wasm");
+        const providerName = this.networkPreset === "local" ? "regtest" : this.networkPreset;
+        const configOverride = {};
+        if (this.rpcUrl !== NETWORK_PRESETS[this.networkPreset]?.rpcUrl) {
+          configOverride.sandshrew_rpc_url = this.rpcUrl;
+        }
+        this._provider = new wasm.WebProvider(
+          providerName,
+          Object.keys(configOverride).length > 0 ? configOverride : void 0
         );
       }
       /**
-       * Push a PSBT to the network (compatible with @oyl/sdk)
+       * Get the underlying WASM provider (initializes if needed)
        */
-      async pushPsbt({ psbtHex, psbtBase64 }) {
-        if (!psbtHex && !psbtBase64) {
-          throw new Error("Please supply psbt in either base64 or hex format");
+      async getProvider() {
+        if (!this._provider) {
+          await this.initialize();
         }
-        if (psbtHex && psbtBase64) {
-          throw new Error("Please select one format of psbt to broadcast");
-        }
-        let psbt;
-        if (psbtHex) {
-          psbt = bitcoin3.Psbt.fromHex(psbtHex, { network: this.network });
-        } else {
-          psbt = bitcoin3.Psbt.fromBase64(psbtBase64, { network: this.network });
-        }
-        let extractedTx;
-        try {
-          extractedTx = psbt.extractTransaction();
-        } catch (error) {
-          throw new Error(`Transaction could not be extracted due to invalid Psbt. ${error}`);
-        }
-        const txId = extractedTx.getId();
-        const rawTx = extractedTx.toHex();
-        const [result] = await this.bitcoin.testMempoolAccept([rawTx]);
-        if (!result.allowed) {
-          throw new Error(`Mempool rejected tx due to ${result["reject-reason"]}`);
-        }
-        await this.bitcoin.sendRawTransaction(rawTx);
-        try {
-          const mempoolEntry = await this.bitcoin.getMempoolEntry(txId);
-          const fee = mempoolEntry.fees["base"] * 10 ** 8;
-          return {
-            txId,
-            rawTx,
-            size: mempoolEntry.vsize,
-            weight: mempoolEntry.weight,
-            fee,
-            satsPerVByte: (fee / (mempoolEntry.weight / 4)).toFixed(2)
-          };
-        } catch (error) {
-          await new Promise((resolve) => setTimeout(resolve, 1e3));
-          const tx = await this.esplora.getTxInfo(txId);
-          return {
-            txId,
-            rawTx,
-            size: tx.size,
-            weight: tx.weight,
-            fee: tx.fee,
-            satsPerVByte: (tx.fee / (tx.weight / 4)).toFixed(2)
-          };
-        }
+        return this._provider;
       }
       /**
-       * Get block information
+       * Bitcoin RPC client
        */
-      async getBlockInfo(hashOrHeight) {
-        const hash = typeof hashOrHeight === "number" ? await this.bitcoin.getBlockHash(hashOrHeight) : hashOrHeight;
-        const block = await this.bitcoin.getBlock(hash);
+      get bitcoin() {
+        if (!this._bitcoin) {
+          if (!this._provider) {
+            throw new Error("Provider not initialized. Call initialize() first.");
+          }
+          this._bitcoin = new BitcoinRpcClient(this._provider);
+        }
+        return this._bitcoin;
+      }
+      /**
+       * Esplora API client
+       */
+      get esplora() {
+        if (!this._esplora) {
+          if (!this._provider) {
+            throw new Error("Provider not initialized. Call initialize() first.");
+          }
+          this._esplora = new EsploraClient(this._provider);
+        }
+        return this._esplora;
+      }
+      /**
+       * Alkanes RPC client
+       */
+      get alkanes() {
+        if (!this._alkanes) {
+          if (!this._provider) {
+            throw new Error("Provider not initialized. Call initialize() first.");
+          }
+          this._alkanes = new AlkanesRpcClient(this._provider);
+        }
+        return this._alkanes;
+      }
+      /**
+       * Data API client
+       */
+      get dataApi() {
+        if (!this._dataApi) {
+          if (!this._provider) {
+            throw new Error("Provider not initialized. Call initialize() first.");
+          }
+          this._dataApi = new DataApiClient(this._provider);
+        }
+        return this._dataApi;
+      }
+      // ============================================================================
+      // CONVENIENCE METHODS
+      // ============================================================================
+      /**
+       * Get BTC balance for an address
+       */
+      async getBalance(address2) {
+        const provider = await this.getProvider();
+        const info = await provider.esploraGetAddressInfo(address2);
+        const utxos = await provider.esploraGetAddressUtxo(address2);
         return {
-          hash: block.hash,
-          height: block.height,
-          timestamp: block.time,
-          txCount: block.tx.length
+          address: address2,
+          confirmed: info.chain_stats?.funded_txo_sum - info.chain_stats?.spent_txo_sum || 0,
+          unconfirmed: info.mempool_stats?.funded_txo_sum - info.mempool_stats?.spent_txo_sum || 0,
+          utxos
         };
       }
       /**
-       * Get address balance
+       * Get enriched balances (BTC + alkanes) for an address
        */
-      async getBalance(address2) {
-        return this.esplora.getAddressBalance(address2);
+      async getEnrichedBalances(address2, protocolTag) {
+        const provider = await this.getProvider();
+        return provider.getEnrichedBalances(address2, protocolTag);
       }
       /**
-       * Get alkane balance for address
+       * Get alkane token balance for an address
        */
       async getAlkaneBalance(address2, alkaneId) {
-        return this.alkanes.getAlkaneBalance(address2, alkaneId);
+        const provider = await this.getProvider();
+        const balances = await provider.alkanesBalance(address2);
+        if (alkaneId) {
+          return balances.filter(
+            (b) => b.id?.block === alkaneId.block && b.id?.tx === alkaneId.tx
+          );
+        }
+        return balances;
       }
       /**
-       * Simulate alkane contract call
+       * Get alkane token details
        */
-      async simulateAlkaneCall(params) {
-        return this.alkanes.simulateAlkaneCall(params);
+      async getAlkaneTokenDetails(params) {
+        const provider = await this.getProvider();
+        const id = `${params.alkaneId.block}:${params.alkaneId.tx}`;
+        const nameResult = await provider.alkanesView(id, "name", void 0, void 0);
+        const symbolResult = await provider.alkanesView(id, "symbol", void 0, void 0);
+        const decimalsResult = await provider.alkanesView(id, "decimals", void 0, void 0);
+        const totalSupplyResult = await provider.alkanesView(id, "totalSupply", void 0, void 0);
+        return {
+          id: params.alkaneId,
+          name: nameResult?.data || "",
+          symbol: symbolResult?.data || "",
+          decimals: decimalsResult?.data || 8,
+          totalSupply: totalSupplyResult?.data || "0"
+        };
+      }
+      /**
+       * Get transaction history for an address
+       */
+      async getAddressHistory(address2) {
+        const provider = await this.getProvider();
+        return provider.getAddressTxs(address2);
+      }
+      /**
+       * Get address history with alkane traces
+       */
+      async getAddressHistoryWithTraces(address2, excludeCoinbase) {
+        const provider = await this.getProvider();
+        return provider.getAddressTxsWithTraces(address2, excludeCoinbase);
+      }
+      /**
+       * Get current block height
+       */
+      async getBlockHeight() {
+        const provider = await this.getProvider();
+        return provider.metashrewHeight();
+      }
+      /**
+       * Broadcast a transaction
+       */
+      async broadcastTransaction(txHex) {
+        const provider = await this.getProvider();
+        return provider.broadcastTransaction(txHex);
+      }
+      /**
+       * Get all AMM pools from a factory
+       */
+      async getAllPools(factoryId) {
+        const provider = await this.getProvider();
+        return provider.alkanesGetAllPoolsWithDetails(factoryId, void 0, void 0);
+      }
+      /**
+       * Get pool reserves
+       */
+      async getPoolReserves(poolId) {
+        const provider = await this.getProvider();
+        return provider.dataApiGetReserves(poolId);
+      }
+      /**
+       * Get recent trades for a pool
+       */
+      async getPoolTrades(poolId, limit) {
+        const provider = await this.getProvider();
+        return provider.dataApiGetTrades(poolId, void 0, void 0, limit ? BigInt(limit) : void 0);
+      }
+      /**
+       * Get candle data for a pool
+       */
+      async getPoolCandles(poolId, interval = "1h", limit) {
+        const provider = await this.getProvider();
+        return provider.dataApiGetCandles(poolId, interval, void 0, void 0, limit ? BigInt(limit) : void 0);
+      }
+      /**
+       * Get Bitcoin price in USD
+       */
+      async getBitcoinPrice() {
+        const provider = await this.getProvider();
+        const result = await provider.dataApiGetBitcoinPrice();
+        return result?.price || 0;
+      }
+      /**
+       * Execute an alkanes contract call
+       */
+      async executeAlkanes(params) {
+        const provider = await this.getProvider();
+        const paramsJson = JSON.stringify({
+          target: params.contractId,
+          calldata: params.calldata,
+          fee_rate: params.feeRate,
+          inputs: params.inputs
+        });
+        return provider.alkanesExecute(paramsJson);
+      }
+      /**
+       * Simulate an alkanes contract call (read-only)
+       */
+      async simulateAlkanes(contractId, calldata, blockTag) {
+        const provider = await this.getProvider();
+        const context = {
+          alkanes: [],
+          transaction: [],
+          block: [],
+          height: 0,
+          vout: 0,
+          txindex: 0,
+          calldata,
+          pointer: 0,
+          refund_pointer: 0
+        };
+        return provider.alkanesSimulate(contractId, JSON.stringify(context), blockTag);
       }
     };
   }
@@ -46696,8 +46894,10 @@ export {
   AlkanesWallet,
   BitcoinRpcClient,
   DERIVATION_PATHS,
+  DataApiClient,
   EsploraClient,
   KeystoreManager,
+  NETWORK_PRESETS,
   VERSION,
   btcToSatoshis,
   bytesToHex,

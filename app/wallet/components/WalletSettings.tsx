@@ -5,7 +5,7 @@ import { useWallet } from '@/context/WalletContext';
 import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock } from 'lucide-react';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 
-type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'oylnet' | 'custom';
+type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'subfrost-regtest' | 'oylnet' | 'custom';
 
 interface DerivationConfig {
   accountIndex: number;
@@ -172,10 +172,12 @@ export default function WalletSettings() {
       
       // Create wallet from mnemonic using SDK
       const { createWalletFromMnemonic } = await import('@alkanes/ts-sdk');
-      const tempWallet = createWalletFromMnemonic(keystore.mnemonic, network);
-      
+      // Map network type for SDK (strip 'subfrost-' prefix if present)
+      const sdkNetwork = network.replace('subfrost-', '') as 'mainnet' | 'testnet' | 'signet' | 'regtest';
+      const tempWallet = createWalletFromMnemonic(keystore.mnemonic, sdkNetwork);
+
       // Use SDK method to get WIF private key (all crypto happens in WASM)
-      const privateKeyWIF = tempWallet.getPrivateKeyWIF(0);
+      const privateKeyWIF = (tempWallet as any).getPrivateKeyWIF(0);
       
       setRevealedPrivateKey(privateKeyWIF);
     } catch (error: any) {
@@ -223,8 +225,8 @@ export default function WalletSettings() {
             >
               <option value="mainnet" className="bg-gray-900 text-white">Mainnet</option>
               <option value="signet" className="bg-gray-900 text-white">Signet</option>
-              <option value="regtest" className="bg-gray-900 text-white">Subfrost Regtest</option>
-              <option value="oylnet" className="bg-gray-900 text-white">Local Regtest</option>
+              <option value="subfrost-regtest" className="bg-gray-900 text-white">Subfrost Regtest (regtest.subfrost.io)</option>
+              <option value="regtest" className="bg-gray-900 text-white">Local Regtest (localhost)</option>
               <option value="custom" className="bg-gray-900 text-white">Custom</option>
             </select>
           </div>
