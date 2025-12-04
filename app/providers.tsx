@@ -12,7 +12,7 @@ import { ExchangeProvider } from '@/context/ExchangeContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 
 // Define Network type locally
-type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
+import type { Network } from '@/utils/constants';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 

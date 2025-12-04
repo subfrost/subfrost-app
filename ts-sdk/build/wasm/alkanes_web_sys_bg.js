@@ -230,6 +230,16 @@ function passArray8ToWasm0(arg, malloc) {
     WASM_VECTOR_LEN = arg.length;
     return ptr;
 }
+
+function passArrayJsValueToWasm0(array, malloc) {
+    const ptr = malloc(array.length * 4, 4) >>> 0;
+    for (let i = 0; i < array.length; i++) {
+        const add = addToExternrefTable0(array[i]);
+        getDataViewMemory0().setUint32(ptr + 4 * i, add, true);
+    }
+    WASM_VECTOR_LEN = array.length;
+    return ptr;
+}
 /**
  * Asynchronously encrypts data using the Web Crypto API.
  * @param {string} mnemonic
@@ -818,6 +828,17 @@ export class WebProvider {
         return ret;
     }
     /**
+     * Get pool details including reserves using simulation
+     * @param {string} pool_id
+     * @returns {Promise<any>}
+     */
+    ammGetPoolDetails(pool_id) {
+        const ptr0 = passStringToWasm0(pool_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_ammGetPoolDetails(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
      * @param {string} outpoint
      * @returns {Promise<any>}
      */
@@ -1325,6 +1346,87 @@ export class WebProvider {
         return ret;
     }
     /**
+     * Create a new wallet with an optional mnemonic phrase
+     * If no mnemonic is provided, a new one will be generated
+     * Returns wallet info including address and mnemonic
+     * @param {string | null} [mnemonic]
+     * @param {string | null} [passphrase]
+     * @returns {Promise<any>}
+     */
+    walletCreate(mnemonic, passphrase) {
+        var ptr0 = isLikeNone(mnemonic) ? 0 : passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_walletCreate(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret;
+    }
+    /**
+     * Load an existing wallet from storage
+     * @param {string | null} [passphrase]
+     * @returns {Promise<any>}
+     */
+    walletLoad(passphrase) {
+        var ptr0 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_walletLoad(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get the wallet's primary address
+     * @returns {Promise<any>}
+     */
+    walletGetAddress() {
+        const ret = wasm.webprovider_walletGetAddress(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get the wallet's BTC balance
+     * Returns { confirmed: number, pending: number }
+     * @param {string[] | null} [addresses]
+     * @returns {Promise<any>}
+     */
+    walletGetBalance(addresses) {
+        var ptr0 = isLikeNone(addresses) ? 0 : passArrayJsValueToWasm0(addresses, wasm.__wbindgen_malloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_walletGetBalance(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Send BTC to an address
+     * params: { address: string, amount: number (satoshis), fee_rate?: number }
+     * @param {string} params_json
+     * @returns {Promise<any>}
+     */
+    walletSend(params_json) {
+        const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_walletSend(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get UTXOs for the wallet
+     * @param {string[] | null} [addresses]
+     * @returns {Promise<any>}
+     */
+    walletGetUtxos(addresses) {
+        var ptr0 = isLikeNone(addresses) ? 0 : passArrayJsValueToWasm0(addresses, wasm.__wbindgen_malloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_walletGetUtxos(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Get transaction history for an address
+     * @param {string | null} [address]
+     * @returns {Promise<any>}
+     */
+    walletGetHistory(address) {
+        var ptr0 = isLikeNone(address) ? 0 : passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_walletGetHistory(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
      * @param {string} params_json
      * @returns {Promise<any>}
      */
@@ -1681,10 +1783,6 @@ export function __wbg_crypto_f5dce82c355d159f() { return handleError(function (a
     return ret;
 }, arguments) };
 
-export function __wbg_debug_f4b0c59db649db48(arg0) {
-    console.debug(arg0);
-};
-
 export function __wbg_decrypt_0452782895e3c2f1() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
     const ret = arg0.decrypt(arg1, arg2, getArrayU8FromWasm0(arg3, arg4));
     return ret;
@@ -1708,10 +1806,6 @@ export function __wbg_encrypt_36464dd547f58e9c() { return handleError(function (
 export function __wbg_entries_e171b586f8f6bdbf(arg0) {
     const ret = Object.entries(arg0);
     return ret;
-};
-
-export function __wbg_error_a7f8fbb0523dae15(arg0) {
-    console.error(arg0);
 };
 
 export function __wbg_fetch_0c645bcbfc592368(arg0, arg1) {
@@ -1775,10 +1869,6 @@ export function __wbg_importKey_2be19189a1451235() { return handleError(function
     const ret = arg0.importKey(getStringFromWasm0(arg1, arg2), arg3, arg4, arg5 !== 0, arg6);
     return ret;
 }, arguments) };
-
-export function __wbg_info_e674a11f4f50cc0c(arg0) {
-    console.info(arg0);
-};
 
 export function __wbg_instanceof_ArrayBuffer_70beb1189ca63b38(arg0) {
     let result;
@@ -1988,11 +2078,6 @@ export function __wbg_ok_5749966cb2b8535e(arg0) {
     return ret;
 };
 
-export function __wbg_performance_e8315b5ae987e93f(arg0) {
-    const ret = arg0.performance;
-    return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-};
-
 export function __wbg_process_dc0fbacc7c1c06f7(arg0) {
     const ret = arg0.process;
     return ret;
@@ -2031,11 +2116,6 @@ export function __wbg_resolve_caf97c30b83f7053(arg0) {
 
 export function __wbg_setItem_64dfb54d7b20d84c() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
     arg0.setItem(getStringFromWasm0(arg1, arg2), getStringFromWasm0(arg3, arg4));
-}, arguments) };
-
-export function __wbg_setTimeout_780ac15e3df4c663() { return handleError(function (arg0, arg1, arg2) {
-    const ret = arg0.setTimeout(arg1, arg2);
-    return ret;
 }, arguments) };
 
 export function __wbg_set_3f1d0b984ed272ed(arg0, arg1, arg2) {
@@ -2163,15 +2243,15 @@ export function __wbindgen_cast_2241b6af4c4b2941(arg0, arg1) {
     return ret;
 };
 
-export function __wbindgen_cast_4625c577ab2ec9ee(arg0) {
-    // Cast intrinsic for `U64 -> Externref`.
-    const ret = BigInt.asUintN(64, arg0);
+export function __wbindgen_cast_2777ff72a397665f(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 2234, function: Function { arguments: [Externref], shim_idx: 2235, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
     return ret;
 };
 
-export function __wbindgen_cast_79e5421433b7d27f(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 2180, function: Function { arguments: [Externref], shim_idx: 2181, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
+export function __wbindgen_cast_4625c577ab2ec9ee(arg0) {
+    // Cast intrinsic for `U64 -> Externref`.
+    const ret = BigInt.asUintN(64, arg0);
     return ret;
 };
 

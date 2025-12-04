@@ -7,7 +7,7 @@
 // AlkanesProvider imported dynamically when needed to avoid WASM SSR issues
 
 // Define Network type locally to avoid import issues with ts-sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
+import type { Network } from '@/utils/constants';
 
 // Import from the browser-bundled alkanes SDK
 import { createKeystore, unlockKeystore, KeystoreManager } from '@alkanes/ts-sdk';
@@ -133,6 +133,7 @@ export async function createAlkanesProvider(
     regtest: 'http://localhost:18443',
     signet: 'https://signet-api.subfrost.com',
     oylnet: 'https://oylnet-api.subfrost.com',
+    'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   };
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;

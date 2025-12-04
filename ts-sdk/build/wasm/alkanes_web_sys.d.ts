@@ -167,6 +167,10 @@ export class WebProvider {
    * Get all pools from a factory (lightweight, IDs only)
    */
   alkanesGetAllPools(factory_id: string): Promise<any>;
+  /**
+   * Get pool details including reserves using simulation
+   */
+  ammGetPoolDetails(pool_id: string): Promise<any>;
   alkanesTrace(outpoint: string): Promise<any>;
   alkanesByAddress(address: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;
   alkanesByOutpoint(outpoint: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;
@@ -218,6 +222,38 @@ export class WebProvider {
   runestoneAnalyzeTx(txid: string): Promise<any>;
   protorunesDecodeTx(txid: string): Promise<any>;
   protorunesAnalyzeTx(txid: string): Promise<any>;
+  /**
+   * Create a new wallet with an optional mnemonic phrase
+   * If no mnemonic is provided, a new one will be generated
+   * Returns wallet info including address and mnemonic
+   */
+  walletCreate(mnemonic?: string | null, passphrase?: string | null): Promise<any>;
+  /**
+   * Load an existing wallet from storage
+   */
+  walletLoad(passphrase?: string | null): Promise<any>;
+  /**
+   * Get the wallet's primary address
+   */
+  walletGetAddress(): Promise<any>;
+  /**
+   * Get the wallet's BTC balance
+   * Returns { confirmed: number, pending: number }
+   */
+  walletGetBalance(addresses?: string[] | null): Promise<any>;
+  /**
+   * Send BTC to an address
+   * params: { address: string, amount: number (satoshis), fee_rate?: number }
+   */
+  walletSend(params_json: string): Promise<any>;
+  /**
+   * Get UTXOs for the wallet
+   */
+  walletGetUtxos(addresses?: string[] | null): Promise<any>;
+  /**
+   * Get transaction history for an address
+   */
+  walletGetHistory(address?: string | null): Promise<any>;
   walletCreatePsbt(params_json: string): Promise<any>;
   walletExport(): Promise<any>;
   walletBackup(): Promise<any>;

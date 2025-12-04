@@ -7,8 +7,8 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 
-// Define Network type locally to avoid import issues with ts-sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
+// Import Network type from constants
+import type { Network } from '@/utils/constants';
 
 // ✅ REAL ALKANES-RS SDK - Import from @alkanes/ts-sdk package
 import {
@@ -264,6 +264,7 @@ export async function createAlkanesProvider(
     regtest: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
     signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
     oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
+    'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   };
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;

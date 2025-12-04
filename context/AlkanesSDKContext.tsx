@@ -15,6 +15,7 @@ interface AlkanesSDKContextType {
   isInitialized: boolean;
   bitcoinPrice: BitcoinPrice | null;
   refreshBitcoinPrice: () => Promise<void>;
+  network: Network;
 }
 
 const AlkanesSDKContext = createContext<AlkanesSDKContextType | null>(null);
@@ -42,6 +43,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
           signet: 'https://signet.subfrost.io/v4/subfrost',
           regtest: 'http://localhost:18888',  // Local alkanes-rs
           oylnet: 'http://localhost:18888',  // Local Regtest
+          'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
         };
 
         const dataApiUrls: Record<Network, string> = {
@@ -50,6 +52,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
           signet: 'https://signet.subfrost.io/v4/subfrost',
           regtest: 'http://localhost:18888',  // Local alkanes-rs
           oylnet: 'http://localhost:18888',  // Local Regtest
+          'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
         };
 
         const networkConfig = NetworkMap[network];
@@ -108,6 +111,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     isInitialized,
     bitcoinPrice,
     refreshBitcoinPrice,
+    network,
   };
 
   return (
