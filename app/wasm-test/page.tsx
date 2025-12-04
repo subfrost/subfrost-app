@@ -21,7 +21,7 @@ export default function WasmTestPage() {
       addLog('Starting WASM import...');
       
       // Import WASM module
-      const wasm = await import('@alkanes/ts-sdk/wasm');
+      const wasm = await import('../../ts-sdk/build/wasm/alkanes_web_sys');
       addLog('WASM module imported successfully');
       addLog(`WASM module keys: ${Object.keys(wasm).join(', ')}`);
       addLog(`Default export type: ${typeof wasm.default}`);
