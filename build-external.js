@@ -20,7 +20,9 @@ const os = require('os');
 // Configuration
 const PROJECT_ROOT = __dirname;
 const BUILD_DIR = path.join(PROJECT_ROOT, '.external-build');
-const ALKANES_RS_DIR = path.join(BUILD_DIR, 'alkanes-rs');
+// Allow using a local alkanes-rs repo via ALKANES_RS_LOCAL env var (for development)
+const LOCAL_ALKANES_RS = process.env.ALKANES_RS_LOCAL || null;
+const ALKANES_RS_DIR = LOCAL_ALKANES_RS || path.join(BUILD_DIR, 'alkanes-rs');
 const ALKANES_RS_REPO = 'https://github.com/kungfuflex/alkanes-rs.git';
 const TS_SDK_SOURCE = path.join(ALKANES_RS_DIR, 'ts-sdk');
 const TS_SDK_DEST = path.join(PROJECT_ROOT, 'ts-sdk');
@@ -193,32 +195,50 @@ function installSystemDeps() {
 // Clone or update alkanes-rs repository
 function setupAlkanesRepo() {
   const sdkBranch = getSdkBranch();
+
+  // If using local alkanes-rs, skip git operations
+  if (LOCAL_ALKANES_RS) {
+    console.log(`\n📦 Using local alkanes-rs at: ${LOCAL_ALKANES_RS}`);
+    if (!fs.existsSync(LOCAL_ALKANES_RS)) {
+      throw new Error(`Local alkanes-rs directory not found: ${LOCAL_ALKANES_RS}`);
+    }
+    console.log('✓ Local alkanes-rs repository ready');
+    return;
+  }
+
   console.log(`\n📦 Setting up alkanes-rs (branch: ${sdkBranch})...`);
-  
+
   ensureDir(BUILD_DIR);
-  
+
   if (!fs.existsSync(ALKANES_RS_DIR)) {
     console.log('Cloning alkanes-rs repository...');
     exec(`git clone ${ALKANES_RS_REPO} ${ALKANES_RS_DIR}`);
     exec(`git checkout ${sdkBranch}`, { cwd: ALKANES_RS_DIR });
   } else {
     console.log('alkanes-rs already cloned, updating...');
-    
+
+    // Ensure remote URL uses HTTPS (not SSH) to avoid permission issues
+    const currentRemote = execSilent('git remote get-url origin', { cwd: ALKANES_RS_DIR });
+    if (currentRemote && !currentRemote.startsWith('https://')) {
+      console.log(`Switching remote from ${currentRemote} to HTTPS...`);
+      exec(`git remote set-url origin ${ALKANES_RS_REPO}`, { cwd: ALKANES_RS_DIR });
+    }
+
     // Fetch latest changes
     exec('git fetch origin', { cwd: ALKANES_RS_DIR });
-    
+
     // Get current branch
     const currentBranch = execSilent('git rev-parse --abbrev-ref HEAD', { cwd: ALKANES_RS_DIR });
-    
+
     if (currentBranch !== sdkBranch) {
       console.log(`Switching from ${currentBranch} to ${sdkBranch}...`);
       exec(`git checkout ${sdkBranch}`, { cwd: ALKANES_RS_DIR });
     }
-    
+
     // Pull latest changes
     exec(`git pull origin ${sdkBranch}`, { cwd: ALKANES_RS_DIR });
   }
-  
+
   console.log('✓ alkanes-rs repository ready');
 }
 

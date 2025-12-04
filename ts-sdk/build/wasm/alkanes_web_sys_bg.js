@@ -2263,8 +2263,8 @@ export function __wbindgen_cast_2241b6af4c4b2941(arg0, arg1) {
     return ret;
 };
 
-export function __wbindgen_cast_3767ecfc87ac2a65(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 2238, function: Function { arguments: [Externref], shim_idx: 2239, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+export function __wbindgen_cast_30f535a3d55f30e2(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 2264, function: Function { arguments: [Externref], shim_idx: 2265, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
     const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
     return ret;
 };
