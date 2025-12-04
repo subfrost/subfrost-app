@@ -69,13 +69,13 @@ export interface EnrichedWalletData {
 }
 
 /**
- * Hook to fetch and enrich wallet data using lua scripts
+ * Hook to fetch and enrich wallet data using alkanes-web-sys provider
  * This combines Bitcoin UTXOs with alkanes/runes/inscriptions data
  */
 export function useEnrichedWalletData(): EnrichedWalletData {
   const { account, isConnected } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
-  
+
   const [data, setData] = useState<Omit<EnrichedWalletData, 'refresh'>>({
     balances: {
       bitcoin: { p2wpkh: 0, p2tr: 0, total: 0 },
@@ -109,44 +109,21 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       }
 
       console.log('[useEnrichedWalletData] Fetching balances for addresses:', addresses);
-      
-      // Use esplora_address::utxo JSON-RPC method (works on local alkanes-rs)
+
+      // Use provider methods instead of direct fetch
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
-          const rpcUrl = (provider as any).url;
-          
-          console.log('[useEnrichedWalletData] Fetching UTXOs for:', address);
-          
-          // Get UTXOs using esplora method
-          const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::utxo',
-              params: [address],
-              id: 1
-            })
-          });
-          
-          if (!response.ok) {
-            console.error('[useEnrichedWalletData] HTTP error:', response.status, response.statusText);
-            return { address, data: null };
-          }
-          
-          const json = await response.json();
-          
-          // Check for JSON-RPC error
-          if (json.error) {
-            console.error('[useEnrichedWalletData] RPC error:', json.error);
-            return { address, data: null };
-          }
-          
-          // Check if result exists
-          if (!json.result || !Array.isArray(json.result)) {
-            console.warn('[useEnrichedWalletData] No UTXOs returned for', address);
-            return { 
-              address, 
+          console.log('[useEnrichedWalletData] Fetching enriched balances for:', address);
+
+          // Get enriched balances using WASM WebProvider's balances.lua method
+          // This returns spendable, assets, pending UTXOs with alkanes/runes/inscriptions data
+          const enrichedData = await provider.getEnrichedBalances(address);
+
+          console.log('[useEnrichedWalletData] Got enriched data for', address);
+
+          if (!enrichedData) {
+            return {
+              address,
               data: {
                 spendable: [],
                 assets: [],
@@ -156,26 +133,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
               }
             };
           }
-          
-          console.log('[useEnrichedWalletData] Found', json.result.length, 'UTXOs for', address);
-          
-          // Convert esplora UTXOs to enriched format
-          const utxos = json.result;
-          const enrichedData = {
-            spendable: utxos.map((utxo: any) => ({
-              outpoint: `${utxo.txid}:${utxo.vout}`,
-              value: utxo.value,
-              height: utxo.status?.block_height
-            })),
-            assets: [],
-            pending: utxos.filter((utxo: any) => !utxo.status?.confirmed).map((utxo: any) => ({
-              outpoint: `${utxo.txid}:${utxo.vout}`,
-              value: utxo.value
-            })),
-            ordHeight: 0,
-            metashrewHeight: 0
-          };
-          
+
           return { address, data: enrichedData };
         } catch (error) {
           console.error(`[useEnrichedWalletData] Failed to fetch data for ${address}:`, error);
@@ -207,7 +165,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
             // balances.lua returns outpoint as "txid:vout" format
             const [txid, voutStr] = (utxo.outpoint || ':').split(':');
             const vout = parseInt(voutStr || '0', 10);
-            
+
             const enrichedUtxo: EnrichedUTXO = {
               txid,
               vout,
@@ -223,7 +181,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
             };
 
             allUtxos.push(enrichedUtxo);
-            
+
             if (isP2WPKH) {
               p2wpkhUtxos.push(enrichedUtxo);
               p2wpkhBtc += utxo.value;
