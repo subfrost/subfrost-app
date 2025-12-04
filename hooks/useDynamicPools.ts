@@ -1,14 +1,14 @@
 /**
  * useDynamicPools - Fetches pools dynamically from the factory contract using WASM
- * 
+ *
  * This hook uses the alkanesGetAllPoolsWithDetails method to fetch all pools
  * with parallel optimization, giving us the correct alkane IDs for each network.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
-import { getNetworkUrls } from '@/utils/alkanesProvider';
 
 export type DynamicPool = {
   pool_id: string;
@@ -35,10 +35,10 @@ export function useDynamicPools(options?: {
   enabled?: boolean;
 }) {
   const { network } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
   const config = getConfig(network);
   const factoryId = config.ALKANE_FACTORY_ID; // e.g., "4:65522"
-  const networkUrls = getNetworkUrls(network);
-  
+
   const {
     chunk_size = 30,
     max_concurrent = 10,
@@ -47,22 +47,20 @@ export function useDynamicPools(options?: {
 
   return useQuery<DynamicPoolsResult>({
     queryKey: ['dynamic-pools', network, factoryId, chunk_size, max_concurrent],
-    enabled: enabled && !!factoryId,
+    enabled: enabled && !!factoryId && isInitialized && !!provider,
     staleTime: 2 * 60 * 1000, // 2 minutes
     queryFn: async () => {
-      // Dynamic import to avoid WASM loading at SSR time
-      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      
-      // Create WASM provider
-      const provider = new WebProvider(networkUrls.rpc, null);
-      
+      if (!provider) {
+        throw new Error('Provider not initialized');
+      }
+
       // Call the parallelized pool fetching method
       const result = await provider.alkanesGetAllPoolsWithDetails(
         factoryId,
         chunk_size,
         max_concurrent
       );
-      
+
       return result as DynamicPoolsResult;
     },
   });

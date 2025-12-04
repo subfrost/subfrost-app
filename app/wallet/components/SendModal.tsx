@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Send, AlertCircle, CheckCircle, Loader2, Lock } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 
 interface SendModalProps {
@@ -23,6 +24,7 @@ interface UTXO {
 
 export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const { address, network } = useWallet() as any;
+  const { provider, isInitialized } = useAlkanesSDK();
   const { utxos, refresh } = useEnrichedWalletData();
 
   const [recipientAddress, setRecipientAddress] = useState('');
@@ -255,6 +257,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     setError('');
 
     try {
+      if (!provider || !isInitialized) {
+        throw new Error('Provider not initialized. Please wait and try again.');
+      }
+
       // Get mnemonic from session storage (set by WalletContext on unlock)
       const mnemonic = sessionStorage.getItem('subfrost_session_mnemonic');
       if (!mnemonic) {
@@ -262,39 +268,35 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       }
 
       const feeRateNum = parseInt(feeRate);
+      const amountSats = Math.floor(parseFloat(amount) * 100000000);
 
-      console.log('[SendModal] Sending via CLI API...');
+      console.log('[SendModal] Sending via WASM provider...');
       console.log('[SendModal] Recipient:', recipientAddress);
-      console.log('[SendModal] Amount:', amount, 'BTC');
+      console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
       console.log('[SendModal] Fee rate:', feeRateNum, 'sat/vB');
       console.log('[SendModal] From address:', address);
 
-      // Call the CLI-based API route
-      const response = await fetch('/api/wallet/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          mnemonic,
-          recipient: recipientAddress,
-          amount: amount, // BTC as string
-          feeRate: feeRateNum,
-          fromAddresses: [address], // Send from current address
-          lockAlkanes: true, // Protect alkane UTXOs
-          network: network || 'regtest',
-        }),
-      });
+      // Use WASM provider's walletSend method
+      const sendParams = {
+        mnemonic,
+        recipient: recipientAddress,
+        amount: amountSats, // Amount in satoshis
+        feeRate: feeRateNum,
+        fromAddresses: [address],
+        lockAlkanes: true,
+      };
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to send transaction');
-      }
+      const result = await provider.walletSend(JSON.stringify(sendParams));
 
       console.log('[SendModal] Transaction broadcast result:', result);
 
-      setTxid(result.txid);
+      // Extract txid from result
+      const txidResult = typeof result === 'string' ? result : result?.txid || result?.tx_id;
+      if (!txidResult) {
+        throw new Error('Transaction sent but no txid returned');
+      }
+
+      setTxid(txidResult);
       setStep('success');
 
       // Refresh wallet data

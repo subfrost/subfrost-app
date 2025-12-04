@@ -37,17 +37,32 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
 };
 
 // Custom URL overrides for networks
+// Subfrost networks use /v4/subfrost endpoint for both jsonrpc and data_api
 const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
-  mainnet: undefined, // Uses defaults
-  testnet: undefined,
-  signet: undefined,
+  mainnet: {
+    jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
+  },
+  testnet: {
+    jsonrpc_url: 'https://testnet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://testnet.subfrost.io/v4/subfrost',
+  },
+  signet: {
+    jsonrpc_url: 'https://signet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://signet.subfrost.io/v4/subfrost',
+  },
   regtest: {
-    jsonrpc_url: 'http://localhost:18888',
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
   },
   oylnet: {
-    jsonrpc_url: 'http://localhost:18888',
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
   },
-  'subfrost-regtest': undefined, // Uses subfrost-regtest preset defaults
+  'subfrost-regtest': {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
 };
 
 export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProps) {

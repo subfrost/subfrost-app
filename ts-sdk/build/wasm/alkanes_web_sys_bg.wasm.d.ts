@@ -105,6 +105,7 @@ export const webprovider_dataApiGetHoldersCount: (a: number, b: number, c: numbe
 export const webprovider_dataApiGetKeys: (a: number, b: number, c: number, d: number, e: number, f: bigint) => any;
 export const webprovider_dataApiGetBitcoinPrice: (a: number) => any;
 export const webprovider_dataApiGetBitcoinMarketChart: (a: number, b: number, c: number) => any;
+export const webprovider_alkanesReflect: (a: number, b: number, c: number) => any;
 export const __wbg_keystore_free: (a: number, b: number) => void;
 export const __wbg_pbkdfparams_free: (a: number, b: number) => void;
 export const pbkdfparams_from_js: (a: any) => [number, number, number];

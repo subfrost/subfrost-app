@@ -1,20 +1,23 @@
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import * as bitcoin from 'bitcoinjs-lib';
 import { ECPairFactory } from 'ecpair';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { useSandshrewProvider } from './useSandshrewProvider';
+import { NetworkMap } from '@/utils/constants';
 
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
 
 export function useSignerShim() {
-  const { signPsbt, signPsbts } = useWallet();
-  const provider = useSandshrewProvider();
+  const { signPsbt, signPsbts, network: walletNetwork } = useWallet();
+  const { provider, network } = useAlkanesSDK();
+
+  // Get the bitcoinjs-lib network from our network string
+  const btcNetwork = NetworkMap[network] || bitcoin.networks.bitcoin;
 
   const finalizePsbt = (signedPsbtBase64: string | undefined) => {
     if (!signedPsbtBase64) throw new Error('Failed to sign PSBT');
-    if (!provider) throw new Error('Provider not available');
-    let psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: provider.network });
+    let psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
     for (let i = 0; i < psbt.inputCount; i++) {
       const input = psbt.data.inputs[i];
       if (!input) throw new Error('input is undefined');
@@ -38,10 +41,8 @@ export function useSignerShim() {
       const finalizedPsbts = signedPsbtResponse.signedPsbts.map((signedPsbt: string) => finalizePsbt(signedPsbt));
       return finalizedPsbts;
     },
-    taprootKeyPair: provider ? ECPair.makeRandom({ network: provider.network }) : undefined,
+    taprootKeyPair: ECPair.makeRandom({ network: btcNetwork }),
   } as any;
 
   return signerShim;
 }
-
-

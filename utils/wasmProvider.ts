@@ -1,32 +1,65 @@
 /**
- * WASM Provider utilities for direct alkanes method calls
- * Uses the WebProvider from alkanes-web-sys for optimized browser operations
+ * @deprecated Use useAlkanesSDK from '@/context/AlkanesSDKContext' instead.
+ *
+ * WASM Provider utilities for direct alkanes method calls.
+ * These functions create new WebProvider instances on each call.
+ * For React components, prefer using the provider from context.
  */
 
 import type { Network } from '@/utils/constants';
-import { getNetworkUrls } from '@/utils/alkanesProvider';
+
+// Network URL mapping (duplicated from context to avoid circular deps)
+const NETWORK_URLS: Record<Network, string> = {
+  mainnet: 'mainnet',
+  testnet: 'testnet',
+  signet: 'signet',
+  regtest: 'regtest',
+  oylnet: 'regtest',
+  'subfrost-regtest': 'subfrost-regtest',
+};
+
+// Subfrost uses /v4/subfrost endpoint for both jsonrpc and data_api_url
+const NETWORK_CONFIG: Record<Network, Record<string, string>> = {
+  mainnet: {
+    jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
+  },
+  testnet: {
+    jsonrpc_url: 'https://testnet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://testnet.subfrost.io/v4/subfrost',
+  },
+  signet: {
+    jsonrpc_url: 'https://signet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://signet.subfrost.io/v4/subfrost',
+  },
+  regtest: {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  oylnet: {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  'subfrost-regtest': {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+};
 
 /**
  * Get a WebProvider instance for direct WASM calls
- * This bypasses the ts-sdk wrapper and uses WASM methods directly
+ * @deprecated Use useAlkanesSDK hook instead
  */
 export async function getWebProvider(network: Network) {
-  const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-  const urls = getNetworkUrls(network);
-  
-  return new WebProvider(urls.rpc, null);
+  const wasm = await import('@alkanes/ts-sdk/wasm');
+  const providerName = NETWORK_URLS[network] || 'mainnet';
+  const configOverrides = NETWORK_CONFIG[network];
+  return new wasm.WebProvider(providerName, configOverrides);
 }
 
 /**
  * Simulate an alkanes contract call
- * 
- * The alkanesSimulate method actually expects a MessageContextParcel as JSON,
- * but for simple read-only calls, we can construct a minimal context.
- * 
- * @param network - Network to use
- * @param contractId - Alkane ID in "block:tx" format
- * @param calldata - Hex-encoded calldata (opcode + args, with 0x prefix)
- * @param blockTag - Optional block tag (default: "latest")
+ * @deprecated Use provider.alkanesSimulate from useAlkanesSDK instead
  */
 export async function simulateAlkaneCall(
   network: Network,
@@ -35,11 +68,11 @@ export async function simulateAlkaneCall(
   blockTag: string = 'latest'
 ): Promise<any> {
   const provider = await getWebProvider(network);
-  
+
   // Create minimal MessageContextParcel for simulation
   const context = {
     calldata,
-    height: 1000000, // High enough for latest
+    height: 1000000,
     txindex: 0,
     pointer: 0,
     refund_pointer: 0,
@@ -50,14 +83,15 @@ export async function simulateAlkaneCall(
     runes: [],
     sheets: {},
     runtime_balances: {},
-    trace: null
+    trace: null,
   };
-  
+
   return await provider.alkanesSimulate(contractId, JSON.stringify(context), blockTag);
 }
 
 /**
  * Get enriched balances for an address
+ * @deprecated Use provider.getEnrichedBalances from useAlkanesSDK instead
  */
 export async function getEnrichedBalances(
   network: Network,
@@ -70,6 +104,7 @@ export async function getEnrichedBalances(
 
 /**
  * Get all pools with details from a factory
+ * @deprecated Use provider.alkanesGetAllPoolsWithDetails from useAlkanesSDK instead
  */
 export async function getAllPoolsWithDetails(
   network: Network,

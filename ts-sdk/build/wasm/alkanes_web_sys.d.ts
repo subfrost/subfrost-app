@@ -273,4 +273,17 @@ export class WebProvider {
   dataApiGetKeys(alkane: string, prefix: string | null | undefined, limit: bigint): Promise<any>;
   dataApiGetBitcoinPrice(): Promise<any>;
   dataApiGetBitcoinMarketChart(days: string): Promise<any>;
+  /**
+   * Reflect alkane token metadata by querying standard opcodes
+   *
+   * This method queries the alkane contract with standard opcodes to retrieve
+   * token metadata like name, symbol, total supply, cap, minted, and value per mint.
+   *
+   * # Arguments
+   * * `alkane_id` - The alkane ID in "block:tx" format (e.g., "2:1234")
+   *
+   * # Returns
+   * An AlkaneReflection object with all available metadata
+   */
+  alkanesReflect(alkane_id: string): Promise<any>;
 }

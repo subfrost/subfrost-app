@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { Pickaxe, Clock, Zap } from 'lucide-react';
 
 export default function RegtestControls() {
-  const { network, account } = useWallet() as any;
+  const { network, account, refreshBalances } = useWallet() as any;
+  const queryClient = useQueryClient();
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -31,19 +33,26 @@ export default function RegtestControls() {
       // Dynamic import WASM to avoid SSR issues
       const wasm = await import('@alkanes/ts-sdk/wasm');
 
-      // Create WebProvider with network preset
-      // For subfrost-regtest, use the preset; for local regtest, provide custom URL
+      // Create WebProvider with network preset and subfrost URL overrides
       const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
-      const provider = new wasm.WebProvider(providerName);
+      const configOverrides = {
+        jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+        data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+      };
+      const provider = new wasm.WebProvider(providerName, configOverrides);
 
       // Call bitcoindGenerateToAddress (uses alkanes-cli-common code path)
       const result = await provider.bitcoindGenerateToAddress(count, address);
       
       console.log('[RegtestControls] Mined blocks:', result);
       showMessage(`✅ Mined ${count} block(s) successfully!`);
-      
-      // Trigger a refetch of balances
-      setTimeout(() => window.location.reload(), 1000);
+
+      // Invalidate all queries to refresh data
+      await queryClient.invalidateQueries();
+      // Also refresh wallet balances if available
+      if (refreshBalances) {
+        await refreshBalances();
+      }
     } catch (error) {
       console.error('Mining error:', error);
       showMessage(`❌ Failed to mine blocks: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
@@ -58,9 +67,13 @@ export default function RegtestControls() {
       // Dynamic import WASM to avoid SSR issues
       const wasm = await import('@alkanes/ts-sdk/wasm');
 
-      // Create WebProvider with network preset
+      // Create WebProvider with network preset and subfrost URL overrides
       const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
-      const provider = new wasm.WebProvider(providerName);
+      const configOverrides = {
+        jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+        data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+      };
+      const provider = new wasm.WebProvider(providerName, configOverrides);
 
       // Call bitcoindGenerateFuture (automatically computes Subfrost address from frBTC signer)
       // The address parameter is ignored - it will call frBTC [32:0] GET_SIGNER to get the address
@@ -68,9 +81,13 @@ export default function RegtestControls() {
       
       console.log('[RegtestControls] Generated future:', result);
       showMessage(`✅ Generated future block with Subfrost address!`);
-      
-      // Trigger a refetch
-      setTimeout(() => window.location.reload(), 1000);
+
+      // Invalidate all queries to refresh data
+      await queryClient.invalidateQueries();
+      // Also refresh wallet balances if available
+      if (refreshBalances) {
+        await refreshBalances();
+      }
     } catch (error) {
       console.error('Generate future error:', error);
       showMessage(`❌ Failed to generate future: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);

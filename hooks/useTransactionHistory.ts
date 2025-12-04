@@ -1,3 +1,7 @@
+/**
+ * Hook for fetching transaction history using WASM WebProvider
+ */
+
 import { useState, useEffect } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 
@@ -30,13 +34,13 @@ export interface EnrichedTransaction {
 }
 
 export function useTransactionHistory(address?: string) {
-  const { provider, network } = useAlkanesSDK();
+  const { provider, isInitialized, network } = useAlkanesSDK();
   const [transactions, setTransactions] = useState<EnrichedTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!address) {
+    if (!address || !provider || !isInitialized) {
       setTransactions([]);
       return;
     }
@@ -44,7 +48,7 @@ export function useTransactionHistory(address?: string) {
     let cancelled = false;
 
     async function fetchTransactions() {
-      if (!address) {
+      if (!address || !provider) {
         setLoading(false);
         return;
       }
@@ -53,34 +57,19 @@ export function useTransactionHistory(address?: string) {
       setError(null);
 
       try {
-        // Use the API route which uses alkanes-cli
-        const response = await fetch('/api/wallet/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            address,
-            network: network || 'regtest',
-          }),
-        });
+        console.log('[useTransactionHistory] Fetching transactions for:', address);
 
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
+        // Use WASM provider's esplora method
+        const rawTxs = await provider.esploraGetAddressTxs(address);
 
         if (cancelled) return;
 
-        if (data.error) {
-          throw new Error(data.error);
-        }
+        console.log('[useTransactionHistory] Got', rawTxs?.length || 0, 'transactions');
 
-        const rawTxs = data.transactions || [];
-
-        // Parse the transactions from CLI output
+        // Parse the transactions
         const parsedTxs: EnrichedTransaction[] = [];
 
-        for (const tx of rawTxs) {
+        for (const tx of (rawTxs || [])) {
           // Skip malformed transactions
           if (!tx || !tx.txid) continue;
 
@@ -106,9 +95,9 @@ export function useTransactionHistory(address?: string) {
               scriptPubKey: out.scriptpubkey || '',
             })),
             hasOpReturn: vout.some((v: any) => v.scriptpubkey_type === 'op_return'),
-            hasProtostones: !!tx.alkanes_traces && tx.alkanes_traces.length > 0,
+            hasProtostones: false, // Will be populated by trace calls if needed
             isRbf: vin.some((v: any) => v.sequence < 0xfffffffe),
-            protostoneTraces: tx.alkanes_traces || [],
+            protostoneTraces: [],
           };
 
           parsedTxs.push(enrichedTx);
@@ -119,7 +108,7 @@ export function useTransactionHistory(address?: string) {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('Failed to fetch transaction history:', err);
+          console.error('[useTransactionHistory] Failed to fetch transaction history:', err);
           setError(err instanceof Error ? err.message : 'Failed to fetch transactions');
         }
       } finally {
@@ -134,7 +123,7 @@ export function useTransactionHistory(address?: string) {
     return () => {
       cancelled = true;
     };
-  }, [address, network]);
+  }, [address, provider, isInitialized, network]);
 
   return { transactions, loading, error };
 }

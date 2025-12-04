@@ -1,22 +1,13 @@
-import { getAlkanesProvider } from '@/utils/alkanesProvider';
-import { useWallet } from '@/context/WalletContext';
-import { useEffect, useState } from 'react';
+/**
+ * @deprecated Use useAlkanesSDK from '@/context/AlkanesSDKContext' instead.
+ * This hook is a compatibility shim that returns the WASM WebProvider from context.
+ */
 
-export function useApiProvider() {
-  const { network } = useWallet();
-  const [provider, setProvider] = useState<any>(null);
-  
-  useEffect(() => {
-    let mounted = true;
-    getAlkanesProvider(network).then((p) => {
-      if (mounted) setProvider(p);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [network]);
-  
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+
+type Provider = import('@alkanes/ts-sdk/wasm').WebProvider | null;
+
+export function useApiProvider(): Provider {
+  const { provider } = useAlkanesSDK();
   return provider;
 }
-
-
