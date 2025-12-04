@@ -174,7 +174,7 @@ import { useTheme } from "@/context/ThemeContext";
                <button
                  type="button"
                  onClick={() => setMenuOpen((v) => !v)}
-                 className="flex items-center gap-2 rounded-full bg-[color:var(--sf-surface)] px-4 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] shadow-[0_2px_0_rgba(0,0,0,0.2),0_6px_14px_rgba(0,0,0,0.12)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] sf-focus-ring"
+                 className={`flex items-center gap-2 rounded-full bg-[color:var(--sf-surface)] px-4 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] sf-focus-ring ${theme === 'dark' ? 'shadow-[0_2px_0_rgba(0,0,0,0.2),0_6px_14px_rgba(0,0,0,0.12)]' : ''}`}
                >
                  <AddressAvatar address={address} size={24} />
                  <span className="hidden sm:inline">{truncate(address)}</span>
@@ -274,6 +274,13 @@ import { useTheme } from "@/context/ThemeContext";
                        <AddressAvatar address={address} size={24} />
                        <span className="text-sm font-semibold text-[color:var(--sf-text)]">{truncate(address)}</span>
                      </div>
+                     <Link
+                       href="/wallet"
+                       onClick={() => setMobileMenuOpen(false)}
+                       className="w-full mb-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 block text-center"
+                     >
+                       WALLET DASHBOARD
+                     </Link>
                      <button
                        type="button"
                        onClick={async () => {

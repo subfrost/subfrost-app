@@ -29,7 +29,8 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('');
-  const [feeRate, setFeeRate] = useState('10');
+  const [feeSelection, setFeeSelection] = useState<'low' | 'medium' | 'high' | 'custom'>('medium');
+  const [customFeeRate, setCustomFeeRate] = useState('10');
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'input' | 'utxo-selection' | 'confirm' | 'broadcasting' | 'success'>('input');
   const [error, setError] = useState('');
@@ -54,6 +55,17 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   };
 
   const frozenUtxos = getFrozenUtxos();
+
+  // Compute actual fee rate based on selection
+  const feeRate = (() => {
+    switch (feeSelection) {
+      case 'low': return 1;
+      case 'medium': return 10;
+      case 'high': return 20;
+      case 'custom': return parseInt(customFeeRate) || 10;
+      default: return 10;
+    }
+  })();
 
   // Filter available UTXOs (only from current address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
@@ -92,7 +104,8 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       setStep('input');
       setRecipientAddress('');
       setAmount('');
-      setFeeRate('10');
+      setFeeSelection('medium');
+      setCustomFeeRate('10');
       setSelectedUtxos(new Set());
       setError('');
       setTxid('');
@@ -135,11 +148,11 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         return;
       }
 
-      const feeRateNum = parseInt(feeRate);
-      if (isNaN(feeRateNum) || feeRateNum < 1) {
+      if (feeRate < 1) {
         setError('Invalid fee rate');
         return;
       }
+      const feeRateNum = feeRate;
 
       if (autoSelectUtxos) {
         // Auto-select UTXOs using smart algorithm
@@ -215,7 +228,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
   const checkFeeAndBroadcast = () => {
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
-    const feeRateNum = parseInt(feeRate);
+    const feeRateNum = feeRate;
     
     // Estimate transaction size: ~180 bytes per input + ~34 bytes per output + ~10 bytes overhead
     const numInputs = selectedUtxos.size;
@@ -267,13 +280,12 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         throw new Error('Wallet session not found. Please reconnect your wallet.');
       }
 
-      const feeRateNum = parseInt(feeRate);
       const amountSats = Math.floor(parseFloat(amount) * 100000000);
 
       console.log('[SendModal] Sending via WASM provider...');
       console.log('[SendModal] Recipient:', recipientAddress);
       console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
-      console.log('[SendModal] Fee rate:', feeRateNum, 'sat/vB');
+      console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
       console.log('[SendModal] From address:', address);
 
       // Use WASM provider's walletSend method
@@ -281,7 +293,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         mnemonic,
         recipient: recipientAddress,
         amount: amountSats, // Amount in satoshis
-        feeRate: feeRateNum,
+        feeRate: feeRate,
         fromAddresses: [address],
         lockAlkanes: true,
       };
@@ -361,34 +373,54 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
         <div>
           <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
-            Fee Rate (sat/vB)
+            Fee Rate
           </label>
-          <input
-            type="number"
-            value={feeRate}
-            onChange={(e) => setFeeRate(e.target.value)}
-            placeholder="10"
-            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-          />
-          <div className="mt-2 flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {(['low', 'medium', 'high'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setFeeSelection(s)}
+                className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all ${
+                  feeSelection === s
+                    ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                    : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
             <button
-              onClick={() => setFeeRate('1')}
-              className="px-3 py-1 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 text-xs text-[color:var(--sf-text)] transition-colors"
+              type="button"
+              onClick={() => setFeeSelection('custom')}
+              className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
+                feeSelection === 'custom'
+                  ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+              }`}
             >
-              Low (1)
+              Custom
             </button>
-            <button
-              onClick={() => setFeeRate('10')}
-              className="px-3 py-1 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 text-xs text-[color:var(--sf-text)] transition-colors"
-            >
-              Medium (10)
-            </button>
-            <button
-              onClick={() => setFeeRate('20')}
-              className="px-3 py-1 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 text-xs text-[color:var(--sf-text)] transition-colors"
-            >
-              High (20)
-            </button>
+            {feeSelection === 'custom' && (
+              <div className="relative">
+                <input
+                  aria-label="Custom fee rate"
+                  type="number"
+                  min={1}
+                  max={999}
+                  step={1}
+                  value={customFeeRate}
+                  onChange={(e) => setCustomFeeRate(e.target.value)}
+                  placeholder="10"
+                  className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sat/vB</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm">
+            <span className="font-semibold text-[color:var(--sf-text)]/70">Selected:</span>
+            <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sat/vB</span>
           </div>
         </div>
 
@@ -524,7 +556,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
   const renderConfirm = () => {
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
-    const estimatedFee = 150 * parseInt(feeRate); // Rough estimate
+    const estimatedFee = 150 * feeRate; // Rough estimate
     const total = amountSats + estimatedFee;
 
     return (
@@ -695,7 +727,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                     {selectedUtxos.size > 100 && (
                       <li>Reduce the number of UTXOs ({selectedUtxos.size} selected)</li>
                     )}
-                    {parseInt(feeRate) > 1000 && (
+                    {feeRate > 1000 && (
                       <li>Lower the fee rate (currently {feeRate} sat/vB)</li>
                     )}
                     {estimatedFee > 0.01 * 100000000 && (

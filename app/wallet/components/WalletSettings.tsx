@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
+import { useTheme } from '@/context/ThemeContext';
 import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock } from 'lucide-react';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 
@@ -15,6 +16,7 @@ interface DerivationConfig {
 
 export default function WalletSettings() {
   const { network: currentNetwork, account, wallet } = useWallet() as any;
+  const { theme } = useTheme();
   const [network, setNetwork] = useState<NetworkType>(currentNetwork || 'mainnet');
   const [customDataApiUrl, setCustomDataApiUrl] = useState('');
   const [customSandshrewUrl, setCustomSandshrewUrl] = useState('');
@@ -483,7 +485,11 @@ export default function WalletSettings() {
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-blue-800 dark:text-yellow-200">
+            <div className={`rounded-lg border p-4 text-sm ${
+              theme === 'light'
+                ? 'border-blue-500/30 bg-blue-500/10 text-blue-700'
+                : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200'
+            }`}>
               ⚠️ <strong>Warning:</strong> Never share your seed phrase or private keys with anyone. Subfrost will never ask for this information.
             </div>
 
