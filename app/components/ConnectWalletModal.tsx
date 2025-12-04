@@ -439,7 +439,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleCreateWallet}
                   disabled={isLoading}
-                  className="flex-1 rounded-lg bg-blue-600 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-medium transition-all hover:shadow-lg disabled:opacity-50 text-white"
                 >
                   {isLoading ? 'Creating...' : 'Create Wallet'}
                 </button>
@@ -492,7 +492,7 @@ export default function ConnectWalletModal() {
                   <button
                     onClick={handleBackupToDrive}
                     disabled={isLoading}
-                    className="w-full rounded-lg border border-blue-500 bg-blue-500/10 py-3 font-medium transition-colors hover:bg-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-medium transition-all hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-white"
                   >
                     {isLoading ? (
                       <>
@@ -509,7 +509,7 @@ export default function ConnectWalletModal() {
                   <button
                     onClick={handleConfirmMnemonic}
                     disabled={!mnemonicConfirmed}
-                    className="text-sm text-white/60 hover:text-white/80 py-2"
+                    className="text-sm text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 py-2"
                   >
                     Skip backup
                   </button>
@@ -520,7 +520,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleConfirmMnemonic}
                   disabled={!mnemonicConfirmed}
-                  className="rounded-lg bg-blue-600 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  className="rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-medium transition-all hover:shadow-lg disabled:opacity-50 text-white"
                 >
                   Continue to Wallet
                 </button>
@@ -572,7 +572,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleRestoreFromMnemonic}
                   disabled={isLoading}
-                  className="flex-1 rounded-lg bg-blue-600 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-medium transition-all hover:shadow-lg disabled:opacity-50 text-white"
                 >
                   {isLoading ? 'Restoring...' : 'Restore Wallet'}
                 </button>
@@ -709,7 +709,7 @@ export default function ConnectWalletModal() {
               <button
                 onClick={handleRestoreFromDrive}
                 disabled={isLoading || !password}
-                className="w-full rounded-lg bg-blue-600 py-3 font-medium transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-medium transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 text-white"
               >
                 {isLoading ? 'Unlocking...' : 'Unlock Wallet'}
               </button>
@@ -758,7 +758,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleUnlockKeystore}
                   disabled={isLoading}
-                  className="flex-1 rounded-lg bg-blue-600 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-medium transition-all hover:shadow-lg disabled:opacity-50 text-white"
                 >
                   {isLoading ? 'Unlocking...' : 'Unlock'}
                 </button>

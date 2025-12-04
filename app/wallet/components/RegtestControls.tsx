@@ -83,15 +83,15 @@ export default function RegtestControls() {
                        network === 'regtest' ? 'Local Regtest' : 'Oylnet';
 
   return (
-    <div className="mt-8 rounded-xl border border-white/10 bg-white/5 p-6">
+    <div className="mt-8 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-6">
       <div className="flex items-center gap-3 mb-4">
         <Pickaxe size={24} className="text-orange-400" />
-        <h3 className="text-xl font-bold">Regtest Controls</h3>
-        <span className="text-sm text-white/60">({networkLabel})</span>
+        <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Regtest Controls</h3>
+        <span className="text-sm text-[color:var(--sf-text)]/60">({networkLabel})</span>
       </div>
 
       {message && (
-        <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+        <div className="mb-4 p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
           {message}
         </div>
       )}
@@ -101,39 +101,39 @@ export default function RegtestControls() {
         <button
           onClick={() => mineBlocks(200)}
           disabled={mining}
-          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-orange-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-orange-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Pickaxe size={32} className="text-orange-400" />
           <span className="font-semibold">Mine 200 Blocks</span>
-          <span className="text-sm text-white/60">Generate bulk blocks</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">Generate bulk blocks</span>
         </button>
 
         {/* Mine 1 Block */}
         <button
           onClick={() => mineBlocks(1)}
           disabled={mining}
-          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-[color:var(--sf-primary)]/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
-          <Zap size={32} className="text-blue-400" />
+          <Zap size={32} className="text-[color:var(--sf-primary)]" />
           <span className="font-semibold">Mine 1 Block</span>
-          <span className="text-sm text-white/60">Generate single block</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">Generate single block</span>
         </button>
 
         {/* Generate Future */}
         <button
           onClick={generateFuture}
           disabled={mining}
-          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
-          <Clock size={32} className="text-purple-400" />
+          <Clock size={32} className="text-purple-500 dark:text-purple-400" />
           <span className="font-semibold">Generate Future</span>
-          <span className="text-sm text-white/60">Create future block</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">Create future block</span>
         </button>
       </div>
 
-      <div className="mt-4 p-3 rounded-lg bg-white/5 border border-white/10">
-        <p className="text-sm text-white/60">
-          <strong className="text-white/80">Note:</strong> These controls interact with the Bitcoin regtest node.
+      <div className="mt-4 p-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
+        <p className="text-sm text-[color:var(--sf-text)]/60">
+          <strong className="text-[color:var(--sf-text)]/80">Note:</strong> These controls interact with the Bitcoin regtest node.
           Mining blocks will confirm transactions and generate test BTC to your taproot address.
         </p>
       </div>

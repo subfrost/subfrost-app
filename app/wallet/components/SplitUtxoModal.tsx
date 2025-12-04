@@ -138,16 +138,16 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-[#1a1a1a] rounded-2xl border border-white/10 max-w-lg w-full mx-4">
+      <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-lg w-full mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
+        <div className="flex items-center justify-between p-6 border-b border-[color:var(--sf-outline)]">
           <div className="flex items-center gap-3">
-            <Scissors size={24} className="text-purple-400" />
-            <h2 className="text-xl font-bold text-white">Split UTXO for Ordinals</h2>
+            <Scissors size={24} className="text-purple-500 dark:text-purple-400" />
+            <h2 className="text-xl font-bold text-[color:var(--sf-text)]">Split UTXO for Ordinals</h2>
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
           >
             <X size={20} />
           </button>
@@ -158,16 +158,16 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
           {step === 'input' && (
             <div className="space-y-6">
               {/* UTXO Info */}
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                <div className="text-sm text-white/60 mb-2">UTXO to Split:</div>
-                <div className="font-mono text-xs text-white/80 mb-2">
+              <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
+                <div className="text-sm text-[color:var(--sf-text)]/60 mb-2">UTXO to Split:</div>
+                <div className="font-mono text-xs text-[color:var(--sf-text)]/80 mb-2">
                   {utxo.txid.slice(0, 16)}...:{utxo.vout}
                 </div>
-                <div className="text-sm text-white">
+                <div className="text-sm text-[color:var(--sf-text)]">
                   Value: {(utxo.value / 100000000).toFixed(8)} BTC ({utxo.value.toLocaleString()} sats)
                 </div>
                 {utxo.inscriptions && utxo.inscriptions.length > 0 && (
-                  <div className="mt-2 text-xs text-orange-400">
+                  <div className="mt-2 text-xs text-orange-500 dark:text-orange-400">
                     ⚠️ Contains {utxo.inscriptions.length} inscription{utxo.inscriptions.length > 1 ? 's' : ''}
                   </div>
                 )}
@@ -176,7 +176,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               {/* Configuration */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">
+                  <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
                     Number of Outputs
                   </label>
                   <input
@@ -185,15 +185,15 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
                     max="10"
                     value={numOutputs}
                     onChange={(e) => setNumOutputs(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white outline-none focus:border-blue-500"
+                    className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
                   />
-                  <div className="mt-1 text-xs text-white/60">
+                  <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
                     Split into {numOutputs} separate UTXOs (good for managing multiple ordinals)
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">
+                  <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
                     Amount per Output (sats)
                   </label>
                   <input
@@ -201,17 +201,17 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
                     min={dustLimit}
                     value={splitAmount}
                     onChange={(e) => setSplitAmount(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white outline-none focus:border-blue-500"
+                    className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
                   />
-                  <div className="mt-1 text-xs text-white/60">
+                  <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
                     Minimum: {dustLimit} sats (dust limit)
                   </div>
                 </div>
 
                 {/* Preview */}
-                <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                  <div className="text-sm font-medium text-blue-400 mb-2">Split Preview:</div>
-                  <div className="space-y-1 text-xs text-white/80">
+                <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/20">
+                  <div className="text-sm font-medium text-[color:var(--sf-primary)] mb-2">Split Preview:</div>
+                  <div className="space-y-1 text-xs text-[color:var(--sf-text)]/80">
                     <div>• {numOutputs} outputs × {parseInt(splitAmount).toLocaleString()} sats = {(parseInt(numOutputs) * parseInt(splitAmount)).toLocaleString()} sats</div>
                     <div>• Estimated fee: ~1,500 sats</div>
                     <div>• Change: ~{(utxo.value - (parseInt(numOutputs) * parseInt(splitAmount)) - 1500).toLocaleString()} sats</div>
@@ -220,7 +220,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               </div>
 
               {/* Warning */}
-              <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-200">
+              <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-600 dark:text-yellow-200">
                 <div className="font-medium mb-2">⚠️ Important:</div>
                 <ul className="list-disc list-inside space-y-1 text-xs">
                   <li>This creates smaller UTXOs suitable for ordinals/inscriptions</li>
@@ -241,14 +241,14 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               <div className="flex gap-3">
                 <button
                   onClick={handleSplit}
-                  className="flex-1 px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 transition-colors text-white font-medium flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium flex items-center justify-center gap-2"
                 >
                   <Scissors size={18} />
                   Split UTXO
                 </button>
                 <button
                   onClick={handleClose}
-                  className="px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white"
+                  className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]"
                 >
                   Cancel
                 </button>
@@ -258,9 +258,9 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
           {step === 'processing' && (
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="animate-spin text-purple-400 mb-4" size={48} />
-              <div className="text-lg text-white/80">Splitting UTXO...</div>
-              <div className="text-sm text-white/60 mt-2">Please wait</div>
+              <Loader2 className="animate-spin text-[color:var(--sf-primary)] mb-4" size={48} />
+              <div className="text-lg text-[color:var(--sf-text)]/80">Splitting UTXO...</div>
+              <div className="text-sm text-[color:var(--sf-text)]/60 mt-2">Please wait</div>
             </div>
           )}
 
@@ -268,18 +268,18 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
             <div className="space-y-6">
               <div className="flex flex-col items-center justify-center py-8">
                 <CheckCircle size={64} className="text-green-400 mb-4" />
-                <div className="text-xl font-bold text-white mb-2">UTXO Split Successfully!</div>
-                
+                <div className="text-xl font-bold text-[color:var(--sf-text)] mb-2">UTXO Split Successfully!</div>
+
                 <div className="w-full p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <div className="text-sm text-green-200 mb-2">Transaction ID:</div>
-                  <div className="font-mono text-xs text-white break-all">{txid}</div>
+                  <div className="text-sm text-green-600 dark:text-green-200 mb-2">Transaction ID:</div>
+                  <div className="font-mono text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
                 </div>
 
                 <a
                   href={`https://mempool.space/tx/${txid}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 text-sm mt-4"
+                  className="text-[color:var(--sf-primary)] hover:opacity-80 text-sm mt-4"
                 >
                   View on Block Explorer →
                 </a>
@@ -287,7 +287,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
               <button
                 onClick={handleClose}
-                className="w-full px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 transition-colors text-white font-medium"
+                className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium"
               >
                 Close
               </button>

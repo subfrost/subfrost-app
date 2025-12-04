@@ -6,16 +6,24 @@ import { Box, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, Filter, 
 import InscriptionRenderer from '@/app/components/InscriptionRenderer';
 import SplitUtxoModal from './SplitUtxoModal';
 
-type UTXOFilterType = 'all' | 'p2wpkh' | 'p2tr' | 'alkanes' | 'runes' | 'inscriptions';
+type UTXOFilterType = 'all' | 'p2wpkh' | 'p2tr' | 'protorunes' | 'runes' | 'brc20';
 
 export default function UTXOManagement() {
   const { utxos, isLoading, error, refresh } = useEnrichedWalletData();
-  const [showRunes, setShowRunes] = useState(true);
-  const [showInscriptions, setShowInscriptions] = useState(true);
   const [expandedUtxo, setExpandedUtxo] = useState<string | null>(null);
-  const [filter, setFilter] = useState<UTXOFilterType>('all');
+  const [selectedFilters, setSelectedFilters] = useState<Set<UTXOFilterType>>(new Set(['all']));
   const [frozenUtxos, setFrozenUtxos] = useState<Set<string>>(new Set());
   const [splitUtxo, setSplitUtxo] = useState<any | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Load frozen UTXOs from localStorage
   useEffect(() => {
@@ -50,38 +58,65 @@ export default function UTXOManagement() {
 
   const isFrozen = (utxoKey: string) => frozenUtxos.has(utxoKey);
 
-  // Filter UTXOs based on selected filter
-  const filteredUtxos = (() => {
-    let baseList = utxos.all;
-    
-    switch (filter) {
-      case 'p2wpkh':
-        baseList = utxos.p2wpkh;
-        break;
-      case 'p2tr':
-        baseList = utxos.p2tr;
-        break;
-      case 'alkanes':
-        baseList = utxos.all.filter(u => u.alkanes && Object.keys(u.alkanes).length > 0);
-        break;
-      case 'runes':
-        baseList = utxos.all.filter(u => u.runes && Object.keys(u.runes).length > 0);
-        break;
-      case 'inscriptions':
-        baseList = utxos.all.filter(u => u.inscriptions && u.inscriptions.length > 0);
-        break;
-      default:
-        baseList = utxos.all;
+  // Toggle filter selection (multi-select, except "All" clears others)
+  const toggleFilter = (filterId: UTXOFilterType) => {
+    const newFilters = new Set(selectedFilters);
+
+    if (filterId === 'all') {
+      // Clicking "All" clears everything and selects only "All"
+      setSelectedFilters(new Set(['all']));
+      return;
     }
-    
-    return baseList;
+
+    // Remove 'all' when selecting other filters
+    newFilters.delete('all');
+
+    if (newFilters.has(filterId)) {
+      newFilters.delete(filterId);
+      // If no filters selected, default to 'all'
+      if (newFilters.size === 0) {
+        newFilters.add('all');
+      }
+    } else {
+      newFilters.add(filterId);
+    }
+
+    setSelectedFilters(newFilters);
+  };
+
+  // Filter UTXOs based on selected filters (multi-select)
+  const filteredUtxos = (() => {
+    // If 'all' is selected, show all UTXOs
+    if (selectedFilters.has('all')) {
+      return utxos.all;
+    }
+
+    // Otherwise, filter by selected criteria (union of all selected filters)
+    return utxos.all.filter(u => {
+      if (selectedFilters.has('p2wpkh') && utxos.p2wpkh.some(p => p.txid === u.txid && p.vout === u.vout)) {
+        return true;
+      }
+      if (selectedFilters.has('p2tr') && utxos.p2tr.some(p => p.txid === u.txid && p.vout === u.vout)) {
+        return true;
+      }
+      if (selectedFilters.has('protorunes') && u.alkanes && Object.keys(u.alkanes).length > 0) {
+        return true;
+      }
+      if (selectedFilters.has('runes') && u.runes && Object.keys(u.runes).length > 0) {
+        return true;
+      }
+      if (selectedFilters.has('brc20') && u.inscriptions && u.inscriptions.length > 0) {
+        return true;
+      }
+      return false;
+    });
   })();
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin text-white/60" size={32} />
-        <div className="ml-3 text-white/60">Loading UTXOs...</div>
+        <Loader2 className="animate-spin text-[color:var(--sf-text)]/60" size={32} />
+        <div className="ml-3 text-[color:var(--sf-text)]/60">Loading UTXOs...</div>
       </div>
     );
   }
@@ -92,7 +127,7 @@ export default function UTXOManagement() {
         <div className="text-red-400 mb-4">{error}</div>
         <button
           onClick={refresh}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white"
         >
           Try Again
         </button>
@@ -105,68 +140,49 @@ export default function UTXOManagement() {
       {/* Header with Refresh */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Box size={24} className="text-blue-400" />
-          <h3 className="text-lg font-bold text-white">
+          <Box size={24} className="text-[color:var(--sf-primary)]" />
+          <h3 className="text-lg font-bold text-[color:var(--sf-text)]">
             {filteredUtxos.length} UTXO{filteredUtxos.length !== 1 ? 's' : ''}
           </h3>
         </div>
         <button
-          onClick={refresh}
-          disabled={isLoading}
-          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-white/60 hover:text-white/80 disabled:opacity-50"
+          onClick={handleRefresh}
+          disabled={isLoading || isRefreshing}
+          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
           title="Refresh UTXOs"
         >
-          <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
+          <RefreshCw size={20} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
         </button>
       </div>
 
       {/* Filters */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2 text-white/80">
+        <div className="flex items-center gap-2 text-[color:var(--sf-text)]/80">
           <Filter size={16} />
           <span className="text-sm font-medium">Filter by:</span>
+          <span className="text-xs text-[color:var(--sf-text)]/50">(multi-select)</span>
         </div>
         <div className="flex gap-2 flex-wrap">
           {[
             { id: 'all', label: 'All' },
             { id: 'p2wpkh', label: 'P2WPKH' },
             { id: 'p2tr', label: 'P2TR' },
-            { id: 'alkanes', label: 'Alkanes' },
             { id: 'runes', label: 'Runes' },
-            { id: 'inscriptions', label: 'Inscriptions' },
+            { id: 'protorunes', label: 'Protorunes (Alkanes)' },
+            { id: 'brc20', label: 'Inscriptions (BRC20)' },
           ].map((f) => (
             <button
               key={f.id}
-              onClick={() => setFilter(f.id as UTXOFilterType)}
+              onClick={() => toggleFilter(f.id as UTXOFilterType)}
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                filter === f.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-[color:var(--sf-primary)]/5 text-white/60 hover:bg-[color:var(--sf-primary)]/10 hover:text-white/80'
+                selectedFilters.has(f.id as UTXOFilterType)
+                  ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
+                  : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:bg-[color:var(--sf-primary)]/10 hover:text-[color:var(--sf-text)]/80'
               }`}
             >
               {f.label}
             </button>
           ))}
-        </div>
-        <div className="flex gap-4 flex-wrap">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showRunes}
-              onChange={(e) => setShowRunes(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm text-white/80">Show Runes</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showInscriptions}
-              onChange={(e) => setShowInscriptions(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm text-white/80">Show Inscriptions</span>
-          </label>
         </div>
       </div>
 
@@ -180,16 +196,16 @@ export default function UTXOManagement() {
             return (
               <div
                 key={utxoKey}
-                className="rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 overflow-hidden"
+                className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 overflow-hidden"
               >
                 <button
                   onClick={() => toggleUtxo(utxoKey)}
                   className="w-full p-4 flex items-center justify-between hover:bg-[color:var(--sf-primary)]/5 transition-colors"
                 >
                   <div className="flex items-center gap-4">
-                    <Box size={20} className="text-blue-400" />
+                    <Box size={20} className="text-[color:var(--sf-primary)]" />
                     <div className="text-left">
-                      <div className="font-mono text-sm flex items-center gap-2">
+                      <div className="font-mono text-sm flex items-center gap-2 text-[color:var(--sf-text)]">
                         <span>{utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}</span>
                         {isFrozen(utxoKey) && (
                           <span title="Frozen UTXO">
@@ -197,39 +213,39 @@ export default function UTXOManagement() {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-white/60">
+                      <div className="text-xs text-[color:var(--sf-text)]/60">
                         {(utxo.value / 100000000).toFixed(8)} BTC
                       </div>
                     </div>
                     {utxo.alkanes && Object.keys(utxo.alkanes).length > 0 && (
-                      <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
-                        {Object.keys(utxo.alkanes).length} Alkane{Object.keys(utxo.alkanes).length > 1 ? 's' : ''}
+                      <span className="px-2 py-1 rounded bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)] text-xs">
+                        {Object.keys(utxo.alkanes).length} Protorune{Object.keys(utxo.alkanes).length > 1 ? 's' : ''}
                       </span>
                     )}
-                    {showRunes && utxo.runes && Object.keys(utxo.runes).length > 0 && (
-                      <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-xs">
+                    {utxo.runes && Object.keys(utxo.runes).length > 0 && (
+                      <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-500 dark:text-purple-400 text-xs">
                         {Object.keys(utxo.runes).length} Rune{Object.keys(utxo.runes).length > 1 ? 's' : ''}
                       </span>
                     )}
-                    {showInscriptions && utxo.inscriptions && utxo.inscriptions.length > 0 && (
-                      <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-400 text-xs">
-                        {utxo.inscriptions.length} Inscription{utxo.inscriptions.length > 1 ? 's' : ''}
+                    {utxo.inscriptions && utxo.inscriptions.length > 0 && (
+                      <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-500 dark:text-orange-400 text-xs">
+                        {utxo.inscriptions.length} BRC20/Inscription{utxo.inscriptions.length > 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
-                  {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  {isExpanded ? <ChevronUp size={20} className="text-[color:var(--sf-text)]" /> : <ChevronDown size={20} className="text-[color:var(--sf-text)]" />}
                 </button>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 space-y-3 border-t border-white/10 pt-3">
+                  <div className="px-4 pb-4 space-y-3 border-t border-[color:var(--sf-outline)] pt-3">
                     {/* UTXO Actions */}
-                    <div className="flex gap-2 pb-3 border-b border-white/10">
+                    <div className="flex gap-2 pb-3 border-b border-[color:var(--sf-outline)]">
                       <button
                         onClick={() => toggleFreezeUtxo(utxoKey)}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                           isFrozen(utxoKey)
-                            ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                            : 'bg-white/5 text-white/80 hover:bg-white/10'
+                            ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/30'
+                            : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10'
                         }`}
                       >
                         {isFrozen(utxoKey) ? (
@@ -248,7 +264,7 @@ export default function UTXOManagement() {
                       {utxo.inscriptions && utxo.inscriptions.length > 0 && (
                         <button
                           onClick={() => setSplitUtxo(utxo)}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 text-white/80 hover:bg-white/10 text-sm transition-colors"
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 text-sm transition-colors"
                         >
                           <Scissors size={16} />
                           Split Ordinals
@@ -259,44 +275,44 @@ export default function UTXOManagement() {
                     {/* UTXO Details */}
                     <div className="space-y-2 text-sm">
                       <div>
-                        <span className="text-white/60">Transaction ID:</span>
+                        <span className="text-[color:var(--sf-text)]/60">Transaction ID:</span>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="font-mono text-xs break-all">{utxo.txid}</span>
+                          <span className="font-mono text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
                           <a
                             href={`https://ordiscan.com/tx/${utxo.txid}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300"
+                            className="text-[color:var(--sf-primary)] hover:opacity-80"
                           >
                             <ExternalLink size={14} />
                           </a>
                         </div>
                       </div>
-                      <div>
-                        <span className="text-white/60">Output Index:</span> {utxo.vout}
+                      <div className="text-[color:var(--sf-text)]">
+                        <span className="text-[color:var(--sf-text)]/60">Output Index:</span> {utxo.vout}
                       </div>
-                      <div>
-                        <span className="text-white/60">Value:</span> {(utxo.value / 100000000).toFixed(8)} BTC
+                      <div className="text-[color:var(--sf-text)]">
+                        <span className="text-[color:var(--sf-text)]/60">Value:</span> {(utxo.value / 100000000).toFixed(8)} BTC
                       </div>
                       {utxo.status.block_height && (
-                        <div>
-                          <span className="text-white/60">Block Height:</span> {utxo.status.block_height}
+                        <div className="text-[color:var(--sf-text)]">
+                          <span className="text-[color:var(--sf-text)]/60">Block Height:</span> {utxo.status.block_height}
                         </div>
                       )}
                     </div>
 
-                    {/* Alkanes */}
+                    {/* Protorunes/Alkanes */}
                     {utxo.alkanes && Object.keys(utxo.alkanes).length > 0 && (
                       <div>
-                        <div className="text-sm font-medium text-white/80 mb-2">Alkanes:</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Protorunes/Alkanes:</div>
                         <div className="space-y-1">
                           {Object.entries(utxo.alkanes).map(([alkaneId, alkane]) => (
                             <div key={alkaneId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
                               <div>
-                                <div className="font-medium text-white">{alkane.symbol || alkane.name}</div>
-                                <div className="text-xs text-white/40">{alkaneId}</div>
+                                <div className="font-medium text-[color:var(--sf-text)]">{alkane.symbol || alkane.name}</div>
+                                <div className="text-xs text-[color:var(--sf-text)]/40">{alkaneId}</div>
                               </div>
-                              <span className="font-mono text-white">{alkane.value}</span>
+                              <span className="font-mono text-[color:var(--sf-text)]">{alkane.value}</span>
                             </div>
                           ))}
                         </div>
@@ -304,24 +320,24 @@ export default function UTXOManagement() {
                     )}
 
                     {/* Runes */}
-                    {showRunes && utxo.runes && Object.keys(utxo.runes).length > 0 && (
+                    {utxo.runes && Object.keys(utxo.runes).length > 0 && (
                       <div>
-                        <div className="text-sm font-medium text-white/80 mb-2">Runes:</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Runes:</div>
                         <div className="space-y-1">
                           {Object.entries(utxo.runes).map(([runeId, rune]) => (
                             <div key={runeId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
-                              <span className="text-white">{rune.symbol}</span>
-                              <span className="font-mono text-white">{rune.amount}</span>
+                              <span className="text-[color:var(--sf-text)]">{rune.symbol}</span>
+                              <span className="font-mono text-[color:var(--sf-text)]">{rune.amount}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Inscriptions */}
-                    {showInscriptions && utxo.inscriptions && utxo.inscriptions.length > 0 && (
+                    {/* BRC20/Inscriptions */}
+                    {utxo.inscriptions && utxo.inscriptions.length > 0 && (
                       <div>
-                        <div className="text-sm font-medium text-white/80 mb-2">Inscriptions:</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">BRC20/Inscriptions:</div>
                         <div className="space-y-3">
                           {utxo.inscriptions.map((inscription, idx) => (
                             <InscriptionRenderer
@@ -340,7 +356,7 @@ export default function UTXOManagement() {
             );
           })
         ) : (
-          <div className="text-center py-12 text-white/60">
+          <div className="text-center py-12 text-[color:var(--sf-text)]/60">
             No UTXOs found
           </div>
         )}

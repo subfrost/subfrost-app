@@ -89,8 +89,8 @@ export default function TransactionHistory() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <RefreshCw className="animate-spin text-white/60 mr-2" size={20} />
-        <div className="text-white/60">Loading transactions...</div>
+        <RefreshCw className="animate-spin text-[color:var(--sf-text)]/60 mr-2" size={20} />
+        <div className="text-[color:var(--sf-text)]/60">Loading transactions...</div>
       </div>
     );
   }
@@ -111,8 +111,8 @@ export default function TransactionHistory() {
           onClick={() => setViewMode('visual')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             viewMode === 'visual'
-              ? 'bg-blue-600 text-white'
-              : 'bg-[color:var(--sf-primary)]/5 text-white/60 hover:text-white/80'
+              ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
+              : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
           }`}
         >
           Visual
@@ -121,8 +121,8 @@ export default function TransactionHistory() {
           onClick={() => setViewMode('raw')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             viewMode === 'raw'
-              ? 'bg-blue-600 text-white'
-              : 'bg-[color:var(--sf-primary)]/5 text-white/60 hover:text-white/80'
+              ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
+              : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
           }`}
         >
           Raw JSON
@@ -135,7 +135,7 @@ export default function TransactionHistory() {
           transactions.map((tx) => (
             <div
               key={tx.txid}
-              className="rounded-xl border border-white/10 bg-[color:var(--sf-primary)]/5 p-6"
+              className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-6"
             >
               {/* Transaction Header */}
               <div className="flex items-start justify-between mb-4">
@@ -147,14 +147,14 @@ export default function TransactionHistory() {
                   )}
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">
+                      <span className="font-mono text-sm text-[color:var(--sf-text)]">
                         {tx.txid.slice(0, 8)}...{tx.txid.slice(-8)}
                       </span>
                       <a
                         href={`https://mempool.space/tx/${tx.txid}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300"
+                        className="text-[color:var(--sf-primary)] hover:opacity-80"
                       >
                         <ExternalLink size={14} />
                       </a>
@@ -165,7 +165,7 @@ export default function TransactionHistory() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-white/60 mt-1">
+                    <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">
                       {tx.blockTime ? formatDate(tx.blockTime) : 'Pending'}
                       {tx.blockHeight && (
                         <span className="ml-2">• Block {tx.blockHeight}</span>
@@ -177,14 +177,14 @@ export default function TransactionHistory() {
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-medium ${
                       tx.confirmed
-                        ? 'bg-green-500/20 text-green-400'
-                        : 'bg-yellow-500/20 text-yellow-400'
+                        ? 'bg-green-500/20 text-green-600 dark:text-green-400'
+                        : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
                     }`}
                   >
                     {tx.confirmed ? 'Confirmed' : 'Pending'}
                   </span>
                   {tx.fee && (
-                    <span className="text-xs text-white/60">
+                    <span className="text-xs text-[color:var(--sf-text)]/60">
                       Fee: {formatSats(tx.fee)} BTC
                     </span>
                   )}
@@ -194,20 +194,20 @@ export default function TransactionHistory() {
               {viewMode === 'visual' ? (
                 <>
                   {/* Inputs/Outputs Summary */}
-                  <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                     <div>
-                      <div className="text-sm font-medium text-white/60 mb-2">
+                      <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
                         Inputs ({tx.inputs.length})
                       </div>
-                      <div className="text-lg font-mono text-white">
+                      <div className="text-lg font-mono text-[color:var(--sf-text)]">
                         {formatSats(tx.inputs.reduce((sum, inp) => sum + (inp.amount || 0), 0))} BTC
                       </div>
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-white/60 mb-2">
+                      <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
                         Outputs ({tx.outputs.length})
                       </div>
-                      <div className="text-lg font-mono text-white">
+                      <div className="text-lg font-mono text-[color:var(--sf-text)]">
                         {formatSats(tx.outputs.reduce((sum, out) => sum + out.amount, 0))} BTC
                       </div>
                     </div>
@@ -217,13 +217,13 @@ export default function TransactionHistory() {
                   <div className="flex gap-2 mb-4">
                     <button
                       onClick={() => toggleExpanded(tx.txid)}
-                      className="text-sm text-blue-400 hover:text-blue-300"
+                      className="text-sm text-[color:var(--sf-primary)] hover:opacity-80"
                     >
                       {expandedTxs.has(tx.txid) ? '▼ Hide Details' : '▶ Show Details'}
                     </button>
                     <button
                       onClick={() => inspectTransaction(tx.txid)}
-                      className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300"
+                      className="flex items-center gap-1 text-sm text-purple-500 dark:text-purple-400 hover:opacity-80"
                     >
                       <Search size={14} />
                       Inspect Runes/Alkanes
@@ -235,7 +235,7 @@ export default function TransactionHistory() {
                     <>
                       {/* Outputs */}
                       <div className="mb-4">
-                        <div className="text-sm font-medium text-white/60 mb-2">Outputs:</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">Outputs:</div>
                         <div className="space-y-2">
                           {tx.outputs.map((output, idx) => (
                             <div
@@ -243,7 +243,7 @@ export default function TransactionHistory() {
                               className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5"
                             >
                               <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <span className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 whitespace-nowrap">
+                                <span className="text-xs px-2 py-1 rounded bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)] whitespace-nowrap">
                                   #{idx}
                                 </span>
                                 {output.address ? (
@@ -251,17 +251,17 @@ export default function TransactionHistory() {
                                     href={`https://mempool.space/address/${output.address}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="font-mono text-xs text-blue-400 hover:text-blue-300 truncate"
+                                    className="font-mono text-xs text-[color:var(--sf-primary)] hover:opacity-80 truncate"
                                   >
                                     {output.address}
                                   </a>
                                 ) : (
-                                  <span className="font-mono text-xs text-white/40">
+                                  <span className="font-mono text-xs text-[color:var(--sf-text)]/40">
                                     OP_RETURN / Non-standard
                                   </span>
                                 )}
                               </div>
-                              <span className="font-mono text-sm whitespace-nowrap ml-3">
+                              <span className="font-mono text-sm text-[color:var(--sf-text)] whitespace-nowrap ml-3">
                                 {formatSats(output.amount)} BTC
                               </span>
                             </div>
@@ -272,17 +272,17 @@ export default function TransactionHistory() {
                       {/* Alkanes Traces */}
                       {tx.protostoneTraces && tx.protostoneTraces.length > 0 && (
                         <div>
-                          <div className="text-sm font-medium text-white/60 mb-2 flex items-center gap-2">
+                          <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2 flex items-center gap-2">
                             <Zap size={16} className="text-purple-400" />
                             Alkanes Execution Traces ({tx.protostoneTraces.length} protostone{tx.protostoneTraces.length !== 1 ? 's' : ''})
                           </div>
                           <div className="space-y-3">
                             {tx.protostoneTraces.map((trace, idx) => (
-                              <div key={idx} className="p-4 rounded-lg bg-black/30 border border-purple-500/20">
-                                <div className="text-xs font-medium text-purple-400 mb-2">
+                              <div key={idx} className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-purple-500/20">
+                                <div className="text-xs font-medium text-purple-500 dark:text-purple-400 mb-2">
                                   Protostone #{idx + 1} (virtual vout {tx.outputs.length + 1 + idx})
                                 </div>
-                                <pre className="text-xs font-mono text-white/80 overflow-x-auto">
+                                <pre className="text-xs font-mono text-[color:var(--sf-text)]/80 overflow-x-auto">
                                   {JSON.stringify(trace, null, 2)}
                                 </pre>
                               </div>
@@ -297,9 +297,9 @@ export default function TransactionHistory() {
                 /* Raw JSON View */
                 <div className="relative">
                   <div className="absolute top-2 right-2">
-                    <Code size={16} className="text-white/40" />
+                    <Code size={16} className="text-[color:var(--sf-text)]/40" />
                   </div>
-                  <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                  <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
                     {JSON.stringify(tx, null, 2)}
                   </pre>
                 </div>
@@ -307,9 +307,9 @@ export default function TransactionHistory() {
             </div>
           ))
         ) : (
-          <div className="text-center py-12 text-white/60">
+          <div className="text-center py-12 text-[color:var(--sf-text)]/60">
             <div className="mb-2">No transactions found</div>
-            <div className="text-sm text-white/40">
+            <div className="text-sm text-[color:var(--sf-text)]/40">
               Transactions will appear here once your wallet has activity
             </div>
           </div>
@@ -319,21 +319,21 @@ export default function TransactionHistory() {
       {/* Transaction Inspection Modal */}
       {inspectingTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#1a1a1a] rounded-2xl border border-white/10 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/10 sticky top-0 bg-[#1a1a1a] z-10">
+            <div className="flex items-center justify-between p-6 border-b border-[color:var(--sf-outline)] sticky top-0 bg-[color:var(--sf-surface)] z-10">
               <div className="flex items-center gap-3">
                 <Sparkles size={24} className="text-purple-400" />
                 <div>
-                  <h2 className="text-xl font-bold text-white">Transaction Analysis</h2>
-                  <div className="font-mono text-xs text-white/60 mt-1">
+                  <h2 className="text-xl font-bold text-[color:var(--sf-text)]">Transaction Analysis</h2>
+                  <div className="font-mono text-xs text-[color:var(--sf-text)]/60 mt-1">
                     {inspectingTx.slice(0, 16)}...{inspectingTx.slice(-16)}
                   </div>
                 </div>
               </div>
               <button
                 onClick={closeInspection}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
               >
                 ✕
               </button>
@@ -344,7 +344,7 @@ export default function TransactionHistory() {
               {inspectionLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <RefreshCw className="animate-spin text-purple-400 mr-2" size={20} />
-                  <div className="text-white/60">Analyzing transaction...</div>
+                  <div className="text-[color:var(--sf-text)]/60">Analyzing transaction...</div>
                 </div>
               ) : inspectionError ? (
                 <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400">
@@ -357,13 +357,13 @@ export default function TransactionHistory() {
                     <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4">
                       <div className="flex items-center gap-2 mb-4">
                         <Zap size={20} className="text-orange-400" />
-                        <h3 className="text-lg font-bold text-white">Runestone Data</h3>
+                        <h3 className="text-lg font-bold text-[color:var(--sf-text)]">Runestone Data</h3>
                       </div>
 
                       {inspectionData.runestone.decode && (
                         <div className="mb-4">
-                          <div className="text-sm font-medium text-white/80 mb-2">Decoded:</div>
-                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                          <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Decoded:</div>
+                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
                             {JSON.stringify(inspectionData.runestone.decode, null, 2)}
                           </pre>
                         </div>
@@ -371,8 +371,8 @@ export default function TransactionHistory() {
 
                       {inspectionData.runestone.analyze && (
                         <div>
-                          <div className="text-sm font-medium text-white/80 mb-2">Analysis:</div>
-                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                          <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Analysis:</div>
+                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
                             {JSON.stringify(inspectionData.runestone.analyze, null, 2)}
                           </pre>
                         </div>
@@ -385,13 +385,13 @@ export default function TransactionHistory() {
                     <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
                       <div className="flex items-center gap-2 mb-4">
                         <Sparkles size={20} className="text-purple-400" />
-                        <h3 className="text-lg font-bold text-white">Alkanes/Protorunes Data</h3>
+                        <h3 className="text-lg font-bold text-[color:var(--sf-text)]">Alkanes/Protorunes Data</h3>
                       </div>
 
                       {inspectionData.protorunes.decode && (
                         <div className="mb-4">
-                          <div className="text-sm font-medium text-white/80 mb-2">Decoded:</div>
-                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                          <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Decoded:</div>
+                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
                             {JSON.stringify(inspectionData.protorunes.decode, null, 2)}
                           </pre>
                         </div>
@@ -399,8 +399,8 @@ export default function TransactionHistory() {
 
                       {inspectionData.protorunes.analyze && (
                         <div>
-                          <div className="text-sm font-medium text-white/80 mb-2">Analysis:</div>
-                          <pre className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-x-auto text-xs font-mono text-white/80">
+                          <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Analysis:</div>
+                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
                             {JSON.stringify(inspectionData.protorunes.analyze, null, 2)}
                           </pre>
                         </div>
@@ -413,9 +413,9 @@ export default function TransactionHistory() {
                     !inspectionData.runestone.analyze &&
                     !inspectionData.protorunes.decode &&
                     !inspectionData.protorunes.analyze && (
-                      <div className="p-8 text-center text-white/60">
+                      <div className="p-8 text-center text-[color:var(--sf-text)]/60">
                         <div className="mb-2">No Runes or Alkanes data found</div>
-                        <div className="text-sm text-white/40">
+                        <div className="text-sm text-[color:var(--sf-text)]/40">
                           This transaction does not contain runestone or protostone data
                         </div>
                       </div>
@@ -425,10 +425,10 @@ export default function TransactionHistory() {
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-white/10 sticky bottom-0 bg-[#1a1a1a]">
+            <div className="p-6 border-t border-[color:var(--sf-outline)] sticky bottom-0 bg-[color:var(--sf-surface)]">
               <button
                 onClick={closeInspection}
-                className="w-full px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-white font-medium"
+                className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)] font-medium"
               >
                 Close
               </button>
