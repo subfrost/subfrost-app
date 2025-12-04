@@ -5,6 +5,7 @@ import { createContext, useContext, useMemo, useState, useCallback, useEffect } 
 import { Loader2 } from 'lucide-react';
 
 import { NetworkMap, type Network } from '@/utils/constants';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 // Import directly from sub-modules to avoid WASM dependency
 import { AlkanesWallet, AddressType, createWallet, createWalletFromMnemonic } from '@alkanes/ts-sdk';
 import { KeystoreManager, createKeystore, unlockKeystore } from '@alkanes/ts-sdk';
@@ -95,6 +96,7 @@ interface WalletProviderProps {
 }
 
 export function WalletProvider({ children, network }: WalletProviderProps) {
+  const { provider: sdkProvider, isInitialized: sdkInitialized } = useAlkanesSDK();
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [wallet, setWallet] = useState<AlkanesWallet | null>(null);
@@ -270,72 +272,124 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     return wallet.signMessage(message, 0);
   }, [wallet]);
 
-  // Get UTXOs
+  // Get UTXOs using WASM provider
   const getUtxos = useCallback(async (): Promise<FormattedUtxo[]> => {
-    if (!wallet || !account.nativeSegwit) {
+    if (!wallet || !account.nativeSegwit || !sdkProvider || !sdkInitialized) {
       return [];
     }
 
-    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
-    const api = await getAlkanesProvider(network);
-    const promises: Promise<any>[] = [];
+    try {
+      const utxos: FormattedUtxo[] = [];
 
-    if (account.taproot?.address) {
-      promises.push(api.getAddressUtxos(account.taproot.address, account.spendStrategy));
-    }
+      // Fetch UTXOs for native segwit address
+      if (account.nativeSegwit?.address) {
+        const enriched = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
+        if (enriched) {
+          // Combine all UTXO categories
+          const allUtxos = [
+            ...(enriched.spendable || []),
+            ...(enriched.assets || []),
+            ...(enriched.pending || []),
+          ];
+          for (const utxo of allUtxos) {
+            utxos.push({
+              txId: utxo.txid || '',
+              outputIndex: utxo.vout || 0,
+              satoshis: utxo.value || 0,
+              scriptPk: utxo.scriptpubkey || '',
+              address: account.nativeSegwit.address,
+              inscriptions: [],
+              runes: [],
+              alkanes: {},
+              indexed: true,
+              confirmations: utxo.status?.confirmed ? 1 : 0,
+            });
+          }
+        }
+      }
 
-    if (account.nativeSegwit?.address) {
-      promises.push(api.getAddressUtxos(account.nativeSegwit.address, account.spendStrategy));
-    }
+      // Fetch UTXOs for taproot address
+      if (account.taproot?.address) {
+        const enriched = await sdkProvider.getEnrichedBalances(account.taproot.address, '1');
+        if (enriched) {
+          const allUtxos = [
+            ...(enriched.spendable || []),
+            ...(enriched.assets || []),
+            ...(enriched.pending || []),
+          ];
+          for (const utxo of allUtxos) {
+            utxos.push({
+              txId: utxo.txid || '',
+              outputIndex: utxo.vout || 0,
+              satoshis: utxo.value || 0,
+              scriptPk: utxo.scriptpubkey || '',
+              address: account.taproot.address,
+              inscriptions: [],
+              runes: [],
+              alkanes: {},
+              indexed: true,
+              confirmations: utxo.status?.confirmed ? 1 : 0,
+            });
+          }
+        }
+      }
 
-    if (promises.length === 0) {
+      return utxos;
+    } catch (error) {
+      console.error('[WalletContext] Error fetching UTXOs:', error);
       return [];
     }
+  }, [wallet, account, sdkProvider, sdkInitialized]);
 
-    const results = await Promise.all(promises);
-    return results.flatMap(result => result.utxos || []);
-  }, [wallet, account, network]);
-
-  // Get spendable UTXOs
+  // Get spendable UTXOs using WASM provider
   const getSpendableUtxos = useCallback(async (): Promise<FormattedUtxo[]> => {
-    if (!wallet || !account.nativeSegwit?.address) {
+    if (!wallet || !account.nativeSegwit?.address || !sdkProvider || !sdkInitialized) {
       return [];
     }
 
-    const { getAlkanesProvider } = await import('@/utils/alkanesProvider');
-    const api = await getAlkanesProvider(network);
+    try {
+      const enriched = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
 
-    const { spendableUtxos } = await api.getAddressUtxos(
-      account.nativeSegwit.address,
-      account.spendStrategy
-    );
+      if (!enriched || !enriched.spendable) {
+        return [];
+      }
 
-    spendableUtxos.sort((a: any, b: any) =>
-      account.spendStrategy.utxoSortGreatestToLeast
-        ? b.satoshis - a.satoshis
-        : a.satoshis - b.satoshis
-    );
+      const spendableUtxos: FormattedUtxo[] = enriched.spendable.map((utxo: any) => ({
+        txId: utxo.txid || '',
+        outputIndex: utxo.vout || 0,
+        satoshis: utxo.value || 0,
+        scriptPk: utxo.scriptpubkey || '',
+        address: account.nativeSegwit!.address,
+        inscriptions: [],
+        runes: [],
+        alkanes: {},
+        indexed: true,
+        confirmations: utxo.status?.confirmed ? 1 : 0,
+      }));
 
-    return spendableUtxos;
-  }, [wallet, account, network]);
+      spendableUtxos.sort((a, b) =>
+        account.spendStrategy.utxoSortGreatestToLeast
+          ? b.satoshis - a.satoshis
+          : a.satoshis - b.satoshis
+      );
 
-  // Get spendable balance
+      return spendableUtxos;
+    } catch (error) {
+      console.error('[WalletContext] Error fetching spendable UTXOs:', error);
+      return [];
+    }
+  }, [wallet, account, sdkProvider, sdkInitialized]);
+
+  // Get spendable balance using WASM provider
   const getSpendableTotalBalance = useCallback(async (): Promise<number> => {
-    if (!wallet || !account.nativeSegwit?.address) {
+    if (!wallet || !account.nativeSegwit?.address || !sdkProvider || !sdkInitialized) {
       return 0;
     }
 
     try {
-      const { getNetworkUrls } = await import('@/utils/alkanesProvider');
-      const networkUrls = getNetworkUrls(network);
-      
-      // Dynamic import WASM to avoid SSR issues
-      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      const provider = new WebProvider(networkUrls.rpc, null);
-      
       // Get enriched balances which includes spendable/assets/pending categorization
-      const enriched = await provider.getEnrichedBalances(account.nativeSegwit.address, '1');
-      
+      const enriched = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
+
       // enriched.spendable is an array of UTXOs
       // Calculate total balance from spendable UTXOs
       if (enriched && enriched.spendable && Array.isArray(enriched.spendable)) {
@@ -343,13 +397,13 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           return total + (utxo.value || 0);
         }, 0);
       }
-      
+
       return 0;
     } catch (error) {
       console.error('[WalletContext] Error fetching balance:', error);
       return 0;
     }
-  }, [wallet, account, network]);
+  }, [wallet, account, sdkProvider, sdkInitialized]);
 
   const onConnectModalOpenChange = useCallback((isOpen: boolean) => {
     setIsConnectModalOpen(isOpen);

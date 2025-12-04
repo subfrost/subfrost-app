@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
-import { getNetworkUrls } from '@/utils/alkanesProvider';
 import BigNumber from 'bignumber.js';
 
 interface VaultStats {
@@ -21,25 +21,26 @@ interface VaultStats {
  */
 export function useVaultStats(vaultContractId: string, baseTokenId: string, enabled: boolean = true) {
   const { account, isConnected, network } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
 
   return useQuery({
     queryKey: ['vaultStats', vaultContractId, baseTokenId, account, network],
+    enabled: enabled && !!vaultContractId && !!baseTokenId && isInitialized && !!provider,
     queryFn: async (): Promise<VaultStats> => {
+      if (!provider) {
+        throw new Error('Provider not initialized');
+      }
+
       try {
         const vaultId = parseAlkaneId(vaultContractId);
         const baseId = parseAlkaneId(baseTokenId);
-        const networkUrls = getNetworkUrls(network);
 
         // Get user balance if connected (opcode 4: GetVeDieselBalance)
         let userBalance = '0';
         let userBalanceFormatted = '0.00';
-        
+
         if (isConnected && account) {
           try {
-            // Dynamic import WASM to avoid SSR issues
-            const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-            const provider = new WebProvider(networkUrls.rpc, null);
-            
             // Opcode 4 for GetVeDieselBalance
             const contractId = `${vaultId.block}:${vaultId.tx}`;
             
@@ -110,7 +111,6 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
         };
       }
     },
-    enabled: enabled && !!vaultContractId && !!baseTokenId,
     refetchInterval: 30000, // Refetch every 30 seconds
     staleTime: 15000, // Data is fresh for 15 seconds
     retry: 2,

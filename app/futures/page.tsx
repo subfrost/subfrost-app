@@ -60,7 +60,7 @@ export default function FuturesPage() {
   // Handle generate future button
   const handleGenerateFuture = async () => {
     try {
-      await generateFuture('http://localhost:18443');
+      await generateFuture();
       // Auto-refresh after generating
       setTimeout(() => {
         refetch();

@@ -1636,6 +1636,26 @@ export class WebProvider {
         const ret = wasm.webprovider_dataApiGetBitcoinMarketChart(this.__wbg_ptr, ptr0, len0);
         return ret;
     }
+    /**
+     * Reflect alkane token metadata by querying standard opcodes
+     *
+     * This method queries the alkane contract with standard opcodes to retrieve
+     * token metadata like name, symbol, total supply, cap, minted, and value per mint.
+     *
+     * # Arguments
+     * * `alkane_id` - The alkane ID in "block:tx" format (e.g., "2:1234")
+     *
+     * # Returns
+     * An AlkaneReflection object with all available metadata
+     * @param {string} alkane_id
+     * @returns {Promise<any>}
+     */
+    alkanesReflect(alkane_id) {
+        const ptr0 = passStringToWasm0(alkane_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesReflect(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
 }
 if (Symbol.dispose) WebProvider.prototype[Symbol.dispose] = WebProvider.prototype.free;
 
@@ -2243,8 +2263,8 @@ export function __wbindgen_cast_2241b6af4c4b2941(arg0, arg1) {
     return ret;
 };
 
-export function __wbindgen_cast_2777ff72a397665f(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 2234, function: Function { arguments: [Externref], shim_idx: 2235, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+export function __wbindgen_cast_3767ecfc87ac2a65(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 2238, function: Function { arguments: [Externref], shim_idx: 2239, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
     const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
     return ret;
 };

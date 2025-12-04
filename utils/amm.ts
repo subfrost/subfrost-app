@@ -18,7 +18,7 @@ type FormattedUtxo = {
   confirmations?: number;
 };
 
-// Provider type for getFutureBlockHeight
+// Provider type for getFutureBlockHeight - supports both old and WASM providers
 interface Provider {
   sandshrew?: {
     bitcoindRpc?: {
@@ -28,6 +28,8 @@ interface Provider {
   bitcoin?: {
     getBlockCount?: () => Promise<number>;
   };
+  // WASM WebProvider methods
+  metashrewHeight?: () => Promise<number>;
 }
 
 export function calculateMinimumFromSlippage({
@@ -59,7 +61,12 @@ export function calculateMaximumFromSlippage({
 }
 
 export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
-  // Try sandshrew provider first, then bitcoin provider
+  // Try WASM provider first (metashrewHeight), then sandshrew, then bitcoin
+  if (provider.metashrewHeight) {
+    const currentBlockHeight = await provider.metashrewHeight();
+    return currentBlockHeight + blocks;
+  }
+
   const getBlockCount = provider.sandshrew?.bitcoindRpc?.getBlockCount
     || provider.bitcoin?.getBlockCount;
 

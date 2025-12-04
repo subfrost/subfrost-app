@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { useApiProvider } from '@/hooks/useApiProvider';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 
 type AmmPageResponse<T> = {
   items: T[];
@@ -23,7 +23,7 @@ export function useInfiniteAmmTxHistory({
   enabled?: boolean;
   transactionType?: AmmTransactionType;
 }) {
-  const api = useApiProvider();
+  const { provider, isInitialized } = useAlkanesSDK();
 
   const query = useInfiniteQuery<
     AmmPageResponse<any>,
@@ -34,20 +34,57 @@ export function useInfiniteAmmTxHistory({
   >({
     queryKey: ['ammTxHistory', address ?? 'all', count, transactionType ?? 'all'],
     initialPageParam: 0,
-    enabled,
+    enabled: enabled && isInitialized && !!provider,
     queryFn: async ({ pageParam }) => {
-      const offset = pageParam * count;
-      const params: any = { count, offset, includeTotal: false, transactionType };
-      const data = address
-        ? await api.getAllAddressAmmTxHistory({ address, ...params })
-        : await api.getAllAmmTxHistory(params);
+      if (!provider) {
+        return { items: [], nextPage: undefined, total: 0 };
+      }
 
-      const items = Array.isArray((data as any)?.items) ? (data as any).items : [];
-      return {
-        items,
-        nextPage: items.length === count ? pageParam + 1 : undefined,
-        total: (data as any)?.total ?? -1,
-      };
+      const offset = pageParam * count;
+
+      try {
+        // Try to get AMM history via provider
+        // Note: This method may need to be implemented in the WASM bindings
+        let data: any;
+        if (address) {
+          // Try address-specific method if available
+          if (typeof (provider as any).getAllAddressAmmTxHistory === 'function') {
+            data = await (provider as any).getAllAddressAmmTxHistory({
+              address,
+              count,
+              offset,
+              includeTotal: false,
+              transactionType,
+            });
+          } else {
+            // Fallback: return empty result
+            data = { items: [] };
+          }
+        } else {
+          // Try global method if available
+          if (typeof (provider as any).getAllAmmTxHistory === 'function') {
+            data = await (provider as any).getAllAmmTxHistory({
+              count,
+              offset,
+              includeTotal: false,
+              transactionType,
+            });
+          } else {
+            // Fallback: return empty result
+            data = { items: [] };
+          }
+        }
+
+        const items = Array.isArray((data as any)?.items) ? (data as any).items : [];
+        return {
+          items,
+          nextPage: items.length === count ? pageParam + 1 : undefined,
+          total: (data as any)?.total ?? -1,
+        };
+      } catch (error) {
+        console.error('[useAmmHistory] Failed to fetch AMM history:', error);
+        return { items: [], nextPage: undefined, total: 0 };
+      }
     },
     getNextPageParam: (lastPage) => lastPage.nextPage as number | undefined,
     refetchOnWindowFocus: false,
@@ -91,5 +128,3 @@ export function useInfiniteAmmTxHistory({
 
   return { ...query, data: filteredData };
 }
-
-

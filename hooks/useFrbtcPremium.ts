@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
-import { getNetworkUrls } from '@/utils/alkanesProvider';
 
 /**
  * Parse u128 from little-endian bytes
@@ -37,20 +37,19 @@ function parseU128FromBytes(data: number[] | Uint8Array): bigint {
  */
 export function useFrbtcPremium() {
   const { network } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
   const { FRBTC_ALKANE_ID } = getConfig(network);
 
   return useQuery({
     queryKey: ['frbtc-premium', network, FRBTC_ALKANE_ID],
+    enabled: isInitialized && !!provider,
     queryFn: async () => {
+      if (!provider) {
+        throw new Error('Provider not initialized');
+      }
+
       try {
         const frbtcId = parseAlkaneId(FRBTC_ALKANE_ID);
-        const networkUrls = getNetworkUrls(network);
-        
-        // Dynamic import WASM to avoid SSR issues
-        const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-        
-        // Create WebProvider for this network
-        const provider = new WebProvider(networkUrls.rpc, null);
         
         // Simulate call to frBTC contract with opcode 104 (get_premium)
         // The calldata should be a byte array [104] not hex string

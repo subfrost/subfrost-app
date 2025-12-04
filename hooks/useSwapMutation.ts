@@ -107,7 +107,8 @@ export function useSwapMutation() {
       if (!provider) {
         throw new Error('Provider not available');
       }
-      calldata.push(BigInt(await getFutureBlockHeight(deadlineBlocks, provider)));
+      // Cast to any since WASM WebProvider is compatible with getFutureBlockHeight's needs
+      calldata.push(BigInt(await getFutureBlockHeight(deadlineBlocks, provider as any)));
 
       const utxos = await getUtxos();
       let alkanesUtxos = undefined as any;
