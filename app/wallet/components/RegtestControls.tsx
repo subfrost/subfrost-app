@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import { getNetworkUrls } from '@/utils/alkanesProvider';
 import { Pickaxe, Clock, Zap } from 'lucide-react';
 
 export default function RegtestControls() {
@@ -10,8 +9,8 @@ export default function RegtestControls() {
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Only show for regtest networks
-  if (network !== 'regtest' && network !== 'oylnet') {
+  // Only show for regtest networks (local regtest, subfrost-regtest, oylnet)
+  if (network !== 'regtest' && network !== 'subfrost-regtest' && network !== 'oylnet') {
     return null;
   }
 
@@ -30,12 +29,13 @@ export default function RegtestControls() {
       }
       
       // Dynamic import WASM to avoid SSR issues
-      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      
-      // Create WebProvider with network URL
-      const networkUrls = getNetworkUrls(network);
-      const provider = new WebProvider(networkUrls.rpc, null);
-      
+      const wasm = await import('@alkanes/ts-sdk/wasm');
+
+      // Create WebProvider with network preset
+      // For subfrost-regtest, use the preset; for local regtest, provide custom URL
+      const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
+      const provider = new wasm.WebProvider(providerName);
+
       // Call bitcoindGenerateToAddress (uses alkanes-cli-common code path)
       const result = await provider.bitcoindGenerateToAddress(count, address);
       
@@ -56,12 +56,12 @@ export default function RegtestControls() {
     setMining(true);
     try {
       // Dynamic import WASM to avoid SSR issues
-      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      
-      // Create WebProvider with network URL
-      const networkUrls = getNetworkUrls(network);
-      const provider = new WebProvider(networkUrls.rpc, null);
-      
+      const wasm = await import('@alkanes/ts-sdk/wasm');
+
+      // Create WebProvider with network preset
+      const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
+      const provider = new wasm.WebProvider(providerName);
+
       // Call bitcoindGenerateFuture (automatically computes Subfrost address from frBTC signer)
       // The address parameter is ignored - it will call frBTC [32:0] GET_SIGNER to get the address
       const result = await provider.bitcoindGenerateFuture('');
@@ -79,7 +79,8 @@ export default function RegtestControls() {
     }
   };
 
-  const networkLabel = network === 'regtest' ? 'Subfrost Regtest' : 'Local Regtest';
+  const networkLabel = network === 'subfrost-regtest' ? 'Subfrost Regtest' :
+                       network === 'regtest' ? 'Local Regtest' : 'Oylnet';
 
   return (
     <div className="mt-8 rounded-xl border border-white/10 bg-white/5 p-6">

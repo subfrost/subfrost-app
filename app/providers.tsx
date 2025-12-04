@@ -44,7 +44,7 @@ function detectNetwork(): Network {
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const [network, setNetwork] = useState<Network>('mainnet');
+  const [network, setNetwork] = useState<Network>('subfrost-regtest');
 
   // Memoize QueryClient to prevent recreation on re-renders
   const queryClient = useMemo(

@@ -9,6 +9,24 @@ import { NetworkMap, type Network } from '@/utils/constants';
 import { AlkanesWallet, AddressType, createWallet, createWalletFromMnemonic } from '@alkanes/ts-sdk';
 import { KeystoreManager, createKeystore, unlockKeystore } from '@alkanes/ts-sdk';
 
+// Map app network names to SDK network names for address generation
+// The SDK only recognizes: mainnet, testnet, regtest
+function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
+  switch (network) {
+    case 'mainnet':
+      return 'mainnet';
+    case 'testnet':
+    case 'signet':
+      return 'testnet';
+    case 'regtest':
+    case 'subfrost-regtest':
+    case 'oylnet':
+      return 'regtest';
+    default:
+      return 'mainnet';
+  }
+}
+
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
   nativeSegwit?: { address: string; pubkey: string; hdPath: string };
@@ -95,7 +113,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       if (sessionMnemonic && stored) {
         try {
           // Restore wallet from session mnemonic
-          const restoredWallet = createWalletFromMnemonic(sessionMnemonic, network);
+          const restoredWallet = createWalletFromMnemonic(sessionMnemonic, toSdkNetwork(network));
           setWallet(restoredWallet);
         } catch (error) {
           // Session invalid, clear it
@@ -153,10 +171,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {
     // createKeystore generates mnemonic and returns both encrypted keystore and mnemonic
-    const { keystore: encrypted, mnemonic } = await createKeystore(password, { network });
+    const sdkNetwork = toSdkNetwork(network);
+    const { keystore: encrypted, mnemonic } = await createKeystore(password, { network: sdkNetwork });
 
     // Create wallet from mnemonic
-    const newWallet = createWalletFromMnemonic(mnemonic, network);
+    const newWallet = createWalletFromMnemonic(mnemonic, sdkNetwork);
 
     // Store encrypted keystore
     localStorage.setItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE, encrypted);
@@ -179,7 +198,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     const keystore = await unlockKeystore(encrypted, password);
-    const unlockedWallet = createWalletFromMnemonic(keystore.mnemonic, network);
+    const unlockedWallet = createWalletFromMnemonic(keystore.mnemonic, toSdkNetwork(network));
 
     // Store mnemonic in session for page navigation persistence
     sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, keystore.mnemonic);
@@ -200,10 +219,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     // Create wallet
-    const restoredWallet = createWalletFromMnemonic(trimmedMnemonic, network);
+    const sdkNetwork = toSdkNetwork(network);
+    const restoredWallet = createWalletFromMnemonic(trimmedMnemonic, sdkNetwork);
 
     // Create keystore and encrypt
-    const keystore = manager.createKeystore(trimmedMnemonic, { network });
+    const keystore = manager.createKeystore(trimmedMnemonic, { network: sdkNetwork });
     const encrypted = await manager.exportKeystore(keystore, password, { pretty: true });
     const encryptedStr = typeof encrypted === 'string' ? encrypted : JSON.stringify(encrypted, null, 2);
 
