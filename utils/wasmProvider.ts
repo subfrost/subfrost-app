@@ -18,6 +18,34 @@ const NETWORK_URLS: Record<Network, string> = {
   'subfrost-regtest': 'subfrost-regtest',
 };
 
+// Subfrost uses /v4/subfrost endpoint for both jsonrpc and data_api_url
+const NETWORK_CONFIG: Record<Network, Record<string, string>> = {
+  mainnet: {
+    jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
+  },
+  testnet: {
+    jsonrpc_url: 'https://testnet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://testnet.subfrost.io/v4/subfrost',
+  },
+  signet: {
+    jsonrpc_url: 'https://signet.subfrost.io/v4/subfrost',
+    data_api_url: 'https://signet.subfrost.io/v4/subfrost',
+  },
+  regtest: {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  oylnet: {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  'subfrost-regtest': {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+};
+
 /**
  * Get a WebProvider instance for direct WASM calls
  * @deprecated Use useAlkanesSDK hook instead
@@ -25,7 +53,8 @@ const NETWORK_URLS: Record<Network, string> = {
 export async function getWebProvider(network: Network) {
   const wasm = await import('@alkanes/ts-sdk/wasm');
   const providerName = NETWORK_URLS[network] || 'mainnet';
-  return new wasm.WebProvider(providerName, undefined);
+  const configOverrides = NETWORK_CONFIG[network];
+  return new wasm.WebProvider(providerName, configOverrides);
 }
 
 /**
