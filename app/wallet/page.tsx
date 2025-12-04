@@ -38,7 +38,7 @@ export default function WalletDashboardPage() {
   ];
 
   return (
-    <div className="w-full max-w-7xl text-[color:var(--sf-text)]">
+    <div className="w-full max-w-5xl text-[color:var(--sf-text)]">
       <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4 sm:p-6">
           {/* Header */}
           <div className="mb-8">

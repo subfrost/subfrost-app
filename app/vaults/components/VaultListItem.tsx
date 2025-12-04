@@ -71,47 +71,43 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          {/* Column 1: EST. APY and AVAILABLE */}
-          <div className="space-y-3">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
-              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-3 py-1 text-sm font-bold text-[color:var(--sf-info-green-title)]">
-                {vault.estimatedApy ? `${vault.estimatedApy}%` : '-'}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Available</div>
-              <div className="text-sm font-bold text-[color:var(--sf-text)]">{availableToken}</div>
-              <div className="text-xs text-[color:var(--sf-text)]/60">{availableUsd}</div>
+        <div className="grid grid-cols-2 gap-x-3">
+          {/* Row 1: EST. APY and RISK LEVEL */}
+          <div className="h-[42px]">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
+            <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-3 py-1 text-sm font-bold text-[color:var(--sf-info-green-title)]">
+              {vault.estimatedApy ? `${vault.estimatedApy}%` : '-'}
             </div>
           </div>
-          
-          {/* Column 2: RISK LEVEL and DEPOSITS */}
-          <div className="space-y-3">
-            <div className={interactive ? 'flex flex-col items-center' : ''}>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Risk Level</div>
-              <div className="flex gap-0.5">
-                {[1, 2, 3, 4, 5].map((level) => {
-                  const riskValue = vault.riskLevel === 'low' ? 2 : vault.riskLevel === 'medium' ? 3 : vault.riskLevel === 'high' ? 4 : 5;
-                  return (
-                    <div 
-                      key={level}
-                      className={`w-1.5 h-4 rounded-sm ${
-                        level <= riskValue 
-                          ? vault.riskLevel === 'low' ? 'bg-green-500' : vault.riskLevel === 'medium' ? 'bg-yellow-500' : vault.riskLevel === 'high' ? 'bg-orange-500' : 'bg-red-500'
-                          : 'bg-gray-300'
-                      }`}
-                    />
-                  );
-                })}
-              </div>
+          <div className={`h-[42px] ${interactive ? 'flex flex-col items-center' : ''}`}>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Risk Level</div>
+            <div className="flex gap-0.5">
+              {[1, 2, 3, 4, 5].map((level) => {
+                const riskValue = vault.riskLevel === 'low' ? 2 : vault.riskLevel === 'medium' ? 3 : vault.riskLevel === 'high' ? 4 : 5;
+                return (
+                  <div
+                    key={level}
+                    className={`w-1.5 h-4 rounded-sm ${
+                      level <= riskValue
+                        ? vault.riskLevel === 'low' ? 'bg-green-500' : vault.riskLevel === 'medium' ? 'bg-yellow-500' : vault.riskLevel === 'high' ? 'bg-orange-500' : 'bg-red-500'
+                        : 'bg-gray-300'
+                    }`}
+                  />
+                );
+              })}
             </div>
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Deposits</div>
-              <div className="text-sm font-bold text-[color:var(--sf-text)]">{depositsToken}</div>
-              <div className="text-xs text-[color:var(--sf-text)]/60">{depositsUsd}</div>
-            </div>
+          </div>
+
+          {/* Row 2: AVAILABLE and DEPOSITS */}
+          <div className="pt-3">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Available</div>
+            <div className="text-sm font-bold text-[color:var(--sf-text)]">{availableToken}</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60">{availableUsd}</div>
+          </div>
+          <div className={`pt-3 ${interactive ? 'text-center' : ''}`}>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Deposits</div>
+            <div className="text-sm font-bold text-[color:var(--sf-text)]">{depositsToken}</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60">{depositsUsd}</div>
           </div>
         </div>
       </div>

@@ -426,15 +426,15 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 
                 <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-glass-border)]">
                   <div>
-                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment</div>
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment (BTC)</div>
                     <div className="text-lg font-semibold text-[color:var(--sf-text)]">
-                      {totalInvestment.toFixed(6)} BTC
+                      {totalInvestment.toFixed(8)}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout</div>
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout (BTC)</div>
                     <div className="text-lg font-semibold text-[color:var(--sf-text)]">
-                      {totalPayout.toFixed(6)} BTC
+                      {totalPayout.toFixed(8)}
                     </div>
                   </div>
                   <div>
