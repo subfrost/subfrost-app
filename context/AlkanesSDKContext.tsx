@@ -40,7 +40,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
           mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
           testnet: 'https://testnet.subfrost.io/v4/subfrost',
           signet: 'https://signet.subfrost.io/v4/subfrost',
-          regtest: 'https://regtest.subfrost.io/v4/subfrost',  // Subfrost Regtest
+          regtest: 'http://localhost:18888',  // Local alkanes-rs
           oylnet: 'http://localhost:18888',  // Local Regtest
         };
 
@@ -48,7 +48,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
           mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
           testnet: 'https://testnet.subfrost.io/v4/subfrost',
           signet: 'https://signet.subfrost.io/v4/subfrost',
-          regtest: 'https://regtest.subfrost.io/v4/subfrost',  // Subfrost Regtest
+          regtest: 'http://localhost:18888',  // Local alkanes-rs
           oylnet: 'http://localhost:18888',  // Local Regtest
         };
 

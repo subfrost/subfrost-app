@@ -8,7 +8,7 @@ import { Bitcoin, Coins, DollarSign, RefreshCw, Loader2 } from 'lucide-react';
 export default function BalancesPanel() {
   const { account } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
-  const { balances, isLoading, error, refresh } = useEnrichedWalletData();
+  const { balances, utxos, isLoading, error, refresh } = useEnrichedWalletData();
 
   const formatBTC = (sats: number) => {
     return (sats / 100000000).toFixed(8);
@@ -84,9 +84,49 @@ export default function BalancesPanel() {
           </button>
         </div>
 
+        {/* Balance Breakdown */}
+        <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/10">
+          <div className="rounded-lg bg-white/5 p-3">
+            <div className="text-xs text-white/60 mb-1">Total Balance</div>
+            <div className="font-mono text-sm text-white">{formatBTC(balances.bitcoin.total)} BTC</div>
+          </div>
+          <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-3">
+            <div className="text-xs text-green-400/80 mb-1">Spendable (Plain BTC)</div>
+            <div className="font-mono text-sm text-green-400">
+              {(() => {
+                // Calculate spendable (UTXOs without inscriptions/runes/alkanes)
+                const spendableSats = utxos.all
+                  .filter((u: any) => 
+                    !u.inscriptions?.length && 
+                    !Object.keys(u.runes || {}).length && 
+                    !Object.keys(u.alkanes || {}).length
+                  )
+                  .reduce((sum: number, u: any) => sum + u.value, 0);
+                return formatBTC(spendableSats);
+              })()} BTC
+            </div>
+          </div>
+          <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-3">
+            <div className="text-xs text-yellow-400/80 mb-1">With Assets</div>
+            <div className="font-mono text-sm text-yellow-400">
+              {(() => {
+                // Calculate UTXOs containing inscriptions/runes/alkanes
+                const assetSats = utxos.all
+                  .filter((u: any) => 
+                    u.inscriptions?.length > 0 || 
+                    Object.keys(u.runes || {}).length > 0 || 
+                    Object.keys(u.alkanes || {}).length > 0
+                  )
+                  .reduce((sum: number, u: any) => sum + u.value, 0);
+                return formatBTC(assetSats);
+              })()} BTC
+            </div>
+          </div>
+        </div>
+
         {/* Address Breakdown */}
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
-          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
+        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10 mt-4">
+          <div className="rounded-lg bg-white/5 p-3">
             <div className="text-xs text-white/60 mb-1">Native SegWit (P2WPKH)</div>
             <div className="font-mono text-sm text-white">{formatBTC(balances.bitcoin.p2wpkh)} BTC</div>
             {account?.nativeSegwit && (

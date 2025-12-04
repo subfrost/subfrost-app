@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
+import { getNetworkUrls } from '@/utils/alkanesProvider';
 import { Pickaxe, Clock, Zap } from 'lucide-react';
 
 export default function RegtestControls() {
-  const { network } = useWallet();
+  const { network, account } = useWallet() as any;
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -22,18 +23,16 @@ export default function RegtestControls() {
   const mineBlocks = async (count: number) => {
     setMining(true);
     try {
-      // Dynamic import WASM to avoid SSR issues
-      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      const { getNetworkUrls } = await import('@/utils/alkanesProvider');
-      const { wallet } = useWallet() as any;
-      
       // Get taproot address (p2tr:0)
-      const address = wallet?.taproot?.address;
+      const address = account?.taproot?.address;
       if (!address) {
         throw new Error('No taproot address available. Please connect wallet first.');
       }
       
-      // Create WebProvider
+      // Dynamic import WASM to avoid SSR issues
+      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
+      
+      // Create WebProvider with network URL
       const networkUrls = getNetworkUrls(network);
       const provider = new WebProvider(networkUrls.rpc, null);
       
@@ -58,9 +57,8 @@ export default function RegtestControls() {
     try {
       // Dynamic import WASM to avoid SSR issues
       const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      const { getNetworkUrls } = await import('@/utils/alkanesProvider');
       
-      // Create WebProvider
+      // Create WebProvider with network URL
       const networkUrls = getNetworkUrls(network);
       const provider = new WebProvider(networkUrls.rpc, null);
       
