@@ -105,11 +105,37 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
 
     try {
       const priceData = await provider.dataApiGetBitcoinPrice();
+      console.log('[AlkanesSDK] Bitcoin price data:', priceData);
+
       if (priceData) {
-        setBitcoinPrice({
-          usd: priceData.usd || priceData.price || 0,
-          lastUpdated: Date.now(),
-        });
+        // Handle different response formats:
+        // - { data: { bitcoin: { usd: number } } } (REST API format)
+        // - { bitcoin: { usd: number } } (direct format)
+        // - { usd: number } (simple format)
+        // - Map objects from serde_wasm_bindgen
+        let usdPrice = 0;
+
+        // Convert Map to object if needed
+        const data = priceData instanceof Map ? Object.fromEntries(priceData) : priceData;
+
+        if (data?.data?.bitcoin?.usd) {
+          usdPrice = data.data.bitcoin.usd;
+        } else if (data?.bitcoin?.usd) {
+          usdPrice = data.bitcoin.usd;
+        } else if (data?.usd) {
+          usdPrice = data.usd;
+        } else if (data?.price) {
+          usdPrice = data.price;
+        }
+
+        console.log('[AlkanesSDK] Extracted USD price:', usdPrice);
+
+        if (usdPrice > 0) {
+          setBitcoinPrice({
+            usd: usdPrice,
+            lastUpdated: Date.now(),
+          });
+        }
       }
     } catch (error) {
       console.error('Failed to fetch Bitcoin price:', error);

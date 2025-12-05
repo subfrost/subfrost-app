@@ -47,28 +47,26 @@ export function usePools(params: UsePoolsParams = {}) {
       }
 
       try {
-        // Use WASM provider to get all pools with details
-        const poolsResult = await provider.alkanesGetAllPoolsWithDetails(
-          ALKANE_FACTORY_ID,
-          30, // chunk_size
-          10 // max_concurrent
-        );
+        // Use WASM provider's dataApiGetPools method
+        const poolsResult = await provider.dataApiGetPools(ALKANE_FACTORY_ID);
+
+        console.log('[usePools] Got pools result:', poolsResult);
 
         const items: PoolsListItem[] = [];
 
-        if (poolsResult && poolsResult.pools) {
-          for (const p of poolsResult.pools) {
-            const details = p.details;
-            if (!details) continue;
+        // dataApiGetPools returns { data: [...pools] } or an array directly
+        const poolsArray = poolsResult?.data || poolsResult?.pools || poolsResult || [];
 
-            // Extract token info from pool details
-            const token0Id = details.token0_id || details.token0?.id || '';
-            const token1Id = details.token1_id || details.token1?.id || '';
-            const poolName = details.name || details.poolName || '';
-            const poolNameClean = poolName.replace(/ LP$/, '');
-            const [rawA, rawB] = poolNameClean.split(' / ');
-            const token0Name = (rawA ?? '').replace('SUBFROST BTC', 'frBTC');
-            const token1Name = (rawB ?? '').replace('SUBFROST BTC', 'frBTC');
+        if (Array.isArray(poolsArray)) {
+          for (const p of poolsArray) {
+            // dataApiGetPools returns pool data with different field names
+            const poolId = p.pool_id || p.poolId || p.id || '';
+            const token0Id = p.token0_id || p.token0Id || p.token0?.id || '';
+            const token1Id = p.token1_id || p.token1Id || p.token1?.id || '';
+            const token0Symbol = p.token0_symbol || p.token0Symbol || p.token0?.symbol || '';
+            const token1Symbol = p.token1_symbol || p.token1Symbol || p.token1?.symbol || '';
+            const token0Name = (p.token0_name || p.token0Name || p.token0?.name || token0Symbol).replace('SUBFROST BTC', 'frBTC');
+            const token1Name = (p.token1_name || p.token1Name || p.token1?.name || token1Symbol).replace('SUBFROST BTC', 'frBTC');
 
             // Parse token IDs for icon URLs
             const [t0Block, t0Tx] = token0Id.split(':');
@@ -80,13 +78,14 @@ export function usePools(params: UsePoolsParams = {}) {
               ? `https://asset.oyl.gg/alkanes/${network}/${t1Block}-${t1Tx}.png`
               : '';
 
-            const tvlUsd = (details.token0TvlInUsd ?? 0) + (details.token1TvlInUsd ?? 0);
-            const vol24hUsd = details.poolVolume1dInUsd ?? 0;
-            const vol30dUsd = details.poolVolume30dInUsd ?? 0;
-            const apr = details.poolApr ?? 0;
+            // Get TVL and volume data from API response
+            const tvlUsd = p.tvl_usd || p.tvlUsd || (p.token0_tvl_usd ?? 0) + (p.token1_tvl_usd ?? 0) || 0;
+            const vol24hUsd = p.volume_1d_usd || p.volume1dUsd || p.poolVolume1dInUsd || 0;
+            const vol30dUsd = p.volume_30d_usd || p.volume30dUsd || p.poolVolume30dInUsd || 0;
+            const apr = p.apr || p.poolApr || 0;
 
             items.push({
-              id: p.pool_id,
+              id: poolId,
               pairLabel: `${token0Name} / ${token1Name} LP`,
               token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: token0IconUrl },
               token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
