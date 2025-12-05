@@ -6,6 +6,9 @@ import { Loader2 } from 'lucide-react';
 
 import { NetworkMap, type Network } from '@/utils/constants';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+
+// Session storage key for mnemonic
+const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
 // Import directly from sub-modules to avoid WASM dependency
 import { AlkanesWallet, AddressType, createWallet, createWalletFromMnemonic } from '@alkanes/ts-sdk';
 import { KeystoreManager, createKeystore, unlockKeystore } from '@alkanes/ts-sdk';
@@ -96,7 +99,7 @@ interface WalletProviderProps {
 }
 
 export function WalletProvider({ children, network }: WalletProviderProps) {
-  const { provider: sdkProvider, isInitialized: sdkInitialized } = useAlkanesSDK();
+  const { provider: sdkProvider, isInitialized: sdkInitialized, loadWallet } = useAlkanesSDK();
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [wallet, setWallet] = useState<AlkanesWallet | null>(null);
@@ -117,6 +120,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           // Restore wallet from session mnemonic
           const restoredWallet = createWalletFromMnemonic(sessionMnemonic, toSdkNetwork(network));
           setWallet(restoredWallet);
+
+          // Also load the wallet into the SDK provider for signing
+          if (sdkInitialized && loadWallet) {
+            loadWallet(sessionMnemonic);
+          }
         } catch (error) {
           // Session invalid, clear it
           sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
@@ -127,7 +135,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     };
 
     initializeWallet();
-  }, [network]);
+  }, [network, sdkInitialized, loadWallet]);
 
   // Derive addresses from wallet
   const addresses = useMemo(() => {
@@ -189,8 +197,13 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     setWallet(newWallet);
     setHasStoredKeystore(true);
 
+    // Load wallet into SDK provider for signing
+    if (loadWallet) {
+      loadWallet(mnemonic);
+    }
+
     return { mnemonic };
-  }, [network]);
+  }, [network, loadWallet]);
 
   // Unlock existing wallet
   const unlockWallet = useCallback(async (password: string): Promise<void> => {
@@ -206,7 +219,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, keystore.mnemonic);
 
     setWallet(unlockedWallet);
-  }, [network]);
+
+    // Load wallet into SDK provider for signing
+    if (loadWallet) {
+      loadWallet(keystore.mnemonic);
+    }
+  }, [network, loadWallet]);
 
   // Restore wallet from mnemonic
   const restoreWallet = useCallback(async (mnemonic: string, password: string): Promise<void> => {
@@ -237,7 +255,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     setWallet(restoredWallet);
     setHasStoredKeystore(true);
-  }, [network]);
+
+    // Load wallet into SDK provider for signing
+    if (loadWallet) {
+      loadWallet(trimmedMnemonic);
+    }
+  }, [network, loadWallet]);
 
   // Disconnect (lock) wallet
   const disconnect = useCallback(() => {

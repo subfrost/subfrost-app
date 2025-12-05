@@ -38,6 +38,7 @@ export const webprovider_esploraGetBlocksTipHeight: (a: number) => any;
 export const webprovider_esploraGetBlocksTipHash: (a: number) => any;
 export const webprovider_esploraGetAddressUtxo: (a: number, b: number, c: number) => any;
 export const webprovider_esploraGetAddressTxs: (a: number, b: number, c: number) => any;
+export const webprovider_esploraGetFeeEstimates: (a: number) => any;
 export const webprovider_esploraBroadcastTx: (a: number, b: number, c: number) => any;
 export const webprovider_esploraGetTxHex: (a: number, b: number, c: number) => any;
 export const webprovider_bitcoindGetBlockCount: (a: number) => any;
@@ -83,6 +84,8 @@ export const webprovider_walletCreate: (a: number, b: number, c: number, d: numb
 export const webprovider_walletLoad: (a: number, b: number, c: number) => any;
 export const webprovider_walletGetAddress: (a: number) => any;
 export const webprovider_walletGetBalance: (a: number, b: number, c: number) => any;
+export const webprovider_walletLoadMnemonic: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+export const webprovider_walletIsLoaded: (a: number) => number;
 export const webprovider_walletSend: (a: number, b: number, c: number) => any;
 export const webprovider_walletGetUtxos: (a: number, b: number, c: number) => any;
 export const webprovider_walletGetHistory: (a: number, b: number, c: number) => any;

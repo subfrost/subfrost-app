@@ -941,6 +941,13 @@ export class WebProvider {
         return ret;
     }
     /**
+     * @returns {Promise<any>}
+     */
+    esploraGetFeeEstimates() {
+        const ret = wasm.webprovider_esploraGetFeeEstimates(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @param {string} tx_hex
      * @returns {Promise<any>}
      */
@@ -1393,8 +1400,33 @@ export class WebProvider {
         return ret;
     }
     /**
+     * Load a wallet from mnemonic for signing transactions
+     * This must be called before walletSend or other signing operations
+     * @param {string} mnemonic_str
+     * @param {string | null} [passphrase]
+     */
+    walletLoadMnemonic(mnemonic_str, passphrase) {
+        const ptr0 = passStringToWasm0(mnemonic_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_walletLoadMnemonic(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * Check if wallet is loaded (has keystore for signing)
+     * @returns {boolean}
+     */
+    walletIsLoaded() {
+        const ret = wasm.webprovider_walletIsLoaded(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * Send BTC to an address
      * params: { address: string, amount: number (satoshis), fee_rate?: number }
+     * Wallet must be loaded first via walletLoadMnemonic
      * @param {string} params_json
      * @returns {Promise<any>}
      */
@@ -2263,15 +2295,15 @@ export function __wbindgen_cast_2241b6af4c4b2941(arg0, arg1) {
     return ret;
 };
 
-export function __wbindgen_cast_30f535a3d55f30e2(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 2264, function: Function { arguments: [Externref], shim_idx: 2265, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
-    return ret;
-};
-
 export function __wbindgen_cast_4625c577ab2ec9ee(arg0) {
     // Cast intrinsic for `U64 -> Externref`.
     const ret = BigInt.asUintN(64, arg0);
+    return ret;
+};
+
+export function __wbindgen_cast_58535cde6944cfce(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 2267, function: Function { arguments: [Externref], shim_idx: 2268, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
     return ret;
 };
 

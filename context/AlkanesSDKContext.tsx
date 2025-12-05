@@ -11,11 +11,22 @@ interface BitcoinPrice {
   lastUpdated: number;
 }
 
+interface FeeEstimates {
+  slow: number;
+  medium: number;
+  fast: number;
+  lastUpdated: number;
+}
+
 interface AlkanesSDKContextType {
   provider: WebProvider | null;
   isInitialized: boolean;
+  isWalletLoaded: boolean;
+  loadWallet: (mnemonic: string, passphrase?: string) => void;
   bitcoinPrice: BitcoinPrice | null;
   refreshBitcoinPrice: () => Promise<void>;
+  feeEstimates: FeeEstimates | null;
+  refreshFeeEstimates: () => Promise<void>;
   network: Network;
 }
 
@@ -68,7 +79,25 @@ const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
 export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProps) {
   const [provider, setProvider] = useState<WebProvider | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isWalletLoaded, setIsWalletLoaded] = useState(false);
   const [bitcoinPrice, setBitcoinPrice] = useState<BitcoinPrice | null>(null);
+  const [feeEstimates, setFeeEstimates] = useState<FeeEstimates | null>(null);
+
+  // Load wallet into provider from mnemonic
+  const loadWallet = (mnemonic: string, passphrase?: string) => {
+    if (!provider) {
+      console.error('[AlkanesSDK] Cannot load wallet - provider not initialized');
+      return;
+    }
+
+    try {
+      provider.walletLoadMnemonic(mnemonic, passphrase || null);
+      setIsWalletLoaded(true);
+      console.log('[AlkanesSDK] Wallet loaded into provider');
+    } catch (error) {
+      console.error('[AlkanesSDK] Failed to load wallet:', error);
+    }
+  };
 
   // Initialize provider based on network
   useEffect(() => {
@@ -142,23 +171,78 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     }
   };
 
+  // Poll fee estimates every 30 seconds
+  const refreshFeeEstimates = async () => {
+    if (!provider) return;
+
+    try {
+      const feeData = await provider.esploraGetFeeEstimates();
+      console.log('[AlkanesSDK] Fee estimates data:', feeData);
+
+      if (feeData) {
+        // Convert Map to object if needed
+        const data = feeData instanceof Map ? Object.fromEntries(feeData) : feeData;
+
+        // Esplora fee estimates format: { "1": rate, "2": rate, "3": rate, ... "144": rate }
+        // We want: fast (1 block), medium (6 blocks), slow (144 blocks)
+        const getRate = (target: string): number => {
+          const rate = data[target] || data.estimates?.[target];
+          return typeof rate === 'number' ? Math.ceil(rate) : 1;
+        };
+
+        const fast = getRate('1') || getRate('2') || 25;
+        const medium = getRate('6') || getRate('3') || 10;
+        const slow = getRate('144') || getRate('25') || 2;
+
+        console.log('[AlkanesSDK] Extracted fee rates:', { fast, medium, slow });
+
+        setFeeEstimates({
+          fast: Math.max(1, fast),
+          medium: Math.max(1, medium),
+          slow: Math.max(1, slow),
+          lastUpdated: Date.now(),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch fee estimates:', error);
+      // Set fallback values if fetch fails
+      if (!feeEstimates) {
+        setFeeEstimates({
+          fast: 25,
+          medium: 10,
+          slow: 2,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  };
+
   useEffect(() => {
     if (!isInitialized || !provider) return;
 
     // Initial fetch
     refreshBitcoinPrice();
+    refreshFeeEstimates();
 
     // Poll every 30 seconds
-    const interval = setInterval(refreshBitcoinPrice, 30000);
+    const priceInterval = setInterval(refreshBitcoinPrice, 30000);
+    const feeInterval = setInterval(refreshFeeEstimates, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(priceInterval);
+      clearInterval(feeInterval);
+    };
   }, [isInitialized, provider]);
 
   const value: AlkanesSDKContextType = {
     provider,
     isInitialized,
+    isWalletLoaded,
+    loadWallet,
     bitcoinPrice,
     refreshBitcoinPrice,
+    feeEstimates,
+    refreshFeeEstimates,
     network,
   };
 

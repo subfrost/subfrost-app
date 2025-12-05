@@ -181,6 +181,7 @@ export class WebProvider {
   esploraGetBlocksTipHash(): Promise<any>;
   esploraGetAddressUtxo(address: string): Promise<any>;
   esploraGetAddressTxs(address: string): Promise<any>;
+  esploraGetFeeEstimates(): Promise<any>;
   esploraBroadcastTx(tx_hex: string): Promise<any>;
   esploraGetTxHex(txid: string): Promise<any>;
   bitcoindGetBlockCount(): Promise<any>;
@@ -242,8 +243,18 @@ export class WebProvider {
    */
   walletGetBalance(addresses?: string[] | null): Promise<any>;
   /**
+   * Load a wallet from mnemonic for signing transactions
+   * This must be called before walletSend or other signing operations
+   */
+  walletLoadMnemonic(mnemonic_str: string, passphrase?: string | null): void;
+  /**
+   * Check if wallet is loaded (has keystore for signing)
+   */
+  walletIsLoaded(): boolean;
+  /**
    * Send BTC to an address
    * params: { address: string, amount: number (satoshis), fee_rate?: number }
+   * Wallet must be loaded first via walletLoadMnemonic
    */
   walletSend(params_json: string): Promise<any>;
   /**
