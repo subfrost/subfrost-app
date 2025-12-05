@@ -274,10 +274,9 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         throw new Error('Provider not initialized. Please wait and try again.');
       }
 
-      // Get mnemonic from session storage (set by WalletContext on unlock)
-      const mnemonic = sessionStorage.getItem('subfrost_session_mnemonic');
-      if (!mnemonic) {
-        throw new Error('Wallet session not found. Please reconnect your wallet.');
+      // Check if wallet is loaded in provider
+      if (!provider.walletIsLoaded()) {
+        throw new Error('Wallet not loaded. Please reconnect your wallet.');
       }
 
       const amountSats = Math.floor(parseFloat(amount) * 100000000);
@@ -289,13 +288,19 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       console.log('[SendModal] From address:', address);
 
       // Use WASM provider's walletSend method
+      // Field names must match alkanes-web-sys SendParams struct:
+      // - address (recipient)
+      // - amount (in satoshis)
+      // - fee_rate (optional)
+      // - from (optional array of addresses to spend from)
+      // - lock_alkanes (protect UTXOs with alkane assets)
       const sendParams = {
-        mnemonic,
-        recipient: recipientAddress,
-        amount: amountSats, // Amount in satoshis
-        feeRate: feeRate,
-        fromAddresses: [address],
-        lockAlkanes: true,
+        address: recipientAddress,  // Recipient address
+        amount: amountSats,         // Amount in satoshis
+        fee_rate: feeRate,          // Fee rate in sat/vB
+        from: [address],            // Spend from this address
+        lock_alkanes: true,         // Protect alkane UTXOs
+        auto_confirm: true,         // Skip confirmation prompt
       };
 
       const result = await provider.walletSend(JSON.stringify(sendParams));

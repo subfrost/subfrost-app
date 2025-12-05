@@ -7,9 +7,23 @@ import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { ExternalLink, Clock, CheckCircle, Code, RefreshCw, Zap, Search, Sparkles } from 'lucide-react';
 
 export default function TransactionHistory() {
-  const { address } = useWallet() as any;
+  const { account } = useWallet() as any;
   const { provider } = useAlkanesSDK();
-  const { transactions, loading, error } = useTransactionHistory(address);
+
+  // Get transaction history for both addresses
+  const p2wpkhAddress = account?.nativeSegwit?.address;
+  const p2trAddress = account?.taproot?.address;
+
+  const { transactions: p2wpkhTxs, loading: p2wpkhLoading, error: p2wpkhError } = useTransactionHistory(p2wpkhAddress);
+  const { transactions: p2trTxs, loading: p2trLoading, error: p2trError } = useTransactionHistory(p2trAddress);
+
+  // Merge and dedupe transactions by txid, sort by block time (newest first)
+  const transactions = [...p2wpkhTxs, ...p2trTxs]
+    .filter((tx, idx, arr) => arr.findIndex(t => t.txid === tx.txid) === idx)
+    .sort((a, b) => (b.blockTime || 0) - (a.blockTime || 0));
+
+  const loading = p2wpkhLoading || p2trLoading;
+  const error = p2wpkhError || p2trError;
   const [viewMode, setViewMode] = useState<'visual' | 'raw'>('visual');
   const [expandedTxs, setExpandedTxs] = useState<Set<string>>(new Set());
   const [inspectingTx, setInspectingTx] = useState<string | null>(null);

@@ -1,12 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
+export function analyze_psbt(psbt_base64: string): string;
+export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
+export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 /**
  * Asynchronously encrypts data using the Web Crypto API.
  */
 export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
-export function analyze_psbt(psbt_base64: string): string;
-export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
-export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 export interface PoolWithDetails {
     pool_id_block: number;
     pool_id_tx: number;
@@ -181,6 +181,7 @@ export class WebProvider {
   esploraGetBlocksTipHash(): Promise<any>;
   esploraGetAddressUtxo(address: string): Promise<any>;
   esploraGetAddressTxs(address: string): Promise<any>;
+  esploraGetFeeEstimates(): Promise<any>;
   esploraBroadcastTx(tx_hex: string): Promise<any>;
   esploraGetTxHex(txid: string): Promise<any>;
   bitcoindGetBlockCount(): Promise<any>;
@@ -242,8 +243,18 @@ export class WebProvider {
    */
   walletGetBalance(addresses?: string[] | null): Promise<any>;
   /**
+   * Load a wallet from mnemonic for signing transactions
+   * This must be called before walletSend or other signing operations
+   */
+  walletLoadMnemonic(mnemonic_str: string, passphrase?: string | null): void;
+  /**
+   * Check if wallet is loaded (has keystore for signing)
+   */
+  walletIsLoaded(): boolean;
+  /**
    * Send BTC to an address
    * params: { address: string, amount: number (satoshis), fee_rate?: number }
+   * Wallet must be loaded first via walletLoadMnemonic
    */
   walletSend(params_json: string): Promise<any>;
   /**
