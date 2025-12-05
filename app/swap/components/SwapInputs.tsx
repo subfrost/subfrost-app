@@ -116,11 +116,16 @@ export default function SwapInputs({
 
   const activePercent = getActivePercent();
 
+  // Bridge tokens don't have on-chain balances
+  const BRIDGE_TOKEN_IDS = ['usdt', 'eth', 'sol', 'zec'];
+  const isFromBridgeToken = from?.id ? BRIDGE_TOKEN_IDS.includes(from.id) : false;
+  const isToBridgeToken = to?.id ? BRIDGE_TOKEN_IDS.includes(to.id) : false;
+
   return (
     <div className="relative flex flex-col gap-3">
       {/* Sell panel */}
       <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-        <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Pay</span>
+        <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Send</span>
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
           <div className="flex flex-col gap-2">
             {/* Row 1: Input + Token Selector */}
@@ -153,64 +158,68 @@ export default function SwapInputs({
             {/* Row 2: Fiat + Balance */}
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
-              <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                {fromBalanceText}
-                {balanceUsage > 0 && (
-                  <span className="ml-1.5 text-[10px] font-bold">
-                    ({balanceUsage.toFixed(1)}%)
-                  </span>
-                )}
-              </div>
+              {!isFromBridgeToken && (
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  {fromBalanceText}
+                  {balanceUsage > 0 && (
+                    <span className="ml-1.5 text-[10px] font-bold">
+                      ({balanceUsage.toFixed(1)}%)
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            
-            {/* Row 3: Balance Bar + Percentage Buttons */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex-1">
-                {balanceUsage > 0 && (
-                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${getBalanceColor()} transition-all duration-300 ease-out`}
-                      style={{ width: `${balanceUsage}%` }}
-                    />
-                  </div>
-                )}
+
+            {/* Row 3: Balance Bar + Percentage Buttons (hidden for bridge tokens) */}
+            {!isFromBridgeToken && (
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1">
+                  {balanceUsage > 0 && (
+                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${getBalanceColor()} transition-all duration-300 ease-out`}
+                        style={{ width: `${balanceUsage}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {onPercentFrom && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onPercentFrom(0.25)}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.25 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                      >
+                        25%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onPercentFrom(0.5)}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.5 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                      >
+                        50%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onPercentFrom(0.75)}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.75 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                      >
+                        75%
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onMaxFrom}
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none ${onMaxFrom ? (activePercent === 1 ? "border border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]" : "border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40") : "opacity-40 cursor-not-allowed border border-transparent"}`}
+                    disabled={!onMaxFrom}
+                  >
+                    Max
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                {onPercentFrom && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onPercentFrom(0.25)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.25 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
-                    >
-                      25%
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onPercentFrom(0.5)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.5 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
-                    >
-                      50%
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onPercentFrom(0.75)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.75 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
-                    >
-                      75%
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={onMaxFrom}
-                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none ${onMaxFrom ? (activePercent === 1 ? "border border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]" : "border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40") : "opacity-40 cursor-not-allowed border border-transparent"}`}
-                  disabled={!onMaxFrom}
-                >
-                  Max
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -264,7 +273,9 @@ export default function SwapInputs({
             {/* Row 2: Fiat + Balance */}
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{toFiatText}</div>
-              <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
+              {!isToBridgeToken && (
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
+              )}
             </div>
           </div>
         </div>

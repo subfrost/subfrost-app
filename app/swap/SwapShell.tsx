@@ -929,15 +929,15 @@ export default function SwapShell() {
         onClose={closeTokenSelector}
         tokens={
           tokenSelectorMode === 'from'
-            ? fromTokenOptions 
+            ? fromTokenOptions
             : tokenSelectorMode === 'pool0' || tokenSelectorMode === 'pool1'
             ? poolTokenOptions
             : toTokenOptions
         }
         onSelectToken={handleTokenSelect}
         selectedTokenId={
-          tokenSelectorMode === 'from' 
-            ? fromToken?.id 
+          tokenSelectorMode === 'from'
+            ? fromToken?.id
             : tokenSelectorMode === 'to'
             ? toToken?.id
             : tokenSelectorMode === 'pool0'
@@ -945,13 +945,37 @@ export default function SwapShell() {
             : poolToken1?.id
         }
         title={
-          tokenSelectorMode === 'from' 
-            ? 'Select token to swap' 
+          tokenSelectorMode === 'from'
+            ? 'Select token to swap'
             : tokenSelectorMode === 'to'
             ? 'Select token to receive'
             : 'Select token to pool'
         }
         network={network}
+        mode={tokenSelectorMode}
+        onBridgeTokenSelect={(tokenSymbol) => {
+          const bridgeTokenMap: Record<string, { name: string }> = {
+            USDT: { name: 'Tether USD' },
+            ETH: { name: 'Ethereum' },
+            SOL: { name: 'Solana' },
+            ZEC: { name: 'Zcash' },
+          };
+          const tokenInfo = bridgeTokenMap[tokenSymbol];
+          if (tokenInfo) {
+            const bridgeToken: TokenMeta = {
+              id: tokenSymbol.toLowerCase(),
+              symbol: tokenSymbol,
+              name: tokenInfo.name,
+              isAvailable: true,
+            };
+            if (tokenSelectorMode === 'from') {
+              setFromToken(bridgeToken);
+            } else if (tokenSelectorMode === 'to') {
+              setToToken(bridgeToken);
+            }
+          }
+          closeTokenSelector();
+        }}
       />
 
       <LPPositionSelectorModal

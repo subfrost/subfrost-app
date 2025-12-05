@@ -26,7 +26,17 @@ type Props = {
   title?: string;
   network?: Network;
   excludedTokenIds?: string[];
+  mode?: 'from' | 'to' | 'pool0' | 'pool1' | null;
+  onBridgeTokenSelect?: (token: string) => void;
 };
+
+// Bridge token definitions
+const BRIDGE_TOKENS = [
+  { symbol: 'USDT', name: 'Tether USD' },
+  { symbol: 'ETH', name: 'Ethereum' },
+  { symbol: 'SOL', name: 'Solana' },
+  { symbol: 'ZEC', name: 'Zcash' },
+] as const;
 
 export default function TokenSelectorModal({
   isOpen,
@@ -37,6 +47,8 @@ export default function TokenSelectorModal({
   title = 'Select a token',
   network = 'mainnet',
   excludedTokenIds = [],
+  mode,
+  onBridgeTokenSelect,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -84,12 +96,42 @@ export default function TokenSelectorModal({
             </button>
           </div>
           <p className="text-xs font-medium text-[color:var(--sf-text)]/60">
-            We only support trades matched with BTC, frBTC, or bUSD
+            We only support trades of high-volume assets.
           </p>
         </div>
 
+        {/* Bridge Section - Shown in FROM and TO modes */}
+        {(mode === 'from' || mode === 'to') && (
+          <div className="border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/20 px-6 py-4">
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
+                Cross-chain Swap:
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {BRIDGE_TOKENS.map((token) => (
+                  <button
+                    key={token.symbol}
+                    type="button"
+                    onClick={() => onBridgeTokenSelect?.(token.symbol)}
+                    className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
+                  >
+                    <img
+                      src={`/tokens/${token.symbol.toLowerCase()}.svg`}
+                      alt={token.symbol}
+                      className="w-5 h-5 rounded-full flex-shrink-0"
+                    />
+                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                      {token.symbol}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Search */}
-        <div className="border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/20 px-6 py-4">
+        <div className="bg-[color:var(--sf-surface)]/20 px-6 py-4">
           <div className="relative">
             <Search
               size={18}
@@ -97,7 +139,7 @@ export default function TokenSelectorModal({
             />
             <input
               type="text"
-              placeholder="Search by name or symbol..."
+              placeholder="Search bitcoin-native assets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 py-3 pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:border-[color:var(--sf-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 transition-all"
