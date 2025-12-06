@@ -18,9 +18,10 @@ export default function WalletSettings() {
   const { network: currentNetwork, account, wallet } = useWallet() as any;
   const { theme } = useTheme();
   const [network, setNetwork] = useState<NetworkType>(currentNetwork || 'mainnet');
+  const [initialNetwork, setInitialNetwork] = useState<NetworkType>(currentNetwork || 'mainnet');
   const [customDataApiUrl, setCustomDataApiUrl] = useState('');
   const [customSandshrewUrl, setCustomSandshrewUrl] = useState('');
-  
+
   // Derivation config
   const [taprootConfig, setTaprootConfig] = useState<DerivationConfig>({
     accountIndex: 0,
@@ -32,10 +33,13 @@ export default function WalletSettings() {
     changeIndex: 0,
     addressIndex: 0,
   });
-  
+
   const [saved, setSaved] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showDerivationConfig, setShowDerivationConfig] = useState(false);
+
+  // Track if network has unsaved changes
+  const hasNetworkChanges = network !== initialNetwork;
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   
   // Security features
@@ -73,6 +77,14 @@ export default function WalletSettings() {
     }
   }, [wallet, taprootConfig, segwitConfig]);
 
+  // Sync initial network when currentNetwork changes from context
+  useEffect(() => {
+    if (currentNetwork) {
+      setNetwork(currentNetwork);
+      setInitialNetwork(currentNetwork);
+    }
+  }, [currentNetwork]);
+
   const handleSave = () => {
     console.log('Saving settings:', {
       network,
@@ -83,13 +95,16 @@ export default function WalletSettings() {
       taprootConfig,
       segwitConfig,
     });
-    
+
     // Save network to localStorage
     localStorage.setItem('subfrost_selected_network', network);
-    
+
     // Dispatch custom event to notify other components (same tab)
     window.dispatchEvent(new CustomEvent('network-changed', { detail: network }));
-    
+
+    // Update initial network to reflect saved state
+    setInitialNetwork(network);
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -265,6 +280,17 @@ export default function WalletSettings() {
                 />
               </div>
             </>
+          )}
+
+          {/* Save Settings Button - appears when network is changed */}
+          {hasNetworkChanges && (
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all text-white"
+            >
+              <Save size={20} />
+              {saved ? 'Settings Saved!' : 'Save Settings'}
+            </button>
           )}
         </div>
       </div>
