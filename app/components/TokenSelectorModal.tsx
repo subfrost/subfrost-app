@@ -28,14 +28,15 @@ type Props = {
   excludedTokenIds?: string[];
   mode?: 'from' | 'to' | 'pool0' | 'pool1' | null;
   onBridgeTokenSelect?: (token: string) => void;
+  selectedBridgeTokenFromOther?: string; // Bridge token selected in the opposite selector
 };
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'Tether USD' },
-  { symbol: 'ETH', name: 'Ethereum' },
-  { symbol: 'SOL', name: 'Solana' },
-  { symbol: 'ZEC', name: 'Zcash' },
+  { symbol: 'USDT', name: 'Tether USD', enabled: true },
+  { symbol: 'ETH', name: 'Ethereum', enabled: false },
+  { symbol: 'SOL', name: 'Solana', enabled: false },
+  { symbol: 'ZEC', name: 'Zcash', enabled: false },
 ] as const;
 
 export default function TokenSelectorModal({
@@ -49,8 +50,11 @@ export default function TokenSelectorModal({
   excludedTokenIds = [],
   mode,
   onBridgeTokenSelect,
+  selectedBridgeTokenFromOther,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showComingSoon, setShowComingSoon] = useState(false);
+  const [showAlreadySelected, setShowAlreadySelected] = useState(false);
 
   const filteredTokens = useMemo(() => {
     if (!searchQuery.trim()) return tokens;
@@ -89,7 +93,7 @@ export default function TokenSelectorModal({
             </h2>
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 focus:outline-none"
               aria-label="Close"
             >
               <X size={18} />
@@ -104,27 +108,76 @@ export default function TokenSelectorModal({
         {(mode === 'from' || mode === 'to') && (
           <div className="border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/20 px-6 py-4">
             <div className="flex flex-col gap-3">
-              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-                Cross-chain Swap:
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
+                  Cross-chain Swap:
+                </span>
+                {showComingSoon && (
+                  <span className="text-xs font-bold text-[color:var(--sf-primary)] animate-pulse">
+                    Coming soon!
+                  </span>
+                )}
+                {showAlreadySelected && (
+                  <span className="text-xs font-bold text-[color:var(--sf-primary)] animate-pulse">
+                    Token already selected!
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {BRIDGE_TOKENS.map((token) => (
-                  <button
-                    key={token.symbol}
-                    type="button"
-                    onClick={() => onBridgeTokenSelect?.(token.symbol)}
-                    className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md sf-focus-ring"
-                  >
-                    <img
-                      src={`/tokens/${token.symbol.toLowerCase()}.svg`}
-                      alt={token.symbol}
-                      className="w-5 h-5 rounded-full flex-shrink-0"
-                    />
-                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                      {token.symbol}
-                    </span>
-                  </button>
-                ))}
+                {BRIDGE_TOKENS.map((token) => {
+                  const isSelectedInOther = selectedBridgeTokenFromOther === token.symbol;
+
+                  return (
+                    <button
+                      key={token.symbol}
+                      type="button"
+                      onClick={() => {
+                        if (isSelectedInOther) {
+                          if (!showAlreadySelected) {
+                            setShowAlreadySelected(true);
+                            setTimeout(() => setShowAlreadySelected(false), 1000);
+                          }
+                        } else if (token.enabled) {
+                          onBridgeTokenSelect?.(token.symbol);
+                        } else {
+                          if (!showComingSoon) {
+                            setShowComingSoon(true);
+                            setTimeout(() => setShowComingSoon(false), 1000);
+                          }
+                        }
+                      }}
+                      className={`inline-flex items-center gap-2 rounded-xl border-2 px-3 py-2 transition-all focus:outline-none ${
+                        isSelectedInOther
+                          ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
+                          : token.enabled
+                          ? 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md cursor-pointer'
+                          : 'border-[color:var(--sf-outline)]/50 bg-[color:var(--sf-surface)]/40 cursor-not-allowed'
+                      }`}
+                    >
+                      <img
+                        src={`/tokens/${token.symbol.toLowerCase()}.svg`}
+                        alt={token.symbol}
+                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
+                      />
+                      <span className={`font-bold text-sm whitespace-nowrap ${
+                        isSelectedInOther
+                          ? 'text-[color:var(--sf-text)]'
+                          : token.enabled
+                          ? 'text-[color:var(--sf-text)]'
+                          : 'text-[color:var(--sf-text)]/40'
+                      }`}>
+                        {token.symbol}
+                      </span>
+                      {isSelectedInOther && (
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -169,7 +222,7 @@ export default function TokenSelectorModal({
                   <button
                     key={token.id}
                     onClick={() => handleSelect(token.id)}
-                    className={`group relative w-full rounded-xl border-2 p-4 text-left transition-all sf-focus-ring ${
+                    className={`group relative w-full rounded-xl border-2 p-4 text-left transition-all focus:outline-none ${
                       !isAvailable
                         ? 'border-transparent bg-gray-300/50 opacity-50 cursor-not-allowed'
                         : isSelected

@@ -28,7 +28,7 @@ export default function VaultTiles() {
             <Link
               key={v.id}
               href={`/vaults?vault=${v.id}`}
-              className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 sf-focus-ring"
+              className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
             >
               <div className="flex items-center gap-3 mb-3">
                 <div className="h-10 w-10 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/10 flex items-center justify-center">

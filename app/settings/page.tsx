@@ -19,7 +19,7 @@ export default function SettingsPage() {
               step="0.01"
               value={maxSlippage}
               onChange={(e) => setMaxSlippage(e.target.value)}
-              className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] sf-focus-ring"
+              className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] focus:outline-none"
             />
           </div>
           <div className="grid gap-2">
@@ -30,7 +30,7 @@ export default function SettingsPage() {
               step="1"
               value={deadlineBlocks}
               onChange={(e) => setDeadlineBlocks(Number(e.target.value || 0))}
-              className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] sf-focus-ring"
+              className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] focus:outline-none"
             />
           </div>
         </div>

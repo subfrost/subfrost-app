@@ -375,7 +375,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
           <button
             key={pool.id}
             onClick={() => handleSelectPool(pool)}
-            className={`text-left rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 sf-focus-ring ${
+            className={`text-left rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 focus:outline-none ${
               selectedPoolId === pool.id ? 'ring-2 ring-[color:var(--sf-primary)] border-[color:var(--sf-primary)]' : ''
             }`}
           >
@@ -429,7 +429,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
         <div className="mt-6 flex justify-center">
           <button
             onClick={() => setShowAll(true)}
-            className="rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] px-8 py-3 font-bold text-[color:var(--sf-text)] uppercase tracking-wide backdrop-blur-md transition-all hover:bg-[color:var(--sf-primary)]/15 hover:shadow-lg hover:border-[color:var(--sf-primary)]/40 sf-focus-ring"
+            className="rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] px-8 py-3 font-bold text-[color:var(--sf-text)] uppercase tracking-wide backdrop-blur-md transition-all hover:bg-[color:var(--sf-primary)]/15 hover:shadow-lg hover:border-[color:var(--sf-primary)]/40 focus:outline-none"
           >
             Show All Pools ({filteredPools.length - displayedPools.length} more)
           </button>

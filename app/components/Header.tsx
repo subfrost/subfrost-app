@@ -174,7 +174,7 @@ import { useTheme } from "@/context/ThemeContext";
                <button
                  type="button"
                  onClick={() => setMenuOpen((v) => !v)}
-                 className={`flex items-center gap-2 rounded-full bg-[color:var(--sf-surface)] px-4 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] sf-focus-ring ${theme === 'dark' ? 'shadow-[0_2px_0_rgba(0,0,0,0.2),0_6px_14px_rgba(0,0,0,0.12)]' : ''}`}
+                 className={`flex items-center gap-2 rounded-full bg-[color:var(--sf-surface)] px-4 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] focus:outline-none ${theme === 'dark' ? 'shadow-[0_2px_0_rgba(0,0,0,0.2),0_6px_14px_rgba(0,0,0,0.12)]' : ''}`}
                >
                  <AddressAvatar address={address} size={24} />
                  <span className="hidden sm:inline">{truncate(address)}</span>
@@ -211,7 +211,7 @@ import { useTheme } from "@/context/ThemeContext";
                <button
                  type="button"
                  onClick={() => onConnectModalOpenChange(true)}
-                 className="relative rounded-lg bg-[color:var(--sf-surface)] px-6 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] sf-focus-ring overflow-hidden"
+                 className="relative rounded-lg bg-[color:var(--sf-surface)] px-6 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] focus:outline-none overflow-hidden"
                >
                  <span className="relative z-10">CONNECT WALLET</span>
                  {theme === 'light' && (
@@ -229,7 +229,7 @@ import { useTheme } from "@/context/ThemeContext";
            <button
              type="button"
              onClick={() => setMobileMenuOpen((v) => !v)}
-             className="flex items-center justify-center w-10 h-10 rounded-lg text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 sf-focus-ring"
+             className="flex items-center justify-center w-10 h-10 rounded-lg text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
              aria-label="Toggle mobile menu"
            >
              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}

@@ -56,7 +56,7 @@ export default function LPPositionSelectorModal({
           </h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 focus:outline-none"
             aria-label="Close"
           >
             <X size={18} />
@@ -97,7 +97,7 @@ export default function LPPositionSelectorModal({
                   <button
                     key={position.id}
                     onClick={() => handleSelect(position)}
-                    className={`group w-full rounded-xl border-2 p-4 text-left transition-all hover:shadow-md sf-focus-ring ${
+                    className={`group w-full rounded-xl border-2 p-4 text-left transition-all hover:shadow-md focus:outline-none ${
                       isSelected
                         ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
                         : 'border-transparent bg-[color:var(--sf-surface)]/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-[color:var(--sf-surface)]/60'

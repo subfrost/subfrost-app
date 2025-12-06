@@ -81,6 +81,9 @@ export default function SwapShell() {
   const [toAmount, setToAmount] = useState<string>("");
   const [direction, setDirection] = useState<'sell' | 'buy'>('sell');
 
+  // Ethereum address for cross-chain swaps
+  const [ethereumAddress, setEthereumAddress] = useState<string>("");
+
   // LP state
   const [poolToken0, setPoolToken0] = useState<TokenMeta | undefined>();
   const [poolToken1, setPoolToken1] = useState<TokenMeta | undefined>();
@@ -293,12 +296,12 @@ export default function SwapShell() {
     if (tokenId === FRBTC_ALKANE_ID) {
       return btcPrice;
     }
-    
-    // For bUSD, assume $1
-    if (tokenId === BUSD_ALKANE_ID) {
+
+    // For bUSD and USDT, assume $1
+    if (tokenId === BUSD_ALKANE_ID || tokenId === 'usdt') {
       return 1.0;
     }
-    
+
     return undefined;
   };
 
@@ -816,6 +819,8 @@ export default function SwapShell() {
               toFiatText={calculateUsdValue(toToken?.id, toAmount)}
               onMaxFrom={fromToken ? handleMaxFrom : undefined}
               onPercentFrom={fromToken ? handlePercentFrom : undefined}
+              ethereumAddress={ethereumAddress}
+              onChangeEthereumAddress={setEthereumAddress}
               summary={
                 <SwapSummary
                   sellId={fromToken?.id ?? ''}
@@ -953,6 +958,14 @@ export default function SwapShell() {
         }
         network={network}
         mode={tokenSelectorMode}
+        selectedBridgeTokenFromOther={
+          // Check if the opposite selector has a cross-chain bridge token selected
+          tokenSelectorMode === 'from'
+            ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(toToken?.symbol ?? '') ? toToken?.symbol : undefined)
+            : tokenSelectorMode === 'to'
+            ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
+            : undefined
+        }
         onBridgeTokenSelect={(tokenSymbol) => {
           const bridgeTokenMap: Record<string, { name: string }> = {
             USDT: { name: 'Tether USD' },

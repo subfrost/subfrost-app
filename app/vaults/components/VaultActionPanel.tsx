@@ -104,7 +104,7 @@ export default function VaultActionPanel({
             placeholder="0.00"
             value={amount}
             onChange={(e) => onAmountChange(e.target.value)}
-            className="flex-1 h-12 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] sf-focus-ring"
+            className="flex-1 h-12 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] focus:outline-none"
           />
           <button
             onClick={() => onAmountChange(balance)}
@@ -128,7 +128,7 @@ export default function VaultActionPanel({
           onExecute();
         }}
         disabled={isConnected && (!amount || parseFloat(amount) <= 0)}
-        className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)] mb-4"
+        className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)] mb-4"
       >
         {isConnected ? mode.toUpperCase() : 'CONNECT WALLET'}
       </button>

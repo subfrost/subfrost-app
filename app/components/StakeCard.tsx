@@ -46,7 +46,7 @@ export default function StakeCard() {
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-right text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] sf-focus-ring"
+              className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-right text-sm text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)] focus:outline-none"
             />
           </div>
             <div className="mt-2 text-xs text-[color:var(--sf-text)]/60">
@@ -86,7 +86,7 @@ export default function StakeCard() {
               if (!isConnected) onConnectModalOpenChange(true);
             }}
             disabled={isStakeDisabled}
-            className="w-full rounded-lg bg-[color:var(--sf-primary)] py-3 text-sm font-semibold tracking-wide text-white shadow-sm transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed sf-focus-ring"
+            className="w-full rounded-lg bg-[color:var(--sf-primary)] py-3 text-sm font-semibold tracking-wide text-white shadow-sm transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none"
           >
             {isConnected ? 'STAKE BTC' : 'CONNECT WALLET'}
           </button>
