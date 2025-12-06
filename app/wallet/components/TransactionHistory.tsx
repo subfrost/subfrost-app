@@ -283,21 +283,39 @@ export default function TransactionHistory() {
                         </div>
                       </div>
 
+                      {/* Runestone Data */}
+                      {tx.runestone && (
+                        <div className="mb-4">
+                          <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2 flex items-center gap-2">
+                            <Zap size={16} className="text-orange-400" />
+                            Runestone Data
+                          </div>
+                          <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-orange-500/20">
+                            <pre className="text-xs font-mono text-[color:var(--sf-text)]/80 overflow-x-auto">
+                              {JSON.stringify(tx.runestone, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Alkanes Traces */}
-                      {tx.protostoneTraces && tx.protostoneTraces.length > 0 && (
+                      {tx.alkanesTraces && tx.alkanesTraces.length > 0 && (
                         <div>
                           <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2 flex items-center gap-2">
-                            <Zap size={16} className="text-purple-400" />
-                            Alkanes Execution Traces ({tx.protostoneTraces.length} protostone{tx.protostoneTraces.length !== 1 ? 's' : ''})
+                            <Sparkles size={16} className="text-purple-400" />
+                            Alkanes Execution Traces ({tx.alkanesTraces.length} protostone{tx.alkanesTraces.length !== 1 ? 's' : ''})
                           </div>
                           <div className="space-y-3">
-                            {tx.protostoneTraces.map((trace, idx) => (
+                            {tx.alkanesTraces.map((trace: any, idx: number) => (
                               <div key={idx} className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-purple-500/20">
                                 <div className="text-xs font-medium text-purple-500 dark:text-purple-400 mb-2">
-                                  Protostone #{idx + 1} (virtual vout {tx.outputs.length + 1 + idx})
+                                  Protostone #{trace.protostone_index + 1} (vout {trace.vout})
                                 </div>
-                                <pre className="text-xs font-mono text-[color:var(--sf-text)]/80 overflow-x-auto">
-                                  {JSON.stringify(trace, null, 2)}
+                                <div className="font-mono text-xs text-[color:var(--sf-text)]/60 mb-2">
+                                  Outpoint: {trace.outpoint}
+                                </div>
+                                <pre className="text-xs font-mono text-[color:var(--sf-text)]/80 overflow-x-auto max-h-64 overflow-y-auto">
+                                  {JSON.stringify(trace.trace, null, 2)}
                                 </pre>
                               </div>
                             ))}

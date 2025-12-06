@@ -1,5 +1,6 @@
 /**
  * Hook for fetching transaction history using WASM WebProvider
+ * Uses getAddressTxsWithTraces for enriched data including runestone/alkanes traces
  */
 
 import { useState, useEffect } from 'react';
@@ -10,12 +11,29 @@ export interface TransactionInput {
   vout: number;
   address?: string;
   amount?: number;
+  isCoinbase?: boolean;
 }
 
 export interface TransactionOutput {
   address?: string;
   amount: number;
   scriptPubKey: string;
+  scriptPubKeyType?: string;
+}
+
+export interface AlkanesTrace {
+  vout: number;
+  outpoint: string;
+  protostone_index: number;
+  trace: any;
+}
+
+export interface RunestoneData {
+  edicts?: any[];
+  etching?: any;
+  mint?: any;
+  pointer?: number;
+  protostones?: any[];
 }
 
 export interface EnrichedTransaction {
@@ -25,15 +43,18 @@ export interface EnrichedTransaction {
   confirmed: boolean;
   fee?: number;
   weight?: number;
+  size?: number;
   inputs: TransactionInput[];
   outputs: TransactionOutput[];
   hasOpReturn: boolean;
   hasProtostones: boolean;
   isRbf: boolean;
-  protostoneTraces?: any[]; // Array of alkanes execution traces
+  isCoinbase: boolean;
+  runestone?: RunestoneData;
+  alkanesTraces?: AlkanesTrace[];
 }
 
-export function useTransactionHistory(address?: string) {
+export function useTransactionHistory(address?: string, excludeCoinbase: boolean = true) {
   const { provider, isInitialized, network } = useAlkanesSDK();
   const [transactions, setTransactions] = useState<EnrichedTransaction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,24 +78,48 @@ export function useTransactionHistory(address?: string) {
       setError(null);
 
       try {
-        console.log('[useTransactionHistory] Fetching transactions for:', address);
+        console.log('[useTransactionHistory] Fetching transactions with traces for:', address);
 
-        // Use WASM provider's esplora method
-        const rawTxs = await provider.esploraGetAddressTxs(address);
+        // Use getAddressTxsWithTraces for enriched data including runestone/alkanes traces
+        const rawTxs = await provider.getAddressTxsWithTraces(address, excludeCoinbase);
 
         if (cancelled) return;
 
         console.log('[useTransactionHistory] Got', rawTxs?.length || 0, 'transactions');
 
+        // Helper to convert Map objects to plain objects (serde_wasm_bindgen returns Maps)
+        const mapToObject = (item: any): any => {
+          if (item instanceof Map) {
+            const obj: any = {};
+            item.forEach((value, key) => {
+              obj[key] = mapToObject(value);
+            });
+            return obj;
+          }
+          if (Array.isArray(item)) {
+            return item.map(mapToObject);
+          }
+          return item;
+        };
+
+        // Convert all transactions from Maps to plain objects
+        const txList = (rawTxs || []).map(mapToObject);
+
         // Parse the transactions
         const parsedTxs: EnrichedTransaction[] = [];
 
-        for (const tx of (rawTxs || [])) {
+        for (const tx of txList) {
           // Skip malformed transactions
-          if (!tx || !tx.txid) continue;
+          if (!tx || !tx.txid) {
+            console.log('[useTransactionHistory] Skipping tx - no txid:', tx);
+            continue;
+          }
 
           const vin = tx.vin || [];
           const vout = tx.vout || [];
+
+          // Check if this is a coinbase transaction
+          const isCoinbase = vin.some((v: any) => v.is_coinbase);
 
           const enrichedTx: EnrichedTransaction = {
             txid: tx.txid,
@@ -83,25 +128,33 @@ export function useTransactionHistory(address?: string) {
             confirmed: tx.status?.confirmed || false,
             fee: tx.fee,
             weight: tx.weight,
+            size: tx.size,
             inputs: vin.map((inp: any) => ({
               txid: inp.txid,
               vout: inp.vout,
               address: inp.prevout?.scriptpubkey_address || '',
               amount: inp.prevout?.value || 0,
+              isCoinbase: inp.is_coinbase || false,
             })),
             outputs: vout.map((out: any) => ({
               address: out.scriptpubkey_address || '',
               amount: out.value || 0,
               scriptPubKey: out.scriptpubkey || '',
+              scriptPubKeyType: out.scriptpubkey_type || '',
             })),
             hasOpReturn: vout.some((v: any) => v.scriptpubkey_type === 'op_return'),
-            hasProtostones: false, // Will be populated by trace calls if needed
+            hasProtostones: !!(tx.runestone?.protostones?.length > 0),
             isRbf: vin.some((v: any) => v.sequence < 0xfffffffe),
-            protostoneTraces: [],
+            isCoinbase,
+            // Include enriched trace data from getAddressTxsWithTraces
+            runestone: tx.runestone,
+            alkanesTraces: tx.alkanes_traces || [],
           };
 
           parsedTxs.push(enrichedTx);
         }
+
+        console.log('[useTransactionHistory] Parsed', parsedTxs.length, 'transactions');
 
         if (!cancelled) {
           setTransactions(parsedTxs);
@@ -123,7 +176,7 @@ export function useTransactionHistory(address?: string) {
     return () => {
       cancelled = true;
     };
-  }, [address, provider, isInitialized, network]);
+  }, [address, provider, isInitialized, network, excludeCoinbase]);
 
   return { transactions, loading, error };
 }

@@ -33583,7 +33583,7 @@ var require_shams = __commonJS({
         return true;
       }
       var obj = {};
-      var sym = /* @__PURE__ */ Symbol("test");
+      var sym = Symbol("test");
       var symObj = Object(sym);
       if (typeof sym === "string") {
         return false;
@@ -33642,7 +33642,7 @@ var require_has_symbols = __commonJS({
       if (typeof origSymbol("foo") !== "symbol") {
         return false;
       }
-      if (typeof /* @__PURE__ */ Symbol("bar") !== "symbol") {
+      if (typeof Symbol("bar") !== "symbol") {
         return false;
       }
       return hasSymbolSham();
@@ -40123,13 +40123,13 @@ var require_async_iterator = __commonJS({
       return (hint === "string" ? String : Number)(input);
     }
     var finished = require_end_of_stream();
-    var kLastResolve = /* @__PURE__ */ Symbol("lastResolve");
-    var kLastReject = /* @__PURE__ */ Symbol("lastReject");
-    var kError = /* @__PURE__ */ Symbol("error");
-    var kEnded = /* @__PURE__ */ Symbol("ended");
-    var kLastPromise = /* @__PURE__ */ Symbol("lastPromise");
-    var kHandlePromise = /* @__PURE__ */ Symbol("handlePromise");
-    var kStream = /* @__PURE__ */ Symbol("stream");
+    var kLastResolve = Symbol("lastResolve");
+    var kLastReject = Symbol("lastReject");
+    var kError = Symbol("error");
+    var kEnded = Symbol("ended");
+    var kLastPromise = Symbol("lastPromise");
+    var kHandlePromise = Symbol("handlePromise");
+    var kStream = Symbol("stream");
     function createIterResult(value, done) {
       return {
         value,
@@ -46092,15 +46092,50 @@ var init_wallet = __esm({
         return this.keystore.mnemonic;
       }
       /**
+       * Get the coin type for the current network
+       * BIP44 uses coin type 0 for mainnet, 1 for testnet/regtest
+       */
+      getCoinType() {
+        return this.network === bitcoin2.networks.bitcoin ? 0 : 1;
+      }
+      /**
+       * Get the correct derivation path base for an address type
+       * Adjusts coin type based on network (0 for mainnet, 1 for testnet/regtest)
+       */
+      getDerivationPathForType(type) {
+        const coinType = this.getCoinType();
+        let purpose;
+        switch (type) {
+          case "p2pkh" /* P2PKH */:
+            purpose = 44;
+            break;
+          case "p2sh" /* P2SH */:
+            purpose = 49;
+            break;
+          case "p2wpkh" /* P2WPKH */:
+            purpose = 84;
+            break;
+          case "p2tr" /* P2TR */:
+            purpose = 86;
+            break;
+          default:
+            purpose = 84;
+        }
+        return `m/${purpose}'/${coinType}'/0'/0`;
+      }
+      /**
        * Derive address at specific index
-       * 
+       *
        * @param type - Address type (p2wpkh, p2tr, etc.)
        * @param index - Derivation index
        * @param change - Change address (0 = receiving, 1 = change)
        * @returns Address information
        */
       deriveAddress(type = "p2wpkh" /* P2WPKH */, index = 0, change = 0) {
-        const node = this.accountNode.derive(change).derive(index);
+        const basePath = this.getDerivationPathForType(type);
+        const accountPath = basePath.replace(/\/\d+$/, "");
+        const accountNode = this.root.derivePath(accountPath);
+        const node = accountNode.derive(change).derive(index);
         const pubkey = node.publicKey;
         let address2;
         let payment;
@@ -46124,7 +46159,7 @@ var init_wallet = __esm({
           default:
             throw new Error(`Unsupported address type: ${type}`);
         }
-        const path = `${DERIVATION_PATHS.BIP84}/${change}/${index}`;
+        const path = `${basePath}/${change}/${index}`;
         return {
           address: address2,
           path,
