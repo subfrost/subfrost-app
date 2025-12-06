@@ -10,7 +10,7 @@
 
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useMemo, useRef } from 'react';
 import { useWallet } from './WalletContext';
 import { useDynamicPools, type DynamicPool } from '@/hooks/useDynamicPools';
 import { getConfig } from '@/utils/getConfig';
@@ -52,7 +52,8 @@ const ExchangeContext = createContext<ExchangeContextType | null>(null);
 
 export function ExchangeProvider({ children }: { children: ReactNode }) {
   const { network } = useWallet();
-  const config = getConfig(network);
+  const config = useMemo(() => getConfig(network), [network]);
+  const prevNetworkRef = useRef(network);
   
   // Token whitelist for filtering
   const [allowedTokens] = useState(() => new Set([
@@ -110,56 +111,61 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
           
           const details = pool.details;
           const poolId = `${pool.pool_id_block}:${pool.pool_id_tx}`;
-          
+
           // Create token metadata from pool details
           const tokenAId = `${details.token_a_block}:${details.token_a_tx}`;
           const tokenBId = `${details.token_b_block}:${details.token_b_tx}`;
-          
-          // Map known tokens (BTC is 2:0 on Regtest, frBTC is 4:0, DIESEL is 32:0)
-          const getTokenMeta = (alkaneId: string): TokenMeta => {
-            // Known token mappings per network
+
+          // Extract token names from pool details if available
+          // Pool details may include: token_a_name, token_b_name, token_a_symbol, token_b_symbol
+          const tokenAName = details.token_a_name || details.token_a_symbol || '';
+          const tokenBName = details.token_b_name || details.token_b_symbol || '';
+
+          // Map known tokens - uses network-specific IDs from config
+          const getTokenMeta = (alkaneId: string, detailsName?: string): TokenMeta => {
+            // Get network-specific token IDs from config
+            const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = config;
+
+            // Known token mappings - dynamically built based on network config
             const tokenMap: Record<string, TokenMeta> = {
-              '2:0': { // BTC (native)
-                symbol: 'BTC',
-                name: 'Bitcoin',
-                id: '2:0',
-                decimals: 8,
-                iconUrl: `https://asset.oyl.gg/alkanes/${network}/2-0.png`,
-              },
-              '4:0': { // frBTC
+              // frBTC - uses config value (32:0 on most networks)
+              [FRBTC_ALKANE_ID]: {
                 symbol: 'frBTC',
                 name: 'Subfrost BTC',
-                id: '4:0',
+                id: FRBTC_ALKANE_ID,
                 decimals: 8,
-                iconUrl: `https://asset.oyl.gg/alkanes/${network}/4-0.png`,
+                iconUrl: `https://asset.oyl.gg/alkanes/${network}/${FRBTC_ALKANE_ID.replace(':', '-')}.png`,
               },
-              '32:0': { // DIESEL
-                symbol: 'DIESEL',
-                name: 'Diesel',
-                id: '32:0',
-                decimals: 8,
-                iconUrl: `https://asset.oyl.gg/alkanes/${network}/32-0.png`,
-              },
-              '128:0': { // bUSD
+              // bUSD - uses config value (varies by network)
+              [BUSD_ALKANE_ID]: {
                 symbol: 'bUSD',
                 name: 'Bitcoin USD',
-                id: '128:0',
+                id: BUSD_ALKANE_ID,
                 decimals: 8,
-                iconUrl: `https://asset.oyl.gg/alkanes/${network}/128-0.png`,
+                iconUrl: `https://asset.oyl.gg/alkanes/${network}/${BUSD_ALKANE_ID.replace(':', '-')}.png`,
               },
             };
-            
-            return tokenMap[alkaneId] || {
-              symbol: alkaneId.replace(':', '_'),
-              name: `Token ${alkaneId}`,
+
+            // If the alkaneId matches a known token, return it
+            if (tokenMap[alkaneId]) {
+              return tokenMap[alkaneId];
+            }
+
+            // Use the name from pool details if available, otherwise use alkaneId
+            const name = detailsName ? detailsName.replace('SUBFROST BTC', 'frBTC') : `Token ${alkaneId}`;
+            const symbol = detailsName ? detailsName.replace('SUBFROST BTC', 'frBTC') : alkaneId.replace(':', '_');
+
+            return {
+              symbol,
+              name,
               id: alkaneId,
               decimals: 8,
               iconUrl: `https://asset.oyl.gg/alkanes/${network}/${alkaneId.replace(':', '-')}.png`,
             };
           };
-          
-          const token0 = getTokenMeta(tokenAId);
-          const token1 = getTokenMeta(tokenBId);
+
+          const token0 = getTokenMeta(tokenAId, tokenAName);
+          const token1 = getTokenMeta(tokenBId, tokenBName);
           
           // Calculate TVL and other metrics from reserves
           // Note: This is simplified - real TVL would need price oracles
@@ -191,12 +197,16 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
     });
     
     setPools(filtered);
-  }, [poolsData, network, allowedTokens]);
-  
+  }, [poolsData, network, allowedTokens, config]);
+
   // Reload pools when network changes
   useEffect(() => {
-    console.log('[ExchangeContext] Network changed to:', network);
-    reloadPools();
+    // Only reload if network actually changed (not on initial mount or other triggers)
+    if (prevNetworkRef.current !== network) {
+      console.log('[ExchangeContext] Network changed to:', network);
+      prevNetworkRef.current = network;
+      reloadPools();
+    }
   }, [network, reloadPools]);
   
   const value: ExchangeContextType = {
