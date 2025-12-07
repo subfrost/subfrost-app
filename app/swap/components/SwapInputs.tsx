@@ -8,6 +8,7 @@ import { useWallet } from "@/context/WalletContext";
 import { useModalStore } from "@/stores/modals";
 import { ChevronDown } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
+import { getConfig } from "@/utils/getConfig";
 
 type BridgeStep = 1 | 2 | 3 | 4 | 5;
 
@@ -61,6 +62,9 @@ export default function SwapInputs({
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { openTokenSelector } = useModalStore();
 
+  // Get frBTC alkane ID for wrap/unwrap detection
+  const { FRBTC_ALKANE_ID } = getConfig(network);
+
   // Bridge state
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState<BridgeStep>(1);
@@ -74,18 +78,30 @@ export default function SwapInputs({
   // Deposit address for cross-chain swaps
   const DEPOSIT_ADDRESS = "0x59f57b84d6742acdaa56e9da1c770898e4a270b6";
 
+  // Detect wrap/unwrap operations
+  const isWrapOperation = from?.id === 'btc' && to?.id === FRBTC_ALKANE_ID;
+  const isUnwrapOperation = from?.id === FRBTC_ALKANE_ID && to?.id === 'btc';
+  const isWrapOrUnwrap = isWrapOperation || isUnwrapOperation;
+
   // For testing: allow cross-chain swap button to work even without full pricing
   const canSwapCrossChain = isConnected && isFromBridgeToken && !!fromAmount && parseFloat(fromAmount) > 0;
+
+  // For wrap/unwrap, only need fromAmount to be valid (toAmount is calculated by hook)
+  const canWrapUnwrap = isConnected && isWrapOrUnwrap && !!fromAmount && isFinite(parseFloat(fromAmount)) && parseFloat(fromAmount) > 0;
+
   const canSwap = isConnected &&
     !!fromAmount && !!toAmount &&
     isFinite(parseFloat(fromAmount)) && isFinite(parseFloat(toAmount)) &&
     parseFloat(fromAmount) > 0 && parseFloat(toAmount) > 0;
 
-  // Enable button for cross-chain FROM tokens even without full quote
-  const isButtonEnabled = canSwap || canSwapCrossChain;
+  // Enable button for cross-chain FROM tokens, wrap/unwrap, or normal swaps
+  const isButtonEnabled = canSwap || canSwapCrossChain || canWrapUnwrap;
 
   const ctaText = isConnected
-    ? (isToBridgeToken || isFromBridgeToken ? "CONFIRM CROSS-CHAIN SWAP" : "CONFIRM SWAP")
+    ? (isWrapOperation ? "WRAP BTC TO frBTC"
+      : isUnwrapOperation ? "UNWRAP frBTC TO BTC"
+      : isToBridgeToken || isFromBridgeToken ? "CONFIRM CROSS-CHAIN SWAP"
+      : "CONFIRM SWAP")
     : "CONNECT WALLET";
 
   const onCtaClick = () => {
