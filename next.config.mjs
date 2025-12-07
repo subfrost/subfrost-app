@@ -10,10 +10,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  eslint: {
-    // Lint errors are warnings during development but should not block builds
-    ignoreDuringBuilds: true,
-  },
   async rewrites() {
     return [
       {
