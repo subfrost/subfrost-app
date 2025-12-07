@@ -19,12 +19,18 @@ describe('@alkanes/ts-sdk WASM WebProvider Integration Tests', () => {
   // Test address on regtest
   const TEST_ADDRESS = 'bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080';
 
+  // Config overrides for subfrost-regtest - use JSON-RPC endpoint
+  const REGTEST_CONFIG = {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  };
+
   beforeAll(async () => {
     // Dynamically import the WASM module
     wasm = await import('@alkanes/ts-sdk/wasm');
 
-    // Create provider for subfrost-regtest
-    provider = new wasm.WebProvider('subfrost-regtest');
+    // Create provider for subfrost-regtest with proper JSON-RPC config
+    provider = new wasm.WebProvider('subfrost-regtest', REGTEST_CONFIG);
   });
 
   describe('Provider Initialization', () => {
@@ -94,12 +100,18 @@ describe('@alkanes/ts-sdk WASM WebProvider Integration Tests', () => {
       expect(Array.isArray(utxos)).toBe(true);
       console.log('[Test] UTXOs for test address:', utxos.length);
 
-      // If UTXOs exist, verify structure
+      // If UTXOs exist, verify structure (may be Map or Object)
       if (utxos.length > 0) {
         const utxo = utxos[0];
-        expect(utxo).toHaveProperty('txid');
-        expect(utxo).toHaveProperty('vout');
-        expect(utxo).toHaveProperty('value');
+        // Handle both Map and Object responses from WASM
+        const hasTxid = utxo instanceof Map ? utxo.has('txid') : 'txid' in utxo;
+        const hasVout = utxo instanceof Map ? utxo.has('vout') : 'vout' in utxo;
+        const hasValue = utxo instanceof Map ? utxo.has('value') : 'value' in utxo;
+
+        console.log('[Test] UTXO structure:', { hasTxid, hasVout, hasValue, type: utxo instanceof Map ? 'Map' : 'Object' });
+        expect(hasTxid).toBe(true);
+        expect(hasVout).toBe(true);
+        expect(hasValue).toBe(true);
       }
     });
 
@@ -108,7 +120,7 @@ describe('@alkanes/ts-sdk WASM WebProvider Integration Tests', () => {
 
       expect(info).toBeDefined();
       // The response format may vary - just check we got data
-      console.log('[Test] Address info:', JSON.stringify(Object.fromEntries(info)).slice(0, 200));
+      console.log('[Test] Address info:', JSON.stringify(info).slice(0, 200));
     });
   });
 
@@ -139,9 +151,15 @@ describe('WebProvider API Surface Verification', () => {
 
   let provider: WebProvider;
 
+  // Config overrides for subfrost-regtest - use JSON-RPC endpoint
+  const REGTEST_CONFIG = {
+    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  };
+
   beforeAll(async () => {
     const wasm = await import('@alkanes/ts-sdk/wasm');
-    provider = new wasm.WebProvider('subfrost-regtest');
+    provider = new wasm.WebProvider('subfrost-regtest', REGTEST_CONFIG);
   });
 
   it('should have all methods used by useEnrichedWalletData', () => {

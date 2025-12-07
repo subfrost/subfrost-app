@@ -1,6 +1,11 @@
 /**
  * Hook for fetching transaction history using WASM WebProvider
  * Uses getAddressTxsWithTraces for enriched data including runestone/alkanes traces
+ *
+ * NOTE: Trace data availability depends on backend support.
+ * The trace fields (runestone, runestone_trace, alkanes_traces) will only be
+ * populated if the backend supports the --runestone-trace option.
+ * On regtest, traces may not be available.
  */
 
 import { useState, useEffect } from 'react';

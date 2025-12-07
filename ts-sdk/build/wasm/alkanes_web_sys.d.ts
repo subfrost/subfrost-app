@@ -1,12 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
+export function analyze_psbt(psbt_base64: string): string;
+export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
+export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 /**
  * Asynchronously encrypts data using the Web Crypto API.
  */
 export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
-export function analyze_psbt(psbt_base64: string): string;
-export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
-export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 export interface PoolWithDetails {
     pool_id_block: number;
     pool_id_tx: number;
@@ -172,6 +172,7 @@ export class WebProvider {
    */
   ammGetPoolDetails(pool_id: string): Promise<any>;
   alkanesTrace(outpoint: string): Promise<any>;
+  traceProtostones(txid: string): Promise<any>;
   alkanesByAddress(address: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;
   alkanesByOutpoint(outpoint: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;
   esploraGetTx(txid: string): Promise<any>;

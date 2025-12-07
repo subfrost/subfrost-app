@@ -175,33 +175,54 @@ export default function SwapShell() {
   // Build FROM options: All allowed tokens (always selectable like TO selector)
   const fromOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
-    
+    const seen = new Set<string>();
+
     // Always add BTC first (always available)
-    opts.push({ 
-      id: 'btc', 
-      symbol: 'BTC', 
+    opts.push({
+      id: 'btc',
+      symbol: 'BTC',
       name: 'Bitcoin',
       isAvailable: true // BTC is always selectable
     });
-    
+    seen.add('btc');
+
+    // Always add frBTC (32:0) - core token for the system
+    if (!seen.has(FRBTC_ALKANE_ID)) {
+      opts.push({
+        id: FRBTC_ALKANE_ID,
+        symbol: 'frBTC',
+        name: 'frBTC',
+        isAvailable: true
+      });
+      seen.add(FRBTC_ALKANE_ID);
+    }
+
+    // Always add DIESEL/bUSD - present on every network
+    if (!seen.has(BUSD_ALKANE_ID)) {
+      // Use DIESEL as the display name on regtest (2:0), bUSD elsewhere
+      const isDiesel = BUSD_ALKANE_ID === '2:0';
+      opts.push({
+        id: BUSD_ALKANE_ID,
+        symbol: isDiesel ? 'DIESEL' : 'bUSD',
+        name: isDiesel ? 'DIESEL' : 'bUSD',
+        isAvailable: true
+      });
+      seen.add(BUSD_ALKANE_ID);
+    }
+
     // Add all tokens from pool data (these are the allowed tokens)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if (allowedTokenSymbols.has(poolToken.symbol) && poolToken.id !== 'btc') {
+      if (allowedTokenSymbols.has(poolToken.symbol) && !seen.has(poolToken.id)) {
         opts.push({
           ...poolToken,
           isAvailable: true // All tokens are always selectable
         });
+        seen.add(poolToken.id);
       }
     });
-    
-    // Remove duplicates
-    const seen = new Set<string>();
-    return opts.filter((t) => {
-      if (seen.has(t.id)) return false;
-      seen.add(t.id);
-      return true;
-    });
-  }, [allowedTokenSymbols, poolTokenMap]);
+
+    return opts;
+  }, [allowedTokenSymbols, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID]);
 
   // Build TO options: All allowed tokens (always selectable)
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -220,8 +241,8 @@ export default function SwapShell() {
       seen.add('btc');
     }
 
-    // Always add frBTC (for wrap/unwrap functionality) if FROM is BTC
-    if (fromToken?.id === 'btc' && !seen.has(FRBTC_ALKANE_ID)) {
+    // Always add frBTC (32:0) - core token for the system (unless FROM is frBTC)
+    if ((!fromToken || fromToken.id !== FRBTC_ALKANE_ID) && !seen.has(FRBTC_ALKANE_ID)) {
       opts.push({
         id: FRBTC_ALKANE_ID,
         symbol: 'frBTC',
@@ -231,32 +252,32 @@ export default function SwapShell() {
       seen.add(FRBTC_ALKANE_ID);
     }
 
-    // Add all allowed tokens from pool map
-    if (fromToken) {
-      Array.from(poolTokenMap.values()).forEach((poolToken) => {
-        if (allowedTokenSymbols.has(poolToken.symbol) && !seen.has(poolToken.id) && poolToken.id !== fromToken.id) {
-          opts.push({
-            ...poolToken,
-            isAvailable: true // Always selectable
-          });
-          seen.add(poolToken.id);
-        }
+    // Always add DIESEL/bUSD - present on every network (unless FROM is DIESEL/bUSD)
+    if ((!fromToken || fromToken.id !== BUSD_ALKANE_ID) && !seen.has(BUSD_ALKANE_ID)) {
+      const isDiesel = BUSD_ALKANE_ID === '2:0';
+      opts.push({
+        id: BUSD_ALKANE_ID,
+        symbol: isDiesel ? 'DIESEL' : 'bUSD',
+        name: isDiesel ? 'DIESEL' : 'bUSD',
+        isAvailable: true
       });
-    } else {
-      // If no FROM token selected, add all other allowed tokens
-      Array.from(poolTokenMap.values()).forEach((poolToken) => {
-        if (allowedTokenSymbols.has(poolToken.symbol) && !seen.has(poolToken.id)) {
-          opts.push({
-            ...poolToken,
-            isAvailable: true
-          });
-          seen.add(poolToken.id);
-        }
-      });
+      seen.add(BUSD_ALKANE_ID);
     }
 
+    // Add all allowed tokens from pool map
+    const fromId = fromToken?.id;
+    Array.from(poolTokenMap.values()).forEach((poolToken) => {
+      if (allowedTokenSymbols.has(poolToken.symbol) && !seen.has(poolToken.id) && poolToken.id !== fromId) {
+        opts.push({
+          ...poolToken,
+          isAvailable: true // Always selectable
+        });
+        seen.add(poolToken.id);
+      }
+    });
+
     return opts;
-  }, [fromToken, allowedTokenSymbols, poolTokenMap, FRBTC_ALKANE_ID]);
+  }, [fromToken, allowedTokenSymbols, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID]);
 
   // Balances
   const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
@@ -481,17 +502,31 @@ export default function SwapShell() {
         (token1Id === FRBTC_ALKANE_ID && token2Id === 'btc')) {
       return true;
     }
-    
+
+    // Special case: BTC <-> DIESEL (or any token with frBTC pool) - multi-hop via frBTC
+    // BTC wraps to frBTC, then frBTC swaps to DIESEL (path: B,32:0,2:0)
+    if (token1Id === 'btc' || token2Id === 'btc') {
+      const otherToken = token1Id === 'btc' ? token2Id : token1Id;
+      // Check if there's a pool between frBTC and the other token
+      const hasPoolWithFrbtc = markets.some(p =>
+        (p.token0.id === FRBTC_ALKANE_ID && p.token1.id === otherToken) ||
+        (p.token0.id === otherToken && p.token1.id === FRBTC_ALKANE_ID)
+      );
+      if (hasPoolWithFrbtc) {
+        return true;
+      }
+    }
+
     // Map BTC to frBTC for pool checking
     const id1 = token1Id === 'btc' ? FRBTC_ALKANE_ID : token1Id;
     const id2 = token2Id === 'btc' ? FRBTC_ALKANE_ID : token2Id;
-    
+
     // Find the pool in markets with these token IDs
-    const pool = markets.find(p => 
+    const pool = markets.find(p =>
       (p.token0.id === id1 && p.token1.id === id2) ||
       (p.token0.id === id2 && p.token1.id === id1)
     );
-    
+
     // Check if the pool's pairLabel is in our allowed list
     return pool ? allowedPairs.has(pool.pairLabel) : false;
   }, [markets, FRBTC_ALKANE_ID, allowedPairs]);
