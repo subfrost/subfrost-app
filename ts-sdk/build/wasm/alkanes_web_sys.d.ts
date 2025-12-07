@@ -1,12 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
-export function analyze_psbt(psbt_base64: string): string;
-export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
-export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 /**
  * Asynchronously encrypts data using the Web Crypto API.
  */
 export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
+export function analyze_psbt(psbt_base64: string): string;
+export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
+export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 export interface PoolWithDetails {
     pool_id_block: number;
     pool_id_tx: number;
@@ -136,6 +136,20 @@ export class WebProvider {
    */
   alkanesExecute(params_json: string): Promise<any>;
   /**
+   * Execute an alkanes smart contract using CLI-style string parameters
+   * This is the recommended method for executing alkanes contracts as it supports
+   * the same parameter format as alkanes-cli.
+   *
+   * # Parameters
+   * - `to_addresses`: JSON array of recipient addresses
+   * - `input_requirements`: String format like "B:10000" or "2:0:1000" (alkane block:tx:amount)
+   * - `protostones`: String format like "[32,0,77]:v0:v0" (cellpack:pointer:refund)
+   * - `fee_rate`: Optional fee rate in sat/vB
+   * - `envelope_hex`: Optional envelope data as hex string
+   * - `options_json`: Optional JSON with additional options (trace_enabled, mine_enabled, auto_confirm, raw_output)
+   */
+  alkanesExecuteWithStrings(to_addresses_json: string, input_requirements: string, protostones: string, fee_rate?: number | null, envelope_hex?: string | null, options_json?: string | null): Promise<any>;
+  /**
    * Resume execution after user confirmation (for simple transactions)
    */
   alkanesResumeExecution(state_json: string, params_json: string): Promise<any>;
@@ -228,8 +242,10 @@ export class WebProvider {
    * Create a new wallet with an optional mnemonic phrase
    * If no mnemonic is provided, a new one will be generated
    * Returns wallet info including address and mnemonic
+   *
+   * Note: This sets the keystore on self synchronously so walletIsLoaded() returns true immediately
    */
-  walletCreate(mnemonic?: string | null, passphrase?: string | null): Promise<any>;
+  walletCreate(mnemonic?: string | null, passphrase?: string | null): any;
   /**
    * Load an existing wallet from storage
    */
