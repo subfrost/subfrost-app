@@ -12,7 +12,7 @@ import { useSwapMutation } from "@/hooks/useSwapMutation";
 import { useWallet } from "@/context/WalletContext";
 import { getConfig } from "@/utils/getConfig";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
-import { useBtcBalance } from "@/hooks/useBtcBalance";
+import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -136,6 +136,8 @@ export default function SwapShell() {
   const idToUserCurrency = useMemo(() => {
     const map = new Map<string, any>();
     userCurrencies.forEach((c: any) => map.set(c.id, c));
+    console.log('[SwapShell] userCurrencies:', userCurrencies);
+    console.log('[SwapShell] idToUserCurrency map:', Array.from(map.entries()));
     return map;
   }, [userCurrencies]);
 
@@ -258,8 +260,9 @@ export default function SwapShell() {
     return opts;
   }, [fromToken, allowedTokenSymbols, poolTokenMap, FRBTC_ALKANE_ID]);
 
-  // Balances
-  const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
+  // Balances - use the same working hook as the dashboard
+  const { balances, isLoading: isFetchingBtc } = useEnrichedWalletData();
+  const btcBalanceSats = balances.bitcoin.total;
   const isBalancesLoading = Boolean(isFetchingUserCurrencies || isFetchingBtc);
   const formatBalance = (id?: string): string => {
     if (!id) return 'Balance: 0';
