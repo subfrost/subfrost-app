@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
-import { createSimulateRequestObject, parseAlkaneId } from '@/lib/oyl/alkanes/transform';
+import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 
 /**
@@ -37,44 +37,60 @@ function parseU128FromBytes(data: number[] | Uint8Array): bigint {
  */
 export function useFrbtcPremium() {
   const { network } = useWallet();
-  const provider = useSandshrewProvider();
+  const { provider, isInitialized } = useAlkanesSDK();
   const { FRBTC_ALKANE_ID } = getConfig(network);
 
   return useQuery({
-    queryKey: ['frbtc-premium', network],
+    queryKey: ['frbtc-premium', network, FRBTC_ALKANE_ID],
+    enabled: isInitialized && !!provider,
     queryFn: async () => {
+      if (!provider) {
+        throw new Error('Provider not initialized');
+      }
+
       try {
         const frbtcId = parseAlkaneId(FRBTC_ALKANE_ID);
         
         // Simulate call to frBTC contract with opcode 104 (get_premium)
+        // The calldata should be a byte array [104] not hex string
+        const contractId = `${frbtcId.block}:${frbtcId.tx}`;
         
-        const request = createSimulateRequestObject({
-          target: { block: frbtcId.block, tx: frbtcId.tx },
-          inputs: ["104"]
-        })
+        // Create minimal context for simulate
+        // calldata must be an array of bytes, not a hex string
+        const context = JSON.stringify({
+          calldata: [104], // Opcode 104 as byte array
+          height: 1000000,
+          txindex: 0,
+          pointer: 0,
+          refund_pointer: 0,
+          vout: 0,
+          transaction: '0x',
+          block: '0x',
+          atomic: null,
+          runes: [],
+          sheets: {},
+          runtime_balances: {},
+          trace: null
+        });
         
-        if (!provider) {
-          throw new Error('Provider not available');
-        }
-        
-        const result = await provider.alkanes.simulate(request);
+        const result = await provider.alkanesSimulate(contractId, context, 'latest');
 
-        console.log('result', result);
+        console.log('frBTC premium result:', result);
 
-        if (!result || !result.execution.data) {
+        if (!result || !result.execution || !result.execution.data) {
           throw new Error('No response data from simulate');
         }
 
-        // Convert to number (premium is in range 0-100,000,000)
-        const premium = Number(result.parsed.le);
+        // Parse u128 from execution data
+        const premium = parseU128FromBytes(result.execution.data);
         
         // Convert to per-1000 format
         // Premium 100,000,000 = 100%, so divide by 100,000 to get per-1000
         // Example: 200,000 = 0.2% = 2 per 1000
-        const feePerThousand = premium / 100_000;
+        const feePerThousand = Number(premium) / 100_000;
 
         return {
-          premium,
+          premium: Number(premium),
           wrapFeePerThousand: feePerThousand,
           unwrapFeePerThousand: feePerThousand,
           isLive: true,
@@ -92,7 +108,6 @@ export function useFrbtcPremium() {
         };
       }
     },
-    enabled: !!provider,
     staleTime: 60_000, // Cache for 1 minute (premium can change)
     retry: 3,
     retryDelay: 1000,

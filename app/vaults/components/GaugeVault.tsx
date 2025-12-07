@@ -33,7 +33,7 @@ export default function GaugeVault() {
       {/* Main Info */}
       <div className="md:col-span-2 space-y-6">
         {/* Gauge Header */}
-        <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
+        <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">DIESEL/frBTC Gauge</h2>
@@ -49,26 +49,26 @@ export default function GaugeVault() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-4 backdrop-blur-sm">
+          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">TVL</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">${stats.tvl}</div>
           </div>
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-4 backdrop-blur-sm">
+          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Base APR</div>
             <div className="text-2xl font-bold text-green-600">{stats.baseApy}%</div>
           </div>
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-4 backdrop-blur-sm">
+          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Your Boost</div>
             <div className="text-2xl font-bold text-purple-600">{stats.userBoost}x</div>
           </div>
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-4 backdrop-blur-sm">
+          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Boosted APR</div>
             <div className="text-2xl font-bold text-blue-600">{stats.boostedApy}%</div>
           </div>
         </div>
 
         {/* Info Tabs Section */}
-        <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
+        <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
           <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
             {['about', 'boost', 'info', 'risk'].map((tab) => (
               <button
@@ -115,7 +115,7 @@ export default function GaugeVault() {
               <div className="space-y-3">
                 <div className="rounded-lg bg-purple-50 border border-purple-200 p-3">
                   <div className="font-semibold text-sm text-purple-900 mb-2">Boost Formula</div>
-                  <code className="text-xs text-purple-800 bg-white px-2 py-1 rounded block">
+                  <code className="text-xs text-purple-800 bg-[color:var(--sf-surface)] px-2 py-1 rounded block">
                     boost = min(1 + (veDIESEL × total_stake) / (stake × total_veDIESEL), 2.5)
                   </code>
                 </div>

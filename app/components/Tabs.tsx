@@ -13,10 +13,10 @@ export default function Tabs({ onChange }: { onChange?: (tab: TabKey) => void })
   };
 
   const base =
-    "px-4 py-2 text-sm font-semibold rounded-md transition-colors sf-focus-ring";
+    "px-4 py-2 text-sm font-semibold rounded-md transition-colors focus:outline-none";
   const active = "bg-[color:var(--sf-primary)] text-white shadow";
   const inactive =
-    "bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-white/80 border border-[color:var(--sf-glass-border)]";
+    "bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border border-[color:var(--sf-glass-border)]";
 
   return (
     <div className="inline-flex items-center gap-2 rounded-full bg-[color:var(--sf-glass-bg)] p-1 border border-[color:var(--sf-glass-border)] backdrop-blur-md">

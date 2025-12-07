@@ -4,17 +4,17 @@ export default function Footer() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4">
         <p className="tracking-wide">© 2025 SUBZERO RESEARCH INC. ALL RIGHTS RESERVED.</p>
         <nav className="flex items-center gap-6">
-          <a href="#" className="hover:opacity-80 sf-focus-ring">
+          <a href="#" className="hover:opacity-80 focus:outline-none">
             TERMS OF SERVICE
           </a>
-          <a href="#" className="hover:opacity-80 sf-focus-ring">
+          <a href="#" className="hover:opacity-80 focus:outline-none">
             PRIVACY POLICY
           </a>
           <a 
             href="https://x.com/SUBFROSTio" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="hover:opacity-80 sf-focus-ring flex items-center"
+            className="hover:opacity-80 focus:outline-none flex items-center"
             aria-label="X (Twitter)"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -25,7 +25,7 @@ export default function Footer() {
             href="https://github.com/subfrost" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="hover:opacity-80 sf-focus-ring flex items-center"
+            className="hover:opacity-80 focus:outline-none flex items-center"
             aria-label="GitHub"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

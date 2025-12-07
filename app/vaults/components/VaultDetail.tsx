@@ -151,7 +151,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           <BoostSection vault={currentVault} />
 
           {/* Right Column: Info Tabs - starts in column 2 after Boosted APY */}
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm h-fit md:col-start-2 md:row-start-4">
+          <div className={`rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit md:col-start-2 ${currentVault.isBoostComingSoon ? 'md:row-start-4' : 'md:row-start-3'}`}>
         <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
           {['about', 'strategies', 'info', 'risk'].map((tab) => (
             <button
@@ -196,26 +196,26 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           <div className="space-y-3">
             <h4 className="font-semibold text-[color:var(--sf-text)]">Active Strategies</h4>
             <div className="space-y-2">
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">LP Fee Harvesting</div>
-                <div className="text-xs text-[color:var(--sf-text)] mb-2">
+              <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
+                <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">LP Fee Harvesting</div>
+                <div className="text-xs text-[color:var(--sf-info-orange-text)] mb-2">
                   Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                 </div>
-                <div className="text-xs text-[color:var(--sf-text)]/70">
-                  Formula: <code className="bg-white px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
+                  Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
                 </div>
               </div>
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">External Subsidies</div>
-                <div className="text-xs text-[color:var(--sf-text)]">
+              <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
+                <div className="font-semibold text-sm text-[color:var(--sf-info-blue-title)] mb-1">External Subsidies</div>
+                <div className="text-xs text-[color:var(--sf-info-blue-text)]">
                   • DIESEL from Protorunes rewards<br/>
                   • frBTC from Bitcoin wrapper fees<br/>
                   • Deposited by strategist
                 </div>
               </div>
-              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
-                <div className="font-semibold text-sm text-blue-900 mb-1">Harvest Distribution</div>
-                <div className="text-xs text-blue-800">
+              <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
+                <div className="font-semibold text-sm text-[color:var(--sf-info-green-title)] mb-1">Harvest Distribution</div>
+                <div className="text-xs text-[color:var(--sf-info-green-text)]">
                   • 10% auto-compound (locked as more {currentVault.outputAsset})<br/>
                   • 90% added to reward pool for claimants
                 </div>
@@ -254,7 +254,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             </div>
             <div className="pt-3 border-t border-[color:var(--sf-outline)]">
               <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
-              <div className="font-mono text-xs text-[color:var(--sf-text)] bg-gray-50 p-2 rounded">
+              <div className="font-mono text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                 {currentVault.contractAddress}
               </div>
             </div>
@@ -267,23 +267,23 @@ export default function VaultDetail({ vault: initialVault }: Props) {
               All vaults carry risk. Please review carefully before depositing.
             </p>
             <div className="space-y-2">
-              <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-3">
-                <div className="font-semibold text-sm text-yellow-900 mb-1">Smart Contract Risk</div>
-                <div className="text-xs text-yellow-800">
+              <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
+                <div className="font-semibold text-sm text-[color:var(--sf-info-yellow-title)] mb-1">Smart Contract Risk</div>
+                <div className="text-xs text-[color:var(--sf-info-yellow-text)]">
                   Contracts are immutable once deployed. Recommend external audit before mainnet. Test thoroughly on testnet first.
                 </div>
               </div>
-              <div className="rounded-lg bg-orange-50 border border-orange-200 p-3">
-                <div className="font-semibold text-sm text-orange-900 mb-1">Economic Risks</div>
-                <div className="text-xs text-orange-800">
+              <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
+                <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">Economic Risks</div>
+                <div className="text-xs text-[color:var(--sf-info-orange-text)]">
                   • <strong>Impermanent Loss:</strong> LP providers exposed to IL<br/>
                   • <strong>Subsidy Variability:</strong> External rewards may fluctuate<br/>
                   • <strong>Boost Competition:</strong> More {currentVault.outputAsset} dilutes individual boost
                 </div>
               </div>
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
-                <div className="font-semibold text-sm text-red-900 mb-1">Operational Risks</div>
-                <div className="text-xs text-red-800">
+              <div className="rounded-lg bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-3">
+                <div className="font-semibold text-sm text-[color:var(--sf-info-red-title)] mb-1">Operational Risks</div>
+                <div className="text-xs text-[color:var(--sf-info-red-text)]">
                   • <strong>Harvest Dependency:</strong> Requires strategist to call harvest<br/>
                   • <strong>Oracle Manipulation:</strong> K-value uses instant price (not TWAP)<br/>
                   • <strong>Front-running:</strong> Harvest could be front-run in theory
@@ -296,7 +296,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         </div>
 
         {/* Info Tabs Section - Mobile/Tablet Only */}
-        <div className="md:hidden rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
+        <div className="md:hidden rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
           <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
             {['about', 'strategies', 'info', 'risk'].map((tab) => (
               <button
@@ -341,26 +341,26 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             <div className="space-y-3">
               <h4 className="font-semibold text-[color:var(--sf-text)]">Active Strategies</h4>
               <div className="space-y-2">
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">LP Fee Harvesting</div>
-                  <div className="text-xs text-[color:var(--sf-text)] mb-2">
+                <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">LP Fee Harvesting</div>
+                  <div className="text-xs text-[color:var(--sf-info-orange-text)] mb-2">
                     Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                   </div>
-                  <div className="text-xs text-[color:var(--sf-text)]/70">
-                    Formula: <code className="bg-white px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                  <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
+                    Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
                   </div>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">External Subsidies</div>
-                  <div className="text-xs text-[color:var(--sf-text)]">
+                <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-blue-title)] mb-1">External Subsidies</div>
+                  <div className="text-xs text-[color:var(--sf-info-blue-text)]">
                     • DIESEL from Protorunes rewards<br/>
                     • frBTC from Bitcoin wrapper fees<br/>
                     • Deposited by strategist
                   </div>
                 </div>
-                <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
-                  <div className="font-semibold text-sm text-blue-900 mb-1">Harvest Distribution</div>
-                  <div className="text-xs text-blue-800">
+                <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-green-title)] mb-1">Harvest Distribution</div>
+                  <div className="text-xs text-[color:var(--sf-info-green-text)]">
                     • 10% auto-compound (locked as more {currentVault.outputAsset})<br/>
                     • 90% added to reward pool for claimants
                   </div>
@@ -399,7 +399,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
               </div>
               <div className="pt-3 border-t border-[color:var(--sf-outline)]">
                 <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
-                <div className="font-mono text-xs text-[color:var(--sf-text)] bg-gray-50 p-2 rounded">
+                <div className="font-mono text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                   {currentVault.contractAddress}
                 </div>
               </div>
@@ -412,23 +412,23 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                 All vaults carry risk. Please review carefully before depositing.
               </p>
               <div className="space-y-2">
-                <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-3">
-                  <div className="font-semibold text-sm text-yellow-900 mb-1">Smart Contract Risk</div>
-                  <div className="text-xs text-yellow-800">
+                <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-yellow-title)] mb-1">Smart Contract Risk</div>
+                  <div className="text-xs text-[color:var(--sf-info-yellow-text)]">
                     Contracts are immutable once deployed. Recommend external audit before mainnet. Test thoroughly on testnet first.
                   </div>
                 </div>
-                <div className="rounded-lg bg-orange-50 border border-orange-200 p-3">
-                  <div className="font-semibold text-sm text-orange-900 mb-1">Economic Risks</div>
-                  <div className="text-xs text-orange-800">
+                <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">Economic Risks</div>
+                  <div className="text-xs text-[color:var(--sf-info-orange-text)]">
                     • <strong>Impermanent Loss:</strong> LP providers exposed to IL<br/>
                     • <strong>Subsidy Variability:</strong> External rewards may fluctuate<br/>
                     • <strong>Boost Competition:</strong> More {currentVault.outputAsset} dilutes individual boost
                   </div>
                 </div>
-                <div className="rounded-lg bg-red-50 border border-red-200 p-3">
-                  <div className="font-semibold text-sm text-red-900 mb-1">Operational Risks</div>
-                  <div className="text-xs text-red-800">
+                <div className="rounded-lg bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-3">
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-red-title)] mb-1">Operational Risks</div>
+                  <div className="text-xs text-[color:var(--sf-info-red-text)]">
                     • <strong>Harvest Dependency:</strong> Requires strategist to call harvest<br/>
                     • <strong>Oracle Manipulation:</strong> K-value uses instant price (not TWAP)<br/>
                     • <strong>Front-running:</strong> Harvest could be front-run in theory

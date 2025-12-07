@@ -12,7 +12,7 @@ import { useSwapMutation } from "@/hooks/useSwapMutation";
 import { useWallet } from "@/context/WalletContext";
 import { getConfig } from "@/utils/getConfig";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
-import { useBtcBalance } from "@/hooks/useBtcBalance";
+import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -37,18 +37,18 @@ const MyWalletSwaps = lazy(() => import("./components/MyWalletSwaps"));
 // Loading skeleton for swap form
 const SwapFormSkeleton = () => (
   <div className="animate-pulse space-y-4">
-    <div className="h-24 bg-white/10 rounded-xl" />
-    <div className="h-10 w-10 mx-auto bg-white/10 rounded-full" />
-    <div className="h-24 bg-white/10 rounded-xl" />
-    <div className="h-14 bg-white/10 rounded-xl" />
+    <div className="h-24 bg-[color:var(--sf-primary)]/10 rounded-xl" />
+    <div className="h-10 w-10 mx-auto bg-[color:var(--sf-primary)]/10 rounded-full" />
+    <div className="h-24 bg-[color:var(--sf-primary)]/10 rounded-xl" />
+    <div className="h-14 bg-[color:var(--sf-primary)]/10 rounded-xl" />
   </div>
 );
 
 // Loading skeleton for markets grid
 const MarketsSkeleton = () => (
   <div className="animate-pulse space-y-3">
-    <div className="h-20 bg-white/10 rounded-xl" />
-    <div className="h-32 bg-white/10 rounded-xl" />
+    <div className="h-20 bg-[color:var(--sf-primary)]/10 rounded-xl" />
+    <div className="h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />
   </div>
 );
 
@@ -80,6 +80,9 @@ export default function SwapShell() {
   const [fromAmount, setFromAmount] = useState<string>("");
   const [toAmount, setToAmount] = useState<string>("");
   const [direction, setDirection] = useState<'sell' | 'buy'>('sell');
+
+  // Ethereum address for cross-chain swaps
+  const [ethereumAddress, setEthereumAddress] = useState<string>("");
 
   // LP state
   const [poolToken0, setPoolToken0] = useState<TokenMeta | undefined>();
@@ -133,6 +136,8 @@ export default function SwapShell() {
   const idToUserCurrency = useMemo(() => {
     const map = new Map<string, any>();
     userCurrencies.forEach((c: any) => map.set(c.id, c));
+    console.log('[SwapShell] userCurrencies:', userCurrencies);
+    console.log('[SwapShell] idToUserCurrency map:', Array.from(map.entries()));
     return map;
   }, [userCurrencies]);
 
@@ -205,7 +210,7 @@ export default function SwapShell() {
     // Build the full list of options (always selectable)
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
-    
+
     // Always add BTC first (unless FROM token is BTC)
     if (!fromToken || fromToken.id !== 'btc') {
       opts.push({
@@ -216,7 +221,18 @@ export default function SwapShell() {
       });
       seen.add('btc');
     }
-    
+
+    // Always add frBTC (for wrap/unwrap functionality) if FROM is BTC
+    if (fromToken?.id === 'btc' && !seen.has(FRBTC_ALKANE_ID)) {
+      opts.push({
+        id: FRBTC_ALKANE_ID,
+        symbol: 'frBTC',
+        name: 'frBTC',
+        isAvailable: true
+      });
+      seen.add(FRBTC_ALKANE_ID);
+    }
+
     // Add all allowed tokens from pool map
     if (fromToken) {
       Array.from(poolTokenMap.values()).forEach((poolToken) => {
@@ -240,12 +256,13 @@ export default function SwapShell() {
         }
       });
     }
-    
-    return opts;
-  }, [fromToken, allowedTokenSymbols, poolTokenMap]);
 
-  // Balances
-  const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
+    return opts;
+  }, [fromToken, allowedTokenSymbols, poolTokenMap, FRBTC_ALKANE_ID]);
+
+  // Balances - use the same working hook as the dashboard
+  const { balances, isLoading: isFetchingBtc } = useEnrichedWalletData();
+  const btcBalanceSats = balances.bitcoin.total;
   const isBalancesLoading = Boolean(isFetchingUserCurrencies || isFetchingBtc);
   const formatBalance = (id?: string): string => {
     if (!id) return 'Balance: 0';
@@ -282,12 +299,12 @@ export default function SwapShell() {
     if (tokenId === FRBTC_ALKANE_ID) {
       return btcPrice;
     }
-    
-    // For bUSD, assume $1
-    if (tokenId === BUSD_ALKANE_ID) {
+
+    // For bUSD and USDT, assume $1
+    if (tokenId === BUSD_ALKANE_ID || tokenId === 'usdt') {
       return 1.0;
     }
-    
+
     return undefined;
   };
 
@@ -315,10 +332,26 @@ export default function SwapShell() {
   const isUnwrapPair = useMemo(() => fromToken?.id === FRBTC_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
 
   const handleSwap = async () => {
-    if (!fromToken || !toToken) return;
+    console.log('[SwapShell] handleSwap called', {
+      fromToken: fromToken?.id,
+      fromSymbol: fromToken?.symbol,
+      toToken: toToken?.id,
+      toSymbol: toToken?.symbol,
+      isWrapPair,
+      isUnwrapPair,
+      FRBTC_ALKANE_ID,
+      fromAmount,
+      toAmount,
+      direction,
+    });
+    if (!fromToken || !toToken) {
+      console.log('[SwapShell] Missing fromToken or toToken, returning');
+      return;
+    }
 
     // Wrap/Unwrap direct pairs
     if (isWrapPair) {
+      console.log('[SwapShell] isWrapPair detected, calling wrapMutation');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
@@ -730,27 +763,27 @@ export default function SwapShell() {
         {/* Left Column: Swap/LP Module + My Wallet Swaps */}
         <div className="flex flex-col min-h-0 md:min-h-0">
           {/* Swap/Liquidity Tabs */}
-          <div className="relative flex w-full items-center justify-center mb-4">
+          <div className="flex w-full items-center justify-center gap-1 mb-4">
+            {/* Invisible spacer to balance the +/- button and keep tabs centered */}
+            <div className="w-10 h-10" />
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
-            {selectedTab === 'lp' && (
-              <button
-                type="button"
-                onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
-                className="absolute right-0 flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-white/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
-                title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {liquidityMode === 'provide' ? (
-                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  ) : (
-                    <path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  )}
-                </svg>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
+              className={`flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md outline-none focus:outline-none ${selectedTab !== 'lp' ? 'invisible' : ''}`}
+              title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {liquidityMode === 'provide' ? (
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                ) : (
+                  <path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                )}
+              </svg>
+            </button>
           </div>
 
-          <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(40,67,114,0.18)] backdrop-blur-xl flex-shrink-0">
+          <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(0,0,0,0.18)] backdrop-blur-xl flex-shrink-0">
           {isBalancesLoading && <LoadingOverlay />}
           <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (
@@ -789,6 +822,8 @@ export default function SwapShell() {
               toFiatText={calculateUsdValue(toToken?.id, toAmount)}
               onMaxFrom={fromToken ? handleMaxFrom : undefined}
               onPercentFrom={fromToken ? handlePercentFrom : undefined}
+              ethereumAddress={ethereumAddress}
+              onChangeEthereumAddress={setEthereumAddress}
               summary={
                 <SwapSummary
                   sellId={fromToken?.id ?? ''}
@@ -850,7 +885,7 @@ export default function SwapShell() {
 
           {/* My Wallet Swaps - under swap modal */}
           <div className="mt-8">
-            <Suspense fallback={<div className="animate-pulse h-32 bg-white/10 rounded-xl" />}>
+            <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
               <MyWalletSwaps />
             </Suspense>
           </div>
@@ -902,15 +937,15 @@ export default function SwapShell() {
         onClose={closeTokenSelector}
         tokens={
           tokenSelectorMode === 'from'
-            ? fromTokenOptions 
+            ? fromTokenOptions
             : tokenSelectorMode === 'pool0' || tokenSelectorMode === 'pool1'
             ? poolTokenOptions
             : toTokenOptions
         }
         onSelectToken={handleTokenSelect}
         selectedTokenId={
-          tokenSelectorMode === 'from' 
-            ? fromToken?.id 
+          tokenSelectorMode === 'from'
+            ? fromToken?.id
             : tokenSelectorMode === 'to'
             ? toToken?.id
             : tokenSelectorMode === 'pool0'
@@ -918,13 +953,45 @@ export default function SwapShell() {
             : poolToken1?.id
         }
         title={
-          tokenSelectorMode === 'from' 
-            ? 'Select token to swap' 
+          tokenSelectorMode === 'from'
+            ? 'Select token to swap'
             : tokenSelectorMode === 'to'
             ? 'Select token to receive'
             : 'Select token to pool'
         }
         network={network}
+        mode={tokenSelectorMode}
+        selectedBridgeTokenFromOther={
+          // Check if the opposite selector has a cross-chain bridge token selected
+          tokenSelectorMode === 'from'
+            ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(toToken?.symbol ?? '') ? toToken?.symbol : undefined)
+            : tokenSelectorMode === 'to'
+            ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
+            : undefined
+        }
+        onBridgeTokenSelect={(tokenSymbol) => {
+          const bridgeTokenMap: Record<string, { name: string }> = {
+            USDT: { name: 'Tether USD' },
+            ETH: { name: 'Ethereum' },
+            SOL: { name: 'Solana' },
+            ZEC: { name: 'Zcash' },
+          };
+          const tokenInfo = bridgeTokenMap[tokenSymbol];
+          if (tokenInfo) {
+            const bridgeToken: TokenMeta = {
+              id: tokenSymbol.toLowerCase(),
+              symbol: tokenSymbol,
+              name: tokenInfo.name,
+              isAvailable: true,
+            };
+            if (tokenSelectorMode === 'from') {
+              setFromToken(bridgeToken);
+            } else if (tokenSelectorMode === 'to') {
+              setToToken(bridgeToken);
+            }
+          }
+          closeTokenSelector();
+        }}
       />
 
       <LPPositionSelectorModal

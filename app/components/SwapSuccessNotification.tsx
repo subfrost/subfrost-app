@@ -76,7 +76,7 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
           {/* Dismiss button */}
           <button
             onClick={handleDismiss}
-            className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full transition-all hover:bg-green-100 sf-focus-ring"
+            className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full transition-all hover:bg-green-100 focus:outline-none"
             aria-label="Dismiss"
           >
             <svg

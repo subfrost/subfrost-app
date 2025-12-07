@@ -1,8 +1,10 @@
 /**
  * React hook for futures trading functionality
+ * Uses the WASM WebProvider from AlkanesSDKContext for all RPC calls
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import {
   getAllFutures,
   generateFuture,
@@ -10,64 +12,36 @@ import {
   type FutureToken,
 } from '@/lib/oyl/alkanes/futures';
 
-// Create a simple provider for reading public blockchain data (no wallet needed)
-async function createReadOnlyProvider() {
-  const { Provider } = await import('@oyl/sdk');
-  const bitcoin = await import('bitcoinjs-lib');
-  
-  // Create provider using the @oyl/sdk Provider class
-  const provider = new Provider({
-    url: 'http://localhost:18888', // metashrew RPC
-    projectId: 'regtest-local',
-    network: bitcoin.networks.regtest,
-    networkType: 'regtest',
-  });
-  
-  return provider;
-}
-
 export function useFutures() {
-  const [provider, setProvider] = useState<any>(null);
+  const { provider, isInitialized, network } = useAlkanesSDK();
   const [futures, setFutures] = useState<FutureToken[]>([]);
   const [currentBlock, setCurrentBlock] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize provider on mount (no wallet needed for viewing futures)
-  useEffect(() => {
-    createReadOnlyProvider()
-      .then(p => {
-        console.log('[useFutures] Provider initialized:', !!p);
-        setProvider(p);
-      })
-      .catch(err => {
-        console.error('[useFutures] Failed to create provider:', err);
-        setError('Failed to initialize provider');
-      });
-  }, []);
-
-  // Fetch current block height
+  // Fetch current block height using the WASM provider
   const fetchBlockHeight = useCallback(async () => {
-    if (!provider) {
-      console.log('[useFutures] No provider, skipping block height fetch');
+    if (!provider || !isInitialized) {
+      console.log('[useFutures] Provider not ready, skipping block height fetch');
       return;
     }
 
     try {
-      const height = await getCurrentBlockHeight(provider);
+      // Use the WASM provider's metashrew height method
+      const height = await provider.metashrewHeight();
       console.log('[useFutures] Current block height:', height);
       setCurrentBlock(height);
     } catch (err) {
       console.error('[useFutures] Failed to fetch block height:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch block height');
     }
-  }, [provider]);
+  }, [provider, isInitialized]);
 
   // Fetch all futures (public data, no wallet needed)
   const fetchFutures = useCallback(async () => {
     console.log('[useFutures] fetchFutures called', { provider: !!provider, currentBlock });
-    
-    if (!provider || currentBlock === 0) {
+
+    if (!provider || !isInitialized || currentBlock === 0) {
       console.log('[useFutures] Skipping fetch - provider or block not ready');
       return;
     }
@@ -87,35 +61,47 @@ export function useFutures() {
     } finally {
       setLoading(false);
     }
-  }, [provider, currentBlock]);
+  }, [provider, isInitialized, currentBlock]);
 
-  // Generate a new future (regtest only)
-  const handleGenerateFuture = useCallback(async (rpcUrl?: string) => {
+  // Generate a new future (regtest only - uses the provider's bitcoind methods)
+  const handleGenerateFuture = useCallback(async () => {
+    if (!provider || !isInitialized) {
+      throw new Error('Provider not initialized');
+    }
+
+    // Only allow on regtest networks
+    if (network !== 'regtest' && network !== 'subfrost-regtest' && network !== 'oylnet') {
+      throw new Error('Generate future is only available on regtest networks');
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const blockHash = await generateFuture(rpcUrl);
-      console.log('Generated future in block:', blockHash);
-      
+      // Use the WASM provider's bitcoind generate future method
+      const result = await provider.bitcoindGenerateFuture('');
+      console.log('[useFutures] Generated future:', result);
+
       // Refresh futures list
       await fetchBlockHeight();
       await fetchFutures();
-      
-      return blockHash;
+
+      return result;
     } catch (err) {
-      console.error('Failed to generate future:', err);
+      console.error('[useFutures] Failed to generate future:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate future');
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [fetchBlockHeight, fetchFutures]);
+  }, [provider, isInitialized, network, fetchBlockHeight, fetchFutures]);
 
-  // Initial load
+  // Initial load when provider is ready
   useEffect(() => {
-    fetchBlockHeight();
-  }, [fetchBlockHeight]);
+    if (isInitialized && provider) {
+      fetchBlockHeight();
+    }
+  }, [isInitialized, provider, fetchBlockHeight]);
 
   useEffect(() => {
     if (currentBlock > 0) {
@@ -125,12 +111,14 @@ export function useFutures() {
 
   // Auto-refresh every 10 seconds
   useEffect(() => {
+    if (!isInitialized || !provider) return;
+
     const interval = setInterval(() => {
       fetchBlockHeight();
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchBlockHeight]);
+  }, [isInitialized, provider, fetchBlockHeight]);
 
   return {
     futures,

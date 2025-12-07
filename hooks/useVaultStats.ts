@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
-import { createSimulateRequestObject } from '@/lib/oyl/alkanes/transform';
 import BigNumber from 'bignumber.js';
 
 interface VaultStats {
@@ -21,12 +20,17 @@ interface VaultStats {
  * Uses alkanes.simulate to query vault contract state
  */
 export function useVaultStats(vaultContractId: string, baseTokenId: string, enabled: boolean = true) {
-  const { account, isConnected } = useWallet();
-  const provider = useSandshrewProvider();
+  const { account, isConnected, network } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
 
   return useQuery({
-    queryKey: ['vaultStats', vaultContractId, baseTokenId, account],
+    queryKey: ['vaultStats', vaultContractId, baseTokenId, account, network],
+    enabled: enabled && !!vaultContractId && !!baseTokenId && isInitialized && !!provider,
     queryFn: async (): Promise<VaultStats> => {
+      if (!provider) {
+        throw new Error('Provider not initialized');
+      }
+
       try {
         const vaultId = parseAlkaneId(vaultContractId);
         const baseId = parseAlkaneId(baseTokenId);
@@ -34,17 +38,31 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
         // Get user balance if connected (opcode 4: GetVeDieselBalance)
         let userBalance = '0';
         let userBalanceFormatted = '0.00';
-        
+
         if (isConnected && account) {
           try {
-            const userBalanceRequest = createSimulateRequestObject({
-              target: { block: vaultId.block, tx: vaultId.tx },
-              inputs: ['4'], // GetVeDieselBalance opcode
+            // Opcode 4 for GetVeDieselBalance
+            const contractId = `${vaultId.block}:${vaultId.tx}`;
+            
+            // Create minimal context for simulate
+            // calldata must be an array of bytes, not a hex string
+            const context = JSON.stringify({
+              calldata: [4], // Opcode 4 as byte array
+              height: 1000000,
+              txindex: 0,
+              pointer: 0,
+              refund_pointer: 0,
+              vout: 0,
+              transaction: '0x',
+              block: '0x',
+              atomic: null,
+              runes: [],
+              sheets: {},
+              runtime_balances: {},
+              trace: null
             });
-            if (!provider) {
-              throw new Error('Provider not available');
-            }
-            const userBalanceResult = await provider.alkanes.simulate(userBalanceRequest);
+            
+            const userBalanceResult = await provider.alkanesSimulate(contractId, context, 'latest');
             
             if (userBalanceResult && userBalanceResult.execution?.data) {
               userBalance = parseU128FromBytes(userBalanceResult.execution.data);
@@ -93,7 +111,6 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
         };
       }
     },
-    enabled: enabled && !!vaultContractId && !!baseTokenId,
     refetchInterval: 30000, // Refetch every 30 seconds
     staleTime: 15000, // Data is fresh for 15 seconds
     retry: 2,

@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useDebounce } from 'use-debounce';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
 import { useAlkanesTokenPairs, type AlkanesTokenPair } from '@/hooks/useAlkanesTokenPairs';
-import { queryPoolFee } from '@/hooks/usePoolFee';
-import { getSandshrewProvider } from '@/utils/oylProvider';
+import { queryPoolFeeWithProvider } from '@/hooks/usePoolFee';
 import { FRBTC_UNWRAP_FEE_PER_1000, FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/utils/amm';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
@@ -82,6 +82,9 @@ const swapCalculateIn = ({
   return Math.ceil(amountIn);
 };
 
+// WebProvider type for the function signature
+type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
+
 async function calculateSwapPrice(
   sellCurrency: string,
   buyCurrency: string,
@@ -89,12 +92,11 @@ async function calculateSwapPrice(
   direction: Direction,
   maxSlippage: string,
   pool: AlkanesTokenPair,
-  network: any,
+  provider: WebProvider | null,
   wrapFee: number = FRBTC_WRAP_FEE_PER_1000,
   unwrapFee: number = FRBTC_UNWRAP_FEE_PER_1000,
 ) {
-  const provider = await getSandshrewProvider(network);
-  const poolFee = await queryPoolFee(provider, pool.poolId);
+  const poolFee = await queryPoolFeeWithProvider(provider, pool.poolId);
   let buyAmount: string;
   let sellAmount: string;
   const amountInAlks = toAlks(amount);
@@ -171,6 +173,7 @@ export function useSwapQuotes(
 ) {
   const [debouncedAmount] = useDebounce(amount, 300);
   const { network } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
   const { BUSD_ALKANE_ID, FRBTC_ALKANE_ID } = getConfig(network);
   const sellCurrencyId = sellCurrency === 'btc' ? FRBTC_ALKANE_ID : sellCurrency;
   const buyCurrencyId = buyCurrency === 'btc' ? FRBTC_ALKANE_ID : buyCurrency;
@@ -196,7 +199,7 @@ export function useSwapQuotes(
       wrapFee,
       unwrapFee,
     ],
-    enabled: !!sellCurrencyId && !!buyCurrencyId,
+    enabled: !!sellCurrencyId && !!buyCurrencyId && isInitialized && !!provider,
     queryFn: async () => {
       // Short-circuit: direct BTC ↔ frBTC wrap/unwrap (no AMM)
       const isDirectWrap = sellCurrency === 'btc' && buyCurrency === FRBTC_ALKANE_ID;
@@ -309,7 +312,7 @@ export function useSwapQuotes(
       }
 
       const direct = sellPairs.find(
-        (p) =>
+        (p: any) =>
           (p.token0.id === sellCurrencyId && p.token1.id === buyCurrencyId) ||
           (p.token0.id === buyCurrencyId && p.token1.id === sellCurrencyId),
       );
@@ -321,7 +324,7 @@ export function useSwapQuotes(
           direction,
           maxSlippage,
           direct,
-          network,
+          provider,
           wrapFee,
           unwrapFee,
         );
@@ -329,18 +332,18 @@ export function useSwapQuotes(
 
       // BUSD bridge route
       const sellToBusd = sellPairs.find(
-        (p) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
+        (p: any) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
       );
       const buyToBusd = buyPairs.find(
-        (p) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
+        (p: any) => p.token0.id === BUSD_ALKANE_ID || p.token1.id === BUSD_ALKANE_ID,
       );
       
       // frBTC bridge route
       const sellToFrbtc = sellPairs.find(
-        (p) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
+        (p: any) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
       );
       const buyToFrbtc = buyPairs.find(
-        (p) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
+        (p: any) => p.token0.id === FRBTC_ALKANE_ID || p.token1.id === FRBTC_ALKANE_ID,
       );
       
       // Try both bridge routes and compare
@@ -358,7 +361,7 @@ export function useSwapQuotes(
               'sell',
               maxSlippage,
               sellToBusd,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );
@@ -369,7 +372,7 @@ export function useSwapQuotes(
               'sell',
               maxSlippage,
               buyToBusd,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );
@@ -386,7 +389,7 @@ export function useSwapQuotes(
               'buy',
               maxSlippage,
               buyToBusd,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );
@@ -397,7 +400,7 @@ export function useSwapQuotes(
               'buy',
               maxSlippage,
               sellToBusd,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );
@@ -420,7 +423,7 @@ export function useSwapQuotes(
               'sell',
               maxSlippage,
               sellToFrbtc,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );
@@ -431,7 +434,7 @@ export function useSwapQuotes(
               'sell',
               maxSlippage,
               buyToFrbtc,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );
@@ -448,7 +451,7 @@ export function useSwapQuotes(
               'buy',
               maxSlippage,
               buyToFrbtc,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );
@@ -459,7 +462,7 @@ export function useSwapQuotes(
               'buy',
               maxSlippage,
               sellToFrbtc,
-              network,
+              provider,
               wrapFee,
               unwrapFee,
             );

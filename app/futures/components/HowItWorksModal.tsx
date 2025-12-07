@@ -40,7 +40,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors"
           >
             <svg
               width="24"
@@ -60,7 +60,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Block 1: Buy */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-white p-6">
+            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
               <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">Buy</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 Buy ftrBTC on the futures market.
@@ -78,7 +78,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
             </div>
 
             {/* Block 2: Hold */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-white p-6">
+            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
               <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">Hold</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 ftrBTC grows toward full BTC value as expiry approaches.
@@ -94,7 +94,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
             </div>
 
             {/* Block 3: Exercise */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-white p-6">
+            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
               <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">Exercise</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 Hold to expiry → exercise 1:1 BTC (no penalty).
