@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
- 
+
 import { useInfiniteAmmTxHistory, AmmTransactionType } from '@/hooks/useAmmHistory';
 import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
+import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
 
@@ -62,7 +63,19 @@ function PairIcon({
   );
 }
 
+// Whitelisted pool IDs (mainnet only)
+const MAINNET_WHITELISTED_POOL_IDS = new Set([
+  '2:77222',
+  '2:77087',
+  '2:77221',
+  '2:77228',
+  '2:77237',
+  '2:68441',
+  '2:68433',
+]);
+
 export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { isFullPage?: boolean; maxHeightClass?: string }) {
+  const { network } = useWallet();
   const [txFilter, setTxFilter] = useState<AmmTransactionType | 'all'>('all');
   const {
     data,
@@ -72,7 +85,23 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
     isLoading,
   } = useInfiniteAmmTxHistory({ count: 50, enabled: true, transactionType: txFilter === 'all' ? undefined : txFilter });
 
-  const items: AmmRow[] = (data?.pages ?? []).flatMap((p) => (p.items as AmmRow[]));
+  // Filter items to only show transactions from whitelisted pools (mainnet only)
+  const allItems: AmmRow[] = (data?.pages ?? []).flatMap((p) => (p.items as AmmRow[]));
+  const items = useMemo(() => {
+    return allItems.filter((row) => {
+      // Wrap/unwrap transactions are always allowed (no pool)
+      if (row.type === 'wrap' || row.type === 'unwrap') {
+        return true;
+      }
+      // On non-mainnet, allow all pool transactions
+      if (network !== 'mainnet') {
+        return true;
+      }
+      // For pool-based transactions on mainnet, check if the pool is whitelisted
+      const poolId = `${row.poolBlockId}:${row.poolTxId}`;
+      return MAINNET_WHITELISTED_POOL_IDS.has(poolId);
+    });
+  }, [allItems, network]);
   const tokenIds = useMemo(() => {
     const out = new Set<string>();
     items.forEach((row) => {

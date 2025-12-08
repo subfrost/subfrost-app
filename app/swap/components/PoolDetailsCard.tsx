@@ -38,8 +38,8 @@ export default function PoolDetailsCard({ pool }: { pool?: PoolSummary }) {
         <div className="rounded-xl bg-[color:var(--sf-surface)]/60 px-4 py-3 backdrop-blur-sm">
           <div className="mb-2 text-xs font-semibold text-[color:var(--sf-text)]/60">24h Volume</div>
           <div className="text-lg font-bold text-[color:var(--sf-text)]">{formatUsd(pool.vol24hUsd)}</div>
-          <div className="mt-3 text-xs font-semibold text-[color:var(--sf-text)]/60">APR</div>
-          <div className="inline-flex items-center rounded-full bg-green-900/30 px-2 py-0.5 text-sm font-bold text-green-400">
+          <div className="mt-3 text-xs font-semibold text-[color:var(--sf-text)]/60">APY</div>
+          <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
             {formatPercent(pool.apr)}
           </div>
         </div>

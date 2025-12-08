@@ -3,7 +3,19 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePools } from '@/hooks/usePools';
+import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
+
+// Whitelisted pool IDs (mainnet only)
+const MAINNET_WHITELISTED_POOL_IDS = new Set([
+  '2:77222',
+  '2:77087',
+  '2:77221',
+  '2:77228',
+  '2:77237',
+  '2:68441',
+  '2:68433',
+]);
 
 function PairBadge({ a, b }: { a: { id: string; symbol: string }, b: { id: string; symbol: string } }) {
   return (
@@ -23,14 +35,25 @@ function PairBadge({ a, b }: { a: { id: string; symbol: string }, b: { id: strin
   );
 }
 
-function formatUsd(n?: number) {
-  const v = Number(n ?? 0);
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+function formatUsd(n?: number, showZeroAsDash = false) {
+  if (n == null || (showZeroAsDash && n === 0)) return "-";
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
 export default function TrendingPairs() {
-  const { data } = usePools({ sortBy: 'volume1d', order: 'desc', limit: 1 });
-  const pairs = useMemo(() => (data?.items ?? []).slice(0, 1), [data?.items]);
+  const { network } = useWallet();
+  const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
+  const pairs = useMemo(() => {
+    // Filter to whitelisted pools on mainnet, allow all on other networks
+    // Sort by TVL (volume data not currently available from API), take the top one
+    const allPools = data?.items ?? [];
+    const filtered = network === 'mainnet'
+      ? allPools.filter(p => MAINNET_WHITELISTED_POOL_IDS.has(p.id))
+      : allPools;
+    return filtered
+      .sort((a, b) => (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0))
+      .slice(0, 1);
+  }, [data?.items, network]);
 
   return (
     <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
@@ -54,7 +77,7 @@ export default function TrendingPairs() {
               <div className="flex items-center justify-between gap-4">
                 <div className="text-left">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Volume</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd)}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>

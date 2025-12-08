@@ -28,29 +28,27 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
   const [volumePeriod, setVolumePeriod] = useState<VolumePeriod>('24h');
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyDisplay>('usd');
 
-  const allowedPairs = useMemo(() => new Set([
-    'DIESEL / frBTC LP',
-    'frBTC / DIESEL LP',
-    'METHANE / frBTC LP',
-    'frBTC / METHANE LP',
-    'ALKAMIST / frBTC LP',
-    'frBTC / ALKAMIST LP',
-    'GOLD DUST / frBTC LP',
-    'frBTC / GOLD DUST LP',
-    'bUSD / frBTC LP',
-    'frBTC / bUSD LP',
-    'DIESEL / bUSD LP',
-    'bUSD / DIESEL LP',
-    'METHANE / bUSD LP',
-    'bUSD / METHANE LP',
-    'ALKAMIST / bUSD LP',
-    'bUSD / ALKAMIST LP',
-    'GOLD DUST / bUSD LP',
-    'bUSD / GOLD DUST LP',
-  ]), []);
+  // Whitelisted pool IDs (mainnet-specific)
+  // On non-mainnet networks, allow all pools
+  const whitelistedPoolIds = useMemo(() => {
+    if (network !== 'mainnet') {
+      return null; // Allow all pools on non-mainnet
+    }
+    return new Set([
+      '2:77222',
+      '2:77087',
+      '2:77221',
+      '2:77228',
+      '2:77237',
+      '2:68441',
+      '2:68433',
+    ]);
+  }, [network]);
 
   const sortedPools = useMemo(() => {
-    let filtered = pools.filter(pool => allowedPairs.has(pool.pairLabel));
+    let filtered = whitelistedPoolIds === null
+      ? pools
+      : pools.filter(pool => whitelistedPoolIds.has(pool.id));
     
     // Apply market filter
     if (marketFilter === 'btc') {
@@ -98,7 +96,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
       return sortOrder === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
     });
     return sorted;
-  }, [pools, sortField, sortOrder, allowedPairs, marketFilter, volumePeriod]);
+  }, [pools, sortField, sortOrder, whitelistedPoolIds, marketFilter, volumePeriod]);
 
   // Filter pools based on search query
   const filteredPools = useMemo(() => {
@@ -170,10 +168,17 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
           <div className="relative w-full max-w-xs">
             <input
               type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="hidden md:block lg:hidden h-10 w-full rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
+            />
+            <input
+              type="text"
               placeholder="Search pools..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-full rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
+              className="md:hidden lg:block h-10 w-full rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
             />
             <svg 
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--sf-text)]/40"
@@ -319,7 +324,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                     </span>
                   </button>
                 </th>
-                <SortableHeader label="APR" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
+                <SortableHeader label="APY" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--sf-glass-border)]">
@@ -352,11 +357,11 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                     </span>
                   </td>
                   <td className="px-2 py-3 text-right text-xs font-semibold text-[color:var(--sf-text)]">
-                    {volumePeriod === '24h' && formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice)}
-                    {volumePeriod === '30d' && formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice)}
+                    {volumePeriod === '24h' && formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}
+                    {volumePeriod === '30d' && formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice, true)}
                   </td>
                   <td className="px-2 py-3 text-center">
-                    <span className="inline-flex items-center rounded-full bg-green-900/30 px-2 py-0.5 text-xs font-bold text-green-400">
+                    <span className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
                       {formatPercent(pool.apr)}
                     </span>
                   </td>
@@ -370,7 +375,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
 
       {/* Mobile/Tablet Card View */}
       {filteredPools.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
+        <div className="grid grid-cols-1 gap-3 md:hidden">
         {displayedPools.map((pool) => (
           <button
             key={pool.id}
@@ -387,7 +392,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                 </div>
                 <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel.replace(/ LP$/, '')}</span>
               </div>
-              <span className="inline-flex items-center rounded-full bg-green-900/30 px-2.5 py-0.5 text-xs font-bold text-green-400">
+              <span className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2.5 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
                 {formatPercent(pool.apr)}
               </span>
             </div>
@@ -399,7 +404,7 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
                 </div>
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Volume</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice)}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -489,15 +494,15 @@ function SortableHeader({
   );
 }
 
-function formatCurrency(v?: number, currency: CurrencyDisplay = 'usd', btcPrice?: number) {
-  if (v == null) return "-";
-  
+function formatCurrency(v?: number, currency: CurrencyDisplay = 'usd', btcPrice?: number, showZeroAsDash = false) {
+  if (v == null || (showZeroAsDash && v === 0)) return "-";
+
   if (currency === 'btc') {
     if (!btcPrice || btcPrice === 0) return "-";
     const btcValue = v / btcPrice;
     return `₿${btcValue.toFixed(4)}`;
   }
-  
+
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
 }
 

@@ -93,9 +93,9 @@ body {
   --sf-badge-coming-soon-border: #9ca3af;
   --sf-badge-coming-soon-text: #9ca3af;
 
-  /* Boost icons - dark mode (with transparency) */
-  --sf-boost-icon-from: rgba(168, 85, 247, 0.6);
-  --sf-boost-icon-to: rgba(236, 72, 153, 0.6);
+  /* Boost icons - dark mode (light purple to dark purple gradient) */
+  --sf-boost-icon-from: #a855f7;
+  --sf-boost-icon-to: #7c3aed;
 }
 
 /* Light Theme (gabes-branch-ui styles) */
@@ -237,9 +237,9 @@ body {
   --sf-badge-coming-soon-border: #9ca3af;
   --sf-badge-coming-soon-text: #9ca3af;
 
-  /* Boost icons - dark mode (with transparency) */
-  --sf-boost-icon-from: rgba(168, 85, 247, 0.6);
-  --sf-boost-icon-to: rgba(236, 72, 153, 0.6);
+  /* Boost icons - dark mode (light purple to dark purple gradient) */
+  --sf-boost-icon-from: #a855f7;
+  --sf-boost-icon-to: #7c3aed;
 }
 
 /* Wordmark invert for dark mode */

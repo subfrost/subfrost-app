@@ -22,9 +22,10 @@ type Props = {
   isCalculating: boolean;
   feeRate: number;
   network?: 'mainnet' | 'testnet';
+  isCrossChainFrom?: boolean;
 };
 
-export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp }: Props) {
+export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp, isCrossChainFrom }: Props) {
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
@@ -236,7 +237,10 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
               danger={hasHighSlippage}
             />
           )}
-          <Row label="Miner Fee Rate" value={`${feeRate} sats/vB`} />
+          <Row
+            label={isCrossChainFrom ? "Bitcoin & Ethereum Network Fee" : "Miner Fee Rate"}
+            value={isCrossChainFrom ? "$0.00 USDT" : `${feeRate} sats/vB`}
+          />
           {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
           
           {hasHighSlippage && slippagePercent !== null && (
