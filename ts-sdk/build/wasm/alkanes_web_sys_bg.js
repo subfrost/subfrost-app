@@ -241,6 +241,21 @@ function passArrayJsValueToWasm0(array, malloc) {
     return ptr;
 }
 /**
+ * Asynchronously encrypts data using the Web Crypto API.
+ * @param {string} mnemonic
+ * @param {string} passphrase
+ * @returns {Promise<any>}
+ */
+export function encryptMnemonic(mnemonic, passphrase) {
+    const ptr0 = passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.encryptMnemonic(ptr0, len0, ptr1, len1);
+    return ret;
+}
+
+/**
  * @param {string} psbt_base64
  * @returns {string}
  */
@@ -295,21 +310,6 @@ export function get_alkane_bytecode(network, block, tx, block_tag) {
     const ptr1 = passStringToWasm0(block_tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.get_alkane_bytecode(ptr0, len0, block, tx, ptr1, len1);
-    return ret;
-}
-
-/**
- * Asynchronously encrypts data using the Web Crypto API.
- * @param {string} mnemonic
- * @param {string} passphrase
- * @returns {Promise<any>}
- */
-export function encryptMnemonic(mnemonic, passphrase) {
-    const ptr0 = passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.encryptMnemonic(ptr0, len0, ptr1, len1);
     return ret;
 }
 
@@ -723,6 +723,40 @@ export class WebProvider {
         const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.webprovider_alkanesExecute(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * Execute an alkanes smart contract using CLI-style string parameters
+     * This is the recommended method for executing alkanes contracts as it supports
+     * the same parameter format as alkanes-cli.
+     *
+     * # Parameters
+     * - `to_addresses`: JSON array of recipient addresses
+     * - `input_requirements`: String format like "B:10000" or "2:0:1000" (alkane block:tx:amount)
+     * - `protostones`: String format like "[32,0,77]:v0:v0" (cellpack:pointer:refund)
+     * - `fee_rate`: Optional fee rate in sat/vB
+     * - `envelope_hex`: Optional envelope data as hex string
+     * - `options_json`: Optional JSON with additional options (trace_enabled, mine_enabled, auto_confirm, raw_output)
+     * @param {string} to_addresses_json
+     * @param {string} input_requirements
+     * @param {string} protostones
+     * @param {number | null} [fee_rate]
+     * @param {string | null} [envelope_hex]
+     * @param {string | null} [options_json]
+     * @returns {Promise<any>}
+     */
+    alkanesExecuteWithStrings(to_addresses_json, input_requirements, protostones, fee_rate, envelope_hex, options_json) {
+        const ptr0 = passStringToWasm0(to_addresses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(input_requirements, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(protostones, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(envelope_hex) ? 0 : passStringToWasm0(envelope_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(options_json) ? 0 : passStringToWasm0(options_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.webprovider_alkanesExecuteWithStrings(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(fee_rate) ? 0x100000001 : Math.fround(fee_rate), ptr3, len3, ptr4, len4);
         return ret;
     }
     /**
@@ -1366,9 +1400,11 @@ export class WebProvider {
      * Create a new wallet with an optional mnemonic phrase
      * If no mnemonic is provided, a new one will be generated
      * Returns wallet info including address and mnemonic
+     *
+     * Note: This sets the keystore on self synchronously so walletIsLoaded() returns true immediately
      * @param {string | null} [mnemonic]
      * @param {string | null} [passphrase]
-     * @returns {Promise<any>}
+     * @returns {any}
      */
     walletCreate(mnemonic, passphrase) {
         var ptr0 = isLikeNone(mnemonic) ? 0 : passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -1376,7 +1412,10 @@ export class WebProvider {
         var ptr1 = isLikeNone(passphrase) ? 0 : passStringToWasm0(passphrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len1 = WASM_VECTOR_LEN;
         const ret = wasm.webprovider_walletCreate(this.__wbg_ptr, ptr0, len0, ptr1, len1);
-        return ret;
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
     /**
      * Load an existing wallet from storage
@@ -2140,6 +2179,11 @@ export function __wbg_ok_5749966cb2b8535e(arg0) {
     return ret;
 };
 
+export function __wbg_parse_2a704d6b78abb2b8() { return handleError(function (arg0, arg1) {
+    const ret = JSON.parse(getStringFromWasm0(arg0, arg1));
+    return ret;
+}, arguments) };
+
 export function __wbg_process_dc0fbacc7c1c06f7(arg0) {
     const ret = arg0.process;
     return ret;
@@ -2317,6 +2361,12 @@ export function __wbindgen_cast_9ae0607507abb057(arg0) {
     return ret;
 };
 
+export function __wbindgen_cast_9d9bc7f4dcd1d4d6(arg0, arg1) {
+    // Cast intrinsic for `Closure(Closure { dtor_idx: 2302, function: Function { arguments: [Externref], shim_idx: 2303, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
+    return ret;
+};
+
 export function __wbindgen_cast_cb9088102bce6b30(arg0, arg1) {
     // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
     const ret = getArrayU8FromWasm0(arg0, arg1);
@@ -2326,12 +2376,6 @@ export function __wbindgen_cast_cb9088102bce6b30(arg0, arg1) {
 export function __wbindgen_cast_d6cd19b81560fd6e(arg0) {
     // Cast intrinsic for `F64 -> Externref`.
     const ret = arg0;
-    return ret;
-};
-
-export function __wbindgen_cast_e44df24e901df5b3(arg0, arg1) {
-    // Cast intrinsic for `Closure(Closure { dtor_idx: 2283, function: Function { arguments: [Externref], shim_idx: 2284, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-    const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h3ba04b4139aaae95, wasm_bindgen__convert__closures_____invoke__h5943629905d90057);
     return ret;
 };
 
