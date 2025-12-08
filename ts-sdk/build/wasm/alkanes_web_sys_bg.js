@@ -2179,6 +2179,11 @@ export function __wbg_ok_5749966cb2b8535e(arg0) {
     return ret;
 };
 
+export function __wbg_parse_2a704d6b78abb2b8() { return handleError(function (arg0, arg1) {
+    const ret = JSON.parse(getStringFromWasm0(arg0, arg1));
+    return ret;
+}, arguments) };
+
 export function __wbg_process_dc0fbacc7c1c06f7(arg0) {
     const ret = arg0.process;
     return ret;
