@@ -56,7 +56,7 @@ export function useFrbtcPremium() {
         const contractId = `${frbtcId.block}:${frbtcId.tx}`;
         
         // Create minimal context for simulate
-        // calldata must be an array of bytes, not a hex string
+        // All byte fields must be arrays of bytes, not hex strings
         const context = JSON.stringify({
           calldata: [104], // Opcode 104 as byte array
           height: 1000000,
@@ -64,8 +64,8 @@ export function useFrbtcPremium() {
           pointer: 0,
           refund_pointer: 0,
           vout: 0,
-          transaction: '0x',
-          block: '0x',
+          transaction: [], // Empty byte array
+          block: [],       // Empty byte array
           atomic: null,
           runes: [],
           sheets: {},

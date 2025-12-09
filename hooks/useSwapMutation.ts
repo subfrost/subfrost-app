@@ -163,10 +163,14 @@ export function useSwapMutation() {
       if (!recipientAddress) throw new Error('No recipient address available');
 
       const toAddresses = JSON.stringify([recipientAddress]);
+
+      // Use p2tr:0 for change address instead of the default p2wsh:0
+      // (p2wsh is not supported by single-sig wallets)
       const options = JSON.stringify({
         trace_enabled: false,
         mine_enabled: false,
         auto_confirm: true,
+        change_address: 'p2tr:0',
       });
 
       // Execute using alkanesExecuteWithStrings
