@@ -58,7 +58,10 @@ export const useSellableCurrencies = (
 
   return useQuery({
     queryKey: ['sellable-currencies', walletAddress, tokensWithPools],
-    staleTime: 1000 * 60 * 2,
+    staleTime: 0, // Always consider stale - refetch on mount and focus
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when user comes back to tab
+    refetchInterval: 5000, // Poll every 5 seconds to catch indexer updates
     enabled: isInitialized && !!provider && !!walletAddress,
     queryFn: async (): Promise<CurrencyPriceInfoResponse[]> => {
       if (!walletAddress || !provider) return [];
