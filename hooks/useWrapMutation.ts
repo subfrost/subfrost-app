@@ -337,17 +337,87 @@ export function useWrapMutation() {
           // Extract the raw transaction
           const tx = signedPsbt.extractTransaction();
           const txHex = tx.toHex();
-          console.log('[useWrapMutation] Extracted tx hex, broadcasting...');
+          const txid = tx.getId();
+
+          // Debug: Log detailed transaction structure
+          console.log('[useWrapMutation] ========================================');
+          console.log('[useWrapMutation] TRANSACTION DETAILS FOR INDEXER DEBUG');
+          console.log('[useWrapMutation] ========================================');
+          console.log('[useWrapMutation] Transaction ID:', txid);
+          console.log('[useWrapMutation] Transaction hex:', txHex);
+          console.log('[useWrapMutation] Number of inputs:', tx.ins.length);
+          console.log('[useWrapMutation] Number of outputs:', tx.outs.length);
+
+          // Analyze each output
+          tx.outs.forEach((output, idx) => {
+            const script = output.script.toString('hex');
+            let outputType = 'unknown';
+            let address = 'N/A';
+            let opReturnData = null;
+
+            try {
+              // Check if OP_RETURN (starts with 6a)
+              if (script.startsWith('6a')) {
+                outputType = 'OP_RETURN';
+                // Parse OP_RETURN data (skip 6a opcode and length byte)
+                const dataHex = script.slice(4); // Skip 6a and length
+                opReturnData = Buffer.from(dataHex, 'hex').toString('utf8');
+              } else {
+                // Try to decode as address
+                address = bitcoin.address.fromOutputScript(output.script, btcNetwork);
+
+                // Determine output type
+                if (address.startsWith('bc1p') || address.startsWith('tb1p') || address.startsWith('bcrt1p')) {
+                  outputType = 'P2TR (taproot)';
+                } else if (address.startsWith('bc1') || address.startsWith('tb1') || address.startsWith('bcrt1')) {
+                  outputType = 'P2WPKH (segwit)';
+                }
+              }
+            } catch (e) {
+              outputType = 'unparseable';
+            }
+
+            console.log(`[useWrapMutation] Output ${idx}:`, {
+              type: outputType,
+              address,
+              value: output.value,
+              scriptHex: script.slice(0, 100) + (script.length > 100 ? '...' : ''),
+              opReturnData,
+            });
+
+            // Check if this output matches expected addresses
+            if (address === userTaprootAddress) {
+              console.log(`[useWrapMutation]   ✓ Output ${idx} is USER address (should receive frBTC via pointer)`);
+            }
+            if (address === signerAddress) {
+              console.log(`[useWrapMutation]   ✓ Output ${idx} is SIGNER address (BTC for wrap - CRITICAL for indexer)`);
+            }
+          });
+
+          console.log('[useWrapMutation] Expected protostone:', protostone);
+          console.log('[useWrapMutation] Expected signer address:', signerAddress);
+          console.log('[useWrapMutation] Expected user address:', userTaprootAddress);
+          console.log('[useWrapMutation] ========================================');
 
           // Broadcast the transaction
-          const txid = await provider.broadcastTransaction(txHex);
-          console.log('[useWrapMutation] Transaction broadcast, txid:', txid);
+          console.log('[useWrapMutation] Broadcasting transaction...');
+          const broadcastTxid = await provider.broadcastTransaction(txHex);
+          console.log('[useWrapMutation] Transaction broadcast successful');
+          console.log('[useWrapMutation] Broadcast returned txid:', broadcastTxid);
 
+          if (txid !== broadcastTxid) {
+            console.warn('[useWrapMutation] WARNING: Computed txid !== broadcast txid!');
+            console.warn('[useWrapMutation] Computed:', txid);
+            console.warn('[useWrapMutation] Broadcast:', broadcastTxid);
+          }
+
+          // Return the txid from broadcast (should match computed txid)
           return {
             success: true,
-            transactionId: txid,
+            transactionId: broadcastTxid || txid,
             wrapAmountSats,
-          } as { success: boolean; transactionId?: string; wrapAmountSats?: number };
+            txHex, // Include raw hex for debugging
+          } as { success: boolean; transactionId?: string; wrapAmountSats?: number; txHex?: string };
         }
 
         // Check if execution completed directly (unlikely for wrap, but handle it)
@@ -375,9 +445,67 @@ export function useWrapMutation() {
         throw error;
       }
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       console.log('[useWrapMutation] Wrap successful, invalidating balance queries...');
       console.log('[useWrapMutation] Transaction ID:', data.transactionId);
+
+      // Post-broadcast verification: try to fetch the transaction back from the network
+      if (data.transactionId && provider) {
+        try {
+          console.log('[useWrapMutation] Verifying transaction is visible on network...');
+
+          // Wait a moment for mempool propagation
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Try to get transaction from provider
+          const txResult = await provider.getTransaction(data.transactionId);
+          console.log('[useWrapMutation] Transaction verified on network:', txResult);
+
+          // If we have the raw hex, decode and verify structure matches what we sent
+          if (data.txHex) {
+            console.log('[useWrapMutation] Transaction hex available for debugging');
+            console.log('[useWrapMutation] You can decode this transaction using:');
+            console.log('[useWrapMutation] bitcoin-cli decoderawtransaction', data.txHex);
+          }
+        } catch (verifyErr) {
+          console.warn('[useWrapMutation] Could not verify transaction on network (may not be an issue):', verifyErr);
+        }
+
+        // Try to check if indexer can see the transaction
+        try {
+          const config = getConfig(network);
+          const dataApiUrl = (config as any).API_URL;
+
+          if (dataApiUrl) {
+            console.log('[useWrapMutation] Checking if indexer can see transaction...');
+
+            // Wait a bit longer for indexer
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            const balanceResponse = await fetch(`${dataApiUrl}/get-address-balances`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                address: account?.taproot?.address,
+                include_outpoints: false
+              }),
+            });
+
+            if (balanceResponse.ok) {
+              const balanceData = await balanceResponse.json();
+              console.log('[useWrapMutation] Indexer balance sheet after wrap:', balanceData);
+
+              if (balanceData?.balances?.[FRBTC_ALKANE_ID]) {
+                console.log('[useWrapMutation] ✓ Indexer shows frBTC balance:', balanceData.balances[FRBTC_ALKANE_ID]);
+              } else {
+                console.log('[useWrapMutation] ⚠ Indexer does not yet show frBTC balance (this is expected - may take time)');
+              }
+            }
+          }
+        } catch (indexerErr) {
+          console.warn('[useWrapMutation] Could not check indexer status:', indexerErr);
+        }
+      }
 
       // Invalidate all balance-related queries to refresh UI
       // Balance will update once the alkanes indexer processes the transaction
