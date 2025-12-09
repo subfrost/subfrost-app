@@ -218,14 +218,21 @@ describe('E2E Swap with Keystore Signer', () => {
       const taprootAddr = testSigner.addresses.taproot.address;
 
       try {
-        const alkanes = await provider.alkanesByAddress(taprootAddr, 'latest', 1);
-        console.log('[Swap] Alkane balances:', JSON.stringify(alkanes).slice(0, 500));
+        // Use getEnrichedBalances instead of alkanesByAddress
+        // (alkanesByAddress uses 'protorunesbyaddress' RPC which isn't available on regtest)
+        const balances = await provider.getEnrichedBalances(taprootAddr, '1');
+        console.log('[Swap] Enriched balances:', JSON.stringify(balances).slice(0, 500));
 
-        // Check if we have frBTC
-        // The response format may vary
-        expect(alkanes).toBeDefined();
+        // Check assets for alkane tokens (frBTC, etc.)
+        if (balances?.assets && Object.keys(balances.assets).length > 0) {
+          console.log('[Swap] Found assets:', Object.keys(balances.assets).length);
+        } else {
+          console.log('[Swap] No alkane assets found in wallet');
+        }
+
+        expect(balances).toBeDefined();
       } catch (error: any) {
-        console.log('[Swap] Could not fetch alkane balances:', error.message?.slice(0, 100));
+        console.log('[Swap] Could not fetch balances:', error.message?.slice(0, 100));
       }
     });
 
@@ -421,12 +428,25 @@ describe('E2E Swap with Keystore Signer', () => {
       const btcBalance = utxos.reduce((sum, utxo) => sum + utxo.satoshis, 0);
       console.log('[Final] BTC balance:', btcBalance, 'sats');
 
-      // Alkane balances
+      // Alkane balances using getEnrichedBalances
+      // (alkanesByAddress uses 'protorunesbyaddress' RPC which isn't available on regtest)
       try {
-        const alkanes = await provider.alkanesByAddress(testSigner.addresses.taproot.address, 'latest', 1);
-        console.log('[Final] Alkane balances:', JSON.stringify(alkanes).slice(0, 500));
+        const balances = await provider.getEnrichedBalances(testSigner.addresses.taproot.address, '1');
+
+        // Count assets with alkane tokens
+        const assetCount = balances?.assets ? Object.keys(balances.assets).length : 0;
+        console.log('[Final] Total UTXOs:', {
+          spendable: balances?.spendable ? Object.keys(balances.spendable).length : 0,
+          assets: assetCount,
+          pending: balances?.pending ? Object.keys(balances.pending).length : 0,
+        });
+
+        // Log assets if any (these contain alkane tokens like frBTC, DIESEL)
+        if (assetCount > 0) {
+          console.log('[Final] Asset UTXOs:', JSON.stringify(balances.assets).slice(0, 500));
+        }
       } catch (e: any) {
-        console.log('[Final] Could not fetch alkane balances:', e.message?.slice(0, 100));
+        console.log('[Final] Could not fetch balances:', e.message?.slice(0, 100));
       }
 
       // Pool state
