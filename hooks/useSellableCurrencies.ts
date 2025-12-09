@@ -93,7 +93,24 @@ export const useSellableCurrencies = (
 
             if (balanceSheetResponse.ok) {
               const balanceSheet = await balanceSheetResponse.json();
-              console.log('[useSellableCurrencies] Balance sheet:', balanceSheet);
+              console.log('[useSellableCurrencies] ========================================');
+              console.log('[useSellableCurrencies] BALANCE SHEET FROM INDEXER API');
+              console.log('[useSellableCurrencies] ========================================');
+              console.log('[useSellableCurrencies] Full response:', JSON.stringify(balanceSheet, null, 2));
+              console.log('[useSellableCurrencies] Address:', walletAddress);
+              console.log('[useSellableCurrencies] Network:', network);
+              console.log('[useSellableCurrencies] frBTC Alkane ID (32:0):', config.FRBTC_ALKANE_ID);
+
+              if (balanceSheet?.balances) {
+                console.log('[useSellableCurrencies] All balances from indexer:');
+                Object.entries(balanceSheet.balances).forEach(([alkaneId, balance]) => {
+                  const isFrbtc = alkaneId === config.FRBTC_ALKANE_ID;
+                  console.log(`[useSellableCurrencies]   ${isFrbtc ? '>>> ' : ''}${alkaneId}: ${balance}${isFrbtc ? ' (frBTC) <<<' : ''}`);
+                });
+              } else {
+                console.log('[useSellableCurrencies] ⚠ No balances in response');
+              }
+              console.log('[useSellableCurrencies] ========================================');
 
               // Process balance sheet entries (e.g., {"32:0": "9990"} for frBTC)
               if (balanceSheet?.balances && typeof balanceSheet.balances === 'object') {
