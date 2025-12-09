@@ -12,7 +12,7 @@ import { useSwapMutation } from "@/hooks/useSwapMutation";
 import { useWallet } from "@/context/WalletContext";
 import { getConfig } from "@/utils/getConfig";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
-import { useBtcBalance } from "@/hooks/useBtcBalance";
+import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -263,9 +263,10 @@ export default function SwapShell() {
     return opts;
   }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
 
-  // Balances
-  const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
-  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isFetchingBtc);
+  // Balances - use useEnrichedWalletData for BTC balance (more reliable than useBtcBalance)
+  const { balances: walletBalances, isLoading: isLoadingWalletData } = useEnrichedWalletData();
+  const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
+  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
   const formatBalance = (id?: string): string => {
     if (!id) return 'Balance: 0';
     if (id === 'btc') {

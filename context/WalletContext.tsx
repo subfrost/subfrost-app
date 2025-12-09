@@ -465,7 +465,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Get spendable balance using WASM provider
   const getSpendableTotalBalance = useCallback(async (): Promise<number> => {
+    console.log('[WalletContext] getSpendableTotalBalance called', {
+      hasWallet: !!wallet,
+      hasSdkProvider: !!sdkProvider,
+      sdkInitialized,
+      nativeSegwit: account.nativeSegwit?.address,
+      taproot: account.taproot?.address,
+    });
+
     if (!wallet || !sdkProvider || !sdkInitialized) {
+      console.log('[WalletContext] Returning 0 - missing dependencies');
       return 0;
     }
 
@@ -477,15 +486,22 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       if (account.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
       if (account.taproot?.address) addresses.push(account.taproot.address);
 
+      console.log('[WalletContext] Querying addresses:', addresses);
+
       if (addresses.length === 0) return 0;
 
       // Fetch balances for all addresses in parallel
       const results = await Promise.all(
         addresses.map(async (address) => {
           try {
+            console.log('[WalletContext] Fetching enriched balances for:', address);
             const rawResult = await sdkProvider.getEnrichedBalances(address, '1');
-            return extractEnrichedData(rawResult);
-          } catch {
+            console.log('[WalletContext] Raw result for', address, ':', rawResult);
+            const extracted = extractEnrichedData(rawResult);
+            console.log('[WalletContext] Extracted data for', address, ':', extracted);
+            return extracted;
+          } catch (err) {
+            console.error('[WalletContext] Error fetching for', address, ':', err);
             return null;
           }
         })
@@ -494,12 +510,15 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // Sum up spendable balances from all addresses
       for (const enriched of results) {
         if (enriched && enriched.spendable.length > 0) {
-          totalBalance += enriched.spendable.reduce((sum: number, utxo: any) => {
+          const addressBalance = enriched.spendable.reduce((sum: number, utxo: any) => {
             return sum + (utxo.value || 0);
           }, 0);
+          console.log('[WalletContext] Address balance:', addressBalance);
+          totalBalance += addressBalance;
         }
       }
 
+      console.log('[WalletContext] Total balance:', totalBalance);
       return totalBalance;
     } catch (error) {
       console.error('[WalletContext] Error fetching balance:', error);

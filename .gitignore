@@ -46,3 +46,7 @@ e2e/screenshots/*.png
 .subfrost-build/
 scripts/rust-deployer/target/
 ts-sdk/node_modules/
+
+# lock files (use your preferred package manager locally)
+package-lock.json
+yarn.lock
