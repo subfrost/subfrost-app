@@ -18,6 +18,21 @@ interface FeeEstimates {
   lastUpdated: number;
 }
 
+// Helper to recursively convert Map to plain object (serde_wasm_bindgen returns nested Maps)
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
+}
+
 interface AlkanesSDKContextType {
   provider: WebProvider | null;
   isInitialized: boolean;
@@ -141,11 +156,11 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         // - { data: { bitcoin: { usd: number } } } (REST API format)
         // - { bitcoin: { usd: number } } (direct format)
         // - { usd: number } (simple format)
-        // - Map objects from serde_wasm_bindgen
+        // - Map objects from serde_wasm_bindgen (nested Maps)
         let usdPrice = 0;
 
-        // Convert Map to object if needed
-        const data = priceData instanceof Map ? Object.fromEntries(priceData) : priceData;
+        // Convert Map to object recursively (serde_wasm_bindgen returns nested Maps)
+        const data = mapToObject(priceData);
 
         if (data?.data?.bitcoin?.usd) {
           usdPrice = data.data.bitcoin.usd;
@@ -180,8 +195,8 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       console.log('[AlkanesSDK] Fee estimates data:', feeData);
 
       if (feeData) {
-        // Convert Map to object if needed
-        const data = feeData instanceof Map ? Object.fromEntries(feeData) : feeData;
+        // Convert Map to object recursively (serde_wasm_bindgen returns nested Maps)
+        const data = mapToObject(feeData);
 
         // Esplora fee estimates format: { "1": rate, "2": rate, "3": rate, ... "144": rate }
         // We want: fast (1 block), medium (6 blocks), slow (144 blocks)

@@ -42,10 +42,22 @@ export function useFrbtcPremium() {
 
   return useQuery({
     queryKey: ['frbtc-premium', network, FRBTC_ALKANE_ID],
-    enabled: isInitialized && !!provider,
+    // Only enable if we have a valid frBTC alkane ID configured
+    enabled: isInitialized && !!provider && !!FRBTC_ALKANE_ID && FRBTC_ALKANE_ID !== '',
     queryFn: async () => {
       if (!provider) {
         throw new Error('Provider not initialized');
+      }
+
+      // Return fallback if no frBTC contract configured for this network
+      if (!FRBTC_ALKANE_ID || FRBTC_ALKANE_ID === '') {
+        return {
+          premium: 100_000,
+          wrapFeePerThousand: FRBTC_WRAP_FEE_PER_1000,
+          unwrapFeePerThousand: FRBTC_UNWRAP_FEE_PER_1000,
+          isLive: false,
+          error: 'frBTC not configured for this network',
+        };
       }
 
       try {
@@ -56,8 +68,18 @@ export function useFrbtcPremium() {
         const contractId = `${frbtcId.block}:${frbtcId.tx}`;
         
         // Create minimal context for simulate
-        // All byte fields must be arrays of bytes, not hex strings
+        // Based on alkanes.proto MessageContextParcel definition:
+        // - alkanes: repeated AlkaneTransfer (required, empty for read-only calls)
+        // - transaction: bytes
+        // - block: bytes
+        // - height: uint64
+        // - txindex: uint32
+        // - calldata: bytes
+        // - vout: uint32
+        // - pointer: uint32
+        // - refund_pointer: uint32
         const context = JSON.stringify({
+          alkanes: [],     // Required field: array of AlkaneTransfer (empty for read-only)
           calldata: [104], // Opcode 104 as byte array
           height: 1000000,
           txindex: 0,
@@ -66,11 +88,6 @@ export function useFrbtcPremium() {
           vout: 0,
           transaction: [], // Empty byte array
           block: [],       // Empty byte array
-          atomic: null,
-          runes: [],
-          sheets: {},
-          runtime_balances: {},
-          trace: null
         });
         
         const result = await provider.alkanesSimulate(contractId, context, 'latest');
@@ -96,8 +113,10 @@ export function useFrbtcPremium() {
           isLive: true,
         };
       } catch (error) {
-        console.error('Failed to fetch frBTC premium:', error);
-        
+        // Only log as warning since this is expected on regtest/testnet without deployed contracts
+        console.warn('[useFrbtcPremium] Using fallback premium values:',
+          error instanceof Error ? error.message : 'Unknown error');
+
         // Return fallback values
         return {
           premium: 100_000, // 0.1% = 1 per 1000

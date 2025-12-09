@@ -443,24 +443,40 @@ describe('Alkanes Trace Verification', () => {
       console.log('[Doc] alkanesSimulate(contract_id, context_json, block_tag?)');
 
       try {
-        // Simulate calling the DIESEL contract (2:0) with empty context
+        // Simulate calling the DIESEL contract (2:0)
+        // Based on alkanes.proto MessageContextParcel definition
         const context = JSON.stringify({
-          inputs: [],
-          op: 100, // Example opcode - get info
+          alkanes: [],     // Required field: array of AlkaneTransfer
+          calldata: [100], // Example opcode - get info
+          height: 1000000,
+          txindex: 0,
+          pointer: 0,
+          refund_pointer: 0,
+          vout: 0,
+          transaction: [],
+          block: [],
         });
 
         const result = await provider.alkanesSimulate(DIESEL_ID, context);
         console.log('[Simulate] DIESEL simulate result:', JSON.stringify(result).slice(0, 500));
       } catch (error: any) {
-        // Expected - context format may not be correct
+        // Expected - context format may not be correct or contract doesn't support this opcode
         console.log('[Simulate] DIESEL simulate error:', error.message?.slice(0, 200));
       }
 
       try {
         // Simulate calling the frBTC contract (32:0)
+        // Based on alkanes.proto MessageContextParcel definition
         const context = JSON.stringify({
-          inputs: [],
-          op: 100,
+          alkanes: [],     // Required field: array of AlkaneTransfer
+          calldata: [100], // Example opcode
+          height: 1000000,
+          txindex: 0,
+          pointer: 0,
+          refund_pointer: 0,
+          vout: 0,
+          transaction: [],
+          block: [],
         });
 
         const result = await provider.alkanesSimulate(FRBTC_ID, context);

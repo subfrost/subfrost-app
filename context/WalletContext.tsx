@@ -3,9 +3,16 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as tinysecp from 'tiny-secp256k1';
+import BIP32Factory from 'bip32';
+import * as bip39 from 'bip39';
 
 import { NetworkMap, type Network } from '@/utils/constants';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+
+// Initialize ECC library for taproot signing
+bitcoin.initEccLib(tinysecp);
 
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
@@ -125,6 +132,7 @@ type WalletContextType = {
   restoreWallet: (mnemonic: string, password: string) => Promise<void>;
   disconnect: () => void;
   signPsbt: (psbtBase64: string) => Promise<string>;
+  signTaprootPsbt: (psbtBase64: string) => Promise<string>;
   signPsbts: (params: { psbts: string[] }) => Promise<{ signedPsbts: string[] }>;
   signMessage: (message: string) => Promise<string>;
 
@@ -323,6 +331,81 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
     return wallet.signPsbt(psbtBase64);
   }, [wallet]);
+
+  // Sign PSBT with taproot inputs (BIP86 derivation)
+  // The standard signPsbt only works for P2WPKH. Taproot requires BIP86 path and tweaked keys.
+  const signTaprootPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
+    if (!wallet) {
+      throw new Error('Wallet not connected');
+    }
+
+    // Get mnemonic from session storage
+    const mnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
+    if (!mnemonic) {
+      throw new Error('Wallet session expired. Please unlock wallet again.');
+    }
+
+    // Determine bitcoin network
+    const getBitcoinNetwork = () => {
+      switch (network) {
+        case 'mainnet':
+          return bitcoin.networks.bitcoin;
+        case 'testnet':
+        case 'signet':
+          return bitcoin.networks.testnet;
+        case 'regtest':
+        case 'subfrost-regtest':
+        case 'oylnet':
+          return bitcoin.networks.regtest;
+        default:
+          return bitcoin.networks.bitcoin;
+      }
+    };
+
+    const btcNetwork = getBitcoinNetwork();
+
+    // Derive taproot key using BIP86 path
+    const seed = bip39.mnemonicToSeedSync(mnemonic);
+    const bip32 = BIP32Factory(tinysecp);
+    const root = bip32.fromSeed(seed, btcNetwork);
+
+    // BIP86 path: m/86'/coinType/0'/0/0
+    // coinType: 0 for mainnet, 1 for testnet/regtest
+    const coinType = network === 'mainnet' ? 0 : 1;
+    const taprootPath = `m/86'/${coinType}'/0'/0/0`;
+    const taprootChild = root.derivePath(taprootPath);
+
+    if (!taprootChild.privateKey) {
+      throw new Error('Failed to derive taproot private key');
+    }
+
+    // X-only pubkey for taproot (remove first byte which is the prefix)
+    const xOnlyPubkey = taprootChild.publicKey.slice(1, 33);
+
+    // Tweak the key for taproot key-path spend
+    const tweakedChild = taprootChild.tweak(
+      bitcoin.crypto.taggedHash('TapTweak', xOnlyPubkey)
+    );
+
+    // Parse and sign the PSBT
+    const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+
+    console.log('[signTaprootPsbt] Signing', psbt.inputCount, 'inputs with taproot key');
+    console.log('[signTaprootPsbt] Taproot path:', taprootPath);
+    console.log('[signTaprootPsbt] X-only pubkey:', Buffer.from(xOnlyPubkey).toString('hex'));
+
+    // Sign each input with the tweaked taproot key
+    for (let i = 0; i < psbt.inputCount; i++) {
+      try {
+        psbt.signInput(i, tweakedChild);
+        console.log(`[signTaprootPsbt] Signed input ${i}`);
+      } catch (error) {
+        console.warn(`[signTaprootPsbt] Could not sign input ${i}:`, error);
+      }
+    }
+
+    return psbt.toBase64();
+  }, [wallet, network]);
 
   // Sign multiple PSBTs
   const signPsbts = useCallback(async (params: { psbts: string[] }): Promise<{ signedPsbts: string[] }> => {
@@ -550,6 +633,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       restoreWallet,
       disconnect,
       signPsbt,
+      signTaprootPsbt,
       signPsbts,
       signMessage,
 
@@ -572,6 +656,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       restoreWallet,
       disconnect,
       signPsbt,
+      signTaprootPsbt,
       signPsbts,
       signMessage,
       getUtxos,

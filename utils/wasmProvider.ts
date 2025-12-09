@@ -70,20 +70,17 @@ export async function simulateAlkaneCall(
   const provider = await getWebProvider(network);
 
   // Create minimal MessageContextParcel for simulation
+  // Based on alkanes.proto MessageContextParcel definition
   const context = {
+    alkanes: [],     // Required field: array of AlkaneTransfer (empty for read-only)
     calldata,
     height: 1000000,
     txindex: 0,
     pointer: 0,
     refund_pointer: 0,
     vout: 0,
-    transaction: '0x',
-    block: '0x',
-    atomic: null,
-    runes: [],
-    sheets: {},
-    runtime_balances: {},
-    trace: null,
+    transaction: [],
+    block: [],
   };
 
   return await provider.alkanesSimulate(contractId, JSON.stringify(context), blockTag);

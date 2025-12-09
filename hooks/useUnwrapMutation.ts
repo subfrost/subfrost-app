@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
@@ -54,6 +54,7 @@ function buildUnwrapInputRequirements(params: {
 export function useUnwrapMutation() {
   const { account, network, isConnected } = useWallet();
   const provider = useSandshrewProvider();
+  const queryClient = useQueryClient();
   const { FRBTC_ALKANE_ID } = getConfig(network);
 
   return useMutation({
@@ -106,6 +107,27 @@ export function useUnwrapMutation() {
         success: true,
         transactionId: txId,
       } as { success: boolean; transactionId?: string };
+    },
+    onSuccess: (data) => {
+      console.log('[useUnwrapMutation] Unwrap successful, invalidating balance queries...');
+
+      // Invalidate all balance-related queries to refresh UI immediately
+      const walletAddress = account?.taproot?.address;
+
+      // Invalidate sellable currencies (shows frBTC balance in swap UI)
+      queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+
+      // Invalidate BTC balance queries
+      queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
+
+      // Invalidate frBTC premium data
+      queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
+
+      // Invalidate pool-related queries
+      queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
+      queryClient.invalidateQueries({ queryKey: ['poolFee'] });
+
+      console.log('[useUnwrapMutation] Balance queries invalidated for address:', walletAddress);
     },
   });
 }

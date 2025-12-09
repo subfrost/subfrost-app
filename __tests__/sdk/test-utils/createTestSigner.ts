@@ -215,12 +215,60 @@ export async function createTestSigner(
     return { signedPsbt: psbt.toBase64(), signedHexPsbt: psbt.toHex() };
   };
 
+  // Sign PSBT with taproot inputs using BIP86 derivation and tweaked key
+  // This is needed because wallet.signPsbt() only works for P2WPKH, not P2TR
+  const signTaprootPsbt = (psbtBase64: string): string => {
+    // Derive taproot key using BIP86 path
+    const taprootPath = `m/86'/${coinType}'/0'/0/0`;
+    const taprootChild = root.derivePath(taprootPath);
+
+    if (!taprootChild.privateKey) {
+      throw new Error('Failed to derive taproot private key');
+    }
+
+    // X-only pubkey for taproot (remove first byte which is the prefix)
+    const xOnlyPubkey = Buffer.from(taprootChild.publicKey).slice(1, 33);
+
+    // Tweak the key for taproot key-path spend
+    const tweakedChild = taprootChild.tweak(
+      bitcoin.crypto.taggedHash('TapTweak', xOnlyPubkey)
+    );
+
+    // Parse and sign the PSBT
+    const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+
+    // Sign each input with the tweaked taproot key
+    for (let i = 0; i < psbt.inputCount; i++) {
+      try {
+        psbt.signInput(i, tweakedChild);
+      } catch (error) {
+        // Input may not be ours - try regular wallet signing as fallback
+        console.log(`[TestSigner] Could not sign input ${i} with taproot key, trying wallet...`);
+      }
+    }
+
+    return psbt.toBase64();
+  };
+
   // Create signer shim (same interface as useSignerShim)
   const signer = {
     signAllInputs: async ({ rawPsbtHex }: { rawPsbtHex: string }) => {
-      // Convert hex to base64 for wallet.signPsbt
+      // Convert hex to base64
       const psbtBase64 = Buffer.from(rawPsbtHex, 'hex').toString('base64');
-      const signedPsbt = await wallet.signPsbt(psbtBase64);
+
+      // Try taproot signing first (for P2TR inputs), then fallback to wallet signing (for P2WPKH)
+      let signedPsbt: string;
+      try {
+        // First pass: sign with taproot key
+        signedPsbt = signTaprootPsbt(psbtBase64);
+
+        // Second pass: sign remaining inputs with wallet (P2WPKH)
+        signedPsbt = await wallet.signPsbt(signedPsbt);
+      } catch (error) {
+        // Fallback to just wallet signing
+        signedPsbt = await wallet.signPsbt(psbtBase64);
+      }
+
       return finalizePsbt(signedPsbt);
     },
     signAllInputsMultiplePsbts: async ({
@@ -237,7 +285,16 @@ export async function createTestSigner(
       const results = await Promise.all(
         rawPsbtsHex.map(async (hex) => {
           const psbtBase64 = Buffer.from(hex, 'hex').toString('base64');
-          const signedPsbt = await wallet.signPsbt(psbtBase64);
+
+          // Try taproot signing first, then fallback to wallet signing
+          let signedPsbt: string;
+          try {
+            signedPsbt = signTaprootPsbt(psbtBase64);
+            signedPsbt = await wallet.signPsbt(signedPsbt);
+          } catch (error) {
+            signedPsbt = await wallet.signPsbt(psbtBase64);
+          }
+
           return finalizePsbt(signedPsbt);
         })
       );

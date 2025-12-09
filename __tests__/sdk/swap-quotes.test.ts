@@ -392,20 +392,17 @@ describe('Swap Quote Integration Tests (alkanes-web-sys)', () => {
 
   describe('frBTC Premium Fee (Opcode 104)', () => {
     it('should fetch frBTC premium using alkanesSimulate', async () => {
+      // Based on alkanes.proto MessageContextParcel definition
       const context = JSON.stringify({
+        alkanes: [],     // Required field: array of AlkaneTransfer (empty for read-only)
         calldata: [104], // Opcode 104 = get_premium
         height: 1000000,
         txindex: 0,
         pointer: 0,
         refund_pointer: 0,
         vout: 0,
-        transaction: '0x',
-        block: '0x',
-        atomic: null,
-        runes: [],
-        sheets: {},
-        runtime_balances: {},
-        trace: null,
+        transaction: [], // Empty byte array
+        block: [],       // Empty byte array
       });
 
       try {

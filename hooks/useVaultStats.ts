@@ -45,21 +45,17 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
             const contractId = `${vaultId.block}:${vaultId.tx}`;
             
             // Create minimal context for simulate
-            // calldata must be an array of bytes, not a hex string
+            // Based on alkanes.proto MessageContextParcel definition
             const context = JSON.stringify({
-              calldata: [4], // Opcode 4 as byte array
+              alkanes: [],     // Required field: array of AlkaneTransfer (empty for read-only)
+              calldata: [4],   // Opcode 4 as byte array
               height: 1000000,
               txindex: 0,
               pointer: 0,
               refund_pointer: 0,
               vout: 0,
-              transaction: '0x',
-              block: '0x',
-              atomic: null,
-              runes: [],
-              sheets: {},
-              runtime_balances: {},
-              trace: null
+              transaction: [], // Empty byte array
+              block: [],       // Empty byte array
             });
             
             const userBalanceResult = await provider.alkanesSimulate(contractId, context, 'latest');

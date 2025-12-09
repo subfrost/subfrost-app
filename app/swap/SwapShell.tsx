@@ -264,7 +264,7 @@ export default function SwapShell() {
   }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
 
   // Balances - use useEnrichedWalletData for BTC balance (more reliable than useBtcBalance)
-  const { balances: walletBalances, isLoading: isLoadingWalletData } = useEnrichedWalletData();
+  const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
   const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
   const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
   const formatBalance = (id?: string): string => {
@@ -360,6 +360,11 @@ export default function SwapShell() {
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
           setSuccessTxId(res.transactionId);
+          // Refresh wallet data after a short delay to allow indexer to process
+          setTimeout(() => {
+            console.log('[SwapShell] Refreshing wallet data after wrap...');
+            refreshWalletData();
+          }, 2000);
         }
       } catch (e) {
         console.error(e);
@@ -374,6 +379,11 @@ export default function SwapShell() {
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
           setSuccessTxId(res.transactionId);
+          // Refresh wallet data after a short delay to allow indexer to process
+          setTimeout(() => {
+            console.log('[SwapShell] Refreshing wallet data after unwrap...');
+            refreshWalletData();
+          }, 2000);
         }
       } catch (e) {
         console.error(e);
