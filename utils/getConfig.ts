@@ -25,6 +25,7 @@ export function getConfig(network: string) {
         BOUND_API_URL: 'https://signet.bound.money/api/v1',
       } as const;
     case 'regtest':
+    case 'subfrost-regtest':
       return {
         ALKANE_FACTORY_ID: '4:65522',
         BUSD_ALKANE_ID: '2:0', // DIESEL on regtest

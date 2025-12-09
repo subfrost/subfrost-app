@@ -196,6 +196,17 @@ export default function SwapShell() {
       seen.add('btc');
     }
 
+    // Always add frBTC (BTC <-> frBTC wrapping is always allowed)
+    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID))) {
+      opts.push({
+        id: FRBTC_ALKANE_ID,
+        symbol: 'frBTC',
+        name: 'frBTC',
+        isAvailable: true
+      });
+      seen.add(FRBTC_ALKANE_ID);
+    }
+
     // Add whitelisted tokens from pool data (null = allow all)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
       if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id)) {
@@ -208,7 +219,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [poolTokenMap, whitelistedTokenIds]);
+  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
 
   // Build TO options: Only whitelisted tokens
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -227,6 +238,17 @@ export default function SwapShell() {
       seen.add('btc');
     }
 
+    // Always add frBTC (BTC <-> frBTC wrapping is always allowed) unless FROM token is frBTC
+    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID)) && fromId !== FRBTC_ALKANE_ID) {
+      opts.push({
+        id: FRBTC_ALKANE_ID,
+        symbol: 'frBTC',
+        name: 'frBTC',
+        isAvailable: true
+      });
+      seen.add(FRBTC_ALKANE_ID);
+    }
+
     // Add whitelisted tokens from pool data (excluding FROM token, null = allow all)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
       if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id) && poolToken.id !== fromId) {
@@ -239,7 +261,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [fromToken, poolTokenMap, whitelistedTokenIds]);
+  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
 
   // Balances
   const { data: btcBalanceSats, isFetching: isFetchingBtc } = useBtcBalance();
