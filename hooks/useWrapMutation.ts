@@ -1,12 +1,15 @@
 import { useMutation } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
-import { useSignerShim } from './useSignerShim';
+import { getConfig } from '@/utils/getConfig';
 
 export type WrapTransactionBaseData = {
   amount: string; // display units (BTC)
   feeRate: number; // sats/vB
 };
+
+// frBTC wrap opcode (exchange BTC for frBTC)
+const FRBTC_WRAP_OPCODE = 77;
 
 const toAlks = (amount: string): string => {
   if (!amount) return '0';
@@ -19,33 +22,72 @@ const toAlks = (amount: string): string => {
   return `${normalizedWhole || '0'}${frac ? frac.padStart(8, '0') : '00000000'}`;
 };
 
+/**
+ * Build protostone string for BTC -> frBTC wrap operation
+ * Format: [frbtc_block,frbtc_tx,opcode(77)]:pointer:refund
+ * Opcode 77 is the exchange/wrap opcode for frBTC contract
+ */
+function buildWrapProtostone(params: {
+  frbtcId: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { frbtcId, pointer = 'v1', refund = 'v1' } = params;
+  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
+
+  // Build cellpack: [frbtc_block, frbtc_tx, opcode(77)]
+  const cellpack = [frbtcBlock, frbtcTx, FRBTC_WRAP_OPCODE].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
 export function useWrapMutation() {
-  const { getSpendableUtxos, account, isConnected } = useWallet();
+  const { account, network, isConnected } = useWallet();
   const provider = useSandshrewProvider();
-  const signerShim = useSignerShim();
+  const { FRBTC_ALKANE_ID } = getConfig(network);
 
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
-      // Dynamic import to avoid WASM loading at SSR time
-      const { wrapBtc } = await import('@alkanes/ts-sdk');
+      const wrapAmount = toAlks(wrapData.amount);
 
-      const utxos = await getSpendableUtxos();
-
-      const transaction = await wrapBtc({
-        utxos,
-        account,
-        provider,
-        signer: signerShim,
-        feeRate: wrapData.feeRate,
-        wrapAmount: Number(toAlks(wrapData.amount)),
+      // Build protostone for wrap operation
+      const protostone = buildWrapProtostone({
+        frbtcId: FRBTC_ALKANE_ID,
       });
+
+      // Input requirements: Bitcoin amount to wrap
+      const inputRequirements = `B:${wrapAmount}`;
+
+      // Get recipient address (taproot for alkanes)
+      const recipientAddress = account?.taproot?.address || account?.nativeSegwit?.address;
+      if (!recipientAddress) throw new Error('No recipient address available');
+
+      const toAddresses = JSON.stringify([recipientAddress]);
+      const options = JSON.stringify({
+        trace_enabled: false,
+        mine_enabled: false,
+        auto_confirm: true,
+      });
+
+      // Execute using alkanesExecuteWithStrings
+      const result = await provider.alkanesExecuteWithStrings(
+        toAddresses,
+        inputRequirements,
+        protostone,
+        wrapData.feeRate,
+        undefined, // envelope_hex
+        options
+      );
+
+      // Parse result
+      const txId = result?.txid || result?.reveal_txid;
 
       return {
         success: true,
-        transactionId: transaction?.txId,
+        transactionId: txId,
       } as { success: boolean; transactionId?: string };
     },
   });

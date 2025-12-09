@@ -144,7 +144,7 @@ export default function VaultHero({
             } else if (badge === 'ZEC' || badge === 'Zcash') {
               badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
             } else if (badge === 'METHANE') {
-              badgeClassName = "rounded-full bg-[color:var(--sf-surface)] text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+              badgeClassName = "rounded-full bg-white dark:bg-white text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
             } else if (badge === 'ORDI') {
               badgeClassName = "rounded-full bg-black text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-black";
             } else {

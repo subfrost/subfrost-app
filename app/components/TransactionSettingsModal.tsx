@@ -11,9 +11,10 @@ type Props = {
   custom: string;
   setCustom: (v: string) => void;
   feeRate: number;
+  isCrossChainFrom?: boolean;
 };
 
-export default function TransactionSettingsModal({ selection, setSelection, custom, setCustom, feeRate }: Props) {
+export default function TransactionSettingsModal({ selection, setSelection, custom, setCustom, feeRate, isCrossChainFrom }: Props) {
   const { isTxSettingsOpen, setTxSettingsOpen } = useModalStore();
   const { maxSlippage, setMaxSlippage, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
 
@@ -112,54 +113,63 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
           </section>
 
           {/* Miner Fee */}
-          <section className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
-            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Miner Fee</div>
-            <div className="flex flex-wrap items-center gap-2">
-              {(['slow', 'medium', 'fast'] as FeeSelection[]).map((s) => (
+          <section className="relative rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
+            {isCrossChainFrom && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[color:var(--sf-surface)]/80 backdrop-blur-[2px]">
+                <p className="px-4 text-center text-sm font-semibold text-[color:var(--sf-text)]">
+                  Both Bitcoin and Ethereum Network fees are auto-calculated for cross-chain swaps.
+                </p>
+              </div>
+            )}
+            <div className={isCrossChainFrom ? 'opacity-30' : ''}>
+              <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Miner Fee</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {(['slow', 'medium', 'fast'] as FeeSelection[]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSelection(s)}
+                    className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all ${
+                      selection === s
+                        ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                        : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
                 <button
-                  key={s}
                   type="button"
-                  onClick={() => setSelection(s)}
-                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all ${
-                    selection === s 
-                      ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
+                  onClick={() => setSelection('custom')}
+                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
+                    selection === 'custom'
+                      ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                       : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
                   }`}
                 >
-                  {s}
+                  Custom
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setSelection('custom')}
-                className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
-                  selection === 'custom' 
-                    ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
-                    : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
-                }`}
-              >
-                Custom
-              </button>
-              {selection === 'custom' && (
-                <div className="relative">
-                  <input
-                    aria-label="Custom miner fee rate"
-                    type="number"
-                    min={1}
-                    max={999}
-                    step={1}
-                    value={custom}
-                    onChange={(e) => setCustom(e.target.value)}
-                    placeholder="0"
-                    className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
-                  />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sats/vB</span>
-                </div>
-              )}
-            </div>
-            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm">
-              <span className="font-semibold text-[color:var(--sf-text)]/70">Selected:</span>
-              <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sats/vB</span>
+                {selection === 'custom' && (
+                  <div className="relative">
+                    <input
+                      aria-label="Custom miner fee rate"
+                      type="number"
+                      min={1}
+                      max={999}
+                      step={1}
+                      value={custom}
+                      onChange={(e) => setCustom(e.target.value)}
+                      placeholder="0"
+                      className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sats/vB</span>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm">
+                <span className="font-semibold text-[color:var(--sf-text)]/70">Selected:</span>
+                <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sats/vB</span>
+              </div>
             </div>
           </section>
 

@@ -33,10 +33,10 @@ type Props = {
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'Tether USD', enabled: true },
-  { symbol: 'ETH', name: 'Ethereum', enabled: false },
-  { symbol: 'SOL', name: 'Solana', enabled: false },
-  { symbol: 'ZEC', name: 'Zcash', enabled: false },
+  { symbol: 'USDT', name: 'USDT', enabled: true },
+  { symbol: 'ETH', name: 'ETH', enabled: false },
+  { symbol: 'SOL', name: 'SOL', enabled: false },
+  { symbol: 'ZEC', name: 'ZEC', enabled: false },
 ] as const;
 
 export default function TokenSelectorModal({
@@ -254,7 +254,7 @@ export default function TokenSelectorModal({
                           )}
                         </div>
                         <p className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
-                          {token.name || token.id}
+                          {token.id}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-0.5">
