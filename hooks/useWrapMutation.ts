@@ -2,8 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
-import { addPendingWrap, calculateFrbtcAmount } from '@/utils/pendingWraps';
-import { useFrbtcPremium } from './useFrbtcPremium';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -33,18 +31,6 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   }
   return btoa(binary);
 }
-
-
-const toAlks = (amount: string): string => {
-  if (!amount) return '0';
-  // 8 decimal places for alks/sats
-  const parts = amount.split('.');
-  const whole = parts[0] || '0';
-  const frac = (parts[1] || '').padEnd(8, '0').slice(0, 8);
-  // remove leading zeros from whole to avoid Number parsing issues later
-  const normalizedWhole = whole.replace(/^0+(\d)/, '$1');
-  return `${normalizedWhole || '0'}${frac ? frac.padStart(8, '0') : '00000000'}`;
-};
 
 /**
  * Calculate the signer's P2TR address for the given network
@@ -99,11 +85,10 @@ function buildWrapProtostone(params: {
 }
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, getSpendableUtxos } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { FRBTC_ALKANE_ID } = getConfig(network);
-  const { data: premiumData } = useFrbtcPremium();
 
   // Get bitcoin network for PSBT parsing
   const getBitcoinNetwork = () => {
@@ -392,31 +377,10 @@ export function useWrapMutation() {
     },
     onSuccess: (data) => {
       console.log('[useWrapMutation] Wrap successful, invalidating balance queries...');
+      console.log('[useWrapMutation] Transaction ID:', data.transactionId);
 
-      // Track the pending wrap so we can show it in the balance immediately
-      // The balance sheet API won't include it until the alkanes indexer processes the tx
-      if (data.transactionId && data.wrapAmountSats) {
-        const wrapFee = premiumData?.wrapFeePerThousand ?? 1; // Default to 0.1%
-        const frbtcAmount = calculateFrbtcAmount(data.wrapAmountSats, wrapFee);
-
-        addPendingWrap({
-          txid: data.transactionId,
-          alkaneId: FRBTC_ALKANE_ID,
-          amountSats: data.wrapAmountSats,
-          frbtcAmount,
-          network,
-        });
-
-        console.log('[useWrapMutation] Added pending wrap:', {
-          txid: data.transactionId,
-          amountSats: data.wrapAmountSats,
-          frbtcAmount,
-          wrapFee,
-        });
-      }
-
-      // Invalidate all balance-related queries to refresh UI immediately
-      // These queries use staleTime which prevents automatic refetch
+      // Invalidate all balance-related queries to refresh UI
+      // Balance will update once the alkanes indexer processes the transaction
       const walletAddress = account?.taproot?.address;
 
       // Invalidate sellable currencies (shows frBTC balance in swap UI)
