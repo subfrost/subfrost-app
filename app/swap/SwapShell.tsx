@@ -285,21 +285,21 @@ export default function SwapShell() {
       return 'Balance: 0';
     }
 
-    // All alkane balances are in satoshi units (1e8 = 1 token)
+    // Balance sheet returns values with 5 decimal places of precision
+    // Example: 749,250,000 raw = 7,492.50000 display
+    // Divide by 100,000 (1e5) to get display value
     const rawBalance = Number(cur.balance);
-    const displayBalance = rawBalance / 1e8;
+    const displayBalance = rawBalance / 1e5;
 
-    // Use 8 decimals for frBTC, 2 for other tokens
-    const isFrbtc = id === FRBTC_ALKANE_ID;
-    const decimals = isFrbtc ? 8 : 2;
+    // Use 2 decimals for display
+    const decimals = 2;
     const formatted = `Balance: ${displayBalance.toFixed(decimals)}`;
 
     console.log(`[SwapShell.formatBalance] ${cur.name || id}:`, {
       rawBalance: rawBalance.toLocaleString(),
-      rawUnit: 'satoshis (1e-8)',
-      displayBalance: displayBalance.toFixed(8),
-      displayUnit: cur.symbol || 'tokens',
-      decimalsShown: decimals,
+      conversionFactor: '1e5 (100,000)',
+      displayBalance: displayBalance.toFixed(decimals),
+      symbol: cur.symbol,
       formatted,
     });
 

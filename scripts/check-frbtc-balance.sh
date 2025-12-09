@@ -67,15 +67,15 @@ else
   echo "✓ frBTC balance found!"
   echo ""
 
-  # Convert to BTC units (8 decimal places)
-  # All alkane balances are stored in smallest unit (satoshis)
-  # 1 frBTC = 100,000,000 satoshis (same as BTC)
-  FRBTC_BTC=$(echo "scale=8; $FRBTC_BALANCE / 100000000" | bc)
+  # Balance sheet stores values with 5 decimal places of precision
+  # Example: 749,250,000 raw = 7,492.50 display
+  # Divide by 100,000 (1e5) to get display value
+  FRBTC_DISPLAY=$(echo "scale=2; $FRBTC_BALANCE / 100000" | bc)
   echo "  Raw value from indexer: $FRBTC_BALANCE"
-  echo "  Unit: satoshis (smallest unit, 1e-8)"
-  echo "  Display value: $FRBTC_BTC frBTC"
+  echo "  Unit: base units with 5 decimals precision (1e-5)"
+  echo "  Display value: $FRBTC_DISPLAY frBTC"
   echo ""
-  echo "  Conversion: $FRBTC_BALANCE satoshis ÷ 100,000,000 = $FRBTC_BTC frBTC"
+  echo "  Conversion: $FRBTC_BALANCE ÷ 100,000 = $FRBTC_DISPLAY frBTC"
 fi
 
 echo ""
