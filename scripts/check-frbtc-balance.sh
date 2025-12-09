@@ -64,13 +64,18 @@ if [ "$FRBTC_BALANCE" = "0" ] || [ "$FRBTC_BALANCE" = "null" ]; then
   echo "  - Indexer hasn't processed the blocks yet"
   echo "  - Wrong frBTC alkane ID for this network"
 else
-  echo "✓ frBTC balance found: $FRBTC_BALANCE"
+  echo "✓ frBTC balance found!"
   echo ""
 
   # Convert to BTC units (8 decimal places)
+  # All alkane balances are stored in smallest unit (satoshis)
+  # 1 frBTC = 100,000,000 satoshis (same as BTC)
   FRBTC_BTC=$(echo "scale=8; $FRBTC_BALANCE / 100000000" | bc)
-  echo "  In satoshis: $FRBTC_BALANCE"
-  echo "  In BTC: $FRBTC_BTC frBTC"
+  echo "  Raw value from indexer: $FRBTC_BALANCE"
+  echo "  Unit: satoshis (smallest unit, 1e-8)"
+  echo "  Display value: $FRBTC_BTC frBTC"
+  echo ""
+  echo "  Conversion: $FRBTC_BALANCE satoshis ÷ 100,000,000 = $FRBTC_BTC frBTC"
 fi
 
 echo ""

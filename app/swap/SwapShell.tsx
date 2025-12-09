@@ -269,18 +269,41 @@ export default function SwapShell() {
   const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
   const formatBalance = (id?: string): string => {
     if (!id) return 'Balance: 0';
+
+    // BTC balance
     if (id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
       const btc = sats / 1e8;
+      console.log(`[SwapShell.formatBalance] BTC: ${sats} sats → ${btc.toFixed(8)} BTC`);
       return `Balance: ${btc.toFixed(8)}`;
     }
+
+    // Alkane token balance (frBTC, DIESEL, etc.)
     const cur = idToUserCurrency.get(id);
-    if (!cur?.balance) return 'Balance: 0';
-    const amt = Number(cur.balance) / 1e8;
+    if (!cur?.balance) {
+      console.log(`[SwapShell.formatBalance] Token ${id}: No balance data`);
+      return 'Balance: 0';
+    }
+
+    // All alkane balances are in satoshi units (1e8 = 1 token)
+    const rawBalance = Number(cur.balance);
+    const displayBalance = rawBalance / 1e8;
+
     // Use 8 decimals for frBTC, 2 for other tokens
     const isFrbtc = id === FRBTC_ALKANE_ID;
     const decimals = isFrbtc ? 8 : 2;
-    return `Balance: ${amt.toFixed(decimals)}`;
+    const formatted = `Balance: ${displayBalance.toFixed(decimals)}`;
+
+    console.log(`[SwapShell.formatBalance] ${cur.name || id}:`, {
+      rawBalance: rawBalance.toLocaleString(),
+      rawUnit: 'satoshis (1e-8)',
+      displayBalance: displayBalance.toFixed(8),
+      displayUnit: cur.symbol || 'tokens',
+      decimalsShown: decimals,
+      formatted,
+    });
+
+    return formatted;
   };
 
   // Get price for any token (from user currencies or derive from pools)
