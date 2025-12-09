@@ -31,6 +31,52 @@ function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
   }
 }
 
+// Helper to recursively convert Map to plain object (serde_wasm_bindgen returns Maps)
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
+}
+
+// Helper to extract enriched data from WASM provider response
+// Handles both Map (from serde_wasm_bindgen) and plain object responses
+function extractEnrichedData(rawResult: any): { spendable: any[]; assets: any[]; pending: any[] } | null {
+  if (!rawResult) return null;
+
+  let enrichedData: any;
+  if (rawResult instanceof Map) {
+    const returns = rawResult.get('returns');
+    enrichedData = mapToObject(returns);
+  } else {
+    enrichedData = rawResult?.returns || rawResult;
+  }
+
+  if (!enrichedData) return null;
+
+  // Convert any nested Maps in arrays
+  const toArray = (val: any): any[] => {
+    if (Array.isArray(val)) return val.map(mapToObject);
+    if (val && typeof val === 'object' && Object.keys(val).length > 0) {
+      return Object.values(val).map(mapToObject);
+    }
+    return [];
+  };
+
+  return {
+    spendable: toArray(enrichedData.spendable),
+    assets: toArray(enrichedData.assets),
+    pending: toArray(enrichedData.pending),
+  };
+}
+
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
   nativeSegwit?: { address: string; pubkey: string; hdPath: string };
@@ -306,18 +352,22 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
       // Fetch UTXOs for native segwit address
       if (account.nativeSegwit?.address) {
-        const enriched = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
+        const rawResult = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
+        const enriched = extractEnrichedData(rawResult);
         if (enriched) {
           // Combine all UTXO categories
           const allUtxos = [
-            ...(enriched.spendable || []),
-            ...(enriched.assets || []),
-            ...(enriched.pending || []),
+            ...enriched.spendable,
+            ...enriched.assets,
+            ...enriched.pending,
           ];
           for (const utxo of allUtxos) {
+            // balances.lua returns outpoint as "txid:vout" format
+            const [txid, voutStr] = (utxo.outpoint || ':').split(':');
+            const vout = parseInt(voutStr || '0', 10);
             utxos.push({
-              txId: utxo.txid || '',
-              outputIndex: utxo.vout || 0,
+              txId: txid || '',
+              outputIndex: vout,
               satoshis: utxo.value || 0,
               scriptPk: utxo.scriptpubkey || '',
               address: account.nativeSegwit.address,
@@ -325,7 +375,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               runes: [],
               alkanes: {},
               indexed: true,
-              confirmations: utxo.status?.confirmed ? 1 : 0,
+              confirmations: utxo.height ? 1 : 0,
             });
           }
         }
@@ -333,17 +383,21 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
       // Fetch UTXOs for taproot address
       if (account.taproot?.address) {
-        const enriched = await sdkProvider.getEnrichedBalances(account.taproot.address, '1');
+        const rawResult = await sdkProvider.getEnrichedBalances(account.taproot.address, '1');
+        const enriched = extractEnrichedData(rawResult);
         if (enriched) {
           const allUtxos = [
-            ...(enriched.spendable || []),
-            ...(enriched.assets || []),
-            ...(enriched.pending || []),
+            ...enriched.spendable,
+            ...enriched.assets,
+            ...enriched.pending,
           ];
           for (const utxo of allUtxos) {
+            // balances.lua returns outpoint as "txid:vout" format
+            const [txid, voutStr] = (utxo.outpoint || ':').split(':');
+            const vout = parseInt(voutStr || '0', 10);
             utxos.push({
-              txId: utxo.txid || '',
-              outputIndex: utxo.vout || 0,
+              txId: txid || '',
+              outputIndex: vout,
               satoshis: utxo.value || 0,
               scriptPk: utxo.scriptpubkey || '',
               address: account.taproot.address,
@@ -351,7 +405,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               runes: [],
               alkanes: {},
               indexed: true,
-              confirmations: utxo.status?.confirmed ? 1 : 0,
+              confirmations: utxo.height ? 1 : 0,
             });
           }
         }
@@ -371,24 +425,30 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     try {
-      const enriched = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
+      const rawResult = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
+      const enriched = extractEnrichedData(rawResult);
 
-      if (!enriched || !enriched.spendable) {
+      if (!enriched || enriched.spendable.length === 0) {
         return [];
       }
 
-      const spendableUtxos: FormattedUtxo[] = enriched.spendable.map((utxo: any) => ({
-        txId: utxo.txid || '',
-        outputIndex: utxo.vout || 0,
-        satoshis: utxo.value || 0,
-        scriptPk: utxo.scriptpubkey || '',
-        address: account.nativeSegwit!.address,
-        inscriptions: [],
-        runes: [],
-        alkanes: {},
-        indexed: true,
-        confirmations: utxo.status?.confirmed ? 1 : 0,
-      }));
+      const spendableUtxos: FormattedUtxo[] = enriched.spendable.map((utxo: any) => {
+        // balances.lua returns outpoint as "txid:vout" format
+        const [txid, voutStr] = (utxo.outpoint || ':').split(':');
+        const vout = parseInt(voutStr || '0', 10);
+        return {
+          txId: txid || '',
+          outputIndex: vout,
+          satoshis: utxo.value || 0,
+          scriptPk: utxo.scriptpubkey || '',
+          address: account.nativeSegwit!.address,
+          inscriptions: [],
+          runes: [],
+          alkanes: {},
+          indexed: true,
+          confirmations: utxo.height ? 1 : 0,
+        };
+      });
 
       spendableUtxos.sort((a, b) =>
         account.spendStrategy.utxoSortGreatestToLeast
@@ -405,23 +465,42 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Get spendable balance using WASM provider
   const getSpendableTotalBalance = useCallback(async (): Promise<number> => {
-    if (!wallet || !account.nativeSegwit?.address || !sdkProvider || !sdkInitialized) {
+    if (!wallet || !sdkProvider || !sdkInitialized) {
       return 0;
     }
 
     try {
-      // Get enriched balances which includes spendable/assets/pending categorization
-      const enriched = await sdkProvider.getEnrichedBalances(account.nativeSegwit.address, '1');
+      let totalBalance = 0;
 
-      // enriched.spendable is an array of UTXOs
-      // Calculate total balance from spendable UTXOs
-      if (enriched && enriched.spendable && Array.isArray(enriched.spendable)) {
-        return enriched.spendable.reduce((total: number, utxo: any) => {
-          return total + (utxo.value || 0);
-        }, 0);
+      // Query both native segwit and taproot addresses
+      const addresses: string[] = [];
+      if (account.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
+      if (account.taproot?.address) addresses.push(account.taproot.address);
+
+      if (addresses.length === 0) return 0;
+
+      // Fetch balances for all addresses in parallel
+      const results = await Promise.all(
+        addresses.map(async (address) => {
+          try {
+            const rawResult = await sdkProvider.getEnrichedBalances(address, '1');
+            return extractEnrichedData(rawResult);
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      // Sum up spendable balances from all addresses
+      for (const enriched of results) {
+        if (enriched && enriched.spendable.length > 0) {
+          totalBalance += enriched.spendable.reduce((sum: number, utxo: any) => {
+            return sum + (utxo.value || 0);
+          }, 0);
+        }
       }
 
-      return 0;
+      return totalBalance;
     } catch (error) {
       console.error('[WalletContext] Error fetching balance:', error);
       return 0;
