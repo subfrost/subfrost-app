@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tantml:parameter>
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
