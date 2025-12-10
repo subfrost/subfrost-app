@@ -61,7 +61,7 @@ export default function RootLayout({
       <head>
         {/* Google Analytics */}
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-L9F2GFS2GY"
+          src="https://www.googletagmanager.com/gtag/js?id=G-E19YHZ6JRK"
           strategy="afterInteractive"
         />
         <Script id="google-analytics" strategy="afterInteractive">
@@ -69,7 +69,7 @@ export default function RootLayout({
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-L9F2GFS2GY');
+            gtag('config', 'G-E19YHZ6JRK');
           `}
         </Script>
         {/* Google Drive API for client-side OAuth */}
