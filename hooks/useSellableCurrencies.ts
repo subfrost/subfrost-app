@@ -90,12 +90,21 @@ export const useSellableCurrencies = (
 
             if (balanceSheetResponse.ok) {
               const balanceSheet = await balanceSheetResponse.json();
-              console.log('[useSellableCurrencies] Balance sheet:', balanceSheet);
+              console.log('[useSellableCurrencies] ========================================');
+              console.log('[useSellableCurrencies] BALANCE SHEET RESPONSE');
+              console.log('[useSellableCurrencies] ========================================');
+              console.log('[useSellableCurrencies] Full response:', JSON.stringify(balanceSheet, null, 2));
+              console.log('[useSellableCurrencies] tokensWithPools filter:', tokensWithPools);
 
               // Process balance sheet entries (e.g., {"32:0": "9990"} for frBTC)
               if (balanceSheet?.balances && typeof balanceSheet.balances === 'object') {
                 for (const [alkaneId, balance] of Object.entries(balanceSheet.balances)) {
-                  if (!alkaneId || seenIds.has(alkaneId)) continue;
+                  console.log(`[useSellableCurrencies] Processing alkane: ${alkaneId}, balance: ${balance}`);
+
+                  if (!alkaneId || seenIds.has(alkaneId)) {
+                    console.log(`[useSellableCurrencies]   Skipped: ${!alkaneId ? 'no ID' : 'already seen'}`);
+                    continue;
+                  }
                   seenIds.add(alkaneId);
 
                   // Determine name based on alkane ID
@@ -108,8 +117,11 @@ export const useSellableCurrencies = (
 
                   // Check if token is in the allowed pools list (if filter provided)
                   if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneId)) {
+                    console.log(`[useSellableCurrencies]   Filtered out: ${alkaneId} not in tokensWithPools`);
                     continue;
                   }
+
+                  console.log(`[useSellableCurrencies]   ✓ Adding ${name} with balance ${balance}`);
 
                   allAlkanes.push({
                     id: alkaneId,
@@ -124,6 +136,8 @@ export const useSellableCurrencies = (
                   });
                 }
               }
+              console.log('[useSellableCurrencies] Total alkanes added from balance sheet:', allAlkanes.length);
+              console.log('[useSellableCurrencies] ========================================');
             }
           }
         } catch (balanceSheetErr) {
