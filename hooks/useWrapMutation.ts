@@ -306,35 +306,8 @@ export function useWrapMutation() {
             console.log('[useWrapMutation] PSBT debug parse error:', dbgErr);
           }
 
-          // If inputs are missing tapInternalKey, try to add it from wallet
-          // This is needed because the WASM SDK may not include BIP32 derivation data
-          const psbtToSign = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          const taprootPubKey = account?.taproot?.pubKeyXOnly;
-
-          if (taprootPubKey) {
-            const pubKeyBuffer = Buffer.from(taprootPubKey, 'hex');
-            let modified = false;
-
-            for (let i = 0; i < psbtToSign.inputCount; i++) {
-              const inp = psbtToSign.data.inputs[i];
-              // Only add tapInternalKey if missing and input has witnessUtxo
-              if (!inp.tapInternalKey && inp.witnessUtxo) {
-                try {
-                  psbtToSign.updateInput(i, { tapInternalKey: pubKeyBuffer });
-                  modified = true;
-                } catch (e) {
-                  console.log('[useWrapMutation] Could not update input', i, ':', e);
-                }
-              }
-            }
-
-            if (modified) {
-              console.log('[useWrapMutation] Added tapInternalKey to inputs');
-              psbtBase64 = psbtToSign.toBase64();
-            }
-          }
-
-          // Sign the PSBT using the taproot signing function (BIP86 derivation with tweaked key)
+          // Sign the PSBT directly without modification (same as test does)
+          // Modifying PSBT may corrupt the OP_RETURN output
           console.log('[useWrapMutation] Signing PSBT with taproot key...');
           const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           console.log('[useWrapMutation] PSBT signed with taproot key');
