@@ -247,7 +247,18 @@ export function useWrapMutation() {
 
         console.log('[useWrapMutation] Result:', result);
 
-        // Check if we got a readyToSign state (transaction needs signing)
+        // Check if execution completed (auto_confirm: true path)
+        if (result?.complete) {
+          const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+          console.log('[useWrapMutation] Execution complete (auto_confirm), txid:', txId);
+          return {
+            success: true,
+            transactionId: txId,
+            wrapAmountSats,
+          } as { success: boolean; transactionId?: string; wrapAmountSats?: number };
+        }
+
+        // Check if we got a readyToSign state (auto_confirm: false path)
         if (result?.readyToSign) {
           console.log('[useWrapMutation] Got readyToSign state, signing transaction...');
           const readyToSign = result.readyToSign;
