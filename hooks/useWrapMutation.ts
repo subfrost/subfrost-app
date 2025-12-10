@@ -1,9 +1,7 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tantml:parameter>
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
-import { addPendingWrap, calculateFrbtcAmount } from '@/utils/pendingWraps';
-import { useFrbtcPremium } from './useFrbtcPremium';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -103,7 +101,6 @@ export function useWrapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { FRBTC_ALKANE_ID } = getConfig(network);
-  const { data: premiumData } = useFrbtcPremium();
 
   // Get bitcoin network for PSBT parsing
   const getBitcoinNetwork = () => {
@@ -391,48 +388,20 @@ export function useWrapMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[useWrapMutation] Wrap successful, invalidating balance queries...');
+      console.log('[useWrapMutation] Wrap successful');
+      console.log('[useWrapMutation] Transaction ID:', data.transactionId);
+      console.log('[useWrapMutation] Amount wrapped:', data.wrapAmountSats, 'sats');
 
-      // Track the pending wrap so we can show it in the balance immediately
-      // The balance sheet API won't include it until the alkanes indexer processes the tx
-      if (data.transactionId && data.wrapAmountSats) {
-        const wrapFee = premiumData?.wrapFeePerThousand ?? 1; // Default to 0.1%
-        const frbtcAmount = calculateFrbtcAmount(data.wrapAmountSats, wrapFee);
-
-        addPendingWrap({
-          txid: data.transactionId,
-          alkaneId: FRBTC_ALKANE_ID,
-          amountSats: data.wrapAmountSats,
-          frbtcAmount,
-          network,
-        });
-
-        console.log('[useWrapMutation] Added pending wrap:', {
-          txid: data.transactionId,
-          amountSats: data.wrapAmountSats,
-          frbtcAmount,
-          wrapFee,
-        });
-      }
-
-      // Invalidate all balance-related queries to refresh UI immediately
-      // These queries use staleTime which prevents automatic refetch
+      // Invalidate balance queries - balance will update when indexer processes the transaction
       const walletAddress = account?.taproot?.address;
 
-      // Invalidate sellable currencies (shows frBTC balance in swap UI)
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
-
-      // Invalidate BTC balance queries
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
-
-      // Invalidate frBTC premium data
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
-
-      // Invalidate pool-related queries that may show token balances
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
 
-      console.log('[useWrapMutation] Balance queries invalidated for address:', walletAddress);
+      console.log('[useWrapMutation] Balance queries invalidated. Balance will update when indexer processes block.');
     },
   });
 }

@@ -3,7 +3,6 @@ import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
 import { useWallet } from '@/context/WalletContext';
-import { getPendingWrapsForAlkane, removePendingWrap } from '@/utils/pendingWraps';
 
 // Helper to recursively convert Map to plain object (serde_wasm_bindgen returns Maps)
 function mapToObject(value: any): any {
@@ -112,90 +111,12 @@ export const useSellableCurrencies = (
                     continue;
                   }
 
-                  // Add pending wraps to the balance (for frBTC or other wrapped tokens)
-                  // Pending wraps are transactions that completed but haven't been indexed yet
-                  let finalBalance = String(balance);
-                  const pendingWraps = getPendingWrapsForAlkane(alkaneId, network);
-
-                  if (pendingWraps.length > 0) {
-                    // Sum up pending wrap amounts
-                    const pendingTotal = pendingWraps.reduce((sum, wrap) => {
-                      return sum + BigInt(wrap.frbtcAmount);
-                    }, BigInt(0));
-
-                    const indexedBalance = BigInt(String(balance));
-
-                    // Check if any pending wraps appear to be indexed already
-                    // This can happen if the indexer caught up between wraps
-                    // We'll detect this by checking if indexed balance >= any single pending wrap amount
-                    // and remove those wraps from the pending list
-                    for (const wrap of pendingWraps) {
-                      const wrapAmount = BigInt(wrap.frbtcAmount);
-                      // If indexed balance is >= this wrap amount, it might be indexed
-                      // To be safe, we check if the wrap is older than 2 minutes
-                      const wrapAge = Date.now() - wrap.timestamp;
-                      if (indexedBalance >= wrapAmount && wrapAge > 120_000) {
-                        console.log(`[useSellableCurrencies] Removing indexed wrap:`, wrap.txid);
-                        removePendingWrap(wrap.txid);
-                      }
-                    }
-
-                    // Recalculate pending wraps after cleanup
-                    const updatedPendingWraps = getPendingWrapsForAlkane(alkaneId, network);
-                    const updatedPendingTotal = updatedPendingWraps.reduce((sum, wrap) => {
-                      return sum + BigInt(wrap.frbtcAmount);
-                    }, BigInt(0));
-
-                    // Add pending to indexed balance
-                    const totalBalance = indexedBalance + updatedPendingTotal;
-                    finalBalance = totalBalance.toString();
-
-                    console.log(`[useSellableCurrencies] ${name} balance:`, {
-                      indexed: balance,
-                      pending: updatedPendingTotal.toString(),
-                      total: finalBalance,
-                      pendingWraps: updatedPendingWraps.length,
-                    });
-                  }
-
                   allAlkanes.push({
                     id: alkaneId,
                     address: walletAddress,
                     name,
                     symbol,
-                    balance: finalBalance,
-                    priceInfo: {
-                      price: 0,
-                      idClubMarketplace: false,
-                    },
-                  });
-                }
-              }
-
-              // Also check for pending wraps that haven't been indexed yet (no balance sheet entry)
-              // This handles the case where the first wrap hasn't been indexed
-              const pendingFrbtcWraps = getPendingWrapsForAlkane(config.FRBTC_ALKANE_ID, network);
-              if (pendingFrbtcWraps.length > 0 && !seenIds.has(config.FRBTC_ALKANE_ID)) {
-                // frBTC exists as pending wraps but not in balance sheet yet
-                const pendingTotal = pendingFrbtcWraps.reduce((sum, wrap) => {
-                  return sum + BigInt(wrap.frbtcAmount);
-                }, BigInt(0));
-
-                console.log('[useSellableCurrencies] frBTC has pending wraps but no indexed balance:', {
-                  pending: pendingTotal.toString(),
-                  pendingWraps: pendingFrbtcWraps.length,
-                });
-
-                // Check if frBTC is in the allowed pools list (if filter provided)
-                if (!tokensWithPools || tokensWithPools.some((p) => p.id === config.FRBTC_ALKANE_ID)) {
-                  seenIds.add(config.FRBTC_ALKANE_ID);
-
-                  allAlkanes.push({
-                    id: config.FRBTC_ALKANE_ID,
-                    address: walletAddress,
-                    name: 'frBTC',
-                    symbol: 'frBTC',
-                    balance: pendingTotal.toString(),
+                    balance: String(balance),
                     priceInfo: {
                       price: 0,
                       idClubMarketplace: false,
@@ -207,37 +128,6 @@ export const useSellableCurrencies = (
           }
         } catch (balanceSheetErr) {
           console.error('[useSellableCurrencies] Balance sheet fetch error:', balanceSheetErr);
-
-          // Even if balance sheet fetch fails, check for pending wraps
-          // This ensures we show pending wraps even when the API is down
-          const pendingFrbtcWraps = getPendingWrapsForAlkane(config.FRBTC_ALKANE_ID, network);
-          if (pendingFrbtcWraps.length > 0 && !seenIds.has(config.FRBTC_ALKANE_ID)) {
-            const pendingTotal = pendingFrbtcWraps.reduce((sum, wrap) => {
-              return sum + BigInt(wrap.frbtcAmount);
-            }, BigInt(0));
-
-            console.log('[useSellableCurrencies] Showing pending wraps despite balance sheet error:', {
-              pending: pendingTotal.toString(),
-              pendingWraps: pendingFrbtcWraps.length,
-            });
-
-            // Check if frBTC is in the allowed pools list (if filter provided)
-            if (!tokensWithPools || tokensWithPools.some((p) => p.id === config.FRBTC_ALKANE_ID)) {
-              seenIds.add(config.FRBTC_ALKANE_ID);
-
-              allAlkanes.push({
-                id: config.FRBTC_ALKANE_ID,
-                address: walletAddress,
-                name: 'frBTC',
-                symbol: 'frBTC',
-                balance: pendingTotal.toString(),
-                priceInfo: {
-                  price: 0,
-                  idClubMarketplace: false,
-                },
-              });
-            }
-          }
         }
 
         // Process alkane tokens from enriched balances (asset UTXOs contain runes/alkanes)
