@@ -189,7 +189,7 @@ export function useWrapMutation() {
       const options: Record<string, any> = {
         trace_enabled: false,
         mine_enabled: false,
-        auto_confirm: false,  // We sign manually with taproot key
+        auto_confirm: true,  // Let SDK handle signing to test if OP_RETURN is correct
         change_address: userTaprootAddress,  // Change goes to user's taproot address
         from: [taprootAddress],
         from_addresses: [taprootAddress],
@@ -235,7 +235,18 @@ export function useWrapMutation() {
 
         console.log('[useWrapMutation] Result:', result);
 
-        // Check if we got a readyToSign state (transaction needs signing)
+        // Check if execution completed (auto_confirm: true path)
+        if (result?.complete) {
+          const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+          console.log('[useWrapMutation] Execution complete (auto_confirm), txid:', txId);
+          return {
+            success: true,
+            transactionId: txId,
+            wrapAmountSats,
+          } as { success: boolean; transactionId?: string; wrapAmountSats?: number };
+        }
+
+        // Check if we got a readyToSign state (auto_confirm: false path)
         if (result?.readyToSign) {
           console.log('[useWrapMutation] Got readyToSign state, signing transaction...');
           const readyToSign = result.readyToSign;
@@ -294,35 +305,8 @@ export function useWrapMutation() {
             console.log('[useWrapMutation] PSBT debug parse error:', dbgErr);
           }
 
-          // If inputs are missing tapInternalKey, try to add it from wallet
-          // This is needed because the WASM SDK may not include BIP32 derivation data
-          const psbtToSign = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          const taprootPubKey = account?.taproot?.pubKeyXOnly;
-
-          if (taprootPubKey) {
-            const pubKeyBuffer = Buffer.from(taprootPubKey, 'hex');
-            let modified = false;
-
-            for (let i = 0; i < psbtToSign.inputCount; i++) {
-              const inp = psbtToSign.data.inputs[i];
-              // Only add tapInternalKey if missing and input has witnessUtxo
-              if (!inp.tapInternalKey && inp.witnessUtxo) {
-                try {
-                  psbtToSign.updateInput(i, { tapInternalKey: pubKeyBuffer });
-                  modified = true;
-                } catch (e) {
-                  console.log('[useWrapMutation] Could not update input', i, ':', e);
-                }
-              }
-            }
-
-            if (modified) {
-              console.log('[useWrapMutation] Added tapInternalKey to inputs');
-              psbtBase64 = psbtToSign.toBase64();
-            }
-          }
-
-          // Sign the PSBT using the taproot signing function (BIP86 derivation with tweaked key)
+          // Sign the PSBT directly without modification (same as test does)
+          // Modifying PSBT may corrupt the OP_RETURN output
           console.log('[useWrapMutation] Signing PSBT with taproot key...');
           const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           console.log('[useWrapMutation] PSBT signed with taproot key');
@@ -445,86 +429,21 @@ export function useWrapMutation() {
         throw error;
       }
     },
-    onSuccess: async (data) => {
-      console.log('[useWrapMutation] Wrap successful, invalidating balance queries...');
+    onSuccess: (data) => {
+      console.log('[useWrapMutation] Wrap successful');
       console.log('[useWrapMutation] Transaction ID:', data.transactionId);
+      console.log('[useWrapMutation] Amount wrapped:', data.wrapAmountSats, 'sats');
 
-      // Post-broadcast verification: try to fetch the transaction back from the network
-      if (data.transactionId && provider) {
-        try {
-          console.log('[useWrapMutation] Verifying transaction is visible on network...');
-
-          // Wait a moment for mempool propagation
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          // Try to get transaction from provider
-          const txResult = await provider.getTransaction(data.transactionId);
-          console.log('[useWrapMutation] Transaction verified on network:', txResult);
-
-          // If we have the raw hex, decode and verify structure matches what we sent
-          if (data.txHex) {
-            console.log('[useWrapMutation] Transaction hex available for debugging');
-            console.log('[useWrapMutation] You can decode this transaction using:');
-            console.log('[useWrapMutation] bitcoin-cli decoderawtransaction', data.txHex);
-          }
-        } catch (verifyErr) {
-          console.warn('[useWrapMutation] Could not verify transaction on network (may not be an issue):', verifyErr);
-        }
-
-        // Try to check if indexer can see the transaction
-        try {
-          const config = getConfig(network);
-          const dataApiUrl = (config as any).API_URL;
-
-          if (dataApiUrl) {
-            console.log('[useWrapMutation] Checking if indexer can see transaction...');
-
-            // Wait a bit longer for indexer
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            const balanceResponse = await fetch(`${dataApiUrl}/get-address-balances`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                address: account?.taproot?.address,
-                include_outpoints: false
-              }),
-            });
-
-            if (balanceResponse.ok) {
-              const balanceData = await balanceResponse.json();
-              console.log('[useWrapMutation] Indexer balance sheet after wrap:', balanceData);
-
-              if (balanceData?.balances?.[FRBTC_ALKANE_ID]) {
-                console.log('[useWrapMutation] ✓ Indexer shows frBTC balance:', balanceData.balances[FRBTC_ALKANE_ID]);
-              } else {
-                console.log('[useWrapMutation] ⚠ Indexer does not yet show frBTC balance (this is expected - may take time)');
-              }
-            }
-          }
-        } catch (indexerErr) {
-          console.warn('[useWrapMutation] Could not check indexer status:', indexerErr);
-        }
-      }
-
-      // Invalidate all balance-related queries to refresh UI
-      // Balance will update once the alkanes indexer processes the transaction
+      // Invalidate balance queries - balance will update when indexer processes the transaction
       const walletAddress = account?.taproot?.address;
 
-      // Invalidate sellable currencies (shows frBTC balance in swap UI)
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
-
-      // Invalidate BTC balance queries
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
-
-      // Invalidate frBTC premium data
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
-
-      // Invalidate pool-related queries that may show token balances
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
 
-      console.log('[useWrapMutation] Balance queries invalidated for address:', walletAddress);
+      console.log('[useWrapMutation] Balance queries invalidated. Balance will update when indexer processes block.');
     },
   });
 }

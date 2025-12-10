@@ -58,10 +58,9 @@ export const useSellableCurrencies = (
 
   return useQuery({
     queryKey: ['sellable-currencies', walletAddress, tokensWithPools],
-    staleTime: 0, // Always consider stale - refetch on mount and focus
-    refetchOnMount: true, // Always refetch when component mounts
-    refetchOnWindowFocus: true, // Refetch when user comes back to tab
-    refetchInterval: 5000, // Poll every 5 seconds to catch indexer updates
+    staleTime: 0, // Always refetch - no caching to ensure latest balance
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     enabled: isInitialized && !!provider && !!walletAddress,
     queryFn: async (): Promise<CurrencyPriceInfoResponse[]> => {
       if (!walletAddress || !provider) return [];
@@ -115,7 +114,12 @@ export const useSellableCurrencies = (
               // Process balance sheet entries (e.g., {"32:0": "9990"} for frBTC)
               if (balanceSheet?.balances && typeof balanceSheet.balances === 'object') {
                 for (const [alkaneId, balance] of Object.entries(balanceSheet.balances)) {
-                  if (!alkaneId || seenIds.has(alkaneId)) continue;
+                  console.log(`[useSellableCurrencies] Processing alkane: ${alkaneId}, balance: ${balance}`);
+
+                  if (!alkaneId || seenIds.has(alkaneId)) {
+                    console.log(`[useSellableCurrencies]   Skipped: ${!alkaneId ? 'no ID' : 'already seen'}`);
+                    continue;
+                  }
                   seenIds.add(alkaneId);
 
                   // Determine name based on alkane ID
@@ -128,6 +132,7 @@ export const useSellableCurrencies = (
 
                   // Check if token is in the allowed pools list (if filter provided)
                   if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneId)) {
+                    console.log(`[useSellableCurrencies]   Filtered out: ${alkaneId} not in tokensWithPools`);
                     continue;
                   }
 
