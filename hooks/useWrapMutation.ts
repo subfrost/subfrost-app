@@ -201,7 +201,7 @@ export function useWrapMutation() {
       const options: Record<string, any> = {
         trace_enabled: false,
         mine_enabled: false,
-        auto_confirm: false,  // We sign manually with taproot key
+        auto_confirm: true,  // Let SDK handle signing to test if OP_RETURN is correct
         change_address: userTaprootAddress,  // Change goes to user's taproot address
         from: [taprootAddress],
         from_addresses: [taprootAddress],
