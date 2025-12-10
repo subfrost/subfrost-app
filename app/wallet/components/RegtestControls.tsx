@@ -45,14 +45,24 @@ export default function RegtestControls() {
       const result = await provider.bitcoindGenerateToAddress(count, address);
       
       console.log('[RegtestControls] Mined blocks:', result);
-      showMessage(`✅ Mined ${count} block(s) successfully!`);
+      showMessage(`✅ Mined ${count} block(s) successfully! Waiting for indexer...`);
+
+      // Wait for indexer to process blocks (typically takes 1-3 seconds)
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Invalidate all queries to refresh data
-      await queryClient.invalidateQueries();
-      // Also refresh wallet balances if available
-      if (refreshBalances) {
-        await refreshBalances();
+      // Invalidate multiple times over 10 seconds to handle backend cache delays
+      for (let i = 0; i < 3; i++) {
+        await queryClient.invalidateQueries();
+        if (refreshBalances) {
+          await refreshBalances();
+        }
+        if (i < 2) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
       }
+
+      showMessage(`✅ Mined ${count} block(s) and refreshed balances!`);
     } catch (error) {
       console.error('Mining error:', error);
       showMessage(`❌ Failed to mine blocks: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);

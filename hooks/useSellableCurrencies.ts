@@ -61,6 +61,7 @@ export const useSellableCurrencies = (
     staleTime: 0, // Always refetch - no caching to ensure latest balance
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+    refetchInterval: network === 'subfrost-regtest' || network === 'regtest' ? 5000 : false, // Poll every 5s on regtest for fresh balances
     enabled: isInitialized && !!provider && !!walletAddress,
     queryFn: async (): Promise<CurrencyPriceInfoResponse[]> => {
       if (!walletAddress || !provider) return [];
