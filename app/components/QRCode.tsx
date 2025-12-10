@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 interface QRCodeProps {
   value: string;
@@ -18,22 +18,14 @@ interface QRCodeProps {
 export default function QRCode({
   value,
   size = 256,
-  level = 'M',
+  level: _level = 'M',
   bgColor = '#ffffff',
   fgColor = '#000000',
   className = '',
 }: QRCodeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
-    if (!canvasRef.current || !value) return;
-
-    // For now, use a simple data URL approach with an external service
-    // In production, you'd want to use a proper QR library like qrcode or react-qr-code
-    renderQRCodeViaAPI();
-  }, [value, size, level, bgColor, fgColor]);
-
-  const renderQRCodeViaAPI = () => {
+  const renderQRCodeViaAPI = useCallback(() => {
     // Using a simple approach: render as SVG using an inline generator
     // For a production app, install: npm install qrcode or react-qr-code
     const canvas = canvasRef.current;
@@ -58,7 +50,15 @@ export default function QRCode({
     ctx.fillText('QR Code', size / 2, size / 2 - 10);
     ctx.font = '10px monospace';
     ctx.fillText('Install QR library', size / 2, size / 2 + 10);
-  };
+  }, [size, bgColor, fgColor]);
+
+  useEffect(() => {
+    if (!canvasRef.current || !value) return;
+
+    // For now, use a simple data URL approach with an external service
+    // In production, you'd want to use a proper QR library like qrcode or react-qr-code
+    renderQRCodeViaAPI();
+  }, [value, renderQRCodeViaAPI]);
 
   return (
     <div className={`inline-block ${className}`}>
