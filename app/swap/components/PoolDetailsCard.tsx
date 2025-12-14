@@ -44,29 +44,10 @@ export default function PoolDetailsCard({ pool, volumePeriod = '24h', onVolumePe
           </div>
         </div>
         <div className="rounded-xl bg-[color:var(--sf-surface)]/60 px-4 py-3 backdrop-blur-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-[color:var(--sf-text)]/60">Volume</span>
-            {onVolumePeriodChange && (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => onVolumePeriodChange('24h')}
-                  className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                    volumePeriod === '24h' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                  }`}
-                >
-                  24H
-                </button>
-                <span className="text-[color:var(--sf-text)]/30">|</span>
-                <button
-                  onClick={() => onVolumePeriodChange('30d')}
-                  className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                    volumePeriod === '30d' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                  }`}
-                >
-                  30D
-                </button>
-              </div>
-            )}
+          <div className="mb-2">
+            <span className="text-xs font-semibold text-[color:var(--sf-text)]/60">
+              Volume ({volumePeriod === '24h' ? '24H' : '30D'})
+            </span>
           </div>
           <div className="text-lg font-bold text-[color:var(--sf-text)]">
             {volumePeriod === '24h' ? formatUsd(pool.vol24hUsd) : formatUsd(pool.vol30dUsd)}

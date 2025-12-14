@@ -42,11 +42,11 @@ function PairIcon({
 }) {
   return (
     <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
-        <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="md" />
+      <div className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
+        <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="lg" />
       </div>
-      <div className="absolute right-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
-        <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="md" />
+      <div className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
+        <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="lg" />
       </div>
     </div>
   );

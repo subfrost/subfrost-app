@@ -11,6 +11,7 @@ import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 import { useMemo } from 'react';
 import { useModalStore } from '@/stores/modals';
+import { useGlobalStore } from '@/stores/global';
 
 type Props = {
   sellId: string;
@@ -30,6 +31,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const network = networkProp || walletNetwork;
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
   const { openTxSettings } = useModalStore();
+  const { maxSlippage } = useGlobalStore();
   const normalizedSell = sellId === 'btc' ? FRBTC_ALKANE_ID : sellId;
   const normalizedBuy = buyId === 'btc' ? FRBTC_ALKANE_ID : buyId;
   
@@ -150,6 +152,10 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const isDirectWrap = quote?.route && quote.route.length === 1 && quote.route[0] === 'wrap';
   const isDirectUnwrap = quote?.route && quote.route.length === 1 && quote.route[0] === 'unwrap';
 
+  // Detect BTC <-> frBTC wrap/unwrap pairs for hardcoded 1:1 rate
+  const isWrapPair = sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID);
+  const isUnwrapPair = (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && buyId === 'btc';
+
   return (
     <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 text-sm backdrop-blur-sm transition-all">
       {isCalculating ? (
@@ -211,9 +217,13 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
             </button>
           </div>
           
-          <Row 
-            label="Exchange Rate" 
-            value={`1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
+          <Row
+            label="Exchange Rate"
+            value={isWrapPair
+              ? '1 BTC = 1 frBTC'
+              : isUnwrapPair
+                ? '1 frBTC = 1 BTC'
+                : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
             highlight
           />
           {direction === 'sell' ? (
@@ -229,21 +239,17 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
               return formatAlks(quote.maximumSent, decimals, decimals);
             })()} ${sellName ?? sellId}`} />
           )}
-          {slippagePercent !== null && (
-            <Row 
-              label="Slippage Tolerance" 
-              value={`${slippagePercent.toFixed(2)}%`}
-              warning={hasWarningSlippage}
-              danger={hasHighSlippage}
-            />
-          )}
+          <Row
+            label="Slippage Tolerance"
+            value={(isWrapPair || isUnwrapPair) ? 'N/A' : `${Number(maxSlippage || 0.5).toFixed(2)}%`}
+          />
           <Row
             label={isCrossChainFrom ? "Bitcoin & Ethereum Network Fee" : "Miner Fee Rate"}
             value={isCrossChainFrom ? "$0.00 USDT" : `${feeRate} sats/vB`}
           />
           {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
           
-          {hasHighSlippage && slippagePercent !== null && (
+          {hasHighSlippage && slippagePercent !== null && !isWrapPair && !isUnwrapPair && (
             <div className="mt-2 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3">
               <svg className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
