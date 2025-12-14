@@ -24,16 +24,16 @@ export default function WasmTestPage() {
       const wasm = await import('@alkanes/ts-sdk/wasm');
       addLog('WASM module imported successfully');
       addLog(`WASM module keys: ${Object.keys(wasm).join(', ')}`);
-      addLog(`Default export type: ${typeof wasm.default}`);
+      addLog(`Default export type: ${typeof (wasm as any).default}`);
       
       setWasmModule(wasm);
 
       // Try to call default export if it's a function
-      if (typeof wasm.default === 'function') {
+      if (typeof (wasm as any).default === 'function') {
         // Note: wasm.default() is not a function in this WASM module
         addLog('✅ WASM module loaded (no init function needed)');
       } else {
-        addLog(`Default is not a function, it's: ${wasm.default}`);
+        addLog(`Default is not a function, it's: ${(wasm as any).default}`);
       }
 
       // Check for init function (using type assertion)

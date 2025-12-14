@@ -334,7 +334,7 @@ export function useWrapMutation() {
 
           // Analyze each output
           tx.outs.forEach((output, idx) => {
-            const script = output.script.toString('hex');
+            const script = Buffer.from(output.script).toString('hex');
             let outputType = 'unknown';
             let address = 'N/A';
             let opReturnData = null;

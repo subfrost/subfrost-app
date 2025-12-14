@@ -17,6 +17,7 @@ import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { usePools } from "@/hooks/usePools";
+import { useAllPoolStats } from "@/hooks/usePoolData";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
@@ -55,7 +56,47 @@ const MarketsSkeleton = () => (
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
   const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
-  const markets = useMemo<PoolSummary[]>(() => (poolsData?.items ?? []), [poolsData?.items]);
+
+  // Enhanced pool stats from our local API (TVL, Volume, APR)
+  const { data: poolStats } = useAllPoolStats();
+
+  // Merge external pool data with our enhanced stats
+  const markets = useMemo<PoolSummary[]>(() => {
+    const basePools = poolsData?.items ?? [];
+
+    if (!poolStats) return basePools;
+
+    // Create a map of pool ID to stats for quick lookup
+    // Pool IDs in our stats use format like "2:77087" which matches the pool.id
+    const statsMap = new Map<string, typeof poolStats[string]>();
+    for (const [key, stats] of Object.entries(poolStats)) {
+      statsMap.set(stats.poolId, stats);
+    }
+
+    // Enhance each pool with stats data
+    return basePools.map(pool => {
+      const stats = statsMap.get(pool.id);
+      if (!stats) return pool;
+
+      // Calculate token TVL percentages from reserves
+      const totalTvl = stats.tvlUsd || 0;
+      const token0Tvl = totalTvl / 2; // Assume 50/50 split initially
+      const token1Tvl = totalTvl / 2;
+
+      return {
+        ...pool,
+        tvlUsd: stats.tvlUsd || pool.tvlUsd,
+        token0TvlUsd: stats.tvlToken0 || token0Tvl,
+        token1TvlUsd: stats.tvlToken1 || token1Tvl,
+        vol24hUsd: stats.volume24hUsd || pool.vol24hUsd,
+        vol30dUsd: stats.volume30dUsd || pool.vol30dUsd,
+        apr: stats.apr || pool.apr,
+      } as PoolSummary;
+    });
+  }, [poolsData?.items, poolStats]);
+
+  // Volume period state (shared between MarketsGrid and PoolDetailsCard)
+  const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('24h');
 
   // Tab state
   const [selectedTab, setSelectedTab] = useState<'swap' | 'lp'>('swap');
@@ -924,8 +965,8 @@ export default function SwapShell() {
         {/* Right Column: TVL and Markets */}
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
-          <PoolDetailsCard 
-            pool={selectedTab === 'lp' && poolToken0 && poolToken1 
+          <PoolDetailsCard
+            pool={selectedTab === 'lp' && poolToken0 && poolToken1
               ? markets.find(p => {
                   // Map BTC to frBTC for pool lookup
                   const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
@@ -946,9 +987,16 @@ export default function SwapShell() {
                   );
                 })
               : selectedPool
-            } 
+            }
+            volumePeriod={volumePeriod}
+            onVolumePeriodChange={setVolumePeriod}
           />
-          <MarketsGrid pools={markets} onSelect={handleSelectPool} />
+          <MarketsGrid
+            pools={markets}
+            onSelect={handleSelectPool}
+            volumePeriod={volumePeriod}
+            onVolumePeriodChange={setVolumePeriod}
+          />
         </div>
         </Suspense>
       </div>

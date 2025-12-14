@@ -4,11 +4,6 @@ import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 
-type Props = {
-  pools: PoolSummary[];
-  onSelect: (pool: PoolSummary) => void;
-};
-
 type SortField = 'pair' | 'tvl' | 'volume' | 'apr';
 type SortOrder = 'asc' | 'desc';
 
@@ -16,7 +11,14 @@ type MarketFilter = 'all' | 'btc' | 'usd';
 type VolumePeriod = '24h' | '30d';
 type CurrencyDisplay = 'usd' | 'btc';
 
-export default function MarketsGrid({ pools, onSelect }: Props) {
+type Props = {
+  pools: PoolSummary[];
+  onSelect: (pool: PoolSummary) => void;
+  volumePeriod?: VolumePeriod;
+  onVolumePeriodChange?: (period: VolumePeriod) => void;
+};
+
+export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange }: Props) {
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const [showAll, setShowAll] = useState(false);
@@ -25,8 +27,12 @@ export default function MarketsGrid({ pools, onSelect }: Props) {
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
-  const [volumePeriod, setVolumePeriod] = useState<VolumePeriod>('24h');
+  const [internalVolumePeriod, setInternalVolumePeriod] = useState<VolumePeriod>('24h');
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyDisplay>('usd');
+
+  // Use external volume period if provided, otherwise use internal state
+  const volumePeriod = externalVolumePeriod ?? internalVolumePeriod;
+  const setVolumePeriod = onVolumePeriodChange ?? setInternalVolumePeriod;
 
   // Whitelisted pool IDs (mainnet-specific)
   // On non-mainnet networks, allow all pools

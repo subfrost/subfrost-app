@@ -3,9 +3,7 @@
 import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
-import { useWallet } from '@/context/WalletContext';
-import { BROWSER_WALLETS, isWalletInstalled, type BrowserWalletInfo } from '@/constants/wallets';
-import { connectBrowserWallet } from '@/utils/browserWallet';
+import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
 import { initGoogleDrive, isDriveConfigured, type WalletBackupInfo } from '@/utils/clientSideDrive';
 import { WalletListPicker } from './WalletListPicker';
 
@@ -21,6 +19,10 @@ export default function ConnectWalletModal() {
     unlockWallet: unlockWalletFromContext,
     restoreWallet: restoreWalletFromContext,
     disconnect,
+    // Browser wallet support
+    availableBrowserWallets,
+    installedBrowserWallets: installedWalletsFromContext,
+    connectBrowserWallet: connectBrowserWalletFromContext,
   } = useWallet();
 
   const [view, setView] = useState<WalletView>('select');
@@ -35,7 +37,8 @@ export default function ConnectWalletModal() {
   const [hasExistingKeystore, setHasExistingKeystore] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mnemonicConfirmed, setMnemonicConfirmed] = useState(false);
-  const [installedWallets, setInstalledWallets] = useState<BrowserWalletInfo[]>([]);
+  // Use installed wallets from context (already detected on init)
+  const installedWallets = installedWalletsFromContext;
   const [selectedDriveWallet, setSelectedDriveWallet] = useState<WalletBackupInfo | null>(null);
   const [passwordHint, setPasswordHint] = useState<string | null>(null);
   const [driveConfigured, setDriveConfigured] = useState(false);
@@ -47,8 +50,7 @@ export default function ConnectWalletModal() {
       setHasExistingKeystore(hasExistingKeystoreFromContext);
       setView('select');
       resetForm();
-      // Detect installed browser wallets
-      setInstalledWallets(BROWSER_WALLETS.filter(isWalletInstalled));
+      // Browser wallets are already detected in WalletContext
       // Initialize Google Drive
       initGoogleDrive().catch(console.error);
       setDriveConfigured(isDriveConfigured());
@@ -743,11 +745,10 @@ export default function ConnectWalletModal() {
                         setIsLoading(true);
                         setError(null);
                         try {
-                          const result = await connectBrowserWallet(wallet);
-                          console.log('Connected to', wallet.name, result);
-                          // TODO: Store browser wallet connection in WalletContext
-                          // For now, just show success
-                          handleClose();
+                          // Use WalletContext's connectBrowserWallet method
+                          await connectBrowserWalletFromContext(wallet.id);
+                          console.log('Connected to browser wallet:', wallet.name);
+                          // handleClose is called automatically by connectBrowserWallet
                         } catch (err) {
                           setError(err instanceof Error ? err.message : 'Failed to connect wallet');
                         } finally {
@@ -776,7 +777,7 @@ export default function ConnectWalletModal() {
                   <div className="text-[color:var(--sf-text)]/60 mb-4">No browser wallets detected</div>
                   <div className="text-sm text-[color:var(--sf-text)]/40 mb-4">Install one of these wallets:</div>
                   <div className="space-y-2">
-                    {BROWSER_WALLETS.map((wallet) => (
+                    {availableBrowserWallets.map((wallet) => (
                       <a
                         key={wallet.id}
                         href={wallet.website}

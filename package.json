@@ -28,7 +28,6 @@
     "test:e2e": "npm run test:e2e:wallet && npm run test:e2e:swap && npm run test:e2e:vault"
   },
   "dependencies": {
-    "@alkanes/ts-sdk": "file:./ts-sdk",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@noble/hashes": "^2.0.1",
     "@omnisat/lasereyes-core": "^0.0.82",
@@ -43,11 +42,13 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "redis": "^5.10.0",
     "tiny-secp256k1": "^2.2.4",
     "use-debounce": "^10.0.6",
     "varuint-bitcoin": "^2.0.0"
   },
   "devDependencies": {
+    "@alkanes/ts-sdk": "https://alkanes.build/api/pkg/@alkanes/ts-sdk",
     "@noble/curves": "^2.0.1",
     "@playwright/experimental-ct-react": "^1.56.1",
     "@playwright/test": "^1.56.1",
