@@ -340,14 +340,14 @@ export async function getPoolVolume(poolKey: string, network?: string): Promise<
 
   const volumeData = await estimate24hVolume(poolKey, 6, network);
 
-  // Get BTC price for USD conversion if needed
-  let volume24hUsd: number | undefined;
-  if (pool.token1Symbol === 'frBTC' && volumeData.volumeToken1 > 0) {
+  // Get BTC price for USD conversion
+  let volume24hUsd: number = 0;
+  if (pool.token1Symbol === 'frBTC') {
     try {
       const btcPrice = await getBitcoinPrice(network);
       volume24hUsd = volumeData.volumeToken1 * btcPrice.usd;
     } catch {
-      // BTC price fetch failed
+      // BTC price fetch failed, volume stays 0
     }
   } else if (pool.token1Symbol === 'bUSD') {
     volume24hUsd = volumeData.volumeToken1;

@@ -111,12 +111,19 @@ export function getNetworkConfig(networkName?: string): NetworkConfig {
         url: process.env.ALKANES_RPC_URL || 'https://signet.subfrost.io/v4/subfrost',
         dataApiUrl: process.env.ALKANES_DATA_API_URL || 'https://signet.subfrost.io/v4/subfrost',
       };
-    case 'regtest':
     case 'subfrost-regtest':
+      // subfrost-regtest is a development network that uses mainnet RPC for pool data
+      return {
+        network: 'subfrost-regtest',
+        networkType: 'regtest',
+        url: process.env.ALKANES_RPC_URL || 'https://mainnet.subfrost.io/v4/subfrost',
+        dataApiUrl: process.env.ALKANES_DATA_API_URL || 'https://mainnet.subfrost.io/v4/subfrost',
+      };
+    case 'regtest':
     case 'oylnet':
     default:
       return {
-        network: 'subfrost-regtest',
+        network: 'regtest',
         networkType: 'regtest',
         url: process.env.ALKANES_RPC_URL || 'https://regtest.subfrost.io/v4/subfrost',
         dataApiUrl: process.env.ALKANES_DATA_API_URL || 'https://regtest.subfrost.io/v4/subfrost',
@@ -140,6 +147,29 @@ export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decima
   '5:0': { symbol: 'SUBFROST', name: 'Subfrost Token', decimals: 8 },
 };
 
+/**
+ * Encode a number as a protobuf varint (little-endian variable-length integer)
+ */
+function encodeVarint(n: number): string {
+  const bytes: number[] = [];
+  while (n > 0x7f) {
+    bytes.push((n & 0x7f) | 0x80);
+    n >>>= 7;
+  }
+  bytes.push(n);
+  return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Generate protobuf payload for a pool ID
+ * Format: 0x2096ce382a0602{varint_tx}e7073001
+ * Note: Currently all mainnet pools use block 2, so block is encoded as 02 in the payload
+ */
+function generatePoolPayload(_block: number, tx: number): string {
+  const txVarint = encodeVarint(tx);
+  return `0x2096ce382a0602${txVarint}e7073001`;
+}
+
 /** Pool configurations - mainnet */
 export const MAINNET_POOLS: Record<string, PoolConfig> = {
   DIESEL_FRBTC: {
@@ -150,7 +180,7 @@ export const MAINNET_POOLS: Record<string, PoolConfig> = {
     token1Symbol: 'frBTC',
     token0Decimals: 8,
     token1Decimals: 8,
-    protobufPayload: '0x2096ce382a06029fda04e7073001',
+    protobufPayload: generatePoolPayload(2, 77087),
     alkaneId: { block: 2, tx: 77087 },
   },
   DIESEL_BUSD: {
@@ -161,8 +191,63 @@ export const MAINNET_POOLS: Record<string, PoolConfig> = {
     token1Symbol: 'bUSD',
     token0Decimals: 8,
     token1Decimals: 8,
-    protobufPayload: '0x2096ce382a0602d99604e7073001',
+    protobufPayload: generatePoolPayload(2, 68441),
     alkaneId: { block: 2, tx: 68441 },
+  },
+  BUSD_FRBTC: {
+    id: '2:77222',
+    key: 'BUSD_FRBTC',
+    name: 'bUSD/frBTC',
+    token0Symbol: 'bUSD',
+    token1Symbol: 'frBTC',
+    token0Decimals: 8,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(2, 77222),
+    alkaneId: { block: 2, tx: 77222 },
+  },
+  METHANE_FRBTC: {
+    id: '2:77221',
+    key: 'METHANE_FRBTC',
+    name: 'METHANE/frBTC',
+    token0Symbol: 'METHANE',
+    token1Symbol: 'frBTC',
+    token0Decimals: 8,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(2, 77221),
+    alkaneId: { block: 2, tx: 77221 },
+  },
+  GOLDDUST_FRBTC: {
+    id: '2:77228',
+    key: 'GOLDDUST_FRBTC',
+    name: 'GOLD DUST/frBTC',
+    token0Symbol: 'GOLD DUST',
+    token1Symbol: 'frBTC',
+    token0Decimals: 8,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(2, 77228),
+    alkaneId: { block: 2, tx: 77228 },
+  },
+  ALKAMIST_FRBTC: {
+    id: '2:77237',
+    key: 'ALKAMIST_FRBTC',
+    name: 'ALKAMIST/frBTC',
+    token0Symbol: 'ALKAMIST',
+    token1Symbol: 'frBTC',
+    token0Decimals: 8,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(2, 77237),
+    alkaneId: { block: 2, tx: 77237 },
+  },
+  METHANE_BUSD: {
+    id: '2:68433',
+    key: 'METHANE_BUSD',
+    name: 'METHANE/bUSD',
+    token0Symbol: 'METHANE',
+    token1Symbol: 'bUSD',
+    token0Decimals: 8,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(2, 68433),
+    alkaneId: { block: 2, tx: 68433 },
   },
 };
 
@@ -174,7 +259,12 @@ export const REGTEST_POOLS: Record<string, PoolConfig> = {
 /** Get pools for specified network (or current network if not specified) */
 export function getPools(networkName?: string): Record<string, PoolConfig> {
   const { network } = getNetworkConfig(networkName);
-  return network === 'mainnet' ? MAINNET_POOLS : REGTEST_POOLS;
+  // Use mainnet pools for mainnet and subfrost-regtest (which queries mainnet data)
+  // Only use regtest pools for actual regtest networks with their own pools
+  if (network === 'mainnet' || network === 'subfrost-regtest') {
+    return MAINNET_POOLS;
+  }
+  return REGTEST_POOLS;
 }
 
 /** DIESEL token configuration */

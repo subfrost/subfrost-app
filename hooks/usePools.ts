@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 
 // Network to API base URL mapping for REST API
 const NETWORK_API_URLS: Record<string, string> = {
@@ -28,16 +29,74 @@ export type PoolsListItem = {
   token0: { id: string; symbol: string; name?: string; iconUrl?: string };
   token1: { id: string; symbol: string; name?: string; iconUrl?: string };
   tvlUsd?: number;
+  token0TvlUsd?: number;
+  token1TvlUsd?: number;
   vol24hUsd?: number;
   vol7dUsd?: number;
   vol30dUsd?: number;
   apr?: number;
 };
 
+// Token IDs for TVL calculation
+const FRBTC_TOKEN_ID = '32:0';
+const BUSD_TOKEN_ID_MAINNET = '2:56801';
+
+/**
+ * Calculate TVL in USD from pool reserves
+ */
+function calculateTvlFromReserves(
+  token0Id: string,
+  token1Id: string,
+  token0Amount: string,
+  token1Amount: string,
+  btcPrice: number | undefined,
+  busdTokenId: string
+): { tvlUsd: number; token0TvlUsd: number; token1TvlUsd: number } {
+  // Default values
+  let token0TvlUsd = 0;
+  let token1TvlUsd = 0;
+
+  // Token decimals (assuming 8 for all alkane tokens)
+  const decimals = 8;
+  const token0Value = Number(token0Amount) / Math.pow(10, decimals);
+  const token1Value = Number(token1Amount) / Math.pow(10, decimals);
+
+  // Determine token prices based on token IDs
+  // frBTC (32:0) = BTC price
+  // bUSD (2:56801) = $1
+  // Other tokens: estimate from pool ratio if paired with a known token
+
+  // Get price for token0
+  if (token0Id === FRBTC_TOKEN_ID && btcPrice) {
+    token0TvlUsd = token0Value * btcPrice;
+  } else if (token0Id === busdTokenId) {
+    token0TvlUsd = token0Value; // $1 per bUSD
+  }
+
+  // Get price for token1
+  if (token1Id === FRBTC_TOKEN_ID && btcPrice) {
+    token1TvlUsd = token1Value * btcPrice;
+  } else if (token1Id === busdTokenId) {
+    token1TvlUsd = token1Value; // $1 per bUSD
+  }
+
+  // For pools with one known-price token and one unknown,
+  // estimate the unknown token's value as equal to the known token's value (50/50 pool assumption)
+  if (token0TvlUsd > 0 && token1TvlUsd === 0) {
+    token1TvlUsd = token0TvlUsd; // Assume 50/50 pool
+  } else if (token1TvlUsd > 0 && token0TvlUsd === 0) {
+    token0TvlUsd = token1TvlUsd; // Assume 50/50 pool
+  }
+
+  const tvlUsd = token0TvlUsd + token1TvlUsd;
+  return { tvlUsd, token0TvlUsd, token1TvlUsd };
+}
+
 export function usePools(params: UsePoolsParams = {}) {
   const { network } = useWallet();
   const { provider, isInitialized } = useAlkanesSDK();
-  const { ALKANE_FACTORY_ID } = getConfig(network);
+  const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID } = getConfig(network);
+  const { data: btcPrice } = useBtcPrice();
 
   return useQuery<{ items: PoolsListItem[]; total: number }>({
     queryKey: [
@@ -48,10 +107,11 @@ export function usePools(params: UsePoolsParams = {}) {
       params.offset ?? 0,
       params.sortBy ?? 'tvl',
       params.order ?? 'desc',
+      btcPrice ?? 0, // Include btcPrice in key so TVL recalculates when price updates
     ],
     staleTime: 120_000,
-    // Enable as soon as we have network info - we use REST API directly
-    enabled: !!network && !!ALKANE_FACTORY_ID,
+    // Enable as soon as we have network info and BTC price - we use REST API directly
+    enabled: !!network && !!ALKANE_FACTORY_ID && btcPrice !== undefined,
     queryFn: async () => {
 
       try {
@@ -126,8 +186,26 @@ export function usePools(params: UsePoolsParams = {}) {
             ? `https://asset.oyl.gg/alkanes/${network}/${t1Block}-${t1Tx}.png`
             : '';
 
-          // Get TVL and volume data from API response
-          const tvlUsd = p.tvl_usd || p.tvlUsd || (p.token0_tvl_usd ?? 0) + (p.token1_tvl_usd ?? 0) || 0;
+          // Get TVL from API response, or calculate from reserves
+          let tvlUsd = p.tvl_usd || p.tvlUsd || (p.token0_tvl_usd ?? 0) + (p.token1_tvl_usd ?? 0) || 0;
+          let token0TvlUsd = p.token0_tvl_usd || 0;
+          let token1TvlUsd = p.token1_tvl_usd || 0;
+
+          // If no TVL from API, calculate from reserves using BTC price
+          if (tvlUsd === 0 && btcPrice) {
+            const calculated = calculateTvlFromReserves(
+              token0Id,
+              token1Id,
+              p.token0_amount || '0',
+              p.token1_amount || '0',
+              btcPrice,
+              BUSD_ALKANE_ID
+            );
+            tvlUsd = calculated.tvlUsd;
+            token0TvlUsd = calculated.token0TvlUsd;
+            token1TvlUsd = calculated.token1TvlUsd;
+          }
+
           const vol24hUsd = p.volume_1d_usd || p.volume1dUsd || p.poolVolume1dInUsd || 0;
           const vol30dUsd = p.volume_30d_usd || p.volume30dUsd || p.poolVolume30dInUsd || 0;
           const apr = p.apr || p.poolApr || 0;
@@ -138,6 +216,8 @@ export function usePools(params: UsePoolsParams = {}) {
             token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: token0IconUrl },
             token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
             tvlUsd,
+            token0TvlUsd,
+            token1TvlUsd,
             vol24hUsd,
             vol7dUsd: 0,
             vol30dUsd,

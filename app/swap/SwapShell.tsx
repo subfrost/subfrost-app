@@ -17,7 +17,7 @@ import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { usePools } from "@/hooks/usePools";
-import { useAllPoolStats } from "@/hooks/usePoolData";
+import { useAllPoolStats, useAllPoolVolumes } from "@/hooks/usePoolData";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
@@ -60,40 +60,62 @@ export default function SwapShell() {
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats } = useAllPoolStats();
 
-  // Merge external pool data with our enhanced stats
+  // Dedicated volume data from volume API (more reliable than stats API)
+  const { data: poolVolumes } = useAllPoolVolumes();
+
+  // Merge external pool data with our enhanced stats and volume data
   const markets = useMemo<PoolSummary[]>(() => {
     const basePools = poolsData?.items ?? [];
 
-    if (!poolStats) return basePools;
+    // Create maps for quick lookup
+    const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
+    const volumeMap = new Map<string, NonNullable<typeof poolVolumes>[string]>();
 
-    // Create a map of pool ID to stats for quick lookup
-    // Pool IDs in our stats use format like "2:77087" which matches the pool.id
-    const statsMap = new Map<string, typeof poolStats[string]>();
-    for (const [key, stats] of Object.entries(poolStats)) {
-      statsMap.set(stats.poolId, stats);
+    if (poolStats) {
+      for (const [, stats] of Object.entries(poolStats)) {
+        statsMap.set(stats.poolId, stats);
+      }
     }
 
-    // Enhance each pool with stats data
+    if (poolVolumes) {
+      for (const [, volume] of Object.entries(poolVolumes)) {
+        volumeMap.set(volume.poolId, volume);
+      }
+    }
+
+    // Enhance each pool with stats and volume data
     return basePools.map(pool => {
       const stats = statsMap.get(pool.id);
-      if (!stats) return pool;
+      const volume = volumeMap.get(pool.id);
 
       // Calculate token TVL percentages from reserves
-      const totalTvl = stats.tvlUsd || 0;
-      const token0Tvl = totalTvl / 2; // Assume 50/50 split initially
+      const totalTvl = stats?.tvlUsd || pool.tvlUsd || 0;
+      const token0Tvl = totalTvl / 2;
       const token1Tvl = totalTvl / 2;
+
+      // Get volume from dedicated volume API, fall back to stats, then to pool data
+      const vol24hUsd = volume?.volume24hUsd ?? stats?.volume24hUsd ?? pool.vol24hUsd;
+
+      // Calculate APR: (daily_volume * fee_rate * 365) / TVL * 100
+      // Fee rate is 0.8% for LPs (8/1000)
+      let apr = stats?.apr ?? pool.apr;
+      if (!apr && vol24hUsd && totalTvl > 0) {
+        const lpFeeRate = 0.008; // 0.8%
+        const dailyFees = (vol24hUsd || 0) * lpFeeRate;
+        apr = ((dailyFees * 365) / totalTvl) * 100;
+      }
 
       return {
         ...pool,
-        tvlUsd: stats.tvlUsd || pool.tvlUsd,
-        token0TvlUsd: stats.tvlToken0 || token0Tvl,
-        token1TvlUsd: stats.tvlToken1 || token1Tvl,
-        vol24hUsd: stats.volume24hUsd || pool.vol24hUsd,
-        vol30dUsd: stats.volume30dUsd || pool.vol30dUsd,
-        apr: stats.apr || pool.apr,
+        tvlUsd: stats?.tvlUsd ?? pool.tvlUsd,
+        token0TvlUsd: stats?.tvlToken0 ?? token0Tvl,
+        token1TvlUsd: stats?.tvlToken1 ?? token1Tvl,
+        vol24hUsd,
+        vol30dUsd: stats?.volume30dUsd ?? pool.vol30dUsd,
+        apr,
       } as PoolSummary;
     });
-  }, [poolsData?.items, poolStats]);
+  }, [poolsData?.items, poolStats, poolVolumes]);
 
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('24h');
