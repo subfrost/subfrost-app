@@ -1,0 +1,338 @@
+name: Preview Deployment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [closed]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  REPOSITORY: docker-images
+  BASE_DOMAIN: subfrost.io
+
+jobs:
+  deploy-preview:
+    name: Deploy Preview
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    environment: preview
+
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set preview variables
+        id: vars
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          # Sanitize branch name for DNS (lowercase, replace invalid chars)
+          BRANCH_NAME=$(echo "${{ github.head_ref }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | cut -c1-20)
+          SERVICE_NAME="subfrost-preview-${PR_NUMBER}"
+          SUBDOMAIN="pr-${PR_NUMBER}"
+
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          echo "service_name=${SERVICE_NAME}" >> $GITHUB_OUTPUT
+          echo "subdomain=${SUBDOMAIN}" >> $GITHUB_OUTPUT
+          echo "preview_domain=${SUBDOMAIN}.${{ env.BASE_DOMAIN }}" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Docker image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ steps.vars.outputs.service_name }}"
+
+          docker build \
+            --tag "${IMAGE}:${{ github.event.pull_request.head.sha }}" \
+            --tag "${IMAGE}:latest" \
+            --build-arg NEXT_PUBLIC_NETWORK=mainnet \
+            .
+
+          docker push "${IMAGE}:${{ github.event.pull_request.head.sha }}"
+          docker push "${IMAGE}:latest"
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ steps.vars.outputs.service_name }}:${{ github.event.pull_request.head.sha }}"
+
+          gcloud run deploy ${{ steps.vars.outputs.service_name }} \
+            --image "${IMAGE}" \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --port 3000 \
+            --cpu 1 \
+            --memory 512Mi \
+            --min-instances 0 \
+            --max-instances 2 \
+            --concurrency 80 \
+            --timeout 60 \
+            --set-env-vars "NODE_ENV=production" \
+            --set-env-vars "NEXT_PUBLIC_NETWORK=mainnet" \
+            --set-env-vars "PREVIEW_DEPLOYMENT=true" \
+            --set-env-vars "PR_NUMBER=${{ steps.vars.outputs.pr_number }}" \
+            --tag pr-${{ steps.vars.outputs.pr_number }}
+
+          # Get the service URL
+          URL=$(gcloud run services describe ${{ steps.vars.outputs.service_name }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "url=${URL}" >> $GITHUB_OUTPUT
+
+      - name: Create domain mapping
+        continue-on-error: true
+        run: |
+          # Try to create domain mapping (may already exist)
+          gcloud run domain-mappings create \
+            --service=${{ steps.vars.outputs.service_name }} \
+            --domain=${{ steps.vars.outputs.preview_domain }} \
+            --region=${{ env.REGION }} 2>/dev/null || true
+
+      - name: Update Cloudflare DNS for preview
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          SUBDOMAIN="${{ steps.vars.outputs.subdomain }}"
+          DOMAIN="${{ steps.vars.outputs.preview_domain }}"
+          # Cloud Run domain mapping IP
+          TARGET="216.239.32.21"
+
+          # Get Zone ID
+          if [ -n "${{ vars.CLOUDFLARE_ZONE_ID }}" ]; then
+            CF_ZONE_ID="${{ vars.CLOUDFLARE_ZONE_ID }}"
+          else
+            CF_ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${{ env.BASE_DOMAIN }}" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" | jq -r '.result[0].id')
+          fi
+
+          if [ "$CF_ZONE_ID" = "null" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "Could not find Cloudflare zone, skipping DNS setup"
+            exit 0
+          fi
+
+          # Check for existing record
+          RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json")
+
+          RECORD_ID=$(echo "$RESPONSE" | jq -r '.result[] | select(.type == "A") | .id' | head -1)
+
+          if [ -n "$RECORD_ID" ]; then
+            # Update existing record
+            curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"${SUBDOMAIN}\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
+            echo "Updated DNS record: ${DOMAIN} -> ${TARGET}"
+          else
+            # Create new record
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"${SUBDOMAIN}\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
+            echo "Created DNS record: ${DOMAIN} -> ${TARGET}"
+          fi
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const previewUrl = `https://${{ steps.vars.outputs.preview_domain }}`;
+            const cloudRunUrl = `${{ steps.deploy.outputs.url }}`;
+            const sha = `${{ github.event.pull_request.head.sha }}`.substring(0, 7);
+
+            const body = `## Preview Deployment Ready!
+
+            | | |
+            |---|---|
+            | **Preview URL** | [${previewUrl}](${previewUrl}) |
+            | **Cloud Run URL** | [${cloudRunUrl}](${cloudRunUrl}) |
+            | **Commit** | \`${sha}\` |
+            | **Branch** | \`${{ github.head_ref }}\` |
+
+            > **Note:** DNS propagation may take a few minutes. Use the Cloud Run URL for immediate access.
+
+            ---
+            <sub>This preview will be automatically deleted when the PR is closed.</sub>`;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.vars.outputs.pr_number }}
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Preview Deployment')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.vars.outputs.pr_number }},
+                body
+              });
+            }
+
+      - name: Summary
+        run: |
+          echo "### Preview Deployed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Preview URL:** https://${{ steps.vars.outputs.preview_domain }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Cloud Run URL:** ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+
+  cleanup-preview:
+    name: Cleanup Preview
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Set cleanup variables
+        id: vars
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          SERVICE_NAME="subfrost-preview-${PR_NUMBER}"
+          SUBDOMAIN="pr-${PR_NUMBER}"
+
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "service_name=${SERVICE_NAME}" >> $GITHUB_OUTPUT
+          echo "subdomain=${SUBDOMAIN}" >> $GITHUB_OUTPUT
+          echo "preview_domain=${SUBDOMAIN}.${{ env.BASE_DOMAIN }}" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Delete domain mapping
+        continue-on-error: true
+        run: |
+          gcloud run domain-mappings delete \
+            --domain=${{ steps.vars.outputs.preview_domain }} \
+            --region=${{ env.REGION }} \
+            --quiet 2>/dev/null || true
+
+      - name: Delete Cloud Run service
+        continue-on-error: true
+        run: |
+          gcloud run services delete ${{ steps.vars.outputs.service_name }} \
+            --region=${{ env.REGION }} \
+            --quiet 2>/dev/null || true
+          echo "Deleted Cloud Run service: ${{ steps.vars.outputs.service_name }}"
+
+      - name: Delete Docker images
+        continue-on-error: true
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ steps.vars.outputs.service_name }}"
+
+          # List and delete all tags
+          gcloud artifacts docker images list "${IMAGE}" --format="value(version)" 2>/dev/null | \
+            while read -r tag; do
+              gcloud artifacts docker images delete "${IMAGE}:${tag}" --quiet 2>/dev/null || true
+            done
+          echo "Cleaned up Docker images"
+
+      - name: Delete Cloudflare DNS record
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          DOMAIN="${{ steps.vars.outputs.preview_domain }}"
+
+          # Get Zone ID
+          if [ -n "${{ vars.CLOUDFLARE_ZONE_ID }}" ]; then
+            CF_ZONE_ID="${{ vars.CLOUDFLARE_ZONE_ID }}"
+          else
+            CF_ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${{ env.BASE_DOMAIN }}" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" | jq -r '.result[0].id')
+          fi
+
+          if [ "$CF_ZONE_ID" = "null" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "Could not find Cloudflare zone, skipping DNS cleanup"
+            exit 0
+          fi
+
+          # Find and delete record
+          RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json")
+
+          RECORD_ID=$(echo "$RESPONSE" | jq -r '.result[] | select(.type == "A") | .id' | head -1)
+
+          if [ -n "$RECORD_ID" ]; then
+            curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json"
+            echo "Deleted DNS record: ${DOMAIN}"
+          fi
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## Preview Deployment Cleaned Up
+
+            The preview environment for this PR has been deleted.
+
+            - Cloud Run service: \`${{ steps.vars.outputs.service_name }}\` - **deleted**
+            - DNS record: \`${{ steps.vars.outputs.preview_domain }}\` - **deleted**
+            - Docker images - **deleted**`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.vars.outputs.pr_number }},
+              body
+            });
+
+      - name: Summary
+        run: |
+          echo "### Preview Cleaned Up" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deleted resources for PR #${{ steps.vars.outputs.pr_number }}" >> $GITHUB_STEP_SUMMARY

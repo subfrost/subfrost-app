@@ -46933,7 +46933,7 @@ function weightToVsize(weight) {
 
 // src/index.ts
 var VERSION = "0.1.0";
-async function initSDK(wasmModule) {
+async function initSDK() {
   const { KeystoreManager: KeystoreManager2, createKeystore: createKeystore2, unlockKeystore: unlockKeystore2 } = await Promise.resolve().then(() => (init_keystore(), keystore_exports));
   const { AlkanesWallet: AlkanesWallet2, createWallet: createWallet2, createWalletFromMnemonic: createWalletFromMnemonic2 } = await Promise.resolve().then(() => (init_wallet(), wallet_exports));
   const { AlkanesProvider: AlkanesProvider2, createProvider: createProvider2 } = await Promise.resolve().then(() => (init_provider(), provider_exports));
@@ -46945,7 +46945,7 @@ async function initSDK(wasmModule) {
     unlockKeystore: unlockKeystore2,
     createWallet: createWallet2,
     createWalletFromMnemonic: createWalletFromMnemonic2,
-    createProvider: (config) => createProvider2(config, wasmModule),
+    createProvider: createProvider2,
     version: VERSION
   };
 }

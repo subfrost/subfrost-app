@@ -1,0 +1,179 @@
+name: Deploy to GCP
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  SERVICE_NAME: subfrost-app
+  REPOSITORY: docker-images
+  CUSTOM_DOMAIN: app.subfrost.io
+  BASE_DOMAIN: subfrost.io
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Option 1: Workload Identity Federation (Recommended)
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      # Option 2: Service Account Key (if WIF not configured)
+      # - name: Authenticate to Google Cloud
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build Docker image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}"
+
+          docker build \
+            --tag "${IMAGE}:${{ github.sha }}" \
+            --tag "${IMAGE}:latest" \
+            --build-arg NEXT_PUBLIC_NETWORK=mainnet \
+            --cache-from "${IMAGE}:latest" \
+            .
+
+      - name: Push Docker image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}"
+          docker push "${IMAGE}:${{ github.sha }}"
+          docker push "${IMAGE}:latest"
+
+      - name: Deploy to Cloud Run
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image "${IMAGE}" \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --port 3000 \
+            --cpu 1 \
+            --memory 512Mi \
+            --min-instances 0 \
+            --max-instances 10 \
+            --concurrency 80 \
+            --timeout 60 \
+            --set-env-vars "NODE_ENV=production" \
+            --set-env-vars "NEXT_PUBLIC_NETWORK=mainnet"
+
+      - name: Get Service URL
+        id: service
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "url=${URL}" >> $GITHUB_OUTPUT
+          HOSTNAME=$(echo $URL | sed 's|https://||')
+          echo "hostname=${HOSTNAME}" >> $GITHUB_OUTPUT
+
+      - name: Create Cloud Run domain mapping
+        continue-on-error: true
+        run: |
+          # Create domain mapping (will fail silently if already exists)
+          gcloud run domain-mappings create \
+            --service=${{ env.SERVICE_NAME }} \
+            --domain=${{ env.CUSTOM_DOMAIN }} \
+            --region=${{ env.REGION }} 2>/dev/null || echo "Domain mapping already exists"
+
+      - name: Update Cloudflare DNS
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          DOMAIN="${{ env.CUSTOM_DOMAIN }}"
+          # Use Google's domain mapping IP (Cloud Run domain mapping)
+          TARGET="216.239.32.21"
+
+          # Get Zone ID for subfrost.io
+          CF_ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${{ env.BASE_DOMAIN }}" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+          if [ "$CF_ZONE_ID" = "null" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "Error: Could not find Cloudflare zone for ${{ env.BASE_DOMAIN }}"
+            exit 1
+          fi
+
+          echo "Using Zone ID: ${CF_ZONE_ID}"
+
+          # Check for existing record
+          RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json")
+
+          RECORD_ID=$(echo "$RESPONSE" | jq -r '.result[] | select(.type == "A" or .type == "AAAA" or .type == "CNAME") | .id' | head -1)
+          RECORD_TYPE=$(echo "$RESPONSE" | jq -r '.result[] | select(.type == "A" or .type == "AAAA" or .type == "CNAME") | .type' | head -1)
+
+          if [ -n "$RECORD_ID" ]; then
+            echo "Found existing ${RECORD_TYPE} record: ${RECORD_ID}"
+            if [ "$RECORD_TYPE" = "A" ]; then
+              curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"type\":\"A\",\"name\":\"app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
+              echo "Updated A record: ${DOMAIN} -> ${TARGET}"
+            else
+              curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" > /dev/null
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"type\":\"A\",\"name\":\"app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
+              echo "Replaced ${RECORD_TYPE} with A record: ${DOMAIN} -> ${TARGET}"
+            fi
+          else
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
+            echo "Created A record: ${DOMAIN} -> ${TARGET}"
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "### Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Production URL:** https://${{ env.CUSTOM_DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Cloud Run URL:** ${{ steps.service.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
