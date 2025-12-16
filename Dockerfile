@@ -59,9 +59,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy server WASM files (not included in standalone by default)
-# Next.js asyncWebAssembly puts WASM in chunks/static/wasm but loads from server/static/wasm
-COPY --from=builder /app/.next/server/chunks/static/wasm ./.next/server/static/wasm 2>/dev/null || true
+# Copy WASM files if they exist (location varies by Next.js version)
+COPY --from=builder /app/.next/server ./tmp-server
+RUN mkdir -p ./.next/server/static/wasm && \
+    find ./tmp-server -name "*.wasm" -exec cp {} ./.next/server/static/wasm/ \; 2>/dev/null || true && \
+    rm -rf ./tmp-server
 
 # Set ownership
 RUN chown -R nextjs:nodejs /app

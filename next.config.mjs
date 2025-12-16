@@ -11,6 +11,7 @@ const hasTsSdk = fs.existsSync(tsSdkWasmPath);
 
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '.'),
   typescript: {
     ignoreBuildErrors: false,
