@@ -35,6 +35,9 @@ importers:
       ecpair:
         specifier: ^3.0.0
         version: 3.0.0(typescript@5.9.3)
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.24)(ts-node@10.9.2(@swc/core@1.15.3)(@swc/wasm@1.15.3)(@types/node@20.19.24)(typescript@5.9.3))
       lucide-react:
         specifier: ^0.556.0
         version: 0.556.0(react@19.2.1)

@@ -289,7 +289,7 @@ describe('Wrap Flow Tests', () => {
           console.log('[Wrap] === Transaction Outputs ===');
           let btcToSigner = BigInt(0);
           debugPsbt.txOutputs.forEach((output, idx) => {
-            const script = output.script.toString('hex');
+            const script = output.script.toString();
             const address = (() => {
               try {
                 return bitcoin.address.fromOutputScript(output.script, btcNetwork);

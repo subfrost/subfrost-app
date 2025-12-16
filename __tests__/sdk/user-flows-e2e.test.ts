@@ -319,7 +319,8 @@ describe('User Flows E2E Test Suite', () => {
         const bytecode = await wasm.get_alkane_bytecode(
           REGTEST_CONFIG.jsonrpc_url,
           frbtcId.block,
-          frbtcId.tx
+          frbtcId.tx,
+          "latest"
         );
         console.log(
           '[Wrap] frBTC bytecode length:',

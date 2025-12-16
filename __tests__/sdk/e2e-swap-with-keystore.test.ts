@@ -289,8 +289,8 @@ describe('E2E Swap with Keystore Signer', () => {
           ];
           const { selectedUtxos } = amm.factory.splitAlkaneUtxos(swapToken, utxos);
           if (selectedUtxos && selectedUtxos.length > 0) {
+            console.log('[Swap] Found alkane UTXOs:', selectedUtxos.length);
             alkanesUtxos = selectedUtxos;
-            console.log('[Swap] Found alkane UTXOs:', alkanesUtxos.length);
           }
         } catch (e: any) {
           console.log('[Swap] No alkane UTXOs found:', e.message?.slice(0, 100));
@@ -389,8 +389,8 @@ describe('E2E Swap with Keystore Signer', () => {
           ];
           const { selectedUtxos } = amm.factory.splitAlkaneUtxos(swapToken, utxos);
           if (selectedUtxos && selectedUtxos.length > 0) {
+            console.log('[ReverseSwap] Found DIESEL UTXOs:', selectedUtxos.length);
             alkanesUtxos = selectedUtxos;
-            console.log('[ReverseSwap] Found DIESEL UTXOs:', alkanesUtxos.length);
           }
         } catch (e: any) {
           console.log('[ReverseSwap] No DIESEL UTXOs found:', e.message?.slice(0, 100));
