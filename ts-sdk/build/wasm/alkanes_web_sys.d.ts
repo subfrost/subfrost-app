@@ -1,12 +1,37 @@
 /* tslint:disable */
 /* eslint-disable */
-export function analyze_psbt(psbt_base64: string): string;
-export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
-export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
 /**
  * Asynchronously encrypts data using the Web Crypto API.
  */
 export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
+export function analyze_psbt(psbt_base64: string, network_str: string): string;
+export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
+export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
+/**
+ * Analyze a transaction's runestone to extract Protostones
+ *
+ * This function takes a raw transaction hex string, decodes it, and extracts
+ * all Protostones from the transaction's OP_RETURN output.
+ *
+ * # Arguments
+ *
+ * * `tx_hex` - Hexadecimal string of the raw transaction (with or without "0x" prefix)
+ *
+ * # Returns
+ *
+ * A JSON string containing:
+ * - `protostone_count`: Number of Protostones found
+ * - `protostones`: Array of Protostone objects with their details
+ *
+ * # Example
+ *
+ * ```javascript
+ * const result = analyze_runestone(txHex);
+ * const data = JSON.parse(result);
+ * console.log(`Found ${data.protostone_count} Protostones`);
+ * ```
+ */
+export function analyze_runestone(tx_hex: string): string;
 export interface PoolWithDetails {
     pool_id_block: number;
     pool_id_tx: number;
@@ -39,6 +64,73 @@ export class PbkdfParams {
   [Symbol.dispose](): void;
   constructor(val: any);
   to_js(): any;
+}
+/**
+ * WASM-exported BrowserWalletProvider that can be created from JavaScript
+ */
+export class WasmBrowserWalletProvider {
+  free(): void;
+  [Symbol.dispose](): void;
+  /**
+   * Create a new BrowserWalletProvider from a JavaScript wallet adapter
+   *
+   * @param adapter - A JavaScript object implementing the JsWalletAdapter interface
+   * @param network - Network string ("mainnet", "testnet", "signet", "regtest")
+   * @returns Promise<WasmBrowserWalletProvider>
+   */
+  constructor(adapter: JsWalletAdapter, network: string);
+  /**
+   * Get the connected wallet address
+   */
+  getAddress(): string | undefined;
+  /**
+   * Get the wallet public key
+   */
+  getPublicKey(): Promise<string>;
+  /**
+   * Sign a PSBT (hex encoded)
+   */
+  signPsbt(psbt_hex: string, options: any): Promise<string>;
+  /**
+   * Sign a message
+   */
+  signMessage(message: string, address?: string | null): Promise<string>;
+  /**
+   * Broadcast a transaction
+   */
+  broadcastTransaction(tx_hex: string): Promise<string>;
+  /**
+   * Get balance
+   */
+  getBalance(): Promise<any>;
+  /**
+   * Get UTXOs
+   */
+  getUtxos(include_frozen: boolean): Promise<any>;
+  /**
+   * Get enriched UTXOs with asset information
+   */
+  getEnrichedUtxos(): Promise<any>;
+  /**
+   * Get all balances (BTC + alkanes)
+   */
+  getAllBalances(): Promise<any>;
+  /**
+   * Get wallet info
+   */
+  getWalletInfo(): any;
+  /**
+   * Get connection status
+   */
+  getConnectionStatus(): string;
+  /**
+   * Get current network
+   */
+  getNetwork(): string;
+  /**
+   * Disconnect from the wallet
+   */
+  disconnect(): Promise<void>;
 }
 /**
  * Web-compatible provider implementation for browser environments
@@ -187,6 +279,7 @@ export class WebProvider {
   ammGetPoolDetails(pool_id: string): Promise<any>;
   alkanesTrace(outpoint: string): Promise<any>;
   traceProtostones(txid: string): Promise<any>;
+  traceBlock(height: number): Promise<any>;
   alkanesByAddress(address: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;
   alkanesByOutpoint(outpoint: string, block_tag?: string | null, protocol_tag?: number | null): Promise<any>;
   esploraGetTx(txid: string): Promise<any>;
@@ -231,7 +324,34 @@ export class WebProvider {
   metashrewHeight(): Promise<any>;
   metashrewStateRoot(height?: number | null): Promise<any>;
   metashrewGetBlockHash(height: number): Promise<any>;
+  /**
+   * Generic metashrew_view call
+   *
+   * Calls the metashrew_view RPC method with the given view function, payload, and block tag.
+   * This is the low-level method for calling any metashrew view function.
+   *
+   * # Arguments
+   * * `view_fn` - The view function name (e.g., "simulate", "protorunesbyaddress")
+   * * `payload` - The hex-encoded payload (with or without 0x prefix)
+   * * `block_tag` - The block tag ("latest" or a block height as string)
+   *
+   * # Returns
+   * The hex-encoded response string from the view function
+   */
+  metashrewView(view_fn: string, payload: string, block_tag: string): Promise<any>;
   luaEvalScript(script: string): Promise<any>;
+  /**
+   * Execute a Lua script with arguments, using scripthash caching
+   *
+   * This method first tries to use the cached scripthash version (lua_evalsaved),
+   * and falls back to the full script (lua_evalscript) if the hash isn't cached.
+   * This is the recommended way to execute Lua scripts for better performance.
+   *
+   * # Arguments
+   * * `script` - The Lua script content
+   * * `args` - JSON-serialized array of arguments to pass to the script
+   */
+  luaEval(script: string, args: any): Promise<any>;
   ordList(outpoint: string): Promise<any>;
   ordFind(sat: number): Promise<any>;
   runestoneDecodeTx(txid: string): Promise<any>;
