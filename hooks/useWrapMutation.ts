@@ -164,12 +164,14 @@ export function useWrapMutation() {
 
       // WORKAROUND: Fetch UTXOs ourselves and filter to only our wallet's address
       // This bypasses the SDK's broken UTXO selection
-      console.log('[useWrapMutation] Fetching wallet UTXOs directly...');
+      console.log('[useWrapMutation] ========================================');
+      console.log('[useWrapMutation] Fetching wallet UTXOs directly from:', taprootAddress);
       let walletUtxos: any[] = [];
       try {
         // Get UTXOs from the wallet's taproot address
         const utxoResult = await provider.getAddressUtxos(taprootAddress);
-        console.log('[useWrapMutation] Raw UTXO result:', utxoResult);
+        console.log('[useWrapMutation] Raw UTXO result type:', typeof utxoResult);
+        console.log('[useWrapMutation] Raw UTXO result:', JSON.stringify(utxoResult, null, 2));
 
         // Handle different response formats
         if (Array.isArray(utxoResult)) {
@@ -181,6 +183,9 @@ export function useWrapMutation() {
         }
 
         console.log('[useWrapMutation] Found', walletUtxos.length, 'UTXOs for wallet');
+        walletUtxos.forEach((utxo, idx) => {
+          console.log(`[useWrapMutation]   UTXO[${idx}]: ${utxo.txid}:${utxo.vout} value=${utxo.value} sats`);
+        });
       } catch (e) {
         console.error('[useWrapMutation] Failed to fetch UTXOs:', e);
       }
