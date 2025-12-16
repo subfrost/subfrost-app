@@ -29,21 +29,20 @@ export default function RegtestControls() {
       if (!address) {
         throw new Error('No taproot address available. Please connect wallet first.');
       }
-      
-      // Dynamic import WASM to avoid SSR issues
-      const wasm = await import('@alkanes/ts-sdk/wasm');
 
-      // Create WebProvider with network preset and subfrost URL overrides
-      const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
-      const configOverrides = {
-        jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
-        data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
-      };
-      const provider = new wasm.WebProvider(providerName, configOverrides);
+      // Use the API route which bypasses WASM issues
+      const response = await fetch('/api/regtest/mine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks: count, address }),
+      });
 
-      // Call bitcoindGenerateToAddress (uses alkanes-cli-common code path)
-      const result = await provider.bitcoindGenerateToAddress(count, address);
-      
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || 'Failed to mine blocks');
+      }
+
       console.log('[RegtestControls] Mined blocks:', result);
       showMessage(`✅ Mined ${count} block(s) successfully! Waiting for indexer...`);
 

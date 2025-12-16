@@ -435,3 +435,192 @@ export class WebProvider {
    */
   alkanesReflect(alkane_id: string): Promise<any>;
 }
+
+export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+
+export interface InitOutput {
+  readonly memory: WebAssembly.Memory;
+  readonly __wbg_webprovider_free: (a: number, b: number) => void;
+  readonly webprovider_new_js: (a: number, b: number, c: number) => [number, number, number];
+  readonly webprovider_sandshrew_rpc_url: (a: number) => [number, number];
+  readonly webprovider_esplora_rpc_url: (a: number) => [number, number];
+  readonly webprovider_bitcoin_rpc_url: (a: number) => [number, number];
+  readonly webprovider_brc20_prog_rpc_url: (a: number) => [number, number];
+  readonly webprovider_getEnrichedBalances: (a: number, b: number, c: number, d: number, e: number) => any;
+  readonly webprovider_getAddressTxs: (a: number, b: number, c: number) => any;
+  readonly webprovider_getTransactionHex: (a: number, b: number, c: number) => any;
+  readonly webprovider_traceOutpoint: (a: number, b: number, c: number) => any;
+  readonly webprovider_getAddressUtxos: (a: number, b: number, c: number) => any;
+  readonly webprovider_broadcastTransaction: (a: number, b: number, c: number) => any;
+  readonly webprovider_getAddressTxsWithTraces: (a: number, b: number, c: number, d: number) => any;
+  readonly webprovider_ordInscription: (a: number, b: number, c: number) => any;
+  readonly webprovider_ordInscriptions: (a: number, b: number, c: number) => any;
+  readonly webprovider_ordOutputs: (a: number, b: number, c: number) => any;
+  readonly webprovider_ordRune: (a: number, b: number, c: number) => any;
+  readonly webprovider_alkanesExecute: (a: number, b: number, c: number) => any;
+  readonly webprovider_alkanesExecuteWithStrings: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
+  readonly webprovider_alkanesResumeExecution: (a: number, b: number, c: number, d: number, e: number) => any;
+  readonly webprovider_alkanesResumeCommitExecution: (a: number, b: number, c: number) => any;
+  readonly webprovider_alkanesResumeRevealExecution: (a: number, b: number, c: number) => any;
+  readonly webprovider_alkanesSimulate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly webprovider_alkanesBalance: (a: number, b: number, c: number) => any;
+  readonly webprovider_alkanesBytecode: (a: number, b: number, c: number, d: number, e: number) => any;
+  readonly webprovider_alkanesGetAllPoolsWithDetails: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly webprovider_alkanesGetAllPools: (a: number, b: number, c: number) => any;
+  readonly webprovider_ammGetPoolDetails: (a: number, b: number, c: number) => any;
+  readonly webprovider_alkanesTrace: (a: number, b: number, c: number) => any;
+  readonly webprovider_traceProtostones: (a: number, b: number, c: number) => any;
+  readonly webprovider_traceBlock: (a: number, b: number) => any;
+  readonly webprovider_alkanesByAddress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly webprovider_alkanesByOutpoint: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly webprovider_esploraGetTx: (a: number, b: number, c: number) => any;
+  readonly webprovider_esploraGetTxStatus: (a: number, b: number, c: number) => any;
+  readonly webprovider_esploraGetAddressInfo: (a: number, b: number, c: number) => any;
+  readonly webprovider_esploraGetBlocksTipHeight: (a: number) => any;
+  readonly webprovider_esploraGetBlocksTipHash: (a: number) => any;
+  readonly webprovider_esploraGetAddressUtxo: (a: number, b: number, c: number) => any;
+  readonly webprovider_esploraGetAddressTxs: (a: number, b: number, c: number) => any;
+  readonly webprovider_esploraGetFeeEstimates: (a: number) => any;
+  readonly webprovider_esploraBroadcastTx: (a: number, b: number, c: number) => any;
+  readonly webprovider_esploraGetTxHex: (a: number, b: number, c: number) => any;
+  readonly webprovider_bitcoindGetBlockCount: (a: number) => any;
+  readonly webprovider_bitcoindSendRawTransaction: (a: number, b: number, c: number) => any;
+  readonly webprovider_bitcoindGenerateToAddress: (a: number, b: number, c: number, d: number) => any;
+  readonly webprovider_bitcoindGenerateFuture: (a: number, b: number, c: number) => any;
+  readonly webprovider_bitcoindGetBlockchainInfo: (a: number) => any;
+  readonly webprovider_bitcoindGetNetworkInfo: (a: number) => any;
+  readonly webprovider_bitcoindGetRawTransaction: (a: number, b: number, c: number, d: number, e: number) => any;
+  readonly webprovider_bitcoindGetBlock: (a: number, b: number, c: number, d: number) => any;
+  readonly webprovider_bitcoindGetBlockHash: (a: number, b: number) => any;
+  readonly webprovider_bitcoindGetBlockHeader: (a: number, b: number, c: number) => any;
+  readonly webprovider_bitcoindGetBlockStats: (a: number, b: number, c: number) => any;
+  readonly webprovider_bitcoindGetMempoolInfo: (a: number) => any;
+  readonly webprovider_bitcoindEstimateSmartFee: (a: number, b: number) => any;
+  readonly webprovider_bitcoindGetChainTips: (a: number) => any;
+  readonly webprovider_alkanesView: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => any;
+  readonly webprovider_alkanesInspect: (a: number, b: number, c: number, d: any) => any;
+  readonly webprovider_alkanesPendingUnwraps: (a: number, b: number, c: number) => any;
+  readonly webprovider_brc20progCall: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly webprovider_brc20progGetBalance: (a: number, b: number, c: number, d: number, e: number) => any;
+  readonly webprovider_brc20progGetCode: (a: number, b: number, c: number) => any;
+  readonly webprovider_brc20progGetTransactionCount: (a: number, b: number, c: number, d: number, e: number) => any;
+  readonly webprovider_brc20progBlockNumber: (a: number) => any;
+  readonly webprovider_brc20progChainId: (a: number) => any;
+  readonly webprovider_brc20progGetTransactionReceipt: (a: number, b: number, c: number) => any;
+  readonly webprovider_brc20progGetTransactionByHash: (a: number, b: number, c: number) => any;
+  readonly webprovider_brc20progGetBlockByNumber: (a: number, b: number, c: number, d: number) => any;
+  readonly webprovider_brc20progEstimateGas: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly webprovider_brc20progGetLogs: (a: number, b: any) => any;
+  readonly webprovider_brc20progWeb3ClientVersion: (a: number) => any;
+  readonly webprovider_metashrewHeight: (a: number) => any;
+  readonly webprovider_metashrewStateRoot: (a: number, b: number, c: number) => any;
+  readonly webprovider_metashrewGetBlockHash: (a: number, b: number) => any;
+  readonly webprovider_metashrewView: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+  readonly webprovider_luaEvalScript: (a: number, b: number, c: number) => any;
+  readonly webprovider_luaEval: (a: number, b: number, c: number, d: any) => any;
+  readonly webprovider_ordList: (a: number, b: number, c: number) => any;
+  readonly webprovider_ordFind: (a: number, b: number) => any;
+  readonly webprovider_runestoneDecodeTx: (a: number, b: number, c: number) => any;
+  readonly webprovider_runestoneAnalyzeTx: (a: number, b: number, c: number) => any;
+  readonly webprovider_protorunesDecodeTx: (a: number, b: number, c: number) => any;
+  readonly webprovider_protorunesAnalyzeTx: (a: number, b: number, c: number) => any;
+  readonly webprovider_walletCreate: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+  readonly webprovider_walletLoad: (a: number, b: number, c: number) => any;
+  readonly webprovider_walletGetAddress: (a: number) => any;
+  readonly webprovider_walletGetBalance: (a: number, b: number, c: number) => any;
+  readonly webprovider_walletLoadMnemonic: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+  readonly webprovider_walletIsLoaded: (a: number) => number;
+  readonly webprovider_walletSend: (a: number, b: number, c: number) => any;
+  readonly webprovider_walletGetUtxos: (a: number, b: number, c: number) => any;
+  readonly webprovider_walletGetHistory: (a: number, b: number, c: number) => any;
+  readonly webprovider_walletCreatePsbt: (a: number, b: number, c: number) => any;
+  readonly webprovider_walletExport: (a: number) => any;
+  readonly webprovider_walletBackup: (a: number) => any;
+  readonly webprovider_dataApiGetPoolHistory: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: bigint) => any;
+  readonly webprovider_dataApiGetPools: (a: number, b: number, c: number) => any;
+  readonly webprovider_dataApiGetAlkanesByAddress: (a: number, b: number, c: number) => any;
+  readonly webprovider_dataApiGetAddressBalances: (a: number, b: number, c: number, d: number) => any;
+  readonly webprovider_dataApiGetAllHistory: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: bigint) => any;
+  readonly webprovider_dataApiGetSwapHistory: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: bigint) => any;
+  readonly webprovider_dataApiGetMintHistory: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: bigint) => any;
+  readonly webprovider_dataApiGetBurnHistory: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: bigint) => any;
+  readonly webprovider_dataApiGetTrades: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: bigint) => any;
+  readonly webprovider_dataApiGetCandles: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: bigint) => any;
+  readonly webprovider_dataApiGetReserves: (a: number, b: number, c: number) => any;
+  readonly webprovider_dataApiGetHolders: (a: number, b: number, c: number, d: bigint, e: bigint) => any;
+  readonly webprovider_dataApiGetHoldersCount: (a: number, b: number, c: number) => any;
+  readonly webprovider_dataApiGetKeys: (a: number, b: number, c: number, d: number, e: number, f: bigint) => any;
+  readonly webprovider_dataApiGetBitcoinPrice: (a: number) => any;
+  readonly webprovider_dataApiGetBitcoinMarketChart: (a: number, b: number, c: number) => any;
+  readonly webprovider_alkanesReflect: (a: number, b: number, c: number) => any;
+  readonly __wbg_wasmbrowserwalletprovider_free: (a: number, b: number) => void;
+  readonly wasmbrowserwalletprovider_new: (a: any, b: number, c: number) => any;
+  readonly wasmbrowserwalletprovider_getAddress: (a: number) => [number, number];
+  readonly wasmbrowserwalletprovider_getPublicKey: (a: number) => any;
+  readonly wasmbrowserwalletprovider_signPsbt: (a: number, b: number, c: number, d: any) => any;
+  readonly wasmbrowserwalletprovider_signMessage: (a: number, b: number, c: number, d: number, e: number) => any;
+  readonly wasmbrowserwalletprovider_broadcastTransaction: (a: number, b: number, c: number) => any;
+  readonly wasmbrowserwalletprovider_getBalance: (a: number) => any;
+  readonly wasmbrowserwalletprovider_getUtxos: (a: number, b: number) => any;
+  readonly wasmbrowserwalletprovider_getEnrichedUtxos: (a: number) => any;
+  readonly wasmbrowserwalletprovider_getAllBalances: (a: number) => any;
+  readonly wasmbrowserwalletprovider_getWalletInfo: (a: number) => any;
+  readonly wasmbrowserwalletprovider_getConnectionStatus: (a: number) => [number, number];
+  readonly wasmbrowserwalletprovider_getNetwork: (a: number) => [number, number];
+  readonly wasmbrowserwalletprovider_disconnect: (a: number) => any;
+  readonly __wbg_keystore_free: (a: number, b: number) => void;
+  readonly __wbg_pbkdfparams_free: (a: number, b: number) => void;
+  readonly pbkdfparams_from_js: (a: any) => [number, number, number];
+  readonly pbkdfparams_to_js: (a: number) => [number, number, number];
+  readonly keystore_from_js: (a: any) => [number, number, number];
+  readonly keystore_to_js: (a: number) => [number, number, number];
+  readonly keystore_accountXpub: (a: number) => [number, number];
+  readonly keystore_hdPaths: (a: number) => any;
+  readonly keystore_masterFingerprint: (a: number) => [number, number];
+  readonly keystore_decryptMnemonic: (a: number, b: number, c: number) => any;
+  readonly encryptMnemonic: (a: number, b: number, c: number, d: number) => any;
+  readonly analyze_psbt: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+  readonly simulate_alkane_call: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+  readonly get_alkane_bytecode: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+  readonly analyze_runestone: (a: number, b: number) => [number, number, number, number];
+  readonly rustsecp256k1_v0_9_2_context_create: (a: number) => number;
+  readonly rustsecp256k1_v0_9_2_context_destroy: (a: number) => void;
+  readonly rustsecp256k1_v0_9_2_default_illegal_callback_fn: (a: number, b: number) => void;
+  readonly rustsecp256k1_v0_9_2_default_error_callback_fn: (a: number, b: number) => void;
+  readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
+  readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
+  readonly rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
+  readonly rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
+  readonly wasm_bindgen__convert__closures_____invoke__h4a94c7d4879bc9ea: (a: number, b: number, c: any) => void;
+  readonly wasm_bindgen__closure__destroy__hda0b27b5b04387b3: (a: number, b: number) => void;
+  readonly wasm_bindgen__convert__closures_____invoke__h53c04da2837a08e3: (a: number, b: number, c: any, d: any) => void;
+  readonly __wbindgen_malloc: (a: number, b: number) => number;
+  readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+  readonly __wbindgen_exn_store: (a: number) => void;
+  readonly __externref_table_alloc: () => number;
+  readonly __wbindgen_externrefs: WebAssembly.Table;
+  readonly __externref_table_dealloc: (a: number) => void;
+  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  readonly __wbindgen_start: () => void;
+}
+
+export type SyncInitInput = BufferSource | WebAssembly.Module;
+/**
+* Instantiates the given `module`, which can either be bytes or
+* a precompiled `WebAssembly.Module`.
+*
+* @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
+*
+* @returns {InitOutput}
+*/
+export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
+
+/**
+* If `module_or_path` is {RequestInfo} or {URL}, makes a request and
+* for everything else, calls `WebAssembly.instantiate` directly.
+*
+* @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
+*
+* @returns {Promise<InitOutput>}
+*/
+export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;

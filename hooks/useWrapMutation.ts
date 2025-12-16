@@ -59,28 +59,35 @@ function getSignerAddress(btcNetwork: bitcoin.Network): string {
  * Format: [frbtc_block,frbtc_tx,opcode(77)]:pointer:refund
  * Opcode 77 is the exchange/wrap opcode for frBTC contract
  *
- * For wrap transactions:
- *   - Output 0: user address (receives minted frBTC via pointer=v0)
- *   - Output 1: signer address (receives BTC - must be explicitly included)
+ * For wrap transactions (output ordering):
+ *   - Output 0 (v0): signer address (receives BTC - triggers frBTC minting)
+ *   - Output 1 (v1): user address (receives minted frBTC via pointer=v1)
  *   - Output 2+: change, OP_RETURN
  *
- * IMPORTANT: The signer address MUST be included in to_addresses.
- * The SDK does NOT add it automatically. The frBTC contract checks
- * that BTC was sent to the signer address before minting frBTC.
+ * IMPORTANT: The signer address must receive the full BTC wrap amount.
+ * NEW OUTPUT ORDER: User at v0 (receives frBTC), Signer at v1 (receives BTC).
+ * The frBTC contract checks BTC sent to signer and mints frBTC to pointer output (v0=user).
  */
 function buildWrapProtostone(params: {
   frbtcId: string;
   pointer?: string;
   refund?: string;
 }): string {
-  // pointer=v0: frBTC goes to output 0 (user's address)
-  // refund=v0: refunds also go to output 0 (user's address)
+  // pointer: output index where minted frBTC should go
+  // refund: output index where refunds should go
+  //
+  // NEW OUTPUT ORDERING - user first, signer second:
+  //   - Output 0 (v0): user address (receives frBTC via pointer=v0)
+  //   - Output 1 (v1): signer address (receives BTC via B:amount:v1)
+  //
+  // pointer=v0 ensures frBTC goes to user at output 0
   const { frbtcId, pointer = 'v0', refund = 'v0' } = params;
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
 
   // Build cellpack: [frbtc_block, frbtc_tx, opcode(77)]
   const cellpack = [frbtcBlock, frbtcTx, FRBTC_WRAP_OPCODE].join(',');
 
+  // Format: [cellpack]:pointer:refund
   return `[${cellpack}]:${pointer}:${refund}`;
 }
 
@@ -134,9 +141,13 @@ export function useWrapMutation() {
       });
       console.log('[useWrapMutation] Built protostone:', protostone);
 
-      // Input requirements: Bitcoin amount to wrap
-      const inputRequirements = `B:${wrapAmountSats}`;
+      // Input requirements: Explicitly assign full wrap amount to output v1 (signer)
+      // NEW: signer is now at v1, user is at v0
+      // Using B:amount:vN format ensures the full amount goes to the specific output
+      // Without :vN, the SDK splits the amount equally across all to_addresses
+      const inputRequirements = `B:${wrapAmountSats}:v1`;
       console.log('[useWrapMutation] Input requirements:', inputRequirements);
+      console.log('[useWrapMutation] Full', wrapAmountSats, 'sats assigned to v1 (signer)');
 
       // Get user's taproot address (receives minted frBTC)
       const userTaprootAddress = account?.taproot?.address;
@@ -152,10 +163,11 @@ export function useWrapMutation() {
       console.log('[useWrapMutation] Signer address:', signerAddress);
 
       // to_addresses: [user, signer]
-      // - Output 0: user address (receives minted frBTC via pointer=v0)
-      // - Output 1: signer address (receives BTC - triggers frBTC minting)
-      // IMPORTANT: The signer address MUST be included - SDK does NOT add it automatically
+      // - Output 0 (v0): user address (receives minted frBTC via pointer=v0)
+      // - Output 1 (v1): signer address (receives full wrap BTC amount via B:amount:v1)
+      // NOTE: User is FIRST (v0) so pointer=v0 sends frBTC to user
       const toAddresses = JSON.stringify([userTaprootAddress, signerAddress]);
+      console.log('[useWrapMutation] to_addresses: v0=user, v1=signer');
 
       // Get taproot address for UTXOs - this is where the funds are
       const taprootAddress = account?.taproot?.address;
