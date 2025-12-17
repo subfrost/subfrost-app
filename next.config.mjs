@@ -1,13 +1,13 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Check if ts-sdk is built
-const tsSdkWasmPath = path.join(process.cwd(), 'ts-sdk/build/wasm/alkanes_web_sys.js');
-const hasTsSdk = fs.existsSync(tsSdkWasmPath);
+// Use LOCAL WASM (fixed version with from_addresses parsing)
+// The npm package version has a bug where from_addresses is always None
+// Once the SDK fix is merged and published, revert to: '@alkanes/ts-sdk/build/wasm/alkanes_web_sys.js'
+const wasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -25,22 +25,18 @@ const nextConfig = {
     ];
   },
   // Turbopack configuration (for dev mode)
-  turbopack: hasTsSdk
-    ? {
-        resolveAlias: {
-          '@alkanes/ts-sdk/wasm': './ts-sdk/build/wasm/alkanes_web_sys.js',
-        },
-      }
-    : {},
+  turbopack: {
+    resolveAlias: {
+      '@alkanes/ts-sdk/wasm': wasmPath,
+    },
+  },
   // Webpack configuration (for production)
   webpack: (config, { isServer, webpack }) => {
-    // WASM alias for production (only if ts-sdk exists)
-    if (hasTsSdk) {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@alkanes/ts-sdk/wasm': tsSdkWasmPath,
-      };
-    }
+    // WASM alias - use npm package
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@alkanes/ts-sdk/wasm': wasmPath,
+    };
 
     // WASM support
     config.experiments = {
