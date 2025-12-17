@@ -256,11 +256,11 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   };
 
   return (
-    <div className="mb-12 space-y-6">
-      {/* Form */}
-      <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 space-y-6">
-        {/* Investment Amount and Lock Period in one row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="mb-6">
+      {/* 2-Column Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Side: User Inputs */}
+        <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 space-y-6">
           {/* Investment Amount */}
           <div className="space-y-3">
             <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
@@ -302,28 +302,28 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     <button
                       type="button"
                       onClick={() => handlePercent(0.25)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                     >
                       25%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.5)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                     >
                       50%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.75)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                     >
                       75%
                     </button>
                     <button
                       type="button"
                       onClick={handleMax}
-                      className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50"
+                      className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50"
                       disabled={btcBalance === 0}
                     >
                       Max
@@ -350,14 +350,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     const minPeriod = findMinimumProfitablePeriod();
                     setSelectedBlocks(minPeriod);
                   }}
-                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                 >
                   Min
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedBlocks(maxPeriod)}
-                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all sf-focus-ring border border-[color:var(--sf-primary)]/20 bg-white text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
                 >
                   Max
                 </button>
@@ -382,7 +382,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     const value = parseInt(e.target.value, 10) || 1;
                     setSelectedBlocks(Math.max(1, Math.min(maxPeriod, value)));
                   }}
-                  className="h-10 w-20 rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                  className="h-10 w-20 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none focus:border-[color:var(--sf-primary)] transition-colors"
                 />
                 <span className="text-sm text-[color:var(--sf-text)]/70">blocks</span>
               </div>
@@ -391,179 +391,181 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
               Select how long you want to lock your position (1-{maxPeriod} blocks)
             </div>
           </div>
-        </div>
 
-        {/* Aggregated Yield Display */}
-        {payoutMarkers.length > 0 ? (
-          <div className="space-y-6">
-            {/* Total Yield Card */}
-            <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-gradient-to-br from-[color:var(--sf-glass-bg)] to-[color:var(--sf-glass-bg)]/50 p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Yield</div>
-                  <div className={`text-3xl font-bold ${aggregatedYield >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
-                    {aggregatedYield >= 0 ? '+' : ''}{aggregatedYield.toFixed(2)}%
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Profit</div>
-                  <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
-                    {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} BTC
-                  </div>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-glass-border)]">
-                <div>
-                  <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment</div>
-                  <div className="text-lg font-semibold text-[color:var(--sf-text)]">
-                    {totalInvestment.toFixed(6)} BTC
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout</div>
-                  <div className="text-lg font-semibold text-[color:var(--sf-text)]">
-                    {totalPayout.toFixed(6)} BTC
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Contracts</div>
-                  <div className="text-lg font-semibold text-[color:var(--sf-text)]">
-                    {payoutMarkers.length}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payout Timeline */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-                  Payout Timeline
-                </div>
-                <div className="text-xs text-[color:var(--sf-text)]/60">
-                  {payoutMarkers.length} payout{payoutMarkers.length !== 1 ? 's' : ''}
-                  {payoutMarkers.length > 0 && (
-                    <span>
-                      {' '}• {payoutMarkers[0].blocksUntil} - {maxBlocksUntil} blocks
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Timeline Scale */}
-              <div className="relative py-8">
-                {/* Background scale line */}
-                <div className="h-2 bg-[color:var(--sf-glass-border)] rounded-full relative">
-                  {/* Current position indicator (Now) */}
-                  <div 
-                    className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-[color:var(--sf-primary)] border-2 border-[color:var(--sf-glass-bg)] z-30"
-                    style={{ left: '0%', marginLeft: '-8px' }}
-                  />
-
-                  {/* Payout markers */}
-                  {payoutMarkers.map((marker, index) => {
-                    const position = maxBlocksUntil > 0 ? (marker.blocksUntil / maxBlocksUntil) * 100 : 100;
-                    
-                    // Vertical offset for overlapping markers
-                    const samePositionMarkers = payoutMarkers.filter(m => m.blocksUntil === marker.blocksUntil);
-                    const samePositionIndex = samePositionMarkers.findIndex(m => m.contractId === marker.contractId);
-                    const verticalOffset = samePositionMarkers.length > 1 
-                      ? (samePositionIndex - (samePositionMarkers.length - 1) / 2) * 10 
-                      : 0;
-                    
-                    return (
-                      <div
-                        key={`${marker.contractId}-${index}`}
-                        className="absolute top-1/2 -translate-y-1/2 z-20 group"
-                        style={{ 
-                          left: `${Math.min(position, 100)}%`, 
-                          marginLeft: '-8px',
-                          transform: `translateY(${verticalOffset}px)`,
-                        }}
-                      >
-                        {/* Marker dot */}
-                        <div className="w-4 h-4 rounded-full bg-blue-400 border-2 border-[color:var(--sf-glass-bg)] shadow-lg cursor-pointer hover:scale-125 transition-transform">
-                          {/* Tooltip on hover */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-                            <div className="bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] rounded-lg p-2 shadow-lg whitespace-nowrap text-xs">
-                              <div className="font-medium text-[color:var(--sf-text)]">{marker.contractId}</div>
-                              <div className="text-[color:var(--sf-text)]/70">Investment: {marker.investmentAmount.toFixed(6)} BTC</div>
-                              <div className="text-[color:var(--sf-text)]/70">Profit: {marker.payoutAmount >= 0 ? '+' : ''}{marker.payoutAmount.toFixed(6)} BTC</div>
-                              <div className="text-[color:var(--sf-text)]/70">Yield: {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Timeline axis labels - positioned at the ends */}
-                <div className="absolute left-0 right-0 top-0 flex items-center justify-between text-xs">
-                  {/* Left: Now */}
-                  <div className="flex flex-col items-start">
-                    <div className="font-medium text-[color:var(--sf-text)]">Now</div>
-                    <div className="text-[color:var(--sf-text)]/50 text-[10px]">0 blocks</div>
-                  </div>
-                  
-                  {/* Right: Payout */}
-                  {payoutMarkers.length > 0 && (
-                    <div className="flex flex-col items-end">
-                      <div className="font-medium text-blue-400">Payout</div>
-                      <div className="text-[color:var(--sf-text)]/50 text-[10px]">{maxBlocksUntil} blocks</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Payout summary cards */}
-                <div className="mt-6 space-y-2">
-                  {payoutMarkers.map((marker, index) => (
-                    <div
-                      key={`summary-${marker.contractId}-${index}`}
-                      className="rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)]/50 p-3 flex items-center justify-between hover:bg-white/5 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                        <div>
-                          <div className="text-sm font-medium text-[color:var(--sf-text)]">{marker.contractId}</div>
-                          <div className="text-xs text-[color:var(--sf-text)]/60">
-                            {marker.investmentAmount.toFixed(6)} BTC • In {marker.blocksUntil} blocks
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-sm font-semibold ${marker.yieldPercent >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
-                          {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%
-                        </div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60">
-                          {marker.payoutAmount >= 0 ? '+' : ''}{marker.payoutAmount.toFixed(6)} BTC
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-            No profitable contracts available for {selectedBlocks} blocks lock period.
-            <div className="text-xs mt-2">Try selecting a shorter period or check back later.</div>
-          </div>
-        )}
-
-        {/* Buy Button */}
-        {payoutMarkers.length > 0 && (
+          {/* Buy Button */}
           <button
             type="button"
             onClick={handleBuy}
             disabled={!canBuy}
-            className="mt-6 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(40,67,114,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(40,67,114,0.3)]"
+            className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
           >
             Buy ftrBTC
           </button>
-        )}
+        </div>
+
+        {/* Right Side: Auto-calculated Values */}
+        <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 space-y-6">
+          {payoutMarkers.length > 0 ? (
+            <>
+              {/* Total Yield Card */}
+              <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-gradient-to-br from-[color:var(--sf-glass-bg)] to-[color:var(--sf-glass-bg)]/50 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Yield</div>
+                    <div className={`text-3xl font-bold ${aggregatedYield >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
+                      {aggregatedYield >= 0 ? '+' : ''}{aggregatedYield.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Profit</div>
+                    <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
+                      {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} BTC
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-glass-border)]">
+                  <div>
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment (BTC)</div>
+                    <div className="text-lg font-semibold text-[color:var(--sf-text)]">
+                      {totalInvestment.toFixed(8)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout (BTC)</div>
+                    <div className="text-lg font-semibold text-[color:var(--sf-text)]">
+                      {totalPayout.toFixed(8)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Contracts</div>
+                    <div className="text-lg font-semibold text-[color:var(--sf-text)]">
+                      {payoutMarkers.length}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payout Timeline */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
+                    Payout Timeline
+                  </div>
+                  <div className="text-xs text-[color:var(--sf-text)]/60">
+                    {payoutMarkers.length} payout{payoutMarkers.length !== 1 ? 's' : ''}
+                    {payoutMarkers.length > 0 && (
+                      <span>
+                        {' '}• {payoutMarkers[0].blocksUntil} - {maxBlocksUntil} blocks
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Timeline Scale */}
+                <div className="relative py-8">
+                  {/* Background scale line */}
+                  <div className="h-2 bg-[color:var(--sf-glass-border)] rounded-full relative">
+                    {/* Current position indicator (Now) */}
+                    <div 
+                      className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-[color:var(--sf-primary)] border-2 border-[color:var(--sf-glass-bg)] z-30"
+                      style={{ left: '0%', marginLeft: '-8px' }}
+                    />
+
+                    {/* Payout markers */}
+                    {payoutMarkers.map((marker, index) => {
+                      // Fixed scale: 0 blocks = 0%, 95 blocks = 100%
+                      const TIMELINE_MAX_BLOCKS = 95;
+                      const position = (marker.blocksUntil / TIMELINE_MAX_BLOCKS) * 100;
+                      
+                      // Vertical offset for overlapping markers
+                      const samePositionMarkers = payoutMarkers.filter(m => m.blocksUntil === marker.blocksUntil);
+                      const samePositionIndex = samePositionMarkers.findIndex(m => m.contractId === marker.contractId);
+                      const verticalOffset = samePositionMarkers.length > 1 
+                        ? (samePositionIndex - (samePositionMarkers.length - 1) / 2) * 10 
+                        : 0;
+                      
+                      return (
+                        <div
+                          key={`${marker.contractId}-${index}`}
+                          className="absolute top-1/2 -translate-y-1/2 z-20 group"
+                          style={{ 
+                            left: `${Math.min(position, 100)}%`, 
+                            marginLeft: '-8px',
+                            transform: `translateY(${verticalOffset}px)`,
+                          }}
+                        >
+                          {/* Marker dot */}
+                          <div className="w-4 h-4 rounded-full bg-blue-400 border-2 border-[color:var(--sf-glass-bg)] shadow-lg cursor-pointer hover:scale-125 transition-transform">
+                            {/* Tooltip on hover */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                              <div className="bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] rounded-lg p-2 shadow-lg whitespace-nowrap text-xs">
+                                <div className="font-medium text-[color:var(--sf-text)]">{marker.contractId}</div>
+                                <div className="text-[color:var(--sf-text)]/70">Investment: {marker.investmentAmount.toFixed(6)} BTC</div>
+                                <div className="text-[color:var(--sf-text)]/70">Profit: {marker.payoutAmount >= 0 ? '+' : ''}{marker.payoutAmount.toFixed(6)} BTC</div>
+                                <div className="text-[color:var(--sf-text)]/70">Yield: {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Timeline axis labels - positioned at the ends */}
+                  <div className="absolute left-0 right-0 top-0 flex items-center justify-between text-xs">
+                    {/* Left: Now */}
+                    <div className="flex flex-col items-start">
+                      <div className="font-medium text-[color:var(--sf-text)]">Now</div>
+                      <div className="text-[color:var(--sf-text)]/50 text-[10px]">0 blocks</div>
+                    </div>
+                    
+                    {/* Right: Max (fixed at 95 blocks) */}
+                    <div className="flex flex-col items-end">
+                      <div className="font-medium text-blue-400">Payout</div>
+                      <div className="text-[color:var(--sf-text)]/50 text-[10px]">95 blocks</div>
+                    </div>
+                  </div>
+
+                  {/* Payout summary cards */}
+                  <div className="mt-6 space-y-2">
+                    {payoutMarkers.map((marker, index) => (
+                      <div
+                        key={`summary-${marker.contractId}-${index}`}
+                        className="rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)]/50 p-3 flex items-center justify-between hover:bg-white/5 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                          <div>
+                            <div className="text-sm font-medium text-[color:var(--sf-text)]">{marker.contractId}</div>
+                            <div className="text-xs text-[color:var(--sf-text)]/60">
+                              {marker.investmentAmount.toFixed(6)} BTC • In {marker.blocksUntil} blocks
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-sm font-semibold ${marker.yieldPercent >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
+                            {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%
+                          </div>
+                          <div className="text-xs text-[color:var(--sf-text)]/60">
+                            {marker.payoutAmount >= 0 ? '+' : ''}{marker.payoutAmount.toFixed(6)} BTC
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-center py-8 text-[color:var(--sf-text)]/60">
+              <div>
+                No profitable contracts available for {selectedBlocks} blocks lock period.
+                <div className="text-xs mt-2">Try selecting a shorter period or check back later.</div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

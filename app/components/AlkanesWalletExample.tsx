@@ -217,7 +217,7 @@ export function AlkanesWalletExample() {
           <p className="text-sm text-yellow-700 mb-2">
             This is the only time you'll see this. Write it down and store it safely.
           </p>
-          <code className="block p-2 bg-white border rounded text-sm">
+          <code className="block p-2 bg-[color:var(--sf-surface)] border rounded text-sm">
             {mnemonic}
           </code>
           <button

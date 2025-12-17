@@ -1,14 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm, executeWithBtcWrapUnwrap } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { useSignerShim } from '@/hooks/useSignerShim';
-import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { VAULT_OPCODES } from '@/constants';
-import {
-  assertAlkaneUtxosAreClean,
-} from '@/utils/amm';
 
 export type VaultWithdrawData = {
   vaultContractId: string; // e.g., "2:123" for vault contract
@@ -18,12 +12,46 @@ export type VaultWithdrawData = {
 };
 
 /**
+ * Build protostone string for vault withdrawal (Redeem) operation
+ * Format: [vault_block,vault_tx,opcode]:pointer:refund
+ * Note: No amount parameter needed, it's determined by incoming vault units
+ */
+function buildVaultWithdrawProtostone(params: {
+  vaultContractId: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { vaultContractId, pointer = 'v1', refund = 'v1' } = params;
+  const [vaultBlock, vaultTx] = vaultContractId.split(':');
+
+  // Build cellpack: [vault_block, vault_tx, opcode(Redeem=2)]
+  const cellpack = [
+    vaultBlock,
+    vaultTx,
+    VAULT_OPCODES.Redeem,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build input requirements string for vault withdrawal
+ * Format: "block:tx:amount" for the vault units being burned
+ */
+function buildVaultWithdrawInputRequirements(params: {
+  vaultUnitId: string;
+  amount: string;
+}): string {
+  const [block, tx] = params.vaultUnitId.split(':');
+  return `${block}:${tx}:${params.amount}`;
+}
+
+/**
  * Hook to handle vault withdrawal transactions
  * Uses opcode 2 (Redeem) to burn vault units and receive tokens back
  */
 export function useVaultWithdraw() {
-  const { getUtxos, account, isConnected } = useWallet();
-  const signerShim = useSignerShim();
+  const { account, isConnected } = useWallet();
   const provider = useSandshrewProvider();
 
   return useMutation({
@@ -31,49 +59,47 @@ export function useVaultWithdraw() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
-      const vaultId = parseAlkaneId(withdrawData.vaultContractId);
-      const vaultUnitId = parseAlkaneId(withdrawData.vaultUnitId);
+      // Build protostone for vault withdrawal
+      const protostone = buildVaultWithdrawProtostone({
+        vaultContractId: withdrawData.vaultContractId,
+      });
 
-      // Build calldata for vault withdrawal (Redeem opcode)
-      // Format: [vaultBlock, vaultTx, opcode(2)]
-      // Note: No amount parameter needed, it's determined by incoming vault units
-      const calldata: bigint[] = [];
-      calldata.push(
-        BigInt(vaultId.block),
-        BigInt(vaultId.tx),
-        BigInt(VAULT_OPCODES.Redeem), // opcode 2
+      // Build input requirements (the vault units being burned)
+      const inputRequirements = buildVaultWithdrawInputRequirements({
+        vaultUnitId: withdrawData.vaultUnitId,
+        amount: new BigNumber(withdrawData.amount).toFixed(0),
+      });
+
+      // Get recipient address (taproot for alkanes)
+      const recipientAddress = account?.taproot?.address || account?.nativeSegwit?.address;
+      if (!recipientAddress) throw new Error('No recipient address available');
+
+      const toAddresses = JSON.stringify([recipientAddress]);
+      // Use p2tr:0 for change address instead of the default p2wsh:0
+      // (p2wsh is not supported by single-sig wallets)
+      const options = JSON.stringify({
+        trace_enabled: false,
+        mine_enabled: false,
+        auto_confirm: true,
+        change_address: 'p2tr:0',
+      });
+
+      // Execute using alkanesExecuteWithStrings
+      const result = await provider.alkanesExecuteWithStrings(
+        toAddresses,
+        inputRequirements,
+        protostone,
+        withdrawData.feeRate,
+        undefined, // envelope_hex
+        options
       );
 
-      // Get UTXOs and prepare alkane inputs
-      const utxos = await getUtxos();
-
-      // Split alkane UTXOs for the vault unit token
-      const vaultUnits = [
-        {
-          alkaneId: vaultUnitId,
-          amount: new BigNumber(withdrawData.amount).toFixed(),
-        },
-      ];
-      const { selectedUtxos } = amm.factory.splitAlkaneUtxos(vaultUnits, utxos);
-      assertAlkaneUtxosAreClean(selectedUtxos);
-
-      // Execute transaction
-      const { executeResult } = await executeWithBtcWrapUnwrap({
-        utxos,
-        alkanesUtxos: selectedUtxos,
-        calldata,
-        feeRate: withdrawData.feeRate,
-        account,
-        provider,
-        signer: signerShim,
-        frbtcWrapAmount: undefined,
-        frbtcUnwrapAmount: undefined,
-        addDieselMint: false,
-      });
+      // Parse result
+      const txId = result?.txid || result?.reveal_txid;
 
       return {
         success: true,
-        transactionId: executeResult?.txId
+        transactionId: txId,
       } as {
         success: boolean;
         transactionId?: string;

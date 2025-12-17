@@ -6,11 +6,11 @@ A Bitcoin futures trading interface built with Next.js, integrating with the ALK
 
 ## Features
 
-- 🔮 **Futures Trading Interface** - View and trade ftrBTC futures on Bitcoin regtest
-- 💰 **Real-time Pricing** - Market price, exercise price, and premium calculations
-- 🔄 **Auto-refresh** - Live data updates every 10 seconds
-- ⛏️ **Future Generation** - Create new futures via `generatefuture` RPC
-- 📊 **Markets Table** - Expandable rows with position details
+-  **Futures Trading Interface** - View and trade ftrBTC futures on Bitcoin regtest
+-  **Real-time Pricing** - Market price, exercise price, and premium calculations
+-  **Auto-refresh** - Live data updates every 10 seconds
+-  **Future Generation** - Create new futures via `generatefuture` RPC
+-  **Markets Table** - Expandable rows with position details
 
 ## Getting Started
 

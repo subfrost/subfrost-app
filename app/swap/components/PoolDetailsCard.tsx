@@ -2,11 +2,19 @@ import type { PoolSummary } from "../types";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
 
-export default function PoolDetailsCard({ pool }: { pool?: PoolSummary }) {
+type VolumePeriod = '24h' | '30d';
+
+type Props = {
+  pool?: PoolSummary;
+  volumePeriod?: VolumePeriod;
+  onVolumePeriodChange?: (period: VolumePeriod) => void;
+};
+
+export default function PoolDetailsCard({ pool, volumePeriod = '24h', onVolumePeriodChange }: Props) {
   const { network } = useWallet();
   if (!pool) {
     return (
-      <div className="hidden md:block rounded-2xl border-2 border-dashed border-[color:var(--sf-glass-border)] bg-gradient-to-br from-white/40 to-white/20 p-8 text-center backdrop-blur-sm transition-all">
+      <div className="hidden md:block rounded-2xl border-2 border-dashed border-[color:var(--sf-glass-border)] bg-gradient-to-br from-[color:var(--sf-surface)]/40 to-[color:var(--sf-surface)]/20 p-8 text-center backdrop-blur-sm transition-all">
         <svg className="mx-auto mb-3 h-12 w-12 text-[color:var(--sf-text)]/30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -19,7 +27,7 @@ export default function PoolDetailsCard({ pool }: { pool?: PoolSummary }) {
   }
 
   return (
-    <div className="hidden md:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-gradient-to-br from-[color:var(--sf-glass-bg)] to-white/60 p-6 backdrop-blur-md shadow-[0_4px_20px_rgba(40,67,114,0.1)] transition-all animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="hidden md:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-gradient-to-br from-[color:var(--sf-glass-bg)] to-[color:var(--sf-surface)]/60 p-6 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">Total Value Locked</div>
@@ -35,11 +43,17 @@ export default function PoolDetailsCard({ pool }: { pool?: PoolSummary }) {
             <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
           </div>
         </div>
-        <div className="rounded-xl bg-white/60 px-4 py-3 backdrop-blur-sm">
-          <div className="mb-2 text-xs font-semibold text-[color:var(--sf-text)]/60">24h Volume</div>
-          <div className="text-lg font-bold text-[color:var(--sf-text)]">{formatUsd(pool.vol24hUsd)}</div>
-          <div className="mt-3 text-xs font-semibold text-[color:var(--sf-text)]/60">APR</div>
-          <div className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-sm font-bold text-green-700">
+        <div className="rounded-xl bg-[color:var(--sf-surface)]/60 px-4 py-3 backdrop-blur-sm">
+          <div className="mb-2">
+            <span className="text-xs font-semibold text-[color:var(--sf-text)]/60">
+              Volume ({volumePeriod === '24h' ? '24H' : '30D'})
+            </span>
+          </div>
+          <div className="text-lg font-bold text-[color:var(--sf-text)]">
+            {volumePeriod === '24h' ? formatUsd(pool.vol24hUsd) : formatUsd(pool.vol30dUsd)}
+          </div>
+          <div className="mt-3 text-xs font-semibold text-[color:var(--sf-text)]/60">APY</div>
+          <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
             {formatPercent(pool.apr)}
           </div>
         </div>

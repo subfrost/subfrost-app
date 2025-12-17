@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import NumberField from '@/app/components/NumberField';
+import { useTheme } from '@/context/ThemeContext';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)
@@ -43,6 +44,7 @@ export default function ContractDetailModal({
   const [amount, setAmount] = useState('1.00');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+  const { theme } = useTheme();
   
   // Calculate exercise values
   const exercisePremium = calculateExercisePremium(blocksLeft);
@@ -99,7 +101,7 @@ export default function ContractDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors"
           >
             <svg
               width="24"
@@ -117,7 +119,7 @@ export default function ContractDetailModal({
 
         <div className="p-6 space-y-6">
           {/* Chart Section */}
-          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-white p-6">
+          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
             <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-4">
               Unlock Value Over Time
             </h3>
@@ -140,7 +142,7 @@ export default function ContractDetailModal({
 
           {/* Buy / Sell Panel */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 rounded-xl border border-[color:var(--sf-glass-border)] bg-white p-6 space-y-4">
+            <div className="md:col-span-2 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6 space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">Exercise Price (poly):</span>
@@ -171,7 +173,7 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-white/50 p-4">
+              <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/50 p-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">Estimated cost:</span>
                   <span className="font-medium text-[color:var(--sf-text)]">
@@ -183,13 +185,17 @@ export default function ContractDetailModal({
               <div className="flex gap-4">
                 <button
                   type="button"
-                  className="flex-1 px-6 py-3 rounded-lg bg-[color:var(--sf-primary)] text-white font-bold tracking-[0.08em] uppercase shadow-[0_2px_8px_rgba(40,67,114,0.2)] hover:opacity-90 transition-opacity"
+                  className="flex-1 px-6 py-3 rounded-lg bg-[color:var(--sf-primary)] text-white font-bold tracking-[0.08em] uppercase shadow-[0_2px_8px_rgba(0,0,0,0.2)] hover:opacity-90 transition-opacity"
                 >
                   Buy ftrBTC
                 </button>
                 <button
                   type="button"
-                  className="flex-1 px-6 py-3 rounded-lg bg-white text-[color:var(--sf-primary)] font-bold tracking-[0.08em] uppercase border-2 border-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/5 transition-colors"
+                  className={`flex-1 px-6 py-3 rounded-lg font-bold tracking-[0.08em] uppercase transition-colors ${
+                    theme === 'dark'
+                      ? 'border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                      : 'border-2 border-[color:var(--sf-primary)] bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/5'
+                  }`}
                 >
                   Sell ftrBTC
                 </button>
@@ -197,7 +203,7 @@ export default function ContractDetailModal({
             </div>
 
             {/* Advanced Info */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-white p-6">
+            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}

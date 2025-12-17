@@ -8,14 +8,15 @@ import { useMemo } from "react";
 function FallingSnowflakes() {
   const snowflakes = useMemo(() => {
     const positions = [10, 22, 35, 48, 60, 72, 85, 95, 5, 65, 43, 28, 78, 50, 18, 88];
-    const delays = [0, 5.2, 3.5, 12.2, 1.2, 8.8, 10.5, 6.2, 16, 10, 15, 25, 26, 27, 1, 2];
     const durations = [15, 18, 12, 20, 14, 17, 13, 19, 14, 14, 12, 16, 13, 18, 17, 15];
     const sizes = [14, 19, 11, 16, 10, 18, 15, 12, 19, 12, 16, 13, 17, 11, 14, 16];
+    // Negative delays to start snowflakes at different positions in their animation cycle
+    const initialOffsets = [-2, -8, -5, -12, -1, -10, -7, -14, -3, -9, -6, -11, -4, -13, -0.5, -15];
     
     return Array.from({ length: 16 }, (_, i) => ({
       id: i,
       left: positions[i],
-      delay: delays[i],
+      delay: initialOffsets[i],
       duration: durations[i],
       size: sizes[i],
     }));
@@ -28,18 +29,19 @@ function FallingSnowflakes() {
           @keyframes snowfallVault {
             0% {
               transform: translateY(-30px) rotate(0deg);
-              opacity: 0;
-            }
-            10% {
-              opacity: 1;
-            }
-            90% {
               opacity: 1;
             }
             100% {
-              transform: translateY(calc(100vh)) rotate(360deg);
-              opacity: 0;
+              transform: translateY(800px) rotate(360deg);
+              opacity: 1;
             }
+          }
+          .snowflake-vault {
+            filter: brightness(0) invert(0.35) sepia(0.3) saturate(1) hue-rotate(180deg) drop-shadow(0 0 1px rgba(40,67,114,0.2));
+          }
+          [data-theme="dark"] .snowflake-vault,
+          .dark .snowflake-vault {
+            filter: brightness(0) invert(1) drop-shadow(0 0 1px rgba(255,255,255,0.3)) !important;
           }
         `
       }} />
@@ -50,13 +52,11 @@ function FallingSnowflakes() {
           alt=""
           width={flake.size}
           height={flake.size}
-          className="pointer-events-none absolute"
+          className="pointer-events-none absolute snowflake-vault"
           style={{
             left: `${flake.left}%`,
             top: '-10px',
-            opacity: 0,
             animation: `snowfallVault ${flake.duration}s linear ${flake.delay}s infinite`,
-            filter: 'brightness(0) invert(1) drop-shadow(0 0 3px rgba(255,255,255,0.9))',
           }}
         />
       ))}
@@ -97,7 +97,7 @@ export default function VaultHero({
   
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#A8C5E8] to-[#8BB4E0] p-6 text-[#1A2B3D] shadow-lg w-full h-full flex flex-col">
+    <div className="relative overflow-hidden rounded-2xl p-6 shadow-lg w-full h-full flex flex-col border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl text-[color:var(--sf-text)]">
       {/* Falling Snowflakes Animation */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <FallingSnowflakes />
@@ -115,11 +115,11 @@ export default function VaultHero({
       </div>
 
       {/* Vault Name */}
-      <h1 className="text-center text-3xl font-bold mb-2 text-white drop-shadow-lg relative z-10">{vaultSymbol}</h1>
-      
+      <h1 className="text-center text-3xl font-bold mb-2 text-[color:var(--sf-text)] drop-shadow-lg relative z-10">{vaultSymbol}</h1>
+
       {/* Contract Address */}
       <div className="flex justify-center mb-3 relative z-10">
-        <button className="text-xs text-white/80 hover:text-white font-mono transition-colors">
+        <button className="text-xs text-[color:var(--sf-text)]/80 hover:text-[color:var(--sf-text)] font-mono transition-colors">
           {contractAddress.slice(0, 6)}...{contractAddress.slice(-4)}
         </button>
       </div>
@@ -132,7 +132,7 @@ export default function VaultHero({
             
             // Determine badge styling based on content
             if (badge === 'Coming Soon') {
-              badgeClassName = "rounded-full bg-gray-400 text-gray-300 px-3 py-1 text-xs font-bold shadow-md border-2 border-gray-400";
+              badgeClassName = "rounded-full bg-[color:var(--sf-badge-coming-soon-bg)] text-[color:var(--sf-badge-coming-soon-text)] px-3 py-1 text-xs font-bold shadow-md border-2 border-[color:var(--sf-badge-coming-soon-border)]";
             } else if (badge === 'BTC' || badge === 'Bitcoin') {
               badgeClassName = "rounded-full bg-[#F7931A] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#F7931A]";
             } else if (badge === 'USD' || badge === 'bUSD') {
@@ -144,10 +144,12 @@ export default function VaultHero({
             } else if (badge === 'ZEC' || badge === 'Zcash') {
               badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
             } else if (badge === 'METHANE') {
-              badgeClassName = "rounded-full bg-white text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+              badgeClassName = "rounded-full bg-white dark:bg-white text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+            } else if (badge === 'ORDI') {
+              badgeClassName = "rounded-full bg-black text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-black";
             } else {
               // Default styling for other badges
-              badgeClassName = "rounded-full bg-white/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
+              badgeClassName = "rounded-full bg-[color:var(--sf-surface)]/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
             }
             
             return (
@@ -160,47 +162,49 @@ export default function VaultHero({
       )}
 
       {/* Stats - 2 Column Grid */}
-      <div className="space-y-4 relative z-10">
-        {/* Row 1: Total deposited and Your Balance */}
-        <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 relative z-10">
+        {/* Left Column: Est. APY, Hist. APY, Boosted APY */}
+        <div className="space-y-4">
           <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Total deposited {vaultSymbol}</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{tvl}</div>
-            <div className="text-xs text-white/90">${tvl}</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Est. APY</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{apy}%</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Your {vaultSymbol} Balance</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{userBalance}</div>
-            <div className="text-xs text-white/90">$0.00</div>
-          </div>
-        </div>
-        
-        {/* Row 2: Historical APY and Est. APY */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Hist. APY</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{historicalApy ? `${historicalApy}%` : '-'}</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Hist. APY</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{historicalApy ? `${historicalApy}%` : '-'}</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-white/80 mb-1 font-semibold">Est. APY</div>
-            <div className="text-2xl font-bold text-white drop-shadow-lg">{apy}%</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Boosted APY</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">-</div>
           </div>
         </div>
-        
-        {/* Row 3: Risk Level (centered, full width) */}
-        <div className="text-center pt-2">
-          <div className="text-xs text-white/80 mb-2 font-semibold">Risk Level</div>
-          <div className="flex gap-1 justify-center">
-            {[1, 2, 3, 4, 5].map((level) => (
-              <div 
-                key={level}
-                className={`w-2 h-5 rounded-sm ${
-                  level <= riskValue 
-                    ? riskLevel === 'low' ? 'bg-green-400' : riskLevel === 'medium' ? 'bg-yellow-400' : riskLevel === 'high' ? 'bg-orange-400' : 'bg-red-400'
-                    : 'bg-white/30'
-                }`}
-              />
-            ))}
+
+        {/* Right Column: Risk Level, Total Deposited, Your Balance */}
+        <div className="space-y-4">
+          <div className="text-center">
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Risk Level</div>
+            <div className="flex gap-1 justify-center">
+              {[1, 2, 3, 4, 5].map((level) => (
+                <div
+                  key={level}
+                  className={`w-2 h-5 rounded-sm shadow-md ${
+                    level <= riskValue
+                      ? riskLevel === 'low' ? 'bg-green-400' : riskLevel === 'medium' ? 'bg-yellow-400' : riskLevel === 'high' ? 'bg-orange-400' : 'bg-red-400'
+                      : 'bg-[color:var(--sf-surface)]/30'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Total Deposited</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{tvl}</div>
+            <div className="text-xs text-[color:var(--sf-text)]/70">${tvl}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Your Balance</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{userBalance}</div>
+            <div className="text-xs text-[color:var(--sf-text)]/70">$0.00</div>
           </div>
         </div>
       </div>

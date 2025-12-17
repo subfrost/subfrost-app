@@ -49,7 +49,7 @@ export default function YveDieselVault() {
         onExecute={handleExecute}
       />
 
-      <div className="rounded-xl border border-[color:var(--sf-outline)] bg-white/60 p-6 backdrop-blur-sm">
+      <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
         <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
           {['about', 'strategies', 'info', 'risk'].map((tab) => (
             <button
@@ -100,7 +100,7 @@ export default function YveDieselVault() {
                   Extracts 60% of trading fees from DIESEL/frBTC pool using k-value growth tracking
                 </div>
                 <div className="text-xs text-[color:var(--sf-text)]/70">
-                  Formula: <code className="bg-white px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                  Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
                 </div>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">

@@ -46,17 +46,17 @@ export default function LPPositionSelectorModal({
       onClick={onClose}
     >
       <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(40,67,114,0.4)] backdrop-blur-xl"
+        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-[color:var(--sf-glass-border)] bg-white/40 px-6 py-5">
+        <div className="flex items-center justify-between border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 px-6 py-5">
           <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
             Select LP Position
           </h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-white/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-white hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 sf-focus-ring"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 focus:outline-none"
             aria-label="Close"
           >
             <X size={18} />
@@ -64,7 +64,7 @@ export default function LPPositionSelectorModal({
         </div>
 
         {/* Search */}
-        <div className="border-b border-[color:var(--sf-glass-border)] bg-white/20 px-6 py-4">
+        <div className="border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/20 px-6 py-4">
           <div className="relative">
             <Search
               size={18}
@@ -75,7 +75,7 @@ export default function LPPositionSelectorModal({
               placeholder="Search positions..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-white/90 py-3 pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:border-[color:var(--sf-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 transition-all"
+              className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 py-3 pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:border-[color:var(--sf-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 transition-all"
             />
           </div>
         </div>
@@ -97,10 +97,10 @@ export default function LPPositionSelectorModal({
                   <button
                     key={position.id}
                     onClick={() => handleSelect(position)}
-                    className={`group w-full rounded-xl border-2 p-4 text-left transition-all hover:shadow-md sf-focus-ring ${
+                    className={`group w-full rounded-xl border-2 p-4 text-left transition-all hover:shadow-md focus:outline-none ${
                       isSelected
                         ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
-                        : 'border-transparent bg-white/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-white/60'
+                        : 'border-transparent bg-[color:var(--sf-surface)]/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-[color:var(--sf-surface)]/60'
                     }`}
                   >
                     <div className="flex items-center gap-3">

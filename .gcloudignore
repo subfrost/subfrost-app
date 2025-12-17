@@ -1,0 +1,55 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+# using gcloud. It follows the same syntax as .gitignore, with the addition of
+# "#!include" directives.
+
+# Include .gitignore rules
+#!include:.gitignore
+
+# Exclude node_modules (will be installed during build)
+node_modules/
+
+# Exclude local development files
+.env
+.env.local
+.env.*.local
+
+# Exclude IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Exclude test files
+coverage/
+.nyc_output/
+__tests__/
+e2e/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Exclude build output (except ts-sdk which is pre-built)
+.next/
+out/
+
+# Exclude reference docs (large)
+references/
+reference/
+.external-build/
+
+# IMPORTANT: Do NOT exclude ts-sdk/dist and ts-sdk/build
+# These contain the pre-built SDK files needed for the application
+!ts-sdk/dist/
+!ts-sdk/build/
+
+# Exclude documentation
+*.md
+!ts-sdk/README.md
+
+# Exclude miscellaneous
+.claude/
+.btc-alias
+.vercel
+vercel.json
+*.log

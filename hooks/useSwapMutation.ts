@@ -1,16 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm, executeWithBtcWrapUnwrap } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { useSignerShim } from '@/hooks/useSignerShim';
 import { getConfig } from '@/utils/getConfig';
-import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { FACTORY_OPCODES } from '@/constants';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
-  assertAlkaneUtxosAreClean,
   calculateMaximumFromSlippage,
   calculateMinimumFromSlippage,
   getFutureBlockHeight,
@@ -29,11 +25,67 @@ export type SwapTransactionBaseData = {
   isDieselMint?: boolean;
 };
 
+/**
+ * Build protostone string for AMM swap operations
+ * Format: [factory_block,factory_tx,opcode,path_len,...path_tokens,amount,limit,deadline]:pointer:refund
+ */
+function buildSwapProtostone(params: {
+  factoryId: string;
+  opcode: string;
+  tokenPath: string[];
+  amount: string;
+  limit: string;
+  deadline: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { factoryId, opcode, tokenPath, amount, limit, deadline, pointer = 'v1', refund = 'v1' } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+
+  // Build cellpack: [factory_block, factory_tx, opcode, path_len, ...path_tokens, amount, limit, deadline]
+  const pathTokens = tokenPath.flatMap(token => token.split(':'));
+  const cellpack = [
+    factoryBlock,
+    factoryTx,
+    opcode,
+    tokenPath.length.toString(),
+    ...pathTokens,
+    amount,
+    limit,
+    deadline,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build input requirements string for alkanes execute
+ * Format: "B:amount" for bitcoin, "block:tx:amount" for alkanes
+ */
+function buildInputRequirements(params: {
+  bitcoinAmount?: string;
+  alkaneInputs?: Array<{ alkaneId: string; amount: string }>;
+}): string {
+  const parts: string[] = [];
+
+  if (params.bitcoinAmount && params.bitcoinAmount !== '0') {
+    parts.push(`B:${params.bitcoinAmount}`);
+  }
+
+  if (params.alkaneInputs) {
+    for (const input of params.alkaneInputs) {
+      const [block, tx] = input.alkaneId.split(':');
+      parts.push(`${block}:${tx}:${input.amount}`);
+    }
+  }
+
+  return parts.join(',');
+}
+
 export function useSwapMutation() {
-  const { getUtxos, account, network, isConnected } = useWallet();
-  const signerShim = useSignerShim();
+  const { account, network, isConnected } = useWallet();
   const provider = useSandshrewProvider();
-  const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID, FRBTC_ALKANE_ID } = getConfig(network);
+  const { ALKANE_FACTORY_ID, FRBTC_ALKANE_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -42,10 +94,12 @@ export function useSwapMutation() {
   return useMutation({
     mutationFn: async (swapData: SwapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      if (!provider) throw new Error('Provider not available');
 
       const sellCurrency = swapData.sellCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.sellCurrency;
       const buyCurrency = swapData.buyCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.buyCurrency;
 
+      // Adjust amounts for wrap fee when selling BTC
       const ammSellAmount =
         swapData.sellCurrency === 'btc'
           ? BigNumber(swapData.sellAmount)
@@ -63,81 +117,80 @@ export function useSwapMutation() {
               .toString()
           : swapData.buyAmount;
 
-      const factoryId = parseAlkaneId(ALKANE_FACTORY_ID);
-
+      // Build token path
       let tokenPath = swapData.tokenPath || [sellCurrency, buyCurrency];
       tokenPath = tokenPath.map((t) => (t === 'btc' ? FRBTC_ALKANE_ID : t));
-      const tokenList = tokenPath.map((t) => parseAlkaneId(t));
 
+      // Calculate slippage limits
       const minAmountOut = calculateMinimumFromSlippage({ amount: ammBuyAmount, maxSlippage: swapData.maxSlippage });
       const maxAmountIn = calculateMaximumFromSlippage({ amount: ammSellAmount, maxSlippage: swapData.maxSlippage });
 
-      const calldata: bigint[] = [];
-      calldata.push(
-        BigInt(factoryId.block),
-        BigInt(factoryId.tx),
-        BigInt(
-          swapData.direction === 'sell'
-            ? FACTORY_OPCODES.SwapExactTokensForTokens
-            : FACTORY_OPCODES.SwapTokensForExactTokens,
-        ),
-        BigInt(tokenList.length),
-      );
-      tokenList.forEach((token) => {
-        calldata.push(BigInt(token.block));
-        calldata.push(BigInt(token.tx));
-      });
-      calldata.push(
-        BigInt(
-          swapData.direction === 'sell'
-            ? new BigNumber(ammSellAmount).toFixed()
-            : new BigNumber(ammBuyAmount).toFixed(),
-        ),
-      );
-      calldata.push(
-        BigInt(
-          swapData.direction === 'sell'
-            ? new BigNumber(minAmountOut).toFixed()
-            : new BigNumber(maxAmountIn).toFixed(),
-        ),
-      );
+      // Get deadline block height
       const deadlineBlocks = swapData.deadlineBlocks || 3;
-      if (!provider) {
-        throw new Error('Provider not available');
-      }
-      calldata.push(BigInt(await getFutureBlockHeight(deadlineBlocks, provider)));
+      const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
 
-      const utxos = await getUtxos();
-      let alkanesUtxos = undefined as any;
-      if (swapData.sellCurrency !== 'btc') {
-        const swapToken = [
-          {
-            alkaneId: parseAlkaneId(sellCurrency),
-            amount: new BigNumber(swapData.sellAmount).toFixed(),
-          },
-        ];
-        const { selectedUtxos } = amm.factory.splitAlkaneUtxos(swapToken, utxos);
-        alkanesUtxos = selectedUtxos;
-        assertAlkaneUtxosAreClean(alkanesUtxos);
-      }
+      // Determine opcode based on direction
+      const opcode = swapData.direction === 'sell'
+        ? FACTORY_OPCODES.SwapExactTokensForTokens
+        : FACTORY_OPCODES.SwapTokensForExactTokens;
 
-      const frbtcWrapAmount = swapData.sellCurrency === 'btc' ? Number(swapData.sellAmount) : undefined;
-      const frbtcUnwrapAmount = swapData.buyCurrency === 'btc' ? Number(ammBuyAmount) : undefined;
-
-      const { executeResult, frbtcUnwrapResult } = await executeWithBtcWrapUnwrap({
-        utxos,
-        alkanesUtxos,
-        calldata,
-        feeRate: swapData.feeRate,
-        account,
-        provider,
-        signer: signerShim,
-        frbtcWrapAmount,
-        frbtcUnwrapAmount,
-        addDieselMint: swapData.isDieselMint,
+      // Build protostone for the swap
+      const protostone = buildSwapProtostone({
+        factoryId: ALKANE_FACTORY_ID,
+        opcode: opcode.toString(),
+        tokenPath,
+        amount: swapData.direction === 'sell'
+          ? new BigNumber(ammSellAmount).toFixed(0)
+          : new BigNumber(ammBuyAmount).toFixed(0),
+        limit: swapData.direction === 'sell'
+          ? new BigNumber(minAmountOut).toFixed(0)
+          : new BigNumber(maxAmountIn).toFixed(0),
+        deadline: deadline.toString(),
       });
 
-      return { success: true, transactionId: executeResult?.txId, frbtcUnwrapTxId: frbtcUnwrapResult?.txId } as {
+      // Build input requirements
+      const isBtcSell = swapData.sellCurrency === 'btc';
+      const inputRequirements = buildInputRequirements({
+        bitcoinAmount: isBtcSell ? new BigNumber(swapData.sellAmount).toFixed(0) : undefined,
+        alkaneInputs: !isBtcSell ? [{
+          alkaneId: sellCurrency,
+          amount: new BigNumber(swapData.sellAmount).toFixed(0),
+        }] : undefined,
+      });
+
+      // Get recipient address (taproot for alkanes)
+      const recipientAddress = account?.taproot?.address || account?.nativeSegwit?.address;
+      if (!recipientAddress) throw new Error('No recipient address available');
+
+      const toAddresses = JSON.stringify([recipientAddress]);
+
+      // Use p2tr:0 for change address instead of the default p2wsh:0
+      // (p2wsh is not supported by single-sig wallets)
+      const options = JSON.stringify({
+        trace_enabled: false,
+        mine_enabled: false,
+        auto_confirm: true,
+        change_address: 'p2tr:0',
+      });
+
+      // Execute using alkanesExecuteWithStrings
+      const result = await provider.alkanesExecuteWithStrings(
+        toAddresses,
+        inputRequirements,
+        protostone,
+        swapData.feeRate,
+        undefined, // envelope_hex
+        options
+      );
+
+      // Parse result
+      const txId = result?.txid || result?.reveal_txid;
+
+      return {
+        success: true,
+        transactionId: txId,
+        frbtcUnwrapTxId: undefined, // TODO: Handle unwrap in separate transaction if needed
+      } as {
         success: boolean;
         transactionId?: string;
         frbtcUnwrapTxId?: string;

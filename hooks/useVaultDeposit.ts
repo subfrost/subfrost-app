@@ -1,15 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
-import { amm, executeWithBtcWrapUnwrap } from '@/ts-sdk';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { useSignerShim } from '@/hooks/useSignerShim';
-import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import { VAULT_OPCODES } from '@/constants';
-import {
-  assertAlkaneUtxosAreClean,
-  getFutureBlockHeight,
-} from '@/utils/amm';
 
 export type VaultDepositData = {
   vaultContractId: string; // e.g., "2:123" for vault contract
@@ -19,12 +12,47 @@ export type VaultDepositData = {
 };
 
 /**
+ * Build protostone string for vault deposit (Purchase) operation
+ * Format: [vault_block,vault_tx,opcode,amount]:pointer:refund
+ */
+function buildVaultDepositProtostone(params: {
+  vaultContractId: string;
+  amount: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { vaultContractId, amount, pointer = 'v1', refund = 'v1' } = params;
+  const [vaultBlock, vaultTx] = vaultContractId.split(':');
+
+  // Build cellpack: [vault_block, vault_tx, opcode(Purchase=1), amount]
+  const cellpack = [
+    vaultBlock,
+    vaultTx,
+    VAULT_OPCODES.Purchase,
+    amount,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build input requirements string for vault deposit
+ * Format: "block:tx:amount" for the token being deposited
+ */
+function buildVaultDepositInputRequirements(params: {
+  tokenId: string;
+  amount: string;
+}): string {
+  const [block, tx] = params.tokenId.split(':');
+  return `${block}:${tx}:${params.amount}`;
+}
+
+/**
  * Hook to handle vault deposit transactions
  * Uses opcode 1 (Purchase) to deposit tokens and receive vault units
  */
 export function useVaultDeposit() {
-  const { getUtxos, account, isConnected } = useWallet();
-  const signerShim = useSignerShim();
+  const { account, isConnected } = useWallet();
   const provider = useSandshrewProvider();
 
   return useMutation({
@@ -32,49 +60,48 @@ export function useVaultDeposit() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
-      const vaultId = parseAlkaneId(depositData.vaultContractId);
-      const tokenId = parseAlkaneId(depositData.tokenId);
+      // Build protostone for vault deposit
+      const protostone = buildVaultDepositProtostone({
+        vaultContractId: depositData.vaultContractId,
+        amount: new BigNumber(depositData.amount).toFixed(0),
+      });
 
-      // Build calldata for vault deposit (Purchase opcode)
-      // Format: [vaultBlock, vaultTx, opcode(1), amount]
-      const calldata: bigint[] = [];
-      calldata.push(
-        BigInt(vaultId.block),
-        BigInt(vaultId.tx),
-        BigInt(VAULT_OPCODES.Purchase), // opcode 1
-        BigInt(new BigNumber(depositData.amount).toFixed()),
+      // Build input requirements (the token being deposited)
+      const inputRequirements = buildVaultDepositInputRequirements({
+        tokenId: depositData.tokenId,
+        amount: new BigNumber(depositData.amount).toFixed(0),
+      });
+
+      // Get recipient address (taproot for alkanes)
+      const recipientAddress = account?.taproot?.address || account?.nativeSegwit?.address;
+      if (!recipientAddress) throw new Error('No recipient address available');
+
+      const toAddresses = JSON.stringify([recipientAddress]);
+      // Use p2tr:0 for change address instead of the default p2wsh:0
+      // (p2wsh is not supported by single-sig wallets)
+      const options = JSON.stringify({
+        trace_enabled: false,
+        mine_enabled: false,
+        auto_confirm: true,
+        change_address: 'p2tr:0',
+      });
+
+      // Execute using alkanesExecuteWithStrings
+      const result = await provider.alkanesExecuteWithStrings(
+        toAddresses,
+        inputRequirements,
+        protostone,
+        depositData.feeRate,
+        undefined, // envelope_hex
+        options
       );
 
-      // Get UTXOs and prepare alkane inputs
-      const utxos = await getUtxos();
-
-      // Split alkane UTXOs for the deposit token
-      const depositTokens = [
-        {
-          alkaneId: tokenId,
-          amount: new BigNumber(depositData.amount).toFixed(),
-        },
-      ];
-      const { selectedUtxos } = amm.factory.splitAlkaneUtxos(depositTokens, utxos);
-      assertAlkaneUtxosAreClean(selectedUtxos);
-
-      // Execute transaction
-      const { executeResult } = await executeWithBtcWrapUnwrap({
-        utxos,
-        alkanesUtxos: selectedUtxos,
-        calldata,
-        feeRate: depositData.feeRate,
-        account,
-        provider,
-        signer: signerShim,
-        frbtcWrapAmount: undefined, // No BTC wrapping for vault deposits
-        frbtcUnwrapAmount: undefined,
-        addDieselMint: false,
-      });
+      // Parse result
+      const txId = result?.txid || result?.reveal_txid;
 
       return {
         success: true,
-        transactionId: executeResult?.txId
+        transactionId: txId,
       } as {
         success: boolean;
         transactionId?: string;

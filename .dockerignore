@@ -1,0 +1,70 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+out
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Development
+*.log
+*.pid
+.DS_Store
+
+# Reference files (large)
+references/
+reference/
+
+# External builds (source repo, not the built artifacts)
+.external-build
+# ts-sdk is needed - contains built SDK artifacts
+
+# GCP scripts (not needed in container)
+gcp/
+
+# Documentation (not needed in container)
+*.md
+!ts-sdk/README.md
+
+# Tests
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+coverage
+e2e/
+
+# Misc
+Dockerfile
+docker-compose.yaml
+cloudbuild.yaml
+.dockerignore
+.gcloudignore
+
+# Claude
+.claude/
+.btc-alias
+
+# Vercel
+.vercel
+vercel.json
+
+# Editor swap files
+*.swp
+*.swo

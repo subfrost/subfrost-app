@@ -1,10 +1,17 @@
-import type { Provider, Signer } from "@/ts-sdk";
+import type { Provider, Signer } from "../types";
 import {
   AssetType,
-  AddressTypeEnum as AddressType,
-  OylTransactionError,
+  AddressType,
   getAddressType,
-} from "@/ts-sdk";
+} from "../types";
+
+// TODO: Import this from proper source or define it
+class OylTransactionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OylTransactionError';
+  }
+}
 import { signBip322Message } from "./BIP322";
 import {
   GetListingPsbtRequest,
@@ -84,7 +91,7 @@ export async function processUnisatOffer({
   utxos,
   signer,
 }: ProcessOfferOptions): Promise<ProcessOfferResponse> {
-  let dummyTxId: string | null = null;
+  const dummyTxId: string | null = null;
   let purchaseTxId: string | null = null;
   const unsignedBid: UnsignedUnisatBid = {
     address,
@@ -230,6 +237,9 @@ export async function getMessageSignature({
   const message = `Please confirm that\nPayment Address: ${address}\nOrdinals Address: ${receiveAddress}`;
   if (getAddressType(receiveAddress) == AddressType.P2WPKH) {
     const keyPair = signer.segwitKeyPair;
+    if (!keyPair) {
+      throw new Error('Segwit key pair is missing');
+    }
     const privateKey = keyPair.privateKey;
     if (!privateKey) {
       throw new Error('Private key is missing');
@@ -243,6 +253,9 @@ export async function getMessageSignature({
     return signature;
   } else if (getAddressType(receiveAddress) == AddressType.P2TR) {
     const keyPair = signer.taprootKeyPair;
+    if (!keyPair) {
+      throw new Error('Taproot key pair is missing');
+    }
     const privateKey = keyPair.privateKey;
     if (!privateKey) {
       throw new Error('Private key is missing');

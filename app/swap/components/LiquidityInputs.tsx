@@ -114,14 +114,14 @@ export default function LiquidityInputs({
         {liquidityMode === 'remove' ? (
         /* Remove Mode: LP Position Selector */
         <>
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select LP Position to Remove
             </span>
             <button
               type="button"
               onClick={onOpenLPSelector}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
             >
               <span className="font-bold text-sm text-[color:var(--sf-text)]">
                 {selectedLPPosition ? `${selectedLPPosition.amount} ${selectedLPPosition.token0Symbol}/${selectedLPPosition.token1Symbol} LP` : 'Select Position'}
@@ -133,67 +133,97 @@ export default function LiquidityInputs({
           {/* Remove Amount Input */}
           {selectedLPPosition && (
             <>
-              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
-                  <button
-                    type="button"
-                    onClick={() => onChangeRemoveAmount?.(selectedLPPosition.amount)}
-                    className="text-xs font-bold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors"
-                  >
-                    MAX
-                  </button>
-                </div>
+              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
+                <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
                 <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-                  <NumberField 
-                    placeholder="0.00" 
-                    align="left" 
-                    value={removeAmount} 
-                    onChange={onChangeRemoveAmount || (() => {})} 
-                  />
-                  <div className="mt-1 flex items-center justify-between text-xs">
-                    <span className="font-medium text-[color:var(--sf-text)]/60">
-                      Available: {selectedLPPosition.amount}
-                    </span>
-                    {removeAmount && parseFloat(removeAmount) > 0 && (
-                      <span className="font-semibold text-[color:var(--sf-text)]/80">
-                        {((parseFloat(removeAmount) / parseFloat(selectedLPPosition.amount)) * 100).toFixed(1)}%
+                  <div className="flex flex-col gap-2">
+                    {/* Row 1: Input */}
+                    <NumberField 
+                      placeholder="0.00" 
+                      align="left" 
+                      value={removeAmount} 
+                      onChange={onChangeRemoveAmount || (() => {})} 
+                    />
+                    
+                    {/* Row 2: USD Value + Balance */}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-[color:var(--sf-text)]/50">
+                        ${selectedLPPosition.valueUSD}
                       </span>
-                    )}
+                      <span className="font-medium text-[color:var(--sf-text)]/60">
+                        Balance: {selectedLPPosition.amount}
+                      </span>
+                    </div>
+                    
+                    {/* Row 3: Percentage Buttons */}
+                    <div className="flex items-center justify-end gap-1.5">
+                      {[
+                        { label: '25%', value: 0.25 },
+                        { label: '50%', value: 0.5 },
+                        { label: '75%', value: 0.75 },
+                        { label: 'Max', value: 1 },
+                      ].map(({ label, value }) => {
+                        const targetAmount = (parseFloat(selectedLPPosition.amount) * value).toString();
+                        const isActive = removeAmount && Math.abs(parseFloat(removeAmount) - parseFloat(targetAmount)) < 0.0001;
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => onChangeRemoveAmount?.(targetAmount)}
+                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${isActive ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* LP Details */}
-              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md">
-                <span className="mb-4 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">LP Details</span>
-                
-                <div className="space-y-3">
-                  {/* Value */}
-                  <div>
-                    <div className="text-sm font-semibold text-[color:var(--sf-text)]/60 mb-2">Value</div>
-                    <div className="text-sm font-bold text-[color:var(--sf-text)]">
+              {/* LP Details - Swap Summary Style */}
+              <div className="relative z-20 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 text-sm backdrop-blur-sm transition-all">
+                {/* Header row - LP Details title + Settings button */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Details</span>
+                  <SettingsButton />
+                </div>
+
+                <div className="flex flex-col gap-2.5">
+                  {/* VALUE row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-primary)]">
+                      Value
+                    </span>
+                    <span className="font-semibold text-[color:var(--sf-primary)]">
                       ${selectedLPPosition.valueUSD}
-                    </div>
+                    </span>
                   </div>
 
-                  {/* Gain/Loss */}
-                  <div>
-                    <div className="text-sm font-semibold text-[color:var(--sf-text)]/60 mb-2">Gain/Loss</div>
-                    <div className="space-y-1.5">
-                      <div className={`flex items-center justify-between text-sm font-bold ${
-                        selectedLPPosition.gainLoss.token0.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        <span>{selectedLPPosition.gainLoss.token0.symbol}</span>
-                        <span>{selectedLPPosition.gainLoss.token0.amount}</span>
-                      </div>
-                      <div className={`flex items-center justify-between text-sm font-bold ${
-                        selectedLPPosition.gainLoss.token1.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        <span>{selectedLPPosition.gainLoss.token1.symbol}</span>
-                        <span>{selectedLPPosition.gainLoss.token1.amount}</span>
-                      </div>
-                    </div>
+                  {/* GAIN/LOSS row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Gain/Loss
+                    </span>
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      <span className={selectedLPPosition.gainLoss.token0.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'}>
+                        {selectedLPPosition.gainLoss.token0.amount} {selectedLPPosition.gainLoss.token0.symbol}
+                      </span>
+                      {' / '}
+                      <span className={selectedLPPosition.gainLoss.token1.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'}>
+                        {selectedLPPosition.gainLoss.token1.amount} {selectedLPPosition.gainLoss.token1.symbol}
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Miner Fee Rate - bottom row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Miner Fee Rate
+                    </span>
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      {feeRate} sats/vB
+                    </span>
                   </div>
                 </div>
               </div>
@@ -204,60 +234,65 @@ export default function LiquidityInputs({
         /* Provide Mode: Token Pair Selection */
         <>
           {/* Select Pair Panel */}
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select Pair to Provide
             </span>
             
             {/* Side-by-side token selectors */}
-            <div className="flex items-center gap-3">
-          {/* Token 0 selector */}
-          <button
-            type="button"
-            onClick={() => openTokenSelector('pool0')}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
-          >
-            {token0 && (
-              <TokenIcon 
-                key={`pool0-${token0.id}-${token0.symbol}`} 
-                symbol={token0.symbol} 
-                id={token0.id} 
-                iconUrl={token0.iconUrl} 
-                size="sm" 
-                network={network} 
-              />
-            )}
-            <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {token0?.symbol ?? 'Select Token'}
-            </span>
-            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-          </button>
+            <div className="flex flex-row md:flex-col lg:flex-row items-center md:items-start lg:items-center gap-3">
+              {/* Token 0 selector + divider row */}
+              <div className="contents md:flex md:items-center md:gap-3 lg:contents">
+                <button
+                  type="button"
+                  onClick={() => openTokenSelector('pool0')}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+                >
+                  {token0 && (
+                    <TokenIcon 
+                      key={`pool0-${token0.id}-${token0.symbol}`} 
+                      symbol={token0.symbol} 
+                      id={token0.id} 
+                      iconUrl={token0.iconUrl} 
+                      size="sm" 
+                      network={network} 
+                    />
+                  )}
+                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                    {token0?.symbol ?? 'Select Token'}
+                  </span>
+                  <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+                </button>
 
-          {/* Divider */}
-          <span className="text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
+                {/* Divider - visible only on medium screens (with token0) */}
+                <span className="hidden md:block lg:hidden text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
+              </div>
 
-          {/* Token 1 selector */}
-          <button
-            type="button"
-            onClick={() => openTokenSelector('pool1')}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-white hover:shadow-md sf-focus-ring"
-          >
-            {token1 && (
-              <TokenIcon 
-                key={`pool1-${token1.id}-${token1.symbol}`} 
-                symbol={token1.symbol} 
-                id={token1.id} 
-                iconUrl={token1.iconUrl} 
-                size="sm" 
-                network={network} 
-              />
-            )}
-            <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {token1?.symbol ?? 'BTC'}
-            </span>
-            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-          </button>
-        </div>
+              {/* Divider - visible on small and large screens (between selectors) */}
+              <span className="md:hidden lg:block text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
+
+              {/* Token 1 selector */}
+              <button
+                type="button"
+                onClick={() => openTokenSelector('pool1')}
+                className="flex-1 md:flex-none lg:flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+              >
+                {token1 && (
+                  <TokenIcon 
+                    key={`pool1-${token1.id}-${token1.symbol}`} 
+                    symbol={token1.symbol} 
+                    id={token1.id} 
+                    iconUrl={token1.iconUrl} 
+                    size="sm" 
+                    network={network} 
+                  />
+                )}
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {token1?.symbol ?? 'BTC'}
+                </span>
+                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
+              </button>
+            </div>
       </div>
 
           {/* Token Amount Inputs - Side by Side */}
@@ -265,7 +300,7 @@ export default function LiquidityInputs({
             <>
               <div className="relative z-20 grid grid-cols-2 gap-3">
             {/* Token 0 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
                 <TokenIcon 
                   symbol={token0.symbol} 
@@ -283,7 +318,7 @@ export default function LiquidityInputs({
             </div>
 
             {/* Token 1 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(40,67,114,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(40,67,114,0.12)]">
+            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
                 <TokenIcon 
                   symbol={token1.symbol} 
@@ -302,7 +337,7 @@ export default function LiquidityInputs({
           </div>
 
           {/* Fee Component */}
-          <div className="relative z-10 rounded-xl border border-[color:var(--sf-glass-border)] bg-white/40 p-4 backdrop-blur-sm">
+          <div className="relative z-10 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 p-4 backdrop-blur-sm">
             {/* Minimum Received with Settings Button */}
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
@@ -329,7 +364,7 @@ export default function LiquidityInputs({
                       value={customFee}
                       onChange={(e) => setCustomFee(e.target.value)}
                       placeholder="0"
-                      className="h-9 w-full rounded-lg border-2 border-[color:var(--sf-outline)] bg-white px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                      className="h-9 w-full rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">Sats / vByte</span>
                   </div>
@@ -368,7 +403,7 @@ export default function LiquidityInputs({
           type="button"
           onClick={onCtaClick}
           disabled={!canAddLiquidity && isConnected}
-          className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(40,67,114,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(40,67,114,0.4)] hover:scale-[1.02] active:scale-[0.98] sf-focus-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(40,67,114,0.3)]"
+          className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
         >
           {ctaText}
         </button>
@@ -383,7 +418,7 @@ function SettingsButton() {
     <button
       type="button"
       onClick={() => openTxSettings()}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -438,14 +473,14 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-white hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm sf-focus-ring"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg border-2 border-[color:var(--sf-glass-border)] bg-white shadow-[0_8px_32px_rgba(40,67,114,0.2)] backdrop-blur-xl">
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
           {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
             <button
               key={option}

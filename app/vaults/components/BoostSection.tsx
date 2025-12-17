@@ -25,7 +25,7 @@ export default function BoostSection({ vault }: Props) {
 
   if (!vault.hasBoost) {
     return (
-      <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-white/40 backdrop-blur-sm p-6">
+      <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6">
         <div className="flex items-center gap-3 text-[color:var(--sf-text)]/60">
           <AlertCircle size={20} />
           <p className="text-sm font-medium">
@@ -41,7 +41,10 @@ export default function BoostSection({ vault }: Props) {
       {/* Boost Header - Spans both columns on md+ */}
       <div className="flex items-center justify-between md:col-span-2 md:row-start-1">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
+          <div 
+            className="flex h-10 w-10 items-center justify-center rounded-full"
+            style={{ background: `linear-gradient(to bottom right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
+          >
             <TrendingUp size={20} className="text-white" />
           </div>
           <div>
@@ -55,18 +58,21 @@ export default function BoostSection({ vault }: Props) {
         </div>
 
         {/* Boost Multiplier Badge */}
-        <div className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-1.5">
+        <div 
+          className="rounded-full px-4 py-1.5"
+          style={{ background: `linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
+        >
           <span className="text-sm font-bold text-white">{boostMultiplier}</span>
         </div>
       </div>
 
       {isComingSoon && (
-        <div className="rounded-xl border-2 border-amber-500/30 bg-amber-50 p-4 md:col-span-2 md:row-start-2">
-          <div className="flex items-center gap-2 text-amber-800">
+        <div className="rounded-xl border-2 border-amber-500/30 bg-[color:var(--sf-coming-soon-bg)] p-4 md:col-span-2 md:row-start-2">
+          <div className="flex items-center gap-2 text-[color:var(--sf-coming-soon-title)]">
             <Lock size={18} />
             <span className="text-sm font-semibold">Coming Soon</span>
           </div>
-          <p className="mt-1 text-xs text-amber-700">
+          <p className="mt-1 text-xs text-[color:var(--sf-coming-soon-text)]">
             FROST token features are not yet available. Stay tuned for the TGE announcement!
           </p>
         </div>
@@ -74,7 +80,7 @@ export default function BoostSection({ vault }: Props) {
 
       {/* APY Comparison - Grid on mobile, split columns on md+ */}
       <div className="grid grid-cols-2 gap-4 md:contents">
-        <div className="rounded-xl border-2 border-[color:var(--sf-outline)] bg-white/60 p-4 md:col-start-1 md:row-start-3">
+        <div className={`rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 md:col-start-1 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
           <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
             Est. Base APY
           </p>
@@ -82,18 +88,21 @@ export default function BoostSection({ vault }: Props) {
             {baseApy}%
           </p>
         </div>
-        <div className="rounded-xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-50 to-pink-50 p-4 md:col-start-2 md:row-start-3">
-          <p className="text-xs font-medium text-purple-700 mb-1">
+        <div 
+          className={`rounded-xl border-2 border-purple-500/30 p-4 md:col-start-2 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}
+          style={{ background: `linear-gradient(to bottom right, var(--sf-boost-bg-from), var(--sf-boost-bg-to))` }}
+        >
+          <p className="text-xs font-medium text-[color:var(--sf-boost-label)] mb-1">
             Boosted APY
           </p>
-          <p className="text-2xl font-bold text-purple-600">
+          <p className="text-2xl font-bold text-[color:var(--sf-boost-value)]">
             {boostedApy}%
           </p>
         </div>
       </div>
 
       {/* Boost Stats - Will be in left column on md+ */}
-      <div className={`rounded-2xl border-2 border-[color:var(--sf-outline)] bg-white/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4 ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 ${isComingSoon ? 'md:row-start-4' : 'md:row-start-3'} ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
@@ -151,7 +160,7 @@ export default function BoostSection({ vault }: Props) {
               placeholder="0.00"
               value={stakeAmount}
               onChange={(e) => setStakeAmount(e.target.value)}
-              className="w-full rounded-xl border-2 border-[color:var(--sf-outline)] bg-white px-4 py-3 text-lg font-semibold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/30 focus:border-[color:var(--sf-primary)] focus:outline-none"
+              className="w-full rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-4 py-3 text-lg font-semibold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/30 focus:border-[color:var(--sf-primary)] focus:outline-none"
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
               <button
@@ -168,16 +177,18 @@ export default function BoostSection({ vault }: Props) {
 
           <button
             disabled={isComingSoon}
-            className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 font-bold text-white transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group relative w-full overflow-hidden rounded-xl px-6 py-3 font-bold text-white transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: `linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
           >
-            {activeTab === "stake" ? "Stake to Boost" : "Unstake"}
+            <span className="relative z-10">{activeTab === "stake" ? "Stake to Boost" : "Unstake"}</span>
+            <div className="absolute inset-0 animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-purple-300/40 to-transparent group-disabled:animate-none" />
           </button>
         </div>
       </div>
 
       {/* Positions List (if has multiple positions) - Will be in left column on md+ */}
       {vault.hasBoost && !isComingSoon && (
-        <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-white/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-5">
+        <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-bold text-[color:var(--sf-text)]">
               Your Boosted Positions
@@ -189,7 +200,7 @@ export default function BoostSection({ vault }: Props) {
 
           {/* Mock positions */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-lg bg-white/60 p-3">
+            <div className="flex items-center justify-between rounded-lg bg-[color:var(--sf-surface)]/60 p-3">
               <div>
                 <p className="text-xs text-[color:var(--sf-text)]/60">Position #1</p>
                 <p className="text-sm font-bold text-[color:var(--sf-text)]">250.50 {vault.outputAsset}</p>
@@ -199,7 +210,7 @@ export default function BoostSection({ vault }: Props) {
                 <p className="text-sm font-bold text-purple-600">200 {vault.boostTokenSymbol}</p>
               </div>
             </div>
-            <div className="flex items-center justify-between rounded-lg bg-white/60 p-3">
+            <div className="flex items-center justify-between rounded-lg bg-[color:var(--sf-surface)]/60 p-3">
               <div>
                 <p className="text-xs text-[color:var(--sf-text)]/60">Position #2</p>
                 <p className="text-sm font-bold text-[color:var(--sf-text)]">1,000.00 {vault.outputAsset}</p>

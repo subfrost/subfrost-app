@@ -1,25 +1,25 @@
 /**
  * Alkanes-RS Wallet Integration
  *
- * ✅ NOW USING REAL ALKANES-RS SDK! (Source fixed)
- *
- * Integrates alkanes-rs ts-sdk as a keystore backend for @oyl/sdk
  * Provides encrypted keystore management, PSBT signing, and regtest support
+ * using the @alkanes/ts-sdk package.
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
 
-// Define Network type locally to avoid import issues with ts-sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
+// Import Network type from constants
+import type { Network } from '@/utils/constants';
 
-// ✅ REAL ALKANES-RS SDK - Source code fixed for proper exports
+// ✅ REAL ALKANES-RS SDK - Import from @alkanes/ts-sdk package
 import {
   KeystoreManager,
   createKeystore,
   unlockKeystore,
   createWallet,
-  type Keystore as AlkanesKeystore,
-  type WalletConfig as AlkanesWalletConfig,
+} from '@alkanes/ts-sdk';
+import type {
+  Keystore as AlkanesKeystore,
+  WalletConfig as AlkanesWalletConfig,
 } from '@alkanes/ts-sdk';
 
 // Re-export types from SDK (use different names to avoid conflicts)
@@ -147,8 +147,8 @@ export async function createAlkanesKeystore(
 ): Promise<{ keystore: string; mnemonic: string }> {
   try {
     // ✅ Use REAL alkanes-rs SDK!
-    const config: AlkanesWalletConfig = { network };
-    const result = await createKeystore(password, config, wordCount);
+    const config: AlkanesWalletConfig = { network, wordCount };
+    const result = await createKeystore(password, config);
     
     return {
       keystore: result.keystore,
@@ -223,16 +223,16 @@ export async function createAlkanesWallet(
           publicKey: addressInfo.publicKey || '',
         };
       },
-      signPsbt: (psbtBase64: string) => {
+      signPsbt: (psbtBase64: string): any => {
         if (typeof alkanesWallet.signPsbt === 'function') {
           return alkanesWallet.signPsbt(psbtBase64);
         } else {
           throw new Error('signPsbt method not found on wallet');
         }
       },
-      signMessage: (message: string, index = 0) => {
+      signMessage: (message: string, index = 0): any => {
         if (typeof alkanesWallet.signMessage === 'function') {
-          return alkanesWallet.signMessage(message, 0, index);
+          return alkanesWallet.signMessage(message, index);
         } else {
           throw new Error('signMessage method not found on wallet');
         }
@@ -246,18 +246,17 @@ export async function createAlkanesWallet(
 }
 
 /**
- * Create an Alkanes provider (using local ts-sdk - no @oyl/sdk dependency)
+ * Create an Alkanes provider using @alkanes/ts-sdk
  *
  * @param network - Bitcoin network
  * @param rpcUrl - Optional Bitcoin Core RPC URL (defaults based on network)
- * @returns Alkanes provider compatible with @oyl/sdk interface
+ * @returns Alkanes provider instance
  */
 export async function createAlkanesProvider(
   network: Network,
   rpcUrl?: string
 ) {
-  // Use local ts-sdk AlkanesProvider instead of @oyl/sdk
-  const { AlkanesProvider } = await import('@/ts-sdk');
+  const { AlkanesProvider } = await import('@alkanes/ts-sdk');
 
   const defaultUrls: Record<Network, string> = {
     mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',
@@ -265,6 +264,7 @@ export async function createAlkanesProvider(
     regtest: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
     signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
     oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
+    'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   };
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;

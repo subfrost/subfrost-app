@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 // Define Network type locally to avoid import issues with ts-sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
+import type { Network } from '@/utils/constants';
 
 type TokenIconProps = {
   symbol: string;

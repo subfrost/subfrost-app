@@ -19,7 +19,7 @@ import {
 } from '@/lib/oyl/alkanes/wallet-integration';
 
 // Define Network type locally to avoid import issues with ts-sdk
-type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest';
+import type { Network } from '@/utils/constants';
 
 export type AlkanesWalletState = {
   wallet: AlkanesWalletInstance | null;

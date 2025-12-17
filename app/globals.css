@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a1929;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -12,7 +12,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+/* Force dark mode for consistency */
+@media (prefers-color-scheme: light) {
   :root {
     --background: #0a1929;
     --foreground: #ededed;
@@ -27,8 +28,81 @@ body {
     "Segoe UI Emoji";
 }
 
-/* Subfrost brand tokens */
+/* Subfrost brand tokens - Dark Theme (default) */
 :root {
+  /* Background gradient - deep navy to darker navy */
+  --sf-bg-start: #0a1628;
+  --sf-bg-end: #0d1f35;
+
+  --sf-surface: #152238;  /* card surface - dark navy */
+  --sf-text: #e8f0ff;     /* primary text - light blue-white */
+  --sf-muted: #7a8ba8;    /* captions - muted blue-gray */
+  --sf-primary: #5b9cff;  /* CTA primary - bright blue */
+  --sf-primary-pressed: #4080e6;
+  --sf-outline: #2a3f5f;  /* borders/focus - dark blue */
+
+  /* Glass variables (dark frosted glass effect) */
+  --sf-glass-bg: rgba(15, 28, 48, 0.85);
+  --sf-glass-border: rgba(91, 156, 255, 0.15);
+
+  /* Settings modal */
+  --sf-settings-section-bg: #152238;
+  --sf-settings-title: #e8f0ff;
+
+  /* Boost section - dark mode defaults */
+  --sf-boost-bg-from: rgba(88, 28, 135, 0.6);
+  --sf-boost-bg-to: rgba(107, 33, 168, 0.4);
+  --sf-boost-label: #e9d5ff;
+  --sf-boost-value: #f3e8ff;
+
+  /* Coming soon - dark mode defaults */
+  --sf-coming-soon-bg: rgba(120, 53, 15, 0.4);
+  --sf-coming-soon-title: #fde68a;
+  --sf-coming-soon-text: #fcd34d;
+
+  /* Info cards - dark mode defaults */
+  --sf-info-gray-bg: rgba(55, 65, 81, 0.4);
+  --sf-info-gray-text: #e5e7eb;
+  --sf-info-blue-bg: rgba(30, 58, 138, 0.4);
+  --sf-info-blue-border: rgba(59, 130, 246, 0.3);
+  --sf-info-blue-title: #93c5fd;
+  --sf-info-blue-text: #bfdbfe;
+  --sf-info-yellow-bg: rgba(113, 63, 18, 0.4);
+  --sf-info-yellow-border: rgba(234, 179, 8, 0.3);
+  --sf-info-yellow-title: #fde047;
+  --sf-info-yellow-text: #fef08a;
+  --sf-info-orange-bg: rgba(124, 45, 18, 0.4);
+  --sf-info-orange-border: rgba(249, 115, 22, 0.3);
+  --sf-info-orange-title: #fdba74;
+  --sf-info-orange-text: #fed7aa;
+  --sf-info-red-bg: rgba(127, 29, 29, 0.4);
+  --sf-info-red-border: rgba(239, 68, 68, 0.3);
+  --sf-info-red-title: #fca5a5;
+  --sf-info-red-text: #fecaca;
+  --sf-info-green-bg: rgba(20, 83, 45, 0.4);
+  --sf-info-green-border: rgba(34, 197, 94, 0.3);
+  --sf-info-green-title: #86efac;
+  --sf-info-green-text: #bbf7d0;
+
+  /* No futures notification - dark mode */
+  --sf-no-futures-title: #fca5a5;
+  --sf-no-futures-text: #fecaca;
+
+  /* Coming Soon badge - dark mode */
+  --sf-badge-coming-soon-bg: transparent;
+  --sf-badge-coming-soon-border: #9ca3af;
+  --sf-badge-coming-soon-text: #9ca3af;
+
+  /* Boost icons - dark mode (light purple to dark purple gradient) */
+  --sf-boost-icon-from: #a855f7;
+  --sf-boost-icon-to: #7c3aed;
+}
+
+/* Light Theme (gabes-branch-ui styles) */
+[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #171717;
+
   /* Background gradient tuned to match reference */
   --sf-bg-start: #CDE2FF; /* slightly richer top blue */
   --sf-bg-end: #F2F7FF;   /* very light bottom blue */
@@ -43,6 +117,179 @@ body {
   /* Glass variables (soft white/blue tint) */
   --sf-glass-bg: rgba(240, 247, 255, 0.82);
   --sf-glass-border: rgba(255, 255, 255, 0.55);
+
+  /* Settings modal - white sections in light mode */
+  --sf-settings-section-bg: #FFFFFF;
+  --sf-settings-title: #284372;
+
+  /* Boost section - light mode */
+  --sf-boost-bg-from: #faf5ff;
+  --sf-boost-bg-to: #fdf2f8;
+  --sf-boost-label: #6b21a8;
+  --sf-boost-value: #7c3aed;
+
+  /* Coming soon - light mode */
+  --sf-coming-soon-bg: #fffbeb;
+  --sf-coming-soon-title: #92400e;
+  --sf-coming-soon-text: #b45309;
+
+  /* Info cards - light mode */
+  --sf-info-gray-bg: #f9fafb;
+  --sf-info-gray-text: #374151;
+  --sf-info-blue-bg: #eff6ff;
+  --sf-info-blue-border: #bfdbfe;
+  --sf-info-blue-title: #1e3a8a;
+  --sf-info-blue-text: #1e40af;
+  --sf-info-yellow-bg: #fefce8;
+  --sf-info-yellow-border: #fde047;
+  --sf-info-yellow-title: #713f12;
+  --sf-info-yellow-text: #854d0e;
+  --sf-info-orange-bg: #fff7ed;
+  --sf-info-orange-border: #fdba74;
+  --sf-info-orange-title: #7c2d12;
+  --sf-info-orange-text: #9a3412;
+  --sf-info-red-bg: #fef2f2;
+  --sf-info-red-border: #fecaca;
+  --sf-info-red-title: #7f1d1d;
+  --sf-info-red-text: #991b1b;
+  --sf-info-green-bg: #dcfce7;
+  --sf-info-green-border: #86efac;
+  --sf-info-green-title: #15803d;
+  --sf-info-green-text: #166534;
+
+  /* No futures notification - light mode (keep blue) */
+  --sf-no-futures-title: #1e3a8a;
+  --sf-no-futures-text: #1e40af;
+
+  /* Coming Soon badge - light mode */
+  --sf-badge-coming-soon-bg: transparent;
+  --sf-badge-coming-soon-border: #6b7280;
+  --sf-badge-coming-soon-text: #6b7280;
+
+  /* Boost icons - light mode (solid) */
+  --sf-boost-icon-from: #a855f7;
+  --sf-boost-icon-to: #ec4899;
+}
+
+/* Explicit Dark Theme */
+[data-theme="dark"] {
+  --background: #0a1929;
+  --foreground: #ededed;
+
+  --sf-bg-start: #0a1628;
+  --sf-bg-end: #0d1f35;
+
+  --sf-surface: #152238;
+  --sf-text: #e8f0ff;
+  --sf-muted: #7a8ba8;
+  --sf-primary: #5b9cff;
+  --sf-primary-pressed: #4080e6;
+  --sf-outline: #2a3f5f;
+
+  --sf-glass-bg: rgba(15, 28, 48, 0.85);
+  --sf-glass-border: rgba(91, 156, 255, 0.15);
+
+  /* Settings modal - dark sections in dark mode */
+  --sf-settings-section-bg: #152238;
+  --sf-settings-title: #e8f0ff;
+
+  /* Boost section - dark mode */
+  --sf-boost-bg-from: rgba(88, 28, 135, 0.6);
+  --sf-boost-bg-to: rgba(107, 33, 168, 0.4);
+  --sf-boost-label: #e9d5ff;
+  --sf-boost-value: #f3e8ff;
+
+  /* Coming soon - dark mode */
+  --sf-coming-soon-bg: rgba(120, 53, 15, 0.4);
+  --sf-coming-soon-title: #fde68a;
+  --sf-coming-soon-text: #fcd34d;
+
+  /* Info cards - dark mode */
+  --sf-info-gray-bg: rgba(55, 65, 81, 0.4);
+  --sf-info-gray-text: #e5e7eb;
+  --sf-info-blue-bg: rgba(30, 58, 138, 0.4);
+  --sf-info-blue-border: rgba(59, 130, 246, 0.3);
+  --sf-info-blue-title: #93c5fd;
+  --sf-info-blue-text: #bfdbfe;
+  --sf-info-yellow-bg: rgba(113, 63, 18, 0.4);
+  --sf-info-yellow-border: rgba(234, 179, 8, 0.3);
+  --sf-info-yellow-title: #fde047;
+  --sf-info-yellow-text: #fef08a;
+  --sf-info-orange-bg: rgba(124, 45, 18, 0.4);
+  --sf-info-orange-border: rgba(249, 115, 22, 0.3);
+  --sf-info-orange-title: #fdba74;
+  --sf-info-orange-text: #fed7aa;
+  --sf-info-red-bg: rgba(127, 29, 29, 0.4);
+  --sf-info-red-border: rgba(239, 68, 68, 0.3);
+  --sf-info-red-title: #fca5a5;
+  --sf-info-red-text: #fecaca;
+  --sf-info-green-bg: rgba(20, 83, 45, 0.4);
+  --sf-info-green-border: rgba(34, 197, 94, 0.3);
+  --sf-info-green-title: #86efac;
+  --sf-info-green-text: #bbf7d0;
+
+  /* No futures notification - dark mode */
+  --sf-no-futures-title: #fca5a5;
+  --sf-no-futures-text: #fecaca;
+
+  /* Coming Soon badge - dark mode */
+  --sf-badge-coming-soon-bg: transparent;
+  --sf-badge-coming-soon-border: #9ca3af;
+  --sf-badge-coming-soon-text: #9ca3af;
+
+  /* Boost icons - dark mode (light purple to dark purple gradient) */
+  --sf-boost-icon-from: #a855f7;
+  --sf-boost-icon-to: #7c3aed;
+}
+
+/* Wordmark invert for dark mode */
+[data-theme="dark"] .sf-wordmark {
+  filter: brightness(0) invert(1);
+}
+
+/* Custom scrollbar styling */
+/* Light mode scrollbars */
+[data-theme="light"] *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+[data-theme="light"] *::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+[data-theme="light"] *::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+[data-theme="light"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Dark mode scrollbars */
+[data-theme="dark"] *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+[data-theme="dark"] *::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+[data-theme="dark"] *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+[data-theme="dark"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Firefox scrollbar support */
+[data-theme="light"] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) rgba(0, 0, 0, 0.05);
+}
+[data-theme="dark"] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
 }
 
 @theme inline {
@@ -58,8 +305,23 @@ body {
   background: linear-gradient(180deg, var(--sf-bg-start), var(--sf-bg-end));
 }
 
-/* Lightweight CSS stars overlay */
+/* Lightweight CSS stars overlay - enhanced for dark theme */
 .sf-stars {
+  background:
+    radial-gradient(1.5px 1.5px at 20% 30%, rgba(200, 220, 255, 0.95) 99%, transparent 100%),
+    radial-gradient(1px 1px at 60% 70%, rgba(180, 200, 255, 0.8) 99%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 80% 20%, rgba(200, 220, 255, 0.7) 99%, transparent 100%),
+    radial-gradient(1px 1px at 35% 80%, rgba(180, 200, 255, 0.9) 99%, transparent 100%),
+    radial-gradient(1px 1px at 10% 60%, rgba(200, 220, 255, 0.75) 99%, transparent 100%),
+    radial-gradient(2px 2px at 45% 15%, rgba(220, 240, 255, 0.95) 99%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, rgba(180, 200, 255, 0.7) 99%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 25% 10%, rgba(200, 220, 255, 0.85) 99%, transparent 100%);
+  animation: sfDrift 36s linear infinite;
+  opacity: 0.9;
+}
+
+/* Light theme stars (white for light backgrounds) */
+[data-theme="light"] .sf-stars {
   background:
     radial-gradient(1px 1px at 20% 30%, rgba(255, 255, 255, 0.9) 99%, transparent 100%),
     radial-gradient(1px 1px at 60% 70%, rgba(255, 255, 255, 0.7) 99%, transparent 100%),
@@ -69,7 +331,6 @@ body {
     radial-gradient(1px 1px at 45% 15%, rgba(255, 255, 255, 0.9) 99%, transparent 100%),
     radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.6) 99%, transparent 100%),
     radial-gradient(1px 1px at 25% 10%, rgba(255, 255, 255, 0.8) 99%, transparent 100%);
-  animation: sfDrift 36s linear infinite;
   opacity: 0.7;
 }
 
@@ -88,11 +349,17 @@ body {
   outline-offset: 2px;
 }
 
-/* Watermark background (SVG) */
+/* Watermark background (SVG) - hidden in dark mode */
 .sf-watermark {
   background: url('/background/watermark-bg.svg') center -120px / 1200px auto no-repeat;
   opacity: 0.08;
   pointer-events: none;
+}
+
+[data-theme="dark"] .sf-watermark {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 
 /* CSS-only snow: three parallax layers using a tiled SVG */
@@ -141,10 +408,10 @@ body {
 /* Additional animations */
 @keyframes shimmer {
   0% {
-    background-position: -1000px 0;
+    transform: translateX(-100%);
   }
   100% {
-    background-position: 1000px 0;
+    transform: translateX(100%);
   }
 }
 
@@ -223,14 +490,14 @@ input[type="number"] {
   border: 1px solid var(--sf-glass-border);
   background: linear-gradient(
     90deg,
-    rgba(40, 67, 114, 0.45) 0%,
-    rgba(40, 67, 114, 0.45) var(--sf-range-progress),
-    rgba(40, 67, 114, 0.12) var(--sf-range-progress),
-    rgba(40, 67, 114, 0.12) 100%
+    rgba(91, 156, 255, 0.5) 0%,
+    rgba(91, 156, 255, 0.5) var(--sf-range-progress),
+    rgba(91, 156, 255, 0.15) var(--sf-range-progress),
+    rgba(91, 156, 255, 0.15) 100%
   );
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.65),
-    0 8px 20px rgba(40, 67, 114, 0.15);
+    inset 0 1px 1px rgba(0, 0, 0, 0.3),
+    0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .sf-range::-webkit-slider-thumb {
@@ -239,48 +506,48 @@ input[type="number"] {
   height: 20px;
   margin-top: -4px;
   border-radius: 999px;
-  border: 3px solid #ffffff;
-  background: linear-gradient(135deg, #ffffff, var(--sf-primary));
-  box-shadow: 0 6px 14px rgba(40, 67, 114, 0.35);
+  border: 3px solid var(--sf-surface);
+  background: linear-gradient(135deg, var(--sf-primary), #4080e6);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
 .sf-range:focus-visible::-webkit-slider-thumb,
 .sf-range:active::-webkit-slider-thumb {
   transform: scale(1.05);
-  box-shadow: 0 8px 18px rgba(40, 67, 114, 0.4);
+  box-shadow: 0 8px 18px rgba(91, 156, 255, 0.4);
 }
 
 .sf-range::-moz-range-track {
   height: 12px;
   border-radius: 999px;
   border: 1px solid var(--sf-glass-border);
-  background: rgba(40, 67, 114, 0.12);
+  background: rgba(91, 156, 255, 0.15);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.65),
-    0 8px 20px rgba(40, 67, 114, 0.15);
+    inset 0 1px 1px rgba(0, 0, 0, 0.3),
+    0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .sf-range::-moz-range-progress {
   height: 12px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(40, 67, 114, 0.45), rgba(40, 67, 114, 0.6));
+  background: linear-gradient(90deg, rgba(91, 156, 255, 0.5), rgba(91, 156, 255, 0.65));
 }
 
 .sf-range::-moz-range-thumb {
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  border: 3px solid #ffffff;
-  background: linear-gradient(135deg, #ffffff, var(--sf-primary));
-  box-shadow: 0 6px 14px rgba(40, 67, 114, 0.35);
+  border: 3px solid var(--sf-surface);
+  background: linear-gradient(135deg, var(--sf-primary), #4080e6);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
 .sf-range:focus-visible::-moz-range-thumb,
 .sf-range:active::-moz-range-thumb {
   transform: scale(1.05);
-  box-shadow: 0 8px 18px rgba(40, 67, 114, 0.4);
+  box-shadow: 0 8px 18px rgba(91, 156, 255, 0.4);
 }
 
 /* Timeline track styling */
@@ -291,12 +558,12 @@ input[type="number"] {
   border: 1px solid var(--sf-glass-border);
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.9) 0%,
-    rgba(234, 242, 255, 0.8) 100%
+    rgba(21, 34, 56, 0.9) 0%,
+    rgba(15, 28, 48, 0.8) 100%
   );
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.7),
-    0 12px 28px rgba(40, 67, 114, 0.18);
+    inset 0 1px 1px rgba(0, 0, 0, 0.4),
+    0 12px 28px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
 
@@ -307,8 +574,8 @@ input[type="number"] {
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    rgba(40, 67, 114, 0.08) 0%,
-    rgba(40, 67, 114, 0.02) 100%
+    rgba(91, 156, 255, 0.1) 0%,
+    rgba(91, 156, 255, 0.03) 100%
   );
   pointer-events: none;
 }

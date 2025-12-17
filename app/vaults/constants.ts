@@ -30,7 +30,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     description: 'Earn yield on frBTC',
     tokenId: '32:0',
     tokenSymbol: 'frBTC',
-    contractAddress: '0xAb12C3...D4567',
+    contractAddress: '4:7937', // yv-fr-btc Vault at [4, 0x1f01] = [4, 7937]
     badge: 'BTC Yield',
     type: 'unit-vault',
     inputAsset: 'frBTC',
@@ -56,6 +56,25 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     hasBoost: true,
     boostTokenSymbol: 'vxDIESEL',
     boostTokenName: 'Staked DIESEL Gauge',
+    boostMultiplier: 1.5,
+  },
+  {
+    id: 've-ordi',
+    name: 'veORDI Vault',
+    description: 'Stake ORDI for boosted yield',
+    tokenId: 'ordi',
+    tokenSymbol: 'ORDI',
+    iconPath: '/tokens/ordi.svg',
+    contractAddress: '0x...',
+    badge: 'Coming Soon',
+    type: 'unit-vault',
+    inputAsset: 'ORDI',
+    outputAsset: 'veORDI',
+    estimatedApy: '24',
+    riskLevel: 'very-high',
+    hasBoost: true,
+    boostTokenSymbol: 'vxORDI',
+    boostTokenName: 'Staked ORDI Gauge',
     boostMultiplier: 1.5,
   },
   {
@@ -103,7 +122,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     iconPath: '/tokens/btc_snowflake.svg',
-    contractAddress: '0x...',
+    contractAddress: '4:7936', // dxBTC at [4, 0x1f00] = [4, 7936]
     badge: 'Coming Soon',
     type: 'unit-vault',
     inputAsset: 'BTC',
