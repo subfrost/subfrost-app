@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Copy, Check, X } from 'lucide-react';
-import { SimpleQRCode } from '@/app/components/QRCode';
+import QRCode from '@/app/components/QRCode';
 import { useWallet } from '@/context/WalletContext';
 
 interface ReceiveModalProps {
@@ -48,7 +48,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           {/* QR Code */}
           <div className="flex flex-col items-center">
             <div className="bg-white p-4 rounded-xl">
-              <SimpleQRCode value={address || ''} size={qrSize} />
+              <QRCode value={address || ''} size={qrSize} />
             </div>
           </div>
 
