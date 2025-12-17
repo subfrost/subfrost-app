@@ -43,6 +43,8 @@ export default function ConnectWalletModal() {
   const [passwordHint, setPasswordHint] = useState<string | null>(null);
   const [driveConfigured, setDriveConfigured] = useState(false);
   const [uploadedKeystore, setUploadedKeystore] = useState<string | null>(null);
+  const [backupSuccess, setBackupSuccess] = useState(false);
+  const [backupProgress, setBackupProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -68,6 +70,8 @@ export default function ConnectWalletModal() {
     setCopied(false);
     setMnemonicConfirmed(false);
     setUploadedKeystore(null);
+    setBackupSuccess(false);
+    setBackupProgress(0);
   };
 
   const handleClose = () => {
@@ -108,14 +112,24 @@ export default function ConnectWalletModal() {
 
     setIsLoading(true);
     setError(null);
+    setBackupSuccess(false);
+    setBackupProgress(0);
 
     try {
       const { backupWalletToDrive } = await import('@/utils/clientSideDrive');
       const encrypted = localStorage.getItem('subfrost_encrypted_keystore');
-      
+
       if (!encrypted) {
         throw new Error('Encrypted keystore not found');
       }
+
+      // Simulate progress while backup is happening
+      const progressInterval = setInterval(() => {
+        setBackupProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + 10;
+        });
+      }, 200);
 
       await backupWalletToDrive(
         encrypted,
@@ -123,10 +137,19 @@ export default function ConnectWalletModal() {
         'My Bitcoin Wallet'
       );
 
-      alert('✅ Wallet backed up to your Google Drive!');
+      clearInterval(progressInterval);
+      setBackupProgress(100);
+      setBackupSuccess(true);
+
+      // Auto-dismiss success after 3 seconds
+      setTimeout(() => {
+        setBackupSuccess(false);
+        setBackupProgress(0);
+      }, 3000);
     } catch (err) {
       console.error('Drive backup error:', err);
       setError(err instanceof Error ? err.message : 'Failed to backup to Google Drive');
+      setBackupProgress(0);
     } finally {
       setIsLoading(false);
     }
@@ -560,23 +583,43 @@ export default function ConnectWalletModal() {
 
               {driveConfigured && (
                 <div className="flex flex-col gap-2">
-                  <button
-                    onClick={handleBackupToDrive}
-                    disabled={isLoading}
-                    className="w-full rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-medium transition-all hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-white"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Cloud className="animate-pulse" size={18} />
-                        Backing up...
-                      </>
-                    ) : (
-                      <>
-                        <Cloud size={18} />
-                        Backup to Google Drive
-                      </>
-                    )}
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={handleBackupToDrive}
+                      disabled={isLoading || backupSuccess}
+                      className={`w-full rounded-lg py-3 font-medium transition-all flex items-center justify-center gap-2 text-white overflow-hidden relative ${
+                        backupSuccess
+                          ? 'bg-green-500 animate-pulse'
+                          : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg disabled:opacity-50'
+                      }`}
+                    >
+                      {/* Progress bar background */}
+                      {isLoading && !backupSuccess && (
+                        <div
+                          className="absolute inset-0 bg-white/20 transition-all duration-200"
+                          style={{ width: `${backupProgress}%` }}
+                        />
+                      )}
+                      <span className="relative z-10 flex items-center gap-2">
+                        {backupSuccess ? (
+                          <>
+                            <Check size={18} />
+                            Backed up successfully!
+                          </>
+                        ) : isLoading ? (
+                          <>
+                            <Cloud className="animate-bounce" size={18} />
+                            Backing up... {backupProgress}%
+                          </>
+                        ) : (
+                          <>
+                            <Cloud size={18} />
+                            Backup to Google Drive
+                          </>
+                        )}
+                      </span>
+                    </button>
+                  </div>
                   <button
                     onClick={handleConfirmMnemonic}
                     disabled={!mnemonicConfirmed}
