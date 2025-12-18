@@ -93,12 +93,12 @@ jobs:
       - name: Create Cloud Run domain mapping
         run: |
           # Check if domain mapping exists
-          if gcloud run domain-mappings describe ${{ env.CUSTOM_DOMAIN }} \
+          if gcloud beta run domain-mappings describe ${{ env.CUSTOM_DOMAIN }} \
             --platform=managed --format='value(name)' 2>/dev/null; then
             echo "Domain mapping already exists"
           else
             echo "Creating domain mapping..."
-            gcloud run domain-mappings create \
+            gcloud beta run domain-mappings create \
               --service=${{ env.SERVICE_NAME }} \
               --domain=${{ env.CUSTOM_DOMAIN }} \
               --platform=managed
@@ -107,7 +107,7 @@ jobs:
           # Get the required DNS records for verification
           echo ""
           echo "Required DNS records for ${{ env.CUSTOM_DOMAIN }}:"
-          gcloud run domain-mappings describe ${{ env.CUSTOM_DOMAIN }} \
+          gcloud beta run domain-mappings describe ${{ env.CUSTOM_DOMAIN }} \
             --platform=managed \
             --format='value(status.resourceRecords[].name,status.resourceRecords[].type,status.resourceRecords[].rrdata)' | \
             while read name type rrdata; do
