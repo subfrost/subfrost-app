@@ -195,14 +195,18 @@ export default function SwapShell() {
   // Build a map from tokenId to token metadata from pools data (has correct symbols)
   const poolTokenMap = useMemo(() => {
     const map = new Map<string, TokenMeta>();
+    console.log('[SwapShell] Building poolTokenMap from', markets.length, 'markets');
     markets.forEach((pool) => {
       if (!map.has(pool.token0.id)) {
         map.set(pool.token0.id, pool.token0);
+        console.log('[SwapShell] Added token to map:', pool.token0.id, pool.token0.symbol);
       }
       if (!map.has(pool.token1.id)) {
         map.set(pool.token1.id, pool.token1);
+        console.log('[SwapShell] Added token to map:', pool.token1.id, pool.token1.symbol);
       }
     });
+    console.log('[SwapShell] poolTokenMap has', map.size, 'tokens:', Array.from(map.keys()));
     return map;
   }, [markets]);
 
@@ -420,30 +424,53 @@ export default function SwapShell() {
   const isWrapPair = useMemo(() => fromToken?.id === 'btc' && toToken?.id === FRBTC_ALKANE_ID, [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
   const isUnwrapPair = useMemo(() => fromToken?.id === FRBTC_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
 
+  // Check if this is a BTC → token swap (not direct wrap to frBTC)
+  const isBtcToTokenSwap = useMemo(() =>
+    fromToken?.id === 'btc' && toToken?.id !== FRBTC_ALKANE_ID && toToken?.id !== 'btc',
+    [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]
+  );
+
+  // Check if this is a token → BTC swap (requires unwrap after swap)
+  const isTokenToBtcSwap = useMemo(() =>
+    fromToken?.id !== 'btc' && fromToken?.id !== FRBTC_ALKANE_ID && toToken?.id === 'btc',
+    [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]
+  );
+
   const handleSwap = async () => {
-    console.log('[SwapShell] handleSwap called', {
-      fromToken: fromToken?.id,
-      fromSymbol: fromToken?.symbol,
-      toToken: toToken?.id,
-      toSymbol: toToken?.symbol,
-      isWrapPair,
-      isUnwrapPair,
-      FRBTC_ALKANE_ID,
-      fromAmount,
-      toAmount,
-      direction,
-    });
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('[SwapShell] ████ SWAP INITIATED ████');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('[SwapShell] FROM Token:', JSON.stringify(fromToken, null, 2));
+    console.log('[SwapShell] TO Token:', JSON.stringify(toToken, null, 2));
+    console.log('[SwapShell] Direction:', direction);
+    console.log('[SwapShell] From Amount:', fromAmount);
+    console.log('[SwapShell] To Amount:', toAmount);
+    console.log('[SwapShell] Max Slippage:', maxSlippage);
+    console.log('[SwapShell] Fee Rate:', fee.feeRate);
+    console.log('[SwapShell] Deadline Blocks:', deadlineBlocks);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('[SwapShell] FRBTC_ALKANE_ID:', FRBTC_ALKANE_ID);
+    console.log('[SwapShell] isWrapPair:', isWrapPair, `(fromToken.id === 'btc' && toToken.id === '${FRBTC_ALKANE_ID}')`);
+    console.log('[SwapShell] isUnwrapPair:', isUnwrapPair, `(fromToken.id === '${FRBTC_ALKANE_ID}' && toToken.id === 'btc')`);
+    console.log('[SwapShell] isBtcToTokenSwap:', isBtcToTokenSwap, `(fromToken.id === 'btc' && toToken.id !== '${FRBTC_ALKANE_ID}' && toToken.id !== 'btc')`);
+    console.log('[SwapShell] isTokenToBtcSwap:', isTokenToBtcSwap);
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('[SwapShell] Quote:', JSON.stringify(quote, null, 2));
+    console.log('═══════════════════════════════════════════════════════════════');
+
     if (!fromToken || !toToken) {
-      console.log('[SwapShell] Missing fromToken or toToken, returning');
+      console.log('[SwapShell] ❌ Missing fromToken or toToken, returning');
       return;
     }
 
     // Wrap/Unwrap direct pairs
     if (isWrapPair) {
-      console.log('[SwapShell] isWrapPair detected, calling wrapMutation');
+      console.log('[SwapShell] ✓ BRANCH: isWrapPair - calling wrapMutation');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
+        console.log('[SwapShell] Wrap amount:', amountDisplay);
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
+        console.log('[SwapShell] Wrap result:', res);
         if (res?.success && res.transactionId) {
           setSuccessTxId(res.transactionId);
           // Refresh wallet data after a short delay to allow indexer to process
@@ -452,17 +479,21 @@ export default function SwapShell() {
             refreshWalletData();
           }, 2000);
         }
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        console.error('[SwapShell] ❌ Wrap error:', e);
+        console.error('[SwapShell] Error stack:', e?.stack);
         window.alert('Wrap failed. See console for details.');
       }
       return;
     }
 
     if (isUnwrapPair) {
+      console.log('[SwapShell] ✓ BRANCH: isUnwrapPair - calling unwrapMutation');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
+        console.log('[SwapShell] Unwrap amount:', amountDisplay);
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
+        console.log('[SwapShell] Unwrap result:', res);
         if (res?.success && res.transactionId) {
           setSuccessTxId(res.transactionId);
           // Refresh wallet data after a short delay to allow indexer to process
@@ -471,15 +502,77 @@ export default function SwapShell() {
             refreshWalletData();
           }, 2000);
         }
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        console.error('[SwapShell] ❌ Unwrap error:', e);
+        console.error('[SwapShell] Error stack:', e?.stack);
         window.alert('Unwrap failed. See console for details.');
       }
       return;
     }
 
-    // Default AMM swap
-    if (!quote) return;
+    // BTC → Token swap: First wrap BTC to frBTC, then swap frBTC to target token
+    // This is a two-step process since atomic wrap+swap isn't supported yet
+    if (isBtcToTokenSwap) {
+      console.log('[SwapShell] ✓ BRANCH: isBtcToTokenSwap - executing wrap + swap sequence');
+
+      // Inform user about the two-step process
+      const confirmTwoStep = window.confirm(
+        `This BTC → ${toToken.symbol} swap requires two transactions:\n\n` +
+        `1. Wrap BTC to frBTC\n` +
+        `2. Swap frBTC for ${toToken.symbol}\n\n` +
+        `Both transactions require confirmation. Continue?`
+      );
+
+      if (!confirmTwoStep) {
+        console.log('[SwapShell] User cancelled two-step swap');
+        return;
+      }
+
+      try {
+        // Step 1: Wrap BTC to frBTC
+        console.log('[SwapShell] Step 1: Wrapping BTC to frBTC...');
+        const wrapAmount = direction === 'sell' ? fromAmount : toAmount;
+        const wrapRes = await wrapMutation.mutateAsync({ amount: wrapAmount, feeRate: fee.feeRate });
+
+        if (!wrapRes?.success || !wrapRes.transactionId) {
+          throw new Error('Wrap transaction failed');
+        }
+
+        console.log('[SwapShell] Wrap successful, txid:', wrapRes.transactionId);
+        window.alert(
+          `Step 1 complete: BTC wrapped to frBTC.\n\n` +
+          `Transaction: ${wrapRes.transactionId.slice(0, 16)}...\n\n` +
+          `IMPORTANT: Wait for the transaction to confirm (1-2 blocks), ` +
+          `then select frBTC → ${toToken.symbol} to complete your swap.`
+        );
+
+        setSuccessTxId(wrapRes.transactionId);
+
+        // Refresh wallet data
+        setTimeout(() => {
+          console.log('[SwapShell] Refreshing wallet data after wrap...');
+          refreshWalletData();
+        }, 2000);
+
+        // Auto-switch to frBTC as the from token for the next step
+        setFromToken({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
+
+      } catch (e: any) {
+        console.error('[SwapShell] BTC → Token swap failed:', e);
+        window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
+      }
+      return;
+    }
+
+    // Default AMM swap (frBTC/DIESEL or other alkane pairs)
+    console.log('[SwapShell] ✓ BRANCH: Default AMM Swap');
+    console.log('[SwapShell] No special case matched, proceeding with swapMutation');
+
+    if (!quote) {
+      console.log('[SwapShell] ❌ No quote available, returning');
+      return;
+    }
+
     const payload = {
       sellCurrency: fromToken.id,
       buyCurrency: toToken.id,
@@ -491,14 +584,40 @@ export default function SwapShell() {
       tokenPath: quote.route ?? [fromToken.id, toToken.id],
       deadlineBlocks,
     } as const;
+
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('[SwapShell] ████ SWAP MUTATION PAYLOAD ████');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('[SwapShell] sellCurrency:', payload.sellCurrency);
+    console.log('[SwapShell] buyCurrency:', payload.buyCurrency);
+    console.log('[SwapShell] direction:', payload.direction);
+    console.log('[SwapShell] sellAmount:', payload.sellAmount);
+    console.log('[SwapShell] buyAmount:', payload.buyAmount);
+    console.log('[SwapShell] maxSlippage:', payload.maxSlippage);
+    console.log('[SwapShell] feeRate:', payload.feeRate);
+    console.log('[SwapShell] tokenPath:', JSON.stringify(payload.tokenPath));
+    console.log('[SwapShell] deadlineBlocks:', payload.deadlineBlocks);
+    console.log('═══════════════════════════════════════════════════════════════');
+
     try {
+      console.log('[SwapShell] Calling swapMutation.mutateAsync...');
       const res = await swapMutation.mutateAsync(payload as any);
+      console.log('[SwapShell] ✓ Swap mutation result:', res);
       if (res?.success && res.transactionId) {
         setSuccessTxId(res.transactionId);
       }
-    } catch (e) {
-      console.error(e);
-      window.alert('Swap failed. See console for details.');
+    } catch (e: any) {
+      console.error('═══════════════════════════════════════════════════════════════');
+      console.error('[SwapShell] ████ SWAP MUTATION ERROR ████');
+      console.error('═══════════════════════════════════════════════════════════════');
+      console.error('[SwapShell] Error message:', e?.message);
+      console.error('[SwapShell] Error name:', e?.name);
+      console.error('[SwapShell] Error stack:', e?.stack);
+      console.error('[SwapShell] Full error object:', e);
+      console.error('═══════════════════════════════════════════════════════════════');
+      // Show the specific error message from the mutation
+      const errorMessage = e?.message || 'Swap failed. See console for details.';
+      window.alert(errorMessage);
     }
   };
 
