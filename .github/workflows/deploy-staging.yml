@@ -90,20 +90,15 @@ jobs:
           HOSTNAME=$(echo $URL | sed 's|https://||')
           echo "hostname=${HOSTNAME}" >> $GITHUB_OUTPUT
 
-      - name: Create Cloud Run domain mapping
-        continue-on-error: true
-        run: |
-          gcloud run domain-mappings create \
-            --service=${{ env.SERVICE_NAME }} \
-            --domain=${{ env.CUSTOM_DOMAIN }} \
-            --region=${{ env.REGION }} 2>/dev/null || echo "Domain mapping already exists"
-
       - name: Update Cloudflare DNS
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           DOMAIN="${{ env.CUSTOM_DOMAIN }}"
-          TARGET="216.239.32.21"
+          # Use CNAME to Cloud Run service URL instead of A record
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)' | sed 's|https://||')
 
           CF_ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${{ env.BASE_DOMAIN }}" \
             -H "Authorization: Bearer ${CF_API_TOKEN}" \
@@ -115,6 +110,7 @@ jobs:
           fi
 
           echo "Using Zone ID: ${CF_ZONE_ID}"
+          echo "Service URL: ${SERVICE_URL}"
 
           RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}" \
             -H "Authorization: Bearer ${CF_API_TOKEN}" \
@@ -125,12 +121,12 @@ jobs:
 
           if [ -n "$RECORD_ID" ]; then
             echo "Found existing ${RECORD_TYPE} record: ${RECORD_ID}"
-            if [ "$RECORD_TYPE" = "A" ]; then
+            if [ "$RECORD_TYPE" = "CNAME" ]; then
               curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
                 -H "Authorization: Bearer ${CF_API_TOKEN}" \
                 -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"staging-app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
-              echo "Updated A record: ${DOMAIN} -> ${TARGET}"
+                --data "{\"type\":\"CNAME\",\"name\":\"staging-app\",\"content\":\"${SERVICE_URL}\",\"ttl\":1,\"proxied\":false}"
+              echo "Updated CNAME record: ${DOMAIN} -> ${SERVICE_URL}"
             else
               curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
                 -H "Authorization: Bearer ${CF_API_TOKEN}" \
@@ -138,15 +134,15 @@ jobs:
               curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
                 -H "Authorization: Bearer ${CF_API_TOKEN}" \
                 -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"staging-app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
-              echo "Replaced ${RECORD_TYPE} with A record: ${DOMAIN} -> ${TARGET}"
+                --data "{\"type\":\"CNAME\",\"name\":\"staging-app\",\"content\":\"${SERVICE_URL}\",\"ttl\":1,\"proxied\":false}"
+              echo "Replaced ${RECORD_TYPE} with CNAME record: ${DOMAIN} -> ${SERVICE_URL}"
             fi
           else
             curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
               -H "Authorization: Bearer ${CF_API_TOKEN}" \
               -H "Content-Type: application/json" \
-              --data "{\"type\":\"A\",\"name\":\"staging-app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
-            echo "Created A record: ${DOMAIN} -> ${TARGET}"
+              --data "{\"type\":\"CNAME\",\"name\":\"staging-app\",\"content\":\"${SERVICE_URL}\",\"ttl\":1,\"proxied\":false}"
+            echo "Created CNAME record: ${DOMAIN} -> ${SERVICE_URL}"
           fi
 
       - name: Deployment Summary
