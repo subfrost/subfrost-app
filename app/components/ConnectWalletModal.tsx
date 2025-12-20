@@ -2,6 +2,7 @@
 
 import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
 import { initGoogleDrive, isDriveConfigured, type WalletBackupInfo } from '@/utils/clientSideDrive';
@@ -10,6 +11,7 @@ import { WalletListPicker } from './WalletListPicker';
 type WalletView = 'select' | 'create' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
 
 export default function ConnectWalletModal() {
+  const router = useRouter();
   const {
     network,
     isConnectModalOpen,
@@ -77,6 +79,12 @@ export default function ConnectWalletModal() {
   const handleClose = () => {
     onConnectModalOpenChange(false);
     resetForm();
+  };
+
+  const handleCloseAndNavigate = () => {
+    onConnectModalOpenChange(false);
+    resetForm();
+    router.push('/wallet');
   };
 
   const handleCreateWallet = async () => {
@@ -156,7 +164,7 @@ export default function ConnectWalletModal() {
   };
 
   const handleConfirmMnemonic = () => {
-    handleClose();
+    handleCloseAndNavigate();
   };
 
   const handleRestoreFromMnemonic = async () => {
@@ -175,7 +183,7 @@ export default function ConnectWalletModal() {
     try {
       // Use WalletContext's restoreWallet which handles storage correctly
       await restoreWalletFromContext(mnemonic.trim(), password);
-      handleClose();
+      handleCloseAndNavigate();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
     } finally {
@@ -195,7 +203,7 @@ export default function ConnectWalletModal() {
     try {
       // Use WalletContext's unlockWallet which handles storage correctly
       await unlockWalletFromContext(password);
-      handleClose();
+      handleCloseAndNavigate();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to unlock wallet');
     } finally {
@@ -265,7 +273,7 @@ export default function ConnectWalletModal() {
 
       // Use WalletContext's restoreWallet with the decrypted mnemonic
       await restoreWalletFromContext(keystore.mnemonic, password);
-      handleClose();
+      handleCloseAndNavigate();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to unlock wallet. Check your password.');
     } finally {
@@ -316,7 +324,7 @@ export default function ConnectWalletModal() {
 
       // Use WalletContext's restoreWallet with the decrypted mnemonic
       await restoreWalletFromContext(keystore.mnemonic, password);
-      handleClose();
+      handleCloseAndNavigate();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to unlock wallet. Check your password.');
     } finally {
@@ -791,7 +799,8 @@ export default function ConnectWalletModal() {
                           // Use WalletContext's connectBrowserWallet method
                           await connectBrowserWalletFromContext(wallet.id);
                           console.log('Connected to browser wallet:', wallet.name);
-                          // handleClose is called automatically by connectBrowserWallet
+                          // Navigate to wallet dashboard on successful connection
+                          handleCloseAndNavigate();
                         } catch (err) {
                           setError(err instanceof Error ? err.message : 'Failed to connect wallet');
                         } finally {
