@@ -14,9 +14,6 @@ RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 # Copy package files
 COPY package.json pnpm-lock.yaml* ./
 
-# Copy ts-sdk (local dependency with pre-built WASM)
-COPY ts-sdk ./ts-sdk/
-
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
