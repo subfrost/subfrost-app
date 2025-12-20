@@ -24,13 +24,8 @@ export default defineConfig({
         inline: ['@alkanes/ts-sdk'],
       },
     },
-    // Use threads pool with proper module handling
-    pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: true,
-      },
-    },
+    // Use forks pool for better WASM compatibility
+    pool: 'forks',
   },
   resolve: {
     alias: {

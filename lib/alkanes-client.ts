@@ -5,11 +5,25 @@
  * using @alkanes/ts-sdk as the underlying driver.
  */
 
-import { AlkanesProvider, type AlkaneBalanceResponse, type AlkaneId } from '@alkanes/ts-sdk';
+import { AlkanesProvider } from '@alkanes/ts-sdk';
 
 // ============================================================================
 // Types
 // ============================================================================
+
+// SDK types - defined locally to avoid version mismatch issues
+interface AlkaneId {
+  block: string | number;
+  tx: string | number;
+}
+
+interface AlkaneBalanceResponse {
+  id: AlkaneId | string;
+  amount: string;
+  name?: string;
+  symbol?: string;
+  decimals?: number;
+}
 
 export interface UTXO {
   txid: string;
