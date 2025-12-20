@@ -25,7 +25,7 @@ async function main() {
   console.log('=== SDK Swap Test ===\n');
 
   // Dynamic import SDK
-  const { AlkanesProvider } = await import('../ts-sdk/dist/index.mjs');
+  const { AlkanesProvider } = await import('@alkanes/ts-sdk');
 
   // Create provider
   const provider = new AlkanesProvider({
@@ -76,7 +76,7 @@ async function main() {
   console.log('Testing AMM...');
   try {
     // Try to get quote for a small BTC -> frBTC swap
-    const { amm } = await import('../ts-sdk/dist/index.mjs');
+    const { amm } = await import('@alkanes/ts-sdk');
 
     // Parse factory ID
     const [factoryBlock, factoryTx] = FACTORY_ID.split(':').map(Number);

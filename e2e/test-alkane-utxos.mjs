@@ -3,7 +3,7 @@
  * Run: node e2e/test-alkane-utxos.mjs
  */
 
-import { AlkanesProvider, createWalletFromMnemonic } from '../ts-sdk/dist/index.mjs';
+import { AlkanesProvider, createWalletFromMnemonic } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 
 async function testAlkaneUtxos() {

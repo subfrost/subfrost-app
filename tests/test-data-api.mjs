@@ -1,5 +1,6 @@
 // Comprehensive Data API test suite
-import { WebProvider } from '../ts-sdk/build/wasm/alkanes_web_sys.js';
+import wasm from '@alkanes/ts-sdk/wasm';
+const { WebProvider } = wasm;
 
 const tests = [
   {

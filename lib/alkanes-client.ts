@@ -5,7 +5,7 @@
  * using @alkanes/ts-sdk as the underlying driver.
  */
 
-import { AlkanesProvider, type AlkaneBalance, type AlkaneId } from '@alkanes/ts-sdk';
+import { AlkanesProvider, type AlkaneBalanceResponse, type AlkaneId } from '@alkanes/ts-sdk';
 
 // ============================================================================
 // Types
@@ -394,7 +394,7 @@ class AlkanesClient {
   // Alkanes Methods
   // ==========================================================================
 
-  async getAlkaneBalances(address: string): Promise<AlkaneBalance[]> {
+  async getAlkaneBalances(address: string): Promise<AlkaneBalanceResponse[]> {
     const provider = await this.ensureProvider();
     return provider.alkanes.getBalance(address);
   }
@@ -406,9 +406,9 @@ class AlkanesClient {
     ]);
 
     const tokens: TokenBalance[] = alkaneBalances.map((ab) => {
-      const alkaneId = ab.alkane_id || ab.id;
+      const alkaneId = ab.id;
       if (!alkaneId) {
-        throw new Error('Invalid balance entry: missing alkane_id/id');
+        throw new Error('Invalid balance entry: missing id');
       }
       const runeId = formatAlkaneId(alkaneId);
       const tokenInfo = KNOWN_TOKENS[runeId] || {
@@ -416,7 +416,7 @@ class AlkanesClient {
         name: ab.name || `Unknown (${runeId})`,
         decimals: 8,
       };
-      const balanceValue = ab.balance ?? ab.amount ?? '0';
+      const balanceValue = ab.amount ?? '0';
 
       return {
         runeId,
@@ -538,9 +538,8 @@ class AlkanesClient {
     const provider = await this.ensureProvider();
     try {
       const result = await provider.dataApi.getBitcoinPrice();
-      const price = result?.data?.bitcoin?.usd ?? result?.bitcoin?.usd ?? result?.price ?? result?.usd;
-      if (typeof price === 'number' && price > 0) {
-        return price;
+      if (result && result.price > 0) {
+        return result.price;
       }
       return 0;
     } catch (error) {

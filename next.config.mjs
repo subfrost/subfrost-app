@@ -4,11 +4,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use LOCAL WASM (fixed version with from_addresses parsing)
-// The npm package version has a bug where from_addresses is always None
-// Once the SDK fix is merged and published, revert to: '@alkanes/ts-sdk/build/wasm/alkanes_web_sys.js'
-const wasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
-
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
@@ -27,16 +22,19 @@ const nextConfig = {
   // Turbopack configuration (for dev mode)
   turbopack: {
     resolveAlias: {
-      '@alkanes/ts-sdk/wasm': wasmPath,
+      // Prevent Node.js-specific loader from being bundled for browser
+      '@alkanes/ts-sdk/wasm/node-loader.cjs': { browser: './lib/empty-module.js' },
     },
   },
   // Webpack configuration (for production)
   webpack: (config, { isServer, webpack }) => {
-    // WASM alias - use npm package
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@alkanes/ts-sdk/wasm': wasmPath,
-    };
+    // Prevent Node.js-specific loader from being bundled for browser
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@alkanes/ts-sdk/wasm/node-loader.cjs': path.join(__dirname, 'lib/empty-module.js'),
+      };
+    }
 
     // WASM support
     config.experiments = {

@@ -269,14 +269,11 @@ export async function createAlkanesProvider(
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
   const networkType = getAlkanesNetwork(network);
-  const bitcoinNetwork = getBitcoinJsNetwork(network);
 
   return new AlkanesProvider({
-    version: '',
-    network: bitcoinNetwork,
+    network: networkType,
     networkType,
     url,
-    projectId: '',
   });
 }
 

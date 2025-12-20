@@ -2,11 +2,9 @@
   "name": "subfrost-app",
   "version": "0.1.0",
   "private": true,
-  "sdkBranch": "develop",
   "scripts": {
     "dev": "next dev",
     "dev:turbo": "next dev --turbopack",
-    "build:external": "node build-external.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
