@@ -17,6 +17,20 @@ export default defineConfig({
     hookTimeout: 30000,
     // Setup file to polyfill fetch for Node.js
     setupFiles: ['./__tests__/setup.ts'],
+    // Enable WASM support in tests
+    server: {
+      deps: {
+        // Inline the SDK to allow vite to process WASM imports
+        inline: ['@alkanes/ts-sdk'],
+      },
+    },
+    // Use threads pool with proper module handling
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: true,
+      },
+    },
   },
   resolve: {
     alias: {
@@ -24,6 +38,11 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['@alkanes/ts-sdk/wasm'],
+    // Don't exclude - let vite process it
+    include: ['@alkanes/ts-sdk', '@alkanes/ts-sdk/wasm'],
+  },
+  // Enable WASM in SSR/Node context
+  ssr: {
+    noExternal: ['@alkanes/ts-sdk'],
   },
 });
