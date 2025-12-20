@@ -19,11 +19,19 @@ const nextConfig = {
       },
     ];
   },
-  // Turbopack configuration (for dev mode)
+  // Turbopack configuration (for dev mode and turbo builds)
   turbopack: {
     resolveAlias: {
       // Prevent Node.js-specific loader from being bundled for browser
       '@alkanes/ts-sdk/wasm/node-loader.cjs': { browser: './lib/empty-module.js' },
+      // Stub out Node.js built-in modules for browser builds
+      fs: { browser: './lib/empty-module.js' },
+      path: { browser: './lib/empty-module.js' },
+      net: { browser: './lib/empty-module.js' },
+      tls: { browser: './lib/empty-module.js' },
+      crypto: { browser: './lib/empty-module.js' },
+      stream: { browser: './lib/empty-module.js' },
+      util: { browser: './lib/empty-module.js' },
     },
   },
   // Webpack configuration (for production)

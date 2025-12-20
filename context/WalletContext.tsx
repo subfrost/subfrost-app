@@ -154,6 +154,7 @@ type WalletContextType = {
   createWallet: (password: string) => Promise<{ mnemonic: string }>;
   unlockWallet: (password: string) => Promise<void>;
   restoreWallet: (mnemonic: string, password: string) => Promise<void>;
+  deleteKeystore: () => void;
 
   // Browser wallet actions
   detectBrowserWallets: () => Promise<BrowserWalletInfo[]>;
@@ -433,6 +434,28 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       loadWallet(trimmedMnemonic);
     }
   }, [network, loadWallet]);
+
+  // Delete stored keystore permanently
+  const deleteKeystore = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    // Clear all keystore-related storage
+    localStorage.removeItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE);
+    localStorage.removeItem(STORAGE_KEYS.WALLET_NETWORK);
+    localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
+    localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
+    sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
+
+    // Also clear old alkanes keys for backwards compatibility
+    localStorage.removeItem('alkanes_encrypted_keystore');
+    localStorage.removeItem('alkanes_wallet_network');
+
+    // Reset wallet state
+    setWallet(null);
+    setBrowserWallet(null);
+    setWalletType(null);
+    setHasStoredKeystore(false);
+  }, []);
 
   // Disconnect (lock) wallet - works for both keystore and browser wallets
   const disconnect = useCallback(async () => {
@@ -899,6 +922,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       createWallet: createNewWallet,
       unlockWallet,
       restoreWallet,
+      deleteKeystore,
 
       // Browser wallet actions
       detectBrowserWallets,
@@ -931,6 +955,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       createNewWallet,
       unlockWallet,
       restoreWallet,
+      deleteKeystore,
       detectBrowserWallets,
       connectBrowserWallet,
       disconnect,

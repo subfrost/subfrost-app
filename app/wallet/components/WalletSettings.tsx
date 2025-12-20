@@ -511,11 +511,7 @@ export default function WalletSettings() {
           </div>
 
           <div className="space-y-3">
-            <div className={`rounded-lg border p-4 text-sm ${
-              theme === 'light'
-                ? 'border-blue-500/30 bg-blue-500/10 text-blue-700'
-                : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-200'
-            }`}>
+            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
               ⚠️ <strong>Warning:</strong> Never share your seed phrase or private keys with anyone. Subfrost will never ask for this information.
             </div>
 
@@ -559,9 +555,9 @@ export default function WalletSettings() {
             <div className="p-6 space-y-4">
               {!revealedSeed ? (
                 <>
-                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-500 dark:text-red-200">
+                  <div className="rounded-lg border border-[color:var(--sf-info-red-border)] bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)]">
                     <Lock size={20} className="inline mr-2" />
-                    Enter your password to decrypt and reveal your seed phrase
+                    Enter your password to decrypt and reveal your seed phrase.
                   </div>
 
                   <div>
@@ -638,9 +634,9 @@ export default function WalletSettings() {
             <div className="p-6 space-y-4">
               {!revealedPrivateKey ? (
                 <>
-                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-500 dark:text-red-200">
+                  <div className="rounded-lg border border-[color:var(--sf-info-red-border)] bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)]">
                     <Lock size={20} className="inline mr-2" />
-                    Enter your password to reveal your private key
+                    Enter your password to reveal your private key.
                   </div>
 
                   <div>

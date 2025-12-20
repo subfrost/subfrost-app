@@ -77,7 +77,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        <p className="text-sm text-gray-400">Loading your wallets from Google Drive...</p>
+        <p className="text-sm text-[color:var(--sf-text)]/60">Loading your wallets from Google Drive...</p>
       </div>
     );
   }
@@ -86,20 +86,20 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
         <div className="text-red-400 text-center">
-          <p className="font-medium mb-2">⚠️ {error}</p>
-          <p className="text-xs text-gray-400">
+          <p className="font-medium mb-2">{error}</p>
+          <p className="text-xs text-[color:var(--sf-text)]/50">
             Make sure you've authorized Google Drive access.
           </p>
         </div>
         <button
           onClick={loadWallets}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors"
+          className="px-4 py-2 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg text-sm text-white transition-colors"
         >
           Try Again
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-gray-400 hover:text-white text-sm transition-colors"
+          className="px-4 py-2 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] text-sm transition-colors"
         >
           Cancel
         </button>
@@ -112,14 +112,14 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold">Select Wallet to Restore</h3>
-          <p className="text-sm text-gray-400 mt-1">
+          <h3 className="text-lg font-semibold text-[color:var(--sf-text)]">Select Wallet to Restore</h3>
+          <p className="text-sm text-[color:var(--sf-text)]/60 mt-1">
             Found {wallets.length} wallet{wallets.length !== 1 ? 's' : ''} in your Google Drive
           </p>
         </div>
         <button
           onClick={loadWallets}
-          className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+          className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
         >
           Refresh
         </button>
@@ -132,34 +132,34 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
             key={wallet.folderId}
             onClick={() => onSelectWallet(wallet)}
             disabled={deletingId === wallet.folderId}
-            className="w-full text-left p-4 rounded-lg border border-gray-700 hover:border-blue-500 bg-gray-800/50 hover:bg-gray-800 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full text-left p-4 rounded-xl border border-[color:var(--sf-outline)] hover:border-blue-500 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div className="flex items-start justify-between">
               {/* Wallet Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center space-x-2 mb-2">
-                  <Cloud className="h-4 w-4 text-blue-400 flex-shrink-0" />
-                  <h4 className="font-medium truncate">{wallet.walletLabel}</h4>
+                  <Cloud className="h-4 w-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+                  <h4 className="font-medium truncate text-[color:var(--sf-text)]">{wallet.walletLabel}</h4>
                 </div>
 
-                <div className="space-y-1 text-xs text-gray-400">
+                <div className="space-y-1 text-xs text-[color:var(--sf-text)]/60">
                   {/* Date */}
                   <div className="flex items-center space-x-2">
                     <Calendar className="h-3 w-3" />
                     <span>{formatBackupDate(wallet.timestamp)}</span>
-                    <span className="text-gray-500">({getRelativeTime(wallet.timestamp)})</span>
+                    <span className="text-[color:var(--sf-text)]/40">({getRelativeTime(wallet.timestamp)})</span>
                   </div>
 
                   {/* Password Hint Indicator */}
                   {wallet.hasPasswordHint && (
-                    <div className="flex items-center space-x-2 text-green-400">
+                    <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
                       <Info className="h-3 w-3" />
                       <span>Password hint available</span>
                     </div>
                   )}
 
                   {/* Folder Name (technical info) */}
-                  <div className="text-gray-600 font-mono text-[10px] truncate">
+                  <div className="text-[color:var(--sf-text)]/30 font-mono text-[10px] truncate">
                     {wallet.folderName}
                   </div>
                 </div>
@@ -173,7 +173,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+                  className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
                   title="View in Google Drive"
                 >
                   <ExternalLink className="h-4 w-4" />
@@ -183,7 +183,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                 <button
                   onClick={(e) => handleDelete(e, wallet.folderId)}
                   disabled={deletingId === wallet.folderId}
-                  className="p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                  className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-red-500 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-100"
                   title="Delete backup"
                 >
                   {deletingId === wallet.folderId ? (
@@ -199,12 +199,12 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
       </div>
 
       {/* Cancel Button */}
-      <div className="pt-4 border-t border-gray-700">
+      <div className="pt-4 border-t border-[color:var(--sf-outline)]">
         <button
           onClick={onCancel}
-          className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+          className="w-full rounded-lg border border-[color:var(--sf-outline)] py-3 font-medium text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-primary)]/5"
         >
-          Cancel
+          Back
         </button>
       </div>
     </div>

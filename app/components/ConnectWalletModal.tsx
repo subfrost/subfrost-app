@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload } from 'lucide-react';
+import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -8,7 +8,7 @@ import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
 import { initGoogleDrive, isDriveConfigured, type WalletBackupInfo } from '@/utils/clientSideDrive';
 import { WalletListPicker } from './WalletListPicker';
 
-type WalletView = 'select' | 'create' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
+type WalletView = 'select' | 'create' | 'restore-options' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
 
 export default function ConnectWalletModal() {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function ConnectWalletModal() {
     createWallet: createWalletFromContext,
     unlockWallet: unlockWalletFromContext,
     restoreWallet: restoreWalletFromContext,
-    disconnect,
+    deleteKeystore: deleteKeystoreFromContext,
     // Browser wallet support
     availableBrowserWallets,
     installedBrowserWallets: installedWalletsFromContext,
@@ -48,9 +48,12 @@ export default function ConnectWalletModal() {
   const [backupSuccess, setBackupSuccess] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wasModalOpenRef = useRef(false);
 
+  // Only reset the view when the modal is first opened, not when hasExistingKeystoreFromContext changes
   useEffect(() => {
-    if (isConnectModalOpen) {
+    if (isConnectModalOpen && !wasModalOpenRef.current) {
+      // Modal just opened
       setHasExistingKeystore(hasExistingKeystoreFromContext);
       setView('select');
       resetForm();
@@ -59,6 +62,7 @@ export default function ConnectWalletModal() {
       initGoogleDrive().catch(console.error);
       setDriveConfigured(isDriveConfigured());
     }
+    wasModalOpenRef.current = isConnectModalOpen;
   }, [isConnectModalOpen, hasExistingKeystoreFromContext]);
 
   const resetForm = () => {
@@ -148,12 +152,6 @@ export default function ConnectWalletModal() {
       clearInterval(progressInterval);
       setBackupProgress(100);
       setBackupSuccess(true);
-
-      // Auto-dismiss success after 3 seconds
-      setTimeout(() => {
-        setBackupSuccess(false);
-        setBackupProgress(0);
-      }, 3000);
     } catch (err) {
       console.error('Drive backup error:', err);
       setError(err instanceof Error ? err.message : 'Failed to backup to Google Drive');
@@ -212,16 +210,7 @@ export default function ConnectWalletModal() {
   };
 
   const handleDeleteKeystore = () => {
-    // Clear the subfrost keystore from localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('subfrost_encrypted_keystore');
-      localStorage.removeItem('subfrost_wallet_network');
-      localStorage.removeItem('subfrost_wallet_unlocked');
-      // Also clear old alkanes keys for backwards compatibility
-      localStorage.removeItem('alkanes_encrypted_keystore');
-      localStorage.removeItem('alkanes_wallet_network');
-    }
-    disconnect();
+    deleteKeystoreFromContext();
     setHasExistingKeystore(false);
     setView('select');
   };
@@ -348,6 +337,7 @@ export default function ConnectWalletModal() {
           <div className="text-center text-xl font-medium leading-10 text-[color:var(--sf-text)]">
             {view === 'select' && 'Connect Wallet'}
             {view === 'create' && 'Create New Wallet'}
+            {view === 'restore-options' && 'Restore Wallet'}
             {view === 'restore-mnemonic' && 'Restore from Mnemonic'}
             {view === 'restore-json' && 'Restore from Keystore'}
             {view === 'restore-drive' && 'Restore from Google Drive'}
@@ -363,10 +353,10 @@ export default function ConnectWalletModal() {
         <div className="px-6 pb-6">
           {view === 'select' && (
             <div className="flex flex-col gap-3">
-              {/* Keystore Options */}
+              {/* Keystore Wallet Options */}
               <div className="mb-2">
                 <div className="mb-2 text-sm font-medium text-[color:var(--sf-text)]/60">Keystore Wallet</div>
-                
+
                 {hasExistingKeystore && (
                   <button
                     onClick={() => setView('unlock')}
@@ -391,55 +381,25 @@ export default function ConnectWalletModal() {
                     <Plus size={24} className="text-green-400" />
                     <div className="text-left">
                       <div className="font-medium text-[color:var(--sf-text)]">Create New Wallet</div>
-                      <div className="text-sm text-[color:var(--sf-text)]/60">Generate a new recovery phrase</div>
+                      <div className="text-sm text-[color:var(--sf-text)]/60">Generate a new Bitcoin wallet.</div>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
                 </button>
 
                 <button
-                  onClick={() => setView('restore-mnemonic')}
-                  className="w-full flex items-center justify-between rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 mb-2 transition-colors hover:bg-[color:var(--sf-primary)]/10"
+                  onClick={() => setView('restore-options')}
+                  className="w-full flex items-center justify-between rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 transition-colors hover:bg-[color:var(--sf-primary)]/10"
                 >
                   <div className="flex items-center gap-3">
-                    <Key size={24} className="text-yellow-400" />
+                    <RotateCcw size={24} className="text-yellow-400" />
                     <div className="text-left">
-                      <div className="font-medium text-[color:var(--sf-text)]">Restore from Mnemonic</div>
-                      <div className="text-sm text-[color:var(--sf-text)]/60">Import existing recovery phrase</div>
+                      <div className="font-medium text-[color:var(--sf-text)]">Restore Wallet</div>
+                      <div className="text-sm text-[color:var(--sf-text)]/60">Recover from seed phrase, keystore file, or Google Drive.</div>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
                 </button>
-
-                <button
-                  onClick={() => setView('restore-json')}
-                  className="w-full flex items-center justify-between rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 mb-2 transition-colors hover:bg-[color:var(--sf-primary)]/10"
-                >
-                  <div className="flex items-center gap-3">
-                    <Upload size={24} className="text-orange-400" />
-                    <div className="text-left">
-                      <div className="font-medium text-[color:var(--sf-text)]">Restore from Keystore File</div>
-                      <div className="text-sm text-[color:var(--sf-text)]/60">Import exported JSON keystore</div>
-                    </div>
-                  </div>
-                  <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
-                </button>
-
-                {driveConfigured && (
-                  <button
-                    onClick={() => setView('restore-drive-picker')}
-                    className="w-full flex items-center justify-between rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 transition-colors hover:bg-[color:var(--sf-primary)]/10"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Cloud size={24} className="text-blue-400" />
-                      <div className="text-left">
-                        <div className="font-medium text-[color:var(--sf-text)]">Restore from Google Drive</div>
-                        <div className="text-sm text-[color:var(--sf-text)]/60">Recover wallet from your Drive</div>
-                      </div>
-                    </div>
-                    <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
-                  </button>
-                )}
               </div>
 
               {/* Browser Extension Wallets */}
@@ -454,9 +414,9 @@ export default function ConnectWalletModal() {
                     <div className="text-left">
                       <div className="font-medium text-[color:var(--sf-text)]">Connect Browser Extension</div>
                       <div className="text-sm text-[color:var(--sf-text)]/60">
-                        {installedWallets.length > 0 
-                          ? `${installedWallets.length} wallet${installedWallets.length > 1 ? 's' : ''} detected`
-                          : 'No wallets detected'}
+                        {installedWallets.length > 0
+                          ? `${installedWallets.length} wallet${installedWallets.length > 1 ? 's' : ''} detected.`
+                          : 'No wallets detected.'}
                       </div>
                     </div>
                   </div>
@@ -472,6 +432,54 @@ export default function ConnectWalletModal() {
                   Delete stored wallet
                 </button>
               )}
+            </div>
+          )}
+
+          {view === 'restore-options' && (
+            <div className="flex flex-col gap-4">
+              <div className="text-sm text-[color:var(--sf-text)]/60 text-center">
+                Choose how you want to restore your wallet:
+              </div>
+
+              {/* Square grid options */}
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={() => setView('restore-mnemonic')}
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 aspect-square transition-colors hover:bg-[color:var(--sf-primary)]/10"
+                >
+                  <Key size={32} className="text-yellow-400" />
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-[color:var(--sf-text)]">Seed Phrase</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setView('restore-json')}
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 aspect-square transition-colors hover:bg-[color:var(--sf-primary)]/10"
+                >
+                  <Upload size={32} className="text-orange-400" />
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-[color:var(--sf-text)]">Keystore File</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setView('restore-drive-picker')}
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 aspect-square transition-colors hover:bg-[color:var(--sf-primary)]/10"
+                >
+                  <Cloud size={32} className="text-blue-400" />
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-[color:var(--sf-text)]">Google Drive</div>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => { setView('select'); resetForm(); }}
+                className="w-full rounded-lg border border-[color:var(--sf-outline)] py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
+              >
+                Back
+              </button>
             </div>
           )}
 
@@ -511,10 +519,7 @@ export default function ConnectWalletModal() {
               {driveConfigured && (
                 <div>
                   <label className="mb-1 block text-sm text-[color:var(--sf-text)]/60">
-                    Password Hint (Optional)
-                    <span className="ml-2 text-xs text-gray-500">
-                      For Google Drive backup
-                    </span>
+                    Password Hint for Google Drive Backup (Optional)
                   </label>
                   <input
                     type="text"
@@ -551,7 +556,7 @@ export default function ConnectWalletModal() {
 
           {view === 'show-mnemonic' && (
             <div className="flex flex-col gap-4">
-              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200">
+              <div className="rounded-lg border-[color:var(--sf-info-yellow-border)] border bg-[color:var(--sf-info-yellow-bg)] p-3 text-sm text-[color:var(--sf-info-yellow-text)]">
                 ⚠️ Write down these words in order and store them safely. This is the only way to recover your wallet.
               </div>
 
@@ -580,11 +585,11 @@ export default function ConnectWalletModal() {
                   onChange={(e) => setMnemonicConfirmed(e.target.checked)}
                   className="rounded"
                 />
-                I have saved my recovery phrase securely
+                I have saved my recovery phrase securely.
               </label>
 
               {error && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                <div className="rounded-lg border-[color:var(--sf-info-red-border)] border bg-[color:var(--sf-info-red-bg)] p-3 text-sm text-[color:var(--sf-info-red-text)]">
                   {error}
                 </div>
               )}
@@ -593,11 +598,11 @@ export default function ConnectWalletModal() {
                 <div className="flex flex-col gap-2">
                   <div className="relative">
                     <button
-                      onClick={handleBackupToDrive}
-                      disabled={isLoading || backupSuccess}
+                      onClick={backupSuccess ? handleConfirmMnemonic : handleBackupToDrive}
+                      disabled={isLoading}
                       className={`w-full rounded-lg py-3 font-medium transition-all flex items-center justify-center gap-2 text-white overflow-hidden relative ${
                         backupSuccess
-                          ? 'bg-green-500 animate-pulse'
+                          ? 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700'
                           : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg disabled:opacity-50'
                       }`}
                     >
@@ -612,7 +617,7 @@ export default function ConnectWalletModal() {
                         {backupSuccess ? (
                           <>
                             <Check size={18} />
-                            Backed up successfully!
+                            Enter App
                           </>
                         ) : isLoading ? (
                           <>
@@ -628,13 +633,15 @@ export default function ConnectWalletModal() {
                       </span>
                     </button>
                   </div>
-                  <button
-                    onClick={handleConfirmMnemonic}
-                    disabled={!mnemonicConfirmed}
-                    className="text-sm text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 py-2"
-                  >
-                    Skip backup
-                  </button>
+                  {!backupSuccess && (
+                    <button
+                      onClick={handleConfirmMnemonic}
+                      disabled={!mnemonicConfirmed}
+                      className="text-sm text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 py-2"
+                    >
+                      Skip Google Drive Backup
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -686,7 +693,7 @@ export default function ConnectWalletModal() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setView('select'); resetForm(); }}
+                  onClick={() => { setView('restore-options'); resetForm(); }}
                   className="flex-1 rounded-lg border border-[color:var(--sf-outline)] py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
                 >
                   Back
@@ -704,7 +711,7 @@ export default function ConnectWalletModal() {
 
           {view === 'restore-json' && (
             <div className="flex flex-col gap-4">
-              <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-3 text-sm text-orange-200">
+              <div className="rounded-lg border-[color:var(--sf-info-orange-border)] border bg-[color:var(--sf-info-orange-bg)] p-3 text-sm text-[color:var(--sf-info-orange-text)]">
                 Upload a previously exported JSON keystore file to restore your wallet.
               </div>
 
@@ -765,7 +772,7 @@ export default function ConnectWalletModal() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setView('select'); resetForm(); }}
+                  onClick={() => { setView('restore-options'); resetForm(); }}
                   className="flex-1 rounded-lg border border-[color:var(--sf-outline)] py-3 font-medium transition-colors hover:bg-[color:var(--sf-primary)]/5"
                 >
                   Back
@@ -783,68 +790,79 @@ export default function ConnectWalletModal() {
 
           {view === 'browser-extension' && (
             <div className="flex flex-col gap-3">
-              <div className="mb-2 text-sm text-[color:var(--sf-text)]/60">
-                Connect using a browser extension wallet. Select from detected wallets below:
-              </div>
-
-              {installedWallets.length > 0 ? (
-                <div className="max-h-96 overflow-y-auto space-y-2">
-                  {installedWallets.map((wallet) => (
-                    <button
-                      key={wallet.id}
-                      onClick={async () => {
-                        setIsLoading(true);
-                        setError(null);
-                        try {
-                          // Use WalletContext's connectBrowserWallet method
-                          await connectBrowserWalletFromContext(wallet.id);
-                          console.log('Connected to browser wallet:', wallet.name);
-                          // Navigate to wallet dashboard on successful connection
-                          handleCloseAndNavigate();
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-                        } finally {
-                          setIsLoading(false);
-                        }
-                      }}
-                      disabled={isLoading}
-                      className="w-full flex items-center justify-between rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 transition-colors hover:bg-[color:var(--sf-primary)]/10 disabled:opacity-50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <img src={wallet.icon} alt={wallet.name} className="w-8 h-8" />
-                        <div className="text-left">
-                          <div className="font-medium text-[color:var(--sf-text)]">{wallet.name}</div>
-                          <div className="text-xs text-[color:var(--sf-text)]/60 flex gap-2">
-                            {wallet.supportsTaproot && <span>Taproot</span>}
-                            {wallet.supportsOrdinals && <span>• Ordinals</span>}
+              <div className="max-h-96 overflow-y-auto space-y-4">
+                {/* Installed Wallets Section */}
+                {installedWallets.length > 0 ? (
+                  <div>
+                    <div className="mb-2 text-sm font-medium text-[color:var(--sf-text)]/60">Installed Wallets</div>
+                    <div className="space-y-2">
+                      {installedWallets.map((wallet) => (
+                        <button
+                          key={wallet.id}
+                          onClick={async () => {
+                            setIsLoading(true);
+                            setError(null);
+                            try {
+                              await connectBrowserWalletFromContext(wallet.id);
+                              console.log('Connected to browser wallet:', wallet.name);
+                              handleCloseAndNavigate();
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+                            } finally {
+                              setIsLoading(false);
+                            }
+                          }}
+                          disabled={isLoading}
+                          className="w-full flex items-center justify-between rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4 transition-colors hover:bg-[color:var(--sf-primary)]/10 disabled:opacity-50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <img src={wallet.icon} alt={wallet.name} className="w-8 h-8" />
+                            <div className="text-left">
+                              <div className="font-medium text-[color:var(--sf-text)]">{wallet.name}</div>
+                              <div className="text-xs text-[color:var(--sf-text)]/60 flex gap-2">
+                                {wallet.supportsTaproot && <span>Taproot</span>}
+                                {wallet.supportsOrdinals && <span>• Ordinals</span>}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                      <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-[color:var(--sf-text)]/60 mb-4">No browser wallets detected</div>
-                  <div className="text-sm text-[color:var(--sf-text)]/40 mb-4">Install one of these wallets:</div>
-                  <div className="space-y-2">
-                    {availableBrowserWallets.map((wallet) => (
-                      <a
-                        key={wallet.id}
-                        href={wallet.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-3 rounded-lg border border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/5 transition-colors"
-                      >
-                        <img src={wallet.icon} alt={wallet.name} className="w-6 h-6" />
-                        <span className="flex-1 text-left text-sm">{wallet.name}</span>
-                        <Download size={16} className="text-[color:var(--sf-text)]/40" />
-                      </a>
-                    ))}
+                          <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-center py-4">
+                    <div className="text-[color:var(--sf-text)]/60">No browser wallets detected.</div>
+                  </div>
+                )}
+
+                {/* Available Wallets Section */}
+                {(() => {
+                  const installedIds = new Set(installedWallets.map(w => w.id));
+                  const notInstalledWallets = availableBrowserWallets.filter(w => !installedIds.has(w.id));
+                  if (notInstalledWallets.length === 0) return null;
+                  return (
+                    <div>
+                      <div className="mb-2 text-sm font-medium text-[color:var(--sf-text)]/60">Available Wallets</div>
+                      <div className="space-y-2">
+                        {notInstalledWallets.map((wallet) => (
+                          <a
+                            key={wallet.id}
+                            href={wallet.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 p-3 rounded-lg border border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/5 transition-colors"
+                          >
+                            <img src={wallet.icon} alt={wallet.name} className="w-6 h-6" />
+                            <span className="flex-1 text-left text-sm">{wallet.name}</span>
+                            <Download size={16} className="text-[color:var(--sf-text)]/40" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
 
               {error && <div className="text-sm text-red-400">{error}</div>}
 
@@ -860,21 +878,21 @@ export default function ConnectWalletModal() {
           {view === 'restore-drive-picker' && (
             <WalletListPicker
               onSelectWallet={handleSelectDriveWallet}
-              onCancel={() => setView('select')}
+              onCancel={() => setView('restore-options')}
             />
           )}
 
           {view === 'restore-drive-unlock' && selectedDriveWallet && (
             <div className="flex flex-col gap-4">
-              <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+              <div className="rounded-lg border-[color:var(--sf-info-blue-border)] border bg-[color:var(--sf-info-blue-bg)] p-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <Cloud size={16} className="text-blue-400" />
-                  <div className="text-sm font-medium text-blue-200">
+                  <Cloud size={16} className="text-[color:var(--sf-info-blue-title)]" />
+                  <div className="text-sm font-medium text-[color:var(--sf-info-blue-text)]">
                     Restoring: {selectedDriveWallet.walletLabel}
                   </div>
                 </div>
                 {passwordHint && (
-                  <div className="text-xs text-gray-300 mt-2">
+                  <div className="text-xs text-[color:var(--sf-info-blue-text)] mt-2">
                     <span className="font-medium">Password hint:</span> {passwordHint}
                   </div>
                 )}
@@ -902,7 +920,7 @@ export default function ConnectWalletModal() {
               </div>
 
               {error && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                <div className="rounded-lg border-[color:var(--sf-info-red-border)] border bg-[color:var(--sf-info-red-bg)] p-3 text-sm text-[color:var(--sf-info-red-text)]">
                   {error}
                 </div>
               )}
