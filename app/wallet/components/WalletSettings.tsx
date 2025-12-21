@@ -305,7 +305,7 @@ export default function WalletSettings() {
         </div>
 
         {!wallet ? (
-          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-600 dark:text-yellow-200">
+          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-amber-700 dark:text-yellow-200">
             ⚠️ Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
           </div>
         ) : (
