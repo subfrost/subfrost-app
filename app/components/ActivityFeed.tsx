@@ -172,7 +172,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
         {/* Header */}
-        <div className="grid grid-cols-[60px_140px_130px_minmax(70px,1fr)_minmax(70px,1fr)] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-2 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] min-w-fit">
+        <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] min-w-fit">
           <div>Txn</div>
           <div>Pair</div>
           <div className="text-right">Amounts</div>
@@ -186,6 +186,15 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
           const timeLabel = new Intl.DateTimeFormat(undefined, {
             month: '2-digit',
             day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(time);
+          // Separate date and time for responsive display
+          const dateLabel = new Intl.DateTimeFormat(undefined, {
+            month: '2-digit',
+            day: '2-digit',
+          }).format(time);
+          const hourMinLabel = new Intl.DateTimeFormat(undefined, {
             hour: '2-digit',
             minute: '2-digit',
           }).format(time);
@@ -237,11 +246,11 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[60px_140px_130px_minmax(70px,1fr)_minmax(70px,1fr)] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-2 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
+              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
             >
               <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
-              <div className="flex items-center gap-2 lg:gap-3">
+              <div className="flex items-center gap-1 lg:gap-3">
                 <PairIcon
                   leftId={pairNames.leftId}
                   rightId={pairNames.rightId}
@@ -302,7 +311,13 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               </div>
 
               <div className="truncate text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
-              <div className="text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{timeLabel}</div>
+              {/* Desktop: single line */}
+              <div className="hidden lg:block text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{timeLabel}</div>
+              {/* Mobile/tablet: two lines */}
+              <div className="lg:hidden text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">
+                <div>{dateLabel}</div>
+                <div>{hourMinLabel}</div>
+              </div>
             </Link>
           );
         })}
