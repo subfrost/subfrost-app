@@ -25,7 +25,7 @@ const TEST_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon a
 // Regtest configuration
 const REGTEST_CONFIG = {
   sandshrew_rpc_url: 'https://regtest.subfrost.io/v4/subfrost',
-  data_api_url: 'https://regtest.subfrost.io/v4/api',
+  data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
 };
 
 // frBTC wrap opcode (same as useWrapMutation)

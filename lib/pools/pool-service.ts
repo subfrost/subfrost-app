@@ -15,6 +15,7 @@ import {
   fetchPoolDataPoints,
   fetchDieselStats,
   estimate24hVolume,
+  estimateVolume,
   calculatePoolTvl,
   getCurrentHeight,
   POOL_FEES,
@@ -23,6 +24,7 @@ import {
   type CandleData,
   type DieselMarketStats,
   type TvlStats,
+  type VolumePeriod,
 } from './candle-fetcher';
 
 // ============================================================================
@@ -79,12 +81,22 @@ export interface SerializedPoolPrice {
 export interface PoolVolume {
   poolId: string;
   poolName: string;
+  volume: number;
+  volumeUsd?: number;
   volume24h: number;
   volume24hUsd?: number;
+  volume7d?: number;
+  volume7dUsd?: number;
+  volume30d?: number;
+  volume30dUsd?: number;
+  period: VolumePeriod;
   startHeight: number;
   endHeight: number;
   timestamp: number;
 }
+
+// Re-export VolumePeriod for consumers
+export type { VolumePeriod };
 
 export interface PoolStats {
   poolId: string;
@@ -144,18 +156,18 @@ function deserializePoolPrice(data: SerializedPoolPrice): PoolPrice {
 
 /**
  * Get current Bitcoin price in USD (with caching)
- * @param network - Optional network name for network-specific client
+ * Always uses mainnet since BTC price is network-agnostic
  */
-export async function getBitcoinPrice(network?: string): Promise<BitcoinPrice> {
-  const netSuffix = network || 'default';
-  const cacheKey = `btc:price:usd:${netSuffix}`;
+export async function getBitcoinPrice(_network?: string): Promise<BitcoinPrice> {
+  const cacheKey = 'btc:price:usd';
 
   const cached = await cacheGet<BitcoinPrice>(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const client = getAlkanesClient(network);
+  // Always use mainnet for BTC price - it's the same across all networks
+  const client = getAlkanesClient('mainnet');
   const price = await client.getBitcoinPrice();
   const result: BitcoinPrice = {
     usd: price,
@@ -321,62 +333,96 @@ export async function getAllPoolPrices(network?: string): Promise<Record<string,
 // Pool Volume
 // ============================================================================
 
+/** Cache TTL for different volume periods */
+const VOLUME_CACHE_TTL: Record<VolumePeriod, number> = {
+  '24h': 300,    // 5 minutes
+  '7d': 600,     // 10 minutes
+  '30d': 900,    // 15 minutes
+};
+
 /**
- * Get 24h trading volume estimate for a pool
+ * Convert volume to USD based on token1 symbol
+ */
+async function convertVolumeToUsd(
+  volumeToken1: number,
+  token1Symbol: string,
+  network?: string
+): Promise<number> {
+  if (token1Symbol === 'bUSD') {
+    return volumeToken1;
+  }
+  if (token1Symbol === 'frBTC') {
+    try {
+      const btcPrice = await getBitcoinPrice(network);
+      return volumeToken1 * btcPrice.usd;
+    } catch {
+      return 0;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Get trading volume estimate for a pool over a specified period
+ * @param poolKey - Pool key (e.g., 'DIESEL_BUSD')
+ * @param period - Time period ('24h', '7d', or '30d')
  * @param network - Optional network name for network-specific client
  */
-export async function getPoolVolume(poolKey: string, network?: string): Promise<PoolVolume | null> {
+export async function getPoolVolume(
+  poolKey: string,
+  period: VolumePeriod = '24h',
+  network?: string
+): Promise<PoolVolume | null> {
   const pools = getPools(network);
   const pool = pools[poolKey];
   if (!pool) return null;
 
   const netSuffix = network || 'default';
-  const cacheKey = `pool:volume:${pool.id}:${netSuffix}`;
+  const cacheKey = `pool:volume:${pool.id}:${period}:${netSuffix}`;
 
   const cached = await cacheGet<PoolVolume>(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const volumeData = await estimate24hVolume(poolKey, 6, network);
-
-  // Get BTC price for USD conversion
-  let volume24hUsd: number = 0;
-  if (pool.token1Symbol === 'frBTC') {
-    try {
-      const btcPrice = await getBitcoinPrice(network);
-      volume24hUsd = volumeData.volumeToken1 * btcPrice.usd;
-    } catch {
-      // BTC price fetch failed, volume stays 0
-    }
-  } else if (pool.token1Symbol === 'bUSD') {
-    volume24hUsd = volumeData.volumeToken1;
-  }
+  const volumeData = await estimateVolume(poolKey, period, network);
+  const volumeUsd = await convertVolumeToUsd(volumeData.volumeToken1, pool.token1Symbol, network);
 
   const result: PoolVolume = {
     poolId: pool.id,
     poolName: pool.name,
-    volume24h: volumeData.volumeToken1,
-    volume24hUsd,
+    volume: volumeData.volumeToken1,
+    volumeUsd,
+    volume24h: period === '24h' ? volumeData.volumeToken1 : 0,
+    volume24hUsd: period === '24h' ? volumeUsd : undefined,
+    volume7d: period === '7d' ? volumeData.volumeToken1 : undefined,
+    volume7dUsd: period === '7d' ? volumeUsd : undefined,
+    volume30d: period === '30d' ? volumeData.volumeToken1 : undefined,
+    volume30dUsd: period === '30d' ? volumeUsd : undefined,
+    period,
     startHeight: volumeData.startHeight,
     endHeight: volumeData.endHeight,
     timestamp: Date.now(),
   };
 
-  await cacheSet(cacheKey, result, CACHE_TTL.VOLUME);
+  await cacheSet(cacheKey, result, VOLUME_CACHE_TTL[period]);
   return result;
 }
 
 /**
- * Get 24h volume for all pools
+ * Get volume for all pools over a specified period
+ * @param period - Time period ('24h', '7d', or '30d')
  * @param network - Optional network name for network-specific client
  */
-export async function getAllPoolVolumes(network?: string): Promise<Record<string, PoolVolume>> {
+export async function getAllPoolVolumes(
+  period: VolumePeriod = '24h',
+  network?: string
+): Promise<Record<string, PoolVolume>> {
   const pools = getPools(network);
   const poolKeys = Object.keys(pools);
 
   const volumes = await Promise.all(
-    poolKeys.map(key => getPoolVolume(key, network))
+    poolKeys.map(key => getPoolVolume(key, period, network))
   );
 
   const result: Record<string, PoolVolume> = {};
@@ -437,7 +483,7 @@ export async function getPoolStats(poolKey: string, network?: string): Promise<P
 
   const [price, volume, btcPrice] = await Promise.all([
     getPoolPrice(poolKey, network),
-    getPoolVolume(poolKey, network),
+    getPoolVolume(poolKey, '24h', network),
     getBitcoinPrice(network),
   ]);
 

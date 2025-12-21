@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePools } from '@/hooks/usePools';
+import { useAllPoolVolumes } from '@/hooks/usePoolData';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 
@@ -43,17 +44,34 @@ function formatUsd(n?: number, showZeroAsDash = false) {
 export default function TrendingPairs() {
   const { network } = useWallet();
   const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
+  const { data: poolVolumes } = useAllPoolVolumes();
+
   const pairs = useMemo(() => {
     // Filter to whitelisted pools on mainnet, allow all on other networks
-    // Sort by TVL (volume data not currently available from API), take the top one
     const allPools = data?.items ?? [];
     const filtered = network === 'mainnet'
       ? allPools.filter(p => MAINNET_WHITELISTED_POOL_IDS.has(p.id))
       : allPools;
+
+    // Create volume lookup map by pool ID
+    const volumeMap = new Map<string, number>();
+    if (poolVolumes) {
+      for (const volume of Object.values(poolVolumes)) {
+        if (volume.volume24hUsd !== undefined) {
+          volumeMap.set(volume.poolId, volume.volume24hUsd);
+        }
+      }
+    }
+
+    // Merge volume data with pools and sort by TVL, take the top one
     return filtered
+      .map(p => ({
+        ...p,
+        vol24hUsd: volumeMap.get(p.id) ?? p.vol24hUsd,
+      }))
       .sort((a, b) => (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0))
       .slice(0, 1);
-  }, [data?.items, network]);
+  }, [data?.items, network, poolVolumes]);
 
   return (
     <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">

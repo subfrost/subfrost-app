@@ -378,8 +378,7 @@ class AlkanesClient {
         this.provider = new AlkanesProvider({
           network: this.networkConfig.network,
           networkType: this.networkConfig.networkType,
-          url: this.networkConfig.url,
-          dataApiUrl: this.networkConfig.dataApiUrl,
+          rpcUrl: this.networkConfig.url,
         });
         await this.provider.initialize();
       })();
@@ -456,8 +455,31 @@ class AlkanesClient {
   // ==========================================================================
 
   async getCurrentHeight(): Promise<number> {
-    const provider = await this.ensureProvider();
-    return provider.getBlockHeight();
+    // TODO: Migrate to @alkanes/ts-sdk once SDK correctly constructs JSON-RPC URLs
+    // Currently the SDK uses /v4/jsonrpc instead of /v4/subfrost/jsonrpc
+    try {
+      const jsonRpcUrl = `${this.networkConfig.url}/jsonrpc`;
+      const response = await fetch(jsonRpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'metashrew_height',
+          params: [],
+        }),
+      });
+      const result = await response.json();
+      if (result?.result) {
+        return parseInt(result.result, 10);
+      }
+      // Fallback to SDK
+      const provider = await this.ensureProvider();
+      return provider.getBlockHeight();
+    } catch {
+      const provider = await this.ensureProvider();
+      return provider.getBlockHeight();
+    }
   }
 
   async metashrewView(viewFn: string, payload: string, blockTag: string = 'latest'): Promise<string> {
@@ -466,23 +488,87 @@ class AlkanesClient {
   }
 
   async executeLuaScript<T>(script: string, args: unknown[]): Promise<T> {
-    const provider = await this.ensureProvider();
-    const result = await provider.lua.eval(script, args);
+    // TODO: Migrate to @alkanes/ts-sdk once SDK correctly constructs JSON-RPC URLs
+    // Currently the SDK uses /v4/jsonrpc instead of /v4/subfrost/jsonrpc, causing rate limits
+    try {
+      const jsonRpcUrl = `${this.networkConfig.url}/jsonrpc`;
+      const response = await fetch(jsonRpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'lua_evalscript',
+          params: [script, args],
+        }),
+      });
+      const result = await response.json();
 
-    if (result && result.returns !== undefined) {
-      return result.returns as T;
+      if (result?.error) {
+        throw new Error(`Lua eval failed: ${result.error.message || JSON.stringify(result.error)}`);
+      }
+
+      if (result?.result !== undefined) {
+        // Handle the returns wrapper if present
+        if (result.result && typeof result.result === 'object' && 'returns' in result.result) {
+          return result.result.returns as T;
+        }
+        return result.result as T;
+      }
+
+      // Fallback to SDK
+      const provider = await this.ensureProvider();
+      const sdkResult = await provider.lua.eval(script, args);
+      if (sdkResult && sdkResult.returns !== undefined) {
+        return sdkResult.returns as T;
+      }
+      return sdkResult as T;
+    } catch (error) {
+      // If our direct call fails, try SDK as fallback
+      const provider = await this.ensureProvider();
+      const result = await provider.lua.eval(script, args);
+      if (result && result.returns !== undefined) {
+        return result.returns as T;
+      }
+      return result as T;
     }
-    return result as T;
   }
 
   // ==========================================================================
   // Pool Methods
   // ==========================================================================
 
-  async getPoolReserves(pool: PoolConfig, blockTag: string = 'latest'): Promise<PoolReserves | null> {
+  async getPoolReserves(pool: PoolConfig, _blockTag: string = 'latest'): Promise<PoolReserves | null> {
     try {
-      const hex = await this.metashrewView('simulate', pool.protobufPayload, blockTag);
-      return this.parsePoolReservesHex(hex);
+      // TODO: Migrate to @alkanes/ts-sdk once SDK correctly supports get-pool-details endpoint
+      // Currently using direct REST API call as workaround for SDK issues:
+      // - SDK's getPoolReserves() calls get-reserves endpoint which returns zeros
+      // - SDK's alkanes.getPoolDetails() returns raw hex requiring custom parsing
+      // See: https://mainnet.subfrost.io/v4/subfrost/get-pool-details
+      const baseUrl = this.networkConfig.url; // includes /subfrost API key
+      const response = await fetch(`${baseUrl}/get-pool-details`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          poolId: {
+            block: String(pool.alkaneId.block),
+            tx: String(pool.alkaneId.tx),
+          },
+        }),
+      });
+      const result = await response.json();
+
+      if (result?.statusCode === 200 && result?.data) {
+        const data = result.data;
+        return {
+          reserve0: BigInt(data.token0_amount || '0'),
+          reserve1: BigInt(data.token1_amount || '0'),
+          totalSupply: BigInt(data.token_supply || '0'),
+        };
+      }
+
+      console.warn(`[AlkanesClient] Unexpected pool details response for ${pool.id}:`, JSON.stringify(result));
+      return null;
     } catch (error) {
       console.error(`[AlkanesClient] Error fetching pool reserves for ${pool.id}:`, error);
       return null;
@@ -549,17 +635,29 @@ class AlkanesClient {
   // ==========================================================================
 
   async getBitcoinPrice(): Promise<number> {
-    const provider = await this.ensureProvider();
+    // TODO: Migrate to @alkanes/ts-sdk once SDK correctly parses the API response
+    // Currently using direct REST API call as workaround for SDK issue:
+    // - SDK's getBitcoinPrice() returns 0 because it expects result.price
+    //   but API returns { statusCode: 200, data: { bitcoin: { usd: number } } }
+    // See: https://mainnet.subfrost.io/v4/subfrost/get-bitcoin-price
     try {
-      const result = await provider.dataApi.getBitcoinPrice();
-      if (result && result.price > 0) {
-        return result.price;
+      // Always use mainnet for BTC price (network-agnostic) with subfrost API key
+      const response = await fetch('https://mainnet.subfrost.io/v4/subfrost/get-bitcoin-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const result = await response.json();
+      const price = result?.data?.bitcoin?.usd;
+      if (typeof price === 'number' && price > 0) {
+        return price;
       }
-      return 0;
+      console.warn('[AlkanesClient] Unexpected BTC price response:', JSON.stringify(result));
     } catch (error) {
-      console.error('[AlkanesClient] Error fetching BTC price:', error);
-      return 0;
+      console.error('[AlkanesClient] getBitcoinPrice failed:', error);
     }
+
+    return 0;
   }
 }
 

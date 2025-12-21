@@ -1,7 +1,7 @@
 /**
  * useDynamicPools - Fetches pools dynamically from the REST API
  *
- * This hook uses the /v4/api/get-pools endpoint to fetch all pools
+ * This hook uses the /v4/subfrost/get-pools endpoint to fetch all pools
  * with their details including token IDs and names.
  */
 
@@ -9,14 +9,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 
-// Network to API base URL mapping for REST API
+// Network to API base URL mapping for REST API (using subfrost API key)
 const NETWORK_API_URLS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/api',
-  testnet: 'https://testnet.subfrost.io/v4/api',
-  signet: 'https://signet.subfrost.io/v4/api',
-  regtest: 'https://regtest.subfrost.io/v4/api',
-  oylnet: 'https://regtest.subfrost.io/v4/api',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/api',
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+  testnet: 'https://testnet.subfrost.io/v4/subfrost',
+  signet: 'https://signet.subfrost.io/v4/subfrost',
+  regtest: 'https://regtest.subfrost.io/v4/subfrost',
+  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
 };
 
 export type DynamicPool = {

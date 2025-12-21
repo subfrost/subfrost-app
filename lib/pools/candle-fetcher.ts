@@ -435,13 +435,32 @@ export function estimateVolumeBetweenPoints(
   return estimatedVolume;
 }
 
+/** Volume period type */
+export type VolumePeriod = '24h' | '7d' | '30d';
+
+/** Blocks per period (assuming ~10 min blocks) */
+export const BLOCKS_PER_PERIOD: Record<VolumePeriod, number> = {
+  '24h': 144,    // 24 hours
+  '7d': 1008,    // 7 days
+  '30d': 4320,   // 30 days
+};
+
+/** Sample intervals per period (to avoid fetching too many data points) */
+const SAMPLE_INTERVALS: Record<VolumePeriod, number> = {
+  '24h': 6,      // Every ~1 hour
+  '7d': 24,      // Every ~4 hours
+  '30d': 72,     // Every ~12 hours
+};
+
 /**
- * Calculate 24h volume estimate for a pool
+ * Calculate volume estimate for a pool over a specified period
+ * @param poolKey - Pool key (e.g., 'DIESEL_BUSD')
+ * @param period - Time period ('24h', '7d', or '30d')
  * @param network - Optional network name for network-specific client
  */
-export async function estimate24hVolume(
+export async function estimateVolume(
   poolKey: string,
-  sampleInterval: number = 6,
+  period: VolumePeriod = '24h',
   network?: string
 ): Promise<{
   volume: number;
@@ -450,16 +469,18 @@ export async function estimate24hVolume(
   startHeight: number;
   endHeight: number;
   samples: number;
+  period: VolumePeriod;
 }> {
   const pools = getPools(network);
   const pool = pools[poolKey];
   if (!pool) {
-    return { volume: 0, volumeToken1: 0, startHeight: 0, endHeight: 0, samples: 0 };
+    return { volume: 0, volumeToken1: 0, startHeight: 0, endHeight: 0, samples: 0, period };
   }
 
   const currentHeight = await getCurrentHeight(network);
-  const blocksIn24h = 144;
-  const startHeight = currentHeight - blocksIn24h;
+  const blocksInPeriod = BLOCKS_PER_PERIOD[period];
+  const sampleInterval = SAMPLE_INTERVALS[period];
+  const startHeight = currentHeight - blocksInPeriod;
 
   const dataPoints = await fetchPoolDataPoints(poolKey, startHeight, currentHeight, sampleInterval, network);
 
@@ -470,6 +491,7 @@ export async function estimate24hVolume(
       startHeight,
       endHeight: currentHeight,
       samples: dataPoints.length,
+      period,
     };
   }
 
@@ -490,6 +512,33 @@ export async function estimate24hVolume(
     startHeight,
     endHeight: currentHeight,
     samples: dataPoints.length,
+    period,
+  };
+}
+
+/**
+ * Calculate 24h volume estimate for a pool (convenience wrapper)
+ * @param network - Optional network name for network-specific client
+ */
+export async function estimate24hVolume(
+  poolKey: string,
+  sampleInterval: number = 6,
+  network?: string
+): Promise<{
+  volume: number;
+  volumeToken1: number;
+  volumeUsd?: number;
+  startHeight: number;
+  endHeight: number;
+  samples: number;
+}> {
+  const result = await estimateVolume(poolKey, '24h', network);
+  return {
+    volume: result.volume,
+    volumeToken1: result.volumeToken1,
+    startHeight: result.startHeight,
+    endHeight: result.endHeight,
+    samples: result.samples,
   };
 }
 
