@@ -21,63 +21,67 @@ const sizeMap = {
   xl: 'h-10 w-10 text-base',
 };
 
+// Tokens with known local icons in /public/tokens/
+const TOKENS_WITH_LOCAL_ICONS = new Set([
+  'btc', 'frbtc', 'busd', 'eth', 'methane', 'ordi', 'sol', 'usdt', 'zec', 'frusd'
+]);
+
+// Alkane IDs with known local icons
+const ALKANE_IDS_WITH_LOCAL_ICONS = new Set([
+  '32:0',    // frBTC
+  '2:56801', // bUSD
+]);
+
 export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className = '', network = 'mainnet' }: TokenIconProps) {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Generate icon paths - try multiple sources
-  // Local files in /public/tokens are prioritized over remote CDN
+  // Only try local paths for tokens we know have icons to avoid 404 console noise
   const getIconPaths = (): string[] => {
     const paths: string[] = [];
+    const symbolLower = symbol?.toLowerCase() || '';
+    const hasLocalIcon = TOKENS_WITH_LOCAL_ICONS.has(symbolLower);
+    const hasLocalIconById = id ? ALKANE_IDS_WITH_LOCAL_ICONS.has(id) : false;
 
     // Priority 1: Special handling for frBTC - always use local logo (brand consistency)
-    if (symbol?.toLowerCase() === 'frbtc' || id === '32:0') {
+    if (symbolLower === 'frbtc' || id === '32:0') {
       paths.push('/tokens/frbtc.svg');
       paths.push('/tokens/frbtc.png');
       return paths;
     }
 
     // Priority 2: Special handling for BTC
-    if (symbol?.toLowerCase() === 'btc' || id === 'btc') {
+    if (symbolLower === 'btc' || id === 'btc') {
       paths.push('/tokens/btc.svg');
+      return paths;
     }
 
     // Priority 3: Special handling for bUSD (check by token ID)
-    if (id === '2:56801' || symbol?.toLowerCase() === 'busd') {
+    if (id === '2:56801' || symbolLower === 'busd') {
       paths.push('/tokens/busd.png');
+      return paths;
     }
 
     // Priority 4: Special handling for frUSD
-    if (symbol?.toLowerCase() === 'frusd' || id === 'frUSD') {
+    if (symbolLower === 'frusd' || id === 'frUSD') {
       paths.push('/tokens/usdt_empty.svg');
+      return paths;
     }
 
-    // Priority 5: Try local token assets by symbol
-    if (symbol) {
-      paths.push(`/tokens/${symbol.toLowerCase()}.svg`);
-      paths.push(`/tokens/${symbol.toLowerCase()}.png`);
-    }
-
-    // Priority 6: Try local files with alkane ID format
-    if (id && /^\d+:\d+/.test(id)) {
-      const urlSafeId = id.replace(/:/g, '-');
-      paths.push(`/tokens/${urlSafeId}.svg`);
-      paths.push(`/tokens/${urlSafeId}.png`);
-    }
-
-    // Priority 7: Try local token assets by id (non-alkane IDs)
-    if (id && id !== symbol && !/^\d+:\d+/.test(id)) {
-      paths.push(`/tokens/${id.toLowerCase()}.svg`);
-      paths.push(`/tokens/${id.toLowerCase()}.png`);
-    }
-
-    // Priority 8: Use direct iconUrl if provided (from API)
+    // Priority 5: Use direct iconUrl if provided (from API)
     if (iconUrl) {
       paths.push(iconUrl);
     }
 
-    // Priority 9: Fallback to Oyl CDN for Alkanes tokens
-    if (id && /^\d+:\d+/.test(id)) {
+    // Priority 6: Try local token assets by symbol (only if we know the icon exists)
+    if (hasLocalIcon) {
+      paths.push(`/tokens/${symbolLower}.svg`);
+      paths.push(`/tokens/${symbolLower}.png`);
+    }
+
+    // Priority 7: Fallback to Oyl CDN for Alkanes tokens (skip local attempts)
+    if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
       const urlSafeId = id.replace(/:/g, '-');
       paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
     }

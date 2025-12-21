@@ -39,54 +39,53 @@ export type PoolsListItem = {
 
 // Token IDs for TVL calculation
 const FRBTC_TOKEN_ID = '32:0';
-const BUSD_TOKEN_ID_MAINNET = '2:56801';
 
 /**
  * Calculate TVL in USD from pool reserves
+ *
+ * For a constant product AMM (x * y = k), both sides are always equal in USD value.
+ * We only need to find the USD value of one side (using a known-price token like frBTC or bUSD)
+ * and the other side is equal.
  */
 function calculateTvlFromReserves(
   token0Id: string,
   token1Id: string,
-  token0Amount: string,
+  _token0Amount: string,
   token1Amount: string,
   btcPrice: number | undefined,
   busdTokenId: string
 ): { tvlUsd: number; token0TvlUsd: number; token1TvlUsd: number } {
-  // Default values
-  let token0TvlUsd = 0;
-  let token1TvlUsd = 0;
-
   // Token decimals (assuming 8 for all alkane tokens)
   const decimals = 8;
-  const token0Value = Number(token0Amount) / Math.pow(10, decimals);
   const token1Value = Number(token1Amount) / Math.pow(10, decimals);
 
-  // Determine token prices based on token IDs
-  // frBTC (32:0) = BTC price
-  // bUSD (2:56801) = $1
-  // Other tokens: estimate from pool ratio if paired with a known token
-
-  // Get price for token0
-  if (token0Id === FRBTC_TOKEN_ID && btcPrice) {
-    token0TvlUsd = token0Value * btcPrice;
-  } else if (token0Id === busdTokenId) {
-    token0TvlUsd = token0Value; // $1 per bUSD
-  }
-
-  // Get price for token1
+  // Find the USD price of token1 (the quote token)
+  // frBTC (32:0) = BTC price, bUSD = $1
+  let token1PriceUsd = 0;
   if (token1Id === FRBTC_TOKEN_ID && btcPrice) {
-    token1TvlUsd = token1Value * btcPrice;
+    token1PriceUsd = btcPrice;
   } else if (token1Id === busdTokenId) {
-    token1TvlUsd = token1Value; // $1 per bUSD
+    token1PriceUsd = 1; // $1 per bUSD
+  } else if (token0Id === FRBTC_TOKEN_ID && btcPrice) {
+    // If token0 is the known token, derive token1's price from reserves
+    // For now, just use the 50/50 assumption
+    const token0Value = Number(_token0Amount) / Math.pow(10, decimals);
+    const token0TvlUsd = token0Value * btcPrice;
+    return { tvlUsd: token0TvlUsd * 2, token0TvlUsd, token1TvlUsd: token0TvlUsd };
+  } else if (token0Id === busdTokenId) {
+    const token0Value = Number(_token0Amount) / Math.pow(10, decimals);
+    const token0TvlUsd = token0Value; // $1 per bUSD
+    return { tvlUsd: token0TvlUsd * 2, token0TvlUsd, token1TvlUsd: token0TvlUsd };
   }
 
-  // For pools with one known-price token and one unknown,
-  // estimate the unknown token's value as equal to the known token's value (50/50 pool assumption)
-  if (token0TvlUsd > 0 && token1TvlUsd === 0) {
-    token1TvlUsd = token0TvlUsd; // Assume 50/50 pool
-  } else if (token1TvlUsd > 0 && token0TvlUsd === 0) {
-    token0TvlUsd = token1TvlUsd; // Assume 50/50 pool
+  // If we couldn't determine a price, return zeros
+  if (token1PriceUsd === 0) {
+    return { tvlUsd: 0, token0TvlUsd: 0, token1TvlUsd: 0 };
   }
+
+  // In a constant product AMM, both sides are equal in USD value
+  const token1TvlUsd = token1Value * token1PriceUsd;
+  const token0TvlUsd = token1TvlUsd; // Equal by AMM design
 
   const tvlUsd = token0TvlUsd + token1TvlUsd;
   return { tvlUsd, token0TvlUsd, token1TvlUsd };

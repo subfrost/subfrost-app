@@ -548,23 +548,30 @@ export async function estimate24hVolume(
 
 /**
  * Calculate TVL for a pool
- * TVL = 2 * (reserve1 * price_of_token1)
+ * For a constant product AMM (x * y = k), both sides are always equal in USD value.
+ *
+ * token0's USD value = reserve0 * token0PriceUsd
+ *                    = reserve0 * (reserve1/reserve0) * token1PriceUsd
+ *                    = reserve1 * token1PriceUsd
+ * token1's USD value = reserve1 * token1PriceUsd
+ *
+ * Total TVL = token0TvlUsd + token1TvlUsd = 2 * reserve1 * token1PriceUsd
  */
 export function calculatePoolTvl(
-  reserve0: bigint,
+  _reserve0: bigint,
   reserve1: bigint,
-  decimals0: number,
+  _decimals0: number,
   decimals1: number,
   token1PriceUsd: number
 ): { tvlToken0: number; tvlToken1: number; tvlUsd: number } {
-  const reserve0Formatted = Number(reserve0) / Math.pow(10, decimals0);
   const reserve1Formatted = Number(reserve1) / Math.pow(10, decimals1);
 
-  const tvlToken1 = reserve1Formatted;
-  const tvlUsd = reserve1Formatted * token1PriceUsd * 2;
-  const tvlToken0 = reserve0Formatted * 2;
+  // In a constant product AMM, both sides are equal in USD value
+  const token1TvlUsd = reserve1Formatted * token1PriceUsd;
+  const token0TvlUsd = token1TvlUsd; // Equal by AMM design
+  const tvlUsd = token0TvlUsd + token1TvlUsd;
 
-  return { tvlToken0, tvlToken1, tvlUsd };
+  return { tvlToken0: token0TvlUsd, tvlToken1: token1TvlUsd, tvlUsd };
 }
 
 // ============================================================================
