@@ -171,17 +171,18 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
       </div>
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
-        {/* Header */}
-        <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] min-w-fit">
-          <div>Txn</div>
-          <div>Pair</div>
-          <div className="text-right">Amounts</div>
-          <div className="text-right">Address</div>
-          <div className="text-right">Time</div>
-        </div>
+        <div className="min-w-fit">
+          {/* Header */}
+          <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)]">
+            <div>Txn</div>
+            <div>Pair</div>
+            <div className="text-right">Amounts</div>
+            <div className="text-right">Address</div>
+            <div className="text-right">Time</div>
+          </div>
 
-        {/* Rows */}
-        {items.map((row, idx) => {
+          {/* Rows */}
+          {items.map((row, idx) => {
           const time = new Date(row.timestamp);
           const timeLabel = new Intl.DateTimeFormat(undefined, {
             month: '2-digit',
@@ -323,10 +324,11 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
             </Link>
           );
         })}
-        {(isLoading || isFetchingNextPage) && (
-          <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">Loading…</div>
-        )}
-        <div ref={loadingRef} className="h-6" />
+          {(isLoading || isFetchingNextPage) && (
+            <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">Loading…</div>
+          )}
+          <div ref={loadingRef} className="h-6" />
+        </div>
       </div>
     </div>
   );
