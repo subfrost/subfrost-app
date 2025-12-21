@@ -311,12 +311,14 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               </div>
 
               <div className="truncate text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
-              {/* Desktop: single line */}
-              <div className="hidden lg:block text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{timeLabel}</div>
-              {/* Mobile/tablet: two lines */}
-              <div className="lg:hidden text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">
-                <div>{dateLabel}</div>
-                <div>{hourMinLabel}</div>
+              <div className="text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">
+                {/* Desktop: single line */}
+                <span className="hidden lg:inline">{timeLabel}</span>
+                {/* Mobile/tablet: two lines */}
+                <div className="lg:hidden">
+                  <div>{dateLabel}</div>
+                  <div>{hourMinLabel}</div>
+                </div>
               </div>
             </Link>
           );
