@@ -52,11 +52,11 @@ function PairIcon({
 }) {
   return (
     <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
+      <div className="absolute left-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
         {/* TokenIcon expects network via WalletContext, handled app-wide */}
         <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="md" />
       </div>
-      <div className="absolute right-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
+      <div className="absolute right-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
         <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="md" />
       </div>
     </div>
