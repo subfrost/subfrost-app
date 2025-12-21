@@ -172,7 +172,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
         {/* Header */}
-        <div className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] min-w-fit">
+        <div className="grid grid-cols-[60px_140px_130px_minmax(70px,1fr)_minmax(70px,1fr)] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-2 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] min-w-fit">
           <div>Txn</div>
           <div>Pair</div>
           <div className="text-right">Amounts</div>
@@ -237,11 +237,11 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-4 px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
+              className="grid grid-cols-[60px_140px_130px_minmax(70px,1fr)_minmax(70px,1fr)] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-2 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
             >
               <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 lg:gap-3">
                 <PairIcon
                   leftId={pairNames.leftId}
                   rightId={pairNames.rightId}
@@ -249,13 +249,21 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                   rightSymbol={pairNames.rightName}
                 />
                 <div className="min-w-0">
-                  <div className="truncate text-sm text-[color:var(--sf-text)]">
-                    {(row.type === 'mint' || row.type === 'burn') 
+                  {/* Desktop: single line */}
+                  <div className="hidden lg:block truncate text-sm text-[color:var(--sf-text)]">
+                    {(row.type === 'mint' || row.type === 'burn')
                       ? `${pairNames.leftName} / ${pairNames.rightName}`
                       : (row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap')
                       ? `${pairNames.leftName} → ${pairNames.rightName}`
                       : `${pairNames.leftName} · ${pairNames.rightName}`
                     }
+                  </div>
+                  {/* Mobile/tablet: two lines */}
+                  <div className="lg:hidden text-xs text-[color:var(--sf-text)]">
+                    <div className="truncate">
+                      {pairNames.leftName} {(row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap') ? '→' : (row.type === 'mint' || row.type === 'burn') ? '/' : '·'}
+                    </div>
+                    <div className="truncate">{pairNames.rightName}</div>
                   </div>
                 </div>
               </div>
