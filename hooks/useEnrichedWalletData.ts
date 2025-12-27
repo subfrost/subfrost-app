@@ -24,6 +24,7 @@ export interface AlkaneAsset {
   symbol: string;
   balance: string;
   decimals: number;
+  logo?: string; // URL to token logo if available
 }
 
 export interface EnrichedUTXO {
@@ -443,6 +444,36 @@ export function useEnrichedWalletData(): EnrichedWalletData {
               console.log(`[useEnrichedWalletData] Aggregated alkane from fallback ${alkaneIdStr}: ${existing.balance}`);
             }
           }
+        }
+      }
+
+      // Fetch token metadata using alkanesReflect for each unique token
+      // This gives us proper name, symbol, and decimals
+      console.log('[useEnrichedWalletData] Fetching metadata for', alkaneMap.size, 'tokens');
+      const metadataPromises = Array.from(alkaneMap.keys()).map(async (alkaneId) => {
+        try {
+          console.log('[useEnrichedWalletData] Fetching metadata for', alkaneId);
+          const rawResult = await provider.alkanesReflect(alkaneId);
+          const metadata = mapToObject(rawResult);
+          console.log('[useEnrichedWalletData] Got metadata for', alkaneId, metadata);
+          return { alkaneId, metadata };
+        } catch (error) {
+          console.error(`[useEnrichedWalletData] Failed to fetch metadata for ${alkaneId}:`, error);
+          return { alkaneId, metadata: null };
+        }
+      });
+
+      const metadataResults = await Promise.all(metadataPromises);
+
+      // Update alkaneMap with fetched metadata
+      for (const { alkaneId, metadata } of metadataResults) {
+        if (metadata && alkaneMap.has(alkaneId)) {
+          const existing = alkaneMap.get(alkaneId)!;
+          existing.name = metadata.name || existing.name;
+          existing.symbol = metadata.symbol || existing.symbol;
+          existing.decimals = metadata.decimals ?? existing.decimals;
+          // Logo URL could be added here if available from metadata
+          console.log(`[useEnrichedWalletData] Updated metadata for ${alkaneId}: ${existing.symbol} (${existing.name})`);
         }
       }
 

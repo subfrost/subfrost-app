@@ -162,18 +162,21 @@ export default function BalancesPanel() {
                   key={alkane.alkaneId}
                   className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/10 transition-colors"
                 >
-                  <div>
-                    <div className="font-medium text-[color:var(--sf-text)]">{alkane.name}</div>
-                    <div className="text-sm text-[color:var(--sf-text)]/60">{alkane.symbol}</div>
-                    {alkane.alkaneId && (
-                      <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">ID: {alkane.alkaneId}</div>
-                    )}
+                  <div className="flex items-center gap-3">
+                    {/* Token Logo */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                      {alkane.symbol?.slice(0, 2).toUpperCase() || '??'}
+                    </div>
+                    <div>
+                      <div className="font-medium text-[color:var(--sf-text)]">{alkane.symbol}</div>
+                      <div className="text-xs text-[color:var(--sf-text)]/40">ID: {alkane.alkaneId}</div>
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-[color:var(--sf-text)] font-mono">
                       {formatAlkaneBalance(alkane.balance, alkane.decimals)}
                     </div>
-                    <div className="text-xs text-[color:var(--sf-text)]/60">{alkane.symbol}</div>
+                    <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>
                   </div>
                 </div>
               ))}
