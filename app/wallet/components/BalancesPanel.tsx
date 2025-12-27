@@ -31,12 +31,27 @@ export default function BalancesPanel() {
     return (btc * bitcoinPrice.usd).toFixed(2);
   };
 
-  const formatAlkaneBalance = (balance: string, decimals: number = 8) => {
+  const formatAlkaneBalance = (balance: string, decimals: number = 8): string => {
     const value = BigInt(balance);
+
+    // Check for NFT: exactly 1 unit (0.00000001 with 8 decimals)
+    if (value === BigInt(1)) {
+      return '1 NFT';
+    }
+
     const divisor = BigInt(10 ** decimals);
     const whole = value / divisor;
     const remainder = value % divisor;
-    return `${whole}.${remainder.toString().padStart(decimals, '0')}`;
+    const wholeStr = whole.toString();
+    const remainderStr = remainder.toString().padStart(decimals, '0');
+
+    // Determine decimal places based on whole number digits
+    // 3+ digits (100+): show 2 decimal places
+    // 2 or fewer digits: show 4 decimal places
+    const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
+    const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
+
+    return `${wholeStr}.${truncatedRemainder}`;
   };
 
   if (isLoading) {
