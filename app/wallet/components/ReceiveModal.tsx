@@ -73,9 +73,9 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           </div>
 
           {/* Warning */}
-          <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-            <div className="text-sm text-yellow-600 dark:text-yellow-400/90 space-y-2">
-              <div className="font-medium">⚠️ Important:</div>
+          <div className="p-4 rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)]">
+            <div className="text-sm text-[color:var(--sf-info-yellow-text)] space-y-2">
+              <div className="font-medium text-[color:var(--sf-info-yellow-title)]">Important:</div>
               <ul className="list-disc list-inside space-y-1 text-xs">
                 <li>Only send Bitcoin to this address</li>
                 <li>Sending other cryptocurrencies may result in permanent loss</li>
@@ -94,7 +94,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
               </code>
             </div>
             <div className="text-xs text-[color:var(--sf-text)]/40">
-              Use this URI to open directly in mobile wallets
+              Use this URL to open directly in mobile wallets.
             </div>
           </div>
         </div>

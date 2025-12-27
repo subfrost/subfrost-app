@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock } from 'lucide-react';
+import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle } from 'lucide-react';
+import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 
 type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'subfrost-regtest' | 'oylnet' | 'custom';
@@ -14,9 +15,56 @@ interface DerivationConfig {
   addressIndex: number;
 }
 
+// Helper to detect network from a Bitcoin address
+function detectNetworkFromAddress(address: string): { network: NetworkType | null; isRecognized: boolean } {
+  if (!address) return { network: null, isRecognized: false };
+
+  // Mainnet addresses
+  if (address.startsWith('bc1p') || address.startsWith('bc1q') || address.startsWith('1') || address.startsWith('3')) {
+    return { network: 'mainnet', isRecognized: true };
+  }
+
+  // Testnet/Signet addresses
+  if (address.startsWith('tb1p') || address.startsWith('tb1q') || address.startsWith('m') || address.startsWith('n') || address.startsWith('2')) {
+    return { network: 'signet', isRecognized: true };
+  }
+
+  // Regtest addresses
+  if (address.startsWith('bcrt1p') || address.startsWith('bcrt1q')) {
+    return { network: 'regtest', isRecognized: true };
+  }
+
+  return { network: null, isRecognized: false };
+}
+
 export default function WalletSettings() {
-  const { network: currentNetwork, account, wallet } = useWallet() as any;
+  const { network: currentNetwork, account, wallet, walletType, browserWallet } = useWallet() as any;
   const { theme } = useTheme();
+
+  // Determine if using browser extension wallet
+  const isBrowserWallet = walletType === 'browser' && browserWallet;
+
+  // Detect the network from the browser wallet's address
+  const browserWalletNetwork = useMemo(() => {
+    if (!isBrowserWallet) return null;
+    const address = browserWallet?.address || '';
+    return detectNetworkFromAddress(address);
+  }, [isBrowserWallet, browserWallet?.address]);
+
+  // Get display name for detected network
+  const getNetworkDisplayName = (networkType: NetworkType | null, isRecognized: boolean) => {
+    if (!isRecognized || !networkType) {
+      return null; // Will show warning instead
+    }
+    switch (networkType) {
+      case 'mainnet': return 'Mainnet';
+      case 'signet': return 'Signet';
+      case 'regtest': return 'Local Regtest (localhost)';
+      case 'subfrost-regtest': return 'Subfrost Regtest (regtest.subfrost.io)';
+      default: return networkType;
+    }
+  };
+
   const [network, setNetwork] = useState<NetworkType>(currentNetwork || 'mainnet');
   const [initialNetwork, setInitialNetwork] = useState<NetworkType>(currentNetwork || 'mainnet');
   const [customDataApiUrl, setCustomDataApiUrl] = useState('');
@@ -44,11 +92,16 @@ export default function WalletSettings() {
   
   // Security features
   const [showSeedModal, setShowSeedModal] = useState(false);
-  const [showPrivateKeyModal, setShowPrivateKeyModal] = useState(false);
   const [password, setPassword] = useState('');
   const [revealedSeed, setRevealedSeed] = useState('');
-  const [revealedPrivateKey, setRevealedPrivateKey] = useState('');
   const [securityError, setSecurityError] = useState('');
+
+  // Google Drive backup
+  const [driveConfigured, setDriveConfigured] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupSuccess, setBackupSuccess] = useState(false);
+  const [backupProgress, setBackupProgress] = useState(0);
+  const [backupError, setBackupError] = useState<string | null>(null);
 
   // Compute derivation paths
   const taprootPath = useMemo(() => {
@@ -84,6 +137,12 @@ export default function WalletSettings() {
       setInitialNetwork(currentNetwork);
     }
   }, [currentNetwork]);
+
+  // Initialize Google Drive on mount
+  useEffect(() => {
+    initGoogleDrive().catch(console.error);
+    setDriveConfigured(isDriveConfigured());
+  }, []);
 
   const handleSave = () => {
     console.log('Saving settings:', {
@@ -169,38 +228,52 @@ export default function WalletSettings() {
     }
   };
 
-  const revealPrivateKey = async () => {
-    if (!wallet || !password) {
-      setSecurityError('Password is required');
+  const handleBackupToDrive = async () => {
+    if (!wallet) {
+      setBackupError('No wallet to backup');
       return;
     }
 
+    setIsBackingUp(true);
+    setBackupError(null);
+    setBackupSuccess(false);
+    setBackupProgress(0);
+
     try {
-      setSecurityError('');
-      
-      // Get the keystore from localStorage
-      const keystoreData = localStorage.getItem('subfrost_encrypted_keystore');
-      if (!keystoreData) {
-        setSecurityError('No keystore found');
-        return;
+      const encrypted = localStorage.getItem('subfrost_encrypted_keystore');
+      if (!encrypted) {
+        throw new Error('Encrypted keystore not found');
       }
 
-      // Unlock keystore to get mnemonic
-      const keystore = await unlockKeystore(keystoreData, password);
-      
-      // Create wallet from mnemonic using SDK
-      const { createWalletFromMnemonic } = await import('@alkanes/ts-sdk');
-      // Map network type for SDK (strip 'subfrost-' prefix if present)
-      const sdkNetwork = network.replace('subfrost-', '') as 'mainnet' | 'testnet' | 'signet' | 'regtest';
-      const tempWallet = createWalletFromMnemonic(keystore.mnemonic, sdkNetwork);
+      // Simulate progress while backup is happening
+      const progressInterval = setInterval(() => {
+        setBackupProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + 10;
+        });
+      }, 200);
 
-      // Use SDK method to get WIF private key (all crypto happens in WASM)
-      const privateKeyWIF = (tempWallet as any).getPrivateKeyWIF(0);
-      
-      setRevealedPrivateKey(privateKeyWIF);
+      await backupWalletToDrive(
+        encrypted,
+        undefined,
+        'My Bitcoin Wallet'
+      );
+
+      clearInterval(progressInterval);
+      setBackupProgress(100);
+      setBackupSuccess(true);
+
+      // Reset success state after a few seconds
+      setTimeout(() => {
+        setBackupSuccess(false);
+        setBackupProgress(0);
+      }, 3000);
     } catch (error: any) {
-      setSecurityError('Invalid password or extraction failed');
-      console.error('Private key reveal failed:', error);
+      console.error('Drive backup error:', error);
+      setBackupError(error.message || 'Failed to backup to Google Drive');
+      setBackupProgress(0);
+    } finally {
+      setIsBackingUp(false);
     }
   };
 
@@ -211,12 +284,6 @@ export default function WalletSettings() {
     setSecurityError('');
   };
 
-  const closePrivateKeyModal = () => {
-    setShowPrivateKeyModal(false);
-    setPassword('');
-    setRevealedPrivateKey('');
-    setSecurityError('');
-  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -236,23 +303,41 @@ export default function WalletSettings() {
             <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
               Select Network
             </label>
-            <div className="relative">
-              <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
-              <select
-                value={network}
-                onChange={(e) => setNetwork(e.target.value as NetworkType)}
-                className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-10 pr-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors appearance-none cursor-pointer"
-              >
-                <option value="mainnet">Mainnet</option>
-                <option value="signet">Signet</option>
-                <option value="subfrost-regtest">Subfrost Regtest (regtest.subfrost.io)</option>
-                <option value="regtest">Local Regtest (localhost)</option>
-                <option value="custom">Custom</option>
-              </select>
-            </div>
+            {isBrowserWallet ? (
+              // Browser wallet - show detected network (read-only)
+              <div className="relative">
+                <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/40 pointer-events-none" />
+                {browserWalletNetwork?.isRecognized ? (
+                  <div className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 pl-10 pr-4 py-3 text-[color:var(--sf-text)]/60 cursor-not-allowed">
+                    {getNetworkDisplayName(browserWalletNetwork.network, browserWalletNetwork.isRecognized)}
+                  </div>
+                ) : (
+                  <div className="w-full rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] pl-10 pr-4 py-3 text-[color:var(--sf-info-yellow-text)] flex items-center gap-2">
+                    <AlertTriangle size={18} className="text-[color:var(--sf-info-yellow-text)]" />
+                    Unrecognized Network from Browser Extension Wallet
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Keystore wallet - allow network selection
+              <div className="relative">
+                <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
+                <select
+                  value={network}
+                  onChange={(e) => setNetwork(e.target.value as NetworkType)}
+                  className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-10 pr-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors appearance-none cursor-pointer"
+                >
+                  <option value="mainnet">Mainnet</option>
+                  <option value="signet">Signet</option>
+                  <option value="subfrost-regtest">Subfrost Regtest (regtest.subfrost.io)</option>
+                  <option value="regtest">Local Regtest (localhost)</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+            )}
           </div>
 
-          {network === 'custom' && (
+          {!isBrowserWallet && network === 'custom' && (
             <>
               <div>
                 <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
@@ -282,8 +367,15 @@ export default function WalletSettings() {
             </>
           )}
 
-          {/* Save Settings Button - appears when network is changed */}
-          {hasNetworkChanges && (
+          {/* Browser wallet info message - shown instead of save button */}
+          {isBrowserWallet && (
+            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
+              Network Configuration is only available for keystore wallets. Please navigate to your browser extension wallet to change the network.
+            </div>
+          )}
+
+          {/* Save Settings Button - appears when network is changed (only for keystore wallets) */}
+          {!isBrowserWallet && hasNetworkChanges && (
             <button
               onClick={handleSave}
               className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all text-white"
@@ -305,8 +397,8 @@ export default function WalletSettings() {
         </div>
 
         {!wallet ? (
-          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-amber-700 dark:text-yellow-200">
-            ⚠️ Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
+          <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
+            Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
           </div>
         ) : (
           <div className="space-y-4">
@@ -533,13 +625,47 @@ export default function WalletSettings() {
               </button>
 
               <button
-                onClick={() => setShowPrivateKeyModal(true)}
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-colors text-[color:var(--sf-text)]"
+                onClick={handleBackupToDrive}
+                disabled={isBackingUp}
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-[color:var(--sf-outline)] transition-all text-[color:var(--sf-text)] overflow-hidden relative ${
+                  backupSuccess
+                    ? 'bg-green-500/20 border-green-500/30'
+                    : 'bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10'
+                } disabled:opacity-50`}
               >
-                <Key size={18} />
-                <span>Reveal Private Key</span>
+                {/* Progress bar background */}
+                {isBackingUp && !backupSuccess && (
+                  <div
+                    className="absolute inset-0 bg-[color:var(--sf-primary)]/20 transition-all duration-200"
+                    style={{ width: `${backupProgress}%` }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-2">
+                  {backupSuccess ? (
+                    <>
+                      <Check size={18} className="text-green-400" />
+                      <span>Backed Up!</span>
+                    </>
+                  ) : isBackingUp ? (
+                    <>
+                      <Cloud className="animate-bounce" size={18} />
+                      <span>Backing up...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud size={18} />
+                      <span>Backup to Google Drive</span>
+                    </>
+                  )}
+                </span>
               </button>
             </div>
+
+            {backupError && (
+              <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+                {backupError}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -623,84 +749,6 @@ export default function WalletSettings() {
         </div>
       )}
 
-      {/* Private Key Modal */}
-      {showPrivateKeyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-lg w-full mx-4">
-            <div className="p-6 border-b border-[color:var(--sf-outline)]">
-              <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">Reveal Private Key</h2>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {!revealedPrivateKey ? (
-                <>
-                  <div className="rounded-lg border border-[color:var(--sf-info-red-border)] bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)]">
-                    <Lock size={20} className="inline mr-2" />
-                    Enter your password to reveal your private key.
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-[color:var(--sf-text)]/60 mb-2">Password</label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && revealPrivateKey()}
-                      placeholder="Enter your password"
-                      className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                      autoFocus
-                    />
-                  </div>
-
-                  {securityError && (
-                    <div className="text-sm text-red-400">{securityError}</div>
-                  )}
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={revealPrivateKey}
-                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium"
-                    >
-                      Reveal
-                    </button>
-                    <button
-                      onClick={closePrivateKeyModal}
-                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4">
-                    <div className="text-sm text-green-600 dark:text-green-200 mb-2">Your Private Key (WIF):</div>
-                    <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] font-mono text-sm text-[color:var(--sf-text)] break-all select-all">
-                      {revealedPrivateKey}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => copyToClipboard(revealedPrivateKey)}
-                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium flex items-center justify-center gap-2"
-                    >
-                      <Copy size={18} />
-                      Copy to Clipboard
-                    </button>
-                    <button
-                      onClick={closePrivateKeyModal}
-                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
