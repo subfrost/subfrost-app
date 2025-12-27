@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 
 // Helper to recursively convert Map to plain object (serde_wasm_bindgen returns Maps)
 function mapToObject(value: any): any {
@@ -170,7 +171,29 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       });
 
-      const enrichedResults = await Promise.all(enrichedDataPromises);
+      // Also fetch protorune/alkane balances directly via protorunesbyaddress (alkanesByAddress)
+      // This is the primary source of truth for protorune assets
+      const protorunePromises = addresses.map(async (address) => {
+        try {
+          console.log('[useEnrichedWalletData] Fetching protorunes via alkanesByAddress for:', address);
+
+          // alkanesByAddress calls protorunesbyaddress with protocol_tag=1 for Alkanes
+          const rawResult = await provider.alkanesByAddress(address, 'latest', 1);
+          const result = mapToObject(rawResult);
+
+          console.log('[useEnrichedWalletData] Got protorunesbyaddress result for', address, result);
+
+          return { address, data: result };
+        } catch (error) {
+          console.error(`[useEnrichedWalletData] Failed to fetch protorunes for ${address}:`, error);
+          return { address, data: null };
+        }
+      });
+
+      const [enrichedResults, protoruneResults] = await Promise.all([
+        Promise.all(enrichedDataPromises),
+        Promise.all(protorunePromises),
+      ]);
 
       // Process results
       let totalBtc = 0;
@@ -293,6 +316,63 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           processUtxo(utxo, false);
         }
       }
+
+      // Process protorune/alkane balances from protorunesbyaddress (PRIMARY source)
+      // Clear any alkanes from the Lua script and use protorunesbyaddress as the source of truth
+      // This is more reliable as it directly queries the protorune indexer
+      alkaneMap.clear();
+      console.log('[useEnrichedWalletData] Processing protoruneResults (primary source):', protoruneResults);
+
+      for (const { address, data } of protoruneResults) {
+        if (!data?.balances) {
+          console.log('[useEnrichedWalletData] No protorune balances for', address);
+          continue;
+        }
+
+        console.log(`[useEnrichedWalletData] Processing ${data.balances.length} UTXOs with protorunes for ${address}`);
+
+        // Process each UTXO's balance_sheet
+        for (const entry of data.balances) {
+          // Access balance_sheet.cached.balances - this is where the tokens are
+          const tokenBalances = entry.balance_sheet?.cached?.balances || {};
+          const tokenEntries = Object.entries(tokenBalances);
+
+          if (tokenEntries.length === 0) continue;
+
+          console.log(`[useEnrichedWalletData] UTXO ${entry.outpoint} has ${tokenEntries.length} protorune(s)`);
+
+          for (const [alkaneIdStr, amount] of tokenEntries) {
+            const amountStr = String(amount);
+
+            // Get token metadata from KNOWN_TOKENS or use defaults
+            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+              symbol: alkaneIdStr.split(':')[1] || 'ALK',
+              name: `Token ${alkaneIdStr}`,
+              decimals: 8,
+            };
+
+            if (!alkaneMap.has(alkaneIdStr)) {
+              alkaneMap.set(alkaneIdStr, {
+                alkaneId: alkaneIdStr,
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                balance: amountStr,
+                decimals: tokenInfo.decimals,
+              });
+              console.log(`[useEnrichedWalletData] Added protorune ${alkaneIdStr}: ${amountStr}`);
+            } else {
+              // Aggregate balance from multiple UTXOs/addresses
+              const existing = alkaneMap.get(alkaneIdStr)!;
+              const currentBalance = BigInt(existing.balance);
+              const additionalBalance = BigInt(amountStr);
+              existing.balance = (currentBalance + additionalBalance).toString();
+              console.log(`[useEnrichedWalletData] Aggregated protorune ${alkaneIdStr}: ${existing.balance}`);
+            }
+          }
+        }
+      }
+
+      console.log('[useEnrichedWalletData] Final alkane balances:', Array.from(alkaneMap.values()));
 
       setData({
         balances: {

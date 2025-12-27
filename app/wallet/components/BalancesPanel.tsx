@@ -104,34 +104,24 @@ export default function BalancesPanel() {
           <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
             <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Spendable (Plain BTC)</div>
             <div className="font-mono text-sm text-[color:var(--sf-info-green-text)]">
-              {(() => {
-                // Calculate spendable (UTXOs without inscriptions/runes/alkanes)
-                const spendableSats = utxos.all
-                  .filter((u: any) =>
-                    !u.inscriptions?.length &&
-                    !Object.keys(u.runes || {}).length &&
-                    !Object.keys(u.alkanes || {}).length
-                  )
-                  .reduce((sum: number, u: any) => sum + u.value, 0);
-                return formatBTC(spendableSats);
-              })()} BTC
+              {formatBTC(balances.bitcoin.p2wpkh)} BTC
             </div>
+            {account?.nativeSegwit?.address && (
+              <div className="text-xs text-[color:var(--sf-info-green-title)]/60 mt-1">
+                Native SegWit ({account.nativeSegwit.address.slice(0, 4)}...{account.nativeSegwit.address.slice(-4)})
+              </div>
+            )}
           </div>
           <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
             <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">With Assets</div>
             <div className="font-mono text-sm text-[color:var(--sf-info-yellow-text)]">
-              {(() => {
-                // Calculate UTXOs containing inscriptions/runes/alkanes
-                const assetSats = utxos.all
-                  .filter((u: any) =>
-                    u.inscriptions?.length > 0 ||
-                    Object.keys(u.runes || {}).length > 0 ||
-                    Object.keys(u.alkanes || {}).length > 0
-                  )
-                  .reduce((sum: number, u: any) => sum + u.value, 0);
-                return formatBTC(assetSats);
-              })()} BTC
+              {formatBTC(balances.bitcoin.p2tr)} BTC
             </div>
+            {account?.taproot?.address && (
+              <div className="text-xs text-[color:var(--sf-info-yellow-title)]/60 mt-1">
+                Taproot ({account.taproot.address.slice(0, 4)}...{account.taproot.address.slice(-4)})
+              </div>
+            )}
           </div>
         </div>
 
