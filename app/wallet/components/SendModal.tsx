@@ -5,6 +5,7 @@ import { X, Send, AlertCircle, CheckCircle, Loader2, Lock } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 
 interface SendModalProps {
   isOpen: boolean;
@@ -26,11 +27,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const { address, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const { utxos, refresh } = useEnrichedWalletData();
+  const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('');
-  const [feeSelection, setFeeSelection] = useState<'low' | 'medium' | 'high' | 'custom'>('medium');
-  const [customFeeRate, setCustomFeeRate] = useState('10');
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'input' | 'utxo-selection' | 'confirm' | 'broadcasting' | 'success'>('input');
   const [error, setError] = useState('');
@@ -55,17 +55,6 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   };
 
   const frozenUtxos = getFrozenUtxos();
-
-  // Compute actual fee rate based on selection
-  const feeRate = (() => {
-    switch (feeSelection) {
-      case 'low': return 1;
-      case 'medium': return 10;
-      case 'high': return 20;
-      case 'custom': return parseInt(customFeeRate) || 10;
-      default: return 10;
-    }
-  })();
 
   // Filter available UTXOs (only from current address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
@@ -100,12 +89,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
   useEffect(() => {
     if (!isOpen) {
-      // Reset state when modal closes
+      // Reset state when modal closes (fee selection is persisted via useFeeRate)
       setStep('input');
       setRecipientAddress('');
       setAmount('');
-      setFeeSelection('medium');
-      setCustomFeeRate('10');
       setSelectedUtxos(new Set());
       setError('');
       setTxid('');
@@ -381,7 +368,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             Fee Rate
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            {(['low', 'medium', 'high'] as const).map((s) => (
+            {(['slow', 'medium', 'fast'] as const).map((s) => (
               <button
                 key={s}
                 type="button"
@@ -392,7 +379,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                     : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
                 }`}
               >
-                {s}
+                {s} ({presets[s]} sat/vB)
               </button>
             ))}
             <button
