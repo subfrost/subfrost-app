@@ -106,22 +106,22 @@ export default function BalancesPanel() {
             <div className="font-mono text-sm text-[color:var(--sf-info-green-text)]">
               {formatBTC(balances.bitcoin.p2wpkh)} BTC
             </div>
-            {account?.nativeSegwit?.address && (
-              <div className="text-xs text-[color:var(--sf-info-green-title)]/60 mt-1">
-                Native SegWit ({account.nativeSegwit.address.slice(0, 4)}...{account.nativeSegwit.address.slice(-4)})
-              </div>
-            )}
+            <div className="text-xs text-[color:var(--sf-info-green-title)]/60 mt-1">
+              {account?.nativeSegwit?.address
+                ? `Native SegWit (${account.nativeSegwit.address.slice(0, 4)}...${account.nativeSegwit.address.slice(-4)})`
+                : 'Native SegWit (Not Found)'}
+            </div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
             <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">With Assets</div>
             <div className="font-mono text-sm text-[color:var(--sf-info-yellow-text)]">
               {formatBTC(balances.bitcoin.p2tr)} BTC
             </div>
-            {account?.taproot?.address && (
-              <div className="text-xs text-[color:var(--sf-info-yellow-title)]/60 mt-1">
-                Taproot ({account.taproot.address.slice(0, 4)}...{account.taproot.address.slice(-4)})
-              </div>
-            )}
+            <div className="text-xs text-[color:var(--sf-info-yellow-title)]/60 mt-1">
+              {account?.taproot?.address
+                ? `Taproot (${account.taproot.address.slice(0, 4)}...${account.taproot.address.slice(-4)})`
+                : 'Taproot (Not Found)'}
+            </div>
           </div>
         </div>
 
@@ -130,20 +130,16 @@ export default function BalancesPanel() {
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
             <div className="font-mono text-sm text-[color:var(--sf-text)]">{formatBTC(balances.bitcoin.p2wpkh)} BTC</div>
-            {account?.nativeSegwit && (
-              <div className="text-xs text-[color:var(--sf-text)]/40 mt-1 truncate" title={account.nativeSegwit.address}>
-                {account.nativeSegwit.address.slice(0, 12)}...
-              </div>
-            )}
+            <div className="text-xs text-[color:var(--sf-text)]/40 mt-1 truncate" title={account?.nativeSegwit?.address || 'Not Found'}>
+              {account?.nativeSegwit?.address ? `${account.nativeSegwit.address.slice(0, 12)}...` : 'Not Found'}
+            </div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
             <div className="font-mono text-sm text-[color:var(--sf-text)]">{formatBTC(balances.bitcoin.p2tr)} BTC</div>
-            {account?.taproot && (
-              <div className="text-xs text-[color:var(--sf-text)]/40 mt-1 truncate" title={account.taproot.address}>
-                {account.taproot.address.slice(0, 12)}...
-              </div>
-            )}
+            <div className="text-xs text-[color:var(--sf-text)]/40 mt-1 truncate" title={account?.taproot?.address || 'Not Found'}>
+              {account?.taproot?.address ? `${account.taproot.address.slice(0, 12)}...` : 'Not Found'}
+            </div>
           </div>
         </div>
       </div>

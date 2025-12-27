@@ -194,6 +194,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const [browserWallet, setBrowserWallet] = useState<ConnectedWallet | null>(null);
   const [walletType, setWalletType] = useState<WalletType | null>(null);
   const [installedBrowserWallets, setInstalledBrowserWallets] = useState<BrowserWalletInfo[]>([]);
+  // Store both addresses from browser wallets that support multiple address types
+  const [browserWalletAddresses, setBrowserWalletAddresses] = useState<{
+    nativeSegwit?: { address: string; publicKey?: string };
+    taproot?: { address: string; publicKey?: string };
+  } | null>(null);
 
   // WalletConnector instance (lazy initialized)
   const walletConnectorRef = useRef<WalletConnector | null>(null);
@@ -257,6 +262,51 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             setBrowserWallet(connected);
             setWalletType('browser');
             console.log('[WalletContext] Reconnected to browser wallet:', walletInfo.name);
+
+            // Fetch additional addresses for wallets that support multiple address types
+            // This is done inline here since fetchBrowserWalletAddresses is defined later
+            try {
+              const additionalAddresses: { nativeSegwit?: { address: string; publicKey?: string }; taproot?: { address: string; publicKey?: string } } = {};
+
+              if (storedBrowserWalletId === 'xverse') {
+                const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
+                if (xverseProvider) {
+                  const response = await xverseProvider.request('getAccounts', { purposes: ['ordinals', 'payment'] });
+                  if (response?.result) {
+                    for (const account of response.result) {
+                      if (account.purpose === 'ordinals' || account.addressType === 'p2tr') {
+                        additionalAddresses.taproot = { address: account.address, publicKey: account.publicKey };
+                      } else if (account.purpose === 'payment' || account.addressType === 'p2wpkh') {
+                        additionalAddresses.nativeSegwit = { address: account.address, publicKey: account.publicKey };
+                      }
+                    }
+                  }
+                }
+              } else if (storedBrowserWalletId === 'leather') {
+                const leatherProvider = (window as any).LeatherProvider;
+                if (leatherProvider) {
+                  const response = await leatherProvider.request('getAddresses');
+                  if (response?.result?.addresses) {
+                    for (const addr of response.result.addresses) {
+                      if (addr.symbol === 'BTC') {
+                        if (addr.type === 'p2tr') {
+                          additionalAddresses.taproot = { address: addr.address, publicKey: addr.publicKey };
+                        } else if (addr.type === 'p2wpkh') {
+                          additionalAddresses.nativeSegwit = { address: addr.address, publicKey: addr.publicKey };
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (additionalAddresses.nativeSegwit || additionalAddresses.taproot) {
+                setBrowserWalletAddresses(additionalAddresses);
+                console.log('[WalletContext] Fetched additional addresses on reconnect:', additionalAddresses);
+              }
+            } catch (addrError) {
+              console.warn('[WalletContext] Failed to fetch additional addresses on reconnect:', addrError);
+            }
           }
         } catch (error) {
           // Auto-reconnect failed, clear stored ID
@@ -274,22 +324,59 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Derive addresses from wallet (keystore or browser wallet)
   const addresses = useMemo(() => {
-    // For browser wallets, use the connected wallet's address
+    // For browser wallets, use the connected wallet's address(es)
     if (browserWallet && walletType === 'browser') {
-      const address = browserWallet.address;
-      const publicKey = browserWallet.publicKey || '';
+      const primaryAddress = browserWallet.address;
+      const primaryPublicKey = browserWallet.publicKey || '';
+
+      // Check if we have explicit addresses from wallets that support multiple address types
+      if (browserWalletAddresses) {
+        const { nativeSegwit: segwitAddr, taproot: taprootAddr } = browserWalletAddresses;
+
+        // Use explicit addresses if available, otherwise fall back to detecting from primary
+        const hasExplicitSegwit = segwitAddr?.address;
+        const hasExplicitTaproot = taprootAddr?.address;
+
+        // If wallet provided explicit addresses, use them
+        if (hasExplicitSegwit || hasExplicitTaproot) {
+          return {
+            nativeSegwit: hasExplicitSegwit ? {
+              address: segwitAddr!.address,
+              pubkey: segwitAddr!.publicKey || '',
+              hdPath: ''
+            } : { address: '', pubkey: '', hdPath: '' },
+            taproot: hasExplicitTaproot ? {
+              address: taprootAddr!.address,
+              pubkey: taprootAddr!.publicKey || '',
+              pubKeyXOnly: taprootAddr!.publicKey ? taprootAddr!.publicKey.slice(2) : '',
+              hdPath: ''
+            } : { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
+          };
+        }
+      }
+
+      // Fall back to detecting address type from address format
+      // bc1q... = native segwit (P2WPKH)
+      // bc1p... = taproot (P2TR)
+      // tb1q.../tb1p... = testnet equivalents
+      // bcrt1q.../bcrt1p... = regtest equivalents
+      const isTaproot = primaryAddress.startsWith('bc1p') || primaryAddress.startsWith('tb1p') || primaryAddress.startsWith('bcrt1p');
+      const isNativeSegwit = primaryAddress.startsWith('bc1q') || primaryAddress.startsWith('tb1q') || primaryAddress.startsWith('bcrt1q');
+
+      // Only assign the address to the correct type based on address format
+      // This prevents the bug where a taproot address was being used for both
       return {
-        nativeSegwit: {
-          address: address,
-          pubkey: publicKey,
+        nativeSegwit: isNativeSegwit ? {
+          address: primaryAddress,
+          pubkey: primaryPublicKey,
           hdPath: ''
-        },
-        taproot: {
-          address: address,
-          pubkey: publicKey,
-          pubKeyXOnly: publicKey ? publicKey.slice(2) : '',
+        } : { address: '', pubkey: '', hdPath: '' },
+        taproot: isTaproot ? {
+          address: primaryAddress,
+          pubkey: primaryPublicKey,
+          pubKeyXOnly: primaryPublicKey ? primaryPublicKey.slice(2) : '',
           hdPath: ''
-        },
+        } : { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
       };
     }
 
@@ -317,7 +404,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         hdPath: taprootInfo.path,
       },
     };
-  }, [wallet, browserWallet, walletType]);
+  }, [wallet, browserWallet, walletType, browserWalletAddresses]);
 
   // Build account structure
   const account: Account = useMemo(() => {
@@ -352,6 +439,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     // Clear any browser wallet connection
     setBrowserWallet(null);
+    setBrowserWalletAddresses(null);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
 
     setWallet(newWallet);
@@ -382,6 +470,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     // Clear any browser wallet connection
     setBrowserWallet(null);
+    setBrowserWalletAddresses(null);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
 
     setWallet(unlockedWallet);
@@ -423,6 +512,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     // Clear any browser wallet connection
     setBrowserWallet(null);
+    setBrowserWalletAddresses(null);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
 
     setWallet(restoredWallet);
@@ -453,6 +543,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Reset wallet state
     setWallet(null);
     setBrowserWallet(null);
+    setBrowserWalletAddresses(null);
     setWalletType(null);
     setHasStoredKeystore(false);
   }, []);
@@ -472,6 +563,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       }
     }
     setBrowserWallet(null);
+    setBrowserWalletAddresses(null);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
     localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
 
@@ -503,6 +595,73 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
   }, []);
 
+  // Helper function to query browser wallet for both address types
+  const fetchBrowserWalletAddresses = useCallback(async (walletId: string): Promise<{
+    nativeSegwit?: { address: string; publicKey?: string };
+    taproot?: { address: string; publicKey?: string };
+  }> => {
+    const result: {
+      nativeSegwit?: { address: string; publicKey?: string };
+      taproot?: { address: string; publicKey?: string };
+    } = {};
+
+    try {
+      switch (walletId) {
+        case 'xverse': {
+          // Xverse supports both ordinals (taproot) and payment (native segwit) addresses
+          const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
+          if (xverseProvider) {
+            const response = await xverseProvider.request('getAccounts', {
+              purposes: ['ordinals', 'payment'],
+            });
+            if (response?.result) {
+              for (const account of response.result) {
+                if (account.purpose === 'ordinals' || account.addressType === 'p2tr') {
+                  result.taproot = { address: account.address, publicKey: account.publicKey };
+                } else if (account.purpose === 'payment' || account.addressType === 'p2wpkh') {
+                  result.nativeSegwit = { address: account.address, publicKey: account.publicKey };
+                }
+              }
+            }
+          }
+          break;
+        }
+        case 'leather': {
+          // Leather provides multiple addresses
+          const leatherProvider = (window as any).LeatherProvider;
+          if (leatherProvider) {
+            const response = await leatherProvider.request('getAddresses');
+            if (response?.result?.addresses) {
+              for (const addr of response.result.addresses) {
+                if (addr.symbol === 'BTC') {
+                  if (addr.type === 'p2tr') {
+                    result.taproot = { address: addr.address, publicKey: addr.publicKey };
+                  } else if (addr.type === 'p2wpkh') {
+                    result.nativeSegwit = { address: addr.address, publicKey: addr.publicKey };
+                  }
+                }
+              }
+            }
+          }
+          break;
+        }
+        case 'unisat':
+        case 'okx':
+        case 'wizz':
+        case 'magic-eden':
+        case 'phantom':
+        default:
+          // These wallets typically only expose one address
+          // We'll detect the type from the address format in the addresses useMemo
+          break;
+      }
+    } catch (error) {
+      console.warn('[WalletContext] Failed to fetch additional addresses:', error);
+    }
+
+    return result;
+  }, []);
+
   // Connect to a browser wallet by ID
   const connectBrowserWallet = useCallback(async (walletId: string): Promise<void> => {
     if (typeof window === 'undefined') {
@@ -522,6 +681,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const connector = getWalletConnector();
       const connected = await connector.connect(walletInfo);
 
+      // Try to fetch both addresses from wallets that support multiple address types
+      const additionalAddresses = await fetchBrowserWalletAddresses(walletId);
+
       // Clear any keystore session
       sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
       setWallet(null);
@@ -531,15 +693,18 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       localStorage.setItem(STORAGE_KEYS.WALLET_TYPE, 'browser');
 
       setBrowserWallet(connected);
+      setBrowserWalletAddresses(additionalAddresses);
       setWalletType('browser');
       setIsConnectModalOpen(false);
 
-      console.log('[WalletContext] Connected to browser wallet:', walletInfo.name, connected.address);
+      console.log('[WalletContext] Connected to browser wallet:', walletInfo.name);
+      console.log('[WalletContext] Primary address:', connected.address);
+      console.log('[WalletContext] Additional addresses:', additionalAddresses);
     } catch (error) {
       console.error('[WalletContext] Failed to connect browser wallet:', error);
       throw error;
     }
-  }, [getWalletConnector]);
+  }, [getWalletConnector, fetchBrowserWalletAddresses]);
 
   // Sign PSBT - supports both keystore and browser wallets
   const signPsbt = useCallback(async (psbtBase64: string): Promise<string> => {

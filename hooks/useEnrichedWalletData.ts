@@ -179,9 +179,22 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
           // alkanesByAddress calls protorunesbyaddress with protocol_tag=1 for Alkanes
           const rawResult = await provider.alkanesByAddress(address, 'latest', 1);
+
+          console.log('[useEnrichedWalletData] Raw alkanesByAddress result type:', typeof rawResult);
+          console.log('[useEnrichedWalletData] Raw result is Map:', rawResult instanceof Map);
+          console.log('[useEnrichedWalletData] Raw result keys:', rawResult ? Object.keys(rawResult) : 'null');
+          console.log('[useEnrichedWalletData] Raw result:', JSON.stringify(rawResult, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2)?.slice(0, 2000));
+
           const result = mapToObject(rawResult);
 
-          console.log('[useEnrichedWalletData] Got protorunesbyaddress result for', address, result);
+          console.log('[useEnrichedWalletData] Converted result for', address);
+          console.log('[useEnrichedWalletData] Result keys:', result ? Object.keys(result) : 'null');
+          console.log('[useEnrichedWalletData] Result.balances exists:', !!result?.balances);
+          console.log('[useEnrichedWalletData] Result.balances length:', result?.balances?.length);
+
+          if (result?.balances?.length > 0) {
+            console.log('[useEnrichedWalletData] First balance entry:', JSON.stringify(result.balances[0], (_, v) => typeof v === 'bigint' ? v.toString() : v, 2)?.slice(0, 1000));
+          }
 
           return { address, data: result };
         } catch (error) {
@@ -190,9 +203,24 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       });
 
-      const [enrichedResults, protoruneResults] = await Promise.all([
+      // Also try alkanesBalance as a simpler fallback (returns aggregated balances)
+      const alkanesBalancePromises = addresses.map(async (address) => {
+        try {
+          console.log('[useEnrichedWalletData] Fetching alkanesBalance for:', address);
+          const rawResult = await provider.alkanesBalance(address);
+          const result = mapToObject(rawResult);
+          console.log('[useEnrichedWalletData] alkanesBalance result for', address, result);
+          return { address, data: result };
+        } catch (error) {
+          console.error(`[useEnrichedWalletData] Failed to fetch alkanesBalance for ${address}:`, error);
+          return { address, data: null };
+        }
+      });
+
+      const [enrichedResults, protoruneResults, alkanesBalanceResults] = await Promise.all([
         Promise.all(enrichedDataPromises),
         Promise.all(protorunePromises),
+        Promise.all(alkanesBalancePromises),
       ]);
 
       // Process results
@@ -367,6 +395,52 @@ export function useEnrichedWalletData(): EnrichedWalletData {
               const additionalBalance = BigInt(amountStr);
               existing.balance = (currentBalance + additionalBalance).toString();
               console.log(`[useEnrichedWalletData] Aggregated protorune ${alkaneIdStr}: ${existing.balance}`);
+            }
+          }
+        }
+      }
+
+      // Fallback: If alkanesByAddress didn't return data, try alkanesBalance (simpler aggregated format)
+      // alkanesBalance returns: [{ alkane_id: { block, tx }, balance: "amount" }, ...]
+      if (alkaneMap.size === 0) {
+        console.log('[useEnrichedWalletData] No alkanes from alkanesByAddress, trying alkanesBalance fallback');
+        for (const { address, data } of alkanesBalanceResults) {
+          if (!data || !Array.isArray(data)) {
+            console.log('[useEnrichedWalletData] No alkanesBalance data for', address);
+            continue;
+          }
+
+          console.log(`[useEnrichedWalletData] Processing ${data.length} alkane balances from alkanesBalance for ${address}`);
+
+          for (const entry of data) {
+            // Handle both alkane_id and id field names
+            const alkaneId = entry.alkane_id || entry.id;
+            if (!alkaneId) continue;
+
+            const alkaneIdStr = `${alkaneId.block}:${alkaneId.tx}`;
+            const amountStr = String(entry.balance || entry.amount || '0');
+
+            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+              symbol: entry.symbol || `${alkaneId.tx}`,
+              name: entry.name || `Token ${alkaneIdStr}`,
+              decimals: entry.decimals || 8,
+            };
+
+            if (!alkaneMap.has(alkaneIdStr)) {
+              alkaneMap.set(alkaneIdStr, {
+                alkaneId: alkaneIdStr,
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                balance: amountStr,
+                decimals: tokenInfo.decimals,
+              });
+              console.log(`[useEnrichedWalletData] Added alkane from fallback ${alkaneIdStr}: ${amountStr}`);
+            } else {
+              const existing = alkaneMap.get(alkaneIdStr)!;
+              const currentBalance = BigInt(existing.balance);
+              const additionalBalance = BigInt(amountStr);
+              existing.balance = (currentBalance + additionalBalance).toString();
+              console.log(`[useEnrichedWalletData] Aggregated alkane from fallback ${alkaneIdStr}: ${existing.balance}`);
             }
           }
         }
