@@ -21,6 +21,7 @@ import { useAllPoolStats, useAllPoolVolumes } from "@/hooks/usePoolData";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
+import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import LoadingOverlay from "@/app/components/LoadingOverlay";
 
 // Lazy loaded components - split into separate chunks
@@ -179,6 +180,7 @@ export default function SwapShell() {
   const swapMutation = useSwapMutation();
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
+  const addLiquidityMutation = useAddLiquidityMutation();
 
   // Wallet/config
   const { address, network } = useWallet();
@@ -590,9 +592,53 @@ export default function SwapShell() {
   };
 
   const handleAddLiquidity = async () => {
-    console.log('Add liquidity', { poolToken0, poolToken1, poolToken0Amount, poolToken1Amount });
-    // TODO: Implement liquidity addition logic
-    window.alert('Add liquidity feature coming soon!');
+    console.log('[handleAddLiquidity] Starting...', { poolToken0, poolToken1, poolToken0Amount, poolToken1Amount });
+
+    if (!poolToken0 || !poolToken1) {
+      window.alert('Please select both tokens');
+      return;
+    }
+
+    if (!poolToken0Amount || !poolToken1Amount ||
+        parseFloat(poolToken0Amount) <= 0 || parseFloat(poolToken1Amount) <= 0) {
+      window.alert('Please enter valid amounts for both tokens');
+      return;
+    }
+
+    // Handle BTC: requires wrap to frBTC first
+    const hasBtc = poolToken0.id === 'btc' || poolToken1.id === 'btc';
+    if (hasBtc) {
+      window.alert(
+        'Adding liquidity with BTC requires wrapping to frBTC first.\n\n' +
+        'Please wrap your BTC to frBTC using the Swap tab, then add liquidity with frBTC.'
+      );
+      return;
+    }
+
+    try {
+      const result = await addLiquidityMutation.mutateAsync({
+        token0Id: poolToken0.id,
+        token1Id: poolToken1.id,
+        token0Amount: poolToken0Amount,
+        token1Amount: poolToken1Amount,
+        token0Decimals: 8, // Default for alkanes
+        token1Decimals: 8,
+        maxSlippage,
+        feeRate: fee.feeRate,
+        deadlineBlocks,
+      });
+
+      if (result?.success && result.transactionId) {
+        console.log('[handleAddLiquidity] Success! txid:', result.transactionId);
+        setSuccessTxId(result.transactionId);
+        // Clear amounts after success
+        setPoolToken0Amount('');
+        setPoolToken1Amount('');
+      }
+    } catch (e: any) {
+      console.error('[handleAddLiquidity] Error:', e);
+      window.alert(`Add liquidity failed: ${e?.message || 'See console for details'}`);
+    }
   };
 
   const handleInvert = () => {
@@ -1007,6 +1053,7 @@ export default function SwapShell() {
                 if (t) setPoolToken1(t);
               }}
               onAddLiquidity={handleAddLiquidity}
+              isLoading={addLiquidityMutation.isPending}
               token0BalanceText={formatBalance(poolToken0?.id)}
               token1BalanceText={formatBalance(poolToken1?.id)}
               token0FiatText="$0.00"

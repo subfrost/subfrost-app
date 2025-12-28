@@ -33,6 +33,7 @@ type Props = {
   onSelectToken0?: (id: string) => void;
   onSelectToken1?: (id: string) => void;
   onAddLiquidity: () => void;
+  isLoading?: boolean;
   token0BalanceText?: string;
   token1BalanceText?: string;
   token0FiatText?: string;
@@ -68,6 +69,7 @@ export default function LiquidityInputs({
   onSelectToken0,
   onSelectToken1,
   onAddLiquidity,
+  isLoading = false,
   token0BalanceText = "No balance",
   token1BalanceText = "No balance",
   token0FiatText = "$0.00",
@@ -91,14 +93,14 @@ export default function LiquidityInputs({
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { openTokenSelector } = useModalStore();
 
-  
+
   const canAddLiquidity = isConnected &&
     !!token0Amount && !!token1Amount &&
     isFinite(parseFloat(token0Amount)) && isFinite(parseFloat(token1Amount)) &&
     parseFloat(token0Amount) > 0 && parseFloat(token1Amount) > 0 &&
     !!token0 && !!token1;
-  
-  const ctaText = isConnected ? "ADD LIQUIDITY" : "CONNECT WALLET";
+
+  const ctaText = isLoading ? "ADDING LIQUIDITY..." : (isConnected ? "ADD LIQUIDITY" : "CONNECT WALLET");
   
   const onCtaClick = () => {
     if (!isConnected) {
@@ -402,7 +404,7 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          disabled={!canAddLiquidity && isConnected}
+          disabled={(!canAddLiquidity && isConnected) || isLoading}
           className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
         >
           {ctaText}
