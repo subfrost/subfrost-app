@@ -330,10 +330,22 @@ export default function SwapShell() {
     return opts;
   }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
 
-  // Balances - use useEnrichedWalletData for BTC balance (more reliable than useBtcBalance)
+  // Balances - use useEnrichedWalletData for reliable balance data
   const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
   const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
   const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
+
+  // Build a map from alkane ID to balance from wallet data (more reliable than useSellableCurrencies)
+  const walletAlkaneBalances = useMemo(() => {
+    const map = new Map<string, string>();
+    if (walletBalances?.alkanes) {
+      for (const alkane of walletBalances.alkanes) {
+        map.set(alkane.alkaneId, alkane.balance);
+      }
+    }
+    return map;
+  }, [walletBalances?.alkanes]);
+
   const formatBalance = (id?: string): string => {
     if (!id) return 'Balance: 0';
 
@@ -345,8 +357,15 @@ export default function SwapShell() {
     }
 
     // Alkane token balance (frBTC, DIESEL, etc.)
-    const cur = idToUserCurrency.get(id);
-    if (!cur?.balance) {
+    // Prefer walletAlkaneBalances (from useEnrichedWalletData) over useSellableCurrencies
+    // as it's more reliable and consistent with the wallet dashboard
+    let balance = walletAlkaneBalances.get(id);
+    if (!balance) {
+      const cur = idToUserCurrency.get(id);
+      balance = cur?.balance;
+    }
+
+    if (!balance) {
       return 'Balance: 0';
     }
 
@@ -354,7 +373,7 @@ export default function SwapShell() {
     // Example: 99000000 raw = 0.99 frBTC
     // Use BigInt for precision to avoid floating point errors
     try {
-      const value = BigInt(cur.balance);
+      const value = BigInt(balance);
       const divisor = BigInt(1e8);
       const whole = value / divisor;
       const remainder = value % divisor;
@@ -375,7 +394,7 @@ export default function SwapShell() {
       return `Balance: ${wholeStr}.${trimmedRemainder}`;
     } catch {
       // Fallback for non-BigInt compatible values
-      const rawBalance = Number(cur.balance);
+      const rawBalance = Number(balance);
       const displayBalance = rawBalance / 1e8;
       return `Balance: ${displayBalance.toFixed(4)}`;
     }
