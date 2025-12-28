@@ -19,7 +19,10 @@ export default function UTXOManagement() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([
+        refresh(),
+        new Promise(resolve => setTimeout(resolve, 500)) // minimum 500ms spin
+      ]);
     } finally {
       setIsRefreshing(false);
     }
@@ -165,8 +168,8 @@ export default function UTXOManagement() {
         <div className="flex gap-2 flex-wrap">
           {[
             { id: 'all', label: 'All' },
-            { id: 'p2wpkh', label: 'P2WPKH' },
-            { id: 'p2tr', label: 'P2TR' },
+            { id: 'p2wpkh', label: 'Native SegWit' },
+            { id: 'p2tr', label: 'Taproot' },
             { id: 'runes', label: 'Runes' },
             { id: 'protorunes', label: 'Protorunes (Alkanes)' },
             { id: 'brc20', label: 'Inscriptions (BRC20)' },

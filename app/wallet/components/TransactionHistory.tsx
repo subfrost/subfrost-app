@@ -14,8 +14,9 @@ export default function TransactionHistory() {
   const p2wpkhAddress = account?.nativeSegwit?.address;
   const p2trAddress = account?.taproot?.address;
 
-  const { transactions: p2wpkhTxs, loading: p2wpkhLoading, error: p2wpkhError } = useTransactionHistory(p2wpkhAddress);
-  const { transactions: p2trTxs, loading: p2trLoading, error: p2trError } = useTransactionHistory(p2trAddress);
+  const { transactions: p2wpkhTxs, loading: p2wpkhLoading, error: p2wpkhError, refresh: refreshP2wpkh } = useTransactionHistory(p2wpkhAddress);
+  const { transactions: p2trTxs, loading: p2trLoading, error: p2trError, refresh: refreshP2tr } = useTransactionHistory(p2trAddress);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Merge and dedupe transactions by txid, sort by block time (newest first)
   const transactions = [...p2wpkhTxs, ...p2trTxs]
@@ -24,6 +25,20 @@ export default function TransactionHistory() {
 
   const loading = p2wpkhLoading || p2trLoading;
   const error = p2wpkhError || p2trError;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        refreshP2wpkh(),
+        refreshP2tr(),
+        new Promise(resolve => setTimeout(resolve, 500)) // minimum 500ms spin
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const [viewMode, setViewMode] = useState<'visual' | 'raw'>('visual');
   const [expandedTxs, setExpandedTxs] = useState<Set<string>>(new Set());
   const [inspectingTx, setInspectingTx] = useState<string | null>(null);
@@ -119,27 +134,37 @@ export default function TransactionHistory() {
 
   return (
     <div className="space-y-6">
-      {/* View Mode Toggle */}
-      <div className="flex gap-2">
+      {/* Header with View Mode Toggle and Refresh */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('visual')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              viewMode === 'visual'
+                ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
+                : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
+            }`}
+          >
+            Visual
+          </button>
+          <button
+            onClick={() => setViewMode('raw')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              viewMode === 'raw'
+                ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
+                : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
+            }`}
+          >
+            Raw JSON
+          </button>
+        </div>
         <button
-          onClick={() => setViewMode('visual')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            viewMode === 'visual'
-              ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
-              : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
-          }`}
+          onClick={handleRefresh}
+          disabled={loading || isRefreshing}
+          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+          title="Refresh transactions"
         >
-          Visual
-        </button>
-        <button
-          onClick={() => setViewMode('raw')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            viewMode === 'raw'
-              ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
-              : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
-          }`}
-        >
-          Raw JSON
+          <RefreshCw size={20} className={loading || isRefreshing ? 'animate-spin' : ''} />
         </button>
       </div>
 

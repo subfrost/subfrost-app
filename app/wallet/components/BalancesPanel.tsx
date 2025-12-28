@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
-import { Bitcoin, Coins, DollarSign, RefreshCw, Loader2 } from 'lucide-react';
+import { Bitcoin, Coins, DollarSign, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
 
 export default function BalancesPanel() {
   const { account } = useWallet() as any;
@@ -15,7 +15,10 @@ export default function BalancesPanel() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([
+        refresh(),
+        new Promise(resolve => setTimeout(resolve, 500)) // minimum 500ms spin
+      ]);
     } finally {
       setIsRefreshing(false);
     }
@@ -93,9 +96,8 @@ export default function BalancesPanel() {
               <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">Bitcoin Balance</div>
               <div className="text-3xl font-bold text-[color:var(--sf-text)]">{totalBTC} BTC</div>
               {totalUSD && (
-                <div className="text-sm text-[color:var(--sf-text)]/60 flex items-center gap-1 mt-1">
-                  <DollarSign size={12} />
-                  <span>${totalUSD} USD</span>
+                <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
+                  ${totalUSD} USD
                 </div>
               )}
             </div>
@@ -111,50 +113,79 @@ export default function BalancesPanel() {
         </div>
 
         {/* Balance Breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-[color:var(--sf-outline)]">
-          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Total Balance</div>
-            <div className="font-mono text-sm text-[color:var(--sf-text)]">{formatBTC(balances.bitcoin.total)} BTC</div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[color:var(--sf-outline)]">
           <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
-            <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Spendable (Plain BTC)</div>
+            <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Spendable BTC</div>
             <div className="font-mono text-sm text-[color:var(--sf-info-green-text)]">
-              {formatBTC(balances.bitcoin.p2wpkh)} BTC
-            </div>
-            <div className="text-xs text-[color:var(--sf-info-green-title)]/60 mt-1">
-              {account?.nativeSegwit?.address
-                ? `Native SegWit (${account.nativeSegwit.address.slice(0, 4)}...${account.nativeSegwit.address.slice(-4)})`
-                : 'Native SegWit (Not Found)'}
+              {formatBTC(balances.bitcoin.spendable)} BTC {formatUSD(balances.bitcoin.spendable) && `($${formatUSD(balances.bitcoin.spendable)})`}
             </div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
-            <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">With Assets</div>
+            <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">Unspendable (with Assets)</div>
             <div className="font-mono text-sm text-[color:var(--sf-info-yellow-text)]">
-              {formatBTC(balances.bitcoin.p2tr)} BTC
-            </div>
-            <div className="text-xs text-[color:var(--sf-info-yellow-title)]/60 mt-1">
-              {account?.taproot?.address
-                ? `Taproot (${account.taproot.address.slice(0, 4)}...${account.taproot.address.slice(-4)})`
-                : 'Taproot (Not Found)'}
+              {formatBTC(balances.bitcoin.withAssets)} BTC {formatUSD(balances.bitcoin.withAssets) && `($${formatUSD(balances.bitcoin.withAssets)})`}
             </div>
           </div>
         </div>
 
         {/* Address Breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[color:var(--sf-outline)] mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-outline)] mt-4">
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
-            <div className="font-mono text-sm text-[color:var(--sf-text)]">{formatBTC(balances.bitcoin.p2wpkh)} BTC</div>
-            <div className="text-xs text-[color:var(--sf-text)]/40 mt-1 truncate" title={account?.nativeSegwit?.address || 'Not Found'}>
-              {account?.nativeSegwit?.address ? `${account.nativeSegwit.address.slice(0, 12)}...` : 'Not Found'}
+            <div className="font-mono text-sm text-[color:var(--sf-text)]">
+              {formatBTC(balances.bitcoin.p2wpkh)} BTC
             </div>
+            <a
+              href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-colors cursor-pointer flex items-center gap-1"
+              title={account?.nativeSegwit?.address ? `View ${account.nativeSegwit.address} on mempool.space` : 'No address'}
+            >
+              <span className="truncate">{account?.nativeSegwit?.address ? `${account.nativeSegwit.address.slice(0, 6)}...${account.nativeSegwit.address.slice(-4)}` : 'Not Found'}</span>
+              <ExternalLink size={10} className="shrink-0" />
+            </a>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
-            <div className="font-mono text-sm text-[color:var(--sf-text)]">{formatBTC(balances.bitcoin.p2tr)} BTC</div>
-            <div className="text-xs text-[color:var(--sf-text)]/40 mt-1 truncate" title={account?.taproot?.address || 'Not Found'}>
-              {account?.taproot?.address ? `${account.taproot.address.slice(0, 12)}...` : 'Not Found'}
+            <div className="font-mono text-sm text-[color:var(--sf-text)]">
+              {formatBTC(balances.bitcoin.p2tr)} BTC
             </div>
+            <a
+              href={account?.taproot?.address ? `https://mempool.space/address/${account.taproot.address}` : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-colors cursor-pointer flex items-center gap-1"
+              title={account?.taproot?.address ? `View ${account.taproot.address} on mempool.space` : 'No address'}
+            >
+              <span className="truncate">{account?.taproot?.address ? `${account.taproot.address.slice(0, 6)}...${account.taproot.address.slice(-4)}` : 'Not Found'}</span>
+              <ExternalLink size={10} className="shrink-0" />
+            </a>
+          </div>
+          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Pending Transactions</div>
+            <div className="font-mono text-sm text-[color:var(--sf-text)] flex items-center gap-1">
+              <a
+                href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-[#5b9cff] transition-colors cursor-pointer"
+                title={account?.nativeSegwit?.address ? `View ${account.nativeSegwit.address} on mempool.space` : 'No address'}
+              >
+                +{balances.pendingTxCount.p2wpkh}
+              </a>
+              <span className="text-[color:var(--sf-text)]/40">/</span>
+              <a
+                href={account?.taproot?.address ? `https://mempool.space/address/${account.taproot.address}` : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-[#5b9cff] transition-colors cursor-pointer"
+                title={account?.taproot?.address ? `View ${account.taproot.address} on mempool.space` : 'No address'}
+              >
+                +{balances.pendingTxCount.p2tr}
+              </a>
+            </div>
+            <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">bc1q / bc1p</div>
           </div>
         </div>
       </div>

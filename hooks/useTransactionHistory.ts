@@ -8,7 +8,7 @@
  * On regtest, traces may not be available.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 
 export interface TransactionInput {
@@ -64,6 +64,11 @@ export function useTransactionHistory(address?: string, excludeCoinbase: boolean
   const [transactions, setTransactions] = useState<EnrichedTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const refresh = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     if (!address || !provider || !isInitialized) {
@@ -181,7 +186,7 @@ export function useTransactionHistory(address?: string, excludeCoinbase: boolean
     return () => {
       cancelled = true;
     };
-  }, [address, provider, isInitialized, network, excludeCoinbase]);
+  }, [address, provider, isInitialized, network, excludeCoinbase, refreshTrigger]);
 
-  return { transactions, loading, error };
+  return { transactions, loading, error, refresh };
 }

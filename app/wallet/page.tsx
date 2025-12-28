@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter } from 'next/navigation';
-import { Wallet, Activity, Settings, BarChart2, Send, QrCode } from 'lucide-react';
+import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check } from 'lucide-react';
 import AddressAvatar from '@/app/components/AddressAvatar';
 import BalancesPanel from './components/BalancesPanel';
 import UTXOManagement from './components/UTXOManagement';
@@ -16,11 +16,22 @@ import SendModal from './components/SendModal';
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected, address } = useWallet() as any;
+  const { connected, isConnected, address, paymentAddress } = useWallet() as any;
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabView>('balances');
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
+
+  const copyToClipboard = async (text: string, type: 'segwit' | 'taproot') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAddress(type);
+      setTimeout(() => setCopiedAddress(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
@@ -61,9 +72,45 @@ export default function WalletDashboardPage() {
                 </button>
               </div>
             </div>
-            <div className="flex items-center gap-3 overflow-hidden">
-              <AddressAvatar address={address} size={32} />
-              <span className="text-sm sm:text-lg text-[color:var(--sf-text)]/80 truncate">{address}</span>
+            <div className="flex flex-col gap-2">
+              {/* Native Segwit Address */}
+              {paymentAddress && (
+                <div className="flex items-center gap-3">
+                  <AddressAvatar address={paymentAddress} size={24} />
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Native SegWit:</span>
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate font-mono">{paymentAddress}</span>
+                  <button
+                    onClick={() => copyToClipboard(paymentAddress, 'segwit')}
+                    className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-colors shrink-0"
+                    title="Copy address"
+                  >
+                    {copiedAddress === 'segwit' ? (
+                      <Check size={14} className="text-green-500" />
+                    ) : (
+                      <Copy size={14} className="text-[color:var(--sf-text)]/60" />
+                    )}
+                  </button>
+                </div>
+              )}
+              {/* Taproot Address */}
+              {address && (
+                <div className="flex items-center gap-3">
+                  <AddressAvatar address={address} size={24} />
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Taproot:</span>
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate font-mono">{address}</span>
+                  <button
+                    onClick={() => copyToClipboard(address, 'taproot')}
+                    className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-colors shrink-0"
+                    title="Copy address"
+                  >
+                    {copiedAddress === 'taproot' ? (
+                      <Check size={14} className="text-green-500" />
+                    ) : (
+                      <Copy size={14} className="text-[color:var(--sf-text)]/60" />
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

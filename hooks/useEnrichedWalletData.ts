@@ -63,6 +63,12 @@ export interface WalletBalances {
     p2wpkh: number;
     p2tr: number;
     total: number;
+    spendable: number;    // Plain BTC UTXOs (no assets) from both address types
+    withAssets: number;   // BTC in UTXOs with assets from both address types
+  };
+  pendingTxCount: {
+    p2wpkh: number;       // Pending transaction count for Native SegWit address
+    p2tr: number;         // Pending transaction count for Taproot address
   };
   alkanes: AlkaneAsset[];
   runes: Array<{
@@ -95,7 +101,8 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
   const [data, setData] = useState<Omit<EnrichedWalletData, 'refresh'>>({
     balances: {
-      bitcoin: { p2wpkh: 0, p2tr: 0, total: 0 },
+      bitcoin: { p2wpkh: 0, p2tr: 0, total: 0, spendable: 0, withAssets: 0 },
+      pendingTxCount: { p2wpkh: 0, p2tr: 0 },
       alkanes: [],
       runes: [],
     },
@@ -203,11 +210,16 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       let totalBtc = 0;
       let p2wpkhBtc = 0;
       let p2trBtc = 0;
+      let spendableBtc = 0;    // Plain BTC (no assets) from both address types
+      let withAssetsBtc = 0;   // BTC in UTXOs with assets from both address types
       const allUtxos: EnrichedUTXO[] = [];
       const p2wpkhUtxos: EnrichedUTXO[] = [];
       const p2trUtxos: EnrichedUTXO[] = [];
       const alkaneMap = new Map<string, AlkaneAsset>();
       const runeMap = new Map<string, any>();
+      // Track unique pending transaction IDs per address type
+      const pendingTxIdsP2wpkh = new Set<string>();
+      const pendingTxIdsP2tr = new Set<string>();
 
       for (const { address, data } of enrichedResults) {
         if (!data) continue;
@@ -216,11 +228,16 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         const isP2TR = address === account.taproot?.address;
 
         // Helper function to process a UTXO from any category
-        const processUtxo = (utxo: any, isConfirmed: boolean) => {
+        // isSpendable: true for plain BTC UTXOs, false for UTXOs with assets
+        const processUtxo = (utxo: any, isConfirmed: boolean, isSpendable: boolean) => {
           // balances.lua returns outpoint as "txid:vout" format
           const [txid, voutStr] = (utxo.outpoint || ':').split(':');
           const vout = parseInt(voutStr || '0', 10);
 
+          // Note: balances.lua returns:
+          // - utxo.runes: protorunes from alkanes_protorunesbyaddress (we enrich from protoruneResults later)
+          // - utxo.ord_runes: regular Runes from ord_outputs (this is what the UI expects as "runes")
+          // - utxo.inscriptions: inscriptions from ord_outputs
           const enrichedUtxo: EnrichedUTXO = {
             txid,
             vout,
@@ -230,9 +247,11 @@ export function useEnrichedWalletData(): EnrichedWalletData {
               confirmed: isConfirmed,
               block_height: utxo.height,
             },
-            alkanes: utxo.alkanes,
+            // alkanes will be enriched later from protoruneResults
+            alkanes: undefined,
             inscriptions: utxo.inscriptions,
-            runes: utxo.runes,
+            // Use ord_runes for regular Runes (not utxo.runes which is protorunes)
+            runes: utxo.ord_runes,
           };
 
           allUtxos.push(enrichedUtxo);
@@ -247,31 +266,29 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
           totalBtc += utxo.value;
 
-          // Aggregate alkanes
-          if (utxo.alkanes) {
-            for (const [alkaneId, alkaneData] of Object.entries(utxo.alkanes)) {
-              const data = alkaneData as any; // Type assertion for alkane data
-              if (!alkaneMap.has(alkaneId)) {
-                alkaneMap.set(alkaneId, {
-                  alkaneId,
-                  name: data.name || alkaneId,
-                  symbol: data.symbol || alkaneId.split(':')[1] || 'ALK',
-                  balance: data.value,
-                  decimals: data.decimals || 8,
-                });
-              } else {
-                const existing = alkaneMap.get(alkaneId)!;
-                // Add balances (assuming they're strings representing numbers)
-                const currentBalance = BigInt(existing.balance);
-                const additionalBalance = BigInt(data.value);
-                existing.balance = (currentBalance + additionalBalance).toString();
-              }
+          // Track spendable vs with-assets BTC separately
+          if (isSpendable) {
+            spendableBtc += utxo.value;
+          } else {
+            withAssetsBtc += utxo.value;
+          }
+
+          // Track pending transaction IDs per address type
+          if (!isConfirmed && txid) {
+            if (isP2WPKH) {
+              pendingTxIdsP2wpkh.add(txid);
+            } else if (isP2TR) {
+              pendingTxIdsP2tr.add(txid);
             }
           }
 
-          // Aggregate runes
-          if (utxo.runes) {
-            for (const [runeId, runeData] of Object.entries(utxo.runes)) {
+          // Note: Alkanes are NOT aggregated here from balances.lua response
+          // because the lua returns protorunes as 'runes' field, not 'alkanes'.
+          // Alkanes are aggregated separately from protoruneResults (alkanesByAddress).
+
+          // Aggregate runes (use ord_runes from balances.lua, which contains regular Runes)
+          if (utxo.ord_runes) {
+            for (const [runeId, runeData] of Object.entries(utxo.ord_runes)) {
               const data = runeData as any; // Type assertion for rune data
               if (!runeMap.has(runeId)) {
                 runeMap.set(runeId, {
@@ -300,25 +317,28 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           return [];
         };
 
-        // Process spendable UTXOs (confirmed, no assets)
+        // Process spendable UTXOs (confirmed, no assets) - these are plain BTC
         for (const utxo of toArray(data.spendable)) {
-          processUtxo(utxo, true);
+          processUtxo(utxo, true, true);
         }
 
-        // Process asset UTXOs (confirmed, have inscriptions/runes/alkanes)
+        // Process asset UTXOs (confirmed, have inscriptions/runes/alkanes) - these have assets
         for (const utxo of toArray(data.assets)) {
-          processUtxo(utxo, true);
+          processUtxo(utxo, true, false);
         }
 
-        // Process pending UTXOs (unconfirmed)
+        // Process pending UTXOs (unconfirmed) - treat as spendable for now
         for (const utxo of toArray(data.pending)) {
-          processUtxo(utxo, false);
+          processUtxo(utxo, false, true);
         }
       }
 
       // Process protorune/alkane balances from protorunesbyaddress (PRIMARY source)
       // Clear any alkanes from the Lua script and use protorunesbyaddress as the source of truth
       alkaneMap.clear();
+
+      // Build a map of outpoint -> alkanes data for UTXO enrichment
+      const utxoAlkanesMap = new Map<string, Record<string, { value: string; name: string; symbol: string; decimals?: number }>>();
 
       for (const { address, data } of protoruneResults) {
         if (!data) continue;
@@ -336,6 +356,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
         for (const outpoint of outpoints) {
           const runes = outpoint.runes || [];
+          const outpointKey = outpoint.outpoint; // "txid:vout" format
 
           for (const runeEntry of runes) {
             const rune = runeEntry.rune;
@@ -369,6 +390,20 @@ export function useEnrichedWalletData(): EnrichedWalletData {
             };
 
             console.log('[BALANCE] Found protorune:', alkaneIdStr, '=', balance, 'raw:', runeEntry.balance, 'name:', rune.name);
+
+            // Add to UTXO alkanes map for enrichment
+            if (outpointKey) {
+              if (!utxoAlkanesMap.has(outpointKey)) {
+                utxoAlkanesMap.set(outpointKey, {});
+              }
+              const utxoAlkanes = utxoAlkanesMap.get(outpointKey)!;
+              utxoAlkanes[alkaneIdStr] = {
+                value: balance,
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                decimals: tokenInfo.decimals,
+              };
+            }
 
             if (!alkaneMap.has(alkaneIdStr)) {
               alkaneMap.set(alkaneIdStr, {
@@ -463,6 +498,18 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
+      // Enrich UTXOs with alkanes data from protoruneResults
+      // This ensures UTXOs have their alkanes property populated for filtering
+      console.log('[BALANCE] Enriching UTXOs with alkanes data. utxoAlkanesMap size:', utxoAlkanesMap.size);
+      for (const utxo of allUtxos) {
+        const outpointKey = `${utxo.txid}:${utxo.vout}`;
+        const alkanes = utxoAlkanesMap.get(outpointKey);
+        if (alkanes && Object.keys(alkanes).length > 0) {
+          utxo.alkanes = alkanes;
+          console.log('[BALANCE] Enriched UTXO', outpointKey, 'with alkanes:', Object.keys(alkanes));
+        }
+      }
+
       // Fetch token metadata using alkanesReflect for each unique token
       // This gives us proper name, symbol, and decimals
       const metadataPromises = Array.from(alkaneMap.keys()).map(async (alkaneId) => {
@@ -488,6 +535,20 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
+      // Also update UTXO alkanes with fetched metadata
+      for (const utxo of allUtxos) {
+        if (utxo.alkanes) {
+          for (const [alkaneId, alkaneData] of Object.entries(utxo.alkanes)) {
+            const metadata = metadataResults.find(r => r.alkaneId === alkaneId)?.metadata;
+            if (metadata) {
+              alkaneData.name = metadata.name || alkaneData.name;
+              alkaneData.symbol = metadata.symbol || alkaneData.symbol;
+              alkaneData.decimals = metadata.decimals ?? alkaneData.decimals;
+            }
+          }
+        }
+      }
+
       // Log final frBTC balance for debugging wrap issue
       // Check both possible frBTC IDs (4:0 on regtest, 32:0 on mainnet)
       const frbtcAsset = alkaneMap.get('4:0') || alkaneMap.get('32:0');
@@ -503,6 +564,12 @@ export function useEnrichedWalletData(): EnrichedWalletData {
             p2wpkh: p2wpkhBtc,
             p2tr: p2trBtc,
             total: totalBtc,
+            spendable: spendableBtc,
+            withAssets: withAssetsBtc,
+          },
+          pendingTxCount: {
+            p2wpkh: pendingTxIdsP2wpkh.size,
+            p2tr: pendingTxIdsP2tr.size,
           },
           alkanes: Array.from(alkaneMap.values()),
           runes: Array.from(runeMap.values()),
