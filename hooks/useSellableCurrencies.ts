@@ -19,7 +19,10 @@ function mapToObject(value: any): any {
   return value;
 }
 
-// Known token metadata (same as useEnrichedWalletData for consistency)
+/**
+ * Fallback token metadata - only used when alkanesReflect() doesn't return data.
+ * NOTE: On-chain metadata from alkanesReflect() takes precedence (fetched below).
+ */
 const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
   '2:0': { symbol: 'DIESEL', name: 'Diesel Token', decimals: 8 },
   '4:0': { symbol: 'frBTC', name: 'Subfrost BTC', decimals: 8 },

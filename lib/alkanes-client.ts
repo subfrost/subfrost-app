@@ -149,7 +149,11 @@ export function getNetworkConfig(networkName?: string): NetworkConfig {
 // Constants
 // ============================================================================
 
-/** Known token metadata - will be extended per-network */
+/**
+ * Known token metadata - fallback values for common tokens.
+ * NOTE: These are defaults and may differ between networks (e.g., 2:0 is DIESEL on mainnet
+ * but may be bUSD on regtest). Always prefer on-chain metadata from alkanesReflect() when available.
+ */
 export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
   // Mainnet tokens
   '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
