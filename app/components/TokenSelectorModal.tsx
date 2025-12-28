@@ -7,6 +7,48 @@ import { Search, X } from 'lucide-react';
 // Import Network type from constants
 import type { Network } from '@/utils/constants';
 
+/**
+ * Format alkane token balance for display
+ * Handles large numbers with proper decimal precision
+ * Matches the formatting logic in BalancesPanel.tsx
+ */
+function formatAlkaneBalance(balance: string, decimals: number = 8): string {
+  if (!balance || balance === '0') return '0';
+
+  try {
+    const value = BigInt(balance);
+
+    // Handle NFTs (single unit)
+    if (value === BigInt(1)) {
+      return '1';
+    }
+
+    const divisor = BigInt(10 ** decimals);
+    const whole = value / divisor;
+    const remainder = value % divisor;
+    const wholeStr = whole.toString();
+    const remainderStr = remainder.toString().padStart(decimals, '0');
+
+    // Determine decimal places based on whole number size
+    // 3+ digits (100+): show 2 decimal places
+    // 2 or fewer digits: show 4 decimal places
+    const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
+    const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
+
+    // Remove trailing zeros for cleaner display
+    const trimmedRemainder = truncatedRemainder.replace(/0+$/, '') || '0';
+
+    if (trimmedRemainder === '0' && whole > 0) {
+      return wholeStr;
+    }
+
+    return `${wholeStr}.${trimmedRemainder}`;
+  } catch {
+    // Fallback for invalid input
+    return '0';
+  }
+}
+
 export type TokenOption = {
   id: string;
   symbol: string;
@@ -213,9 +255,12 @@ export default function TokenSelectorModal({
               {filteredTokens.map((token) => {
                 const isSelected = token.id === selectedTokenId;
                 const isAvailable = token.isAvailable !== false;
+                // Use proper alkane balance formatting with BigInt math
+                const formattedBalance = token.balance ? formatAlkaneBalance(token.balance) : null;
+                // For USD value calculation, parse the raw balance and divide by 1e8
                 const balanceNum = token.balance ? parseFloat(token.balance) / 1e8 : 0;
-                const valueUsd = token.price && token.balance 
-                  ? (balanceNum * token.price).toFixed(2) 
+                const valueUsd = token.price && token.balance
+                  ? (balanceNum * token.price).toFixed(2)
                   : null;
 
                 return (
@@ -258,10 +303,10 @@ export default function TokenSelectorModal({
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-0.5">
-                        {token.balance && (
+                        {formattedBalance && (
                           <>
                             <span className="text-sm font-bold text-[color:var(--sf-text)]">
-                              {balanceNum.toFixed(6)}
+                              {formattedBalance}
                             </span>
                             {valueUsd && (
                               <span className="text-xs font-medium text-[color:var(--sf-text)]/50">

@@ -47,6 +47,9 @@ export type WrapTransactionBaseData = {
 // frBTC wrap opcode (exchange BTC for frBTC)
 const FRBTC_WRAP_OPCODE = 77;
 
+// Opcode to query signer address from frBTC contract
+const GET_SIGNER_OPCODE = 100001;
+
 // Helper to convert Uint8Array to base64
 function uint8ArrayToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -56,28 +59,109 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Hardcoded signer addresses per network
+// Fallback signer addresses per network (used if simulate call fails)
 // These are the multisig addresses configured in each frBTC contract deployment
-// NOTE: These addresses depend on how the frBTC contract was deployed on each network.
-// For regtest, this was found by examining successful wrap transactions.
-// If wraps fail, verify the signer address matches the contract's configured signer.
-const SIGNER_ADDRESSES: Record<string, string> = {
+const FALLBACK_SIGNER_ADDRESSES: Record<string, string> = {
   'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
 };
 
 /**
- * Get the signer address for the frBTC contract
- * Uses hardcoded addresses since simulate calls don't work reliably on regtest
+ * Fetch the signer address dynamically from the frBTC contract via simulate call
+ * Uses opcode 100001 which returns the configured signer address as a bech32 string
+ *
+ * From frBTC contract source (alkanes/fr-btc/src/lib.rs):
+ *   100001 => {
+ *     response.data = to_address_str(Script::from_bytes(self.signer_pointer().get().as_ref()))
+ *       .ok_or("").map_err(|_| anyhow!("invalid script"))?.as_bytes().to_vec();
+ *     Ok(response)
+ *   }
  */
-function getSignerAddress(network: string): string {
-  const signer = SIGNER_ADDRESSES[network];
-  if (!signer) {
-    throw new Error(`No signer address configured for network: ${network}`);
+async function fetchSignerAddressFromContract(
+  provider: any,
+  frbtcAlkaneId: string,
+): Promise<string | null> {
+  try {
+    // Build context for simulate call matching alkanes.proto MessageContextParcel format
+    // The calldata encodes the opcode as LEB128 bytes
+    const context = JSON.stringify({
+      alkanes: [],           // Required: array of AlkaneTransfer (empty for read-only)
+      calldata: [GET_SIGNER_OPCODE & 0x7F | 0x80, (GET_SIGNER_OPCODE >> 7) & 0x7F | 0x80, (GET_SIGNER_OPCODE >> 14) & 0x7F], // LEB128 encode 100001
+      height: 0,
+      txindex: 0,
+      pointer: 0,
+      refund_pointer: 0,
+      vout: 0,
+      transaction: [],
+      block: [],
+    });
+
+    console.log('[WRAP] Fetching signer from contract:', frbtcAlkaneId, 'with opcode:', GET_SIGNER_OPCODE);
+
+    const result = await provider.alkanesSimulate(frbtcAlkaneId, context, 'latest');
+    const converted = mapToObject(result);
+
+    console.log('[WRAP] Simulate result:', JSON.stringify(converted, null, 2));
+
+    // The result contains the signer address as UTF-8 bytes in execution.data
+    // Opcode 100001 returns: to_address_str(...).as_bytes().to_vec()
+    if (converted?.execution?.data) {
+      const dataBytes = converted.execution.data;
+
+      // Check if data is an array of bytes (typical format)
+      if (Array.isArray(dataBytes) && dataBytes.length > 0) {
+        // Convert bytes to string (it's a bech32 address)
+        const address = String.fromCharCode(...dataBytes);
+        if (address.startsWith('bc') || address.startsWith('tb') || address.startsWith('bcrt')) {
+          console.log('[WRAP] Got signer address from contract:', address);
+          return address;
+        }
+      }
+
+      // If it's a hex string, decode it
+      if (typeof dataBytes === 'string') {
+        const hexStr = dataBytes.startsWith('0x') ? dataBytes.slice(2) : dataBytes;
+        const bytes = Buffer.from(hexStr, 'hex');
+        const address = bytes.toString('utf8');
+        if (address.startsWith('bc') || address.startsWith('tb') || address.startsWith('bcrt')) {
+          console.log('[WRAP] Got signer address from contract (hex decoded):', address);
+          return address;
+        }
+      }
+    }
+
+    console.log('[WRAP] Could not parse signer address from simulate result');
+    return null;
+  } catch (error) {
+    console.error('[WRAP] Failed to fetch signer from contract:', error);
+    return null;
   }
-  console.log('[WRAP] Using signer address:', signer);
-  return signer;
+}
+
+/**
+ * Get the signer address for the frBTC contract
+ * First tries to fetch dynamically via simulate call, falls back to hardcoded addresses
+ */
+async function getSignerAddress(
+  provider: any,
+  frbtcAlkaneId: string,
+  network: string
+): Promise<string> {
+  // Try to fetch dynamically from contract
+  const dynamicSigner = await fetchSignerAddressFromContract(provider, frbtcAlkaneId);
+  if (dynamicSigner) {
+    return dynamicSigner;
+  }
+
+  // Fall back to hardcoded address
+  const fallbackSigner = FALLBACK_SIGNER_ADDRESSES[network];
+  if (fallbackSigner) {
+    console.log('[WRAP] Using fallback signer address:', fallbackSigner);
+    return fallbackSigner;
+  }
+
+  throw new Error(`No signer address available for network: ${network}`);
 }
 
 /**
@@ -172,8 +256,8 @@ export function useWrapMutation() {
       // Get bitcoin network for PSBT parsing
       const btcNetwork = getBitcoinNetwork();
 
-      // Get the signer address for this network (hardcoded per network)
-      const signerAddress = getSignerAddress(network);
+      // Get the signer address dynamically from contract or fall back to hardcoded
+      const signerAddress = await getSignerAddress(provider, FRBTC_ALKANE_ID, network);
 
       // to_addresses: [user, signer]
       // - Output 0 (v0): user address (receives minted frBTC via pointer=v0)
