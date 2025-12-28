@@ -212,17 +212,21 @@ export default function SwapShell() {
     return map;
   }, [markets]);
 
-  // Default from/to tokens: BTC → bUSD
+  // Default from/to tokens: BTC → BUSD (use pool data for correct symbol)
   useEffect(() => {
     if (!fromToken) setFromToken({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
   }, [fromToken]);
   const toInitializedRef = useRef(false);
   useEffect(() => {
-    if (!toInitializedRef.current && !toToken) {
-      setToToken({ id: BUSD_ALKANE_ID, symbol: 'bUSD', name: 'bUSD' });
+    if (!toInitializedRef.current && !toToken && BUSD_ALKANE_ID) {
+      // Use poolTokenMap for correct symbol if available, otherwise fallback
+      const poolToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      const symbol = poolToken?.symbol ?? 'DIESEL';
+      const name = poolToken?.name ?? 'DIESEL';
+      setToToken({ id: BUSD_ALKANE_ID, symbol, name });
       toInitializedRef.current = true;
     }
-  }, [toToken, BUSD_ALKANE_ID]);
+  }, [toToken, BUSD_ALKANE_ID, poolTokenMap]);
 
   // Default LP tokens: Select Token / BTC
   useEffect(() => {
@@ -573,12 +577,15 @@ export default function SwapShell() {
 
   const tokenOptions = useMemo<TokenMeta[]>(() => {
     if (selectedPool) return [selectedPool.token0, selectedPool.token1];
+    // Fallback options - use poolTokenMap for correct symbols when available
+    const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+    const frbtcToken = poolTokenMap.get(FRBTC_ALKANE_ID);
     return [
       { id: "btc", symbol: "BTC", name: "Bitcoin" },
-      { id: "frbtc", symbol: "frBTC", name: "frBTC" },
-      { id: "busd", symbol: "bUSD", name: "bUSD" },
+      { id: FRBTC_ALKANE_ID, symbol: frbtcToken?.symbol ?? "frBTC", name: frbtcToken?.name ?? "frBTC" },
+      { id: BUSD_ALKANE_ID, symbol: busdToken?.symbol ?? "DIESEL", name: busdToken?.name ?? "DIESEL" },
     ];
-  }, [selectedPool]);
+  }, [selectedPool, poolTokenMap, BUSD_ALKANE_ID, FRBTC_ALKANE_ID]);
 
   const handleSelectPool = (pool: PoolSummary) => {
     setSelectedPool(pool);
@@ -711,25 +718,25 @@ export default function SwapShell() {
     return pool ? (whitelistedPoolIds === null || whitelistedPoolIds.has(pool.id)) : false;
   }, [markets, FRBTC_ALKANE_ID, whitelistedPoolIds]);
 
-  // Custom sort function for token options: BTC, bUSD, frBTC, then alphabetical
+  // Custom sort function for token options: BTC, DIESEL/bUSD, frBTC, then alphabetical
   const sortTokenOptions = (options: TokenOption[]): TokenOption[] => {
     return [...options].sort((a, b) => {
-      // Priority order
+      // Priority order (DIESEL and bUSD are the same token on different networks)
       const getPriority = (symbol: string) => {
         if (symbol === 'BTC') return 0;
-        if (symbol === 'bUSD') return 1;
+        if (symbol === 'bUSD' || symbol === 'DIESEL') return 1;
         if (symbol === 'frBTC') return 2;
         return 3;
       };
-      
+
       const priorityA = getPriority(a.symbol);
       const priorityB = getPriority(b.symbol);
-      
+
       // If different priorities, sort by priority
       if (priorityA !== priorityB) {
         return priorityA - priorityB;
       }
-      
+
       // If same priority (both are priority 3, i.e., other tokens), sort alphabetically
       return a.symbol.localeCompare(b.symbol);
     });
