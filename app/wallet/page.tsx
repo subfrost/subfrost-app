@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check } from 'lucide-react';
 import AddressAvatar from '@/app/components/AddressAvatar';
 import BalancesPanel from './components/BalancesPanel';
@@ -18,7 +18,16 @@ type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 export default function WalletDashboardPage() {
   const { connected, isConnected, address, paymentAddress } = useWallet() as any;
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabView>('balances');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') as TabView | null;
+  const [activeTab, setActiveTab] = useState<TabView>(tabParam && ['balances', 'utxos', 'transactions', 'settings'].includes(tabParam) ? tabParam : 'balances');
+
+  // Update activeTab when URL changes
+  useEffect(() => {
+    if (tabParam && ['balances', 'utxos', 'transactions', 'settings'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);

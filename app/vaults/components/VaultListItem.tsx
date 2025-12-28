@@ -47,7 +47,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
     <Element
       onClick={interactive ? onClick : undefined}
       className={`w-full lg:w-auto lg:mx-auto rounded-lg transition-all overflow-hidden ${
-        interactive ? 'hover:bg-[color:var(--sf-surface)]/80 cursor-pointer' : 'cursor-default'
+        interactive ? 'hover:bg-[color:var(--sf-primary)]/10 cursor-pointer' : 'cursor-default'
       } ${
         isSelected 
           ? 'bg-[color:var(--sf-surface)]/90 border-2 border-[color:var(--sf-primary)] shadow-md' 

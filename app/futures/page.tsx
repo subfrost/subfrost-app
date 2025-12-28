@@ -4,6 +4,7 @@ import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageContent from '@/app/components/PageContent';
 import PageHeader from '@/app/components/PageHeader';
 import { useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import ContractDetailModal from './components/ContractDetailModal';
 import MarketsTable from './components/MarketsTable';
 import HowItWorksModal from './components/HowItWorksModal';
@@ -19,7 +20,8 @@ export default function FuturesPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('markets');
   const [selectedContract, setSelectedContract] = useState<{ id: string; blocksLeft: number } | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
-  
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Fetch real futures data from regtest
   const { futures, currentBlock, loading, error, refetch, generateFuture } = useFutures();
   
@@ -73,10 +75,16 @@ export default function FuturesPage() {
   
   // Handle manual refresh
   const handleRefresh = async () => {
+    setIsRefreshing(true);
     try {
-      await refetch();
+      await Promise.all([
+        refetch(),
+        new Promise(resolve => setTimeout(resolve, 500)) // minimum 500ms spin
+      ]);
     } catch (err) {
       console.error('Refresh failed:', err);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -84,7 +92,7 @@ export default function FuturesPage() {
     <PageContent>
       <AlkanesMainWrapper header={
         <PageHeader
-          title="Coinbase Futures (ftrBTC)"
+          title="Coinbase Futures (Coming Soon)"
           subtitle={
             <div className="flex items-center gap-3 text-sm text-[color:var(--sf-text)]/70">
               <span>Block: {currentBlock || '...'}</span>
@@ -102,6 +110,27 @@ export default function FuturesPage() {
                   <span className="text-red-400">Error: {error}</span>
                 </>
               )}
+              <button
+                type="button"
+                onClick={handleGenerateFuture}
+                disabled={loading}
+                className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Generate a new future on regtest (requires local node)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline-block">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span className="ml-2">Generate Future</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading || isRefreshing}
+                className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+                title="Refresh futures data"
+              >
+                <RefreshCw size={20} className={loading || isRefreshing ? 'animate-spin' : ''} />
+              </button>
             </div>
           }
           howItWorksButton={
@@ -119,33 +148,7 @@ export default function FuturesPage() {
             </button>
           }
           actions={
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleGenerateFuture}
-                disabled={loading}
-                className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Generate a new future on regtest (requires local node)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline-block">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <span className="ml-2">Generate Future</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={loading}
-                className="px-3 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Refresh futures data"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline-block">
-                  <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                </svg>
-                <span className="ml-2">Refresh</span>
-              </button>
-              <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
-            </div>
+            <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
           }
         />
       }>
