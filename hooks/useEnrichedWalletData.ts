@@ -125,32 +125,19 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         throw new Error('No wallet addresses available');
       }
 
-      console.log('[useEnrichedWalletData] Fetching balances for addresses:', addresses);
-
       // Use provider methods instead of direct fetch
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
-          console.log('[useEnrichedWalletData] Fetching enriched balances for:', address);
-
           // Get enriched balances using WASM WebProvider's balances.lua method
-          // This returns spendable, assets, pending UTXOs with alkanes/runes/inscriptions data
           const rawResult = await provider.getEnrichedBalances(address);
 
-          console.log('[useEnrichedWalletData] Got raw result for', address, rawResult);
-
-          // The lua evalscript returns {calls, returns, runtime} - we need the .returns field
-          // which contains {spendable, assets, pending, ordHeight, metashrewHeight}
-          // Note: serde_wasm_bindgen returns Maps, not plain objects, so we need to handle both
           let enrichedData: any;
           if (rawResult instanceof Map) {
             const returns = rawResult.get('returns');
-            // Convert Map to plain object recursively
             enrichedData = mapToObject(returns);
           } else {
             enrichedData = rawResult?.returns || rawResult;
           }
-
-          console.log('[useEnrichedWalletData] Extracted enriched data for', address, enrichedData);
 
           if (!enrichedData) {
             return {
@@ -167,18 +154,15 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
           return { address, data: enrichedData };
         } catch (error) {
-          console.error(`[useEnrichedWalletData] Failed to fetch data for ${address}:`, error);
+          console.error(`[BALANCE] Failed to fetch enriched data for ${address}:`, error);
           return { address, data: null };
         }
       });
 
-      // Also fetch protorune/alkane balances directly via protorunesbyaddress (alkanesByAddress)
-      // This is the primary source of truth for protorune assets
+      // Fetch protorune/alkane balances via alkanesByAddress
+      // This is the primary source of truth for protorune assets (frBTC)
       const protorunePromises = addresses.map(async (address) => {
         try {
-          console.log('[useEnrichedWalletData] Fetching protorunes via alkanesByAddress for:', address);
-
-          // alkanesByAddress calls protorunesbyaddress with protocol_tag=1 for Alkanes
           const rawResult = await provider.alkanesByAddress(address, 'latest', 1);
 
           console.log('[useEnrichedWalletData] Raw alkanesByAddress result type:', typeof rawResult);
@@ -187,19 +171,10 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           console.log('[useEnrichedWalletData] Raw result:', JSON.stringify(rawResult, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2)?.slice(0, 2000));
 
           const result = mapToObject(rawResult);
-
-          console.log('[useEnrichedWalletData] Converted result for', address);
-          console.log('[useEnrichedWalletData] Result keys:', result ? Object.keys(result) : 'null');
-          console.log('[useEnrichedWalletData] Result.balances exists:', !!result?.balances);
-          console.log('[useEnrichedWalletData] Result.balances length:', result?.balances?.length);
-
-          if (result?.balances?.length > 0) {
-            console.log('[useEnrichedWalletData] First balance entry:', JSON.stringify(result.balances[0], (_, v) => typeof v === 'bigint' ? v.toString() : v, 2)?.slice(0, 1000));
-          }
-
+          console.log('[BALANCE] alkanesByAddress raw for', address, ':', JSON.stringify(result, null, 2));
           return { address, data: result };
         } catch (error) {
-          console.error(`[useEnrichedWalletData] Failed to fetch protorunes for ${address}:`, error);
+          console.error(`[BALANCE] Failed to fetch protorunes for ${address}:`, error);
           return { address, data: null };
         }
       });
@@ -234,16 +209,11 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       const alkaneMap = new Map<string, AlkaneAsset>();
       const runeMap = new Map<string, any>();
 
-      console.log('[useEnrichedWalletData] Processing enrichedResults:', enrichedResults);
-
       for (const { address, data } of enrichedResults) {
-        console.log('[useEnrichedWalletData] Processing address:', address, 'data:', data);
         if (!data) continue;
 
         const isP2WPKH = address === account.nativeSegwit?.address;
         const isP2TR = address === account.taproot?.address;
-        console.log('[useEnrichedWalletData] isP2WPKH:', isP2WPKH, 'isP2TR:', isP2TR);
-        console.log('[useEnrichedWalletData] data.spendable:', data.spendable, 'type:', typeof data.spendable, 'isArray:', Array.isArray(data.spendable));
 
         // Helper function to process a UTXO from any category
         const processUtxo = (utxo: any, isConfirmed: boolean) => {
@@ -348,37 +318,91 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
       // Process protorune/alkane balances from protorunesbyaddress (PRIMARY source)
       // Clear any alkanes from the Lua script and use protorunesbyaddress as the source of truth
-      // This is more reliable as it directly queries the protorune indexer
       alkaneMap.clear();
-      console.log('[useEnrichedWalletData] Processing protoruneResults (primary source):', protoruneResults);
 
       for (const { address, data } of protoruneResults) {
-        if (!data?.balances) {
-          console.log('[useEnrichedWalletData] No protorune balances for', address);
-          continue;
+        if (!data) continue;
+
+        // Log the actual data structure to understand what format we're getting
+        console.log('[BALANCE] alkanesByAddress data structure:', {
+          hasOutpoints: !!data.outpoints,
+          hasBalances: !!data.balances,
+          keys: Object.keys(data),
+        });
+
+        // The RPC alkanes_protorunesbyaddress returns outpoints with runes array
+        // Format: { outpoints: [{ outpoint: "txid:vout", runes: [{ balance: "123", rune: { name: "SUBFROST BTC", id: { block: "0x20", tx: "0x0" } } }] }] }
+        const outpoints = data.outpoints || [];
+
+        for (const outpoint of outpoints) {
+          const runes = outpoint.runes || [];
+
+          for (const runeEntry of runes) {
+            const rune = runeEntry.rune;
+            if (!rune) continue;
+
+            // Build alkane ID from block:tx (hex values like "0x20")
+            // parseInt with 0x prefix needs no radix, or we strip the prefix
+            const blockStr = rune.id?.block || '0';
+            const txStr = rune.id?.tx || '0';
+            const block = blockStr.startsWith('0x') ? parseInt(blockStr) : parseInt(blockStr, 16);
+            const tx = txStr.startsWith('0x') ? parseInt(txStr) : parseInt(txStr, 16);
+            const alkaneIdStr = `${block}:${tx}`;
+
+            console.log('[BALANCE] Parsing rune ID:', { blockStr, txStr, block, tx, alkaneIdStr });
+
+            // Balance might be a string, number, or object with value property
+            let balance = '0';
+            if (typeof runeEntry.balance === 'string') {
+              balance = runeEntry.balance;
+            } else if (typeof runeEntry.balance === 'number') {
+              balance = runeEntry.balance.toString();
+            } else if (runeEntry.balance?.value) {
+              balance = String(runeEntry.balance.value);
+            }
+
+            // Get token metadata from KNOWN_TOKENS or use rune name
+            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+              symbol: rune.name || alkaneIdStr.split(':')[1] || 'ALK',
+              name: rune.name || `Token ${alkaneIdStr}`,
+              decimals: 8,
+            };
+
+            console.log('[BALANCE] Found protorune:', alkaneIdStr, '=', balance, 'raw:', runeEntry.balance, 'name:', rune.name);
+
+            if (!alkaneMap.has(alkaneIdStr)) {
+              alkaneMap.set(alkaneIdStr, {
+                alkaneId: alkaneIdStr,
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                balance: balance,
+                decimals: tokenInfo.decimals,
+              });
+            } else {
+              // Aggregate balance from multiple UTXOs/addresses
+              const existing = alkaneMap.get(alkaneIdStr)!;
+              const currentBalance = BigInt(existing.balance);
+              const additionalBalance = BigInt(balance);
+              existing.balance = (currentBalance + additionalBalance).toString();
+            }
+          }
         }
 
-        console.log(`[useEnrichedWalletData] Processing ${data.balances.length} UTXOs with protorunes for ${address}`);
-
-        // Process each UTXO's balance_sheet
-        for (const entry of data.balances) {
-          // Access balance_sheet.cached.balances - this is where the tokens are
+        // Fallback: Also check the old balance_sheet format in case the SDK returns that
+        const balances = data.balances || [];
+        for (const entry of balances) {
           const tokenBalances = entry.balance_sheet?.cached?.balances || {};
           const tokenEntries = Object.entries(tokenBalances);
 
-          if (tokenEntries.length === 0) continue;
-
-          console.log(`[useEnrichedWalletData] UTXO ${entry.outpoint} has ${tokenEntries.length} protorune(s)`);
-
           for (const [alkaneIdStr, amount] of tokenEntries) {
             const amountStr = String(amount);
-
-            // Get token metadata from KNOWN_TOKENS or use defaults
             const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
               symbol: alkaneIdStr.split(':')[1] || 'ALK',
               name: `Token ${alkaneIdStr}`,
               decimals: 8,
             };
+
+            console.log('[BALANCE] Found balance_sheet entry:', alkaneIdStr, '=', amountStr);
 
             if (!alkaneMap.has(alkaneIdStr)) {
               alkaneMap.set(alkaneIdStr, {
@@ -388,14 +412,11 @@ export function useEnrichedWalletData(): EnrichedWalletData {
                 balance: amountStr,
                 decimals: tokenInfo.decimals,
               });
-              console.log(`[useEnrichedWalletData] Added protorune ${alkaneIdStr}: ${amountStr}`);
             } else {
-              // Aggregate balance from multiple UTXOs/addresses
               const existing = alkaneMap.get(alkaneIdStr)!;
               const currentBalance = BigInt(existing.balance);
               const additionalBalance = BigInt(amountStr);
               existing.balance = (currentBalance + additionalBalance).toString();
-              console.log(`[useEnrichedWalletData] Aggregated protorune ${alkaneIdStr}: ${existing.balance}`);
             }
           }
         }
@@ -404,14 +425,11 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       // Fallback: If alkanesByAddress didn't return data, try alkanesBalance (simpler aggregated format)
       // alkanesBalance returns: [{ alkane_id: { block, tx }, balance: "amount" }, ...]
       if (alkaneMap.size === 0) {
-        console.log('[useEnrichedWalletData] No alkanes from alkanesByAddress, trying alkanesBalance fallback');
+        console.log('[BALANCE] No alkanes from alkanesByAddress, trying alkanesBalance fallback');
         for (const { address, data } of alkanesBalanceResults) {
           if (!data || !Array.isArray(data)) {
-            console.log('[useEnrichedWalletData] No alkanesBalance data for', address);
             continue;
           }
-
-          console.log(`[useEnrichedWalletData] Processing ${data.length} alkane balances from alkanesBalance for ${address}`);
 
           for (const entry of data) {
             // Handle both alkane_id and id field names
@@ -435,13 +453,11 @@ export function useEnrichedWalletData(): EnrichedWalletData {
                 balance: amountStr,
                 decimals: tokenInfo.decimals,
               });
-              console.log(`[useEnrichedWalletData] Added alkane from fallback ${alkaneIdStr}: ${amountStr}`);
             } else {
               const existing = alkaneMap.get(alkaneIdStr)!;
               const currentBalance = BigInt(existing.balance);
               const additionalBalance = BigInt(amountStr);
               existing.balance = (currentBalance + additionalBalance).toString();
-              console.log(`[useEnrichedWalletData] Aggregated alkane from fallback ${alkaneIdStr}: ${existing.balance}`);
             }
           }
         }
@@ -449,16 +465,13 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
       // Fetch token metadata using alkanesReflect for each unique token
       // This gives us proper name, symbol, and decimals
-      console.log('[useEnrichedWalletData] Fetching metadata for', alkaneMap.size, 'tokens');
       const metadataPromises = Array.from(alkaneMap.keys()).map(async (alkaneId) => {
         try {
-          console.log('[useEnrichedWalletData] Fetching metadata for', alkaneId);
           const rawResult = await provider.alkanesReflect(alkaneId);
           const metadata = mapToObject(rawResult);
-          console.log('[useEnrichedWalletData] Got metadata for', alkaneId, metadata);
           return { alkaneId, metadata };
         } catch (error) {
-          console.error(`[useEnrichedWalletData] Failed to fetch metadata for ${alkaneId}:`, error);
+          console.error(`[BALANCE] Failed to fetch metadata for ${alkaneId}:`, error);
           return { alkaneId, metadata: null };
         }
       });
@@ -472,12 +485,17 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           existing.name = metadata.name || existing.name;
           existing.symbol = metadata.symbol || existing.symbol;
           existing.decimals = metadata.decimals ?? existing.decimals;
-          // Logo URL could be added here if available from metadata
-          console.log(`[useEnrichedWalletData] Updated metadata for ${alkaneId}: ${existing.symbol} (${existing.name})`);
         }
       }
 
-      console.log('[useEnrichedWalletData] Final alkane balances:', Array.from(alkaneMap.values()));
+      // Log final frBTC balance for debugging wrap issue
+      // Check both possible frBTC IDs (4:0 on regtest, 32:0 on mainnet)
+      const frbtcAsset = alkaneMap.get('4:0') || alkaneMap.get('32:0');
+      if (frbtcAsset) {
+        console.log('[BALANCE] frBTC from protorunes:', frbtcAsset.alkaneId, '=', frbtcAsset.balance);
+      } else {
+        console.log('[BALANCE] No frBTC found. Available alkanes:', Array.from(alkaneMap.keys()));
+      }
 
       setData({
         balances: {

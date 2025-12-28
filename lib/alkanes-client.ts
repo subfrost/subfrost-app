@@ -157,7 +157,8 @@ export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decima
   '2:56801': { symbol: 'bUSD', name: 'Bitcoin USD', decimals: 8 },
   '2:68441': { symbol: 'DIESEL/bUSD LP', name: 'DIESEL/bUSD LP Token', decimals: 8 },
   '2:77087': { symbol: 'DIESEL/frBTC LP', name: 'DIESEL/frBTC LP Token', decimals: 8 },
-  // Regtest tokens (add as needed)
+  // Regtest tokens
+  '4:0': { symbol: 'frBTC', name: 'Fractional BTC', decimals: 8 }, // frBTC on regtest
   '5:0': { symbol: 'SUBFROST', name: 'Subfrost Token', decimals: 8 },
 };
 
