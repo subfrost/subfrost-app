@@ -69,21 +69,20 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 // - 99: name() -> "frBTC"
 // - 100: symbol() -> "frBTC"
 // - 102: decimals() -> 8
-// - 103: signer() -> 32-byte pubkey (NOTE: may not match actual /signer storage!)
+// - 103: signer() -> 32-byte x-only pubkey
 // - 104: premium() -> u128 (100000 = 0.1%)
 // - 105: totalSupply() -> u128
 //
-// IMPORTANT: Opcode 103 returns a different pubkey than what's stored in /signer.
-// The contract's compute_output() checks against /signer storage, NOT opcode 103.
-// These hardcoded addresses are the ACTUAL signer addresses that work for wraps.
-// Pubkey: a7f90b8256f58c1074fe085d37b73dff3040774babc216dae106e281e020638b
+// Opcode 103 returns the signer pubkey as a 32-byte x-only pubkey.
+// We convert this to a bech32m P2TR address using the network-appropriate prefix.
+// Pubkey from opcode 103: 7940ef3b659179a1371dec05793cb027cde47806fb66ce1e3d1b69d56de629dc
 const SIGNER_ADDRESSES: Record<string, string> = {
-  'mainnet': 'bc1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9s2r4auy',
-  'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'signet': 'tb1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9sxrz0c9',
-  'testnet': 'tb1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9sxrz0c9',
+  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqcdrpr6',
+  'regtest': 'bcrt1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqzulgv0',
+  'subfrost-regtest': 'bcrt1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqzulgv0',
+  'oylnet': 'bcrt1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqzulgv0',
+  'signet': 'tb1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqstjlmh',
+  'testnet': 'tb1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqstjlmh',
 };
 
 // RPC URLs for metashrew_view calls per network
@@ -359,21 +358,25 @@ async function fetchSignerAddressFromContract(
 /**
  * Get the signer address for the frBTC contract.
  *
- * Uses hardcoded addresses that match the actual /signer storage in the contract.
+ * First tries to fetch dynamically from the contract using opcode 103.
+ * Falls back to hardcoded addresses if the RPC call fails.
  *
- * NOTE: We previously tried to fetch dynamically using opcode 103, but that returns
- * a DIFFERENT pubkey than what's stored in /signer. The contract's compute_output()
- * function checks BTC sent to the address derived from /signer storage, so we must
- * use the correct hardcoded addresses.
+ * Opcode 103 returns a 32-byte x-only pubkey which we convert to a P2TR address.
  */
 async function getSignerAddress(
-  _frbtcAlkaneId: string,
+  frbtcAlkaneId: string,
   network: string
 ): Promise<string> {
-  // Use hardcoded address - dynamic fetch via opcode 103 returns wrong pubkey
+  // Try to fetch dynamically from contract
+  const dynamicSigner = await fetchSignerAddressFromContract(network, frbtcAlkaneId);
+  if (dynamicSigner) {
+    return dynamicSigner;
+  }
+
+  // Fall back to hardcoded address
   const signer = SIGNER_ADDRESSES[network];
   if (signer) {
-    console.log('[WRAP] Using hardcoded signer address:', signer);
+    console.log('[WRAP] Using fallback signer address:', signer);
     return signer;
   }
 
