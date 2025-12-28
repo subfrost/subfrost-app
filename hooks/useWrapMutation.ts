@@ -71,6 +71,9 @@ const FALLBACK_SIGNER_ADDRESSES: Record<string, string> = {
  * Fetch the signer address dynamically from the frBTC contract via simulate call
  * Uses opcode 100001 which returns the configured signer address as a bech32 string
  *
+ * NOTE: This may fail on regtest/testnet where simulate RPC isn't fully configured.
+ * The caller should handle null return and fall back to hardcoded addresses.
+ *
  * From frBTC contract source (alkanes/fr-btc/src/lib.rs):
  *   100001 => {
  *     response.data = to_address_str(Script::from_bytes(self.signer_pointer().get().as_ref()))
@@ -78,6 +81,20 @@ const FALLBACK_SIGNER_ADDRESSES: Record<string, string> = {
  *     Ok(response)
  *   }
  */
+// Encode a number as LEB128 (unsigned) for alkanes calldata
+function encodeLEB128(value: number): number[] {
+  const result: number[] = [];
+  do {
+    let byte = value & 0x7F;
+    value >>>= 7;
+    if (value !== 0) {
+      byte |= 0x80; // Set high bit if more bytes follow
+    }
+    result.push(byte);
+  } while (value !== 0);
+  return result;
+}
+
 async function fetchSignerAddressFromContract(
   provider: any,
   frbtcAlkaneId: string,
@@ -85,24 +102,23 @@ async function fetchSignerAddressFromContract(
   try {
     // Build context for simulate call matching alkanes.proto MessageContextParcel format
     // The calldata encodes the opcode as LEB128 bytes
+    // 100001 in LEB128 = [0xA1, 0x8D, 0x06]
+    const opcodeBytes = encodeLEB128(GET_SIGNER_OPCODE);
+
     const context = JSON.stringify({
-      alkanes: [],           // Required: array of AlkaneTransfer (empty for read-only)
-      calldata: [GET_SIGNER_OPCODE & 0x7F | 0x80, (GET_SIGNER_OPCODE >> 7) & 0x7F | 0x80, (GET_SIGNER_OPCODE >> 14) & 0x7F], // LEB128 encode 100001
-      height: 0,
+      alkanes: [],           // Required field: array of AlkaneTransfer (empty for read-only)
+      calldata: opcodeBytes, // LEB128 encoded opcode
+      height: 1000000,       // Use a reasonable height
       txindex: 0,
       pointer: 0,
       refund_pointer: 0,
       vout: 0,
-      transaction: [],
-      block: [],
+      transaction: [],       // Empty byte array
+      block: [],             // Empty byte array
     });
-
-    console.log('[WRAP] Fetching signer from contract:', frbtcAlkaneId, 'with opcode:', GET_SIGNER_OPCODE);
 
     const result = await provider.alkanesSimulate(frbtcAlkaneId, context, 'latest');
     const converted = mapToObject(result);
-
-    console.log('[WRAP] Simulate result:', JSON.stringify(converted, null, 2));
 
     // The result contains the signer address as UTF-8 bytes in execution.data
     // Opcode 100001 returns: to_address_str(...).as_bytes().to_vec()
@@ -131,33 +147,39 @@ async function fetchSignerAddressFromContract(
       }
     }
 
-    console.log('[WRAP] Could not parse signer address from simulate result');
+    // Silent return - fallback will be used
     return null;
-  } catch (error) {
-    console.error('[WRAP] Failed to fetch signer from contract:', error);
+  } catch {
+    // Expected to fail on regtest/testnet - silently fall back to hardcoded addresses
     return null;
   }
 }
 
 /**
  * Get the signer address for the frBTC contract
- * First tries to fetch dynamically via simulate call, falls back to hardcoded addresses
+ * Uses hardcoded addresses for regtest networks (simulate RPC not available),
+ * tries dynamic fetch for mainnet/signet, falls back to hardcoded if needed.
  */
 async function getSignerAddress(
   provider: any,
   frbtcAlkaneId: string,
   network: string
 ): Promise<string> {
-  // Try to fetch dynamically from contract
-  const dynamicSigner = await fetchSignerAddressFromContract(provider, frbtcAlkaneId);
-  if (dynamicSigner) {
-    return dynamicSigner;
+  // For regtest networks, skip the simulate call entirely - it's not configured
+  // and will just produce errors. Use hardcoded addresses directly.
+  const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'oylnet';
+
+  if (!isRegtest) {
+    // Try to fetch dynamically from contract (mainnet/signet)
+    const dynamicSigner = await fetchSignerAddressFromContract(provider, frbtcAlkaneId);
+    if (dynamicSigner) {
+      return dynamicSigner;
+    }
   }
 
-  // Fall back to hardcoded address
+  // Use hardcoded address for regtest or as fallback for other networks
   const fallbackSigner = FALLBACK_SIGNER_ADDRESSES[network];
   if (fallbackSigner) {
-    console.log('[WRAP] Using fallback signer address:', fallbackSigner);
     return fallbackSigner;
   }
 
