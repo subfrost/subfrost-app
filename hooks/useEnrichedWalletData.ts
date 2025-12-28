@@ -468,8 +468,8 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       // Remember: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
 
       // Log final frBTC balance for debugging wrap issue
-      // Check both possible frBTC IDs (4:0 on regtest, 32:0 on mainnet)
-      const frbtcAsset = alkaneMap.get('4:0') || alkaneMap.get('32:0');
+      // frBTC is always 32:0 on all networks
+      const frbtcAsset = alkaneMap.get('32:0');
       if (frbtcAsset) {
         console.log('[BALANCE] frBTC from protorunes:', frbtcAsset.alkaneId, '=', frbtcAsset.balance);
       } else {

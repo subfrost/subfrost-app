@@ -21,12 +21,11 @@ function mapToObject(value: any): any {
 
 /**
  * Fallback token metadata.
- * NOTE: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
+ * NOTE: 2:0 is ALWAYS DIESEL, 32:0 is ALWAYS frBTC on all networks.
  */
 const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
   '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
-  '4:0': { symbol: 'frBTC', name: 'Subfrost BTC', decimals: 8 },
-  '32:0': { symbol: 'frBTC', name: 'Subfrost BTC', decimals: 8 },
+  '32:0': { symbol: 'frBTC', name: 'Fractional BTC', decimals: 8 },
 };
 
 /**
