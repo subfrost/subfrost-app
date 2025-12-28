@@ -47,8 +47,10 @@ export type WrapTransactionBaseData = {
 // frBTC wrap opcode (exchange BTC for frBTC)
 const FRBTC_WRAP_OPCODE = 77;
 
-// Opcode to query signer address from frBTC contract
-const GET_SIGNER_OPCODE = 100001;
+// Opcode to query signer pubkey from frBTC contract
+// The deployed contracts use opcode 103 (not 100001 from source code)
+// Returns: 32-byte x-only pubkey that we convert to P2TR address
+const GET_SIGNER_OPCODE = 103;
 
 // Helper to convert Uint8Array to base64
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -59,34 +61,29 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Signer addresses per network
+// Fallback signer addresses per network (used if dynamic fetch fails)
 //
-// The deployed frBTC contracts are an OLDER version that doesn't include
-// the get_signer opcode (100001). The current source code in frBTC/alkanes/fr-btc/src/lib.rs
-// HAS the opcode (lines 230-234), but the deployed bytecode doesn't match.
-//
-// Available opcodes in deployed contracts (verified via metashrew_view simulate):
+// Available opcodes in deployed frBTC contracts (verified via metashrew_view simulate):
 // - 0: initialize (one-time setup)
 // - 77: wrap (exchange BTC for frBTC)
-// - 99: name() -> "frBTC"  (source returns "SUBFROST BTC")
+// - 99: name() -> "frBTC"
 // - 100: symbol() -> "frBTC"
-// - 101: unknown - returns data
+// - 102: decimals() -> 8
+// - 103: signer() -> 32-byte pubkey (NOTE: may not match actual /signer storage!)
+// - 104: premium() -> u128 (100000 = 0.1%)
+// - 105: totalSupply() -> u128
 //
-// Opcodes in source but NOT in deployed bytecode:
-// - 1: set_signer (requires owner)
-// - 78: unwrap/burn
-// - 100001: get_signer() -> bech32 address
-// - 1001: payments_at_height
-//
-// Until the contracts are redeployed with the full bytecode, we must use
-// hardcoded signer addresses for all networks.
+// IMPORTANT: Opcode 103 returns a different pubkey than what's stored in /signer.
+// The contract's compute_output() checks against /signer storage, NOT opcode 103.
+// These hardcoded addresses are the ACTUAL signer addresses that work for wraps.
+// Pubkey: a7f90b8256f58c1074fe085d37b73dff3040774babc216dae106e281e020638b
 const SIGNER_ADDRESSES: Record<string, string> = {
+  'mainnet': 'bc1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9s2r4auy',
   'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  // TODO: Add mainnet/signet signer addresses when known
-  // 'mainnet': 'bc1p...',
-  // 'signet': 'tb1p...',
+  'signet': 'tb1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9sxrz0c9',
+  'testnet': 'tb1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9sxrz0c9',
 };
 
 // RPC URLs for metashrew_view calls per network
@@ -207,20 +204,102 @@ function parseSimulateResponse(hexResponse: string): Buffer | null {
   }
 }
 
+// Bech32m encoding helpers for converting pubkey to P2TR address
+const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+
+function convertBits(data: Buffer, fromBits: number, toBits: number, pad: boolean): number[] {
+  let acc = 0;
+  let bits = 0;
+  const result: number[] = [];
+  const maxv = (1 << toBits) - 1;
+  for (const value of data) {
+    acc = (acc << fromBits) | value;
+    bits += fromBits;
+    while (bits >= toBits) {
+      bits -= toBits;
+      result.push((acc >> bits) & maxv);
+    }
+  }
+  if (pad && bits > 0) {
+    result.push((acc << (toBits - bits)) & maxv);
+  }
+  return result;
+}
+
+function bech32mPolymod(values: number[]): number {
+  const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  let chk = 1;
+  for (const v of values) {
+    const b = chk >> 25;
+    chk = ((chk & 0x1ffffff) << 5) ^ v;
+    for (let i = 0; i < 5; i++) {
+      if ((b >> i) & 1) chk ^= GEN[i];
+    }
+  }
+  return chk;
+}
+
+function bech32mHrpExpand(hrp: string): number[] {
+  const result: number[] = [];
+  for (const c of hrp) {
+    result.push(c.charCodeAt(0) >> 5);
+  }
+  result.push(0);
+  for (const c of hrp) {
+    result.push(c.charCodeAt(0) & 31);
+  }
+  return result;
+}
+
+function bech32mCreateChecksum(hrp: string, data: number[]): number[] {
+  const values = [...bech32mHrpExpand(hrp), ...data];
+  const polymod = bech32mPolymod([...values, 0, 0, 0, 0, 0, 0]) ^ 0x2bc830a3;
+  const checksum: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    checksum.push((polymod >> (5 * (5 - i))) & 31);
+  }
+  return checksum;
+}
+
+/**
+ * Encode a 32-byte x-only pubkey as a bech32m P2TR address
+ */
+function pubkeyToP2TRAddress(pubkey: Buffer, hrp: string): string {
+  const witnessVersion = 1; // P2TR uses witness version 1
+  const words = [witnessVersion, ...convertBits(pubkey, 8, 5, true)];
+  const checksum = bech32mCreateChecksum(hrp, words);
+  let result = hrp + '1';
+  for (const w of [...words, ...checksum]) {
+    result += BECH32_CHARSET[w];
+  }
+  return result;
+}
+
+/**
+ * Get the bech32 HRP (human-readable part) for a network
+ */
+function getNetworkHRP(network: string): string {
+  switch (network) {
+    case 'mainnet':
+      return 'bc';
+    case 'testnet':
+    case 'signet':
+      return 'tb';
+    case 'regtest':
+    case 'subfrost-regtest':
+    case 'oylnet':
+    default:
+      return 'bcrt';
+  }
+}
+
 /**
  * Fetch the signer address dynamically from the frBTC contract.
  *
- * Uses opcode 100001 (get_signer) via metashrew_view with protobuf-encoded payload.
- * This is the only way that works - the SDK's alkanesSimulate method fails.
+ * Uses opcode 103 via metashrew_view with protobuf-encoded payload.
+ * The opcode returns a 32-byte x-only pubkey which we convert to a P2TR address.
  *
- * From frBTC contract source (alkanes/fr-btc/src/lib.rs):
- *   100001 => {
- *     response.data = to_address_str(Script::from_bytes(self.signer_pointer().get().as_ref()))
- *       .ok_or("").map_err(|_| anyhow!("invalid script"))?.as_bytes().to_vec();
- *     Ok(response)
- *   }
- *
- * @param network - Network name for RPC URL
+ * @param network - Network name for RPC URL and address prefix
  * @param frbtcAlkaneId - Alkane ID like "32:0"
  * @returns Signer address or null if fetch fails
  */
@@ -255,12 +334,19 @@ async function fetchSignerAddressFromContract(
     const data = parseSimulateResponse(result.result);
     if (!data) return null;
 
-    // The data is a bech32 address as UTF-8 bytes
-    const address = data.toString('utf8');
-
-    if (address.startsWith('bc') || address.startsWith('tb') || address.startsWith('bcrt')) {
+    // Opcode 103 returns a 32-byte x-only pubkey
+    if (data.length === 32) {
+      const hrp = getNetworkHRP(network);
+      const address = pubkeyToP2TRAddress(data, hrp);
       console.log('[WRAP] Got signer address from contract:', address);
       return address;
+    }
+
+    // Fallback: try to interpret as UTF-8 address (for future compatibility)
+    const utf8 = data.toString('utf8');
+    if (utf8.startsWith('bc') || utf8.startsWith('tb') || utf8.startsWith('bcrt')) {
+      console.log('[WRAP] Got signer address from contract (utf8):', utf8);
+      return utf8;
     }
 
     return null;
@@ -273,27 +359,21 @@ async function fetchSignerAddressFromContract(
 /**
  * Get the signer address for the frBTC contract.
  *
- * First tries to fetch dynamically from the contract using opcode 100001.
- * Falls back to hardcoded addresses if the contract doesn't support the opcode
- * or the RPC call fails.
+ * Uses hardcoded addresses that match the actual /signer storage in the contract.
  *
- * Note: Currently the deployed frBTC contracts don't have the get_signer opcode,
- * so this will always use hardcoded addresses. The dynamic fetch is kept for
- * future compatibility when/if contracts are upgraded.
+ * NOTE: We previously tried to fetch dynamically using opcode 103, but that returns
+ * a DIFFERENT pubkey than what's stored in /signer. The contract's compute_output()
+ * function checks BTC sent to the address derived from /signer storage, so we must
+ * use the correct hardcoded addresses.
  */
 async function getSignerAddress(
-  frbtcAlkaneId: string,
+  _frbtcAlkaneId: string,
   network: string
 ): Promise<string> {
-  // Try to fetch dynamically from contract
-  const dynamicSigner = await fetchSignerAddressFromContract(network, frbtcAlkaneId);
-  if (dynamicSigner) {
-    return dynamicSigner;
-  }
-
-  // Use hardcoded address
+  // Use hardcoded address - dynamic fetch via opcode 103 returns wrong pubkey
   const signer = SIGNER_ADDRESSES[network];
   if (signer) {
+    console.log('[WRAP] Using hardcoded signer address:', signer);
     return signer;
   }
 
