@@ -200,27 +200,9 @@ export const useSellableCurrencies = (
           }
         }
 
-        // Fetch token metadata for better names/symbols
-        const metadataPromises = Array.from(alkaneMap.keys()).map(async (alkaneId) => {
-          try {
-            const rawResult = await provider.alkanesReflect(alkaneId);
-            const metadata = mapToObject(rawResult);
-            return { alkaneId, metadata };
-          } catch {
-            return { alkaneId, metadata: null };
-          }
-        });
-
-        const metadataResults = await Promise.all(metadataPromises);
-
-        // Update with fetched metadata
-        for (const { alkaneId, metadata } of metadataResults) {
-          if (metadata && alkaneMap.has(alkaneId)) {
-            const existing = alkaneMap.get(alkaneId)!;
-            existing.name = metadata.name || existing.name;
-            existing.symbol = metadata.symbol || existing.symbol;
-          }
-        }
+        // NOTE: We skip alkanesReflect() for token metadata because it can return
+        // stale/incorrect data (e.g., returning "bUSD" when contract says "DIESEL").
+        // Instead, we rely on KNOWN_TOKENS which has verified correct values.
 
         // Convert map to array
         allAlkanes.push(...alkaneMap.values());

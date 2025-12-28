@@ -1,27 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useWallet } from '@/context/WalletContext';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
-
-// Helper to recursively convert Map to plain object (serde_wasm_bindgen returns Maps)
-function mapToObject(value: any): any {
-  if (value instanceof Map) {
-    const obj: Record<string, any> = {};
-    for (const [k, v] of value.entries()) {
-      obj[k] = mapToObject(v);
-    }
-    return obj;
-  }
-  if (Array.isArray(value)) {
-    return value.map(mapToObject);
-  }
-  return value;
-}
-
-// Cache for token metadata to avoid repeated RPC calls
-const tokenMetadataCache = new Map<string, { symbol: string; name: string }>();
 
 // Network to API base URL mapping for REST API (using subfrost API key)
 const NETWORK_API_URLS: Record<string, string> = {
@@ -111,7 +92,6 @@ function calculateTvlFromReserves(
 
 export function usePools(params: UsePoolsParams = {}) {
   const { network } = useWallet();
-  const { provider, isInitialized } = useAlkanesSDK();
   const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID } = getConfig(network);
   const { data: btcPrice } = useBtcPrice();
 
@@ -127,8 +107,8 @@ export function usePools(params: UsePoolsParams = {}) {
       btcPrice ?? 0, // Include btcPrice in key so TVL recalculates when price updates
     ],
     staleTime: 120_000,
-    // Enable when we have network, factory ID, BTC price, and provider (for token metadata)
-    enabled: !!network && !!ALKANE_FACTORY_ID && btcPrice !== undefined && isInitialized && !!provider,
+    // Enable as soon as we have network info and BTC price - we use REST API directly
+    enabled: !!network && !!ALKANE_FACTORY_ID && btcPrice !== undefined,
     queryFn: async () => {
 
       try {
@@ -244,62 +224,9 @@ export function usePools(params: UsePoolsParams = {}) {
 
         console.log('[usePools] Parsed', items.length, 'valid pools');
 
-        // Fetch on-chain token metadata via alkanesReflect for consistent symbols
-        // This ensures symbols match what the wallet dashboard shows
-        if (provider) {
-          // Collect unique token IDs
-          const tokenIds = new Set<string>();
-          for (const item of items) {
-            tokenIds.add(item.token0.id);
-            tokenIds.add(item.token1.id);
-          }
-
-          // Fetch metadata for tokens not in cache
-          const fetchPromises: Promise<void>[] = [];
-          for (const tokenId of tokenIds) {
-            if (!tokenMetadataCache.has(tokenId)) {
-              fetchPromises.push(
-                (async () => {
-                  try {
-                    const rawResult = await provider.alkanesReflect(tokenId);
-                    const metadata = mapToObject(rawResult);
-                    if (metadata?.symbol) {
-                      // Normalize "SUBFROST BTC" to "frBTC"
-                      const symbol = metadata.symbol === 'SUBFROST BTC' ? 'frBTC' : metadata.symbol;
-                      const name = (metadata.name === 'SUBFROST BTC' ? 'Fractional BTC' : metadata.name) || symbol;
-                      tokenMetadataCache.set(tokenId, { symbol, name });
-                      console.log(`[usePools] Cached metadata for ${tokenId}:`, { symbol, name });
-                    }
-                  } catch (e) {
-                    console.warn(`[usePools] Failed to fetch metadata for ${tokenId}:`, e);
-                  }
-                })()
-              );
-            }
-          }
-
-          if (fetchPromises.length > 0) {
-            await Promise.all(fetchPromises);
-          }
-
-          // Update items with cached metadata (on-chain symbols are authoritative)
-          for (const item of items) {
-            const meta0 = tokenMetadataCache.get(item.token0.id);
-            const meta1 = tokenMetadataCache.get(item.token1.id);
-
-            if (meta0) {
-              item.token0.symbol = meta0.symbol;
-              item.token0.name = meta0.name;
-            }
-            if (meta1) {
-              item.token1.symbol = meta1.symbol;
-              item.token1.name = meta1.name;
-            }
-
-            // Update pairLabel with corrected symbols
-            item.pairLabel = `${item.token0.symbol} / ${item.token1.symbol} LP`;
-          }
-        }
+        // NOTE: We use pool_name from the API as the source of truth for token symbols
+        // instead of alkanesReflect(). The indexer's pool_name reflects the actual
+        // on-chain contract symbols, while alkanesReflect() can return stale/incorrect data.
 
         // Apply search filter if specified
         let filtered = items;

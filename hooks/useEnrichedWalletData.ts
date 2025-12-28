@@ -463,30 +463,10 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
-      // Fetch token metadata using alkanesReflect for each unique token
-      // This gives us proper name, symbol, and decimals
-      const metadataPromises = Array.from(alkaneMap.keys()).map(async (alkaneId) => {
-        try {
-          const rawResult = await provider.alkanesReflect(alkaneId);
-          const metadata = mapToObject(rawResult);
-          return { alkaneId, metadata };
-        } catch (error) {
-          console.error(`[BALANCE] Failed to fetch metadata for ${alkaneId}:`, error);
-          return { alkaneId, metadata: null };
-        }
-      });
-
-      const metadataResults = await Promise.all(metadataPromises);
-
-      // Update alkaneMap with fetched metadata
-      for (const { alkaneId, metadata } of metadataResults) {
-        if (metadata && alkaneMap.has(alkaneId)) {
-          const existing = alkaneMap.get(alkaneId)!;
-          existing.name = metadata.name || existing.name;
-          existing.symbol = metadata.symbol || existing.symbol;
-          existing.decimals = metadata.decimals ?? existing.decimals;
-        }
-      }
+      // NOTE: We skip alkanesReflect() for token metadata because it can return
+      // stale/incorrect data (e.g., returning "bUSD" when contract says "DIESEL").
+      // Instead, we rely on KNOWN_TOKENS which has verified correct values.
+      // The rune.name from protorunesbyaddress (set above) is also used as fallback.
 
       // Log final frBTC balance for debugging wrap issue
       // Check both possible frBTC IDs (4:0 on regtest, 32:0 on mainnet)
