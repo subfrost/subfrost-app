@@ -57,7 +57,9 @@ export default function BalancesPanel() {
     return `${wholeStr}.${truncatedRemainder}`;
   };
 
-  if (isLoading) {
+  // Only show full loading screen on initial load (no data yet)
+  const hasData = balances.bitcoin.total !== undefined;
+  if (isLoading && !hasData) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="animate-spin text-[color:var(--sf-text)]/60" size={32} />
@@ -65,6 +67,13 @@ export default function BalancesPanel() {
       </div>
     );
   }
+
+  // Helper to show loading or value during refresh
+  const showValue = (value: string) => {
+    return isRefreshing ? (
+      <span className="text-[color:var(--sf-text)]/60">Loading...</span>
+    ) : value;
+  };
 
   if (error) {
     return (
@@ -94,8 +103,8 @@ export default function BalancesPanel() {
             </div>
             <div>
               <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">Bitcoin Balance</div>
-              <div className="text-3xl font-bold text-[color:var(--sf-text)]">{totalBTC} BTC</div>
-              {totalUSD && (
+              <div className="text-3xl font-bold text-[color:var(--sf-text)]">{showValue(`${totalBTC} BTC`)}</div>
+              {totalUSD && !isRefreshing && (
                 <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
                   ${totalUSD} USD
                 </div>
@@ -117,13 +126,13 @@ export default function BalancesPanel() {
           <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
             <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Spendable BTC</div>
             <div className="font-mono text-sm text-[color:var(--sf-info-green-text)]">
-              {formatBTC(balances.bitcoin.spendable)} BTC {formatUSD(balances.bitcoin.spendable) && `($${formatUSD(balances.bitcoin.spendable)})`}
+              {showValue(`${formatBTC(balances.bitcoin.spendable)} BTC ${!isRefreshing && formatUSD(balances.bitcoin.spendable) ? `($${formatUSD(balances.bitcoin.spendable)})` : ''}`)}
             </div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
             <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">Unspendable (with Assets)</div>
             <div className="font-mono text-sm text-[color:var(--sf-info-yellow-text)]">
-              {formatBTC(balances.bitcoin.withAssets)} BTC {formatUSD(balances.bitcoin.withAssets) && `($${formatUSD(balances.bitcoin.withAssets)})`}
+              {showValue(`${formatBTC(balances.bitcoin.withAssets)} BTC ${!isRefreshing && formatUSD(balances.bitcoin.withAssets) ? `($${formatUSD(balances.bitcoin.withAssets)})` : ''}`)}
             </div>
           </div>
         </div>
@@ -133,7 +142,7 @@ export default function BalancesPanel() {
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
             <div className="font-mono text-sm text-[color:var(--sf-text)]">
-              {formatBTC(balances.bitcoin.p2wpkh)} BTC
+              {showValue(`${formatBTC(balances.bitcoin.p2wpkh)} BTC`)}
             </div>
             <a
               href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
@@ -149,7 +158,7 @@ export default function BalancesPanel() {
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
             <div className="font-mono text-sm text-[color:var(--sf-text)]">
-              {formatBTC(balances.bitcoin.p2tr)} BTC
+              {showValue(`${formatBTC(balances.bitcoin.p2tr)} BTC`)}
             </div>
             <a
               href={account?.taproot?.address ? `https://mempool.space/address/${account.taproot.address}` : '#'}
@@ -220,19 +229,25 @@ export default function BalancesPanel() {
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-[color:var(--sf-text)] font-mono">
-                      {formatAlkaneBalance(alkane.balance, alkane.decimals)}
+                      {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals))}
                     </div>
-                    <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>
+                    {!isRefreshing && <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-              No protorune assets found
-              <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
-                Protorune assets (like Alkanes) will appear here once detected
-              </div>
+              {isRefreshing ? (
+                <span>Loading...</span>
+              ) : (
+                <>
+                  No protorune assets found
+                  <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
+                    Protorune assets (like Alkanes) will appear here once detected
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -247,10 +262,16 @@ export default function BalancesPanel() {
           </div>
 
           <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-            No inscription assets found
-            <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
-              Inscription assets (like BRC20) will appear here once detected
-            </div>
+            {isRefreshing ? (
+              <span>Loading...</span>
+            ) : (
+              <>
+                No inscription assets found
+                <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
+                  Inscription assets (like BRC20) will appear here once detected
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
