@@ -463,10 +463,9 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
-      // NOTE: We skip alkanesReflect() for token metadata because it can return
-      // stale/incorrect data (e.g., returning "bUSD" when contract says "DIESEL").
-      // Instead, we rely on KNOWN_TOKENS which has verified correct values.
-      // The rune.name from protorunesbyaddress (set above) is also used as fallback.
+      // NOTE: We skip alkanesReflect() for token metadata because the indexer can return
+      // stale/incorrect data. Instead, we rely on KNOWN_TOKENS which has verified values.
+      // Remember: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
 
       // Log final frBTC balance for debugging wrap issue
       // Check both possible frBTC IDs (4:0 on regtest, 32:0 on mainnet)

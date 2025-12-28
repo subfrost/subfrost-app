@@ -151,11 +151,10 @@ export function getNetworkConfig(networkName?: string): NetworkConfig {
 
 /**
  * Known token metadata - fallback values for common tokens.
- * NOTE: These are defaults and may differ between networks (e.g., 2:0 is DIESEL on mainnet
- * but may be bUSD on regtest). Always prefer on-chain metadata from alkanesReflect() when available.
+ * NOTE: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet.
  */
 export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
-  // Mainnet tokens
+  // DIESEL is always 2:0 on all networks
   '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
   '32:0': { symbol: 'frBTC', name: 'Fractional BTC', decimals: 8 },
   '2:56801': { symbol: 'bUSD', name: 'Bitcoin USD', decimals: 8 },

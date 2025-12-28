@@ -282,11 +282,13 @@ export function useSwapMutation() {
       }
 
       // Build options matching the pattern from useWrapMutation
+      // Use p2tr:0 for change address instead of the default p2wsh:0
+      // (p2wsh is not supported by single-sig wallets)
       const options: Record<string, any> = {
         trace_enabled: false,
         mine_enabled: false,
         auto_confirm: true,
-        change_address: taprootAddress,        // Change goes to user's taproot address
+        change_address: 'p2tr:0',              // Use symbolic notation - SDK defaults to p2wsh which isn't supported
         from: [taprootAddress],                // Explicit UTXO source (needed by SDK)
         from_addresses: [taprootAddress],      // Explicit UTXO source (alt param name)
         lock_alkanes: true,

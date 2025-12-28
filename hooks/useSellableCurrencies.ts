@@ -20,11 +20,11 @@ function mapToObject(value: any): any {
 }
 
 /**
- * Fallback token metadata - only used when alkanesReflect() doesn't return data.
- * NOTE: On-chain metadata from alkanesReflect() takes precedence (fetched below).
+ * Fallback token metadata.
+ * NOTE: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
  */
 const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
-  '2:0': { symbol: 'DIESEL', name: 'Diesel Token', decimals: 8 },
+  '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
   '4:0': { symbol: 'frBTC', name: 'Subfrost BTC', decimals: 8 },
   '32:0': { symbol: 'frBTC', name: 'Subfrost BTC', decimals: 8 },
 };
@@ -200,9 +200,9 @@ export const useSellableCurrencies = (
           }
         }
 
-        // NOTE: We skip alkanesReflect() for token metadata because it can return
-        // stale/incorrect data (e.g., returning "bUSD" when contract says "DIESEL").
-        // Instead, we rely on KNOWN_TOKENS which has verified correct values.
+        // NOTE: We skip alkanesReflect() for token metadata because the indexer can return
+        // stale/incorrect data. Instead, we rely on KNOWN_TOKENS which has verified values.
+        // Remember: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
 
         // Convert map to array
         allAlkanes.push(...alkaneMap.values());
