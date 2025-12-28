@@ -28,7 +28,7 @@ export function getConfig(network: string) {
     case 'subfrost-regtest':
       return {
         ALKANE_FACTORY_ID: '4:65522',
-        BUSD_ALKANE_ID: '2:0', // DIESEL on regtest
+        BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0', // frBTC (hardcoded in indexer)
         OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'http://localhost:18888',

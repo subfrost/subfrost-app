@@ -510,48 +510,13 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
-      // Fetch token metadata using alkanesReflect for each unique token
-      // This gives us proper name, symbol, and decimals
-      const metadataPromises = Array.from(alkaneMap.keys()).map(async (alkaneId) => {
-        try {
-          const rawResult = await provider.alkanesReflect(alkaneId);
-          const metadata = mapToObject(rawResult);
-          return { alkaneId, metadata };
-        } catch (error) {
-          console.error(`[BALANCE] Failed to fetch metadata for ${alkaneId}:`, error);
-          return { alkaneId, metadata: null };
-        }
-      });
-
-      const metadataResults = await Promise.all(metadataPromises);
-
-      // Update alkaneMap with fetched metadata
-      for (const { alkaneId, metadata } of metadataResults) {
-        if (metadata && alkaneMap.has(alkaneId)) {
-          const existing = alkaneMap.get(alkaneId)!;
-          existing.name = metadata.name || existing.name;
-          existing.symbol = metadata.symbol || existing.symbol;
-          existing.decimals = metadata.decimals ?? existing.decimals;
-        }
-      }
-
-      // Also update UTXO alkanes with fetched metadata
-      for (const utxo of allUtxos) {
-        if (utxo.alkanes) {
-          for (const [alkaneId, alkaneData] of Object.entries(utxo.alkanes)) {
-            const metadata = metadataResults.find(r => r.alkaneId === alkaneId)?.metadata;
-            if (metadata) {
-              alkaneData.name = metadata.name || alkaneData.name;
-              alkaneData.symbol = metadata.symbol || alkaneData.symbol;
-              alkaneData.decimals = metadata.decimals ?? alkaneData.decimals;
-            }
-          }
-        }
-      }
+      // NOTE: We skip alkanesReflect() for token metadata because the indexer can return
+      // stale/incorrect data. Instead, we rely on KNOWN_TOKENS which has verified values.
+      // Remember: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
 
       // Log final frBTC balance for debugging wrap issue
-      // Check both possible frBTC IDs (4:0 on regtest, 32:0 on mainnet)
-      const frbtcAsset = alkaneMap.get('4:0') || alkaneMap.get('32:0');
+      // frBTC is always 32:0 on all networks
+      const frbtcAsset = alkaneMap.get('32:0');
       if (frbtcAsset) {
         console.log('[BALANCE] frBTC from protorunes:', frbtcAsset.alkaneId, '=', frbtcAsset.balance);
       } else {
