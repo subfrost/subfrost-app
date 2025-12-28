@@ -59,20 +59,159 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Fallback signer addresses per network (used if simulate call fails)
-// These are the multisig addresses configured in each frBTC contract deployment
-const FALLBACK_SIGNER_ADDRESSES: Record<string, string> = {
+// Signer addresses per network
+//
+// The deployed frBTC contracts are an OLDER version that doesn't include
+// the get_signer opcode (100001). The current source code in frBTC/alkanes/fr-btc/src/lib.rs
+// HAS the opcode (lines 230-234), but the deployed bytecode doesn't match.
+//
+// Available opcodes in deployed contracts (verified via metashrew_view simulate):
+// - 0: initialize (one-time setup)
+// - 77: wrap (exchange BTC for frBTC)
+// - 99: name() -> "frBTC"  (source returns "SUBFROST BTC")
+// - 100: symbol() -> "frBTC"
+// - 101: unknown - returns data
+//
+// Opcodes in source but NOT in deployed bytecode:
+// - 1: set_signer (requires owner)
+// - 78: unwrap/burn
+// - 100001: get_signer() -> bech32 address
+// - 1001: payments_at_height
+//
+// Until the contracts are redeployed with the full bytecode, we must use
+// hardcoded signer addresses for all networks.
+const SIGNER_ADDRESSES: Record<string, string> = {
   'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
+  // TODO: Add mainnet/signet signer addresses when known
+  // 'mainnet': 'bc1p...',
+  // 'signet': 'tb1p...',
+};
+
+// RPC URLs for metashrew_view calls per network
+const RPC_URLS: Record<string, string> = {
+  'mainnet': 'https://mainnet.subfrost.io/v4/subfrost',
+  'signet': 'https://signet.subfrost.io/v4/subfrost',
+  'testnet': 'https://testnet.subfrost.io/v4/subfrost',
+  'regtest': 'https://regtest.subfrost.io/v4/subfrost',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+  'oylnet': 'https://regtest.subfrost.io/v4/subfrost',
 };
 
 /**
- * Fetch the signer address dynamically from the frBTC contract via simulate call
- * Uses opcode 100001 which returns the configured signer address as a bech32 string
+ * Encode a number as a protobuf varint (LEB128)
+ */
+function encodeVarint(n: number): number[] {
+  const bytes: number[] = [];
+  while (n > 0x7f) {
+    bytes.push((n & 0x7f) | 0x80);
+    n >>>= 7;
+  }
+  bytes.push(n);
+  return bytes;
+}
+
+/**
+ * Build a protobuf-encoded payload for metashrew_view simulate call.
  *
- * NOTE: This may fail on regtest/testnet where simulate RPC isn't fully configured.
- * The caller should handle null return and fall back to hardcoded addresses.
+ * The payload structure (matching what works for DIESEL totalSupply):
+ * - Field 4 (height): varint
+ * - Field 5 (embedded target+opcode): length-delimited [block, tx, opcode as varints]
+ * - Field 6 (pointer): varint
+ *
+ * @param block - Contract block number
+ * @param tx - Contract tx number
+ * @param opcode - Opcode to call
+ * @returns Hex-encoded protobuf payload with 0x prefix
+ */
+function buildSimulatePayload(block: number, tx: number, opcode: number): string {
+  const blockBytes = encodeVarint(block);
+  const txBytes = encodeVarint(tx);
+  const opcodeBytes = encodeVarint(opcode);
+
+  const embedded = [...blockBytes, ...txBytes, ...opcodeBytes];
+  const height = 927587; // Standard height used in other payloads
+  const heightBytes = encodeVarint(height);
+
+  const payload = [
+    0x20, ...heightBytes,           // Field 4: height
+    0x2a, embedded.length, ...embedded,  // Field 5: embedded [block, tx, opcode]
+    0x30, 0x01                       // Field 6: pointer
+  ];
+
+  return '0x' + payload.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Parse the simulate response to extract the data field.
+ *
+ * Response format is protobuf with field 1 containing the execution result,
+ * and within that, field 3 contains the data bytes.
+ *
+ * @param hexResponse - Hex string response from metashrew_view
+ * @returns The data bytes as a Buffer, or null if parsing fails
+ */
+function parseSimulateResponse(hexResponse: string): Buffer | null {
+  try {
+    const hex = hexResponse.startsWith('0x') ? hexResponse.slice(2) : hexResponse;
+    const bytes = Buffer.from(hex, 'hex');
+
+    // Check for error response (starts with 0x1a which is field 3 = error)
+    if (bytes[0] === 0x1a) {
+      const errorLen = bytes[1];
+      const errorMsg = bytes.slice(2, 2 + errorLen).toString('utf8');
+      if (errorMsg.includes('Unrecognized opcode') || errorMsg.includes('revert')) {
+        return null;
+      }
+    }
+
+    // Success response format: 0a [outer_len] ... 1a [data_len] [data_bytes] ...
+    // Field 1 (0x0a) contains the execution result
+    // Within that, field 3 (0x1a) contains the data
+
+    // Find field 3 (0x1a) which contains the data
+    let pos = 0;
+    while (pos < bytes.length) {
+      const tag = bytes[pos];
+      const fieldNum = tag >> 3;
+      const wireType = tag & 0x7;
+
+      if (fieldNum === 3 && wireType === 2) {
+        // Found field 3, length-delimited
+        const dataLen = bytes[pos + 1];
+        const data = bytes.slice(pos + 2, pos + 2 + dataLen);
+        return data;
+      }
+
+      // Skip to next field
+      if (wireType === 0) {
+        // Varint - find end
+        pos++;
+        while (pos < bytes.length && (bytes[pos] & 0x80)) pos++;
+        pos++;
+      } else if (wireType === 2) {
+        // Length-delimited - skip length + data
+        pos++;
+        const len = bytes[pos];
+        pos += 1 + len;
+      } else {
+        // Unknown wire type, advance
+        pos++;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch the signer address dynamically from the frBTC contract.
+ *
+ * Uses opcode 100001 (get_signer) via metashrew_view with protobuf-encoded payload.
+ * This is the only way that works - the SDK's alkanesSimulate method fails.
  *
  * From frBTC contract source (alkanes/fr-btc/src/lib.rs):
  *   100001 => {
@@ -80,107 +219,82 @@ const FALLBACK_SIGNER_ADDRESSES: Record<string, string> = {
  *       .ok_or("").map_err(|_| anyhow!("invalid script"))?.as_bytes().to_vec();
  *     Ok(response)
  *   }
+ *
+ * @param network - Network name for RPC URL
+ * @param frbtcAlkaneId - Alkane ID like "32:0"
+ * @returns Signer address or null if fetch fails
  */
-// Encode a number as LEB128 (unsigned) for alkanes calldata
-function encodeLEB128(value: number): number[] {
-  const result: number[] = [];
-  do {
-    let byte = value & 0x7F;
-    value >>>= 7;
-    if (value !== 0) {
-      byte |= 0x80; // Set high bit if more bytes follow
-    }
-    result.push(byte);
-  } while (value !== 0);
-  return result;
-}
-
 async function fetchSignerAddressFromContract(
-  provider: any,
+  network: string,
   frbtcAlkaneId: string,
 ): Promise<string | null> {
   try {
-    // Build context for simulate call matching alkanes.proto MessageContextParcel format
-    // The calldata encodes the opcode as LEB128 bytes
-    // 100001 in LEB128 = [0xA1, 0x8D, 0x06]
-    const opcodeBytes = encodeLEB128(GET_SIGNER_OPCODE);
+    const rpcUrl = RPC_URLS[network];
+    if (!rpcUrl) return null;
 
-    const context = JSON.stringify({
-      alkanes: [],           // Required field: array of AlkaneTransfer (empty for read-only)
-      calldata: opcodeBytes, // LEB128 encoded opcode
-      height: 1000000,       // Use a reasonable height
-      txindex: 0,
-      pointer: 0,
-      refund_pointer: 0,
-      vout: 0,
-      transaction: [],       // Empty byte array
-      block: [],             // Empty byte array
+    const [block, tx] = frbtcAlkaneId.split(':').map(Number);
+    const payload = buildSimulatePayload(block, tx, GET_SIGNER_OPCODE);
+
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'metashrew_view',
+        params: ['simulate', payload, 'latest'],
+        id: 1
+      })
     });
 
-    const result = await provider.alkanesSimulate(frbtcAlkaneId, context, 'latest');
-    const converted = mapToObject(result);
+    const result = await response.json();
 
-    // The result contains the signer address as UTF-8 bytes in execution.data
-    // Opcode 100001 returns: to_address_str(...).as_bytes().to_vec()
-    if (converted?.execution?.data) {
-      const dataBytes = converted.execution.data;
-
-      // Check if data is an array of bytes (typical format)
-      if (Array.isArray(dataBytes) && dataBytes.length > 0) {
-        // Convert bytes to string (it's a bech32 address)
-        const address = String.fromCharCode(...dataBytes);
-        if (address.startsWith('bc') || address.startsWith('tb') || address.startsWith('bcrt')) {
-          console.log('[WRAP] Got signer address from contract:', address);
-          return address;
-        }
-      }
-
-      // If it's a hex string, decode it
-      if (typeof dataBytes === 'string') {
-        const hexStr = dataBytes.startsWith('0x') ? dataBytes.slice(2) : dataBytes;
-        const bytes = Buffer.from(hexStr, 'hex');
-        const address = bytes.toString('utf8');
-        if (address.startsWith('bc') || address.startsWith('tb') || address.startsWith('bcrt')) {
-          console.log('[WRAP] Got signer address from contract (hex decoded):', address);
-          return address;
-        }
-      }
+    if (result.error) {
+      return null;
     }
 
-    // Silent return - fallback will be used
+    const data = parseSimulateResponse(result.result);
+    if (!data) return null;
+
+    // The data is a bech32 address as UTF-8 bytes
+    const address = data.toString('utf8');
+
+    if (address.startsWith('bc') || address.startsWith('tb') || address.startsWith('bcrt')) {
+      console.log('[WRAP] Got signer address from contract:', address);
+      return address;
+    }
+
     return null;
   } catch {
-    // Expected to fail on regtest/testnet - silently fall back to hardcoded addresses
+    // Silently fail - caller will use fallback
     return null;
   }
 }
 
 /**
- * Get the signer address for the frBTC contract
- * Uses hardcoded addresses for regtest networks (simulate RPC not available),
- * tries dynamic fetch for mainnet/signet, falls back to hardcoded if needed.
+ * Get the signer address for the frBTC contract.
+ *
+ * First tries to fetch dynamically from the contract using opcode 100001.
+ * Falls back to hardcoded addresses if the contract doesn't support the opcode
+ * or the RPC call fails.
+ *
+ * Note: Currently the deployed frBTC contracts don't have the get_signer opcode,
+ * so this will always use hardcoded addresses. The dynamic fetch is kept for
+ * future compatibility when/if contracts are upgraded.
  */
 async function getSignerAddress(
-  provider: any,
   frbtcAlkaneId: string,
   network: string
 ): Promise<string> {
-  // For regtest networks, skip the simulate call entirely - it's not configured
-  // and will just produce errors. Use hardcoded addresses directly.
-  const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'oylnet';
-
-  if (!isRegtest) {
-    // Try to fetch dynamically from contract (mainnet/signet)
-    const dynamicSigner = await fetchSignerAddressFromContract(provider, frbtcAlkaneId);
-    if (dynamicSigner) {
-      return dynamicSigner;
-    }
+  // Try to fetch dynamically from contract
+  const dynamicSigner = await fetchSignerAddressFromContract(network, frbtcAlkaneId);
+  if (dynamicSigner) {
+    return dynamicSigner;
   }
 
-  // Use hardcoded address for regtest or as fallback for other networks
-  const fallbackSigner = FALLBACK_SIGNER_ADDRESSES[network];
-  if (fallbackSigner) {
-    return fallbackSigner;
+  // Use hardcoded address
+  const signer = SIGNER_ADDRESSES[network];
+  if (signer) {
+    return signer;
   }
 
   throw new Error(`No signer address available for network: ${network}`);
@@ -279,7 +393,7 @@ export function useWrapMutation() {
       const btcNetwork = getBitcoinNetwork();
 
       // Get the signer address dynamically from contract or fall back to hardcoded
-      const signerAddress = await getSignerAddress(provider, FRBTC_ALKANE_ID, network);
+      const signerAddress = await getSignerAddress(FRBTC_ALKANE_ID, network);
 
       // to_addresses: [user, signer]
       // - Output 0 (v0): user address (receives minted frBTC via pointer=v0)
