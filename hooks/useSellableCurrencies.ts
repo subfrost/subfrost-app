@@ -19,188 +19,228 @@ function mapToObject(value: any): any {
   return value;
 }
 
-// Helper to extract enriched data from WASM provider response
-function extractEnrichedData(rawResult: any): { spendable: any[]; assets: any[]; pending: any[] } | null {
-  if (!rawResult) return null;
+// Known token metadata (same as useEnrichedWalletData for consistency)
+const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
+  '2:0': { symbol: 'DIESEL', name: 'Diesel Token', decimals: 8 },
+  '4:0': { symbol: 'frBTC', name: 'Subfrost BTC', decimals: 8 },
+  '32:0': { symbol: 'frBTC', name: 'Subfrost BTC', decimals: 8 },
+};
 
-  let enrichedData: any;
-  if (rawResult instanceof Map) {
-    const returns = rawResult.get('returns');
-    enrichedData = mapToObject(returns);
-  } else {
-    enrichedData = rawResult?.returns || rawResult;
-  }
-
-  if (!enrichedData) return null;
-
-  const toArray = (val: any): any[] => {
-    if (Array.isArray(val)) return val.map(mapToObject);
-    if (val && typeof val === 'object' && Object.keys(val).length > 0) {
-      return Object.values(val).map(mapToObject);
-    }
-    return [];
-  };
-
-  return {
-    spendable: toArray(enrichedData.spendable),
-    assets: toArray(enrichedData.assets),
-    pending: toArray(enrichedData.pending),
-  };
-}
-
+/**
+ * Fetches sellable currencies (alkane tokens) for a wallet address.
+ *
+ * IMPORTANT: This hook now uses the same data source as useEnrichedWalletData
+ * (alkanesByAddress RPC) to ensure consistent balance display across the app.
+ *
+ * Previously used /get-address-balances API which returned different values.
+ */
 export const useSellableCurrencies = (
   walletAddress?: string,
   tokensWithPools?: { id: string; name?: string }[],
 ) => {
   const { provider, isInitialized } = useAlkanesSDK();
-  const { network } = useWallet();
+  const { network, account } = useWallet();
   const config = getConfig(network);
 
   return useQuery({
-    queryKey: ['sellable-currencies', walletAddress, tokensWithPools],
+    queryKey: ['sellable-currencies', walletAddress, tokensWithPools, network],
     staleTime: 0, // Always refetch - no caching to ensure latest balance
     refetchOnMount: true,
     refetchOnWindowFocus: true,
-    refetchInterval: network === 'subfrost-regtest' || network === 'regtest' ? 5000 : false, // Poll every 5s on regtest for fresh balances
+    refetchInterval: network === 'subfrost-regtest' || network === 'regtest' ? 5000 : false,
     enabled: isInitialized && !!provider && !!walletAddress,
     queryFn: async (): Promise<CurrencyPriceInfoResponse[]> => {
       if (!walletAddress || !provider) return [];
 
-      console.log('[useSellableCurrencies] Fetching for address:', walletAddress);
-      console.log('[useSellableCurrencies] Network:', network);
-      console.log('[useSellableCurrencies] Config:', config);
-
       try {
-        // Use WASM provider to get enriched balances which includes alkane tokens
-        const rawResult = await provider.getEnrichedBalances(walletAddress, '1');
-        const enriched = extractEnrichedData(rawResult);
-
         const allAlkanes: CurrencyPriceInfoResponse[] = [];
-        const seenIds = new Set<string>();
+        const alkaneMap = new Map<string, CurrencyPriceInfoResponse>();
 
-        // Also fetch protorune balance sheet from data API
-        // This is needed because frBTC and other protorunes are tracked in the balance sheet,
-        // not as asset data on UTXOs
-        try {
-          const dataApiUrl = (config as any).API_URL;
-          console.log('[useSellableCurrencies] Data API URL:', dataApiUrl);
-          if (dataApiUrl) {
-            const balanceSheetResponse = await fetch(`${dataApiUrl}/get-address-balances`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ address: walletAddress, include_outpoints: false }),
-            });
+        // Get addresses to query (both nativeSegwit and taproot for complete balance)
+        const addresses: string[] = [];
+        if (account?.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
+        if (account?.taproot?.address) addresses.push(account.taproot.address);
+        // Also include the provided walletAddress if different
+        if (walletAddress && !addresses.includes(walletAddress)) {
+          addresses.push(walletAddress);
+        }
 
-            if (balanceSheetResponse.ok) {
-              const balanceSheet = await balanceSheetResponse.json();
-              console.log('[useSellableCurrencies] ========================================');
-              console.log('[useSellableCurrencies] BALANCE SHEET FROM INDEXER API');
-              console.log('[useSellableCurrencies] ========================================');
-              console.log('[useSellableCurrencies] Full response:', JSON.stringify(balanceSheet, null, 2));
-              console.log('[useSellableCurrencies] Address:', walletAddress);
-              console.log('[useSellableCurrencies] Network:', network);
-              console.log('[useSellableCurrencies] frBTC Alkane ID (32:0):', config.FRBTC_ALKANE_ID);
+        // Fetch alkane balances using alkanesByAddress RPC (same as useEnrichedWalletData)
+        // This ensures consistent balance data across the app
+        for (const address of addresses) {
+          try {
+            const rawResult = await provider.alkanesByAddress(address, 'latest', 1);
+            const result = mapToObject(rawResult);
 
-              if (balanceSheet?.balances) {
-                console.log('[useSellableCurrencies] All balances from indexer:');
-                Object.entries(balanceSheet.balances).forEach(([alkaneId, balance]) => {
-                  const isFrbtc = alkaneId === config.FRBTC_ALKANE_ID;
-                  console.log(`[useSellableCurrencies]   ${isFrbtc ? '>>> ' : ''}${alkaneId}: ${balance}${isFrbtc ? ' (frBTC) <<<' : ''}`);
-                });
-              } else {
-                console.log('[useSellableCurrencies] ⚠ No balances in response');
-              }
-              console.log('[useSellableCurrencies] ========================================');
+            if (!result) continue;
 
-              // Process balance sheet entries (e.g., {"32:0": "9990"} for frBTC)
-              if (balanceSheet?.balances && typeof balanceSheet.balances === 'object') {
-                for (const [alkaneId, balance] of Object.entries(balanceSheet.balances)) {
-                  console.log(`[useSellableCurrencies] Processing alkane: ${alkaneId}, balance: ${balance}`);
+            // Parse outpoints array - this is the primary data structure from alkanes_protorunesbyaddress
+            const outpoints = result.outpoints || [];
+            for (const outpoint of outpoints) {
+              const runes = outpoint.runes || [];
+              for (const runeEntry of runes) {
+                const rune = runeEntry.rune;
+                if (!rune?.id) continue;
 
-                  if (!alkaneId || seenIds.has(alkaneId)) {
-                    console.log(`[useSellableCurrencies]   Skipped: ${!alkaneId ? 'no ID' : 'already seen'}`);
-                    continue;
-                  }
-                  seenIds.add(alkaneId);
+                // Build alkane ID from block:tx (hex values like "0x20")
+                const blockStr = rune.id?.block || '0';
+                const txStr = rune.id?.tx || '0';
+                const block = typeof blockStr === 'string' && blockStr.startsWith('0x')
+                  ? parseInt(blockStr)
+                  : parseInt(String(blockStr), 16);
+                const tx = typeof txStr === 'string' && txStr.startsWith('0x')
+                  ? parseInt(txStr)
+                  : parseInt(String(txStr), 16);
 
-                  // Determine name based on alkane ID
-                  let name = alkaneId;
-                  let symbol = alkaneId.split(':')[1] || 'ALK';
-                  if (alkaneId === config.FRBTC_ALKANE_ID) {
-                    name = 'frBTC';
-                    symbol = 'frBTC';
-                  }
+                if (isNaN(block) || isNaN(tx)) continue;
 
-                  // Check if token is in the allowed pools list (if filter provided)
-                  if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneId)) {
-                    console.log(`[useSellableCurrencies]   Filtered out: ${alkaneId} not in tokensWithPools`);
-                    continue;
-                  }
+                const alkaneIdStr = `${block}:${tx}`;
 
-                  allAlkanes.push({
-                    id: alkaneId,
+                // Extract balance (can be string, number, or object)
+                let balance = '0';
+                if (typeof runeEntry.balance === 'string') {
+                  balance = runeEntry.balance;
+                } else if (typeof runeEntry.balance === 'number') {
+                  balance = runeEntry.balance.toString();
+                } else if (runeEntry.balance?.value) {
+                  balance = String(runeEntry.balance.value);
+                }
+
+                // Get token info from known tokens or use defaults
+                const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+                  symbol: rune.name || `${tx}`,
+                  name: rune.name || `Token ${alkaneIdStr}`,
+                  decimals: 8,
+                };
+
+                // Check if token is in the allowed pools list (if filter provided)
+                if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneIdStr)) {
+                  continue;
+                }
+
+                // Aggregate balance if we've seen this token before
+                if (!alkaneMap.has(alkaneIdStr)) {
+                  alkaneMap.set(alkaneIdStr, {
+                    id: alkaneIdStr,
                     address: walletAddress,
-                    name,
-                    symbol,
-                    balance: String(balance),
+                    name: tokenInfo.name,
+                    symbol: tokenInfo.symbol,
+                    balance: balance,
                     priceInfo: {
                       price: 0,
                       idClubMarketplace: false,
                     },
                   });
+                } else {
+                  // Aggregate balance from multiple UTXOs/addresses
+                  const existing = alkaneMap.get(alkaneIdStr)!;
+                  try {
+                    const currentBalance = BigInt(existing.balance || '0');
+                    const additionalBalance = BigInt(balance);
+                    existing.balance = (currentBalance + additionalBalance).toString();
+                  } catch {
+                    // If BigInt fails, use number addition
+                    existing.balance = String(
+                      Number(existing.balance || 0) + Number(balance)
+                    );
+                  }
                 }
               }
             }
+
+            // Also check balance_sheet format (fallback for some SDK versions)
+            const balances = result.balances || [];
+            for (const entry of balances) {
+              const tokenBalances = entry.balance_sheet?.cached?.balances || {};
+              for (const [alkaneIdStr, amount] of Object.entries(tokenBalances)) {
+                const amountStr = String(amount);
+
+                // Check if token is in the allowed pools list
+                if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneIdStr)) {
+                  continue;
+                }
+
+                const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+                  symbol: alkaneIdStr.split(':')[1] || 'ALK',
+                  name: `Token ${alkaneIdStr}`,
+                  decimals: 8,
+                };
+
+                if (!alkaneMap.has(alkaneIdStr)) {
+                  alkaneMap.set(alkaneIdStr, {
+                    id: alkaneIdStr,
+                    address: walletAddress,
+                    name: tokenInfo.name,
+                    symbol: tokenInfo.symbol,
+                    balance: amountStr,
+                    priceInfo: {
+                      price: 0,
+                      idClubMarketplace: false,
+                    },
+                  });
+                } else {
+                  const existing = alkaneMap.get(alkaneIdStr)!;
+                  try {
+                    const currentBalance = BigInt(existing.balance || '0');
+                    const additionalBalance = BigInt(amountStr);
+                    existing.balance = (currentBalance + additionalBalance).toString();
+                  } catch {
+                    existing.balance = String(
+                      Number(existing.balance || 0) + Number(amountStr)
+                    );
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`[useSellableCurrencies] Failed to fetch for ${address}:`, error);
           }
-        } catch (balanceSheetErr) {
-          console.error('[useSellableCurrencies] Balance sheet fetch error:', balanceSheetErr);
         }
 
-        // Process alkane tokens from enriched balances (asset UTXOs contain runes/alkanes)
-        if (enriched && enriched.assets.length > 0) {
-          for (const asset of enriched.assets) {
-            // Skip LP tokens and invalid entries
-            const name = asset.name || asset.token_name || '';
-            if (!name || name === '' || name.includes('LP (OYL)') || name === '{REVERT}' || name.endsWith(' LP')) {
-              continue;
-            }
-
-            const alkaneId = asset.alkane_id || asset.alkaneId;
-            if (!alkaneId) continue;
-
-            const id = typeof alkaneId === 'string'
-              ? alkaneId
-              : `${alkaneId.block}:${alkaneId.tx}`;
-
-            // Skip if already added from balance sheet
-            if (seenIds.has(id)) continue;
-            seenIds.add(id);
-
-            // Check if token is in the allowed pools list
-            if (tokensWithPools && !tokensWithPools.some((p) => p.id === id)) {
-              continue;
-            }
-
-            allAlkanes.push({
-              id,
-              address: walletAddress,
-              name: name.replace('SUBFROST BTC', 'frBTC'),
-              symbol: asset.symbol || '',
-              balance: asset.balance || asset.value || '0',
-              priceInfo: {
-                price: asset.busdPoolPriceInUsd || asset.priceUsd || 0,
-                idClubMarketplace: asset.idClubMarketplace || false,
-              },
-            });
+        // Fetch token metadata for better names/symbols
+        const metadataPromises = Array.from(alkaneMap.keys()).map(async (alkaneId) => {
+          try {
+            const rawResult = await provider.alkanesReflect(alkaneId);
+            const metadata = mapToObject(rawResult);
+            return { alkaneId, metadata };
+          } catch {
+            return { alkaneId, metadata: null };
           }
+        });
+
+        const metadataResults = await Promise.all(metadataPromises);
+
+        // Update with fetched metadata
+        for (const { alkaneId, metadata } of metadataResults) {
+          if (metadata && alkaneMap.has(alkaneId)) {
+            const existing = alkaneMap.get(alkaneId)!;
+            existing.name = metadata.name || existing.name;
+            existing.symbol = metadata.symbol || existing.symbol;
+          }
+        }
+
+        // Convert map to array
+        allAlkanes.push(...alkaneMap.values());
+
+        // Log frBTC balance for debugging
+        const frbtcBalance = alkaneMap.get(config.FRBTC_ALKANE_ID);
+        if (frbtcBalance) {
+          console.log('[useSellableCurrencies] frBTC balance:', frbtcBalance.balance);
         }
 
         // Sort by balance descending, then by name
         allAlkanes.sort((a, b) => {
-          const balanceA = typeof a.balance === 'string' ? parseFloat(a.balance) : (a.balance ?? 0);
-          const balanceB = typeof b.balance === 'string' ? parseFloat(b.balance) : (b.balance ?? 0);
-          if (balanceA === balanceB) return (a.name || '').localeCompare(b.name || '');
-          return balanceA > balanceB ? -1 : 1;
+          try {
+            const balanceA = BigInt(a.balance || '0');
+            const balanceB = BigInt(b.balance || '0');
+            if (balanceA === balanceB) return (a.name || '').localeCompare(b.name || '');
+            return balanceA > balanceB ? -1 : 1;
+          } catch {
+            const balanceA = Number(a.balance || 0);
+            const balanceB = Number(b.balance || 0);
+            if (balanceA === balanceB) return (a.name || '').localeCompare(b.name || '');
+            return balanceA > balanceB ? -1 : 1;
+          }
         });
 
         return allAlkanes;
