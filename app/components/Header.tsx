@@ -166,7 +166,19 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-4 md:flex ml-4">
-          {walletConnected ? (
+          <Link href="/" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+            HOME
+          </Link>
+          <Link href="/swap" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/swap') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+            SWAP
+          </Link>
+          <Link href="/vaults" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+            VAULTS
+          </Link>
+          <Link href="/futures" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/futures') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
+            FUTURES
+          </Link>
+          {walletConnected && (
             <div
               className="relative"
               ref={walletNavRef}
@@ -207,20 +219,7 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
                 </div>
               )}
             </div>
-          ) : (
-            <Link href="/" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
-              HOME
-            </Link>
           )}
-          <Link href="/swap" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/swap') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
-            SWAP
-          </Link>
-          <Link href="/vaults" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
-            VAULTS
-          </Link>
-          <Link href="/futures" className={`text-sm font-bold tracking-[0.08em] uppercase hover:opacity-80 outline-none focus:outline-none transition-all whitespace-nowrap ${isActive('/futures') ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)] pb-1' : 'text-[color:var(--sf-text)]'}`}>
-            FUTURES
-          </Link>
         </nav>
 
         {/* Desktop CTA */}
@@ -303,21 +302,111 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
            )}
          </div>
 
-        {/* Mobile Hamburger Menu */}
-         <div className="ml-auto md:hidden" ref={mobileMenuRef}>
-           <button
-             type="button"
-             onClick={() => setMobileMenuOpen((v) => !v)}
-             className="flex items-center justify-center w-10 h-10 rounded-lg text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
-             aria-label="Toggle mobile menu"
-           >
-             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-           </button>
+        {/* Mobile Header Right Section */}
+        <div className="ml-auto flex items-center gap-2 md:hidden">
+          {walletConnected && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex items-center gap-2 rounded-full bg-[color:var(--sf-surface)] px-3 py-1.5 border border-[color:var(--sf-outline)]"
+              >
+                <AddressAvatar address={address} size={20} />
+                <span className="text-sm font-semibold text-[color:var(--sf-text)]">{isBalanceLoading ? '...' : btcBalance} BTC</span>
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                  {account?.nativeSegwit?.address && (
+                    <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
+                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.nativeSegwit.address)}</span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(account.nativeSegwit.address, 'segwit')}
+                          className="p-1 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]"
+                        >
+                          {copiedAddress === 'segwit' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {account?.taproot?.address && (
+                    <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
+                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.taproot.address)}</span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(account.taproot.address, 'taproot')}
+                          className="p-1 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]"
+                        >
+                          {copiedAddress === 'taproot' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await disconnect();
+                      } catch (e) {
+                        // noop
+                      } finally {
+                        setMenuOpen(false);
+                      }
+                    }}
+                    className="w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                  >
+                    Disconnect Wallet
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <div ref={mobileMenuRef}>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="flex items-center justify-center w-10 h-10 rounded-lg text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
+              aria-label="Toggle mobile menu"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
 
            {mobileMenuOpen && (
              <div className="fixed left-0 right-0 top-[58px] mx-4 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                <nav className="flex flex-col">
-                 {walletConnected ? (
+                 <Link
+                   href="/"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
+                 >
+                   HOME
+                 </Link>
+                 <Link
+                   href="/swap"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/swap') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
+                 >
+                   SWAP
+                 </Link>
+                 <Link
+                   href="/vaults"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
+                 >
+                   VAULTS
+                 </Link>
+                 <Link
+                   href="/futures"
+                   onClick={() => setMobileMenuOpen(false)}
+                   className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/futures') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
+                 >
+                   FUTURES
+                 </Link>
+                 {walletConnected && (
                    <>
                      <button
                        type="button"
@@ -360,91 +449,9 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
                        </>
                      )}
                    </>
-                 ) : (
-                   <Link
-                     href="/"
-                     onClick={() => setMobileMenuOpen(false)}
-                     className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                   >
-                     HOME
-                   </Link>
                  )}
-                 <Link
-                   href="/swap"
-                   onClick={() => setMobileMenuOpen(false)}
-                   className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/swap') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                 >
-                   SWAP
-                 </Link>
-                 <Link
-                   href="/vaults"
-                   onClick={() => setMobileMenuOpen(false)}
-                   className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                 >
-                   VAULTS
-                 </Link>
-                 <Link
-                   href="/futures"
-                   onClick={() => setMobileMenuOpen(false)}
-                   className={`px-6 py-4 text-sm font-bold tracking-[0.08em] uppercase hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none focus:outline-none transition-all ${isActive('/futures') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                 >
-                   FUTURES
-                 </Link>
-                 
-                 {walletConnected ? (
-                   <div className="px-6 py-4">
-                     <div className="mb-2 text-xs text-[color:var(--sf-text)]/70">Connected</div>
-                     <div className="mb-3 flex items-center gap-2">
-                       <AddressAvatar address={address} size={24} />
-                       <span className="text-sm font-semibold text-[color:var(--sf-text)]">{isBalanceLoading ? '...' : btcBalance} BTC</span>
-                     </div>
-                     {account?.nativeSegwit?.address && (
-                       <div className="mb-2 p-3 rounded-lg bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)]">
-                         <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit</div>
-                         <div className="flex items-center justify-between gap-2">
-                           <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.nativeSegwit.address)}</span>
-                           <button
-                             type="button"
-                             onClick={() => copyToClipboard(account.nativeSegwit.address, 'segwit')}
-                             className="p-1.5 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]"
-                           >
-                             {copiedAddress === 'segwit' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-                           </button>
-                         </div>
-                       </div>
-                     )}
-                     {account?.taproot?.address && (
-                       <div className="mb-3 p-3 rounded-lg bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)]">
-                         <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot</div>
-                         <div className="flex items-center justify-between gap-2">
-                           <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.taproot.address)}</span>
-                           <button
-                             type="button"
-                             onClick={() => copyToClipboard(account.taproot.address, 'taproot')}
-                             className="p-1.5 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]"
-                           >
-                             {copiedAddress === 'taproot' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-                           </button>
-                         </div>
-                       </div>
-                     )}
-                     <button
-                       type="button"
-                       onClick={async () => {
-                         try {
-                           await disconnect();
-                         } catch (e) {
-                           // noop
-                         } finally {
-                           setMobileMenuOpen(false);
-                         }
-                       }}
-                       className="w-full rounded-lg bg-[color:var(--sf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--sf-text)] hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500 border border-[color:var(--sf-outline)] transition-colors"
-                     >
-                       DISCONNECT WALLET
-                     </button>
-                   </div>
-                 ) : (
+
+                 {!walletConnected && (
                    <div className="px-6 py-4">
                      <button
                        type="button"
@@ -466,7 +473,8 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
                </nav>
              </div>
            )}
-         </div>
+          </div>
+        </div>
       </div>
     </header>
   );
