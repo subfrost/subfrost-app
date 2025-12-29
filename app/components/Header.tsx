@@ -81,7 +81,9 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
    const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
    const menuRootRef = useRef<HTMLDivElement | null>(null);
    const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+   const mobileWalletRef = useRef<HTMLDivElement | null>(null);
    const walletNavRef = useRef<HTMLDivElement | null>(null);
+   const menuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
    const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
    const btcBalance = btcBalanceSats ? (btcBalanceSats / 1e8).toFixed(5) : '0.00000';
@@ -99,11 +101,35 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
      return pathname.startsWith(path);
    }, [pathname]);
 
+   const handleMenuMouseEnter = useCallback(() => {
+     if (menuCloseTimeoutRef.current) {
+       clearTimeout(menuCloseTimeoutRef.current);
+       menuCloseTimeoutRef.current = null;
+     }
+     setMenuOpen(true);
+   }, []);
+
+   const handleMenuMouseLeave = useCallback(() => {
+     menuCloseTimeoutRef.current = setTimeout(() => {
+       setMenuOpen(false);
+     }, 100);
+   }, []);
+
+   useEffect(() => {
+     return () => {
+       if (menuCloseTimeoutRef.current) {
+         clearTimeout(menuCloseTimeoutRef.current);
+       }
+     };
+   }, []);
+
    useEffect(() => {
      if (!menuOpen) return;
      const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-       if (!menuRootRef.current) return;
-       if (!menuRootRef.current.contains(e.target as Node)) {
+       const target = e.target as Node;
+       const isInsideDesktop = menuRootRef.current?.contains(target);
+       const isInsideMobile = mobileWalletRef.current?.contains(target);
+       if (!isInsideDesktop && !isInsideMobile) {
          setMenuOpen(false);
        }
      };
@@ -225,16 +251,18 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
         {/* Desktop CTA */}
          <div className="ml-auto relative hidden md:block" ref={menuRootRef}>
           {walletConnected ? (
-             <>
+             <div
+               onMouseEnter={handleMenuMouseEnter}
+               onMouseLeave={handleMenuMouseLeave}
+             >
                <button
                  type="button"
-                 onClick={() => setMenuOpen((v) => !v)}
                  className={`flex items-center gap-2 rounded-full bg-[color:var(--sf-surface)] px-4 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] focus:outline-none ${theme === 'dark' ? 'shadow-[0_2px_0_rgba(0,0,0,0.2),0_6px_14px_rgba(0,0,0,0.12)]' : ''}`}
                >
                  <AddressAvatar address={address} size={24} />
                  <span className="hidden sm:inline">{isBalanceLoading ? '...' : btcBalance} BTC</span>
                </button>
-               {menuOpen ? (
+               {menuOpen && (
                  <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                   {account?.nativeSegwit?.address && (
                     <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
@@ -282,21 +310,19 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
                      Disconnect Wallet
                    </button>
                  </div>
-               ) : null}
-             </>
+               )}
+             </div>
            ) : (
              <div className="relative">
                <button
                  type="button"
                  onClick={() => onConnectModalOpenChange(true)}
-                 className="relative rounded-lg bg-[color:var(--sf-surface)] px-6 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-surface)]/95 border border-[color:var(--sf-outline)] focus:outline-none overflow-hidden"
+                 className="relative rounded-lg bg-[color:var(--sf-surface)] px-6 py-2 text-sm font-bold tracking-[0.08em] text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] focus:outline-none overflow-hidden"
                >
                  <span className="relative z-10">CONNECT WALLET</span>
-                 {theme === 'light' && (
-                   <div className="absolute inset-0 pointer-events-none">
-                     <FallingSnowflakes />
-                   </div>
-                 )}
+                 <div className="absolute inset-0 pointer-events-none">
+                   <FallingSnowflakes white={theme === 'dark'} />
+                 </div>
                </button>
              </div>
            )}
@@ -305,7 +331,7 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
         {/* Mobile Header Right Section */}
         <div className="ml-auto flex items-center gap-2 md:hidden">
           {walletConnected && (
-            <div className="relative">
+            <div className="relative" ref={mobileWalletRef}>
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
@@ -364,6 +390,15 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
                 </div>
               )}
             </div>
+          )}
+          {!walletConnected && (
+            <button
+              type="button"
+              onClick={() => onConnectModalOpenChange(true)}
+              className="relative flex items-center gap-2 rounded-full bg-[color:var(--sf-surface)] px-3 py-1.5 border border-[color:var(--sf-outline)] text-sm font-semibold text-[color:var(--sf-text)] overflow-hidden"
+            >
+              <span className="relative z-10">Connect Wallet</span>
+            </button>
           )}
           <div ref={mobileMenuRef}>
             <button
@@ -451,26 +486,7 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
                    </>
                  )}
 
-                 {!walletConnected && (
-                   <div className="px-6 py-4">
-                     <button
-                       type="button"
-                       onClick={() => {
-                         onConnectModalOpenChange(true);
-                         setMobileMenuOpen(false);
-                       }}
-                       className="relative w-full rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[color:var(--sf-primary-pressed)] overflow-hidden"
-                     >
-                       <span className="relative z-10">CONNECT WALLET</span>
-                       {theme === 'light' && (
-                         <div className="absolute inset-0 pointer-events-none">
-                           <FallingSnowflakes white />
-                         </div>
-                       )}
-                     </button>
-                   </div>
-                 )}
-               </nav>
+                </nav>
              </div>
            )}
           </div>

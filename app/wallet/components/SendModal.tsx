@@ -579,7 +579,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             </div>
           </div>
 
-          <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-600 dark:text-yellow-200">
+          <div className="p-3 rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] text-sm text-[color:var(--sf-info-yellow-text)]">
             ⚠️ Please verify the recipient address before sending. Transactions cannot be reversed.
           </div>
 
@@ -711,11 +711,11 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   </div>
                 </div>
 
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
-                  <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                <div className="border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] rounded p-3">
+                  <p className="text-xs text-[color:var(--sf-info-yellow-text)]">
                     <strong>⚠️ Recommendations:</strong>
                   </p>
-                  <ul className="text-xs text-yellow-600/80 dark:text-yellow-300/80 mt-1 space-y-1 list-disc list-inside">
+                  <ul className="text-xs text-[color:var(--sf-info-yellow-text)]/80 mt-1 space-y-1 list-disc list-inside">
                     {selectedUtxos.size > 100 && (
                       <li>Reduce the number of UTXOs ({selectedUtxos.size} selected)</li>
                     )}

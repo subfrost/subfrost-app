@@ -15,7 +15,6 @@ const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
   { id: '32:0', symbol: 'frBTC' },
   { id: 'usd', symbol: 'bUSD' },
   { id: '2:0', symbol: 'DIESEL' },
-  { id: 'eth_empty', symbol: 'frETH' },
   { id: '2:16', symbol: 'METHANE' },
   { id: 'frUSD', symbol: 'frUSD' },
   { id: 'zec_empty', symbol: 'frZEC' },
@@ -32,7 +31,6 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
     'usd': 've-usd',       // bUSD -> veUSD
     'frUSD': 've-usd',     // frUSD -> veUSD
     'zec_empty': 've-zec', // frZEC -> veZEC
-    'eth_empty': 've-eth', // frETH -> veETH
     'ordi': 've-ordi',     // ORDI -> veORDI
   };
   
@@ -51,7 +49,6 @@ const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol:
     'veDIESEL': { id: '2:0', symbol: 'DIESEL' },
     'veUSD': { id: 'usd', symbol: 'bUSD' },
     'veZEC': { id: 'zec_empty', symbol: 'frZEC' },
-    'veETH': { id: 'eth_empty', symbol: 'frETH' },
     'yvfrBTC': { id: '32:0', symbol: 'frBTC' },
     'veORDI': { id: 'ordi', symbol: 'ORDI' },
   };
