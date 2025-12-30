@@ -70,8 +70,8 @@ importers:
         version: 2.0.0
     devDependencies:
       '@alkanes/ts-sdk':
-        specifier: file:./reference/alkanes-rs/ts-sdk
-        version: file:reference/alkanes-rs/ts-sdk(@oyl/sdk@1.17.0(@swc/core@1.15.3)(@swc/wasm@1.15.3)(@types/node@20.19.24)(typescript@5.9.3))(@types/node@20.19.24)
+        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.1-dc473a61
+        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.1-dc473a61(@oyl/sdk@1.17.0(@swc/core@1.15.3)(@swc/wasm@1.15.3)(@types/node@20.19.24)(typescript@5.9.3))(@types/node@20.19.24)
       '@noble/curves':
         specifier: ^2.0.1
         version: 2.0.1
@@ -162,8 +162,9 @@ packages:
   '@adraffy/ens-normalize@1.10.1':
     resolution: {integrity: sha512-96Z2IP3mYmF1Xg2cDm8f1gWGf/HUVedQ3FMifV4kG/PQ4yEP51xDtRAEfhVNt5f/uzpNkZHwWQuUcu6D6K+Ekw==}
 
-  '@alkanes/ts-sdk@file:reference/alkanes-rs/ts-sdk':
-    resolution: {directory: reference/alkanes-rs/ts-sdk, type: directory}
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.1-dc473a61':
+    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.1-dc473a61}
+    version: 0.1.1-dc473a6
     hasBin: true
     peerDependencies:
       '@oyl/sdk': '*'
@@ -5256,7 +5257,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.10.1': {}
 
-  '@alkanes/ts-sdk@file:reference/alkanes-rs/ts-sdk(@oyl/sdk@1.17.0(@swc/core@1.15.3)(@swc/wasm@1.15.3)(@types/node@20.19.24)(typescript@5.9.3))(@types/node@20.19.24)':
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.1-dc473a61(@oyl/sdk@1.17.0(@swc/core@1.15.3)(@swc/wasm@1.15.3)(@types/node@20.19.24)(typescript@5.9.3))(@types/node@20.19.24)':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       bip32: 4.0.0
