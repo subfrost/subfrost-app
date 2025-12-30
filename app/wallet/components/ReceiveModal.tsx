@@ -56,7 +56,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           <div className="space-y-2">
             <label className="text-sm text-[color:var(--sf-text)]/60">Your Bitcoin Address</label>
             <div className="flex items-center gap-2">
-              <div className="flex-1 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] font-mono text-sm break-all text-[color:var(--sf-text)]">
+              <div className="flex-1 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-sm break-all text-[color:var(--sf-text)]">
                 {address}
               </div>
               <button
@@ -85,13 +85,13 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
             </div>
           </div>
 
-          {/* Bitcoin URI (for wallet apps) */}
+          {/* Bitcoin URL (for wallet apps) */}
           <div className="space-y-2">
-            <label className="text-sm text-[color:var(--sf-text)]/60">Bitcoin URI</label>
+            <label className="text-sm text-[color:var(--sf-text)]/60">Bitcoin URL</label>
             <div className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <code className="text-xs break-all text-[color:var(--sf-text)]/80">
+              <span className="text-xs break-all text-[color:var(--sf-text)]/80">
                 bitcoin:{address}
-              </code>
+              </span>
             </div>
             <div className="text-xs text-[color:var(--sf-text)]/40">
               Use this URL to open directly in mobile wallets.

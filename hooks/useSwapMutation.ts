@@ -233,104 +233,30 @@ export function useSwapMutation() {
       const inputRequirements = buildInputRequirements(inputReqParams);
       console.log('[useSwapMutation] Built inputRequirements:', inputRequirements);
 
-      // Get recipient address (taproot for alkanes)
-      const recipientAddress = account?.taproot?.address || account?.nativeSegwit?.address;
-      console.log('[useSwapMutation] Recipient address:', recipientAddress);
-      if (!recipientAddress) {
-        console.error('[useSwapMutation] ❌ No recipient address available');
-        throw new Error('No recipient address available');
-      }
-
-      const toAddresses = JSON.stringify([recipientAddress]);
-
-      // Use explicit taproot address instead of symbolic 'p2tr:0' notation
-      // The SDK's internal address derivation has a bug where it defaults to P2WSH,
-      // which isn't supported by single-sig wallets
-      const taprootAddress = account?.taproot?.address;
-      console.log('[useSwapMutation] Taproot address:', taprootAddress);
-      if (!taprootAddress) {
-        console.error('[useSwapMutation] ❌ No taproot address available');
-        throw new Error('No taproot address available');
-      }
-
-      // WORKAROUND: Fetch UTXOs ourselves and filter to only our wallet's address
-      // This bypasses the SDK's broken UTXO selection (same pattern as useWrapMutation)
-      console.log('[useSwapMutation] ========================================');
-      console.log('[useSwapMutation] Fetching wallet UTXOs directly from:', taprootAddress);
-      let walletUtxos: any[] = [];
-      try {
-        // Get UTXOs from the wallet's taproot address
-        const utxoResult = await provider.getAddressUtxos(taprootAddress);
-        console.log('[useSwapMutation] Raw UTXO result type:', typeof utxoResult);
-        console.log('[useSwapMutation] Raw UTXO result:', JSON.stringify(utxoResult, null, 2));
-
-        // Handle different response formats
-        if (Array.isArray(utxoResult)) {
-          walletUtxos = utxoResult;
-        } else if (utxoResult?.utxos) {
-          walletUtxos = utxoResult.utxos;
-        } else if (utxoResult instanceof Map) {
-          walletUtxos = Array.from(utxoResult.values());
-        }
-
-        console.log('[useSwapMutation] Found', walletUtxos.length, 'UTXOs for wallet');
-        walletUtxos.forEach((utxo, idx) => {
-          console.log(`[useSwapMutation]   UTXO[${idx}]: ${utxo.txid}:${utxo.vout} value=${utxo.value} sats`);
-        });
-      } catch (e) {
-        console.error('[useSwapMutation] Failed to fetch UTXOs:', e);
-      }
-
-      // Build options matching the pattern from useWrapMutation
-      // Use p2tr:0 for change address instead of the default p2wsh:0
-      // (p2wsh is not supported by single-sig wallets)
-      const options: Record<string, any> = {
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: true,
-        change_address: 'p2tr:0',              // Use symbolic notation - SDK defaults to p2wsh which isn't supported
-        from: [taprootAddress],                // Explicit UTXO source (needed by SDK)
-        from_addresses: [taprootAddress],      // Explicit UTXO source (alt param name)
-        lock_alkanes: true,
-      };
-
-      // Pass explicit UTXOs if available (bypasses SDK's broken UTXO selection)
-      if (walletUtxos.length > 0) {
-        const formattedUtxos = walletUtxos.map((utxo: any) => ({
-          txid: utxo.txid,
-          vout: utxo.vout,
-          value: utxo.value,
-          script: utxo.scriptpubkey || utxo.script,
-        }));
-        options.utxos = formattedUtxos;
-        options.explicit_utxos = formattedUtxos;
-        console.log('[useSwapMutation] Passing', formattedUtxos.length, 'explicit UTXOs to SDK');
-      }
-
       console.log('═══════════════════════════════════════════════════════════════');
       console.log('[useSwapMutation] ████ EXECUTING SWAP ████');
       console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] alkanesExecuteWithStrings params:');
-      console.log('[useSwapMutation]   toAddresses:', toAddresses);
+      console.log('[useSwapMutation] alkanesExecuteTyped params:');
       console.log('[useSwapMutation]   inputRequirements:', inputRequirements);
       console.log('[useSwapMutation]   protostone:', protostone);
       console.log('[useSwapMutation]   feeRate:', swapData.feeRate);
-      console.log('[useSwapMutation]   options:', JSON.stringify(options, null, 2));
       console.log('═══════════════════════════════════════════════════════════════');
 
       // Determine btcNetwork for PSBT operations
       const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
 
       try {
-        // Execute using alkanesExecuteWithStrings
-        const result = await provider.alkanesExecuteWithStrings(
-          toAddresses,
+        // Execute using alkanesExecuteTyped with SDK defaults:
+        // - fromAddresses: ['p2wpkh:0', 'p2tr:0'] (sources from both SegWit and Taproot)
+        // - changeAddress: 'p2wpkh:0' (BTC change -> SegWit)
+        // - alkanesChangeAddress: 'p2tr:0' (alkane change -> Taproot)
+        // - toAddresses: auto-generated from protostone vN references
+        const result = await provider.alkanesExecuteTyped({
           inputRequirements,
-          protostone,
-          swapData.feeRate,
-          undefined, // envelope_hex
-          JSON.stringify(options)
-        );
+          protostones: protostone,
+          feeRate: swapData.feeRate,
+          autoConfirm: true,
+        });
 
         console.log('[useSwapMutation] ✓ Execute result:', JSON.stringify(result, null, 2));
 

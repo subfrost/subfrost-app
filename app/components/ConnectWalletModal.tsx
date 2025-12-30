@@ -561,7 +561,7 @@ export default function ConnectWalletModal() {
               </div>
 
               <div className="relative rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4">
-                <div className="grid grid-cols-3 gap-2 font-mono text-sm">
+                <div className="grid grid-cols-3 gap-2 text-sm">
                   {generatedMnemonic.split(' ').map((word, i) => (
                     <div key={i} className="flex gap-2">
                       <span className="text-[color:var(--sf-text)]/40">{i + 1}.</span>

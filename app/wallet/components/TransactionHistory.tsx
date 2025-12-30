@@ -186,7 +186,7 @@ export default function TransactionHistory() {
                   )}
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm text-[color:var(--sf-text)]">
+                      <span className="text-sm text-[color:var(--sf-text)]">
                         {tx.txid.slice(0, 8)}...{tx.txid.slice(-8)}
                       </span>
                       <a
@@ -238,7 +238,7 @@ export default function TransactionHistory() {
                       <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
                         Inputs ({tx.inputs.length})
                       </div>
-                      <div className="text-lg font-mono text-[color:var(--sf-text)]">
+                      <div className="text-lg text-[color:var(--sf-text)]">
                         {formatSats(tx.inputs.reduce((sum, inp) => sum + (inp.amount || 0), 0))} BTC
                       </div>
                     </div>
@@ -246,7 +246,7 @@ export default function TransactionHistory() {
                       <div className="text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
                         Outputs ({tx.outputs.length})
                       </div>
-                      <div className="text-lg font-mono text-[color:var(--sf-text)]">
+                      <div className="text-lg text-[color:var(--sf-text)]">
                         {formatSats(tx.outputs.reduce((sum, out) => sum + out.amount, 0))} BTC
                       </div>
                     </div>
@@ -290,17 +290,17 @@ export default function TransactionHistory() {
                                     href={`https://mempool.space/address/${output.address}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="font-mono text-xs text-[color:var(--sf-primary)] hover:opacity-80 truncate"
+                                    className="text-xs text-[color:var(--sf-primary)] hover:opacity-80 truncate"
                                   >
                                     {output.address}
                                   </a>
                                 ) : (
-                                  <span className="font-mono text-xs text-[color:var(--sf-text)]/40">
+                                  <span className="text-xs text-[color:var(--sf-text)]/40">
                                     OP_RETURN / Non-standard
                                   </span>
                                 )}
                               </div>
-                              <span className="font-mono text-sm text-[color:var(--sf-text)] whitespace-nowrap ml-3">
+                              <span className="text-sm text-[color:var(--sf-text)] whitespace-nowrap ml-3">
                                 {formatSats(output.amount)} BTC
                               </span>
                             </div>
@@ -316,9 +316,9 @@ export default function TransactionHistory() {
                             Runestone Data
                           </div>
                           <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-orange-500/20">
-                            <pre className="text-xs font-mono text-[color:var(--sf-text)]/80 overflow-x-auto">
+                            <div className="text-xs text-[color:var(--sf-text)]/80 overflow-x-auto whitespace-pre">
                               {JSON.stringify(tx.runestone, null, 2)}
-                            </pre>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -336,12 +336,12 @@ export default function TransactionHistory() {
                                 <div className="text-xs font-medium text-purple-500 dark:text-purple-400 mb-2">
                                   Protostone #{trace.protostone_index + 1} (vout {trace.vout})
                                 </div>
-                                <div className="font-mono text-xs text-[color:var(--sf-text)]/60 mb-2">
+                                <div className="text-xs text-[color:var(--sf-text)]/60 mb-2">
                                   Outpoint: {trace.outpoint}
                                 </div>
-                                <pre className="text-xs font-mono text-[color:var(--sf-text)]/80 overflow-x-auto max-h-64 overflow-y-auto">
+                                <div className="text-xs text-[color:var(--sf-text)]/80 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre">
                                   {JSON.stringify(trace.trace, null, 2)}
-                                </pre>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -356,9 +356,9 @@ export default function TransactionHistory() {
                   <div className="absolute top-2 right-2">
                     <Code size={16} className="text-[color:var(--sf-text)]/40" />
                   </div>
-                  <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
+                  <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs text-[color:var(--sf-text)]/80 whitespace-pre">
                     {JSON.stringify(tx, null, 2)}
-                  </pre>
+                  </div>
                 </div>
               )}
             </div>
@@ -383,7 +383,7 @@ export default function TransactionHistory() {
                 <Sparkles size={24} className="text-purple-400" />
                 <div>
                   <h2 className="text-xl font-bold text-[color:var(--sf-text)]">Transaction Analysis</h2>
-                  <div className="font-mono text-xs text-[color:var(--sf-text)]/60 mt-1">
+                  <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">
                     {inspectingTx.slice(0, 16)}...{inspectingTx.slice(-16)}
                   </div>
                 </div>
@@ -420,18 +420,18 @@ export default function TransactionHistory() {
                       {inspectionData.runestone.decode && (
                         <div className="mb-4">
                           <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Decoded:</div>
-                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
+                          <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs text-[color:var(--sf-text)]/80 whitespace-pre">
                             {JSON.stringify(inspectionData.runestone.decode, null, 2)}
-                          </pre>
+                          </div>
                         </div>
                       )}
 
                       {inspectionData.runestone.analyze && (
                         <div>
                           <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Analysis:</div>
-                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
+                          <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs text-[color:var(--sf-text)]/80 whitespace-pre">
                             {JSON.stringify(inspectionData.runestone.analyze, null, 2)}
-                          </pre>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -448,18 +448,18 @@ export default function TransactionHistory() {
                       {inspectionData.protorunes.decode && (
                         <div className="mb-4">
                           <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Decoded:</div>
-                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
+                          <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs text-[color:var(--sf-text)]/80 whitespace-pre">
                             {JSON.stringify(inspectionData.protorunes.decode, null, 2)}
-                          </pre>
+                          </div>
                         </div>
                       )}
 
                       {inspectionData.protorunes.analyze && (
                         <div>
                           <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Analysis:</div>
-                          <pre className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs font-mono text-[color:var(--sf-text)]/80">
+                          <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] overflow-x-auto text-xs text-[color:var(--sf-text)]/80 whitespace-pre">
                             {JSON.stringify(inspectionData.protorunes.analyze, null, 2)}
-                          </pre>
+                          </div>
                         </div>
                       )}
                     </div>

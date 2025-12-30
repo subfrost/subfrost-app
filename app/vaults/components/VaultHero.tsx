@@ -119,7 +119,7 @@ export default function VaultHero({
 
       {/* Contract Address */}
       <div className="flex justify-center mb-3 relative z-10">
-        <button className="text-xs text-[color:var(--sf-text)]/80 hover:text-[color:var(--sf-text)] font-mono transition-colors">
+        <button className="text-xs text-[color:var(--sf-text)]/80 hover:text-[color:var(--sf-text)] transition-colors">
           {contractAddress.slice(0, 6)}...{contractAddress.slice(-4)}
         </button>
       </div>

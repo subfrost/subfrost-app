@@ -193,7 +193,7 @@ export default function MyWalletSwaps() {
                     </div>
                   </div>
 
-                  <div className="text-right font-mono text-xs text-[color:var(--sf-text)]">
+                  <div className="text-right text-xs text-[color:var(--sf-text)]">
                     {row.type === 'swap' && (
                       <>
                         <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
@@ -214,7 +214,7 @@ export default function MyWalletSwaps() {
                     )}
                   </div>
 
-                  <div className="text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{timeLabel}</div>
+                  <div className="text-right text-[10px] text-[color:var(--sf-text)]/60">{timeLabel}</div>
                 </Link>
               );
             })}

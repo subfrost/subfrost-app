@@ -230,12 +230,12 @@ export default function ActivateBridge({
           {/* Address with copy button */}
           <div className="flex items-center justify-center gap-2 mb-6">
             {/* Full address on lg+ screens, truncated on smaller */}
-            <code className="hidden lg:block text-xs font-mono text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
+            <span className="hidden lg:block text-xs text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
               {depositAddress}
-            </code>
-            <code className="lg:hidden text-xs font-mono text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
+            </span>
+            <span className="lg:hidden text-xs text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
               {`${depositAddress.slice(0, 6)}...${depositAddress.slice(-4)}`}
-            </code>
+            </span>
             <button
               onClick={handleCopy}
               className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all"
@@ -309,9 +309,9 @@ export default function ActivateBridge({
             }`}
           >
             <div className="flex items-center justify-center gap-2">
-              <code className="text-xs font-mono text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] truncate max-w-[240px]">
+              <span className="text-xs text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] truncate max-w-[240px]">
                 {transactionHash}
-              </code>
+              </span>
               <button
                 onClick={handleCopyTransaction}
                 className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all"

@@ -19,16 +19,16 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export type AddLiquidityTransactionData = {
-  token0Id: string;      // alkane id (e.g., "2:0" for DIESEL)
-  token1Id: string;      // alkane id (e.g., "32:0" for frBTC)
-  token0Amount: string;  // display amount (e.g., "1.5")
-  token1Amount: string;  // display amount
-  token0Decimals?: number; // default 8
-  token1Decimals?: number; // default 8
-  maxSlippage?: string;  // percent string, e.g. '0.5' (unused for now, minLP=0)
-  feeRate: number;       // sats/vB
-  deadlineBlocks?: number; // default 3
+export type RemoveLiquidityTransactionData = {
+  lpTokenId: string;       // LP token alkane id (e.g., "3:123")
+  lpAmount: string;        // amount of LP tokens to burn (display units)
+  lpDecimals?: number;     // LP token decimals (default 8)
+  minAmount0?: string;     // minimum token0 to receive (display units, optional)
+  minAmount1?: string;     // minimum token1 to receive (display units, optional)
+  token0Decimals?: number; // token0 decimals (default 8)
+  token1Decimals?: number; // token1 decimals (default 8)
+  feeRate: number;         // sats/vB
+  deadlineBlocks?: number; // blocks until deadline (default 3)
 };
 
 /**
@@ -41,48 +41,43 @@ function toAlks(amount: string, decimals: number = 8): string {
 }
 
 /**
- * Build protostone string for AddLiquidity operation
- * Format: [factory_block,factory_tx,opcode(11),token0_block,token0_tx,token1_block,token1_tx,amount0,amount1,minLP,deadline]:pointer:refund
+ * Build protostone string for RemoveLiquidity (Burn) operation
+ * Format: [factory_block,factory_tx,opcode(12),lp_block,lp_tx,lpAmount,minAmount0,minAmount1,deadline]:pointer:refund
  */
-function buildAddLiquidityProtostone(params: {
+function buildRemoveLiquidityProtostone(params: {
   factoryId: string;
-  token0Id: string;
-  token1Id: string;
-  amount0: string;
-  amount1: string;
-  minLP: string;
+  lpTokenId: string;
+  lpAmount: string;
+  minAmount0: string;
+  minAmount1: string;
   deadline: string;
   pointer?: string;
   refund?: string;
 }): string {
   const {
     factoryId,
-    token0Id,
-    token1Id,
-    amount0,
-    amount1,
-    minLP,
+    lpTokenId,
+    lpAmount,
+    minAmount0,
+    minAmount1,
     deadline,
     pointer = 'v0',
     refund = 'v0',
   } = params;
 
   const [factoryBlock, factoryTx] = factoryId.split(':');
-  const [token0Block, token0Tx] = token0Id.split(':');
-  const [token1Block, token1Tx] = token1Id.split(':');
+  const [lpBlock, lpTx] = lpTokenId.split(':');
 
-  // Build cellpack: [factory_block, factory_tx, opcode(11), token0_block, token0_tx, token1_block, token1_tx, amount0, amount1, minLP, deadline]
+  // Build cellpack: [factory_block, factory_tx, opcode(12), lp_block, lp_tx, lpAmount, minAmount0, minAmount1, deadline]
   const cellpack = [
     factoryBlock,
     factoryTx,
-    FACTORY_OPCODES.AddLiquidity, // '11'
-    token0Block,
-    token0Tx,
-    token1Block,
-    token1Tx,
-    amount0,
-    amount1,
-    minLP,
+    FACTORY_OPCODES.Burn, // '12'
+    lpBlock,
+    lpTx,
+    lpAmount,
+    minAmount0,
+    minAmount1,
     deadline,
   ].join(',');
 
@@ -90,24 +85,19 @@ function buildAddLiquidityProtostone(params: {
 }
 
 /**
- * Build input requirements string for AddLiquidity
- * Format: "block0:tx0:amount0,block1:tx1:amount1"
+ * Build input requirements string for RemoveLiquidity
+ * Format: "lp_block:lp_tx:lpAmount"
  */
-function buildAddLiquidityInputRequirements(params: {
-  token0Id: string;
-  token1Id: string;
-  amount0: string;
-  amount1: string;
+function buildRemoveLiquidityInputRequirements(params: {
+  lpTokenId: string;
+  lpAmount: string;
 }): string {
-  const { token0Id, token1Id, amount0, amount1 } = params;
-
-  const [block0, tx0] = token0Id.split(':');
-  const [block1, tx1] = token1Id.split(':');
-
-  return `${block0}:${tx0}:${amount0},${block1}:${tx1}:${amount1}`;
+  const { lpTokenId, lpAmount } = params;
+  const [block, tx] = lpTokenId.split(':');
+  return `${block}:${tx}:${lpAmount}`;
 }
 
-export function useAddLiquidityMutation() {
+export function useRemoveLiquidityMutation() {
   const { account, network, isConnected, signTaprootPsbt } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
@@ -131,10 +121,10 @@ export function useAddLiquidityMutation() {
   };
 
   return useMutation({
-    mutationFn: async (data: AddLiquidityTransactionData) => {
-      console.log('[AddLiquidity] ═══════════════════════════════════════════');
-      console.log('[AddLiquidity] Starting add liquidity transaction');
-      console.log('[AddLiquidity] Input data:', JSON.stringify(data, null, 2));
+    mutationFn: async (data: RemoveLiquidityTransactionData) => {
+      console.log('[RemoveLiquidity] ═══════════════════════════════════════════');
+      console.log('[RemoveLiquidity] Starting remove liquidity transaction');
+      console.log('[RemoveLiquidity] Input data:', JSON.stringify(data, null, 2));
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
@@ -143,15 +133,16 @@ export function useAddLiquidityMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      // Get addresses
+      // Get addresses for validation
       const taprootAddress = account?.taproot?.address;
       if (!taprootAddress) throw new Error('No taproot address available');
 
       // Convert display amounts to alks
-      const amount0Alks = toAlks(data.token0Amount, data.token0Decimals ?? 8);
-      const amount1Alks = toAlks(data.token1Amount, data.token1Decimals ?? 8);
+      const lpAmountAlks = toAlks(data.lpAmount, data.lpDecimals ?? 8);
+      const minAmount0Alks = data.minAmount0 ? toAlks(data.minAmount0, data.token0Decimals ?? 8) : '0';
+      const minAmount1Alks = data.minAmount1 ? toAlks(data.minAmount1, data.token1Decimals ?? 8) : '0';
 
-      console.log('[AddLiquidity] Amounts in alks:', { amount0Alks, amount1Alks });
+      console.log('[RemoveLiquidity] Amounts in alks:', { lpAmountAlks, minAmount0Alks, minAmount1Alks });
 
       // Get block height for deadline
       const deadline = await getFutureBlockHeight(
@@ -159,40 +150,33 @@ export function useAddLiquidityMutation() {
         provider as any
       );
 
-      console.log('[AddLiquidity] Deadline block:', deadline);
-
-      // For MVP, use minLP = 0 (no slippage protection)
-      // TODO: Calculate minLP based on pool reserves and slippage
-      const minLP = '0';
+      console.log('[RemoveLiquidity] Deadline block:', deadline);
 
       // Build protostone
-      const protostone = buildAddLiquidityProtostone({
+      const protostone = buildRemoveLiquidityProtostone({
         factoryId: ALKANE_FACTORY_ID,
-        token0Id: data.token0Id,
-        token1Id: data.token1Id,
-        amount0: amount0Alks,
-        amount1: amount1Alks,
-        minLP,
+        lpTokenId: data.lpTokenId,
+        lpAmount: lpAmountAlks,
+        minAmount0: minAmount0Alks,
+        minAmount1: minAmount1Alks,
         deadline: deadline.toString(),
       });
 
-      console.log('[AddLiquidity] Protostone:', protostone);
+      console.log('[RemoveLiquidity] Protostone:', protostone);
 
       // Build input requirements
-      const inputRequirements = buildAddLiquidityInputRequirements({
-        token0Id: data.token0Id,
-        token1Id: data.token1Id,
-        amount0: amount0Alks,
-        amount1: amount1Alks,
+      const inputRequirements = buildRemoveLiquidityInputRequirements({
+        lpTokenId: data.lpTokenId,
+        lpAmount: lpAmountAlks,
       });
 
-      console.log('[AddLiquidity] Input requirements:', inputRequirements);
+      console.log('[RemoveLiquidity] Input requirements:', inputRequirements);
 
-      console.log('[AddLiquidity] ═══════════════════════════════════════════');
-      console.log('[AddLiquidity] Executing...');
-      console.log('[AddLiquidity] inputRequirements:', inputRequirements);
-      console.log('[AddLiquidity] protostone:', protostone);
-      console.log('[AddLiquidity] feeRate:', data.feeRate);
+      console.log('[RemoveLiquidity] ═══════════════════════════════════════════');
+      console.log('[RemoveLiquidity] Executing...');
+      console.log('[RemoveLiquidity] inputRequirements:', inputRequirements);
+      console.log('[RemoveLiquidity] protostone:', protostone);
+      console.log('[RemoveLiquidity] feeRate:', data.feeRate);
 
       const btcNetwork = getBitcoinNetwork();
 
@@ -209,18 +193,18 @@ export function useAddLiquidityMutation() {
           autoConfirm: false,
         });
 
-        console.log('[AddLiquidity] Execute result:', JSON.stringify(result, null, 2));
+        console.log('[RemoveLiquidity] Execute result:', JSON.stringify(result, null, 2));
 
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[AddLiquidity] Transaction auto-completed, txid:', txId);
+          console.log('[RemoveLiquidity] Transaction auto-completed, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[AddLiquidity] Got readyToSign, signing PSBT...');
+          console.log('[RemoveLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
@@ -251,11 +235,11 @@ export function useAddLiquidityMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[AddLiquidity] Transaction built:', txid);
+          console.log('[RemoveLiquidity] Transaction built:', txid);
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[AddLiquidity] Broadcast successful:', broadcastTxid);
+          console.log('[RemoveLiquidity] Broadcast successful:', broadcastTxid);
 
           return {
             success: true,
@@ -266,22 +250,22 @@ export function useAddLiquidityMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[AddLiquidity] Complete, txid:', txId);
+          console.log('[RemoveLiquidity] Complete, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[AddLiquidity] Transaction ID:', txId);
+        console.log('[RemoveLiquidity] Transaction ID:', txId);
         return { success: true, transactionId: txId };
 
       } catch (error) {
-        console.error('[AddLiquidity] Execution error:', error);
+        console.error('[RemoveLiquidity] Execution error:', error);
         throw error;
       }
     },
     onSuccess: (data) => {
-      console.log('[AddLiquidity] Success! txid:', data.transactionId);
+      console.log('[RemoveLiquidity] Success! txid:', data.transactionId);
 
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });

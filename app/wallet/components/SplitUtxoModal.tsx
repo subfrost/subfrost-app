@@ -160,7 +160,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               {/* UTXO Info */}
               <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
                 <div className="text-sm text-[color:var(--sf-text)]/60 mb-2">UTXO to Split:</div>
-                <div className="font-mono text-xs text-[color:var(--sf-text)]/80 mb-2">
+                <div className="text-xs text-[color:var(--sf-text)]/80 mb-2">
                   {utxo.txid.slice(0, 16)}...:{utxo.vout}
                 </div>
                 <div className="text-sm text-[color:var(--sf-text)]">
@@ -272,7 +272,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
                 <div className="w-full p-4 rounded-lg bg-green-500/10 border border-green-500/20">
                   <div className="text-sm text-green-600 dark:text-green-200 mb-2">Transaction ID:</div>
-                  <div className="font-mono text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
+                  <div className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
                 </div>
 
                 <a

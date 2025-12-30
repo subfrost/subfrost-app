@@ -410,7 +410,7 @@ export default function WalletSettings() {
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
                     <div>
                       <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
-                      <div className="font-mono text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
+                      <div className="text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
                       <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.taproot.hdPath}</div>
                     </div>
                   </div>
@@ -419,7 +419,7 @@ export default function WalletSettings() {
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
                     <div>
                       <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
-                      <div className="font-mono text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
+                      <div className="text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
                       <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.nativeSegwit.hdPath}</div>
                     </div>
                   </div>
@@ -495,7 +495,7 @@ export default function WalletSettings() {
                     <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
                       <div className="flex-1 mr-2">
                         <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
-                        <div className="font-mono text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
+                        <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
                       </div>
                       <button
                         onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
@@ -563,7 +563,7 @@ export default function WalletSettings() {
                     <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
                       <div className="flex-1 mr-2">
                         <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
-                        <div className="font-mono text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
+                        <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
                       </div>
                       <button
                         onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
@@ -722,7 +722,7 @@ export default function WalletSettings() {
                 <>
                   <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4">
                     <div className="text-sm text-green-600 dark:text-green-200 mb-2">Your Seed Phrase:</div>
-                    <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] font-mono text-sm text-[color:var(--sf-text)] break-all select-all">
+                    <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] text-sm text-[color:var(--sf-text)] break-all select-all">
                       {revealedSeed}
                     </div>
                   </div>

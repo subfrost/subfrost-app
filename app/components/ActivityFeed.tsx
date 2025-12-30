@@ -278,7 +278,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 </div>
               </div>
 
-              <div className="text-right font-mono text-xs text-[color:var(--sf-text)]">
+              <div className="text-right text-xs text-[color:var(--sf-text)]">
                 {row.type === 'swap' && (
                   <>
                     <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
@@ -311,8 +311,8 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 )}
               </div>
 
-              <div className="truncate text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
-              <div className="text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">
+              <div className="truncate text-right text-[10px] text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
+              <div className="text-right text-[10px] text-[color:var(--sf-text)]/60">
                 {/* Desktop: single line */}
                 <span className="hidden lg:inline">{timeLabel}</span>
                 {/* Mobile/tablet: two lines */}

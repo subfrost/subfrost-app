@@ -208,7 +208,7 @@ export default function UTXOManagement() {
                   <div className="flex items-center gap-4">
                     <Box size={20} className="text-[color:var(--sf-primary)]" />
                     <div className="text-left">
-                      <div className="font-mono text-sm flex items-center gap-2 text-[color:var(--sf-text)]">
+                      <div className="text-sm flex items-center gap-2 text-[color:var(--sf-text)]">
                         <span>{utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}</span>
                         {isFrozen(utxoKey) && (
                           <span title="Frozen UTXO">
@@ -280,7 +280,7 @@ export default function UTXOManagement() {
                       <div>
                         <span className="text-[color:var(--sf-text)]/60">Transaction ID:</span>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="font-mono text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
+                          <span className="text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
                           <a
                             href={`https://ordiscan.com/tx/${utxo.txid}`}
                             target="_blank"
@@ -315,7 +315,7 @@ export default function UTXOManagement() {
                                 <div className="font-medium text-[color:var(--sf-text)]">{alkane.symbol || alkane.name}</div>
                                 <div className="text-xs text-[color:var(--sf-text)]/40">{alkaneId}</div>
                               </div>
-                              <span className="font-mono text-[color:var(--sf-text)]">{alkane.value}</span>
+                              <span className="text-[color:var(--sf-text)]">{alkane.value}</span>
                             </div>
                           ))}
                         </div>
@@ -330,7 +330,7 @@ export default function UTXOManagement() {
                           {Object.entries(utxo.runes).map(([runeId, rune]) => (
                             <div key={runeId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
                               <span className="text-[color:var(--sf-text)]">{rune.symbol}</span>
-                              <span className="font-mono text-[color:var(--sf-text)]">{rune.amount}</span>
+                              <span className="text-[color:var(--sf-text)]">{rune.amount}</span>
                             </div>
                           ))}
                         </div>

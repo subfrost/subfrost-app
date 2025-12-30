@@ -69,7 +69,7 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
             </div>
             <div className="text-sm text-green-700/80">
               Transaction ID:{" "}
-              <span className="font-mono font-semibold text-xs break-all">{txId}</span>
+              <span className="font-semibold text-xs break-all">{txId}</span>
             </div>
           </div>
 

@@ -57,20 +57,10 @@ export default function BalancesPanel() {
     return `${wholeStr}.${truncatedRemainder}`;
   };
 
-  // Only show full loading screen on initial load (no data yet)
-  const hasData = balances.bitcoin.total !== undefined;
-  if (isLoading && !hasData) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin text-[color:var(--sf-text)]/60" size={32} />
-        <div className="ml-3 text-[color:var(--sf-text)]/60">Loading wallet data...</div>
-      </div>
-    );
-  }
-
-  // Helper to show loading or value during refresh
+  // Helper to show loading or value during initial load or refresh
+  const isLoadingData = isLoading || isRefreshing;
   const showValue = (value: string) => {
-    return isRefreshing ? (
+    return isLoadingData ? (
       <span className="text-[color:var(--sf-text)]/60">Loading...</span>
     ) : value;
   };
@@ -104,20 +94,22 @@ export default function BalancesPanel() {
             <div>
               <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">Bitcoin Balance</div>
               <div className="text-3xl font-bold text-[color:var(--sf-text)]">{showValue(`${totalBTC} BTC`)}</div>
-              {totalUSD && !isRefreshing && (
-                <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
-                  ${totalUSD} USD
-                </div>
-              )}
+              <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
+                {isLoadingData ? (
+                  <span>Loading...</span>
+                ) : (
+                  `$${totalUSD || '0.00'} USD`
+                )}
+              </div>
             </div>
           </div>
           <button
             onClick={handleRefresh}
-            disabled={isLoading || isRefreshing}
+            disabled={isLoadingData}
             className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
             title="Refresh balances"
           >
-            <RefreshCw size={20} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={20} className={isLoadingData ? 'animate-spin' : ''} />
           </button>
         </div>
 
@@ -125,14 +117,14 @@ export default function BalancesPanel() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[color:var(--sf-outline)]">
           <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
             <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Spendable BTC</div>
-            <div className="font-mono text-sm text-[color:var(--sf-info-green-text)]">
-              {showValue(`${formatBTC(balances.bitcoin.spendable)} BTC ${!isRefreshing && formatUSD(balances.bitcoin.spendable) ? `($${formatUSD(balances.bitcoin.spendable)})` : ''}`)}
+            <div className="text-sm text-[color:var(--sf-info-green-text)]">
+              {showValue(`${formatBTC(balances.bitcoin.spendable)} BTC ${!isLoadingData && formatUSD(balances.bitcoin.spendable) ? `($${formatUSD(balances.bitcoin.spendable)})` : ''}`)}
             </div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
             <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">Unspendable (with Assets)</div>
-            <div className="font-mono text-sm text-[color:var(--sf-info-yellow-text)]">
-              {showValue(`${formatBTC(balances.bitcoin.withAssets)} BTC ${!isRefreshing && formatUSD(balances.bitcoin.withAssets) ? `($${formatUSD(balances.bitcoin.withAssets)})` : ''}`)}
+            <div className="text-sm text-[color:var(--sf-info-yellow-text)]">
+              {showValue(`${formatBTC(balances.bitcoin.withAssets)} BTC ${!isLoadingData && formatUSD(balances.bitcoin.withAssets) ? `($${formatUSD(balances.bitcoin.withAssets)})` : ''}`)}
             </div>
           </div>
         </div>
@@ -141,7 +133,7 @@ export default function BalancesPanel() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-outline)] mt-4">
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
-            <div className="font-mono text-sm text-[color:var(--sf-text)]">
+            <div className="text-sm text-[color:var(--sf-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2wpkh)} BTC`)}
             </div>
             <a
@@ -157,7 +149,7 @@ export default function BalancesPanel() {
           </div>
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
-            <div className="font-mono text-sm text-[color:var(--sf-text)]">
+            <div className="text-sm text-[color:var(--sf-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2tr)} BTC`)}
             </div>
             <a
@@ -173,7 +165,7 @@ export default function BalancesPanel() {
           </div>
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Pending Transactions</div>
-            <div className="font-mono text-sm text-[color:var(--sf-text)] flex items-center gap-1">
+            <div className="text-sm text-[color:var(--sf-text)] flex items-center gap-1">
               <a
                 href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
                 target="_blank"
@@ -228,17 +220,17 @@ export default function BalancesPanel() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-[color:var(--sf-text)] font-mono">
+                    <div className="font-bold text-[color:var(--sf-text)]">
                       {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals))}
                     </div>
-                    {!isRefreshing && <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>}
+                    {!isLoadingData && <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-              {isRefreshing ? (
+              {isLoadingData ? (
                 <span>Loading...</span>
               ) : (
                 <>
@@ -262,7 +254,7 @@ export default function BalancesPanel() {
           </div>
 
           <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-            {isRefreshing ? (
+            {isLoadingData ? (
               <span>Loading...</span>
             ) : (
               <>

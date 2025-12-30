@@ -342,7 +342,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
             placeholder="bc1q... or 1... or 3..."
-            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] font-mono text-sm"
+            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] text-sm"
           />
         </div>
 
@@ -492,7 +492,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <div className="font-mono text-xs text-[color:var(--sf-text)]/80">
+                    <div className="text-xs text-[color:var(--sf-text)]/80">
                       {utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}
                     </div>
                     <div className="text-sm text-[color:var(--sf-text)] font-medium">
@@ -557,7 +557,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] space-y-3">
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">Recipient:</span>
-              <span className="font-mono text-sm text-[color:var(--sf-text)] break-all ml-4">
+              <span className="text-sm text-[color:var(--sf-text)] break-all ml-4">
                 {recipientAddress}
               </span>
             </div>
@@ -626,7 +626,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
         <div className="w-full p-4 rounded-lg bg-green-500/10 border border-green-500/20">
           <div className="text-sm text-green-600 dark:text-green-200 mb-2">Transaction ID:</div>
-          <div className="font-mono text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
+          <div className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
         </div>
 
         <a
@@ -691,21 +691,21 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                 <div className="bg-red-500/10 border border-red-500/30 rounded p-3 space-y-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Estimated Fee:</span>
-                    <span className="text-red-400 font-mono">
+                    <span className="text-red-400">
                       {(estimatedFee / 100000000).toFixed(8)} BTC
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Fee Rate:</span>
-                    <span className="text-red-400 font-mono">{feeRate} sat/vB</span>
+                    <span className="text-red-400">{feeRate} sat/vB</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Number of Inputs:</span>
-                    <span className="text-red-400 font-mono">{selectedUtxos.size}</span>
+                    <span className="text-red-400">{selectedUtxos.size}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Fee Percentage:</span>
-                    <span className="text-red-400 font-mono">
+                    <span className="text-red-400">
                       {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
                     </span>
                   </div>

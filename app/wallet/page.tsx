@@ -87,7 +87,7 @@ export default function WalletDashboardPage() {
                 <div className="flex items-center gap-3">
                   <AddressAvatar address={paymentAddress} size={24} />
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Native SegWit:</span>
-                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate font-mono">{paymentAddress}</span>
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{paymentAddress}</span>
                   <button
                     onClick={() => copyToClipboard(paymentAddress, 'segwit')}
                     className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-colors shrink-0"
@@ -106,7 +106,7 @@ export default function WalletDashboardPage() {
                 <div className="flex items-center gap-3">
                   <AddressAvatar address={address} size={24} />
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Taproot:</span>
-                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate font-mono">{address}</span>
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{address}</span>
                   <button
                     onClick={() => copyToClipboard(address, 'taproot')}
                     className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-colors shrink-0"

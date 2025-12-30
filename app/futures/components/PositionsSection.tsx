@@ -50,13 +50,13 @@ export default function PositionsSection() {
         </div>
         <ul className="list-disc list-inside space-y-1 text-xs md:text-sm">
           <li>
-            Each <span className="font-mono font-semibold">ftrBTC[xxxxxx]</span> is a
+            Each <span className="font-semibold">ftrBTC[xxxxxx]</span> is a
             time-locked BTC position with a deterministic exercise value defined by the
             polynomial fee curve.
           </li>
           <li>
             <span className="font-semibold">Exercise value</span> is what you get if you
-            exercise right now via <span className="font-mono">Exercise</span> (dxBTC
+            exercise right now via <span className="font-semibold">Exercise</span> (dxBTC
             redemption). It only depends on time to expiry, not on secondary market prices.
           </li>
           <li>

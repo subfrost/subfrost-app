@@ -159,7 +159,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                   )}
 
                   {/* Folder Name (technical info) */}
-                  <div className="text-[color:var(--sf-text)]/30 font-mono text-[10px] truncate">
+                  <div className="text-[color:var(--sf-text)]/30 text-[10px] truncate">
                     {wallet.folderName}
                   </div>
                 </div>

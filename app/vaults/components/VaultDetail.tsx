@@ -202,7 +202,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                   Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                 </div>
                 <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
-                  Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                  Formula: <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
                 </div>
               </div>
               <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
@@ -254,7 +254,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             </div>
             <div className="pt-3 border-t border-[color:var(--sf-outline)]">
               <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
-              <div className="font-mono text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
+              <div className="text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                 {currentVault.contractAddress}
               </div>
             </div>
@@ -347,7 +347,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                     Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                   </div>
                   <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
-                    Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                    Formula: <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
                   </div>
                 </div>
                 <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
@@ -399,7 +399,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
               </div>
               <div className="pt-3 border-t border-[color:var(--sf-outline)]">
                 <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
-                <div className="font-mono text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
+                <div className="text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                   {currentVault.contractAddress}
                 </div>
               </div>

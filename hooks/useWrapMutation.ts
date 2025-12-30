@@ -4,41 +4,6 @@ import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 
-// Helper to recursively convert serde_wasm_bindgen Maps to plain objects
-// The WASM SDK returns nested Maps that need to be converted
-function mapToObject(value: any): any {
-  if (value instanceof Map) {
-    const obj: Record<string, any> = {};
-    for (const [k, v] of value.entries()) {
-      obj[k] = mapToObject(v);
-    }
-    return obj;
-  }
-  if (Array.isArray(value)) {
-    return value.map(mapToObject);
-  }
-  // Handle objects with numeric keys (WASM sometimes returns these for arrays)
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const keys = Object.keys(value);
-    // Check if this looks like an array (all numeric keys)
-    if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
-      // Could be a pseudo-array, check if sequential
-      const numKeys = keys.map(Number).sort((a, b) => a - b);
-      if (numKeys[0] === 0 && numKeys[numKeys.length - 1] === numKeys.length - 1) {
-        // It's a pseudo-array, convert to real array
-        return numKeys.map(k => mapToObject(value[k]));
-      }
-    }
-    // Regular object, convert each property
-    const obj: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value)) {
-      obj[k] = mapToObject(v);
-    }
-    return obj;
-  }
-  return value;
-}
-
 export type WrapTransactionBaseData = {
   amount: string; // display units (BTC)
   feeRate: number; // sats/vB
@@ -478,72 +443,21 @@ export function useWrapMutation() {
       // Get the signer address dynamically from contract or fall back to hardcoded
       const signerAddress = await getSignerAddress(FRBTC_ALKANE_ID, network);
 
-      // to_addresses: [user, signer]
-      // - Output 0 (v0): user address (receives minted frBTC via pointer=v0)
-      // - Output 1 (v1): signer address (receives full wrap BTC amount via B:amount:v1)
-      // NOTE: User is FIRST (v0) so pointer=v0 sends frBTC to user
-      const toAddresses = JSON.stringify([userTaprootAddress, signerAddress]);
-
-      // Get taproot address for UTXOs - this is where the funds are
-      const taprootAddress = account?.taproot?.address;
-      if (!taprootAddress) throw new Error('No taproot address available for UTXOs');
-
-      // Fetch UTXOs for the wallet
-      let walletUtxos: any[] = [];
       try {
-        const utxoResult = await provider.getAddressUtxos(taprootAddress);
-        const convertedResult = mapToObject(utxoResult);
-
-        if (Array.isArray(convertedResult)) {
-          walletUtxos = convertedResult;
-        } else if (convertedResult?.utxos) {
-          walletUtxos = convertedResult.utxos;
-        } else if (convertedResult instanceof Map) {
-          walletUtxos = Array.from(convertedResult.values());
-        }
-
-        walletUtxos = walletUtxos.filter((utxo: any) => utxo && utxo.txid && typeof utxo.value === 'number');
-      } catch (e) {
-        console.error('[WRAP] Failed to fetch UTXOs:', e);
-      }
-
-      // If we have wallet UTXOs, include them in options
-      // Use the actual taproot address for change (not symbolic notation which may cause issues)
-      const options: Record<string, any> = {
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: false,  // We'll handle signing ourselves
-        change_address: taprootAddress,  // Use actual taproot address for change
-        from: [taprootAddress],
-        from_addresses: [taprootAddress],
-        lock_alkanes: true,
-      };
-
-      // Pass explicit UTXOs if available
-      if (walletUtxos.length > 0) {
-        // Format UTXOs for the SDK
-        const formattedUtxos = walletUtxos.map((utxo: any) => ({
-          txid: utxo.txid,
-          vout: utxo.vout,
-          value: utxo.value,
-          script: utxo.scriptpubkey || utxo.script,
-        }));
-        options.utxos = formattedUtxos;
-        options.explicit_utxos = formattedUtxos;
-      }
-
-      const optionsJson = JSON.stringify(options);
-
-      try {
-        // Execute using alkanesExecuteWithStrings
-        const result = await provider.alkanesExecuteWithStrings(
-          toAddresses,
+        // Execute using alkanesExecuteTyped with SDK defaults:
+        // - fromAddresses: ['p2wpkh:0', 'p2tr:0'] (will find BTC in SegWit)
+        // - changeAddress: 'p2wpkh:0' (BTC change -> SegWit)
+        // - alkanesChangeAddress: 'p2tr:0' (alkane change -> Taproot)
+        // Keep explicit toAddresses for wrap output ordering:
+        // - Output 0 (v0): user address (receives frBTC)
+        // - Output 1 (v1): signer address (receives BTC)
+        const result = await provider.alkanesExecuteTyped({
+          toAddresses: [userTaprootAddress, signerAddress],
           inputRequirements,
-          protostone,
-          wrapData.feeRate,
-          undefined, // envelope_hex
-          optionsJson
-        );
+          protostones: protostone,
+          feeRate: wrapData.feeRate,
+          autoConfirm: false,  // We'll handle signing ourselves
+        });
 
         // Check if execution completed (auto_confirm: true path)
         if (result?.complete) {

@@ -79,26 +79,17 @@ export function useUnwrapMutation() {
       const recipientAddress = account?.nativeSegwit?.address || account?.taproot?.address;
       if (!recipientAddress) throw new Error('No recipient address available');
 
-      const toAddresses = JSON.stringify([recipientAddress]);
-
-      // Use p2tr:0 for change address instead of the default p2wsh:0
-      // (p2wsh is not supported by single-sig wallets)
-      const options = JSON.stringify({
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: true,
-        change_address: 'p2tr:0',
-      });
-
-      // Execute using alkanesExecuteWithStrings
-      const result = await provider.alkanesExecuteWithStrings(
-        toAddresses,
+      // Execute using alkanesExecuteTyped with SDK defaults:
+      // - fromAddresses: ['p2wpkh:0', 'p2tr:0'] (will find frBTC in Taproot)
+      // - changeAddress: 'p2wpkh:0' (BTC change -> SegWit)
+      // - alkanesChangeAddress: 'p2tr:0' (alkane change -> Taproot)
+      const result = await provider.alkanesExecuteTyped({
+        toAddresses: [recipientAddress],  // SegWit address for BTC output
         inputRequirements,
-        protostone,
-        unwrapData.feeRate,
-        undefined, // envelope_hex
-        options
-      );
+        protostones: protostone,
+        feeRate: unwrapData.feeRate,
+        autoConfirm: true,
+      });
 
       // Parse result
       const txId = result?.txid || result?.reveal_txid;
