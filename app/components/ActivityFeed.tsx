@@ -52,11 +52,11 @@ function PairIcon({
 }) {
   return (
     <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
+      <div className="absolute left-0 top-0 h-8 w-8 rounded-full bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
         {/* TokenIcon expects network via WalletContext, handled app-wide */}
         <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="md" />
       </div>
-      <div className="absolute right-0 top-0 h-8 w-8 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
+      <div className="absolute right-0 top-0 h-8 w-8 rounded-full bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
         <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="md" />
       </div>
     </div>
@@ -139,13 +139,13 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
   };
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
+      <div className="px-6 py-4 bg-white/1">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">Global Activity</h3>
             <select
-              className="rounded-md border border-[color:var(--sf-glass-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)]"
+              className="rounded-md bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)]"
               value={txFilter}
               onChange={(e) => setTxFilter(e.target.value as any)}
             >
@@ -170,10 +170,10 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
         </div>
       </div>
 
-      <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
+      <div className={`no-scrollbar overflow-auto bg-black/10 ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
         <div className="min-w-fit">
           {/* Header */}
-          <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)]">
+          <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">
             <div>Txn</div>
             <div>Pair</div>
             <div className="text-right">Amounts</div>
@@ -247,7 +247,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
+              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-white/3"
             >
               <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
