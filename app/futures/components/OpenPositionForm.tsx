@@ -260,7 +260,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
       {/* 2-Column Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Side: User Inputs */}
-        <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 space-y-6">
+        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md space-y-6">
           {/* Investment Amount */}
           <div className="space-y-3">
             <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
@@ -404,11 +404,11 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
         </div>
 
         {/* Right Side: Auto-calculated Values */}
-        <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 space-y-6">
+        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md space-y-6">
           {payoutMarkers.length > 0 ? (
             <>
               {/* Total Yield Card */}
-              <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-gradient-to-br from-[color:var(--sf-glass-bg)] to-[color:var(--sf-glass-bg)]/50 p-6 space-y-4">
+              <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Yield</div>
@@ -423,8 +423,8 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     </div>
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-glass-border)]">
+
+                <div className="grid grid-cols-3 gap-4 pt-4">
                   <div>
                     <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment (BTC)</div>
                     <div className="text-lg font-semibold text-[color:var(--sf-text)]">

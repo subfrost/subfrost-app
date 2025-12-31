@@ -85,7 +85,7 @@ export default function BalancesPanel() {
   return (
     <div className="space-y-6">
       {/* Bitcoin Balance */}
-      <div className="rounded-xl border border-[color:var(--sf-outline)] bg-gradient-to-br from-orange-500/10 to-orange-600/5 p-6">
+      <div className="rounded-xl bg-gradient-to-br from-orange-500/10 to-orange-600/5 p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-xl bg-orange-500/20 border border-orange-500/30">
@@ -194,7 +194,7 @@ export default function BalancesPanel() {
       {/* Token Assets - 2 column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Protorune Assets (like Alkanes) */}
-        <div className="rounded-xl border border-[color:var(--sf-outline)] bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-6">
+        <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
               <Coins size={24} className="text-blue-400" />
@@ -245,7 +245,7 @@ export default function BalancesPanel() {
         </div>
 
         {/* Inscription Assets (like BRC20) */}
-        <div className="rounded-xl border border-[color:var(--sf-outline)] bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-6">
+        <div className="rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
               <Coins size={24} className="text-purple-400" />

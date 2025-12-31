@@ -25,7 +25,7 @@ export default function BoostSection({ vault }: Props) {
 
   if (!vault.hasBoost) {
     return (
-      <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6">
+      <div className="rounded-2xl bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6">
         <div className="flex items-center gap-3 text-[color:var(--sf-text)]/60">
           <AlertCircle size={20} />
           <p className="text-sm font-medium">
@@ -80,7 +80,7 @@ export default function BoostSection({ vault }: Props) {
 
       {/* APY Comparison - Grid on mobile, split columns on md+ */}
       <div className="grid grid-cols-2 gap-4 md:contents">
-        <div className={`rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 md:col-start-1 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
+        <div className={`rounded-xl bg-[color:var(--sf-surface)]/60 p-4 md:col-start-1 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
           <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
             Est. Base APY
           </p>
@@ -102,7 +102,7 @@ export default function BoostSection({ vault }: Props) {
       </div>
 
       {/* Boost Stats - Will be in left column on md+ */}
-      <div className={`rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 ${isComingSoon ? 'md:row-start-4' : 'md:row-start-3'} ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`rounded-2xl bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 ${isComingSoon ? 'md:row-start-4' : 'md:row-start-3'} ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
@@ -188,7 +188,7 @@ export default function BoostSection({ vault }: Props) {
 
       {/* Positions List (if has multiple positions) - Will be in left column on md+ */}
       {vault.hasBoost && !isComingSoon && (
-        <div className="rounded-2xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4">
+        <div className="rounded-2xl bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-bold text-[color:var(--sf-text)]">
               Your Boosted Positions

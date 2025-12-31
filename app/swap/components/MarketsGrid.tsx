@@ -144,7 +144,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
               marketFilter === 'all'
                 ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
             }`}
           >
             All
@@ -154,7 +154,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
               marketFilter === 'btc'
                 ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
             }`}
           >
             BTC
@@ -164,7 +164,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
               marketFilter === 'usd'
                 ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
             }`}
           >
             USD
@@ -210,7 +210,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
 
       {/* Empty State */}
       {filteredPools.length === 0 && (
-        <div className="rounded-2xl border-2 border-dashed border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/50 backdrop-blur-sm p-12 text-center">
+        <div className="rounded-2xl bg-[color:var(--sf-surface)]/50 backdrop-blur-sm p-12 text-center">
           <svg className="mx-auto h-12 w-12 text-[color:var(--sf-text)]/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -231,8 +231,8 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
 
       {/* Desktop Table View */}
       {filteredPools.length > 0 && (
-        <div className="hidden md:block rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
-        <div className="px-4 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
+        <div className="hidden md:block rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+        <div className="px-4 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">Markets</h3>
             <div className="flex items-center gap-2 sm:gap-4">
@@ -286,7 +286,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
               <col className="w-[21%]" />
             </colgroup>
             <thead>
-              <tr className="border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
+              <tr className="border-b border-[color:var(--sf-row-border)]">
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
                 <th className="px-2 py-3 text-right">
                   <button
@@ -333,11 +333,11 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                 <SortableHeader label="APY" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-[color:var(--sf-glass-border)]">
+            <tbody>
               {displayedPools.map((pool) => (
                 <tr
                   key={pool.id}
-                  className={`transition-all hover:bg-[color:var(--sf-primary)]/10 cursor-pointer group ${
+                  className={`transition-all hover:bg-[color:var(--sf-primary)]/10 cursor-pointer group border-b border-[color:var(--sf-row-border)] ${
                     selectedPoolId === pool.id ? 'bg-[color:var(--sf-primary)]/5 border-l-4 border-l-[color:var(--sf-primary)]' : ''
                   }`}
                   onClick={() => handleSelectPool(pool)}
@@ -386,8 +386,8 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
           <button
             key={pool.id}
             onClick={() => handleSelectPool(pool)}
-            className={`text-left rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 focus:outline-none ${
-              selectedPoolId === pool.id ? 'ring-2 ring-[color:var(--sf-primary)] border-[color:var(--sf-primary)]' : ''
+            className={`text-left rounded-2xl bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none border-t border-[color:var(--sf-top-highlight)] ${
+              selectedPoolId === pool.id ? 'ring-2 ring-[color:var(--sf-primary)]' : ''
             }`}
           >
             <div className="flex items-center justify-between mb-3">

@@ -1,12 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 import { useInfiniteAmmTxHistory, AmmTransactionType } from '@/hooks/useAmmHistory';
 import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
+
+const TX_FILTER_OPTIONS: { value: AmmTransactionType | 'all'; label: string }[] = [
+  { value: 'all', label: 'All Types' },
+  { value: 'swap', label: 'Swaps' },
+  { value: 'mint', label: 'Supply' },
+  { value: 'burn', label: 'Withdraw' },
+  { value: 'creation', label: 'Create Pool' },
+  { value: 'wrap', label: 'Wrap' },
+  { value: 'unwrap', label: 'Unwrap' },
+];
 
 type AmmRow =
   | ({ type: 'swap'; soldAmount: string; boughtAmount: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; soldTokenBlockId: string; soldTokenTxId: string; boughtTokenBlockId: string; boughtTokenTxId: string; address?: string; sellerAddress?: string })
@@ -52,11 +63,11 @@ function PairIcon({
 }) {
   return (
     <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 h-8 w-8 rounded-full bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
+      <div className="absolute left-0 top-0 h-8 w-8 rounded-full bg-transparent flex items-center justify-center overflow-hidden">
         {/* TokenIcon expects network via WalletContext, handled app-wide */}
         <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="md" />
       </div>
-      <div className="absolute right-0 top-0 h-8 w-8 rounded-full bg-[color:var(--sf-primary)]/5 flex items-center justify-center overflow-hidden">
+      <div className="absolute right-0 top-0 h-8 w-8 rounded-full bg-transparent flex items-center justify-center overflow-hidden">
         <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="md" />
       </div>
     </div>
@@ -77,6 +88,8 @@ const MAINNET_WHITELISTED_POOL_IDS = new Set([
 export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { isFullPage?: boolean; maxHeightClass?: string }) {
   const { network } = useWallet();
   const [txFilter, setTxFilter] = useState<AmmTransactionType | 'all'>('all');
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
   const {
     data,
     isFetchingNextPage,
@@ -132,6 +145,25 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
     return () => obs.disconnect();
   }, [hasNextPage, fetchNextPage]);
 
+  // Close filter dropdown on click outside
+  useEffect(() => {
+    if (!filterDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+        setFilterDropdownOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFilterDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [filterDropdownOpen]);
+
   const getName = (id: string | undefined) => {
     if (!id) return '';
     const d = displayMap?.[id];
@@ -139,24 +171,42 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
   };
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
-      <div className="px-6 py-4 bg-white/1">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">Global Activity</h3>
-            <select
-              className="rounded-md bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)]"
-              value={txFilter}
-              onChange={(e) => setTxFilter(e.target.value as any)}
-            >
-              <option value="all">All Types</option>
-              <option value="swap">Swaps</option>
-              <option value="mint">Supply</option>
-              <option value="burn">Withdraw</option>
-              <option value="creation">Create Pool</option>
-              <option value="wrap">Wrap</option>
-              <option value="unwrap">Unwrap</option>
-            </select>
+            <div className="relative" ref={filterDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setFilterDropdownOpen((v) => !v)}
+                className="flex items-center gap-1 rounded-md bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-colors"
+              >
+                {TX_FILTER_OPTIONS.find((o) => o.value === txFilter)?.label ?? 'All Types'}
+                <ChevronDown size={14} className={`transition-transform ${filterDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {filterDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-36 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                  {TX_FILTER_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setTxFilter(option.value);
+                        setFilterDropdownOpen(false);
+                      }}
+                      className={`w-full px-4 py-1.5 text-left text-sm font-medium transition-colors ${
+                        txFilter === option.value
+                          ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                          : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           {!isFullPage ? (
             <Link href="/activity" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors">
@@ -170,17 +220,17 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
         </div>
       </div>
 
-      <div className={`no-scrollbar overflow-auto bg-black/10 ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
-        <div className="min-w-fit">
-          {/* Header */}
-          <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">
-            <div>Txn</div>
-            <div>Pair</div>
-            <div className="text-right">Amounts</div>
-            <div className="text-right">Address</div>
-            <div className="text-right">Time</div>
-          </div>
+      {/* Column Headers */}
+      <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+        <div>Txn</div>
+        <div>Pair</div>
+        <div className="text-right">Amounts</div>
+        <div className="text-right">Address</div>
+        <div className="text-right">Time</div>
+      </div>
 
+      <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
+        <div className="min-w-fit">
           {/* Rows */}
           {items.map((row, idx) => {
           const time = new Date(row.timestamp);
@@ -247,7 +297,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-white/3"
+              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
             >
               <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
@@ -311,8 +361,8 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 )}
               </div>
 
-              <div className="truncate text-right text-[10px] text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
-              <div className="text-right text-[10px] text-[color:var(--sf-text)]/60">
+              <div className="truncate text-right text-sm text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
+              <div className="text-right text-sm text-[color:var(--sf-text)]/60">
                 {/* Desktop: single line */}
                 <span className="hidden lg:inline">{timeLabel}</span>
                 {/* Mobile/tablet: two lines */}

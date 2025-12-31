@@ -116,7 +116,7 @@ export default function LiquidityInputs({
         {liquidityMode === 'remove' ? (
         /* Remove Mode: LP Position Selector */
         <>
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select LP Position to Remove
             </span>
@@ -135,7 +135,7 @@ export default function LiquidityInputs({
           {/* Remove Amount Input */}
           {selectedLPPosition && (
             <>
-              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
+              <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
                 <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
                 <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
                   <div className="flex flex-col gap-2">
@@ -236,7 +236,7 @@ export default function LiquidityInputs({
         /* Provide Mode: Token Pair Selection */
         <>
           {/* Select Pair Panel */}
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select Pair to Provide
             </span>
@@ -302,9 +302,9 @@ export default function LiquidityInputs({
             <>
               <div className="relative z-20 grid grid-cols-2 gap-3">
             {/* Token 0 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
-                <TokenIcon 
+                <TokenIcon
                   symbol={token0.symbol} 
                   id={token0.id} 
                   iconUrl={token0.iconUrl} 
@@ -320,9 +320,9 @@ export default function LiquidityInputs({
             </div>
 
             {/* Token 1 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
-                <TokenIcon 
+                <TokenIcon
                   symbol={token1.symbol} 
                   id={token1.id} 
                   iconUrl={token1.iconUrl} 

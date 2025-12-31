@@ -44,6 +44,9 @@ body {
   /* Glass variables (dark frosted glass effect) */
   --sf-glass-bg: rgba(15, 28, 48, 0.85);
   --sf-glass-border: rgba(91, 156, 255, 0.15);
+  --sf-dropdown-bg: #152238;
+  --sf-row-border: rgba(255, 255, 255, 0.04);
+  --sf-top-highlight: rgba(255, 255, 255, 0.08);
 
   /* Settings modal */
   --sf-settings-section-bg: #152238;
@@ -117,6 +120,11 @@ body {
   /* Glass variables (soft white/blue tint) */
   --sf-glass-bg: rgba(240, 247, 255, 0.82);
   --sf-glass-border: rgba(255, 255, 255, 0.55);
+  --sf-panel-bg: rgba(255, 255, 255, 0.5);
+  --sf-list-hover-bg: rgba(255, 255, 255, 0.8);
+  --sf-dropdown-bg: #FFFFFF;
+  --sf-row-border: rgba(200, 210, 230, 0.25);
+  --sf-top-highlight: transparent;
 
   /* Settings modal - white sections in light mode */
   --sf-settings-section-bg: #FFFFFF;
@@ -188,6 +196,8 @@ body {
 
   --sf-glass-bg: rgba(15, 28, 48, 0.85);
   --sf-glass-border: rgba(91, 156, 255, 0.15);
+  --sf-panel-bg: rgba(255, 255, 255, 0.03);
+  --sf-list-hover-bg: rgba(91, 156, 255, 0.1);
 
   /* Settings modal - dark sections in dark mode */
   --sf-settings-section-bg: #152238;

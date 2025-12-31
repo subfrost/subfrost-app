@@ -97,7 +97,7 @@ export default function VaultHero({
   
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
-    <div className="relative overflow-hidden rounded-2xl p-6 shadow-lg w-full h-full flex flex-col border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl text-[color:var(--sf-text)]">
+    <div className="relative overflow-hidden rounded-2xl p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] w-full h-full flex flex-col bg-[color:var(--sf-glass-bg)] backdrop-blur-md text-[color:var(--sf-text)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Falling Snowflakes Animation */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <FallingSnowflakes />

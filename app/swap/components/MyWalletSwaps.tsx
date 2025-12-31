@@ -42,10 +42,10 @@ function PairIcon({
 }) {
   return (
     <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
+      <div className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-transparent">
         <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="lg" />
       </div>
-      <div className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
+      <div className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-transparent">
         <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="lg" />
       </div>
     </div>
@@ -111,8 +111,8 @@ export default function MyWalletSwaps() {
   const hasScrollbar = items.length > 3;
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)] flex flex-col">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
         <h3 className="text-base font-bold text-[color:var(--sf-text)]">My Wallet Swaps</h3>
       </div>
 
@@ -130,7 +130,7 @@ export default function MyWalletSwaps() {
             }}
           >
         {/* Header */}
-        <div className="grid grid-cols-[220px_1fr_minmax(100px,150px)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] sticky top-0">
+        <div className="grid grid-cols-[220px_1fr_minmax(100px,150px)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)] sticky top-0">
           <div>Pair</div>
           <div className="text-right">Amounts</div>
           <div className="text-right">Time</div>
@@ -177,7 +177,7 @@ export default function MyWalletSwaps() {
                   href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="grid grid-cols-[220px_1fr_minmax(100px,150px)] items-center gap-4 px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
+                  className="grid grid-cols-[220px_1fr_minmax(100px,150px)] items-center gap-4 px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)] last:border-b-0"
                 >
                   <div className="flex items-center gap-3">
                     <PairIcon

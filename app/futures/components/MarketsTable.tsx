@@ -57,9 +57,9 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
   const filteredContracts = contracts;
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Header */}
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <h3 className="text-base font-bold text-[color:var(--sf-text)]">Active Unlockable Positions</h3>
       </div>
 
@@ -67,7 +67,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
       <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[color:var(--sf-glass-border)]">
+              <tr className="border-b border-[color:var(--sf-row-border)]">
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Contract
                 </th>
@@ -94,7 +94,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 const rows = [
                   <tr
                     key={contract.id}
-                    className="border-b border-[color:var(--sf-glass-border)] hover:bg-[color:var(--sf-primary)]/10 transition-colors cursor-pointer"
+                    className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-colors cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
                     <td className="px-6 py-4">

@@ -37,7 +37,7 @@ export default function VaultActionPanel({
   const showStakeUnstake = mode === 'stake' || mode === 'unstake';
 
   return (
-    <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm sticky top-4">
+    <div className="rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm sticky top-4">
       <h3 className="text-xl font-bold text-[color:var(--sf-text)] mb-6">{title}</h3>
 
       {/* Mode Tabs */}
