@@ -19,6 +19,8 @@ const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
   { id: 'frUSD', symbol: 'frUSD' },
   { id: 'zec_empty', symbol: 'frZEC' },
   { id: 'ordi', symbol: 'ORDI' },
+  { id: '4:8193', symbol: 'USDC' },
+  { id: '4:8194', symbol: 'USDT' },
 ];
 
 // Get the corresponding vault for an input token
@@ -32,6 +34,8 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
     'frUSD': 've-usd',     // frUSD -> veUSD
     'zec_empty': 've-zec', // frZEC -> veZEC
     'ordi': 've-ordi',     // ORDI -> veORDI
+    '4:8193': 'curve-usdc', // USDC -> Curve USDC LP vault
+    '4:8194': 'curve-usdt', // USDT -> Curve USDT LP vault
   };
   
   const vaultId = tokenToVaultMap[tokenId];
@@ -51,6 +55,8 @@ const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol:
     'veZEC': { id: 'zec_empty', symbol: 'frZEC' },
     'yvfrBTC': { id: '32:0', symbol: 'frBTC' },
     'veORDI': { id: 'ordi', symbol: 'ORDI' },
+    'yvUSDC': { id: '4:8193', symbol: 'USDC' },
+    'yvUSDT': { id: '4:8194', symbol: 'USDT' },
   };
   
   return defaultInputMap[vault.outputAsset] || { id: vault.tokenId, symbol: vault.inputAsset };

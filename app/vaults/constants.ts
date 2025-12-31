@@ -155,4 +155,36 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     boostTokenName: 'Staked ZEC Gauge',
     boostMultiplier: 1.5,
   },
+  {
+    id: 'curve-usdc',
+    name: 'USDC Curve LP Vault',
+    description: 'Earn yield on USDC via Curve tricrypto2 LP',
+    tokenId: '4:8193', // USDC peg alkane (to be deployed)
+    tokenSymbol: 'USDC',
+    iconPath: '/tokens/usdc.svg',
+    contractAddress: '4:8193', // Same as tokenId for now
+    badge: 'Curve LP',
+    type: 'unit-vault',
+    inputAsset: 'USDC',
+    outputAsset: 'yvUSDC',
+    estimatedApy: '8.5',
+    riskLevel: 'low',
+    hasBoost: false,
+  },
+  {
+    id: 'curve-usdt',
+    name: 'USDT Curve LP Vault',
+    description: 'Earn yield on USDT via Curve tricrypto2 LP',
+    tokenId: '4:8194', // USDT peg alkane (to be deployed)
+    tokenSymbol: 'USDT',
+    iconPath: '/tokens/usdt.svg',
+    contractAddress: '4:8194', // Same as tokenId for now
+    badge: 'Curve LP',
+    type: 'unit-vault',
+    inputAsset: 'USDT',
+    outputAsset: 'yvUSDT',
+    estimatedApy: '8.2',
+    riskLevel: 'low',
+    hasBoost: false,
+  },
 ];

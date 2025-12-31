@@ -184,7 +184,7 @@ export default function SwapShell() {
 
   // Wallet/config
   const { address, network } = useWallet();
-  const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
+  const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID, USDT_ALKANE_ID, USDC_ALKANE_ID } = getConfig(network);
 
   // User tokens (for FROM selector)
   const { data: userCurrencies = [], isFetching: isFetchingUserCurrencies } = useSellableCurrencies(address);
@@ -250,6 +250,8 @@ export default function SwapShell() {
       '2:25720',   // ALKAMIST
       '2:35275',   // GOLD DUST
       '2:0',       // DIESEL
+      '4:8193',    // USDC (cross-chain)
+      '4:8194',    // USDT (cross-chain)
     ]);
   }, [network]);
 
@@ -278,6 +280,26 @@ export default function SwapShell() {
         isAvailable: true
       });
       seen.add(FRBTC_ALKANE_ID);
+    }
+
+    // Add USDC and USDT as cross-chain swap options
+    if (whitelistedTokenIds === null || whitelistedTokenIds.has('4:8193')) {
+      opts.push({
+        id: '4:8193',
+        symbol: 'USDC',
+        name: 'USD Coin',
+        isAvailable: true
+      });
+      seen.add('4:8193');
+    }
+    if (whitelistedTokenIds === null || whitelistedTokenIds.has('4:8194')) {
+      opts.push({
+        id: '4:8194',
+        symbol: 'USDT',
+        name: 'Tether USD',
+        isAvailable: true
+      });
+      seen.add('4:8194');
     }
 
     // Add whitelisted tokens from pool data (null = allow all)
@@ -320,6 +342,26 @@ export default function SwapShell() {
         isAvailable: true
       });
       seen.add(FRBTC_ALKANE_ID);
+    }
+
+    // Add USDC and USDT as cross-chain swap options (excluding FROM token)
+    if ((whitelistedTokenIds === null || whitelistedTokenIds.has('4:8193')) && fromId !== '4:8193') {
+      opts.push({
+        id: '4:8193',
+        symbol: 'USDC',
+        name: 'USD Coin',
+        isAvailable: true
+      });
+      seen.add('4:8193');
+    }
+    if ((whitelistedTokenIds === null || whitelistedTokenIds.has('4:8194')) && fromId !== '4:8194') {
+      opts.push({
+        id: '4:8194',
+        symbol: 'USDT',
+        name: 'Tether USD',
+        isAvailable: true
+      });
+      seen.add('4:8194');
     }
 
     // Add whitelisted tokens from pool data (excluding FROM token, null = allow all)
@@ -426,8 +468,14 @@ export default function SwapShell() {
       return btcPrice;
     }
 
-    // For bUSD and USDT, assume $1
-    if (tokenId === BUSD_ALKANE_ID || tokenId === 'usdt') {
+    // For stablecoins (bUSD, USDT, USDC), assume $1
+    if (
+      tokenId === BUSD_ALKANE_ID ||
+      tokenId === USDT_ALKANE_ID ||
+      tokenId === USDC_ALKANE_ID ||
+      tokenId === 'usdt' ||
+      tokenId === 'usdc'
+    ) {
       return 1.0;
     }
 

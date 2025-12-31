@@ -161,6 +161,9 @@ export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decima
   '2:68441': { symbol: 'DIESEL/bUSD LP', name: 'DIESEL/bUSD LP Token', decimals: 8 },
   '2:77087': { symbol: 'DIESEL/frBTC LP', name: 'DIESEL/frBTC LP Token', decimals: 8 },
   // Note: frBTC is always 32:0 on all networks
+  // ERC20 peg tokens (regtest - Curve LP vaults)
+  '4:8193': { symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+  '4:8194': { symbol: 'USDT', name: 'Tether USD', decimals: 6 },
 };
 
 /**
@@ -269,7 +272,30 @@ export const MAINNET_POOLS: Record<string, PoolConfig> = {
 
 /** Pool configurations - regtest (extend as needed) */
 export const REGTEST_POOLS: Record<string, PoolConfig> = {
-  // Add regtest pool configs here when available
+  // USDT/frBTC pool for USDT -> BTC swaps
+  USDT_FRBTC: {
+    id: '4:8195', // Pool alkane ID (to be deployed)
+    key: 'USDT_FRBTC',
+    name: 'USDT/frBTC',
+    token0Symbol: 'USDT',
+    token1Symbol: 'frBTC',
+    token0Decimals: 6,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(4, 8195),
+    alkaneId: { block: 4, tx: 8195 },
+  },
+  // USDC/frBTC pool for USDC -> BTC swaps
+  USDC_FRBTC: {
+    id: '4:8196', // Pool alkane ID (to be deployed)
+    key: 'USDC_FRBTC',
+    name: 'USDC/frBTC',
+    token0Symbol: 'USDC',
+    token1Symbol: 'frBTC',
+    token0Decimals: 6,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(4, 8196),
+    alkaneId: { block: 4, tx: 8196 },
+  },
 };
 
 /** Get pools for specified network (or current network if not specified) */

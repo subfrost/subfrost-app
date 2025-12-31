@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
@@ -8,6 +8,7 @@ import { useWallet } from "@/context/WalletContext";
 import { useModalStore } from "@/stores/modals";
 import { ChevronDown } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
+import { useCrossChainSwapMutation, CROSS_CHAIN_TOKENS } from "@/hooks/useCrossChainSwapMutation";
 
 type BridgeStep = 1 | 2 | 3 | 4 | 5;
 
@@ -60,14 +61,18 @@ export default function SwapInputs({
 }: Props) {
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { openTokenSelector } = useModalStore();
+  const crossChainSwap = useCrossChainSwapMutation();
 
   // Bridge state
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState<BridgeStep>(1);
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
+  const [swapTxHash, setSwapTxHash] = useState<string | undefined>();
+  const [swapError, setSwapError] = useState<string | null>(null);
+  const swapExecutedRef = useRef(false);
 
-  // Bridge tokens don't have on-chain balances
-  const BRIDGE_TOKEN_IDS = ['usdt', 'eth', 'sol', 'zec'];
+  // Bridge tokens - includes both lowercase symbols and alkane IDs
+  const BRIDGE_TOKEN_IDS = ['usdt', 'usdc', 'eth', 'sol', 'zec', '4:8193', '4:8194'];
   const isFromBridgeToken = from?.id ? BRIDGE_TOKEN_IDS.includes(from.id) : false;
   const isToBridgeToken = to?.id ? BRIDGE_TOKEN_IDS.includes(to.id) : false;
 
@@ -111,43 +116,92 @@ export default function SwapInputs({
     setBridgeActive(false);
     setBridgeStep(1);
     setCompletedSteps([]);
+    setSwapTxHash(undefined);
+    setSwapError(null);
+    swapExecutedRef.current = false;
   }, [from?.id, to?.id]);
 
-  // Demo: simulate step progression for testing (remove in production)
+  // Execute the cross-chain swap when we reach step 3
+  const executeCrossChainSwap = useCallback(async () => {
+    if (!from || !fromAmount || swapExecutedRef.current) return;
+
+    swapExecutedRef.current = true;
+    setSwapError(null);
+
+    try {
+      // Determine token type based on from token
+      const tokenSymbol = from.symbol.toUpperCase() as 'USDT' | 'USDC';
+      const tokenConfig = CROSS_CHAIN_TOKENS[tokenSymbol];
+
+      if (!tokenConfig) {
+        throw new Error(`Unknown bridge token: ${from.symbol}`);
+      }
+
+      console.log('[SwapInputs] Executing cross-chain swap:', {
+        fromToken: tokenSymbol,
+        fromTokenId: tokenConfig.alkaneId,
+        amount: fromAmount,
+      });
+
+      const result = await crossChainSwap.mutateAsync({
+        fromToken: tokenSymbol,
+        fromTokenId: tokenConfig.alkaneId,
+        toToken: 'BTC',
+        amount: fromAmount,
+        maxSlippage: '0.5',
+        feeRate: 10,
+        deadlineBlocks: 3,
+      });
+
+      console.log('[SwapInputs] Cross-chain swap result:', result);
+
+      if (result.success && result.swapTransactionId) {
+        setSwapTxHash(result.swapTransactionId);
+        // Move to step 4 (Sending)
+        setCompletedSteps([1, 2, 3]);
+        setBridgeStep(4);
+
+        // After a short delay, move to step 5 (Sent!)
+        setTimeout(() => {
+          setCompletedSteps([1, 2, 3, 4]);
+          setBridgeStep(5);
+          setTimeout(() => {
+            setCompletedSteps([1, 2, 3, 4, 5]);
+          }, 2000);
+        }, 3000);
+      }
+    } catch (error: any) {
+      console.error('[SwapInputs] Cross-chain swap failed:', error);
+      setSwapError(error.message || 'Swap failed');
+      // Keep at step 3 to show error, but allow retry
+      swapExecutedRef.current = false;
+    }
+  }, [from, fromAmount, crossChainSwap]);
+
+  // Bridge step progression with actual swap execution
   useEffect(() => {
     if (!bridgeActive) return;
 
     const stepTimers: NodeJS.Timeout[] = [];
 
-    // Simulate step progression for demo purposes
+    // Step 1→2: Simulate deposit detection (in production, this would be from a backend)
     stepTimers.push(setTimeout(() => {
       setCompletedSteps([1]);
       setBridgeStep(2);
     }, 5000));
 
+    // Step 2→3: Simulate confirmation and start swap
     stepTimers.push(setTimeout(() => {
       setCompletedSteps([1, 2]);
       setBridgeStep(3);
+      // Execute the actual swap when we reach step 3
+      executeCrossChainSwap();
     }, 10000));
-
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1, 2, 3]);
-      setBridgeStep(4);
-    }, 15000));
-
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1, 2, 3, 4]);
-      setBridgeStep(5);
-    }, 20000));
-
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1, 2, 3, 4, 5]);
-    }, 22000));
 
     return () => {
       stepTimers.forEach(clearTimeout);
     };
-  }, [bridgeActive]);
+  }, [bridgeActive, executeCrossChainSwap]);
 
   // Calculate balance usage percentage
   const calculateBalanceUsage = (): number => {
@@ -407,7 +461,27 @@ export default function SwapInputs({
         depositAddress={DEPOSIT_ADDRESS}
         currentStep={bridgeStep}
         completedSteps={completedSteps}
+        transactionHash={swapTxHash}
       />
+
+      {/* Error display for cross-chain swap */}
+      {swapError && bridgeActive && (
+        <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+          <p className="text-sm text-red-500 font-medium">
+            Swap Error: {swapError}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSwapError(null);
+              executeCrossChainSwap();
+            }}
+            className="mt-2 text-xs font-bold text-red-500 underline hover:no-underline"
+          >
+            Retry Swap
+          </button>
+        </div>
+      )}
 
       {/* CTA Button - slides down when bridge is active */}
       <div

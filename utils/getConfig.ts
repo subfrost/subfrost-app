@@ -31,6 +31,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0', // frBTC (hardcoded in indexer)
+        USDC_ALKANE_ID: '4:8193', // USDC peg alkane for Curve LP vault
+        USDT_ALKANE_ID: '4:8194', // USDT peg alkane for Curve LP vault
         OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'http://localhost:18888',
         API_URL: 'https://regtest.subfrost.io/v4/subfrost',
         BLOCK_EXPLORER_URL_BTC: 'http://localhost:50010',

@@ -118,6 +118,12 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
         console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
 
+        // Expose provider to window for debugging/deployment scripts
+        if (typeof window !== 'undefined') {
+          (window as any).__ALKANES_PROVIDER__ = providerInstance;
+          console.log('[AlkanesSDK] Provider exposed as window.__ALKANES_PROVIDER__');
+        }
+
         setProvider(providerInstance);
         setIsInitialized(true);
       } catch (error) {

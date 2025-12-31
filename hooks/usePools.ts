@@ -38,6 +38,8 @@ export type PoolsListItem = {
 
 // Token IDs for TVL calculation
 const FRBTC_TOKEN_ID = '32:0';
+const USDT_TOKEN_ID = '4:8194';
+const USDC_TOKEN_ID = '4:8193';
 
 /**
  * Calculate TVL in USD from pool reserves
@@ -58,22 +60,28 @@ function calculateTvlFromReserves(
   const decimals = 8;
   const token1Value = Number(token1Amount) / Math.pow(10, decimals);
 
+  // Helper to check if a token is a stablecoin ($1)
+  const isStablecoin = (tokenId: string) =>
+    tokenId === busdTokenId || tokenId === USDT_TOKEN_ID || tokenId === USDC_TOKEN_ID;
+
   // Find the USD price of token1 (the quote token)
-  // frBTC (32:0) = BTC price, bUSD = $1
+  // frBTC (32:0) = BTC price, stablecoins (bUSD, USDT, USDC) = $1
   let token1PriceUsd = 0;
   if (token1Id === FRBTC_TOKEN_ID && btcPrice) {
     token1PriceUsd = btcPrice;
-  } else if (token1Id === busdTokenId) {
-    token1PriceUsd = 1; // $1 per bUSD
+  } else if (isStablecoin(token1Id)) {
+    token1PriceUsd = 1; // $1 per stablecoin
   } else if (token0Id === FRBTC_TOKEN_ID && btcPrice) {
     // If token0 is the known token, derive token1's price from reserves
     // For now, just use the 50/50 assumption
     const token0Value = Number(_token0Amount) / Math.pow(10, decimals);
     const token0TvlUsd = token0Value * btcPrice;
     return { tvlUsd: token0TvlUsd * 2, token0TvlUsd, token1TvlUsd: token0TvlUsd };
-  } else if (token0Id === busdTokenId) {
-    const token0Value = Number(_token0Amount) / Math.pow(10, decimals);
-    const token0TvlUsd = token0Value; // $1 per bUSD
+  } else if (isStablecoin(token0Id)) {
+    // Handle stablecoins (bUSD, USDT, USDC) with 6 decimals for USDT/USDC
+    const stablecoinDecimals = (token0Id === USDT_TOKEN_ID || token0Id === USDC_TOKEN_ID) ? 6 : 8;
+    const token0Value = Number(_token0Amount) / Math.pow(10, stablecoinDecimals);
+    const token0TvlUsd = token0Value; // $1 per stablecoin
     return { tvlUsd: token0TvlUsd * 2, token0TvlUsd, token1TvlUsd: token0TvlUsd };
   }
 
