@@ -330,6 +330,13 @@ body {
   opacity: 0.9;
 }
 
+/* Light theme snowflakes (brighter white for light backgrounds) */
+[data-theme="light"] .sf-snow,
+[data-theme="light"] .sf-snow::before,
+[data-theme="light"] .sf-snow::after {
+  background-image: url('/background/snowflakes-bg-light.svg');
+}
+
 /* Light theme stars (white for light backgrounds) */
 [data-theme="light"] .sf-stars {
   background:
