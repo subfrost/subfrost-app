@@ -1,9 +1,10 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Asynchronously encrypts data using the Web Crypto API.
+ * Initialize the panic hook for better error messages in WASM
+ * This should be called early in your application
  */
-export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
+export function init_panic_hook(): void;
 export function analyze_psbt(psbt_base64: string, network_str: string): string;
 export function simulate_alkane_call(alkane_id_str: string, wasm_hex: string, cellpack_hex: string): Promise<any>;
 export function get_alkane_bytecode(network: string, block: number, tx: number, block_tag: string): Promise<any>;
@@ -62,6 +63,218 @@ export function analyze_runestone(tx_hex: string): string;
  * ```
  */
 export function decode_psbt(psbt_base64: string): string;
+/**
+ * Deploy a BRC20-prog contract from Foundry JSON
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ * * `foundry_json` - Foundry build JSON as string containing contract bytecode
+ * * `params_json` - JSON string with execution parameters:
+ *   ```json
+ *   {
+ *     "from_addresses": ["address1", "address2"],  // optional
+ *     "change_address": "address",                  // optional
+ *     "fee_rate": 100.0,                            // optional, sat/vB
+ *     "use_activation": false,                      // optional, use 3-tx pattern
+ *     "use_slipstream": false,                      // optional
+ *     "use_rebar": false,                           // optional
+ *     "rebar_tier": 1,                              // optional (1 or 2)
+ *     "resume_from_commit": "txid"                  // optional, auto-detects commit/reveal
+ *   }
+ *   ```
+ *
+ * # Returns
+ *
+ * A JSON string containing:
+ * - `commit_txid`: Commit transaction ID
+ * - `reveal_txid`: Reveal transaction ID
+ * - `activation_txid`: Activation transaction ID (if use_activation=true)
+ * - `commit_fee`: Commit fee in sats
+ * - `reveal_fee`: Reveal fee in sats
+ * - `activation_fee`: Activation fee in sats (if applicable)
+ *
+ * # Example
+ *
+ * ```javascript
+ * const result = await brc20_prog_deploy_contract(
+ *   "regtest",
+ *   foundryJson,
+ *   JSON.stringify({ fee_rate: 100, use_activation: false })
+ * );
+ * const data = JSON.parse(result);
+ * console.log(`Deployed! Commit: ${data.commit_txid}, Reveal: ${data.reveal_txid}`);
+ * ```
+ */
+export function brc20_prog_deploy_contract(network: string, foundry_json: string, params_json: string): Promise<any>;
+/**
+ * Call a BRC20-prog contract function (transact)
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ * * `contract_address` - Contract address to call (0x-prefixed hex)
+ * * `function_signature` - Function signature (e.g., "transfer(address,uint256)")
+ * * `calldata` - Comma-separated calldata arguments
+ * * `params_json` - JSON string with execution parameters (same as deploy_contract)
+ *
+ * # Returns
+ *
+ * A JSON string with transaction details (same format as deploy_contract)
+ *
+ * # Example
+ *
+ * ```javascript
+ * const result = await brc20_prog_transact(
+ *   "regtest",
+ *   "0x1234567890abcdef1234567890abcdef12345678",
+ *   "transfer(address,uint256)",
+ *   "0xrecipient,1000",
+ *   JSON.stringify({ fee_rate: 100 })
+ * );
+ * const data = JSON.parse(result);
+ * console.log(`Transaction sent! Commit: ${data.commit_txid}`);
+ * ```
+ */
+export function brc20_prog_transact(network: string, contract_address: string, function_signature: string, calldata: string, params_json: string): Promise<any>;
+/**
+ * Wrap BTC into frBTC and execute a contract call in one transaction
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ * * `amount` - Amount of BTC to wrap (in satoshis)
+ * * `target_contract` - Target contract address for wrapAndExecute2
+ * * `function_signature` - Function signature for the target contract call
+ * * `calldata` - Comma-separated calldata arguments for the target function
+ * * `params_json` - JSON string with execution parameters:
+ *   ```json
+ *   {
+ *     "from_addresses": ["address1", "address2"],  // optional
+ *     "change_address": "address",                  // optional
+ *     "fee_rate": 100.0                             // optional, sat/vB
+ *   }
+ *   ```
+ *
+ * # Returns
+ *
+ * A JSON string with transaction details
+ *
+ * # Example
+ *
+ * ```javascript
+ * const result = await brc20_prog_wrap_btc(
+ *   "regtest",
+ *   100000,  // 100k sats
+ *   "0xtargetContract",
+ *   "someFunction(uint256)",
+ *   "42",
+ *   JSON.stringify({ fee_rate: 100 })
+ * );
+ * const data = JSON.parse(result);
+ * console.log(`frBTC wrapped! Reveal: ${data.reveal_txid}`);
+ * ```
+ */
+export function brc20_prog_wrap_btc(network: string, amount: bigint, target_contract: string, function_signature: string, calldata: string, params_json: string): Promise<any>;
+/**
+ * Simple wrap: convert BTC to frBTC without executing any contract
+ *
+ * This calls the wrap() function on the FrBTC contract.
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ * * `amount` - Amount of BTC to wrap (in satoshis)
+ * * `params_json` - JSON string with execution parameters:
+ *   ```json
+ *   {
+ *     "from_addresses": ["address1", "address2"],  // optional
+ *     "change_address": "address",                  // optional
+ *     "fee_rate": 100.0                             // optional, sat/vB
+ *   }
+ *   ```
+ *
+ * # Returns
+ *
+ * A JSON string with transaction details
+ */
+export function frbtc_wrap(network: string, amount: bigint, params_json: string): Promise<any>;
+/**
+ * Unwrap frBTC to BTC
+ *
+ * This calls unwrap2() on the FrBTC contract to burn frBTC and queue a BTC payment.
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ * * `amount` - Amount of frBTC to unwrap (in satoshis)
+ * * `vout` - Vout index for the inscription output
+ * * `recipient_address` - Bitcoin address to receive the unwrapped BTC
+ * * `params_json` - JSON string with execution parameters
+ *
+ * # Returns
+ *
+ * A JSON string with transaction details
+ */
+export function frbtc_unwrap(network: string, amount: bigint, vout: bigint, recipient_address: string, params_json: string): Promise<any>;
+/**
+ * Wrap BTC and deploy+execute a script (wrapAndExecute)
+ *
+ * This calls wrapAndExecute() on the FrBTC contract.
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ * * `amount` - Amount of BTC to wrap (in satoshis)
+ * * `script_bytecode` - Script bytecode to deploy and execute (hex-encoded)
+ * * `params_json` - JSON string with execution parameters
+ *
+ * # Returns
+ *
+ * A JSON string with transaction details
+ */
+export function frbtc_wrap_and_execute(network: string, amount: bigint, script_bytecode: string, params_json: string): Promise<any>;
+/**
+ * Wrap BTC and call an existing contract (wrapAndExecute2)
+ *
+ * This calls wrapAndExecute2() on the FrBTC contract.
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ * * `amount` - Amount of BTC to wrap (in satoshis)
+ * * `target_address` - Target contract address
+ * * `function_signature` - Function signature (e.g., "deposit()")
+ * * `calldata_args` - Comma-separated calldata arguments
+ * * `params_json` - JSON string with execution parameters
+ *
+ * # Returns
+ *
+ * A JSON string with transaction details
+ */
+export function frbtc_wrap_and_execute2(network: string, amount: bigint, target_address: string, function_signature: string, calldata_args: string, params_json: string): Promise<any>;
+/**
+ * Get the FrBTC signer address for a network
+ *
+ * This calls getSignerAddress() on the FrBTC contract to get the p2tr address
+ * where BTC should be sent for wrapping.
+ *
+ * # Arguments
+ *
+ * * `network` - Network to use ("mainnet", "testnet", "signet", "regtest")
+ *
+ * # Returns
+ *
+ * A JSON string containing:
+ * - `network`: The network name
+ * - `frbtc_contract`: The FrBTC contract address
+ * - `signer_address`: The Bitcoin p2tr address for the signer
+ */
+export function frbtc_get_signer_address(network: string): Promise<any>;
+/**
+ * Asynchronously encrypts data using the Web Crypto API.
+ */
+export function encryptMnemonic(mnemonic: string, passphrase: string): Promise<any>;
 export interface PoolWithDetails {
     pool_id_block: number;
     pool_id_tx: number;
@@ -253,6 +466,14 @@ export class WebProvider {
   ordInscriptions(page?: number | null): Promise<any>;
   ordOutputs(address: string): Promise<any>;
   ordRune(rune: string): Promise<any>;
+  ordAddressInfo(address: string): Promise<any>;
+  ordBlockInfo(query: string): Promise<any>;
+  ordBlockCount(): Promise<any>;
+  ordBlocks(): Promise<any>;
+  ordChildren(inscription_id: string, page?: number | null): Promise<any>;
+  ordContent(inscription_id: string): Promise<any>;
+  ordParents(inscription_id: string, page?: number | null): Promise<any>;
+  ordTxInfo(txid: string): Promise<any>;
   /**
    * Execute an alkanes smart contract
    */
@@ -272,6 +493,17 @@ export class WebProvider {
    */
   alkanesExecuteWithStrings(to_addresses_json: string, input_requirements: string, protostones: string, fee_rate?: number | null, envelope_hex?: string | null, options_json?: string | null): Promise<any>;
   /**
+   * Execute an alkanes smart contract fully (handles complete flow internally)
+   *
+   * This method handles the complete execution flow:
+   * - For deployments (with envelope): commit -> reveal -> mine -> trace
+   * - For simple transactions: sign -> broadcast -> mine -> trace
+   *
+   * Returns the final EnhancedExecuteResult directly, avoiding serialization issues
+   * with intermediate states.
+   */
+  alkanesExecuteFull(to_addresses_json: string, input_requirements: string, protostones: string, fee_rate?: number | null, envelope_hex?: string | null, options_json?: string | null): Promise<any>;
+  /**
    * Resume execution after user confirmation (for simple transactions)
    */
   alkanesResumeExecution(state_json: string, params_json: string): Promise<any>;
@@ -287,6 +519,206 @@ export class WebProvider {
    * Simulate an alkanes contract call (read-only)
    */
   alkanesSimulate(contract_id: string, context_json: string, block_tag?: string | null): Promise<any>;
+  /**
+   * Wrap BTC to frBTC
+   */
+  alkanesWrapBtc(params_json: string): Promise<any>;
+  /**
+   * Initialize a new AMM liquidity pool
+   */
+  alkanesInitPool(params_json: string): Promise<any>;
+  /**
+   * Execute an AMM swap
+   */
+  alkanesSwap(params_json: string): Promise<any>;
+  /**
+   * Reflect metadata for a range of alkanes
+   */
+  alkanesReflectAlkaneRange(block: number, start_tx: number, end_tx: number, concurrency?: number | null): Promise<any>;
+  /**
+   * Execute a tx-script with WASM bytecode
+   */
+  alkanesTxScript(wasm_hex: string, inputs_json: string, block_tag?: string | null): Promise<any>;
+  /**
+   * Get pool details for a specific pool
+   */
+  alkanesPoolDetails(pool_id: string): Promise<any>;
+  /**
+   * Calculate minimum unwrap amount for subfrost frBTC unwrapping
+   */
+  subfrostMinimumUnwrap(fee_rate_override?: number | null, premium?: number | null, expected_inputs?: number | null, expected_outputs?: number | null, raw?: boolean | null): Promise<any>;
+  /**
+   * Get OPI block height
+   */
+  opiBlockHeight(base_url: string): Promise<any>;
+  /**
+   * Get OPI extras block height
+   */
+  opiExtrasBlockHeight(base_url: string): Promise<any>;
+  /**
+   * Get OPI database version
+   */
+  opiDbVersion(base_url: string): Promise<any>;
+  /**
+   * Get OPI event hash version
+   */
+  opiEventHashVersion(base_url: string): Promise<any>;
+  /**
+   * Get OPI balance on block
+   */
+  opiBalanceOnBlock(base_url: string, block_height: number, pkscript: string, ticker: string): Promise<any>;
+  /**
+   * Get OPI activity on block
+   */
+  opiActivityOnBlock(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI Bitcoin RPC results on block
+   */
+  opiBitcoinRpcResultsOnBlock(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI current balance
+   */
+  opiCurrentBalance(base_url: string, ticker: string, address?: string | null, pkscript?: string | null): Promise<any>;
+  /**
+   * Get OPI valid tx notes of wallet
+   */
+  opiValidTxNotesOfWallet(base_url: string, address?: string | null, pkscript?: string | null): Promise<any>;
+  /**
+   * Get OPI valid tx notes of ticker
+   */
+  opiValidTxNotesOfTicker(base_url: string, ticker: string): Promise<any>;
+  /**
+   * Get OPI holders
+   */
+  opiHolders(base_url: string, ticker: string): Promise<any>;
+  /**
+   * Get OPI hash of all activity
+   */
+  opiHashOfAllActivity(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI hash of all current balances
+   */
+  opiHashOfAllCurrentBalances(base_url: string): Promise<any>;
+  /**
+   * Get OPI event
+   */
+  opiEvent(base_url: string, event_hash: string): Promise<any>;
+  /**
+   * Get OPI IP address
+   */
+  opiIp(base_url: string): Promise<any>;
+  /**
+   * Get OPI raw endpoint
+   */
+  opiRaw(base_url: string, endpoint: string): Promise<any>;
+  /**
+   * Get OPI Runes block height
+   */
+  opiRunesBlockHeight(base_url: string): Promise<any>;
+  /**
+   * Get OPI Runes balance on block
+   */
+  opiRunesBalanceOnBlock(base_url: string, block_height: number, pkscript: string, rune_id: string): Promise<any>;
+  /**
+   * Get OPI Runes activity on block
+   */
+  opiRunesActivityOnBlock(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI Runes current balance
+   */
+  opiRunesCurrentBalance(base_url: string, address?: string | null, pkscript?: string | null): Promise<any>;
+  /**
+   * Get OPI Runes unspent outpoints
+   */
+  opiRunesUnspentOutpoints(base_url: string, address?: string | null, pkscript?: string | null): Promise<any>;
+  /**
+   * Get OPI Runes holders
+   */
+  opiRunesHolders(base_url: string, rune_id: string): Promise<any>;
+  /**
+   * Get OPI Runes hash of all activity
+   */
+  opiRunesHashOfAllActivity(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI Runes event
+   */
+  opiRunesEvent(base_url: string, txid: string): Promise<any>;
+  /**
+   * Get OPI Bitmap block height
+   */
+  opiBitmapBlockHeight(base_url: string): Promise<any>;
+  /**
+   * Get OPI Bitmap hash of all activity
+   */
+  opiBitmapHashOfAllActivity(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI Bitmap hash of all bitmaps
+   */
+  opiBitmapHashOfAllBitmaps(base_url: string): Promise<any>;
+  /**
+   * Get OPI Bitmap inscription ID
+   */
+  opiBitmapInscriptionId(base_url: string, bitmap: string): Promise<any>;
+  /**
+   * Get OPI POW20 block height
+   */
+  opiPow20BlockHeight(base_url: string): Promise<any>;
+  /**
+   * Get OPI POW20 balance on block
+   */
+  opiPow20BalanceOnBlock(base_url: string, block_height: number, pkscript: string, ticker: string): Promise<any>;
+  /**
+   * Get OPI POW20 activity on block
+   */
+  opiPow20ActivityOnBlock(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI POW20 current balance
+   */
+  opiPow20CurrentBalance(base_url: string, ticker: string, address?: string | null, pkscript?: string | null): Promise<any>;
+  /**
+   * Get OPI POW20 valid tx notes of wallet
+   */
+  opiPow20ValidTxNotesOfWallet(base_url: string, address?: string | null, pkscript?: string | null): Promise<any>;
+  /**
+   * Get OPI POW20 valid tx notes of ticker
+   */
+  opiPow20ValidTxNotesOfTicker(base_url: string, ticker: string): Promise<any>;
+  /**
+   * Get OPI POW20 holders
+   */
+  opiPow20Holders(base_url: string, ticker: string): Promise<any>;
+  /**
+   * Get OPI POW20 hash of all activity
+   */
+  opiPow20HashOfAllActivity(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI POW20 hash of all current balances
+   */
+  opiPow20HashOfAllCurrentBalances(base_url: string): Promise<any>;
+  /**
+   * Get OPI SNS block height
+   */
+  opiSnsBlockHeight(base_url: string): Promise<any>;
+  /**
+   * Get OPI SNS hash of all activity
+   */
+  opiSnsHashOfAllActivity(base_url: string, block_height: number): Promise<any>;
+  /**
+   * Get OPI SNS hash of all registered names
+   */
+  opiSnsHashOfAllRegisteredNames(base_url: string): Promise<any>;
+  /**
+   * Get OPI SNS info
+   */
+  opiSnsInfo(base_url: string, name: string): Promise<any>;
+  /**
+   * Get OPI SNS inscriptions of domain
+   */
+  opiSnsInscriptionsOfDomain(base_url: string, domain: string): Promise<any>;
+  /**
+   * Get OPI SNS registered namespaces
+   */
+  opiSnsRegisteredNamespaces(base_url: string): Promise<any>;
   /**
    * Get alkanes contract balance for an address
    */
@@ -320,9 +752,30 @@ export class WebProvider {
   esploraGetAddressUtxo(address: string): Promise<any>;
   esploraGetAddressTxs(address: string): Promise<any>;
   esploraGetAddressTxsChain(address: string, last_seen_txid?: string | null): Promise<any>;
+  getStorageAt(block: bigint, tx: bigint, path: Uint8Array): Promise<any>;
   esploraGetFeeEstimates(): Promise<any>;
   esploraBroadcastTx(tx_hex: string): Promise<any>;
   esploraGetTxHex(txid: string): Promise<any>;
+  esploraGetBlocks(start_height?: number | null): Promise<any>;
+  esploraGetBlockByHeight(height: number): Promise<any>;
+  esploraGetBlock(hash: string): Promise<any>;
+  esploraGetBlockStatus(hash: string): Promise<any>;
+  esploraGetBlockTxids(hash: string): Promise<any>;
+  esploraGetBlockHeader(hash: string): Promise<any>;
+  esploraGetBlockRaw(hash: string): Promise<any>;
+  esploraGetBlockTxid(hash: string, index: number): Promise<any>;
+  esploraGetBlockTxs(hash: string, start_index?: number | null): Promise<any>;
+  esploraGetAddressTxsMempool(address: string): Promise<any>;
+  esploraGetAddressPrefix(prefix: string): Promise<any>;
+  esploraGetTxRaw(txid: string): Promise<any>;
+  esploraGetTxMerkleProof(txid: string): Promise<any>;
+  esploraGetTxMerkleblockProof(txid: string): Promise<any>;
+  esploraGetTxOutspend(txid: string, index: number): Promise<any>;
+  esploraGetTxOutspends(txid: string): Promise<any>;
+  esploraGetMempool(): Promise<any>;
+  esploraGetMempoolTxids(): Promise<any>;
+  esploraGetMempoolRecent(): Promise<any>;
+  esploraPostTx(tx_hex: string): Promise<any>;
   bitcoindGetBlockCount(): Promise<any>;
   bitcoindSendRawTransaction(tx_hex: string): Promise<any>;
   bitcoindGenerateToAddress(nblocks: number, address: string): Promise<any>;
@@ -343,6 +796,11 @@ export class WebProvider {
   bitcoindDecodePsbt(psbt: string): Promise<any>;
   alkanesView(contract_id: string, view_fn: string, params?: Uint8Array | null, block_tag?: string | null): Promise<any>;
   alkanesInspect(target: string, config: any): Promise<any>;
+  /**
+   * Inspect alkanes bytecode directly from WASM bytes (hex-encoded or raw bytes)
+   * This allows inspection without fetching from RPC - useful for local/offline analysis
+   */
+  alkanesInspectBytecode(bytecode_hex: string, alkane_id: string, config: any): Promise<any>;
   alkanesPendingUnwraps(block_tag?: string | null): Promise<any>;
   brc20progCall(to: string, data: string, block?: string | null): Promise<any>;
   brc20progGetBalance(address: string, block?: string | null): Promise<any>;
@@ -424,6 +882,20 @@ export class WebProvider {
    */
   walletIsLoaded(): boolean;
   /**
+   * Get addresses from the loaded wallet keystore
+   * Uses the Keystore.get_addresses method from alkanes-cli-common
+   *
+   * # Arguments
+   * * `address_type` - Address type: "p2tr", "p2wpkh", "p2sh-p2wpkh", "p2pkh"
+   * * `start_index` - Starting index for address derivation
+   * * `count` - Number of addresses to derive
+   * * `chain` - Chain index (0 for external/receiving, 1 for internal/change)
+   *
+   * # Returns
+   * Array of address info objects with: { derivation_path, address, script_type, index, used }
+   */
+  walletGetAddresses(address_type: string, start_index: number, count: number, chain?: number | null): any;
+  /**
    * Send BTC to an address
    * params: { address: string, amount: number (satoshis), fee_rate?: number }
    * Wallet must be loaded first via walletLoadMnemonic
@@ -440,6 +912,30 @@ export class WebProvider {
   walletCreatePsbt(params_json: string): Promise<any>;
   walletExport(): Promise<any>;
   walletBackup(): Promise<any>;
+  /**
+   * Get the FrBTC signer address for the current network
+   */
+  frbtcGetSignerAddress(): Promise<any>;
+  /**
+   * Wrap BTC to frBTC
+   * params_json: { fee_rate?: number, from?: string[], change?: string }
+   */
+  frbtcWrap(amount: bigint, params_json: string): Promise<any>;
+  /**
+   * Unwrap frBTC to BTC
+   * params_json: { fee_rate?: number, from?: string[], change?: string }
+   */
+  frbtcUnwrap(amount: bigint, vout: bigint, recipient_address: string, params_json: string): Promise<any>;
+  /**
+   * Wrap BTC and deploy+execute a script (wrapAndExecute)
+   * params_json: { fee_rate?: number, from_addresses?: string[], change_address?: string, ... }
+   */
+  frbtcWrapAndExecute(amount: bigint, script_bytecode: string, params_json: string): Promise<any>;
+  /**
+   * Wrap BTC and call an existing contract (wrapAndExecute2)
+   * params_json: { fee_rate?: number, from_addresses?: string[], change_address?: string, ... }
+   */
+  frbtcWrapAndExecute2(amount: bigint, target_address: string, signature: string, calldata_args: string, params_json: string): Promise<any>;
   dataApiGetPoolHistory(pool_id: string, category?: string | null, limit?: bigint | null, offset?: bigint | null): Promise<any>;
   dataApiGetPools(factory_id: string): Promise<any>;
   dataApiGetAlkanesByAddress(address: string): Promise<any>;
@@ -456,6 +952,14 @@ export class WebProvider {
   dataApiGetKeys(alkane: string, prefix: string | null | undefined, limit: bigint): Promise<any>;
   dataApiGetBitcoinPrice(): Promise<any>;
   dataApiGetBitcoinMarketChart(days: string): Promise<any>;
+  dataApiHealth(): Promise<any>;
+  dataApiGetAlkanes(page?: bigint | null, limit?: bigint | null): Promise<any>;
+  dataApiGetAlkaneDetails(alkane_id: string): Promise<any>;
+  dataApiGetPoolById(pool_id: string): Promise<any>;
+  dataApiGetOutpointBalances(outpoint: string): Promise<any>;
+  dataApiGetBlockHeight(): Promise<any>;
+  dataApiGetBlockHash(): Promise<any>;
+  dataApiGetIndexerPosition(): Promise<any>;
   /**
    * Reflect alkane token metadata by querying standard opcodes
    *
@@ -469,6 +973,8 @@ export class WebProvider {
    * An AlkaneReflection object with all available metadata
    */
   alkanesReflect(alkane_id: string): Promise<any>;
+  alkanesSequence(block_tag?: string | null): Promise<any>;
+  alkanesSpendables(address: string): Promise<any>;
   /**
    * Get current ESPO indexer height
    */

@@ -51,6 +51,10 @@ function parseMaxVoutFromProtostones(protostones: string): number {
 /**
  * Execute an alkanes contract with typed parameters and sensible defaults.
  *
+ * Uses alkanesExecuteFull which handles the complete execution flow:
+ * - For deployments (with envelope): commit -> reveal -> mine -> trace
+ * - For simple transactions: sign -> broadcast -> mine -> trace
+ *
  * This provides automatic address separation:
  * - Sources UTXOs from both SegWit (p2wpkh:0) and Taproot (p2tr:0)
  * - Sends BTC change to SegWit (p2wpkh:0)
@@ -72,6 +76,7 @@ export async function alkanesExecuteTyped(
   // Creates one p2tr:0 output for each vN reference (v0, v1, v2, etc.)
   const toAddresses = params.toAddresses ?? Array(maxVout + 1).fill('p2tr:0');
 
+  // Build options object for alkanesExecuteFull
   const options: Record<string, any> = {};
 
   // Apply automatic defaults for address separation
@@ -84,12 +89,23 @@ export async function alkanesExecuteTyped(
   if (params.autoConfirm !== undefined) options.auto_confirm = params.autoConfirm;
   if (params.rawOutput !== undefined) options.raw_output = params.rawOutput;
 
-  const optionsJson = Object.keys(options).length > 0 ? JSON.stringify(options) : null;
+  // Convert toAddresses array to JSON string
+  const toAddressesJson = JSON.stringify(toAddresses);
 
-  // Use alkanesExecuteFull which handles the complete flow internally
-  // This avoids serialization issues when passing state between JS and Rust
-  const result = await (provider as any).alkanesExecuteFull(
-    JSON.stringify(toAddresses),
+  // Convert options to JSON string
+  const optionsJson = JSON.stringify(options);
+
+  console.log('[alkanesExecuteTyped] Calling alkanesExecuteFull with:');
+  console.log('[alkanesExecuteTyped]   to_addresses:', toAddressesJson);
+  console.log('[alkanesExecuteTyped]   input_requirements:', params.inputRequirements);
+  console.log('[alkanesExecuteTyped]   protostones:', params.protostones);
+  console.log('[alkanesExecuteTyped]   fee_rate:', params.feeRate);
+  console.log('[alkanesExecuteTyped]   options:', optionsJson);
+
+  // Use alkanesExecuteFull which handles the complete execution flow
+  // Signature: alkanesExecuteFull(to_addresses_json, input_requirements, protostones, fee_rate?, envelope_hex?, options_json?)
+  const result = await provider.alkanesExecuteFull(
+    toAddressesJson,
     params.inputRequirements,
     params.protostones,
     params.feeRate ?? null,
