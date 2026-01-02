@@ -151,7 +151,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           <BoostSection vault={currentVault} />
 
           {/* Right Column: Info Tabs - starts in column 2 after Boosted APY */}
-          <div className={`rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit md:col-start-2 ${currentVault.isBoostComingSoon ? 'md:row-start-4' : 'md:row-start-3'}`}>
+          <div className={`rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit md:col-start-2 border-t border-[color:var(--sf-top-highlight)] ${currentVault.isBoostComingSoon ? 'md:row-start-4' : 'md:row-start-3'}`}>
         <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
           {['about', 'strategies', 'info', 'risk'].map((tab) => (
             <button
@@ -296,7 +296,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         </div>
 
         {/* Info Tabs Section - Mobile/Tablet Only */}
-        <div className="md:hidden rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
+        <div className="md:hidden rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm border-t border-[color:var(--sf-top-highlight)]">
           <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
             {['about', 'strategies', 'info', 'risk'].map((tab) => (
               <button
