@@ -258,14 +258,14 @@ export default function SwapInputs({
     <div className="relative flex flex-col gap-3">
       {/* Collapsible swap inputs container - slides up when bridge is active */}
       <div
-        className={`flex flex-col gap-3 transition-all duration-500 ease-out overflow-hidden ${
+        className={`flex flex-col gap-3 transition-all duration-500 ease-out ${
           bridgeActive
-            ? "max-h-0 opacity-0 -translate-y-full pointer-events-none"
-            : "max-h-[1000px] opacity-100 translate-y-0"
+            ? "max-h-0 opacity-0 -translate-y-full pointer-events-none overflow-hidden"
+            : "max-h-[1000px] opacity-100 translate-y-0 overflow-visible"
         }`}
       >
         {/* Sell panel */}
-        <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+        <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
           <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Send</span>
           <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
             <div className="flex flex-col gap-2">
@@ -380,7 +380,7 @@ export default function SwapInputs({
         </div>
 
         {/* Receive panel */}
-        <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+        <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
           <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Receive</span>
           <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
             <div className="flex flex-col gap-2">
@@ -436,7 +436,7 @@ export default function SwapInputs({
 
       {/* Ethereum Wallet Address for cross-chain tokens (when sending TO bridge token) */}
       {isToBridgeToken && !bridgeActive && (
-        <div className="relative z-10 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
+        <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
           <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
             Ethereum Wallet Address
           </label>

@@ -139,7 +139,7 @@ export default function VaultShell() {
               className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
                 vaultFilter === 'all'
                   ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
               }`}
             >
               All
@@ -149,7 +149,7 @@ export default function VaultShell() {
               className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
                 vaultFilter === 'mains'
                   ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
               }`}
             >
               Mains
@@ -159,7 +159,7 @@ export default function VaultShell() {
               className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
                 vaultFilter === 'alts'
                   ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
               }`}
             >
               Alts
@@ -180,7 +180,7 @@ export default function VaultShell() {
                 className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
                   vaultFilter === 'all'
                     ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
                 }`}
               >
                 All
@@ -190,7 +190,7 @@ export default function VaultShell() {
                 className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
                   vaultFilter === 'mains'
                     ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
                 }`}
               >
                 Mains
@@ -200,7 +200,7 @@ export default function VaultShell() {
                 className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
                   vaultFilter === 'alts'
                     ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
                 }`}
               >
                 Alts

@@ -156,7 +156,7 @@ export default function VaultDepositInterface({
   };
 
   return (
-    <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
       {/* Tabs */}
       <div className="flex gap-4 mb-6 border-b border-[color:var(--sf-outline)]">
         <button
@@ -185,7 +185,7 @@ export default function VaultDepositInterface({
         /* Deposit Mode: Swap-like UI */
         <div className="relative flex flex-col gap-3">
           {/* From Wallet Panel */}
-          <div className="relative z-30 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">From Wallet</span>
             <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
               <div className="flex flex-col gap-2">
@@ -297,7 +297,7 @@ export default function VaultDepositInterface({
           </div>
 
           {/* To Vault Panel */}
-          <div className="relative z-10 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">To Vault</span>
             <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3">
               <div className="grid grid-cols-[1fr_auto] items-center gap-3">
@@ -324,9 +324,9 @@ export default function VaultDepositInterface({
           </div>
 
           {/* Miner Fee Section */}
-          <div className="relative z-[5] rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 p-4 backdrop-blur-sm">
+          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Miner Fee</span>
             <div>
-              <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 mb-1">Miner Fee:</div>
               <div className="flex items-center gap-2">
                 {selection === 'custom' && setCustom ? (
                   <div className="relative w-40">

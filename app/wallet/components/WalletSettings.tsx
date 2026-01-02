@@ -292,7 +292,7 @@ export default function WalletSettings() {
   return (
     <div className="space-y-6">
       {/* Network Selection */}
-      <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-6">
+      <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
         <div className="flex items-center gap-3 mb-4">
           <Network size={24} className="text-[color:var(--sf-primary)]" />
           <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Network Configuration</h3>
@@ -388,7 +388,7 @@ export default function WalletSettings() {
       </div>
 
       {/* Derivation Paths */}
-      <div className="rounded-xl border border-[color:var(--sf-outline)] bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6">
+      <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <Key size={24} className="text-yellow-400" />

@@ -6,6 +6,7 @@ import { type Contract } from '../data/mockContracts';
 import TokenIcon from '@/app/components/TokenIcon';
 import NumberField from '@/app/components/NumberField';
 import { useBtcBalance } from '@/hooks/useBtcBalance';
+import { useWallet } from '@/context/WalletContext';
 
 type OpenPositionFormProps = {
   contracts: Contract[];
@@ -24,7 +25,10 @@ type PayoutMarker = {
 export default function OpenPositionForm({ contracts, onContractSelect }: OpenPositionFormProps) {
   const [selectedBlocks, setSelectedBlocks] = useState<number>(30);
   const [investmentAmount, setInvestmentAmount] = useState<string>('1.0');
-  
+
+  // Get wallet connection state
+  const { isConnected, onConnectModalOpenChange } = useWallet();
+
   // Get BTC balance
   const { data: btcBalanceSats } = useBtcBalance();
   const btcBalance = btcBalanceSats ? Number(btcBalanceSats) / 1e8 : 0;
@@ -244,6 +248,12 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   }, [investmentAmount, selectedBlocks, payoutMarkers.length, totalInvestment]);
 
   const handleBuy = () => {
+    // If not connected, open connect wallet modal
+    if (!isConnected) {
+      onConnectModalOpenChange(true);
+      return;
+    }
+
     if (!canBuy) return;
     // TODO: Implement buy logic
     console.log('Buy clicked', {
@@ -260,7 +270,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
       {/* 2-Column Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Side: User Inputs */}
-        <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 space-y-6">
+        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md space-y-6">
           {/* Investment Amount */}
           <div className="space-y-3">
             <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
@@ -396,35 +406,35 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
           <button
             type="button"
             onClick={handleBuy}
-            disabled={!canBuy}
+            disabled={isConnected && !canBuy}
             className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
           >
-            Buy ftrBTC
+            {isConnected ? 'Buy ftrBTC' : 'Connect Wallet'}
           </button>
         </div>
 
         {/* Right Side: Auto-calculated Values */}
-        <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 space-y-6">
+        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md space-y-6">
           {payoutMarkers.length > 0 ? (
             <>
               {/* Total Yield Card */}
-              <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-gradient-to-br from-[color:var(--sf-glass-bg)] to-[color:var(--sf-glass-bg)]/50 p-6 space-y-4">
+              <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Yield</div>
-                    <div className={`text-3xl font-bold ${aggregatedYield >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
+                    <div className={`text-3xl font-bold ${aggregatedYield >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {aggregatedYield >= 0 ? '+' : ''}{aggregatedYield.toFixed(2)}%
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Profit</div>
-                    <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
+                    <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} BTC
                     </div>
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-glass-border)]">
+
+                <div className="grid grid-cols-3 gap-4 pt-4">
                   <div>
                     <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment (BTC)</div>
                     <div className="text-lg font-semibold text-[color:var(--sf-text)]">
@@ -496,7 +506,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                           }}
                         >
                           {/* Marker dot */}
-                          <div className="w-4 h-4 rounded-full bg-blue-400 border-2 border-[color:var(--sf-glass-bg)] shadow-lg cursor-pointer hover:scale-125 transition-transform">
+                          <div className="w-4 h-4 rounded-full bg-[color:var(--sf-primary)] border-2 border-[color:var(--sf-glass-bg)] shadow-lg cursor-pointer hover:scale-125 transition-transform">
                             {/* Tooltip on hover */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                               <div className="bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] rounded-lg p-2 shadow-lg whitespace-nowrap text-xs">
@@ -522,7 +532,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     
                     {/* Right: Max (fixed at 95 blocks) */}
                     <div className="flex flex-col items-end">
-                      <div className="font-medium text-blue-400">Payout</div>
+                      <div className="font-medium text-[color:var(--sf-primary)]">Payout</div>
                       <div className="text-[color:var(--sf-text)]/50 text-[10px]">95 blocks</div>
                     </div>
                   </div>
@@ -535,7 +545,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                         className="rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)]/50 p-3 flex items-center justify-between hover:bg-white/5 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                          <div className="w-2 h-2 rounded-full bg-[color:var(--sf-primary)]"></div>
                           <div>
                             <div className="text-sm font-medium text-[color:var(--sf-text)]">{marker.contractId}</div>
                             <div className="text-xs text-[color:var(--sf-text)]/60">
@@ -544,7 +554,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className={`text-sm font-semibold ${marker.yieldPercent >= 0 ? 'text-blue-400' : 'text-red-500'}`}>
+                          <div className={`text-sm font-semibold ${marker.yieldPercent >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                             {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%
                           </div>
                           <div className="text-xs text-[color:var(--sf-text)]/60">

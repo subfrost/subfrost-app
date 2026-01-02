@@ -157,7 +157,8 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const isUnwrapPair = (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && buyId === 'btc';
 
   return (
-    <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 text-sm backdrop-blur-sm transition-all">
+    <div className="mt-3 flex flex-col gap-2.5 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+      <span className="mb-1 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Transaction</span>
       {isCalculating ? (
         <SkeletonLines />
       ) : quote ? (

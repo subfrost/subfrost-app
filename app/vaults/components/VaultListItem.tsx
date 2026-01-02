@@ -46,12 +46,12 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   return (
     <Element
       onClick={interactive ? onClick : undefined}
-      className={`w-full lg:w-auto lg:mx-auto rounded-2xl transition-all overflow-hidden ${
-        interactive ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 cursor-pointer' : 'cursor-default'
+      className={`w-full lg:w-auto lg:mx-auto rounded-2xl transition-all overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] ${
+        interactive ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer' : 'cursor-default'
       } ${
         isSelected
-          ? 'bg-[color:var(--sf-surface)]/90 border-2 border-[color:var(--sf-primary)] shadow-md'
-          : 'bg-[color:var(--sf-glass-bg)] border-2 border-[color:var(--sf-glass-border)]'
+          ? 'bg-[color:var(--sf-surface)]/90 ring-2 ring-[color:var(--sf-primary)]'
+          : 'bg-[color:var(--sf-glass-bg)]'
       }`}
     >
       {/* Card layout for small screens */}

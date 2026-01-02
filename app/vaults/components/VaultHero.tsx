@@ -2,67 +2,6 @@
 
 import { useWallet } from "@/context/WalletContext";
 import TokenIcon from "@/app/components/TokenIcon";
-import Image from "next/image";
-import { useMemo } from "react";
-
-function FallingSnowflakes() {
-  const snowflakes = useMemo(() => {
-    const positions = [10, 22, 35, 48, 60, 72, 85, 95, 5, 65, 43, 28, 78, 50, 18, 88];
-    const durations = [15, 18, 12, 20, 14, 17, 13, 19, 14, 14, 12, 16, 13, 18, 17, 15];
-    const sizes = [14, 19, 11, 16, 10, 18, 15, 12, 19, 12, 16, 13, 17, 11, 14, 16];
-    // Negative delays to start snowflakes at different positions in their animation cycle
-    const initialOffsets = [-2, -8, -5, -12, -1, -10, -7, -14, -3, -9, -6, -11, -4, -13, -0.5, -15];
-    
-    return Array.from({ length: 16 }, (_, i) => ({
-      id: i,
-      left: positions[i],
-      delay: initialOffsets[i],
-      duration: durations[i],
-      size: sizes[i],
-    }));
-  }, []);
-
-  return (
-    <>
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          @keyframes snowfallVault {
-            0% {
-              transform: translateY(-30px) rotate(0deg);
-              opacity: 1;
-            }
-            100% {
-              transform: translateY(800px) rotate(360deg);
-              opacity: 1;
-            }
-          }
-          .snowflake-vault {
-            filter: brightness(0) invert(0.35) sepia(0.3) saturate(1) hue-rotate(180deg) drop-shadow(0 0 1px rgba(40,67,114,0.2));
-          }
-          [data-theme="dark"] .snowflake-vault,
-          .dark .snowflake-vault {
-            filter: brightness(0) invert(1) drop-shadow(0 0 1px rgba(255,255,255,0.3)) !important;
-          }
-        `
-      }} />
-      {snowflakes.map((flake) => (
-        <Image
-          key={flake.id}
-          src="/brand/snowflake-mark.svg"
-          alt=""
-          width={flake.size}
-          height={flake.size}
-          className="pointer-events-none absolute snowflake-vault"
-          style={{
-            left: `${flake.left}%`,
-            top: '-10px',
-            animation: `snowfallVault ${flake.duration}s linear ${flake.delay}s infinite`,
-          }}
-        />
-      ))}
-    </>
-  );
-}
 
 type Props = {
   tokenId: string; // Alkane ID like "2:0"
@@ -97,12 +36,7 @@ export default function VaultHero({
   
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
-    <div className="relative overflow-hidden rounded-2xl p-6 shadow-lg w-full h-full flex flex-col border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl text-[color:var(--sf-text)]">
-      {/* Falling Snowflakes Animation */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        <FallingSnowflakes />
-      </div>
-      
+    <div className="relative overflow-hidden rounded-2xl p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] w-full h-full flex flex-col bg-[color:var(--sf-glass-bg)] backdrop-blur-md text-[color:var(--sf-text)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Token Icon */}
       <div className="mb-4 flex justify-center items-center relative z-10">
         <div className="w-40 h-40 flex items-center justify-center">

@@ -1010,7 +1010,7 @@ export default function SwapShell() {
         )}
       </Suspense>
 
-      <div className="flex flex-col md:grid md:grid-cols-2 gap-8 flex-1 min-h-0">
+      <div className="flex flex-col md:grid md:grid-cols-2 gap-6 flex-1 min-h-0">
         {/* Left Column: Swap/LP Module + My Wallet Swaps */}
         <div className="flex flex-col min-h-0 md:min-h-0">
           {/* Swap/Liquidity Tabs */}
@@ -1034,7 +1034,7 @@ export default function SwapShell() {
             </button>
           </div>
 
-          <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(0,0,0,0.18)] backdrop-blur-xl flex-shrink-0">
+          <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
           {isBalancesLoading && <LoadingOverlay />}
           <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (

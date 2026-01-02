@@ -57,9 +57,9 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
   const filteredContracts = contracts;
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(40,67,114,0.12)]">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Header */}
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <h3 className="text-base font-bold text-[color:var(--sf-text)]">Active Unlockable Positions</h3>
       </div>
 
@@ -67,7 +67,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
       <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[color:var(--sf-glass-border)]">
+              <tr className="border-b border-[color:var(--sf-row-border)]">
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Contract
                 </th>
@@ -94,7 +94,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 const rows = [
                   <tr
                     key={contract.id}
-                    className="border-b border-[color:var(--sf-glass-border)] hover:bg-[color:var(--sf-primary)]/10 transition-colors cursor-pointer"
+                    className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-colors cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
                     <td className="px-6 py-4">
@@ -136,7 +136,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                             {/* Mempool queue portion (different color) */}
                             {contract.mempoolQueue > 0 && (
                               <div
-                                className="absolute left-0 top-0 h-full bg-blue-400/70 transition-all z-20"
+                                className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all z-20"
                                 style={{
                                   width: `${(contract.mempoolQueue / contract.totalSupply) * 100}%`,
                                   left: `${(contract.exercised / contract.totalSupply) * 100}%`,
@@ -153,7 +153,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           <span>
                             {contract.remaining.toFixed(1)} BTC remaining
                             {contract.mempoolQueue > 0 && (
-                              <span className="ml-1 text-blue-400/90">
+                              <span className="ml-1 text-[color:var(--sf-primary)]/90">
                                 ({contract.mempoolQueue.toFixed(1)} in mempool)
                               </span>
                             )}
@@ -232,7 +232,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
                                   In queue:
                                 </span>
-                                <div className="font-medium text-blue-400/90">{contract.mempoolQueue.toFixed(1)} BTC</div>
+                                <div className="font-medium text-[color:var(--sf-primary)]/90">{contract.mempoolQueue.toFixed(1)} BTC</div>
                               </div>
                             )}
                             <div>
@@ -258,7 +258,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                     {/* Mempool queue portion (different color) */}
                                     {contract.mempoolQueue > 0 && (
                                       <div
-                                        className="absolute left-0 top-0 h-full bg-blue-400/70 transition-all z-20"
+                                        className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all z-20"
                                         style={{
                                           width: `${(contract.mempoolQueue / contract.totalSupply) * 100}%`,
                                           left: `${(contract.exercised / contract.totalSupply) * 100}%`,
@@ -275,7 +275,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                     </span>
                                     {contract.mempoolQueue > 0 && (
                                       <span>
-                                        <span className="font-medium text-blue-400/90">
+                                        <span className="font-medium text-[color:var(--sf-primary)]/90">
                                           {contract.mempoolQueue.toFixed(1)} BTC
                                         </span>{' '}
                                         in queue

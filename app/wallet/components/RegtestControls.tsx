@@ -109,7 +109,7 @@ export default function RegtestControls() {
                        network === 'regtest' ? 'Local Regtest' : 'Oylnet';
 
   return (
-    <div className="mt-8 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-6">
+    <div className="mt-8 rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
       <div className="flex items-center gap-3 mb-4">
         <Pickaxe size={24} className="text-orange-400" />
         <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Regtest Controls</h3>
