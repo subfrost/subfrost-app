@@ -118,7 +118,7 @@ function buildWrapProtostone(params: {
 }
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { FRBTC_ALKANE_ID } = getConfig(network);
@@ -181,53 +181,30 @@ export function useWrapMutation() {
       // NOTE: User is FIRST (v0) so pointer=v0 sends frBTC to user
       const toAddresses = JSON.stringify([userTaprootAddress, signerAddress]);
 
-      // Get taproot address for UTXOs - this is where the funds are
+      // Get both taproot and segwit addresses for UTXOs
       const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
       if (!taprootAddress) throw new Error('No taproot address available for UTXOs');
 
-      // Fetch UTXOs for the wallet
-      let walletUtxos: any[] = [];
-      try {
-        const utxoResult = await provider.getAddressUtxos(taprootAddress);
-        const convertedResult = mapToObject(utxoResult);
+      // Build list of addresses to source funds from
+      const fromAddresses: string[] = [];
+      if (segwitAddress) fromAddresses.push(segwitAddress);
+      if (taprootAddress) fromAddresses.push(taprootAddress);
 
-        if (Array.isArray(convertedResult)) {
-          walletUtxos = convertedResult;
-        } else if (convertedResult?.utxos) {
-          walletUtxos = convertedResult.utxos;
-        } else if (convertedResult instanceof Map) {
-          walletUtxos = Array.from(convertedResult.values());
-        }
+      console.log('[WRAP] Sourcing from addresses:', fromAddresses);
 
-        walletUtxos = walletUtxos.filter((utxo: any) => utxo && utxo.txid && typeof utxo.value === 'number');
-      } catch (e) {
-        console.error('[WRAP] Failed to fetch UTXOs:', e);
-      }
-
-      // If we have wallet UTXOs, include them in options
-      // Use the actual taproot address for change (not symbolic notation which may cause issues)
+      // Options for the SDK - source from both segwit and taproot
+      // Use segwit address for BTC change, taproot for alkane change
       const options: Record<string, any> = {
         trace_enabled: false,
         mine_enabled: false,
         auto_confirm: false,  // We'll handle signing ourselves
-        change_address: taprootAddress,  // Use actual taproot address for change
-        from: [taprootAddress],
-        from_addresses: [taprootAddress],
+        change_address: segwitAddress || taprootAddress,  // BTC change to segwit
+        alkanes_change_address: taprootAddress,  // Alkane change to taproot
+        from: fromAddresses,
+        from_addresses: fromAddresses,
         lock_alkanes: true,
       };
-
-      // Pass explicit UTXOs if available
-      if (walletUtxos.length > 0) {
-        // Format UTXOs for the SDK
-        const formattedUtxos = walletUtxos.map((utxo: any) => ({
-          txid: utxo.txid,
-          vout: utxo.vout,
-          value: utxo.value,
-          script: utxo.scriptpubkey || utxo.script,
-        }));
-        options.utxos = formattedUtxos;
-        options.explicit_utxos = formattedUtxos;
-      }
 
       const optionsJson = JSON.stringify(options);
 
@@ -267,8 +244,15 @@ export function useWrapMutation() {
             throw new Error('Unexpected PSBT format');
           }
 
-          // Sign the PSBT
-          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          // Sign the PSBT with both SegWit and Taproot keys
+          // The SDK may select UTXOs from either address type
+          console.log('[WRAP] Signing PSBT with SegWit key first, then Taproot key...');
+
+          // First sign with SegWit key (for native segwit inputs)
+          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+
+          // Then sign with Taproot key (for taproot inputs)
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
