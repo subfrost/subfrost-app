@@ -725,6 +725,12 @@ export default function SwapShell() {
 
   // Helper function to check if a pair is in the allowed list
   const isAllowedPair = useMemo(() => (token1Id: string, token2Id: string): boolean => {
+    // On non-mainnet networks (whitelistedPoolIds === null), allow all pairs
+    // This enables LP token selection on regtest/signet where pools may not be loaded yet
+    if (whitelistedPoolIds === null) {
+      return true;
+    }
+
     // Special case: BTC <-> frBTC wrap/unwrap is always allowed
     if ((token1Id === 'btc' && token2Id === FRBTC_ALKANE_ID) ||
         (token1Id === FRBTC_ALKANE_ID && token2Id === 'btc')) {
