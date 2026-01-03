@@ -824,20 +824,20 @@ export default function SwapShell() {
         // Check if this pair is in the allowed list
         isAvailable = isAllowedPair(token.id, fromToken.id);
       }
-      
+
       return {
         id: token.id,
         symbol: token.symbol,
         name: token.name,
-        iconUrl: token.iconUrl || currency?.iconUrl,
-        balance: currency?.balance,
+        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
+        balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: currency?.priceInfo?.price,
         isAvailable,
       };
     });
-    
+
     return sortTokenOptions(options);
-  }, [toOptions, idToUserCurrency, fromToken, isAllowedPair]);
+  }, [toOptions, idToUserCurrency, btcBalanceSats, fromToken, isAllowedPair]);
 
   // Pool token options - filtered to only show tokens that are in the whitelisted pools
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
