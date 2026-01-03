@@ -10,10 +10,12 @@ import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 
 type LPPosition = {
-  id: string;
+  id: string;                    // LP token alkane ID (same as pool ID)
   token0Symbol: string;
   token1Symbol: string;
-  amount: string;
+  token0Id?: string;             // Token 0 alkane ID (for remove liquidity)
+  token1Id?: string;             // Token 1 alkane ID (for remove liquidity)
+  amount: string;                // LP token balance (display units)
   valueUSD: number;
   gainLoss: {
     token0: { amount: string; symbol: string };
@@ -33,7 +35,9 @@ type Props = {
   onSelectToken0?: (id: string) => void;
   onSelectToken1?: (id: string) => void;
   onAddLiquidity: () => void;
+  onRemoveLiquidity?: () => void;
   isLoading?: boolean;
+  isRemoveLoading?: boolean;
   token0BalanceText?: string;
   token1BalanceText?: string;
   token0FiatText?: string;
@@ -69,7 +73,9 @@ export default function LiquidityInputs({
   onSelectToken0,
   onSelectToken1,
   onAddLiquidity,
+  onRemoveLiquidity,
   isLoading = false,
+  isRemoveLoading = false,
   token0BalanceText = "No balance",
   token1BalanceText = "No balance",
   token0FiatText = "$0.00",
@@ -100,14 +106,33 @@ export default function LiquidityInputs({
     parseFloat(token0Amount) > 0 && parseFloat(token1Amount) > 0 &&
     !!token0 && !!token1;
 
-  const ctaText = isLoading ? "ADDING LIQUIDITY..." : (isConnected ? "ADD LIQUIDITY" : "CONNECT WALLET");
-  
+  const canRemoveLiquidity = isConnected &&
+    !!selectedLPPosition &&
+    !!removeAmount &&
+    parseFloat(removeAmount) > 0 &&
+    parseFloat(removeAmount) <= parseFloat(selectedLPPosition.amount);
+
+  // Dynamic CTA text and handler based on mode
+  const getCtaText = () => {
+    if (!isConnected) return "CONNECT WALLET";
+    if (liquidityMode === 'remove') {
+      return isRemoveLoading ? "REMOVING LIQUIDITY..." : "REMOVE LIQUIDITY";
+    }
+    return isLoading ? "ADDING LIQUIDITY..." : "ADD LIQUIDITY";
+  };
+
+  const ctaText = getCtaText();
+
   const onCtaClick = () => {
     if (!isConnected) {
       onConnectModalOpenChange(true);
       return;
     }
-    onAddLiquidity();
+    if (liquidityMode === 'remove' && onRemoveLiquidity) {
+      onRemoveLiquidity();
+    } else {
+      onAddLiquidity();
+    }
   };
 
   return (
@@ -404,7 +429,11 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          disabled={(!canAddLiquidity && isConnected) || isLoading}
+          disabled={
+            (liquidityMode === 'remove'
+              ? (!canRemoveLiquidity && isConnected) || isRemoveLoading
+              : (!canAddLiquidity && isConnected) || isLoading)
+          }
           className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
         >
           {ctaText}

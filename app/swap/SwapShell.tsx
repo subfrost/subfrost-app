@@ -23,6 +23,8 @@ import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
+import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
+import { useLPPositions } from "@/hooks/useLPPositions";
 import LoadingOverlay from "@/app/components/LoadingOverlay";
 
 // Lazy loaded components - split into separate chunks
@@ -148,20 +150,8 @@ export default function SwapShell() {
   const [isLPSelectorOpen, setIsLPSelectorOpen] = useState(false);
   const [removeAmount, setRemoveAmount] = useState<string>("");
 
-  // Test LP positions data
-  const testLPPositions: LPPosition[] = [
-    {
-      id: '1',
-      token0Symbol: 'DIESEL',
-      token1Symbol: 'frBTC',
-      amount: '0.1377',
-      valueUSD: 191,
-      gainLoss: {
-        token0: { amount: '+4.973', symbol: 'DIESEL' },
-        token1: { amount: '-0.00025911', symbol: 'frBTC' },
-      },
-    },
-  ];
+  // LP positions from wallet (real data from useLPPositions hook)
+  const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
 
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
@@ -182,6 +172,7 @@ export default function SwapShell() {
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
+  const removeLiquidityMutation = useRemoveLiquidityMutation();
 
   // Wallet/config
   const { address, network } = useWallet();
@@ -690,6 +681,50 @@ export default function SwapShell() {
     }
   };
 
+  const handleRemoveLiquidity = async () => {
+    console.log('[handleRemoveLiquidity] Starting...', { selectedLPPosition, removeAmount });
+
+    if (!selectedLPPosition) {
+      window.alert('Please select an LP position to remove');
+      return;
+    }
+
+    if (!removeAmount || parseFloat(removeAmount) <= 0) {
+      window.alert('Please enter a valid amount to remove');
+      return;
+    }
+
+    if (parseFloat(removeAmount) > parseFloat(selectedLPPosition.amount)) {
+      window.alert('Amount exceeds your LP position balance');
+      return;
+    }
+
+    try {
+      const result = await removeLiquidityMutation.mutateAsync({
+        lpTokenId: selectedLPPosition.id,  // LP token's alkane ID (same as pool ID)
+        lpAmount: removeAmount,
+        lpDecimals: 8,
+        minAmount0: '0',  // No slippage protection for now
+        minAmount1: '0',
+        token0Decimals: 8,
+        token1Decimals: 8,
+        feeRate: fee.feeRate,
+        deadlineBlocks,
+      });
+
+      if (result?.success && result.transactionId) {
+        console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
+        setSuccessTxId(result.transactionId);
+        // Clear state after success
+        setRemoveAmount('');
+        setSelectedLPPosition(null);
+      }
+    } catch (e: any) {
+      console.error('[handleRemoveLiquidity] Error:', e);
+      window.alert(`Remove liquidity failed: ${e?.message || 'See console for details'}`);
+    }
+  };
+
   const handleInvert = () => {
     // Swap tokens
     setFromToken((prev) => {
@@ -1142,7 +1177,9 @@ export default function SwapShell() {
                 if (t) setPoolToken1(t);
               }}
               onAddLiquidity={handleAddLiquidity}
+              onRemoveLiquidity={handleRemoveLiquidity}
               isLoading={addLiquidityMutation.isPending}
+              isRemoveLoading={removeLiquidityMutation.isPending}
               token0BalanceText={formatBalance(poolToken0?.id)}
               token1BalanceText={formatBalance(poolToken1?.id)}
               token0FiatText="$0.00"
@@ -1292,7 +1329,7 @@ export default function SwapShell() {
       <LPPositionSelectorModal
         isOpen={isLPSelectorOpen}
         onClose={() => setIsLPSelectorOpen(false)}
-        positions={testLPPositions}
+        positions={lpPositions}
         onSelectPosition={setSelectedLPPosition}
         selectedPositionId={selectedLPPosition?.id}
       />

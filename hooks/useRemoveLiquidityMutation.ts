@@ -98,7 +98,7 @@ function buildRemoveLiquidityInputRequirements(params: {
 }
 
 export function useRemoveLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { ALKANE_FACTORY_ID } = getConfig(network);
@@ -224,8 +224,11 @@ export function useRemoveLiquidityMutation() {
             throw new Error('Unexpected PSBT format');
           }
 
-          // Sign the PSBT
-          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          // Sign the PSBT with both keys (SegWit first, then Taproot)
+          // The PSBT may have inputs from both address types
+          console.log('[RemoveLiquidity] Signing PSBT with SegWit key first, then Taproot key...');
+          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
