@@ -937,6 +937,11 @@ export default function SwapShell() {
       }
     });
 
+    console.log('[poolTokenOptions] Built options:', opts.length, 'tokens');
+    console.log('[poolTokenOptions] userCurrencies count:', userCurrencies?.length || 0);
+    console.log('[poolTokenOptions] poolTokenMap size:', poolTokenMap?.size || 0);
+    console.log('[poolTokenOptions] opts:', opts.map(o => ({ id: o.id, symbol: o.symbol })));
+
     return sortTokenOptions(opts);
   }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds]);
 

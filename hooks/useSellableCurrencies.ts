@@ -67,12 +67,16 @@ export const useSellableCurrencies = (
           addresses.push(walletAddress);
         }
 
+        console.log('[useSellableCurrencies] Fetching for addresses:', addresses);
+
         // Fetch alkane balances using alkanesByAddress RPC (same as useEnrichedWalletData)
         // This ensures consistent balance data across the app
         for (const address of addresses) {
           try {
             const rawResult = await provider.alkanesByAddress(address, 'latest', 1);
             const result = mapToObject(rawResult);
+
+            console.log('[useSellableCurrencies] alkanesByAddress result for', address, ':', JSON.stringify(result, null, 2)?.slice(0, 500));
 
             if (!result) continue;
 
@@ -203,8 +207,74 @@ export const useSellableCurrencies = (
         // stale/incorrect data. Instead, we rely on KNOWN_TOKENS which has verified values.
         // Remember: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
 
+        // Fallback: If alkanesByAddress didn't return data, try alkanesBalance (simpler aggregated format)
+        // alkanesBalance returns: [{ alkane_id: { block, tx }, balance: "amount" }, ...]
+        if (alkaneMap.size === 0) {
+          console.log('[useSellableCurrencies] No data from alkanesByAddress, trying alkanesBalance fallback');
+          for (const address of addresses) {
+            try {
+              const rawResult = await provider.alkanesBalance(address);
+              const result = mapToObject(rawResult);
+
+              console.log('[useSellableCurrencies] alkanesBalance result for', address, ':', result);
+
+              if (!result || !Array.isArray(result)) continue;
+
+              for (const entry of result) {
+                // Handle both alkane_id and id field names
+                const alkaneId = entry.alkane_id || entry.id;
+                if (!alkaneId) continue;
+
+                const alkaneIdStr = `${alkaneId.block}:${alkaneId.tx}`;
+                const amountStr = String(entry.balance || entry.amount || '0');
+
+                // Check if token is in the allowed pools list (if filter provided)
+                if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneIdStr)) {
+                  continue;
+                }
+
+                const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+                  symbol: entry.symbol || `${alkaneId.tx}`,
+                  name: entry.name || `Token ${alkaneIdStr}`,
+                  decimals: entry.decimals || 8,
+                };
+
+                if (!alkaneMap.has(alkaneIdStr)) {
+                  alkaneMap.set(alkaneIdStr, {
+                    id: alkaneIdStr,
+                    address: walletAddress,
+                    name: tokenInfo.name,
+                    symbol: tokenInfo.symbol,
+                    balance: amountStr,
+                    priceInfo: {
+                      price: 0,
+                      idClubMarketplace: false,
+                    },
+                  });
+                } else {
+                  const existing = alkaneMap.get(alkaneIdStr)!;
+                  try {
+                    const currentBalance = BigInt(existing.balance || '0');
+                    const additionalBalance = BigInt(amountStr);
+                    existing.balance = (currentBalance + additionalBalance).toString();
+                  } catch {
+                    existing.balance = String(
+                      Number(existing.balance || 0) + Number(amountStr)
+                    );
+                  }
+                }
+              }
+            } catch (error) {
+              console.error(`[useSellableCurrencies] alkanesBalance failed for ${address}:`, error);
+            }
+          }
+        }
+
         // Convert map to array
         allAlkanes.push(...alkaneMap.values());
+
+        console.log('[useSellableCurrencies] Final alkaneMap size:', alkaneMap.size);
+        console.log('[useSellableCurrencies] Alkanes found:', Array.from(alkaneMap.keys()));
 
         // Log frBTC balance for debugging
         const frbtcBalance = alkaneMap.get(config.FRBTC_ALKANE_ID);
