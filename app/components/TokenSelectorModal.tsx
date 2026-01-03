@@ -124,18 +124,18 @@ export default function TokenSelectorModal({
       onClick={onClose}
     >
       <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 px-6 py-5">
+        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
               {title}
             </h2>
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 focus:outline-none"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] focus:outline-none"
               aria-label="Close"
             >
               <X size={18} />
@@ -148,7 +148,7 @@ export default function TokenSelectorModal({
 
         {/* Bridge Section - Shown in FROM and TO modes */}
         {(mode === 'from' || mode === 'to') && (
-          <div className="border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/20 px-6 py-4">
+          <div className="bg-[color:var(--sf-panel-bg)] mx-4 mt-4 rounded-2xl px-5 py-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
@@ -188,12 +188,12 @@ export default function TokenSelectorModal({
                           }
                         }
                       }}
-                      className={`inline-flex items-center gap-2 rounded-xl border-2 px-3 py-2 transition-all focus:outline-none ${
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all focus:outline-none ${
                         isSelectedInOther
-                          ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
+                          ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
                           : token.enabled
-                          ? 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md cursor-pointer'
-                          : 'border-[color:var(--sf-outline)]/50 bg-[color:var(--sf-surface)]/40 cursor-not-allowed'
+                          ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-md cursor-pointer'
+                          : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
                       }`}
                     >
                       <img
@@ -226,7 +226,7 @@ export default function TokenSelectorModal({
         )}
 
         {/* Search */}
-        <div className="bg-[color:var(--sf-surface)]/20 px-6 py-4">
+        <div className="px-4 py-4">
           <div className="relative">
             <Search
               size={18}
@@ -237,7 +237,7 @@ export default function TokenSelectorModal({
               placeholder="Search bitcoin-native assets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 py-3 pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:border-[color:var(--sf-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 transition-all"
+              className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] py-3 pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all"
             />
           </div>
         </div>
@@ -267,12 +267,12 @@ export default function TokenSelectorModal({
                   <button
                     key={token.id}
                     onClick={() => handleSelect(token.id)}
-                    className={`group relative w-full rounded-xl border-2 p-4 text-left transition-all focus:outline-none ${
+                    className={`group relative w-full rounded-xl p-4 text-left shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all focus:outline-none ${
                       !isAvailable
-                        ? 'border-transparent bg-gray-300/50 opacity-50 cursor-not-allowed'
+                        ? 'bg-[color:var(--sf-input-bg)]/50 opacity-50 cursor-not-allowed'
                         : isSelected
-                        ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 hover:shadow-md'
-                        : 'border-transparent bg-[color:var(--sf-surface)]/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-[color:var(--sf-surface)]/60 hover:shadow-md'
+                        ? 'bg-[color:var(--sf-primary)]/10 hover:shadow-md'
+                        : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-md'
                     }`}
                     disabled={!isAvailable}
                   >

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Minus, Send } from "lucide-react";
+import Link from "next/link";
 
 type Props = {
   txId: string;
@@ -11,29 +12,37 @@ type Props = {
 export default function SwapSuccessNotification({ txId, onClose }: Props) {
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   useEffect(() => {
     // Start animations
     requestAnimationFrame(() => setIsVisible(true));
-    
+
     // End flash after 400ms
     const flashTimer = setTimeout(() => setIsFlashing(false), 400);
-    
-    // Auto-dismiss after 5 seconds
-    const dismissTimer = setTimeout(() => {
-      setIsVisible(false);
-      setTimeout(onClose, 300);
+
+    // Auto-collapse after 5 seconds (instead of dismiss)
+    const collapseTimer = setTimeout(() => {
+      setIsExpanded(false);
     }, 5000);
 
     return () => {
       clearTimeout(flashTimer);
-      clearTimeout(dismissTimer);
+      clearTimeout(collapseTimer);
     };
-  }, [onClose]);
+  }, []);
 
   const handleDismiss = () => {
     setIsVisible(false);
     setTimeout(onClose, 300);
+  };
+
+  const handleCollapse = () => {
+    setIsExpanded(false);
+  };
+
+  const handleExpand = () => {
+    setIsExpanded(true);
   };
 
   return (
@@ -45,73 +54,85 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
         }`}
       />
 
-      {/* Success bar */}
+      {/* Collapsed circle - bottom right */}
       <div
-        className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-[540px] px-4 transition-all duration-300 ease-out ${
-          isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"
+        className={`fixed bottom-6 right-6 z-[9999] transition-all duration-300 ease-out ${
+          isVisible && !isExpanded ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
         }`}
       >
-        <div className="relative rounded-2xl border-2 border-green-500/30 bg-gradient-to-br from-green-50 to-white p-4 shadow-[0_12px_48px_rgba(34,197,94,0.25)] backdrop-blur-xl">
-          {/* Success icon */}
-          <div className="absolute -top-3 -left-3 flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-green-500 to-green-600 shadow-[0_4px_16px_rgba(34,197,94,0.4)]">
-            <Check size={20} className="text-white" strokeWidth={3} />
+        <button
+          onClick={handleExpand}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_6px_28px_rgba(34,197,94,0.4)] transition-shadow cursor-pointer"
+          aria-label="Expand swap notification"
+        >
+          <div className="flex gap-0.5">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse [animation-delay:200ms]" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse [animation-delay:400ms]" />
           </div>
+        </button>
+      </div>
+
+      {/* Expanded notification - above the circle in bottom right */}
+      <div
+        className={`fixed bottom-20 right-6 z-[9999] w-full max-w-[340px] transition-all duration-300 ease-out ${
+          isVisible && isExpanded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
+        }`}
+      >
+        <div className="relative rounded-2xl border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] p-4 shadow-[0_12px_48px_rgba(34,197,94,0.25)] backdrop-blur-xl">
+          {/* Send icon */}
+          <Send size={18} className="absolute top-4 left-4 text-[color:var(--sf-info-green-title)]" strokeWidth={2.5} />
 
           {/* Content */}
-          <div className="ml-8 pr-8">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-base font-bold text-green-800">Swap Submitted</h3>
-              <div className="flex gap-1">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse [animation-delay:200ms]" />
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse [animation-delay:400ms]" />
-              </div>
-            </div>
-            <div className="text-sm text-green-700/80">
+          <div className="ml-8 pr-16">
+            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">Swap Submitted</h3>
+            <div className="text-sm text-[color:var(--sf-info-green-text)]">
               Transaction ID:{" "}
-              <span className="font-semibold text-xs break-all">{txId}</span>
+              <Link
+                href={`https://ordiscan.com/tx/${txId}`}
+                target="_blank"
+                className="font-semibold text-xs break-all hover:underline"
+              >
+                {txId}
+              </Link>
             </div>
           </div>
 
-          {/* Dismiss button */}
-          <button
-            onClick={handleDismiss}
-            className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full transition-all hover:bg-green-100 focus:outline-none"
-            aria-label="Dismiss"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-green-600"
+          {/* Action buttons */}
+          <div className="absolute top-3 right-3 flex items-center gap-1">
+            {/* Collapse button */}
+            <button
+              onClick={handleCollapse}
+              className="flex h-6 w-6 items-center justify-center rounded-full transition-all hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
+              aria-label="Collapse"
             >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+              <Minus size={14} className="text-[color:var(--sf-info-green-title)]" strokeWidth={2.5} />
+            </button>
 
-          {/* Progress bar */}
-          <div className="absolute bottom-0 left-0 right-0 h-1 overflow-hidden rounded-b-2xl bg-green-200/50">
-            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 animate-[shrink_5s_linear_forwards] origin-left" />
+            {/* Dismiss button */}
+            <button
+              onClick={handleDismiss}
+              className="flex h-6 w-6 items-center justify-center rounded-full transition-all hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
+              aria-label="Dismiss"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-[color:var(--sf-info-green-title)]"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes shrink {
-          from {
-            transform: scaleX(1);
-          }
-          to {
-            transform: scaleX(0);
-          }
-        }
-      `}</style>
     </>
   );
 }

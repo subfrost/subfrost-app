@@ -50,7 +50,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         interactive ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer' : 'cursor-default'
       } ${
         isSelected
-          ? 'bg-[color:var(--sf-surface)]/90 ring-2 ring-[color:var(--sf-primary)]'
+          ? 'bg-[color:var(--sf-primary)]/10'
           : 'bg-[color:var(--sf-glass-bg)]'
       }`}
     >

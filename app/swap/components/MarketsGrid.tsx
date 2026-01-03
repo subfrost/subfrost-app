@@ -141,30 +141,30 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setMarketFilter('all')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
               marketFilter === 'all'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
             }`}
           >
             All
           </button>
           <button
             onClick={() => setMarketFilter('btc')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
               marketFilter === 'btc'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
             }`}
           >
             BTC
           </button>
           <button
             onClick={() => setMarketFilter('usd')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
               marketFilter === 'usd'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
             }`}
           >
             USD
@@ -177,14 +177,14 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="hidden md:block lg:hidden h-10 w-full rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
+              className="hidden md:block lg:hidden h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:outline-none "
             />
             <input
               type="text"
               placeholder="Search pools..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="md:hidden lg:block h-10 w-full rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:border-[color:var(--sf-primary)]/50 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/20"
+              className="md:hidden lg:block h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all focus:outline-none "
             />
             <svg 
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--sf-text)]/40"
@@ -387,7 +387,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             key={pool.id}
             onClick={() => handleSelectPool(pool)}
             className={`text-left rounded-2xl bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none border-t border-[color:var(--sf-top-highlight)] ${
-              selectedPoolId === pool.id ? 'ring-2 ring-[color:var(--sf-primary)]' : ''
+              selectedPoolId === pool.id ? 'bg-[color:var(--sf-primary)]/10' : ''
             }`}
           >
             <div className="flex items-center justify-between mb-3">

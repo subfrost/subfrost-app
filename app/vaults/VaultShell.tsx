@@ -136,30 +136,30 @@ export default function VaultShell() {
           <div className="col-span-full flex items-center gap-2 mb-2 md:hidden">
             <button
               onClick={() => setVaultFilter('all')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                 vaultFilter === 'all'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
               All
             </button>
             <button
               onClick={() => setVaultFilter('mains')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                 vaultFilter === 'mains'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
               Mains
             </button>
             <button
               onClick={() => setVaultFilter('alts')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                 vaultFilter === 'alts'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
               Alts
@@ -177,30 +177,30 @@ export default function VaultShell() {
             <div className="min-w-[200px] max-w-[300px] lg:max-w-[400px] text-left flex items-center gap-2">
               <button
                 onClick={() => setVaultFilter('all')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'all'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
                 All
               </button>
               <button
                 onClick={() => setVaultFilter('mains')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'mains'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
                 Mains
               </button>
               <button
                 onClick={() => setVaultFilter('alts')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'alts'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-[color:var(--sf-glass-border)]'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
                 Alts

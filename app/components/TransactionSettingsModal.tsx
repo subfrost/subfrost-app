@@ -33,19 +33,19 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200" onClick={close}>
       <div
-        className="w-[540px] max-w-[92vw] overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+        className="w-[540px] max-w-[92vw] overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Transaction Settings"
       >
         {/* Header */}
-        <div className="border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 px-6 py-5">
+        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Transaction Settings</h2>
-            <button 
+            <button
               onClick={close}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)]"
               aria-label="Close"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -57,18 +57,18 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
 
         <div className="flex flex-col gap-5 p-6">
           {/* Slippage */}
-          <section className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
-            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Max Slippage</div>
+          <section className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Max Slippage</div>
             <div className="flex items-center gap-2 flex-wrap">
               {['0.1', '0.5', '1'].map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setMaxSlippage(p)}
-                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
-                    maxSlippage === p 
-                      ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' 
-                      : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                  className={`rounded-lg px-4 py-2 text-sm font-bold shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all border ${
+                    maxSlippage === p
+                      ? 'border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                      : 'border-[color:var(--sf-text)]/20 bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                   }`}
                 >
                   {p}%
@@ -87,7 +87,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                     const n = Math.max(0, Math.min(50, Number(v)));
                     if (Number.isFinite(n)) setMaxSlippage(String(n));
                   }}
-                  className="h-10 w-28 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-10 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                  className="h-10 w-28 rounded-lg border border-[color:var(--sf-text)]/20 bg-[color:var(--sf-input-bg)] px-3 pr-10 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-semibold text-[color:var(--sf-text)] outline-none transition-all"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
               </div>
@@ -95,8 +95,8 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
           </section>
 
           {/* Deadline */}
-          <section className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
-            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Deadline (blocks)</div>
+          <section className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
+            <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Deadline (blocks)</div>
             <input
               aria-label="Deadline in blocks"
               type="number"
@@ -108,31 +108,31 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                 const n = Math.max(1, Math.min(10, Number(e.target.value)));
                 if (Number.isFinite(n)) setDeadlineBlocks(n);
               }}
-              className="h-10 w-32 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+              className="h-10 w-32 rounded-lg border border-[color:var(--sf-text)]/20 bg-[color:var(--sf-input-bg)] px-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-semibold text-[color:var(--sf-text)] outline-none transition-all"
             />
           </section>
 
           {/* Miner Fee */}
-          <section className="relative rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-settings-section-bg)] p-4">
+          <section className="relative rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
             {isCrossChainFrom && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[color:var(--sf-surface)]/80 backdrop-blur-[2px]">
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-[color:var(--sf-glass-bg)]/80 backdrop-blur-[2px]">
                 <p className="px-4 text-center text-sm font-semibold text-[color:var(--sf-text)]">
                   Both Bitcoin and Ethereum Network fees are auto-calculated for cross-chain swaps.
                 </p>
               </div>
             )}
             <div className={isCrossChainFrom ? 'opacity-30' : ''}>
-              <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-settings-title)]">Miner Fee</div>
+              <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Miner Fee</div>
               <div className="flex flex-wrap items-center gap-2">
                 {(['slow', 'medium', 'fast'] as FeeSelection[]).map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => setSelection(s)}
-                    className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all ${
+                    className={`rounded-lg px-4 py-2 text-sm font-bold capitalize shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all border ${
                       selection === s
-                        ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                        : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                        ? 'border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                        : 'border-[color:var(--sf-text)]/20 bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                     }`}
                   >
                     {s}
@@ -141,10 +141,10 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                 <button
                   type="button"
                   onClick={() => setSelection('custom')}
-                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
+                  className={`rounded-lg px-4 py-2 text-sm font-bold shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all border ${
                     selection === 'custom'
-                      ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                      : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                      ? 'border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                      : 'border-[color:var(--sf-text)]/20 bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                   }`}
                 >
                   Custom
@@ -160,13 +160,13 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                       value={custom}
                       onChange={(e) => setCustom(e.target.value)}
                       placeholder="0"
-                      className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                      className="h-10 w-36 rounded-lg border border-[color:var(--sf-text)]/20 bg-[color:var(--sf-input-bg)] px-3 pr-20 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-semibold text-[color:var(--sf-text)] outline-none transition-all"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sats/vB</span>
                   </div>
                 )}
               </div>
-              <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm">
+              <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm">
                 <span className="font-semibold text-[color:var(--sf-text)]/70">Selected:</span>
                 <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sats/vB</span>
               </div>

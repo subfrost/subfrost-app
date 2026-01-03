@@ -5,6 +5,7 @@ import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
 import { useWallet } from "@/context/WalletContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { ChevronDown } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
@@ -59,6 +60,7 @@ export default function SwapInputs({
   onChangeEthereumAddress,
 }: Props) {
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
+  const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
 
   // Bridge state
@@ -170,11 +172,12 @@ export default function SwapInputs({
   
   // Color based on usage
   const getBalanceColor = () => {
-    if (balanceUsage === 0) return 'bg-gray-200';
-    if (balanceUsage < 50) return 'bg-green-500';
-    if (balanceUsage < 80) return 'bg-yellow-500';
-    if (balanceUsage < 100) return 'bg-orange-500';
-    return 'bg-red-500';
+    const isDark = theme === 'dark';
+    if (balanceUsage === 0) return isDark ? 'bg-gray-700' : 'bg-gray-200';
+    if (balanceUsage < 50) return isDark ? 'bg-green-700' : 'bg-green-500';
+    if (balanceUsage < 80) return isDark ? 'bg-yellow-700' : 'bg-yellow-500';
+    if (balanceUsage < 100) return isDark ? 'bg-orange-700' : 'bg-orange-500';
+    return isDark ? 'bg-red-700' : 'bg-red-500';
   };
 
   // Check if current amount matches a specific percentage of balance
@@ -213,7 +216,7 @@ export default function SwapInputs({
         {/* Sell panel */}
         <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
           <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Send</span>
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+          <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all">
             <div className="flex flex-col gap-2">
               {/* Row 1: Input + Token Selector */}
               <div className="flex items-center gap-2">
@@ -223,7 +226,7 @@ export default function SwapInputs({
                 <button
                   type="button"
                   onClick={() => openTokenSelector('from')}
-                  className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none flex-shrink-0"
+                  className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none flex-shrink-0"
                 >
                   {from && (
                     <TokenIcon
@@ -249,7 +252,7 @@ export default function SwapInputs({
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                     {fromBalanceText}
                     {balanceUsage > 0 && (
-                      <span className="ml-1.5 text-[10px] font-bold">
+                      <span className="ml-1.5">
                         ({balanceUsage.toFixed(1)}%)
                       </span>
                     )}
@@ -262,7 +265,7 @@ export default function SwapInputs({
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1">
                     {balanceUsage > 0 && (
-                      <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div className={`h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
                         <div
                           className={`h-full ${getBalanceColor()} transition-all duration-300 ease-out`}
                           style={{ width: `${balanceUsage}%` }}
@@ -276,21 +279,21 @@ export default function SwapInputs({
                         <button
                           type="button"
                           onClick={() => onPercentFrom(0.25)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.25 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                         >
                           25%
                         </button>
                         <button
                           type="button"
                           onClick={() => onPercentFrom(0.5)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.5 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                         >
                           50%
                         </button>
                         <button
                           type="button"
                           onClick={() => onPercentFrom(0.75)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.75 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                         >
                           75%
                         </button>
@@ -299,7 +302,7 @@ export default function SwapInputs({
                     <button
                       type="button"
                       onClick={onMaxFrom}
-                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none ${onMaxFrom ? (activePercent === 1 ? "border border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]" : "border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40") : "opacity-40 cursor-not-allowed border border-transparent"}`}
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none ${onMaxFrom ? (activePercent === 1 ? "border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-percent-btn)]" : "border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10") : "opacity-40 cursor-not-allowed border border-transparent"}`}
                       disabled={!onMaxFrom}
                     >
                       Max
@@ -316,7 +319,7 @@ export default function SwapInputs({
           <button
             type="button"
             onClick={onInvert}
-            className="group flex h-11 w-11 items-center justify-center rounded-full border-2 border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.25)] hover:border-[color:var(--sf-primary)]/40 hover:scale-105 active:scale-95 outline-none"
+            className="group flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.25)] hover:scale-105 active:scale-95 outline-none"
             aria-label="Invert swap direction"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform group-hover:-rotate-180 duration-300">
@@ -328,7 +331,7 @@ export default function SwapInputs({
         {/* Receive panel */}
         <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
           <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Receive</span>
-          <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+          <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all">
             <div className="flex flex-col gap-2">
               {/* Row 1: Input + Token Selector */}
               <div className="flex items-center gap-2">
@@ -338,7 +341,7 @@ export default function SwapInputs({
                 <button
                   type="button"
                   onClick={() => openTokenSelector('to')}
-                  className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none flex-shrink-0"
+                  className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none flex-shrink-0"
                 >
                   {to && (
                     <TokenIcon
@@ -391,7 +394,7 @@ export default function SwapInputs({
             value={ethereumAddress ?? ''}
             onChange={(e) => onChangeEthereumAddress?.(e.target.value)}
             placeholder="Enter USDT recipient address (0x...)"
-            className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-4 py-3 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 focus:border-[color:var(--sf-primary)] transition-all"
+            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all"
           />
           <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
             Enter the Ethereum address where you want to receive USDT.

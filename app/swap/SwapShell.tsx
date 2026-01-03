@@ -22,7 +22,6 @@ import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
-import LoadingOverlay from "@/app/components/LoadingOverlay";
 
 // Lazy loaded components - split into separate chunks
 const SwapInputs = lazy(() => import("./components/SwapInputs"));
@@ -353,6 +352,7 @@ export default function SwapShell() {
   }, [walletBalances?.alkanes]);
 
   const formatBalance = (id?: string): string => {
+    if (isBalancesLoading) return 'Loading...';
     if (!id) return 'Balance: 0';
 
     // BTC balance
@@ -1014,7 +1014,7 @@ export default function SwapShell() {
             <button
               type="button"
               onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md outline-none focus:outline-none ${selectedTab !== 'lp' ? 'invisible' : ''}`}
+              className={`flex h-10 w-10 items-center justify-center rounded-lg bg-[color:var(--sf-panel-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-[color:var(--sf-text)] transition-all hover:bg-[color:var(--sf-surface)] hover:shadow-md outline-none focus:outline-none ${selectedTab !== 'lp' ? 'invisible' : ''}`}
               title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1028,7 +1028,6 @@ export default function SwapShell() {
           </div>
 
           <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
-          {isBalancesLoading && <LoadingOverlay />}
           <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (
             <SwapInputs

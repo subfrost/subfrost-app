@@ -164,7 +164,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
       ) : quote ? (
         <>
           {swapRoute && (
-            <div className="mb-2 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/20 p-3">
+            <div className="mb-2 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)] mb-2">
                 {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
               </div>
@@ -208,7 +208,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
             <button
               type="button"
               onClick={() => openTxSettings()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-percent-btn)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

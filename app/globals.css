@@ -99,6 +99,9 @@ body {
   /* Boost icons - dark mode (light purple to dark purple gradient) */
   --sf-boost-icon-from: #a855f7;
   --sf-boost-icon-to: #7c3aed;
+
+  /* Percentage buttons - white in dark mode */
+  --sf-percent-btn: #ffffff;
 }
 
 /* Light Theme (gabes-branch-ui styles) */
@@ -121,6 +124,7 @@ body {
   --sf-glass-bg: rgba(240, 247, 255, 0.82);
   --sf-glass-border: rgba(255, 255, 255, 0.55);
   --sf-panel-bg: rgba(255, 255, 255, 0.5);
+  --sf-input-bg: var(--sf-surface);
   --sf-list-hover-bg: rgba(255, 255, 255, 0.8);
   --sf-dropdown-bg: #FFFFFF;
   --sf-row-border: rgba(200, 210, 230, 0.25);
@@ -135,6 +139,9 @@ body {
   --sf-boost-bg-to: #fdf2f8;
   --sf-boost-label: #6b21a8;
   --sf-boost-value: #7c3aed;
+
+  /* Percentage buttons - primary color in light mode */
+  --sf-percent-btn: var(--sf-primary);
 
   /* Coming soon - light mode */
   --sf-coming-soon-bg: #fffbeb;
@@ -197,6 +204,7 @@ body {
   --sf-glass-bg: rgba(15, 28, 48, 0.85);
   --sf-glass-border: rgba(91, 156, 255, 0.15);
   --sf-panel-bg: rgba(255, 255, 255, 0.03);
+  --sf-input-bg: rgba(255, 255, 255, 0.04);
   --sf-list-hover-bg: rgba(91, 156, 255, 0.1);
 
   /* Settings modal - dark sections in dark mode */

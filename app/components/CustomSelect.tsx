@@ -64,7 +64,7 @@ export default function CustomSelect({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={`h-11 w-full appearance-none rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-br from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-3.5 pr-10 text-left text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-[color:var(--sf-primary)]/40 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
-          isOpen ? 'ring-2 ring-[color:var(--sf-primary)]/50' : ''
+          ''
         }`}
       >
         {showTokenIcon && displaySymbol && (

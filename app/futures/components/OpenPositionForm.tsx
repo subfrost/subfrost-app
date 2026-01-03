@@ -7,6 +7,7 @@ import TokenIcon from '@/app/components/TokenIcon';
 import NumberField from '@/app/components/NumberField';
 import { useBtcBalance } from '@/hooks/useBtcBalance';
 import { useWallet } from '@/context/WalletContext';
+import { useTheme } from '@/context/ThemeContext';
 
 type OpenPositionFormProps = {
   contracts: Contract[];
@@ -28,6 +29,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
   // Get wallet connection state
   const { isConnected, onConnectModalOpenChange } = useWallet();
+  const { theme } = useTheme();
 
   // Get BTC balance
   const { data: btcBalanceSats } = useBtcBalance();
@@ -47,11 +49,12 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   
   // Color based on usage
   const getBalanceColor = () => {
-    if (balanceUsage === 0) return 'bg-gray-200';
-    if (balanceUsage < 50) return 'bg-green-500';
-    if (balanceUsage < 80) return 'bg-yellow-500';
-    if (balanceUsage < 100) return 'bg-orange-500';
-    return 'bg-red-500';
+    const isDark = theme === 'dark';
+    if (balanceUsage === 0) return isDark ? 'bg-gray-700' : 'bg-gray-200';
+    if (balanceUsage < 50) return isDark ? 'bg-green-700' : 'bg-green-500';
+    if (balanceUsage < 80) return isDark ? 'bg-yellow-700' : 'bg-yellow-500';
+    if (balanceUsage < 100) return isDark ? 'bg-orange-700' : 'bg-orange-500';
+    return isDark ? 'bg-red-700' : 'bg-red-500';
   };
   
   // Handle percentage clicks
@@ -276,7 +279,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
             <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Investment Amount
             </label>
-            <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+            <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all">
               <div className="grid grid-cols-[1fr_auto] items-center gap-3">
                 <div className="flex items-center gap-3">
                   <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" className="flex-shrink-0" />
@@ -294,14 +297,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     <div className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
                       {balanceText}
                       {balanceUsage > 0 && (
-                        <span className="ml-1.5 text-[10px] font-bold">
+                        <span className="ml-1.5">
                           ({balanceUsage.toFixed(1)}%)
                         </span>
                       )}
                     </div>
                     {balanceUsage > 0 && (
-                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                        <div 
+                      <div className={`w-full h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
+                        <div
                           className={`h-full ${getBalanceColor()} transition-all duration-300 ease-out`}
                           style={{ width: `${balanceUsage}%` }}
                         />
@@ -312,28 +315,28 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     <button
                       type="button"
                       onClick={() => handlePercent(0.25)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10"
                     >
                       25%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.5)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10"
                     >
                       50%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.75)}
-                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10"
                     >
                       75%
                     </button>
                     <button
                       type="button"
                       onClick={handleMax}
-                      className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/20 hover:border-[color:var(--sf-primary)]/50"
+                      className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/20"
                       disabled={btcBalance === 0}
                     >
                       Max
@@ -360,14 +363,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     const minPeriod = findMinimumProfitablePeriod();
                     setSelectedBlocks(minPeriod);
                   }}
-                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10"
                 >
                   Min
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedBlocks(maxPeriod)}
-                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"
+                  className="inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all focus:outline-none border border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10"
                 >
                   Max
                 </button>
@@ -392,7 +395,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     const value = parseInt(e.target.value, 10) || 1;
                     setSelectedBlocks(Math.max(1, Math.min(maxPeriod, value)));
                   }}
-                  className="h-10 w-20 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                  className="h-10 w-20 rounded-lg border border-[color:var(--sf-text)]/20 bg-[color:var(--sf-surface)] px-3 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none transition-colors"
                 />
                 <span className="text-sm text-[color:var(--sf-text)]/70">blocks</span>
               </div>

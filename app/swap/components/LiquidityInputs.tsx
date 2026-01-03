@@ -123,7 +123,7 @@ export default function LiquidityInputs({
             <button
               type="button"
               onClick={onOpenLPSelector}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
             >
               <span className="font-bold text-sm text-[color:var(--sf-text)]">
                 {selectedLPPosition ? `${selectedLPPosition.amount} ${selectedLPPosition.token0Symbol}/${selectedLPPosition.token1Symbol} LP` : 'Select Position'}
@@ -137,7 +137,7 @@ export default function LiquidityInputs({
             <>
               <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
                 <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
-                <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+                <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all">
                   <div className="flex flex-col gap-2">
                     {/* Row 1: Input */}
                     <NumberField 
@@ -172,7 +172,7 @@ export default function LiquidityInputs({
                             key={label}
                             type="button"
                             onClick={() => onChangeRemoveAmount?.(targetAmount)}
-                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${isActive ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${isActive ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                           >
                             {label}
                           </button>
@@ -248,7 +248,7 @@ export default function LiquidityInputs({
                 <button
                   type="button"
                   onClick={() => openTokenSelector('pool0')}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
                 >
                   {token0 && (
                     <TokenIcon 
@@ -277,7 +277,7 @@ export default function LiquidityInputs({
               <button
                 type="button"
                 onClick={() => openTokenSelector('pool1')}
-                className="flex-1 md:flex-none lg:flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+                className="flex-1 md:flex-none lg:flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
               >
                 {token1 && (
                   <TokenIcon 
@@ -313,7 +313,7 @@ export default function LiquidityInputs({
                 />
                 <span className="text-xs font-bold text-[color:var(--sf-text)]">{token0.symbol}</span>
               </div>
-              <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-2 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+              <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all">
                 <NumberField placeholder={"0.00"} align="left" value={token0Amount} onChange={onChangeToken0Amount} />
                 <div className="mt-1 text-right text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
               </div>
@@ -323,15 +323,15 @@ export default function LiquidityInputs({
             <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
                 <TokenIcon
-                  symbol={token1.symbol} 
-                  id={token1.id} 
-                  iconUrl={token1.iconUrl} 
-                  size="sm" 
-                  network={network} 
+                  symbol={token1.symbol}
+                  id={token1.id}
+                  iconUrl={token1.iconUrl}
+                  size="sm"
+                  network={network}
                 />
                 <span className="text-xs font-bold text-[color:var(--sf-text)]">{token1.symbol}</span>
               </div>
-              <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-2 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+              <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all">
                 <NumberField placeholder={"0.00"} align="left" value={token1Amount} onChange={onChangeToken1Amount} />
                 <div className="mt-1 text-right text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
               </div>
@@ -420,7 +420,7 @@ function SettingsButton() {
     <button
       type="button"
       onClick={() => openTxSettings()}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
+      className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-percent-btn)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
