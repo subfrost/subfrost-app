@@ -13,6 +13,7 @@ import { useWallet } from "@/context/WalletContext";
 import { getConfig } from "@/utils/getConfig";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
+import { useBtcBalance } from "@/hooks/useBtcBalance";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -291,8 +292,22 @@ export default function SwapShell() {
       }
     });
 
+    // Also add tokens from user's wallet that aren't in pools yet
+    userCurrencies.forEach((currency: any) => {
+      if (!seen.has(currency.id) && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
+        seen.add(currency.id);
+        opts.push({
+          id: currency.id,
+          symbol: currency.symbol || currency.name || currency.id,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          isAvailable: true,
+        });
+      }
+    });
+
     return opts;
-  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
+  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, userCurrencies]);
 
   // Build TO options: Only whitelisted tokens
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -333,13 +348,28 @@ export default function SwapShell() {
       }
     });
 
-    return opts;
-  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
+    // Also add tokens from user's wallet that aren't in pools yet
+    userCurrencies.forEach((currency: any) => {
+      if (!seen.has(currency.id) && currency.id !== fromId && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
+        seen.add(currency.id);
+        opts.push({
+          id: currency.id,
+          symbol: currency.symbol || currency.name || currency.id,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          isAvailable: true,
+        });
+      }
+    });
 
-  // Balances - use useEnrichedWalletData for reliable balance data
+    return opts;
+  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, userCurrencies]);
+
+  // Balances - use useEnrichedWalletData for alkane balances, useBtcBalance for spendable BTC
   const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
-  const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
-  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
+  const { data: spendableBtcSats, isLoading: isLoadingBtcBalance } = useBtcBalance();
+  const btcBalanceSats = spendableBtcSats ?? 0;
+  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData || isLoadingBtcBalance);
 
   // Build a map from alkane ID to balance from wallet data (more reliable than useSellableCurrencies)
   const walletAlkaneBalances = useMemo(() => {
