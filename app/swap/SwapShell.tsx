@@ -13,6 +13,7 @@ import { useWallet } from "@/context/WalletContext";
 import { getConfig } from "@/utils/getConfig";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
+import { useBtcBalance } from "@/hooks/useBtcBalance";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -22,6 +23,8 @@ import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
+import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
+import { useLPPositions } from "@/hooks/useLPPositions";
 
 // Lazy loaded components - split into separate chunks
 const SwapInputs = lazy(() => import("./components/SwapInputs"));
@@ -146,20 +149,8 @@ export default function SwapShell() {
   const [isLPSelectorOpen, setIsLPSelectorOpen] = useState(false);
   const [removeAmount, setRemoveAmount] = useState<string>("");
 
-  // Test LP positions data
-  const testLPPositions: LPPosition[] = [
-    {
-      id: '1',
-      token0Symbol: 'DIESEL',
-      token1Symbol: 'frBTC',
-      amount: '0.1377',
-      valueUSD: 191,
-      gainLoss: {
-        token0: { amount: '+4.973', symbol: 'DIESEL' },
-        token1: { amount: '-0.00025911', symbol: 'frBTC' },
-      },
-    },
-  ];
+  // LP positions from wallet (real data from useLPPositions hook)
+  const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
 
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
@@ -180,6 +171,7 @@ export default function SwapShell() {
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
+  const removeLiquidityMutation = useRemoveLiquidityMutation();
 
   // Wallet/config
   const { address, network } = useWallet();
@@ -290,8 +282,22 @@ export default function SwapShell() {
       }
     });
 
+    // Also add tokens from user's wallet that aren't in pools yet
+    userCurrencies.forEach((currency: any) => {
+      if (!seen.has(currency.id) && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
+        seen.add(currency.id);
+        opts.push({
+          id: currency.id,
+          symbol: currency.symbol || currency.name || currency.id,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          isAvailable: true,
+        });
+      }
+    });
+
     return opts;
-  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
+  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, userCurrencies]);
 
   // Build TO options: Only whitelisted tokens
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -332,13 +338,28 @@ export default function SwapShell() {
       }
     });
 
-    return opts;
-  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
+    // Also add tokens from user's wallet that aren't in pools yet
+    userCurrencies.forEach((currency: any) => {
+      if (!seen.has(currency.id) && currency.id !== fromId && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
+        seen.add(currency.id);
+        opts.push({
+          id: currency.id,
+          symbol: currency.symbol || currency.name || currency.id,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          isAvailable: true,
+        });
+      }
+    });
 
-  // Balances - use useEnrichedWalletData for reliable balance data
+    return opts;
+  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, userCurrencies]);
+
+  // Balances - use useEnrichedWalletData for alkane balances, useBtcBalance for spendable BTC
   const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
-  const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
-  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
+  const { data: spendableBtcSats, isLoading: isLoadingBtcBalance } = useBtcBalance();
+  const btcBalanceSats = spendableBtcSats ?? 0;
+  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData || isLoadingBtcBalance);
 
   // Build a map from alkane ID to balance from wallet data (more reliable than useSellableCurrencies)
   const walletAlkaneBalances = useMemo(() => {
@@ -660,6 +681,50 @@ export default function SwapShell() {
     }
   };
 
+  const handleRemoveLiquidity = async () => {
+    console.log('[handleRemoveLiquidity] Starting...', { selectedLPPosition, removeAmount });
+
+    if (!selectedLPPosition) {
+      window.alert('Please select an LP position to remove');
+      return;
+    }
+
+    if (!removeAmount || parseFloat(removeAmount) <= 0) {
+      window.alert('Please enter a valid amount to remove');
+      return;
+    }
+
+    if (parseFloat(removeAmount) > parseFloat(selectedLPPosition.amount)) {
+      window.alert('Amount exceeds your LP position balance');
+      return;
+    }
+
+    try {
+      const result = await removeLiquidityMutation.mutateAsync({
+        lpTokenId: selectedLPPosition.id,  // LP token's alkane ID (same as pool ID)
+        lpAmount: removeAmount,
+        lpDecimals: 8,
+        minAmount0: '0',  // No slippage protection for now
+        minAmount1: '0',
+        token0Decimals: 8,
+        token1Decimals: 8,
+        feeRate: fee.feeRate,
+        deadlineBlocks,
+      });
+
+      if (result?.success && result.transactionId) {
+        console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
+        setSuccessTxId(result.transactionId);
+        // Clear state after success
+        setRemoveAmount('');
+        setSelectedLPPosition(null);
+      }
+    } catch (e: any) {
+      console.error('[handleRemoveLiquidity] Error:', e);
+      window.alert(`Remove liquidity failed: ${e?.message || 'See console for details'}`);
+    }
+  };
+
   const handleInvert = () => {
     // Swap tokens
     setFromToken((prev) => {
@@ -695,6 +760,12 @@ export default function SwapShell() {
 
   // Helper function to check if a pair is in the allowed list
   const isAllowedPair = useMemo(() => (token1Id: string, token2Id: string): boolean => {
+    // On non-mainnet networks (whitelistedPoolIds === null), allow all pairs
+    // This enables LP token selection on regtest/signet where pools may not be loaded yet
+    if (whitelistedPoolIds === null) {
+      return true;
+    }
+
     // Special case: BTC <-> frBTC wrap/unwrap is always allowed
     if ((token1Id === 'btc' && token2Id === FRBTC_ALKANE_ID) ||
         (token1Id === FRBTC_ALKANE_ID && token2Id === 'btc')) {
@@ -788,20 +859,20 @@ export default function SwapShell() {
         // Check if this pair is in the allowed list
         isAvailable = isAllowedPair(token.id, fromToken.id);
       }
-      
+
       return {
         id: token.id,
         symbol: token.symbol,
         name: token.name,
-        iconUrl: token.iconUrl || currency?.iconUrl,
-        balance: currency?.balance,
+        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
+        balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: currency?.priceInfo?.price,
         isAvailable,
       };
     });
-    
+
     return sortTokenOptions(options);
-  }, [toOptions, idToUserCurrency, fromToken, isAllowedPair]);
+  }, [toOptions, idToUserCurrency, btcBalanceSats, fromToken, isAllowedPair]);
 
   // Pool token options - filtered to only show tokens that are in the whitelisted pools
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
@@ -906,6 +977,11 @@ export default function SwapShell() {
         });
       }
     });
+
+    console.log('[poolTokenOptions] Built options:', opts.length, 'tokens');
+    console.log('[poolTokenOptions] userCurrencies count:', userCurrencies?.length || 0);
+    console.log('[poolTokenOptions] poolTokenMap size:', poolTokenMap?.size || 0);
+    console.log('[poolTokenOptions] opts:', opts.map(o => ({ id: o.id, symbol: o.symbol })));
 
     return sortTokenOptions(opts);
   }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds]);
@@ -1100,7 +1176,9 @@ export default function SwapShell() {
                 if (t) setPoolToken1(t);
               }}
               onAddLiquidity={handleAddLiquidity}
+              onRemoveLiquidity={handleRemoveLiquidity}
               isLoading={addLiquidityMutation.isPending}
+              isRemoveLoading={removeLiquidityMutation.isPending}
               token0BalanceText={formatBalance(poolToken0?.id)}
               token1BalanceText={formatBalance(poolToken1?.id)}
               token0FiatText="$0.00"
@@ -1250,7 +1328,7 @@ export default function SwapShell() {
       <LPPositionSelectorModal
         isOpen={isLPSelectorOpen}
         onClose={() => setIsLPSelectorOpen(false)}
-        positions={testLPPositions}
+        positions={lpPositions}
         onSelectPosition={setSelectedLPPosition}
         selectedPositionId={selectedLPPosition?.id}
       />

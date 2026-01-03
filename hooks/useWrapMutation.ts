@@ -186,7 +186,9 @@ export function useWrapMutation() {
       const segwitAddress = account?.nativeSegwit?.address;
       if (!taprootAddress) throw new Error('No taproot address available for UTXOs');
 
-      // Build list of addresses to source funds from
+      // Build list of actual addresses to source funds from
+      // alkanesExecuteWithStrings requires actual Bitcoin addresses, NOT symbolic references
+      // (Symbolic references like 'p2wpkh:0' only work with alkanesExecuteTyped)
       const fromAddresses: string[] = [];
       if (segwitAddress) fromAddresses.push(segwitAddress);
       if (taprootAddress) fromAddresses.push(taprootAddress);
@@ -194,13 +196,13 @@ export function useWrapMutation() {
       console.log('[WRAP] Sourcing from addresses:', fromAddresses);
 
       // Options for the SDK - source from both segwit and taproot
-      // Use segwit address for BTC change, taproot for alkane change
+      // Use actual addresses for change outputs
       const options: Record<string, any> = {
         trace_enabled: false,
         mine_enabled: false,
         auto_confirm: false,  // We'll handle signing ourselves
-        change_address: segwitAddress || taprootAddress,  // BTC change to segwit
-        alkanes_change_address: taprootAddress,  // Alkane change to taproot
+        change_address: segwitAddress || taprootAddress,  // BTC change to SegWit
+        alkanes_change_address: taprootAddress,  // Alkane change to Taproot
         from: fromAddresses,
         from_addresses: fromAddresses,
         lock_alkanes: true,
