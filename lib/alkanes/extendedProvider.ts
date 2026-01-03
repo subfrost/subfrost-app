@@ -51,9 +51,8 @@ function parseMaxVoutFromProtostones(protostones: string): number {
 /**
  * Execute an alkanes contract with typed parameters and sensible defaults.
  *
- * Uses alkanesExecuteFull which handles the complete execution flow:
- * - For deployments (with envelope): commit -> reveal -> mine -> trace
- * - For simple transactions: sign -> broadcast -> mine -> trace
+ * Uses alkanesExecute which takes a JSON params string and returns a PSBT
+ * for external wallet signing when auto_confirm is false.
  *
  * This provides automatic address separation:
  * - Sources UTXOs from both SegWit (p2wpkh:0) and Taproot (p2tr:0)
@@ -63,7 +62,7 @@ function parseMaxVoutFromProtostones(protostones: string): number {
  *
  * @param provider - The WASM WebProvider instance
  * @param params - Typed execution parameters
- * @returns Execution result
+ * @returns Execution result (PSBT when auto_confirm is false)
  */
 export async function alkanesExecuteTyped(
   provider: WebProvider,
@@ -76,7 +75,7 @@ export async function alkanesExecuteTyped(
   // Creates one p2tr:0 output for each vN reference (v0, v1, v2, etc.)
   const toAddresses = params.toAddresses ?? Array(maxVout + 1).fill('p2tr:0');
 
-  // Build options object for alkanesExecuteFull
+  // Build options object
   const options: Record<string, any> = {};
 
   // Apply automatic defaults for address separation
@@ -89,22 +88,34 @@ export async function alkanesExecuteTyped(
   if (params.autoConfirm !== undefined) options.auto_confirm = params.autoConfirm;
   if (params.rawOutput !== undefined) options.raw_output = params.rawOutput;
 
-  // Convert toAddresses array to JSON string
+  // Build parameters for alkanesExecuteWithStrings
+  // This returns a PSBT for signing - caller handles sign + broadcast
   const toAddressesJson = JSON.stringify(toAddresses);
-
-  // Convert options to JSON string
   const optionsJson = JSON.stringify(options);
 
-  console.log('[alkanesExecuteTyped] Calling alkanesExecuteFull with:');
+  console.log('[alkanesExecuteTyped] Calling alkanesExecuteWithStrings with:');
   console.log('[alkanesExecuteTyped]   to_addresses:', toAddressesJson);
   console.log('[alkanesExecuteTyped]   input_requirements:', params.inputRequirements);
   console.log('[alkanesExecuteTyped]   protostones:', params.protostones);
+  console.log('[alkanesExecuteTyped]   protostones type:', typeof params.protostones);
+  console.log('[alkanesExecuteTyped]   protostones length:', params.protostones?.length);
   console.log('[alkanesExecuteTyped]   fee_rate:', params.feeRate);
   console.log('[alkanesExecuteTyped]   options:', optionsJson);
 
-  // Use alkanesExecuteFull which handles the complete execution flow
-  // Signature: alkanesExecuteFull(to_addresses_json, input_requirements, protostones, fee_rate?, envelope_hex?, options_json?)
-  const result = await provider.alkanesExecuteFull(
+  // Validate protostone format
+  const protostoneStr = params.protostones;
+  if (protostoneStr && protostoneStr.includes('[') && protostoneStr.includes(']')) {
+    const cellpackMatch = protostoneStr.match(/\[([^\]]+)\]/);
+    if (cellpackMatch) {
+      console.log('[alkanesExecuteTyped]   Detected cellpack in protostone:', cellpackMatch[1]);
+    } else {
+      console.warn('[alkanesExecuteTyped]   WARNING: No cellpack found in protostone!');
+    }
+  }
+
+  // Use alkanesExecuteWithStrings which returns a PSBT for external signing
+  // The caller (useWrapMutation, useSwapMutation) handles signing and broadcasting
+  const result = await provider.alkanesExecuteWithStrings(
     toAddressesJson,
     params.inputRequirements,
     params.protostones,

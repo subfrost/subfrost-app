@@ -470,10 +470,22 @@ export default function SwapShell() {
   );
 
   const handleSwap = async () => {
+    console.log('[handleSwap] Called with:', {
+      fromToken: fromToken?.id,
+      toToken: toToken?.id,
+      FRBTC_ALKANE_ID,
+      isWrapPair,
+      isUnwrapPair,
+      fromAmount,
+      toAmount,
+      direction,
+    });
+
     if (!fromToken || !toToken) return;
 
     // Wrap/Unwrap direct pairs
     if (isWrapPair) {
+      console.log('[handleSwap] isWrapPair=true, calling wrapMutation...');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
@@ -866,8 +878,37 @@ export default function SwapShell() {
       }
     });
 
+    // Also add tokens from user's wallet that aren't in pools yet
+    // This allows users to add liquidity for new token pairs
+    userCurrencies.forEach((currency: any) => {
+      if (!seen.has(currency.id) && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
+        seen.add(currency.id);
+
+        // Check if this token can pair with the counterpart token (if selected)
+        let isAvailable = true;
+        if (counterpartToken) {
+          isAvailable = isAllowedPair(currency.id, counterpartToken.id);
+
+          // For LP mode, disallow BTC/frBTC pairing
+          if (currency.id === FRBTC_ALKANE_ID && counterpartToken.id === 'btc') {
+            isAvailable = false;
+          }
+        }
+
+        opts.push({
+          id: currency.id,
+          symbol: currency.symbol || currency.name || currency.id,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          balance: currency.balance,
+          price: currency.priceInfo?.price,
+          isAvailable,
+        });
+      }
+    });
+
     return sortTokenOptions(opts);
-  }, [markets, idToUserCurrency, FRBTC_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds]);
+  }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds]);
 
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {

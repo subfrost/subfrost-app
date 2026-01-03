@@ -164,6 +164,7 @@ type WalletContextType = {
   disconnect: () => void;
   signPsbt: (psbtBase64: string) => Promise<string>;
   signTaprootPsbt: (psbtBase64: string) => Promise<string>;
+  signSegwitPsbt: (psbtBase64: string) => Promise<string>;
   signPsbts: (params: { psbts: string[] }) => Promise<{ signedPsbts: string[] }>;
   signMessage: (message: string) => Promise<string>;
 
@@ -824,6 +825,94 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     return psbt.toBase64();
   }, [wallet, network, browserWallet, walletType]);
 
+  // Sign PSBT with segwit inputs (BIP84 derivation)
+  // Uses dynamic import to avoid SSR issues with crypto libraries
+  const signSegwitPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
+    // For browser wallets, they handle segwit signing internally
+    if (browserWallet && walletType === 'browser') {
+      const psbtBuffer = Buffer.from(psbtBase64, 'base64');
+      const psbtHex = psbtBuffer.toString('hex');
+      const signedHex = await browserWallet.signPsbt(psbtHex);
+      const signedBuffer = Buffer.from(signedHex, 'hex');
+      return signedBuffer.toString('base64');
+    }
+
+    // For keystore wallets, use BIP84 derivation
+    if (!wallet) {
+      throw new Error('Wallet not connected');
+    }
+
+    // Get mnemonic from session storage
+    const mnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
+    if (!mnemonic) {
+      throw new Error('Wallet session expired. Please unlock wallet again.');
+    }
+
+    // Dynamic imports to avoid SSR issues
+    const [bitcoin, tinysecp, BIP32Factory, bip39] = await Promise.all([
+      import('bitcoinjs-lib'),
+      import('tiny-secp256k1'),
+      import('bip32').then(m => m.default),
+      import('bip39'),
+    ]);
+
+    // Initialize ECC library
+    bitcoin.initEccLib(tinysecp);
+
+    // Determine bitcoin network
+    const getBitcoinNetwork = () => {
+      switch (network) {
+        case 'mainnet':
+          return bitcoin.networks.bitcoin;
+        case 'testnet':
+        case 'signet':
+          return bitcoin.networks.testnet;
+        case 'regtest':
+        case 'subfrost-regtest':
+        case 'oylnet':
+          return bitcoin.networks.regtest;
+        default:
+          return bitcoin.networks.bitcoin;
+      }
+    };
+
+    const btcNetwork = getBitcoinNetwork();
+
+    // Derive segwit key using BIP84 path
+    const seed = bip39.mnemonicToSeedSync(mnemonic);
+    const bip32 = BIP32Factory(tinysecp);
+    const root = bip32.fromSeed(seed, btcNetwork);
+
+    // BIP84 path: m/84'/coinType/0'/0/0
+    // coinType: 0 for mainnet, 1 for testnet/regtest
+    const coinType = network === 'mainnet' ? 0 : 1;
+    const segwitPath = `m/84'/${coinType}'/0'/0/0`;
+    const segwitChild = root.derivePath(segwitPath);
+
+    if (!segwitChild.privateKey) {
+      throw new Error('Failed to derive segwit private key');
+    }
+
+    // Parse and sign the PSBT
+    const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+
+    console.log('[signSegwitPsbt] Signing', psbt.inputCount, 'inputs with segwit key');
+    console.log('[signSegwitPsbt] Segwit path:', segwitPath);
+    console.log('[signSegwitPsbt] Pubkey:', Buffer.from(segwitChild.publicKey).toString('hex'));
+
+    // Sign each input with the segwit key
+    for (let i = 0; i < psbt.inputCount; i++) {
+      try {
+        psbt.signInput(i, segwitChild);
+        console.log(`[signSegwitPsbt] Signed input ${i}`);
+      } catch (error) {
+        console.warn(`[signSegwitPsbt] Could not sign input ${i}:`, error);
+      }
+    }
+
+    return psbt.toBase64();
+  }, [wallet, network, browserWallet, walletType]);
+
   // Sign multiple PSBTs - supports both keystore and browser wallets
   const signPsbts = useCallback(async (params: { psbts: string[] }): Promise<{ signedPsbts: string[] }> => {
     // For browser wallets
@@ -1097,6 +1186,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       disconnect,
       signPsbt,
       signTaprootPsbt,
+      signSegwitPsbt,
       signPsbts,
       signMessage,
 
@@ -1126,6 +1216,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       disconnect,
       signPsbt,
       signTaprootPsbt,
+      signSegwitPsbt,
       signPsbts,
       signMessage,
       getUtxos,
