@@ -107,16 +107,20 @@ export function usePools(params: UsePoolsParams = {}) {
       btcPrice ?? 0, // Include btcPrice in key so TVL recalculates when price updates
     ],
     staleTime: 120_000,
-    // Enable as soon as we have network info and BTC price - we use REST API directly
-    enabled: !!network && !!ALKANE_FACTORY_ID && btcPrice !== undefined,
+    // Enable as soon as we have network info - BTC price is optional for TVL calculation
+    enabled: !!network && !!ALKANE_FACTORY_ID,
     queryFn: async () => {
 
       try {
         // Parse factory ID into block and tx components
         const [factoryBlock, factoryTx] = ALKANE_FACTORY_ID.split(':');
 
+        console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID, 'on network:', network);
+
         // Use REST API directly for reliable pool data
         const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
+        console.log('[usePools] API URL:', `${apiUrl}/get-pools`);
+
         const response = await fetch(`${apiUrl}/get-pools`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -124,6 +128,8 @@ export function usePools(params: UsePoolsParams = {}) {
             factoryId: { block: factoryBlock, tx: factoryTx }
           }),
         });
+
+        console.log('[usePools] Response status:', response.status);
 
         if (!response.ok) {
           throw new Error(`API request failed: ${response.status}`);
