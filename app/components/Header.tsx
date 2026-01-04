@@ -6,7 +6,7 @@
  import { usePathname } from "next/navigation";
  import { useWallet } from "@/context/WalletContext";
 import { useTheme } from "@/context/ThemeContext";
-import { useBtcBalance } from "@/hooks/useBtcBalance";
+import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
  import { Menu, X, Copy, Check, ChevronDown } from "lucide-react";
  import AddressAvatar from "./AddressAvatar";
 
@@ -72,7 +72,7 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
  export default function Header() {
   const { connected, isConnected, address, onConnectModalOpenChange, disconnect, account } = useWallet() as any;
   const { theme } = useTheme();
-   const { data: btcBalanceSats, isLoading: isBalanceLoading } = useBtcBalance();
+   const { balances, isLoading: isBalanceLoading } = useEnrichedWalletData();
    const pathname = usePathname();
    const [menuOpen, setMenuOpen] = useState(false);
    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -86,7 +86,7 @@ import { useBtcBalance } from "@/hooks/useBtcBalance";
    const menuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
    const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
-   const btcBalance = btcBalanceSats ? (btcBalanceSats / 1e8).toFixed(5) : '0.00000';
+   const btcBalance = balances?.bitcoin?.total ? (balances.bitcoin.total / 1e8).toFixed(5) : '0.00000';
 
    const copyToClipboard = useCallback(async (text: string, type: string) => {
      await navigator.clipboard.writeText(text);
