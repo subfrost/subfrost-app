@@ -23,7 +23,7 @@ const sizeMap = {
 
 // Tokens with known local icons in /public/tokens/
 const TOKENS_WITH_LOCAL_ICONS = new Set([
-  'btc', 'frbtc', 'busd', 'eth', 'methane', 'ordi', 'sol', 'usdt', 'zec', 'frusd'
+  'btc', 'frbtc', 'busd', 'eth', 'ordi', 'sol', 'usdt', 'zec', 'frusd'
 ]);
 
 // Alkane IDs with known local icons
@@ -146,7 +146,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}
-        className={`${sizeClass} ${className} object-contain transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        className={`${sizeClass} ${className} object-contain transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
         onError={handleError}
       />

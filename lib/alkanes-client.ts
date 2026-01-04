@@ -221,17 +221,6 @@ export const MAINNET_POOLS: Record<string, PoolConfig> = {
     protobufPayload: generatePoolPayload(2, 77222),
     alkaneId: { block: 2, tx: 77222 },
   },
-  METHANE_FRBTC: {
-    id: '2:77221',
-    key: 'METHANE_FRBTC',
-    name: 'METHANE/frBTC',
-    token0Symbol: 'METHANE',
-    token1Symbol: 'frBTC',
-    token0Decimals: 8,
-    token1Decimals: 8,
-    protobufPayload: generatePoolPayload(2, 77221),
-    alkaneId: { block: 2, tx: 77221 },
-  },
   GOLDDUST_FRBTC: {
     id: '2:77228',
     key: 'GOLDDUST_FRBTC',
@@ -253,17 +242,6 @@ export const MAINNET_POOLS: Record<string, PoolConfig> = {
     token1Decimals: 8,
     protobufPayload: generatePoolPayload(2, 77237),
     alkaneId: { block: 2, tx: 77237 },
-  },
-  METHANE_BUSD: {
-    id: '2:68433',
-    key: 'METHANE_BUSD',
-    name: 'METHANE/bUSD',
-    token0Symbol: 'METHANE',
-    token1Symbol: 'bUSD',
-    token0Decimals: 8,
-    token1Decimals: 8,
-    protobufPayload: generatePoolPayload(2, 68433),
-    alkaneId: { block: 2, tx: 68433 },
   },
 };
 

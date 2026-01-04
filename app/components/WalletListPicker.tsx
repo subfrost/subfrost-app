@@ -93,13 +93,13 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
         </div>
         <button
           onClick={loadWallets}
-          className="px-4 py-2 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg text-sm text-white transition-colors"
+          className="px-4 py-2 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg text-sm text-white transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
         >
           Try Again
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] text-sm transition-colors"
+          className="px-4 py-2 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] text-sm transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
         >
           Cancel
         </button>
@@ -119,7 +119,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
         </div>
         <button
           onClick={loadWallets}
-          className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+          className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
         >
           Refresh
         </button>
@@ -132,7 +132,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
             key={wallet.folderId}
             onClick={() => onSelectWallet(wallet)}
             disabled={deletingId === wallet.folderId}
-            className="w-full text-left p-4 rounded-xl border border-[color:var(--sf-outline)] hover:border-blue-500 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full text-left p-4 rounded-xl border border-[color:var(--sf-outline)] hover:border-blue-500 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div className="flex items-start justify-between">
               {/* Wallet Info */}
@@ -173,7 +173,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-blue-500 dark:hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+                  className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-blue-500 dark:hover:text-blue-400 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none opacity-0 group-hover:opacity-100"
                   title="View in Google Drive"
                 >
                   <ExternalLink className="h-4 w-4" />
@@ -183,7 +183,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                 <button
                   onClick={(e) => handleDelete(e, wallet.folderId)}
                   disabled={deletingId === wallet.folderId}
-                  className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-red-500 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-100"
+                  className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-red-500 dark:hover:text-red-400 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none opacity-0 group-hover:opacity-100 disabled:opacity-100"
                   title="Delete backup"
                 >
                   {deletingId === wallet.folderId ? (
@@ -202,7 +202,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
       <div className="pt-4 border-t border-[color:var(--sf-outline)]">
         <button
           onClick={onCancel}
-          className="w-full rounded-lg border border-[color:var(--sf-outline)] py-3 font-medium text-[color:var(--sf-text)] transition-colors hover:bg-[color:var(--sf-primary)]/5"
+          className="w-full rounded-lg border border-[color:var(--sf-outline)] py-3 font-medium text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/5"
         >
           Back
         </button>

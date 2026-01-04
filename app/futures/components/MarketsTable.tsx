@@ -94,7 +94,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 const rows = [
                   <tr
                     key={contract.id}
-                    className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-colors cursor-pointer"
+                    className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
                     <td className="px-6 py-4">
@@ -106,7 +106,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           fill="none"
                           stroke="currentColor"
                           strokeWidth="2"
-                          className={`text-[color:var(--sf-text)]/50 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                          className={`text-[color:var(--sf-text)]/50 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isExpanded ? 'rotate-90' : ''}`}
                         >
                           <path d="M9 18l6-6-6-6" />
                         </svg>
@@ -128,7 +128,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           <div className="flex-1 h-2.5 rounded-full bg-[color:var(--sf-glass-border)] overflow-hidden relative">
                             {/* Exercised portion (filled) */}
                             <div
-                              className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)] transition-all z-10"
+                              className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-10"
                               style={{
                                 width: `${(contract.exercised / contract.totalSupply) * 100}%`,
                               }}
@@ -136,7 +136,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                             {/* Mempool queue portion (different color) */}
                             {contract.mempoolQueue > 0 && (
                               <div
-                                className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all z-20"
+                                className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-20"
                                 style={{
                                   width: `${(contract.mempoolQueue / contract.totalSupply) * 100}%`,
                                   left: `${(contract.exercised / contract.totalSupply) * 100}%`,
@@ -171,7 +171,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           e.stopPropagation();
                           onContractSelect({ id: contract.id, blocksLeft: contract.blocksLeft });
                         }}
-                        className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-opacity"
+                        className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                       >
                         View Details
                       </button>
@@ -250,7 +250,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                   <div className="flex-1 h-4 rounded-full bg-[color:var(--sf-glass-border)] overflow-hidden relative max-w-md">
                                     {/* Exercised portion */}
                                     <div
-                                      className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)] transition-all z-10"
+                                      className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-10"
                                       style={{
                                         width: `${(contract.exercised / contract.totalSupply) * 100}%`,
                                       }}
@@ -258,7 +258,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                     {/* Mempool queue portion (different color) */}
                                     {contract.mempoolQueue > 0 && (
                                       <div
-                                        className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all z-20"
+                                        className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-20"
                                         style={{
                                           width: `${(contract.mempoolQueue / contract.totalSupply) * 100}%`,
                                           left: `${(contract.exercised / contract.totalSupply) * 100}%`,

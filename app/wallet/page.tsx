@@ -67,14 +67,14 @@ export default function WalletDashboardPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowSendModal(true)}
-                  className="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium flex items-center gap-2 text-sm sm:text-base"
+                  className="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm sm:text-base"
                 >
                   <Send size={18} />
                   Send
                 </button>
                 <button
                   onClick={() => setShowReceiveModal(true)}
-                  className="px-3 sm:px-4 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-sm sm:text-base"
+                  className="px-3 sm:px-4 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-sm sm:text-base"
                 >
                   <QrCode size={18} />
                   Receive
@@ -90,7 +90,7 @@ export default function WalletDashboardPage() {
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{paymentAddress}</span>
                   <button
                     onClick={() => copyToClipboard(paymentAddress, 'segwit')}
-                    className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-colors shrink-0"
+                    className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0"
                     title="Copy address"
                   >
                     {copiedAddress === 'segwit' ? (
@@ -109,7 +109,7 @@ export default function WalletDashboardPage() {
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{address}</span>
                   <button
                     onClick={() => copyToClipboard(address, 'taproot')}
-                    className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-colors shrink-0"
+                    className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0"
                     title="Copy address"
                   >
                     {copiedAddress === 'taproot' ? (
@@ -132,7 +132,7 @@ export default function WalletDashboardPage() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-3 font-medium transition-colors relative text-sm sm:text-base shrink-0 ${
+                    className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-3 font-medium transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-sm sm:text-base shrink-0 ${
                       activeTab === tab.id
                         ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                         : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'

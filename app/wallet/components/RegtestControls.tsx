@@ -260,7 +260,7 @@ export default function RegtestControls() {
         <button
           onClick={() => mineBlocks(200)}
           disabled={mining}
-          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-orange-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-orange-500/50 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Pickaxe size={32} className="text-orange-400" />
           <span className="font-semibold">Mine 200 Blocks</span>
@@ -271,7 +271,7 @@ export default function RegtestControls() {
         <button
           onClick={() => mineBlocks(1)}
           disabled={mining}
-          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-[color:var(--sf-primary)]/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-[color:var(--sf-primary)]/50 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Zap size={32} className="text-[color:var(--sf-primary)]" />
           <span className="font-semibold">Mine 1 Block</span>
@@ -282,7 +282,7 @@ export default function RegtestControls() {
         <button
           onClick={mineDiesel}
           disabled={mining || !isWalletLoaded}
-          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-green-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-green-500/50 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Fuel size={32} className="text-green-500" />
           <span className="font-semibold">Mint DIESEL</span>
@@ -293,7 +293,7 @@ export default function RegtestControls() {
         <button
           onClick={generateFuture}
           disabled={mining}
-          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-purple-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-purple-500/50 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Clock size={32} className="text-purple-500 dark:text-purple-400" />
           <span className="font-semibold">Generate Future</span>

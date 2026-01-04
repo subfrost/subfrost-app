@@ -180,10 +180,10 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               <button
                 type="button"
                 onClick={() => setFilterDropdownOpen((v) => !v)}
-                className="flex items-center gap-1 rounded-md bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-colors"
+                className="flex items-center gap-1 rounded-md bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
               >
                 {TX_FILTER_OPTIONS.find((o) => o.value === txFilter)?.label ?? 'All Types'}
-                <ChevronDown size={14} className={`transition-transform ${filterDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={14} className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${filterDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
               {filterDropdownOpen && (
                 <div className="absolute left-0 top-full z-50 mt-1 w-36 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
@@ -195,7 +195,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                         setTxFilter(option.value);
                         setFilterDropdownOpen(false);
                       }}
-                      className={`w-full px-4 py-1.5 text-left text-sm font-medium transition-colors ${
+                      className={`w-full px-4 py-1.5 text-left text-sm font-medium transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                         txFilter === option.value
                           ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                           : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
@@ -209,11 +209,11 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
             </div>
           </div>
           {!isFullPage ? (
-            <Link href="/activity" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors">
+            <Link href="/activity" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
               View all
             </Link>
           ) : (
-            <Link href="/" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-colors">
+            <Link href="/" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
               Back
             </Link>
           )}
@@ -297,7 +297,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
             >
               <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 

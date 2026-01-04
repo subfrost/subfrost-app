@@ -240,23 +240,23 @@ console.log('');
 // ==========================================
 console.log('📦 Test Suite 3: Multi-Hop Routing Logic\n');
 
-test('Should calculate 2-hop swap (DIESEL → BUSD → METHANE)', () => {
+test('Should calculate 2-hop swap (DIESEL → BUSD → ALKAMIST)', () => {
   const amountIn = 100_000_000; // 1 DIESEL
-  
+
   // Hop 1: DIESEL → BUSD
   const hop1ReserveIn = 500_000_000_000; // 5,000 DIESEL
   const hop1ReserveOut = 1000_000_000_000; // 10,000 BUSD
   const hop1Quote = calculateSwapPrice('DIESEL', 'BUSD', amountIn, hop1ReserveIn, hop1ReserveOut);
-  
-  // Hop 2: BUSD → METHANE
+
+  // Hop 2: BUSD → ALKAMIST
   const hop2AmountIn = Number(hop1Quote.buyAmount);
   const hop2ReserveIn = 1000_000_000_000; // 10,000 BUSD
-  const hop2ReserveOut = 500_000_000_000; // 5,000 METHANE
-  const hop2Quote = calculateSwapPrice('BUSD', 'METHANE', hop2AmountIn, hop2ReserveIn, hop2ReserveOut);
-  
+  const hop2ReserveOut = 500_000_000_000; // 5,000 ALKAMIST
+  const hop2Quote = calculateSwapPrice('BUSD', 'ALKAMIST', hop2AmountIn, hop2ReserveIn, hop2ReserveOut);
+
   expect(Number(hop1Quote.buyAmount)).toBeGreaterThan(0);
   expect(Number(hop2Quote.buyAmount)).toBeGreaterThan(0);
-  
+
   // Final output should be less than direct due to 2x fees
   const finalOutput = Number(hop2Quote.buyAmount);
   expect(finalOutput).toBeGreaterThan(0);
@@ -267,12 +267,12 @@ test('Should simulate route comparison (BUSD vs frBTC bridge)', () => {
   
   // BUSD bridge route
   const busdHop1 = calculateSwapPrice('DIESEL', 'BUSD', amountIn, 500_000_000_000, 1000_000_000_000);
-  const busdHop2 = calculateSwapPrice('BUSD', 'METHANE', Number(busdHop1.buyAmount), 1000_000_000_000, 500_000_000_000);
+  const busdHop2 = calculateSwapPrice('BUSD', 'ALKAMIST', Number(busdHop1.buyAmount), 1000_000_000_000, 500_000_000_000);
   const busdRouteOutput = Number(busdHop2.buyAmount);
-  
+
   // frBTC bridge route (assume better liquidity)
   const frbtcHop1 = calculateSwapPrice('DIESEL', 'frBTC', amountIn, 500_000_000_000, 2000_000_000_000);
-  const frbtcHop2 = calculateSwapPrice('frBTC', 'METHANE', Number(frbtcHop1.buyAmount), 2000_000_000_000, 500_000_000_000);
+  const frbtcHop2 = calculateSwapPrice('frBTC', 'ALKAMIST', Number(frbtcHop1.buyAmount), 2000_000_000_000, 500_000_000_000);
   const frbtcRouteOutput = Number(frbtcHop2.buyAmount);
   
   // Should be able to compare routes

@@ -155,7 +155,7 @@ export default function SwapShell() {
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
   const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
-  const [successTxId, setSuccessTxId] = useState<string | null>(null);
+  const [successTx, setSuccessTx] = useState<{ txId: string; type: 'swap' | 'add-liquidity' | 'remove-liquidity' } | null>(null);
   const { data: btcPrice } = useBtcPrice();
 
   const sellId = fromToken?.id ?? '';
@@ -205,7 +205,7 @@ export default function SwapShell() {
 
   // Default from/to tokens: BTC → BUSD (use pool data for correct symbol)
   useEffect(() => {
-    if (!fromToken) setFromToken({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+    if (!fromToken) setFromToken({ id: 'btc', symbol: 'BTC', name: 'BTC' });
   }, [fromToken]);
   const toInitializedRef = useRef(false);
   useEffect(() => {
@@ -222,7 +222,7 @@ export default function SwapShell() {
   // Default LP tokens: Select Token / BTC
   useEffect(() => {
     if (!poolToken1 && selectedTab === 'lp') {
-      setPoolToken1({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+      setPoolToken1({ id: 'btc', symbol: 'BTC', name: 'BTC' });
     }
   }, [poolToken1, selectedTab]);
 
@@ -237,7 +237,6 @@ export default function SwapShell() {
       '32:0',      // frBTC
       'btc',       // BTC
       '2:56801',   // bUSD
-      '2:16',      // METHANE
       '2:25720',   // ALKAMIST
       '2:35275',   // GOLD DUST
       '2:0',       // DIESEL
@@ -254,7 +253,7 @@ export default function SwapShell() {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
-        name: 'Bitcoin',
+        name: 'BTC',
         isAvailable: true
       });
       seen.add('btc');
@@ -310,7 +309,7 @@ export default function SwapShell() {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
-        name: 'Bitcoin',
+        name: 'BTC',
         isAvailable: true
       });
       seen.add('btc');
@@ -511,7 +510,7 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          setSuccessTxId(res.transactionId);
+          setSuccessTx({ txId: res.transactionId, type: 'swap' });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -526,7 +525,7 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          setSuccessTxId(res.transactionId);
+          setSuccessTx({ txId: res.transactionId, type: 'swap' });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -562,7 +561,7 @@ export default function SwapShell() {
           `then select frBTC → ${toToken.symbol} to complete your swap.`
         );
 
-        setSuccessTxId(wrapRes.transactionId);
+        setSuccessTx({ txId: wrapRes.transactionId, type: 'swap' });
         setTimeout(() => refreshWalletData(), 2000);
         setFromToken({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
 
@@ -591,7 +590,7 @@ export default function SwapShell() {
     try {
       const res = await swapMutation.mutateAsync(payload as any);
       if (res?.success && res.transactionId) {
-        setSuccessTxId(res.transactionId);
+        setSuccessTx({ txId: res.transactionId, type: 'swap' });
       }
     } catch (e: any) {
       console.error('[SWAP] Mutation error:', e?.message);
@@ -614,7 +613,7 @@ export default function SwapShell() {
     const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
     const frbtcToken = poolTokenMap.get(FRBTC_ALKANE_ID);
     return [
-      { id: "btc", symbol: "BTC", name: "Bitcoin" },
+      { id: "btc", symbol: "BTC", name: "BTC" },
       { id: FRBTC_ALKANE_ID, symbol: frbtcToken?.symbol ?? "frBTC", name: frbtcToken?.name ?? "frBTC" },
       { id: BUSD_ALKANE_ID, symbol: busdToken?.symbol ?? "DIESEL", name: busdToken?.name ?? "DIESEL" },
     ];
@@ -670,7 +669,7 @@ export default function SwapShell() {
 
       if (result?.success && result.transactionId) {
         console.log('[handleAddLiquidity] Success! txid:', result.transactionId);
-        setSuccessTxId(result.transactionId);
+        setSuccessTx({ txId: result.transactionId, type: 'add-liquidity' });
         // Clear amounts after success
         setPoolToken0Amount('');
         setPoolToken1Amount('');
@@ -714,7 +713,7 @@ export default function SwapShell() {
 
       if (result?.success && result.transactionId) {
         console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
-        setSuccessTxId(result.transactionId);
+        setSuccessTx({ txId: result.transactionId, type: 'remove-liquidity' });
         // Clear state after success
         setRemoveAmount('');
         setSelectedLPPosition(null);
@@ -912,7 +911,7 @@ export default function SwapShell() {
     opts.push({
       id: 'btc',
       symbol: 'BTC',
-      name: 'Bitcoin',
+      name: 'BTC',
       iconUrl: undefined,
       balance: String(btcBalanceSats ?? 0),
       price: undefined,
@@ -1071,10 +1070,11 @@ export default function SwapShell() {
   return (
     <div className="flex w-full flex-col gap-8 h-full">
       <Suspense fallback={null}>
-        {successTxId && (
+        {successTx && (
           <SwapSuccessNotification
-            txId={successTxId}
-            onClose={() => setSuccessTxId(null)}
+            txId={successTx.txId}
+            type={successTx.type}
+            onClose={() => setSuccessTx(null)}
           />
         )}
       </Suspense>
@@ -1083,24 +1083,8 @@ export default function SwapShell() {
         {/* Left Column: Swap/LP Module + My Wallet Swaps */}
         <div className="flex flex-col min-h-0 md:min-h-0">
           {/* Swap/Liquidity Tabs */}
-          <div className="flex w-full items-center justify-center gap-1 mb-4">
-            {/* Invisible spacer to balance the +/- button and keep tabs centered */}
-            <div className="w-10 h-10" />
+          <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
-            <button
-              type="button"
-              onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg bg-[color:var(--sf-panel-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-[color:var(--sf-text)] transition-all hover:bg-[color:var(--sf-surface)] hover:shadow-md outline-none focus:outline-none ${selectedTab !== 'lp' ? 'invisible' : ''}`}
-              title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {liquidityMode === 'provide' ? (
-                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                ) : (
-                  <path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                )}
-              </svg>
-            </button>
           </div>
 
           <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
@@ -1154,6 +1138,11 @@ export default function SwapShell() {
                   isCalculating={!!isCalculating}
                   feeRate={fee.feeRate}
                   isCrossChainFrom={['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '')}
+                  feeSelection={fee.selection}
+                  setFeeSelection={fee.setSelection}
+                  customFee={fee.custom}
+                  setCustomFee={fee.setCustom}
+                  feePresets={fee.presets}
                 />
               }
             />
@@ -1196,6 +1185,7 @@ export default function SwapShell() {
               setCustomFee={fee.setCustom}
               feePresets={fee.presets}
               liquidityMode={liquidityMode}
+              onModeChange={setLiquidityMode}
               selectedLPPosition={selectedLPPosition}
               onSelectLPPosition={setSelectedLPPosition}
               onOpenLPSelector={() => setIsLPSelectorOpen(true)}

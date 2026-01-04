@@ -53,7 +53,7 @@ export default function VaultHero({
 
       {/* Contract Address */}
       <div className="flex justify-center mb-3 relative z-10">
-        <button className="text-xs text-[color:var(--sf-text)]/80 hover:text-[color:var(--sf-text)] transition-colors">
+        <button className="text-xs text-[color:var(--sf-text)]/80 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
           {contractAddress.slice(0, 6)}...{contractAddress.slice(-4)}
         </button>
       </div>
@@ -66,7 +66,7 @@ export default function VaultHero({
             
             // Determine badge styling based on content
             if (badge === 'Coming Soon') {
-              badgeClassName = "rounded-full bg-[color:var(--sf-badge-coming-soon-bg)] text-[color:var(--sf-badge-coming-soon-text)] px-3 py-1 text-xs font-bold shadow-md border-2 border-[color:var(--sf-badge-coming-soon-border)]";
+              badgeClassName = "rounded-full bg-[color:var(--sf-badge-coming-soon-bg)] text-[color:var(--sf-badge-coming-soon-text)] px-3 py-1 text-xs font-bold shadow-md border border-[color:var(--sf-badge-coming-soon-border)]";
             } else if (badge === 'BTC' || badge === 'Bitcoin') {
               badgeClassName = "rounded-full bg-[#F7931A] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#F7931A]";
             } else if (badge === 'USD' || badge === 'bUSD') {
@@ -77,8 +77,6 @@ export default function VaultHero({
               badgeClassName = "rounded-full bg-[#987fd9] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#987fd9]";
             } else if (badge === 'ZEC' || badge === 'Zcash') {
               badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
-            } else if (badge === 'METHANE') {
-              badgeClassName = "rounded-full bg-white dark:bg-white text-[#F7931A] border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
             } else if (badge === 'ORDI') {
               badgeClassName = "rounded-full bg-black text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-black";
             } else {

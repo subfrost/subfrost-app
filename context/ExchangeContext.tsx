@@ -62,7 +62,6 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
     'SUBFROST BTC',
     'bUSD',
     'DIESEL',
-    'METHANE',
     'ALKAMIST',
     'GOLD DUST'
   ]));

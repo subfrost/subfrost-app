@@ -40,7 +40,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
             <svg
               width="24"

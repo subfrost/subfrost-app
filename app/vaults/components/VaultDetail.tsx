@@ -157,7 +157,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             <button
               key={tab}
               onClick={() => setInfoTab(tab as any)}
-              className={`pb-3 text-sm font-semibold capitalize transition-colors ${
+              className={`pb-3 text-sm font-semibold capitalize transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 infoTab === tab
                   ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
@@ -302,7 +302,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
               <button
                 key={tab}
                 onClick={() => setInfoTab(tab as any)}
-                className={`pb-3 text-sm font-semibold capitalize transition-colors ${
+                className={`pb-3 text-sm font-semibold capitalize transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                   infoTab === tab
                     ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                     : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'

@@ -128,7 +128,7 @@ UI updates with correct pools
 **Mainnet:**
 - Factory: `4:65522`
 - All mainnet pools
-- Whitelist: BTC, frBTC, bUSD, DIESEL, METHANE, ALKAMIST, GOLD DUST
+- Whitelist: BTC, frBTC, bUSD, DIESEL, ALKAMIST, GOLD DUST
 
 **Subfrost Regtest:**
 - Network-specific factory ID

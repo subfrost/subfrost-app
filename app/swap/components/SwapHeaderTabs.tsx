@@ -13,7 +13,7 @@ export default function SwapHeaderTabs({ selectedTab, onTabChange }: Props) {
       {/* Buttons */}
       <button
         type="button"
-        className={`relative z-10 flex items-center gap-2 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-300 focus:outline-none rounded-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+        className={`relative z-10 flex items-center gap-2 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
           selectedTab === "swap"
             ? "bg-[color:var(--sf-primary)] text-white shadow-lg"
             : "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]"
@@ -30,7 +30,7 @@ export default function SwapHeaderTabs({ selectedTab, onTabChange }: Props) {
       </button>
       <button
         type="button"
-        className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-300 focus:outline-none rounded-md whitespace-nowrap shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+        className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md whitespace-nowrap shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
           selectedTab === "lp"
             ? "bg-[color:var(--sf-primary)] text-white shadow-lg"
             : "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]"

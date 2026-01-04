@@ -4,12 +4,26 @@ import { useEffect, useState } from "react";
 import { Minus, Send } from "lucide-react";
 import Link from "next/link";
 
+type TransactionType = 'swap' | 'add-liquidity' | 'remove-liquidity';
+
 type Props = {
   txId: string;
   onClose: () => void;
+  type?: TransactionType;
 };
 
-export default function SwapSuccessNotification({ txId, onClose }: Props) {
+const getTitle = (type: TransactionType): string => {
+  switch (type) {
+    case 'add-liquidity':
+      return 'Add Liquidity Submitted';
+    case 'remove-liquidity':
+      return 'Remove Liquidity Submitted';
+    default:
+      return 'Swap Submitted';
+  }
+};
+
+export default function SwapSuccessNotification({ txId, onClose, type = 'swap' }: Props) {
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -49,7 +63,7 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
     <>
       {/* Flash overlay */}
       <div
-        className={`fixed inset-0 z-[9998] bg-[color:var(--sf-primary)]/10 pointer-events-none transition-opacity duration-[400ms] ${
+        className={`fixed inset-0 z-[9998] bg-[color:var(--sf-primary)]/10 pointer-events-none transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
           isFlashing ? "opacity-100" : "opacity-0"
         }`}
       />
@@ -62,7 +76,7 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
       >
         <button
           onClick={handleExpand}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_6px_28px_rgba(34,197,94,0.4)] transition-shadow cursor-pointer"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_6px_28px_rgba(34,197,94,0.4)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
           aria-label="Expand swap notification"
         >
           <div className="flex gap-0.5">
@@ -85,7 +99,7 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
 
           {/* Content */}
           <div className="ml-8 pr-16">
-            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">Swap Submitted</h3>
+            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">{getTitle(type)}</h3>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               Transaction ID:{" "}
               <Link
@@ -103,7 +117,7 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
             {/* Collapse button */}
             <button
               onClick={handleCollapse}
-              className="flex h-6 w-6 items-center justify-center rounded-full transition-all hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
+              className="flex h-6 w-6 items-center justify-center rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
               aria-label="Collapse"
             >
               <Minus size={14} className="text-[color:var(--sf-info-green-title)]" strokeWidth={2.5} />
@@ -112,7 +126,7 @@ export default function SwapSuccessNotification({ txId, onClose }: Props) {
             {/* Dismiss button */}
             <button
               onClick={handleDismiss}
-              className="flex h-6 w-6 items-center justify-center rounded-full transition-all hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
+              className="flex h-6 w-6 items-center justify-center rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
               aria-label="Dismiss"
             >
               <svg

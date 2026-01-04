@@ -9,7 +9,7 @@ export type TokenMeta = {
 
 export type PoolSummary = {
   id: string;
-  pairLabel: string; // e.g., "METHANE / bUSD LP"
+  pairLabel: string; // e.g., "DIESEL / bUSD LP"
   token0: TokenMeta;
   token1: TokenMeta;
   tvlUsd?: number;

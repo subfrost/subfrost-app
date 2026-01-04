@@ -33,7 +33,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   };
 
   const badgeColors = {
-    'Coming Soon': 'bg-[color:var(--sf-badge-coming-soon-bg)] border border-[color:var(--sf-badge-coming-soon-border)] text-[color:var(--sf-badge-coming-soon-text)]',
+    'Coming Soon': 'bg-[color:var(--sf-badge-coming-soon-bg)] text-[color:var(--sf-badge-coming-soon-text)]',
     'BTC Yield': 'bg-orange-400 text-orange-900',
     'USD Yield': 'bg-green-400 text-green-900',
     'Migrate': 'bg-yellow-400 text-yellow-900',
@@ -46,7 +46,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   return (
     <Element
       onClick={interactive ? onClick : undefined}
-      className={`w-full lg:w-auto lg:mx-auto rounded-2xl transition-all overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] ${
+      className={`w-full lg:w-auto lg:mx-auto rounded-2xl transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] ${
         interactive ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer' : 'cursor-default'
       } ${
         isSelected

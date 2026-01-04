@@ -126,7 +126,7 @@ export default function BoostSection({ vault }: Props) {
         <div className="flex gap-2 mb-4 border-b border-[color:var(--sf-outline)]">
           <button
             onClick={() => setActiveTab("stake")}
-            className={`px-4 py-2 text-sm font-semibold transition-all relative ${
+            className={`px-4 py-2 text-sm font-semibold transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative ${
               activeTab === "stake"
                 ? "text-[color:var(--sf-primary)]"
                 : "text-[color:var(--sf-text)]/60"
@@ -139,7 +139,7 @@ export default function BoostSection({ vault }: Props) {
           </button>
           <button
             onClick={() => setActiveTab("unstake")}
-            className={`px-4 py-2 text-sm font-semibold transition-all relative ${
+            className={`px-4 py-2 text-sm font-semibold transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative ${
               activeTab === "unstake"
                 ? "text-[color:var(--sf-primary)]"
                 : "text-[color:var(--sf-text)]/60"
@@ -177,7 +177,7 @@ export default function BoostSection({ vault }: Props) {
 
           <button
             disabled={isComingSoon}
-            className="group relative w-full overflow-hidden rounded-xl px-6 py-3 font-bold text-white transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group relative w-full overflow-hidden rounded-xl px-6 py-3 font-bold text-white transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: `linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
           >
             <span className="relative z-10">{activeTab === "stake" ? "Stake to Boost" : "Unstake"}</span>

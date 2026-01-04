@@ -96,7 +96,7 @@ const tvl = Number(details.reserve_a) + Number(details.reserve_b);
 - `2:0` → **BTC** (Bitcoin)
 - `4:0` → **frBTC** (Subfrost BTC)
 - `128:0` → **bUSD** (Bitcoin USD)
-- Plus: METHANE, ALKAMIST, GOLD DUST, etc.
+- Plus: ALKAMIST, GOLD DUST, etc.
 
 ---
 
