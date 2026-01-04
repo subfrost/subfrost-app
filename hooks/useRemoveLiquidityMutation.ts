@@ -1,9 +1,66 @@
+/**
+ * useRemoveLiquidityMutation.ts
+ *
+ * This hook handles removing liquidity from AMM pools by burning LP tokens.
+ *
+ * ## CRITICAL IMPLEMENTATION NOTES (January 2026)
+ *
+ * ### Why We Call the Pool Directly (Not the Factory)
+ *
+ * The app's constants/index.ts defines FACTORY_OPCODES including opcode 12 (Burn),
+ * but this opcode DOES NOT EXIST in the deployed factory contract. The actual
+ * factory only has opcodes 0-3:
+ *   - 0: InitPool
+ *   - 1: CreateNewPool
+ *   - 2: FindExistingPoolId
+ *   - 3: GetAllPools
+ *
+ * The POOL contract has the actual operation opcodes:
+ *   - 0: Init
+ *   - 1: AddLiquidity (mint LP tokens)
+ *   - 2: RemoveLiquidity (burn LP tokens) <-- WE USE THIS
+ *   - 3: Swap
+ *   - 4: SimulateSwap
+ *
+ * ### The Two-Protostone Pattern
+ *
+ * For RemoveLiquidity to work, LP tokens must appear in the pool's `incomingAlkanes`.
+ * This is how the indexer (poolburn.rs) detects burn events:
+ *   1. Looks for delegatecall to pool with inputs[0] == 0x2 (opcode 2)
+ *   2. Checks incomingAlkanes for LP tokens matching the pool ID
+ *
+ * To achieve this, we use TWO protostones:
+ *   - p0: Edict [lp_block:lp_tx:amount:p1] - transfers LP tokens to p1
+ *   - p1: Cellpack [pool_block,pool_tx,2,...] - calls pool with opcode 2
+ *
+ * The edict in p0 sends LP tokens TO p1, making them available as incomingAlkanes
+ * for the pool call.
+ *
+ * ### Previous Broken Implementation
+ *
+ * The old code tried to call factory opcode 12:
+ *   Protostone: [4,0,12,2,3,amount,min0,min1,deadline]:v0:v0
+ *
+ * This transaction would broadcast and confirm, but LP tokens were NOT burned
+ * because factory opcode 12 doesn't exist - the factory just ignored the call.
+ *
+ * ### Working Implementation
+ *
+ * Current code calls pool directly with two-protostone pattern:
+ *   Protostone: [2:3:amount:p1]:v0:v0,[2,3,2,min0,min1,deadline]:v0:v0
+ *
+ * This ensures LP tokens flow into the pool call and get properly burned.
+ *
+ * @see alkanes-rs-dev/crates/alkanes-cli-common/src/alkanes/amm.rs - Pool opcodes
+ * @see alkanes-rs-dev/crates/alkanes-contract-indexer/src/helpers/poolburn.rs - Burn detection
+ * @see alkanes-rs-dev/docs/FLEXIBLE-PROTOSTONE-PARSING.md - Protostone format docs
+ */
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
-import { FACTORY_OPCODES } from '@/constants';
 import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
@@ -41,12 +98,35 @@ function toAlks(amount: string, decimals: number = 8): string {
 }
 
 /**
+ * Pool operation codes
+ * These are the opcodes for calling the pool contract directly
+ */
+const POOL_OPCODES = {
+  Init: 0,
+  AddLiquidity: 1, // mint
+  RemoveLiquidity: 2, // burn
+  Swap: 3,
+  SimulateSwap: 4,
+};
+
+/**
  * Build protostone string for RemoveLiquidity (Burn) operation
- * Format: [factory_block,factory_tx,opcode(12),lp_block,lp_tx,lpAmount,minAmount0,minAmount1,deadline]:pointer:refund
+ *
+ * This calls the POOL directly with opcode 2 (RemoveLiquidity/Burn).
+ * The LP token ID IS the pool ID (e.g., 2:3 is both the pool contract and its LP token).
+ *
+ * We use a two-protostone pattern:
+ * 1. First protostone (p0): Transfer LP tokens to p1 (the pool call)
+ * 2. Second protostone (p1): Call pool with RemoveLiquidity opcode 2
+ *
+ * Format: [lp_block:lp_tx:lpAmount:p1]:v0:v0,[pool_block,pool_tx,2,minAmount0,minAmount1,deadline]:v0:v0
+ *
+ * The edict [lp_block:lp_tx:lpAmount:p1] sends LP tokens to the pool call.
+ * The pool call receives these tokens as incomingAlkanes and burns them.
  */
 function buildRemoveLiquidityProtostone(params: {
-  factoryId: string;
-  lpTokenId: string;
+  factoryId: string; // kept for signature compatibility but not used
+  lpTokenId: string; // LP token = pool ID
   lpAmount: string;
   minAmount0: string;
   minAmount1: string;
@@ -55,7 +135,6 @@ function buildRemoveLiquidityProtostone(params: {
   refund?: string;
 }): string {
   const {
-    factoryId,
     lpTokenId,
     lpAmount,
     minAmount0,
@@ -65,23 +144,28 @@ function buildRemoveLiquidityProtostone(params: {
     refund = 'v0',
   } = params;
 
-  const [factoryBlock, factoryTx] = factoryId.split(':');
   const [lpBlock, lpTx] = lpTokenId.split(':');
 
-  // Build cellpack: [factory_block, factory_tx, opcode(12), lp_block, lp_tx, lpAmount, minAmount0, minAmount1, deadline]
+  // First protostone: Transfer LP tokens to p1 (the pool call)
+  // Edict format: [block:tx:amount:target]
+  const edict = `[${lpBlock}:${lpTx}:${lpAmount}:p1]`;
+  // This protostone just transfers, pointer/refund go to v0 for any remaining tokens
+  const p0 = `${edict}:${pointer}:${refund}`;
+
+  // Second protostone: Call pool with RemoveLiquidity opcode (2)
+  // The pool receives LP tokens from p0's edict
   const cellpack = [
-    factoryBlock,
-    factoryTx,
-    FACTORY_OPCODES.Burn, // '12'
-    lpBlock,
-    lpTx,
-    lpAmount,
+    lpBlock,      // pool block (= LP block)
+    lpTx,         // pool tx (= LP tx)
+    POOL_OPCODES.RemoveLiquidity, // 2
     minAmount0,
     minAmount1,
     deadline,
   ].join(',');
+  const p1 = `[${cellpack}]:${pointer}:${refund}`;
 
-  return `[${cellpack}]:${pointer}:${refund}`;
+  // Combine both protostones
+  return `${p0},${p1}`;
 }
 
 /**
@@ -152,9 +236,10 @@ export function useRemoveLiquidityMutation() {
 
       console.log('[RemoveLiquidity] Deadline block:', deadline);
 
-      // Build protostone
+      // Build protostone - calls pool directly with opcode 2
+      // Uses two-protostone pattern: p0 transfers LP tokens to p1 (pool call)
       const protostone = buildRemoveLiquidityProtostone({
-        factoryId: ALKANE_FACTORY_ID,
+        factoryId: ALKANE_FACTORY_ID, // not used, kept for compatibility
         lpTokenId: data.lpTokenId,
         lpAmount: lpAmountAlks,
         minAmount0: minAmount0Alks,
@@ -162,7 +247,9 @@ export function useRemoveLiquidityMutation() {
         deadline: deadline.toString(),
       });
 
-      console.log('[RemoveLiquidity] Protostone:', protostone);
+      console.log('[RemoveLiquidity] Protostone (two-protostone pattern):', protostone);
+      console.log('[RemoveLiquidity] p0: edict transfers LP to p1');
+      console.log('[RemoveLiquidity] p1: pool call with opcode 2 (RemoveLiquidity)');
 
       // Build input requirements
       const inputRequirements = buildRemoveLiquidityInputRequirements({
