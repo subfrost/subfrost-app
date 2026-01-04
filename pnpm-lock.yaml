@@ -163,7 +163,11 @@ packages:
     resolution: {integrity: sha512-96Z2IP3mYmF1Xg2cDm8f1gWGf/HUVedQ3FMifV4kG/PQ4yEP51xDtRAEfhVNt5f/uzpNkZHwWQuUcu6D6K+Ekw==}
 
   '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk':
+<<<<<<< HEAD
     resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk}
+=======
+    resolution: {integrity: sha512-6OrGvVkfUJJP8YOBLplbMkjXacnhHJE8OSf3h1Is9zRrvFK5Y3dxh3RpqAmPWkJMkzq4daH0XqjeIzN4rDX4xQ==, tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk}
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
     version: 0.1.1-3ffa931
     hasBin: true
     peerDependencies:

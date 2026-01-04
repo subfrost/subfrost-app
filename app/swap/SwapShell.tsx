@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useRef, lazy, Suspense } from "react";
 import type { PoolSummary, TokenMeta } from "./types";
 import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import type { LPPosition } from "./components/LiquidityInputs";
+import type { OperationType } from "@/app/components/SwapSuccessNotification";
 
 // Critical path imports - needed immediately
 import SwapHeaderTabs from "./components/SwapHeaderTabs";
@@ -152,10 +153,21 @@ export default function SwapShell() {
   // LP positions from wallet (real data from useLPPositions hook)
   const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
 
+  // Debug: log LP positions when they change
+  useEffect(() => {
+    console.log('[SwapShell] LP positions updated:', lpPositions);
+    console.log('[SwapShell] LP positions loading:', isLoadingLPPositions);
+  }, [lpPositions, isLoadingLPPositions]);
+
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
   const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
+<<<<<<< HEAD
   const [successTx, setSuccessTx] = useState<{ txId: string; type: 'swap' | 'add-liquidity' | 'remove-liquidity' } | null>(null);
+=======
+  const [successTxId, setSuccessTxId] = useState<string | null>(null);
+  const [successOperationType, setSuccessOperationType] = useState<OperationType>('swap');
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
   const { data: btcPrice } = useBtcPrice();
 
   const sellId = fromToken?.id ?? '';
@@ -510,7 +522,12 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
+<<<<<<< HEAD
           setSuccessTx({ txId: res.transactionId, type: 'swap' });
+=======
+          setSuccessOperationType('wrap');
+          setSuccessTxId(res.transactionId);
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -525,7 +542,12 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
+<<<<<<< HEAD
           setSuccessTx({ txId: res.transactionId, type: 'swap' });
+=======
+          setSuccessOperationType('unwrap');
+          setSuccessTxId(res.transactionId);
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -561,7 +583,12 @@ export default function SwapShell() {
           `then select frBTC → ${toToken.symbol} to complete your swap.`
         );
 
+<<<<<<< HEAD
         setSuccessTx({ txId: wrapRes.transactionId, type: 'swap' });
+=======
+        setSuccessOperationType('wrap');
+        setSuccessTxId(wrapRes.transactionId);
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
         setTimeout(() => refreshWalletData(), 2000);
         setFromToken({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
 
@@ -590,7 +617,12 @@ export default function SwapShell() {
     try {
       const res = await swapMutation.mutateAsync(payload as any);
       if (res?.success && res.transactionId) {
+<<<<<<< HEAD
         setSuccessTx({ txId: res.transactionId, type: 'swap' });
+=======
+        setSuccessOperationType('swap');
+        setSuccessTxId(res.transactionId);
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
       }
     } catch (e: any) {
       console.error('[SWAP] Mutation error:', e?.message);
@@ -669,7 +701,12 @@ export default function SwapShell() {
 
       if (result?.success && result.transactionId) {
         console.log('[handleAddLiquidity] Success! txid:', result.transactionId);
+<<<<<<< HEAD
         setSuccessTx({ txId: result.transactionId, type: 'add-liquidity' });
+=======
+        setSuccessOperationType('addLiquidity');
+        setSuccessTxId(result.transactionId);
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
         // Clear amounts after success
         setPoolToken0Amount('');
         setPoolToken1Amount('');
@@ -713,7 +750,12 @@ export default function SwapShell() {
 
       if (result?.success && result.transactionId) {
         console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
+<<<<<<< HEAD
         setSuccessTx({ txId: result.transactionId, type: 'remove-liquidity' });
+=======
+        setSuccessOperationType('removeLiquidity');
+        setSuccessTxId(result.transactionId);
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
         // Clear state after success
         setRemoveAmount('');
         setSelectedLPPosition(null);
@@ -1072,9 +1114,15 @@ export default function SwapShell() {
       <Suspense fallback={null}>
         {successTx && (
           <SwapSuccessNotification
+<<<<<<< HEAD
             txId={successTx.txId}
             type={successTx.type}
             onClose={() => setSuccessTx(null)}
+=======
+            txId={successTxId}
+            onClose={() => setSuccessTxId(null)}
+            operationType={successOperationType}
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
           />
         )}
       </Suspense>

@@ -4,11 +4,16 @@ import { useEffect, useState } from "react";
 import { Minus, Send } from "lucide-react";
 import Link from "next/link";
 
+<<<<<<< HEAD
 type TransactionType = 'swap' | 'add-liquidity' | 'remove-liquidity';
+=======
+export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity';
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
 
 type Props = {
   txId: string;
   onClose: () => void;
+<<<<<<< HEAD
   type?: TransactionType;
 };
 
@@ -24,9 +29,25 @@ const getTitle = (type: TransactionType): string => {
 };
 
 export default function SwapSuccessNotification({ txId, onClose, type = 'swap' }: Props) {
+=======
+  operationType?: OperationType;
+};
+
+const OPERATION_LABELS: Record<OperationType, string> = {
+  swap: 'Swap',
+  wrap: 'Wrap',
+  unwrap: 'Unwrap',
+  addLiquidity: 'Add Liquidity',
+  removeLiquidity: 'Remove Liquidity',
+};
+
+export default function SwapSuccessNotification({ txId, onClose, operationType = 'swap' }: Props) {
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+
+  const operationLabel = OPERATION_LABELS[operationType];
 
   useEffect(() => {
     // Start animations
@@ -99,7 +120,11 @@ export default function SwapSuccessNotification({ txId, onClose, type = 'swap' }
 
           {/* Content */}
           <div className="ml-8 pr-16">
+<<<<<<< HEAD
             <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">{getTitle(type)}</h3>
+=======
+            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">{operationLabel} Submitted</h3>
+>>>>>>> ab5e2a1cd4055bbcddd7e0d660de943426afbee3
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               Transaction ID:{" "}
               <Link
