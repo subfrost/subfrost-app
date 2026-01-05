@@ -6,6 +6,16 @@ import { getConfig } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useWallet } from '@/context/WalletContext';
 
+// Network to API base URL mapping for REST API fallback
+const NETWORK_API_URLS: Record<string, string> = {
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+  testnet: 'https://testnet.subfrost.io/v4/subfrost',
+  signet: 'https://signet.subfrost.io/v4/subfrost',
+  regtest: 'https://regtest.subfrost.io/v4/subfrost',
+  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+};
+
 export type AlkanesTokenPair = {
   token0: { id: string; token0Amount?: string; alkaneId?: { block: number | string; tx: number | string } };
   token1: { id: string; token1Amount?: string; alkaneId?: { block: number | string; tx: number | string } };
@@ -54,14 +64,6 @@ function extractPoolsArray(response: any): any[] {
 }
 
 /**
- * Helper to get value from pool object (may be Map or plain object)
- */
-function getPoolValue(pool: any, key: string): any {
-  if (pool instanceof Map) return pool.get(key);
-  return pool?.[key];
-}
-
-/**
  * Convert pool object to plain object
  */
 function poolToObject(pool: any): any {
@@ -97,12 +99,124 @@ export function useAlkanesTokenPairs(
         throw new Error('Provider not initialized');
       }
 
-      // Use the WASM provider's dataApiGetPools to get pools via JSON-RPC
-      // This uses the same endpoint as our tests: https://regtest.subfrost.io/v4/subfrost
-      const poolsResponse = await provider.dataApiGetPools(ALKANE_FACTORY_ID);
-      const poolsArray = extractPoolsArray(poolsResponse);
+      const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
+      const [factoryBlock, factoryTx] = ALKANE_FACTORY_ID.split(':');
+      let poolsArray: any[] = [];
 
-      console.log('[useAlkanesTokenPairs] Got', poolsArray.length, 'pools for token:', normalizedId);
+      // =====================================================================
+      // FALLBACK CHAIN: Try multiple methods to get pools
+      // This mirrors the fallback logic in usePools.ts
+      // =====================================================================
+
+      // Method 1: Try WASM provider's dataApiGetPools
+      try {
+        const poolsResponse = await provider.dataApiGetPools(ALKANE_FACTORY_ID);
+        poolsArray = extractPoolsArray(poolsResponse);
+        console.log('[useAlkanesTokenPairs] WASM provider returned', poolsArray.length, 'pools');
+      } catch (e) {
+        console.warn('[useAlkanesTokenPairs] WASM provider failed:', e);
+      }
+
+      // Method 2: If empty, try REST API /get-pools
+      if (poolsArray.length === 0) {
+        try {
+          console.log('[useAlkanesTokenPairs] Trying REST API fallback...');
+          const response = await fetch(`${apiUrl}/get-pools`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              factoryId: { block: factoryBlock, tx: factoryTx }
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            // Check for error in response body (some APIs return 200 with error)
+            if (!result?.error && result?.statusCode !== 404) {
+              const rawData = result?.data?.pools || result?.data || result?.pools || result || [];
+              poolsArray = Array.isArray(rawData) ? rawData : [];
+              console.log('[useAlkanesTokenPairs] REST API returned', poolsArray.length, 'pools');
+              // If REST API returned empty, log that we'll try next fallback
+              if (poolsArray.length === 0) {
+                console.log('[useAlkanesTokenPairs] REST API returned empty, will try next fallback');
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[useAlkanesTokenPairs] REST API failed:', e);
+        }
+      }
+
+      // Method 3: If still empty, try RPC alkanesGetAllPoolsWithDetails
+      if (poolsArray.length === 0) {
+        try {
+          console.log('[useAlkanesTokenPairs] Trying RPC fallback...');
+          const rpcResult = await provider.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID);
+          const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+          const rpcPools = parsed?.pools || [];
+
+          // Convert RPC format to standard format
+          poolsArray = rpcPools.map((p: any) => ({
+            pool_block_id: p.pool_id_block,
+            pool_tx_id: p.pool_id_tx,
+            token0_block_id: p.details?.token_a_block,
+            token0_tx_id: p.details?.token_a_tx,
+            token1_block_id: p.details?.token_b_block,
+            token1_tx_id: p.details?.token_b_tx,
+            token0_amount: p.details?.reserve_a || '0',
+            token1_amount: p.details?.reserve_b || '0',
+            pool_name: p.details?.pool_name || '',
+          }));
+          console.log('[useAlkanesTokenPairs] RPC returned', poolsArray.length, 'pools');
+        } catch (e) {
+          console.warn('[useAlkanesTokenPairs] RPC fallback failed:', e);
+        }
+      }
+
+      // Method 4: If still empty, try pool scan via get-pool-by-id for block 2 alkanes
+      if (poolsArray.length === 0) {
+        try {
+          console.log('[useAlkanesTokenPairs] Trying pool scan fallback...');
+
+          // Fetch all alkanes to find block 2 candidates
+          const alkanesResponse = await fetch(`${apiUrl}/get-alkanes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ page: 1, limit: 500 }),
+          });
+          const alkanesData = await alkanesResponse.json();
+          const allTokens = alkanesData?.data?.tokens || [];
+          const block2Alkanes = allTokens.filter((t: any) => t.id?.block === '2');
+
+          console.log('[useAlkanesTokenPairs] Checking', block2Alkanes.length, 'block 2 alkanes');
+
+          // Check each block 2 alkane via get-pool-by-id in parallel
+          const poolPromises = block2Alkanes.map(async (alkane: any) => {
+            try {
+              const poolResponse = await fetch(`${apiUrl}/get-pool-by-id`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poolId: { block: alkane.id.block, tx: alkane.id.tx } }),
+              });
+              const poolData = await poolResponse.json();
+              if (poolData?.statusCode === 404 || poolData?.error) return null;
+              const p = poolData?.data || poolData;
+              if (!p?.pool_block_id || !p?.pool_tx_id) return null;
+              return p;
+            } catch {
+              return null;
+            }
+          });
+
+          const poolResults = await Promise.all(poolPromises);
+          poolsArray = poolResults.filter((p): p is any => p !== null);
+          console.log('[useAlkanesTokenPairs] Pool scan found', poolsArray.length, 'pools');
+        } catch (e) {
+          console.warn('[useAlkanesTokenPairs] Pool scan failed:', e);
+        }
+      }
+
+      console.log('[useAlkanesTokenPairs] Total pools found:', poolsArray.length, 'for token:', normalizedId);
 
       // Filter pools that contain this token
       const matchingPools: AlkanesTokenPair[] = [];

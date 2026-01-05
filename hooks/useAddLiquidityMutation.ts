@@ -1,3 +1,47 @@
+/**
+ * useAddLiquidityMutation.ts
+ *
+ * This hook handles adding liquidity to AMM pools.
+ *
+ * ## IMPORTANT: Factory vs Pool Opcodes (January 2026)
+ *
+ * There are TWO different contracts with different opcodes:
+ *
+ * ### FACTORY Contract (e.g., 4:65522)
+ * Only has opcodes 0-3 for management:
+ *   - 0: InitFactory
+ *   - 1: CreateNewPool
+ *   - 2: FindExistingPoolId
+ *   - 3: GetAllPools
+ *
+ * The FACTORY_OPCODES in constants/index.ts includes opcodes 11 (AddLiquidity)
+ * but this is actually a POOL operation that the factory routes to the pool.
+ *
+ * ### POOL Contract (e.g., 2:3 for DIESEL/frBTC pool)
+ * Has the actual operation opcodes:
+ *   - 0: Init
+ *   - 1: AddLiquidity (mint LP tokens)
+ *   - 2: RemoveLiquidity (burn LP tokens)
+ *   - 3: Swap
+ *   - 4: SimulateSwap
+ *
+ * ### Why AddLiquidity Works with Factory
+ *
+ * AddLiquidity uses a single protostone that calls factory opcode 11.
+ * The factory then internally routes this to create/find the pool and
+ * execute the AddLiquidity operation. This is different from Swap and
+ * RemoveLiquidity which must call the pool directly.
+ *
+ * ### Contrast with Swap/RemoveLiquidity
+ *
+ * - Swap: Must call POOL directly with two-protostone pattern (see useSwapMutation.ts)
+ * - RemoveLiquidity: Must call POOL directly (see useRemoveLiquidityMutation.ts)
+ * - AddLiquidity: Can call FACTORY which routes to pool (this file)
+ *
+ * @see constants/index.ts - FACTORY_OPCODES documentation
+ * @see useSwapMutation.ts - Two-protostone pattern for swaps
+ * @see useRemoveLiquidityMutation.ts - Two-protostone pattern for burns
+ */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';

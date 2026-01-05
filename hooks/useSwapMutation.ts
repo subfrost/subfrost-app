@@ -1,13 +1,69 @@
-import { useMutation } from '@tanstack/react-query';
+/**
+ * useSwapMutation - Execute AMM swap transactions
+ *
+ * ## CRITICAL IMPLEMENTATION NOTES (January 2026)
+ *
+ * ### Why We Call the Pool Directly (Not the Factory)
+ *
+ * The app's constants/index.ts defines FACTORY_OPCODES with swap opcodes (3, 4),
+ * but these DO NOT execute swaps. The actual factory only has opcodes 0-3:
+ *   - 0: InitPool
+ *   - 1: CreateNewPool
+ *   - 2: FindExistingPoolId
+ *   - 3: GetAllPools
+ *
+ * The POOL contract has the actual operation opcodes:
+ *   - 0: Init
+ *   - 1: AddLiquidity (mint LP tokens)
+ *   - 2: RemoveLiquidity (burn LP tokens)
+ *   - 3: Swap <-- WE USE THIS
+ *   - 4: SimulateSwap
+ *
+ * ### The Two-Protostone Pattern
+ *
+ * For Swap to work, input tokens must appear in the pool's `incomingAlkanes`.
+ * This is how the indexer (poolswap.rs) detects swap events:
+ *   1. Looks for delegatecall to pool with inputs[0] == 0x3 (opcode 3)
+ *   2. Checks incomingAlkanes for one of the pool's tokens
+ *   3. Looks for return event with the other pool token
+ *
+ * To achieve this, we use TWO protostones:
+ *   - p0: Edict [sell_block:sell_tx:amount:p1] - transfers sell tokens to p1
+ *   - p1: Cellpack [pool_block,pool_tx,3,minOutput,deadline] - calls pool with opcode 3
+ *
+ * The edict in p0 sends sell tokens TO p1, making them available as incomingAlkanes
+ * for the pool call.
+ *
+ * ### Previous Broken Implementation
+ *
+ * The old code tried to call factory with a swap opcode:
+ *   Protostone: [factory_block,factory_tx,3,...]:v1:v1
+ *
+ * This transaction would broadcast and confirm, but NO SWAP occurred because
+ * factory opcode 3 is GetAllPools, not Swap. The factory just returned pool data
+ * and ignored the swap intent.
+ *
+ * ### Working Implementation
+ *
+ * Current code calls pool directly with two-protostone pattern:
+ *   Protostone: [sell_block:sell_tx:amount:p1]:v0:v0,[pool_block,pool_tx,3,minOut,deadline]:v0:v0
+ *
+ * This ensures sell tokens flow into the pool call and get properly swapped.
+ *
+ * @see alkanes-rs-dev/crates/alkanes-cli-common/src/alkanes/amm.rs - Pool opcodes
+ * @see alkanes-rs-dev/crates/alkanes-contract-indexer/src/helpers/poolswap.rs - Swap detection
+ * @see useRemoveLiquidityMutation.ts - Same two-protostone pattern for burns
+ * @see useAddLiquidityMutation.ts - Uses factory routing (different pattern)
+ * @see constants/index.ts - FACTORY_OPCODES documentation with warnings
+ */
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
-import { FACTORY_OPCODES } from '@/constants';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
-  calculateMaximumFromSlippage,
   calculateMinimumFromSlippage,
   getFutureBlockHeight,
 } from '@/utils/amm';
@@ -15,6 +71,18 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
 bitcoin.initEccLib(ecc);
+
+/**
+ * Pool operation codes (NOT factory opcodes!)
+ * These are the opcodes for calling the pool contract directly
+ */
+const POOL_OPCODES = {
+  Init: 0,
+  AddLiquidity: 1, // mint
+  RemoveLiquidity: 2, // burn
+  Swap: 3,
+  SimulateSwap: 4,
+};
 
 // Helper to convert Uint8Array to base64
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -34,41 +102,67 @@ export type SwapTransactionBaseData = {
   maxSlippage: string; // percent string, e.g. '0.5'
   feeRate: number; // sats/vB
   tokenPath?: string[]; // optional explicit path
+  poolId?: { block: string | number; tx: string | number }; // Pool to swap through
   deadlineBlocks?: number; // default 3
   isDieselMint?: boolean;
 };
 
 /**
  * Build protostone string for AMM swap operations
- * Format: [factory_block,factory_tx,opcode,path_len,...path_tokens,amount,limit,deadline]:pointer:refund
+ *
+ * This calls the POOL directly with opcode 3 (Swap).
+ * We use a two-protostone pattern:
+ * 1. First protostone (p0): Transfer sell tokens to p1 (the pool call)
+ * 2. Second protostone (p1): Call pool with Swap opcode 3
+ *
+ * Format: [sell_block:sell_tx:sellAmount:p1]:v0:v0,[pool_block,pool_tx,3,minOutput,deadline]:v0:v0
+ *
+ * The edict [sell_block:sell_tx:sellAmount:p1] sends sell tokens to the pool call.
+ * The pool call receives these tokens as incomingAlkanes and executes the swap.
  */
 function buildSwapProtostone(params: {
-  factoryId: string;
-  opcode: string;
-  tokenPath: string[];
-  amount: string;
-  limit: string;
+  poolId: { block: string | number; tx: string | number };
+  sellTokenId: string; // e.g., "32:0" for frBTC
+  sellAmount: string;
+  minOutput: string;
   deadline: string;
   pointer?: string;
   refund?: string;
 }): string {
-  const { factoryId, opcode, tokenPath, amount, limit, deadline, pointer = 'v1', refund = 'v1' } = params;
-  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const {
+    poolId,
+    sellTokenId,
+    sellAmount,
+    minOutput,
+    deadline,
+    pointer = 'v0',
+    refund = 'v0',
+  } = params;
 
-  // Build cellpack: [factory_block, factory_tx, opcode, path_len, ...path_tokens, amount, limit, deadline]
-  const pathTokens = tokenPath.flatMap(token => token.split(':'));
+  const [sellBlock, sellTx] = sellTokenId.split(':');
+  const poolBlock = poolId.block.toString();
+  const poolTx = poolId.tx.toString();
+
+  // First protostone: Transfer sell tokens to p1 (the pool call)
+  // Edict format: [block:tx:amount:target]
+  const edict = `[${sellBlock}:${sellTx}:${sellAmount}:p1]`;
+  // This protostone just transfers, pointer/refund go to v0 for output tokens
+  const p0 = `${edict}:${pointer}:${refund}`;
+
+  // Second protostone: Call pool with Swap opcode (3)
+  // The pool receives sell tokens from p0's edict as incomingAlkanes
+  // Pool swap calldata: [pool_block, pool_tx, opcode(3), minOutput, deadline]
   const cellpack = [
-    factoryBlock,
-    factoryTx,
-    opcode,
-    tokenPath.length.toString(),
-    ...pathTokens,
-    amount,
-    limit,
+    poolBlock,
+    poolTx,
+    POOL_OPCODES.Swap, // 3
+    minOutput,
     deadline,
   ].join(',');
+  const p1 = `[${cellpack}]:${pointer}:${refund}`;
 
-  return `[${cellpack}]:${pointer}:${refund}`;
+  // Combine both protostones
+  return `${p0},${p1}`;
 }
 
 /**
@@ -96,9 +190,10 @@ function buildInputRequirements(params: {
 }
 
 export function useSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
   const provider = useSandshrewProvider();
-  const { ALKANE_FACTORY_ID, FRBTC_ALKANE_ID } = getConfig(network);
+  const queryClient = useQueryClient();
+  const { FRBTC_ALKANE_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -111,7 +206,6 @@ export function useSwapMutation() {
       console.log('═══════════════════════════════════════════════════════════════');
       console.log('[useSwapMutation] Input swapData:', JSON.stringify(swapData, null, 2));
       console.log('[useSwapMutation] Network:', network);
-      console.log('[useSwapMutation] ALKANE_FACTORY_ID:', ALKANE_FACTORY_ID);
       console.log('[useSwapMutation] FRBTC_ALKANE_ID:', FRBTC_ALKANE_ID);
       console.log('[useSwapMutation] wrapFee:', wrapFee);
       console.log('[useSwapMutation] isConnected:', isConnected);
@@ -169,20 +263,12 @@ export function useSwapMutation() {
       console.log('[useSwapMutation]   ammSellAmount:', ammSellAmount);
       console.log('[useSwapMutation]   ammBuyAmount:', ammBuyAmount);
 
-      // Build token path
-      let tokenPath = swapData.tokenPath || [sellCurrency, buyCurrency];
-      console.log('[useSwapMutation] Initial tokenPath:', JSON.stringify(tokenPath));
-      tokenPath = tokenPath.map((t) => (t === 'btc' ? FRBTC_ALKANE_ID : t));
-      console.log('[useSwapMutation] Resolved tokenPath:', JSON.stringify(tokenPath));
-
       // Calculate slippage limits
       const minAmountOut = calculateMinimumFromSlippage({ amount: ammBuyAmount, maxSlippage: swapData.maxSlippage });
-      const maxAmountIn = calculateMaximumFromSlippage({ amount: ammSellAmount, maxSlippage: swapData.maxSlippage });
 
       console.log('[useSwapMutation] Slippage calculations:');
       console.log('[useSwapMutation]   maxSlippage:', swapData.maxSlippage);
       console.log('[useSwapMutation]   minAmountOut:', minAmountOut);
-      console.log('[useSwapMutation]   maxAmountIn:', maxAmountIn);
 
       // Get deadline block height
       const deadlineBlocks = swapData.deadlineBlocks || 3;
@@ -190,31 +276,31 @@ export function useSwapMutation() {
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[useSwapMutation] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
-      // Determine opcode based on direction
-      const opcode = swapData.direction === 'sell'
-        ? FACTORY_OPCODES.SwapExactTokensForTokens
-        : FACTORY_OPCODES.SwapTokensForExactTokens;
+      // Validate poolId - required for the two-protostone pattern
+      if (!swapData.poolId) {
+        console.error('[useSwapMutation] ❌ poolId is required for swap!');
+        console.error('[useSwapMutation] The swap needs a pool ID to call the pool contract directly.');
+        throw new Error('Pool ID is required for swap. Make sure the quote includes the pool information.');
+      }
 
-      console.log('[useSwapMutation] Opcode:', opcode, `(${swapData.direction === 'sell' ? 'SwapExactTokensForTokens' : 'SwapTokensForExactTokens'})`);
+      console.log('[useSwapMutation] Pool ID:', `${swapData.poolId.block}:${swapData.poolId.tx}`);
+      console.log('[useSwapMutation] Using two-protostone pattern (like RemoveLiquidity):');
+      console.log('[useSwapMutation]   p0: Edict to transfer sell tokens to p1');
+      console.log('[useSwapMutation]   p1: Call pool with opcode 3 (Swap)');
 
-      // Build protostone for the swap
+      // Build protostone for the swap using two-protostone pattern
       const protostoneParams = {
-        factoryId: ALKANE_FACTORY_ID,
-        opcode: opcode.toString(),
-        tokenPath,
-        amount: swapData.direction === 'sell'
-          ? new BigNumber(ammSellAmount).toFixed(0)
-          : new BigNumber(ammBuyAmount).toFixed(0),
-        limit: swapData.direction === 'sell'
-          ? new BigNumber(minAmountOut).toFixed(0)
-          : new BigNumber(maxAmountIn).toFixed(0),
+        poolId: swapData.poolId,
+        sellTokenId: sellCurrency,
+        sellAmount: new BigNumber(ammSellAmount).toFixed(0),
+        minOutput: new BigNumber(minAmountOut).toFixed(0),
         deadline: deadline.toString(),
       };
 
       console.log('[useSwapMutation] Protostone params:', JSON.stringify(protostoneParams, null, 2));
 
       const protostone = buildSwapProtostone(protostoneParams);
-      console.log('[useSwapMutation] Built protostone:', protostone);
+      console.log('[useSwapMutation] Built protostone (two-protostone pattern):', protostone);
 
       // Build input requirements
       const isBtcSell = swapData.sellCurrency === 'btc';
@@ -309,10 +395,12 @@ export function useSwapMutation() {
             console.log('[useSwapMutation] PSBT debug parse error:', dbgErr);
           }
 
-          // Sign the PSBT with taproot key
-          console.log('[useSwapMutation] Signing PSBT with taproot key...');
-          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          console.log('[useSwapMutation] PSBT signed with taproot key');
+          // Sign the PSBT with both keys (SegWit first, then Taproot)
+          // The PSBT may have inputs from both address types
+          console.log('[useSwapMutation] Signing PSBT with SegWit key first, then Taproot key...');
+          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          console.log('[useSwapMutation] PSBT signed with both keys');
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
@@ -381,6 +469,22 @@ export function useSwapMutation() {
         console.error('═══════════════════════════════════════════════════════════════');
         throw executeError;
       }
+    },
+    onSuccess: (data) => {
+      console.log('[useSwapMutation] Swap successful, txid:', data.transactionId);
+      console.log('[useSwapMutation] Invalidating balance queries...');
+
+      // Invalidate all balance-related queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
+      queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
+      queryClient.invalidateQueries({ queryKey: ['poolFee'] });
+      queryClient.invalidateQueries({ queryKey: ['alkane-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['alkanesTokenPairs'] });
+
+      console.log('[useSwapMutation] Balance queries invalidated - UI should refresh when indexer processes block');
     },
   });
 }

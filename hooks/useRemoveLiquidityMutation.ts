@@ -54,6 +54,9 @@
  * @see alkanes-rs-dev/crates/alkanes-cli-common/src/alkanes/amm.rs - Pool opcodes
  * @see alkanes-rs-dev/crates/alkanes-contract-indexer/src/helpers/poolburn.rs - Burn detection
  * @see alkanes-rs-dev/docs/FLEXIBLE-PROTOSTONE-PARSING.md - Protostone format docs
+ * @see useSwapMutation.ts - Same two-protostone pattern for swaps
+ * @see useAddLiquidityMutation.ts - Uses factory routing (different pattern)
+ * @see constants/index.ts - FACTORY_OPCODES documentation with warnings
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';

@@ -1,3 +1,19 @@
+/**
+ * useSwapQuotes.ts
+ *
+ * Calculates swap quotes for AMM token exchanges.
+ *
+ * ## IMPORTANT: poolId is Required for Swaps (January 2026)
+ *
+ * The SwapQuote type includes a `poolId` field which is REQUIRED for executing
+ * swaps. This is because swaps use a two-protostone pattern that calls the
+ * POOL contract directly (not the factory).
+ *
+ * The poolId comes from the AlkanesTokenPair data returned by useAlkanesTokenPairs.
+ *
+ * @see useSwapMutation.ts - Uses poolId to build two-protostone swap calls
+ * @see constants/index.ts - Documentation on factory vs pool opcodes
+ */
 import { useQuery } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useDebounce } from 'use-debounce';
@@ -12,6 +28,12 @@ import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 
 type Direction = 'buy' | 'sell';
 
+/**
+ * SwapQuote contains all information needed to execute a swap.
+ *
+ * The `poolId` field is REQUIRED for executing swaps via useSwapMutation.
+ * It identifies which pool contract to call directly using the two-protostone pattern.
+ */
 export type SwapQuote = {
   direction: Direction;
   inputAmount: string; // in display units
@@ -27,6 +49,12 @@ export type SwapQuote = {
   error?: string;
   route?: string[];
   hops?: number;
+  /**
+   * Pool contract ID to call for the swap.
+   * REQUIRED - Swaps call the pool directly with opcode 3, not the factory.
+   * @see useSwapMutation.ts for the two-protostone pattern implementation
+   */
+  poolId?: { block: string | number; tx: string | number };
 };
 
 const ALKS_DECIMALS = 8;
@@ -161,6 +189,8 @@ async function calculateSwapPrice(
     displaySellAmount: direction !== 'sell' ? fromAlks(maxSentInAlks) : fromAlks(sellAmount),
     displayMinimumReceived: fromAlks(minReceivedInAlks),
     displayMaximumSent: fromAlks(maxSentInAlks),
+    // Include poolId for the swap mutation to use
+    poolId: pool.poolId,
   } as SwapQuote;
 }
 
