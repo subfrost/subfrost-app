@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 // Define Network type locally to avoid import issues with ts-sdk
 import type { Network } from '@/utils/constants';
@@ -89,8 +89,17 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     return paths;
   };
 
-  const [iconPaths] = useState(getIconPaths());
+  // Use useMemo to recompute icon paths when id, symbol, iconUrl, or network changes
+  const iconPaths = useMemo(() => getIconPaths(), [id, symbol, iconUrl, network]);
   const [currentPathIndex, setCurrentPathIndex] = useState(0);
+
+  // Reset path index when icon paths change (props updated)
+  useEffect(() => {
+    setCurrentPathIndex(0);
+    setHasError(false);
+    setIsLoading(true);
+  }, [iconPaths]);
+
   const currentPath = iconPaths[currentPathIndex];
   
   // Fallback gradient colors based on symbol

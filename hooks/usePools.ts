@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 
 // Network to API base URL mapping for REST API (using subfrost API key)
 const NETWORK_API_URLS: Record<string, string> = {
@@ -94,6 +95,7 @@ export function usePools(params: UsePoolsParams = {}) {
   const { network } = useWallet();
   const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID } = getConfig(network);
   const { data: btcPrice } = useBtcPrice();
+  const { provider } = useAlkanesSDK();
 
   return useQuery<{ items: PoolsListItem[]; total: number }>({
     queryKey: [
@@ -110,6 +112,7 @@ export function usePools(params: UsePoolsParams = {}) {
     // Enable as soon as we have network info - BTC price is optional for TVL calculation
     enabled: !!network && !!ALKANE_FACTORY_ID,
     queryFn: async () => {
+      const items: PoolsListItem[] = [];
 
       try {
         // Parse factory ID into block and tx components
@@ -131,14 +134,15 @@ export function usePools(params: UsePoolsParams = {}) {
 
         console.log('[usePools] Response status:', response.status);
 
-        if (!response.ok) {
-          throw new Error(`API request failed: ${response.status}`);
+        // Check if response contains an error (some APIs return 200 with error in body)
+        const poolsResult = await response.json();
+
+        if (!response.ok || poolsResult?.error || poolsResult?.statusCode >= 400) {
+          console.warn('[usePools] REST API failed, trying RPC fallback:', poolsResult?.error || response.status);
+          throw new Error(poolsResult?.error || `API request failed: ${response.status}`);
         }
 
-        const poolsResult = await response.json();
         console.log('[usePools] Got pools result:', poolsResult);
-
-        const items: PoolsListItem[] = [];
 
         // dataApiGetPools returns { data: { pools: [...] } } or { pools: [...] } or array directly
         const rawData = poolsResult?.data?.pools || poolsResult?.data || poolsResult?.pools || poolsResult || [];
@@ -260,8 +264,295 @@ export function usePools(params: UsePoolsParams = {}) {
 
         return { items: paginated, total: sorted.length };
       } catch (error) {
-        console.error('[usePools] Error fetching pools:', error);
-        return { items: [], total: 0 };
+        console.warn('[usePools] REST API error, trying RPC fallback:', error);
+
+        // =====================================================================
+        // RPC FALLBACK: Use alkanesGetAllPoolsWithDetails when REST API fails
+        //
+        // This fallback is necessary on networks like regtest where the
+        // PoolState database table may not exist. The WASM provider's
+        // alkanesGetAllPoolsWithDetails method fetches pool data directly
+        // from the Alkanes indexer via RPC calls.
+        // =====================================================================
+        if (!provider) {
+          console.error('[usePools] No provider available for RPC fallback');
+          return { items: [], total: 0 };
+        }
+
+        try {
+          console.log('[usePools] Using RPC fallback: alkanesGetAllPoolsWithDetails');
+          const rpcResult = await provider.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID);
+          console.log('[usePools] RPC result:', rpcResult);
+
+          // Parse result - may be JSON string or object
+          const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+          const pools = parsed?.pools || [];
+
+          console.log('[usePools] RPC returned', pools.length, 'pools');
+
+          for (const p of pools) {
+            // RPC returns: pool_id_block, pool_id_tx, details: { token_a_block, token_a_tx, ... }
+            const poolId = `${p.pool_id_block}:${p.pool_id_tx}`;
+            const details = p.details || {};
+
+            const token0Id = details.token_a_block != null && details.token_a_tx != null
+              ? `${details.token_a_block}:${details.token_a_tx}`
+              : '';
+            const token1Id = details.token_b_block != null && details.token_b_tx != null
+              ? `${details.token_b_block}:${details.token_b_tx}`
+              : '';
+
+            // Get token names from details or pool_name
+            let token0Name = (details.token_a_name || '').replace('SUBFROST BTC', 'frBTC');
+            let token1Name = (details.token_b_name || '').replace('SUBFROST BTC', 'frBTC');
+
+            // Try to parse from pool_name if names not available
+            if ((!token0Name || !token1Name) && details.pool_name) {
+              const match = details.pool_name.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+              if (match) {
+                token0Name = token0Name || match[1].trim().replace('SUBFROST BTC', 'frBTC');
+                token1Name = token1Name || match[2].trim().replace('SUBFROST BTC', 'frBTC');
+              }
+            }
+
+            // Skip incomplete pools
+            if (!poolId || !token0Id || !token1Id || !token0Name || !token1Name) {
+              console.log('[usePools] Skipping incomplete RPC pool:', { poolId, token0Id, token1Id, token0Name, token1Name });
+              continue;
+            }
+
+            // Parse token IDs for icon URLs
+            const [t0Block, t0Tx] = token0Id.split(':');
+            const [t1Block, t1Tx] = token1Id.split(':');
+            const token0IconUrl = t0Block && t0Tx
+              ? `https://asset.oyl.gg/alkanes/${network}/${t0Block}-${t0Tx}.png`
+              : '';
+            const token1IconUrl = t1Block && t1Tx
+              ? `https://asset.oyl.gg/alkanes/${network}/${t1Block}-${t1Tx}.png`
+              : '';
+
+            // Calculate TVL from reserves if available
+            let tvlUsd = 0;
+            let token0TvlUsd = 0;
+            let token1TvlUsd = 0;
+
+            if (btcPrice && (details.reserve_a || details.reserve_b)) {
+              const calculated = calculateTvlFromReserves(
+                token0Id,
+                token1Id,
+                details.reserve_a || '0',
+                details.reserve_b || '0',
+                btcPrice,
+                BUSD_ALKANE_ID
+              );
+              tvlUsd = calculated.tvlUsd;
+              token0TvlUsd = calculated.token0TvlUsd;
+              token1TvlUsd = calculated.token1TvlUsd;
+            }
+
+            items.push({
+              id: poolId,
+              pairLabel: `${token0Name} / ${token1Name} LP`,
+              token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: token0IconUrl },
+              token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
+              tvlUsd,
+              token0TvlUsd,
+              token1TvlUsd,
+              vol24hUsd: 0, // RPC doesn't provide volume data
+              vol7dUsd: 0,
+              vol30dUsd: 0,
+              apr: 0, // RPC doesn't provide APR data
+            });
+          }
+
+          console.log('[usePools] RPC fallback parsed', items.length, 'valid pools');
+
+          // Apply search filter, sorting, and pagination (same as REST path)
+          let filtered = items;
+          if (params.search) {
+            const searchLower = params.search.toLowerCase();
+            filtered = items.filter(
+              (p) =>
+                p.pairLabel.toLowerCase().includes(searchLower) ||
+                p.token0.symbol.toLowerCase().includes(searchLower) ||
+                p.token1.symbol.toLowerCase().includes(searchLower)
+            );
+          }
+
+          const sorted = [...filtered].sort((a, b) =>
+            params.order === 'asc'
+              ? (a.tvlUsd ?? 0) - (b.tvlUsd ?? 0)
+              : (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0)
+          );
+
+          const start = params.offset ?? 0;
+          const end = start + (params.limit ?? 100);
+          const paginated = sorted.slice(start, end);
+
+          return { items: paginated, total: sorted.length };
+        } catch (rpcError) {
+          console.error('[usePools] RPC fallback also failed:', rpcError);
+
+          // =====================================================================
+          // POOL SCAN FALLBACK: Query alkanes on block 2 via get-pool-by-id
+          //
+          // When both REST API and alkanesGetAllPoolsWithDetails fail (e.g., on
+          // regtest where PoolState table doesn't exist and metashrew is unavailable),
+          // we first fetch all alkanes, filter to block 2 (where pools are created),
+          // then check each one via get-pool-by-id in parallel.
+          // =====================================================================
+          console.log('[usePools] Trying pool scan fallback via get-pool-by-id');
+
+          const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
+          const scannedPools: PoolsListItem[] = [];
+
+          try {
+            // Step 1: Fetch all alkanes to find which IDs exist on block 2
+            const alkanesResponse = await fetch(`${apiUrl}/get-alkanes`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ page: 1, limit: 500 }),
+            });
+            const alkanesData = await alkanesResponse.json();
+            const allTokens = alkanesData?.data?.tokens || [];
+
+            // Filter to block 2 alkanes only (where pools are created)
+            const block2Alkanes = allTokens.filter((t: any) => t.id?.block === '2');
+            console.log('[usePools] Found', block2Alkanes.length, 'alkanes on block 2 to check');
+
+            // Step 2: Check each block 2 alkane via get-pool-by-id in parallel
+            const poolPromises = block2Alkanes.map(async (alkane: any) => {
+              try {
+                const poolResponse = await fetch(`${apiUrl}/get-pool-by-id`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ poolId: { block: alkane.id.block, tx: alkane.id.tx } }),
+                });
+
+                const poolData = await poolResponse.json();
+
+                // Skip if not a pool (404 response)
+                if (poolData?.statusCode === 404 || poolData?.error) {
+                  return null;
+                }
+
+                const p = poolData?.data || poolData;
+                if (!p?.pool_block_id || !p?.pool_tx_id) {
+                  return null;
+                }
+
+                return p;
+              } catch {
+                return null;
+              }
+            });
+
+            const poolResults = await Promise.all(poolPromises);
+
+            // Step 3: Process valid pools
+            for (const p of poolResults) {
+              if (!p) continue;
+
+              const poolId = `${p.pool_block_id}:${p.pool_tx_id}`;
+              const token0Id = `${p.token0_block_id}:${p.token0_tx_id}`;
+              const token1Id = `${p.token1_block_id}:${p.token1_tx_id}`;
+
+              // Parse token names from pool_name
+              let token0Name = '';
+              let token1Name = '';
+              const poolName = p.pool_name || '';
+              if (poolName) {
+                const match = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+                if (match) {
+                  token0Name = match[1].trim().replace('SUBFROST BTC', 'frBTC');
+                  token1Name = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+                }
+              }
+
+              // Skip incomplete pools
+              if (!token0Name || !token1Name) {
+                continue;
+              }
+
+              // Parse token IDs for icon URLs
+              const [t0Block, t0Tx] = token0Id.split(':');
+              const [t1Block, t1Tx] = token1Id.split(':');
+              const token0IconUrl = t0Block && t0Tx
+                ? `https://asset.oyl.gg/alkanes/${network}/${t0Block}-${t0Tx}.png`
+                : '';
+              const token1IconUrl = t1Block && t1Tx
+                ? `https://asset.oyl.gg/alkanes/${network}/${t1Block}-${t1Tx}.png`
+                : '';
+
+              // Calculate TVL from reserves if available
+              let tvlUsd = 0;
+              let token0TvlUsd = 0;
+              let token1TvlUsd = 0;
+
+              if (btcPrice && (p.token0_amount || p.token1_amount)) {
+                const calculated = calculateTvlFromReserves(
+                  token0Id,
+                  token1Id,
+                  p.token0_amount || '0',
+                  p.token1_amount || '0',
+                  btcPrice,
+                  BUSD_ALKANE_ID
+                );
+                tvlUsd = calculated.tvlUsd;
+                token0TvlUsd = calculated.token0TvlUsd;
+                token1TvlUsd = calculated.token1TvlUsd;
+              }
+
+              scannedPools.push({
+                id: poolId,
+                pairLabel: `${token0Name} / ${token1Name} LP`,
+                token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: token0IconUrl },
+                token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
+                tvlUsd,
+                token0TvlUsd,
+                token1TvlUsd,
+                vol24hUsd: 0,
+                vol7dUsd: 0,
+                vol30dUsd: 0,
+                apr: 0,
+              });
+
+              console.log('[usePools] Found pool via scan:', poolId, poolName);
+            }
+          } catch (scanError) {
+            console.error('[usePools] Pool scan failed:', scanError);
+          }
+
+          console.log('[usePools] Pool scan found', scannedPools.length, 'pools');
+
+          if (scannedPools.length > 0) {
+            // Apply search filter, sorting, and pagination
+            let filtered = scannedPools;
+            if (params.search) {
+              const searchLower = params.search.toLowerCase();
+              filtered = scannedPools.filter(
+                (p) =>
+                  p.pairLabel.toLowerCase().includes(searchLower) ||
+                  p.token0.symbol.toLowerCase().includes(searchLower) ||
+                  p.token1.symbol.toLowerCase().includes(searchLower)
+              );
+            }
+
+            const sorted = [...filtered].sort((a, b) =>
+              params.order === 'asc'
+                ? (a.tvlUsd ?? 0) - (b.tvlUsd ?? 0)
+                : (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0)
+            );
+
+            const start = params.offset ?? 0;
+            const end = start + (params.limit ?? 100);
+            const paginated = sorted.slice(start, end);
+
+            return { items: paginated, total: sorted.length };
+          }
+
+          return { items: [], total: 0 };
+        }
       }
     },
   });

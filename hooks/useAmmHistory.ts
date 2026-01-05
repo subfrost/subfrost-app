@@ -32,18 +32,55 @@ type PoolMetadata = {
   poolName: string;
 };
 
+// Helper to fetch single pool metadata via get-pool-by-id
+async function fetchPoolMetadataById(
+  apiUrl: string,
+  poolBlockId: string,
+  poolTxId: string
+): Promise<PoolMetadata | null> {
+  try {
+    const response = await fetch(`${apiUrl}/get-pool-by-id`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        poolId: { block: poolBlockId, tx: poolTxId }
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const result = await response.json();
+    const pool = result?.data?.pool || result?.pool || result?.data || result;
+
+    if (!pool || !pool.token0_block_id) return null;
+
+    return {
+      token0BlockId: pool.token0_block_id,
+      token0TxId: pool.token0_tx_id,
+      token1BlockId: pool.token1_block_id,
+      token1TxId: pool.token1_tx_id,
+      poolName: pool.pool_name || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Hook to fetch pool metadata for enriching mint/burn/creation transactions
-function usePoolsMetadata(network: string) {
+// Uses get-pools first, falls back to individual get-pool-by-id calls if that fails
+function usePoolsMetadata(network: string, poolIds: string[]) {
   const { ALKANE_FACTORY_ID } = getConfig(network);
   const [factoryBlock, factoryTx] = (ALKANE_FACTORY_ID || '4:65522').split(':');
 
   return useQuery({
-    queryKey: ['poolsMetadata', network],
+    queryKey: ['poolsMetadata', network, poolIds.sort().join(',')],
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    enabled: !!network,
+    enabled: !!network && poolIds.length > 0,
     queryFn: async (): Promise<Record<string, PoolMetadata>> => {
       const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
+      const poolMap: Record<string, PoolMetadata> = {};
 
+      // First try get-pools endpoint
       try {
         const response = await fetch(`${apiUrl}/get-pools`, {
           method: 'POST',
@@ -53,31 +90,46 @@ function usePoolsMetadata(network: string) {
           }),
         });
 
-        if (!response.ok) {
-          throw new Error(`API request failed: ${response.status}`);
+        if (response.ok) {
+          const result = await response.json();
+          const pools = result?.data?.pools || result?.pools || [];
+
+          for (const pool of pools) {
+            const poolId = `${pool.pool_block_id}:${pool.pool_tx_id}`;
+            poolMap[poolId] = {
+              token0BlockId: pool.token0_block_id,
+              token0TxId: pool.token0_tx_id,
+              token1BlockId: pool.token1_block_id,
+              token1TxId: pool.token1_tx_id,
+              poolName: pool.pool_name || '',
+            };
+          }
+
+          // Check if we have metadata for all requested pools
+          const missingPools = poolIds.filter(id => !poolMap[id]);
+          if (missingPools.length === 0) {
+            return poolMap;
+          }
+          // If some pools are missing, fall through to individual fetches
+          console.log('[usePoolsMetadata] get-pools missing some pools, fetching individually:', missingPools);
         }
-
-        const result = await response.json();
-        const pools = result?.data?.pools || result?.pools || [];
-
-        // Create a map of poolId -> token metadata
-        const poolMap: Record<string, PoolMetadata> = {};
-        for (const pool of pools) {
-          const poolId = `${pool.pool_block_id}:${pool.pool_tx_id}`;
-          poolMap[poolId] = {
-            token0BlockId: pool.token0_block_id,
-            token0TxId: pool.token0_tx_id,
-            token1BlockId: pool.token1_block_id,
-            token1TxId: pool.token1_tx_id,
-            poolName: pool.pool_name || '',
-          };
-        }
-
-        return poolMap;
       } catch (error) {
-        console.error('[usePoolsMetadata] Failed to fetch pools:', error);
-        return {};
+        console.log('[usePoolsMetadata] get-pools failed, falling back to individual fetches:', error);
       }
+
+      // Fallback: fetch metadata for missing pools individually
+      const missingPools = poolIds.filter(id => !poolMap[id]);
+      const fetchPromises = missingPools.map(async (poolId) => {
+        const [blockId, txId] = poolId.split(':');
+        const metadata = await fetchPoolMetadataById(apiUrl, blockId, txId);
+        if (metadata) {
+          poolMap[poolId] = metadata;
+        }
+      });
+
+      await Promise.all(fetchPromises);
+
+      return poolMap;
     },
   });
 }
@@ -94,7 +146,6 @@ export function useInfiniteAmmTxHistory({
   transactionType?: AmmTransactionType;
 }) {
   const { network, isInitialized } = useAlkanesSDK();
-  const { data: poolsMetadata } = usePoolsMetadata(network);
 
   const query = useInfiniteQuery<
     AmmPageResponse<any>,
@@ -160,6 +211,30 @@ export function useInfiniteAmmTxHistory({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  // Extract unique pool IDs from mint/burn/creation transactions that need enrichment
+  const poolIdsToFetch = useMemo(() => {
+    if (!query.data) return [];
+    const poolIds = new Set<string>();
+
+    for (const page of query.data.pages) {
+      const items = Array.isArray(page.items) ? page.items : [];
+      for (const row of items) {
+        if (!row) continue;
+        // Only need to fetch metadata for mint/burn/creation that don't already have token IDs
+        if ((row.type === 'mint' || row.type === 'burn' || row.type === 'creation')
+            && row.poolBlockId && row.poolTxId
+            && !row.token0BlockId) {
+          poolIds.add(`${row.poolBlockId}:${row.poolTxId}`);
+        }
+      }
+    }
+
+    return Array.from(poolIds);
+  }, [query.data]);
+
+  // Fetch pool metadata for the pools we need
+  const { data: poolsMetadata } = usePoolsMetadata(network, poolIdsToFetch);
 
   // Enrich mint/burn/creation transactions with token IDs from pool metadata
   const enrichedData = useMemo(() => {
