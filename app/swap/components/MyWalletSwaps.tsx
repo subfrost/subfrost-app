@@ -115,10 +115,20 @@ export default function MyWalletSwaps() {
     return () => obs.disconnect();
   }, [hasNextPage, fetchNextPage]);
 
+  // Known token ID to name mappings for fallback
+  const KNOWN_TOKEN_NAMES: Record<string, string> = {
+    '32:0': 'frBTC',
+    '2:0': 'DIESEL',
+    '2:56801': 'bUSD',
+    'btc': 'BTC',
+    'frbtc': 'frBTC',
+  };
+
   const getName = (id: string | undefined) => {
     if (!id) return '';
     const d = displayMap?.[id];
-    return d?.symbol || d?.name || id;
+    // Try displayMap first, then known tokens, then fall back to id
+    return d?.symbol || d?.name || KNOWN_TOKEN_NAMES[id] || id;
   };
 
   // Determine if scrollbar is needed (more than 3 items)

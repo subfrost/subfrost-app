@@ -164,10 +164,20 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
     };
   }, [filterDropdownOpen]);
 
+  // Known token ID to name mappings for fallback
+  const KNOWN_TOKEN_NAMES: Record<string, string> = {
+    '32:0': 'frBTC',
+    '2:0': 'DIESEL',
+    '2:56801': 'bUSD',
+    'btc': 'BTC',
+    'frbtc': 'frBTC',
+  };
+
   const getName = (id: string | undefined) => {
     if (!id) return '';
     const d = displayMap?.[id];
-    return d?.name || d?.symbol || id;
+    // Try displayMap first, then known tokens, then fall back to id
+    return d?.name || d?.symbol || KNOWN_TOKEN_NAMES[id] || id;
   };
 
   return (
