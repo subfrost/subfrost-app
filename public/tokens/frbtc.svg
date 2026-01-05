@@ -10,12 +10,4 @@
   <circle cx="16" cy="16" r="14.5" fill="none" stroke="#ffffff" stroke-width="0.8" stroke-opacity="0.6"/>
   <!-- Bitcoin B symbol -->
   <path d="M22.5 13.5c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.7-.4-.7 2.6c-.4-.1-.9-.2-1.4-.3l.7-2.7-1.7-.4-.7 2.7c-.4-.1-.7-.2-1.1-.2l-2.3-.6-.4 1.8s1.2.3 1.2.3c.7.2.8.6.8 1l-.8 3.2c0 .1.1.1.1.2h-.1l-1.1 4.4c-.1.2-.3.5-.8.4 0 0-1.2-.3-1.2-.3l-.8 1.9 2.2.5c.4.1.8.2 1.2.3l-.7 2.8 1.7.4.7-2.7c.5.1.9.2 1.4.3l-.7 2.7 1.7.4.7-2.8c2.9.5 5.1.3 6-2.2.7-2-.1-3.2-1.5-3.9 1-.2 1.8-1 2-2.5zm-3.6 5.1c-.5 2-4 .9-5.1.7l.9-3.6c1.1.3 4.7.9 4.2 2.9zm.5-5.1c-.5 1.8-3.5.9-4.5.6l.8-3.3c1 .3 4.1.8 3.7 2.7z" fill="white"/>
-  <!-- Snowflake accent -->
-  <g opacity="0.7" transform="translate(22, 4) scale(0.35)">
-    <path d="M12 0L12 24M0 12L24 12M3.5 3.5L20.5 20.5M20.5 3.5L3.5 20.5" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="12" cy="0" r="1.5" fill="white"/>
-    <circle cx="12" cy="24" r="1.5" fill="white"/>
-    <circle cx="0" cy="12" r="1.5" fill="white"/>
-    <circle cx="24" cy="12" r="1.5" fill="white"/>
-  </g>
 </svg>
