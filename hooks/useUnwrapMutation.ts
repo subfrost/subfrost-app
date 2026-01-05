@@ -117,6 +117,8 @@ export function useUnwrapMutation() {
       // Invalidate pool-related queries
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
+      // Invalidate activity feed so it shows the new unwrap transaction
+      queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
       console.log('[useUnwrapMutation] Balance queries invalidated for address:', walletAddress);
     },

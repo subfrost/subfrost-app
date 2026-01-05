@@ -330,6 +330,8 @@ export function useWrapMutation() {
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
+      // Invalidate activity feed so it shows the new wrap transaction
+      queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
       console.log('[WRAP] Balance queries invalidated - waiting for indexer to process block');
     },

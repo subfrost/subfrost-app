@@ -210,6 +210,8 @@ export function useInfiniteAmmTxHistory({
     getNextPageParam: (lastPage) => lastPage.nextPage as number | undefined,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    // Refetch every 30 seconds to keep the activity feed fresh
+    refetchInterval: 30000,
   });
 
   // Extract unique pool IDs from mint/burn/creation transactions that need enrichment

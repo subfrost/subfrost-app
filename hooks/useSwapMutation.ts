@@ -483,6 +483,8 @@ export function useSwapMutation() {
       queryClient.invalidateQueries({ queryKey: ['alkane-balance'] });
       queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['alkanesTokenPairs'] });
+      // Invalidate activity feed so it shows the new swap transaction
+      queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
       console.log('[useSwapMutation] Balance queries invalidated - UI should refresh when indexer processes block');
     },

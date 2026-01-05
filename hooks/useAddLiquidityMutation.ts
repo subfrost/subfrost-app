@@ -336,6 +336,8 @@ export function useAddLiquidityMutation() {
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['pool-stats'] });
       queryClient.invalidateQueries({ queryKey: ['lp-positions'] });
+      // Invalidate activity feed so it shows the new liquidity transaction
+      queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
     },
   });
 }
