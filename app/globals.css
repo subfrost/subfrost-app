@@ -374,6 +374,47 @@ body {
   outline-offset: 2px;
 }
 
+/* Global cursor pointer for clickable elements */
+button,
+a,
+[role="button"],
+[type="button"],
+[type="submit"],
+[type="reset"],
+select,
+summary,
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+label[for],
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Focus state with 1px border - configurable via CSS variables */
+:root {
+  --sf-focus-border-color: #5b9cff;
+}
+
+[data-theme="light"] {
+  --sf-focus-border-color: #284372;
+}
+
+[data-theme="dark"] {
+  --sf-focus-border-color: #5b9cff;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 1px solid var(--sf-focus-border-color);
+  outline-offset: 2px;
+}
+
 /* Watermark background (SVG) - hidden in dark mode */
 .sf-watermark {
   background: url('/background/watermark-bg.svg') center -120px / 1200px auto no-repeat;

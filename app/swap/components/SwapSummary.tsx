@@ -172,14 +172,14 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
         <>
           {swapRoute && (
             <div className="mb-2 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)] mb-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
                 {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {swapRoute.map((step, index) => (
                   <div key={`${step.id}-${index}`} className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-[10px] font-bold text-[color:var(--sf-primary)]">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-xs font-bold text-[color:var(--sf-primary)]">
                         {index + 1}
                       </div>
                       <span className="text-xs font-semibold text-[color:var(--sf-text)]">{step.symbol}</span>
@@ -193,18 +193,23 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 ))}
               </div>
               {(quote?.hops === 2 || sellId === 'btc' || buyId === 'btc') && (
-                <div className="mt-1.5 text-[10px] text-[color:var(--sf-text)]/70">
-                  {quote?.hops === 2 && swapRoute.length === 3 && (
-                    <>
-                      {swapRoute[1].id === BUSD_ALKANE_ID && '⚡ Using bUSD as bridge token'}
-                      {swapRoute[1].id === FRBTC_ALKANE_ID && '⚡ Using frBTC as bridge token'}
-                    </>
-                  )}
-                  {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && 'BTC will seamlessly wrap to frBTC in this Tx.'}
-                  {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
-                  {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && 'NOTE: frBTC will be unwrapped to BTC in this Tx. BTC will be sent to your wallet after 3 block confirmations.'}
-                  {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
-                  {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
+                <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[color:var(--sf-text)]/60">
+                  <svg className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 256 256" fill="currentColor">
+                    <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z"/>
+                  </svg>
+                  <span>
+                    {quote?.hops === 2 && swapRoute.length === 3 && (
+                      <>
+                        {swapRoute[1].id === BUSD_ALKANE_ID && 'Using bUSD as bridge token'}
+                        {swapRoute[1].id === FRBTC_ALKANE_ID && 'Using frBTC as bridge token'}
+                      </>
+                    )}
+                    {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && 'BTC will seamlessly wrap to frBTC in this Tx.'}
+                    {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
+                    {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && 'NOTE: frBTC will be unwrapped to BTC in this Tx. BTC will be sent to your wallet after 3 block confirmations.'}
+                    {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
+                    {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
+                  </span>
                 </div>
               )}
             </div>
