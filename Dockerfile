@@ -17,8 +17,8 @@ COPY package.json pnpm-lock.yaml* ./
 # Install dependencies
 # Note: Using --no-frozen-lockfile because @alkanes/ts-sdk is from a tarball URL
 # that may be republished with same version but different content.
-# Clear store first to ensure fresh download of tarball packages.
-RUN pnpm store prune && pnpm install --prefer-offline=false
+# Force fresh download by disabling offline mode.
+RUN pnpm install --prefer-offline=false
 
 # ============================================
 # Stage 2: Builder
