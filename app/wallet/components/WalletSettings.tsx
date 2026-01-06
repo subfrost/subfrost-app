@@ -7,7 +7,7 @@ import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, D
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 
-type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'subfrost-regtest' | 'oylnet' | 'custom';
+type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'oylnet' | 'custom';
 
 interface DerivationConfig {
   accountIndex: number;
@@ -60,6 +60,7 @@ export default function WalletSettings() {
       case 'mainnet': return 'Mainnet';
       case 'signet': return 'Signet';
       case 'regtest': return 'Local Regtest (localhost)';
+      case 'regtest-local': return 'Local Docker (localhost:18888)';
       case 'subfrost-regtest': return 'Subfrost Regtest (regtest.subfrost.io)';
       default: return networkType;
     }
@@ -330,7 +331,8 @@ export default function WalletSettings() {
                   <option value="mainnet">Mainnet</option>
                   <option value="signet">Signet</option>
                   <option value="subfrost-regtest">Subfrost Regtest (regtest.subfrost.io)</option>
-                  <option value="regtest">Local Regtest (localhost)</option>
+                  <option value="regtest-local">Local Docker (localhost:18888)</option>
+                  <option value="regtest">Local Regtest (legacy)</option>
                   <option value="custom">Custom</option>
                 </select>
               </div>

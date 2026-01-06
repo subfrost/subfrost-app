@@ -36,6 +36,17 @@ export function getConfig(network: string) {
         BLOCK_EXPLORER_URL_BTC: 'http://localhost:50010',
         BLOCK_EXPLORER_URL_ETH: '',
       } as const;
+    case 'regtest-local':
+      return {
+        ALKANE_FACTORY_ID: '4:65522',
+        BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
+        DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
+        FRBTC_ALKANE_ID: '32:0', // frBTC (hardcoded in indexer)
+        OYL_API_URL: 'http://localhost:18888',
+        API_URL: 'http://localhost:4000',
+        BLOCK_EXPLORER_URL_BTC: 'http://localhost:50010',
+        BLOCK_EXPLORER_URL_ETH: '',
+      } as const;
     case 'mainnet':
       if (host.startsWith('localhost') || host.startsWith('app.localhost') || host.startsWith('staging-app')) {
         return {

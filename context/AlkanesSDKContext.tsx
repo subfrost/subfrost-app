@@ -43,12 +43,14 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   testnet: 'testnet',
   signet: 'signet',
   regtest: 'regtest',
+  'regtest-local': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
 };
 
 // Custom URL overrides for networks
 // Subfrost networks use /v4/subfrost endpoint for both jsonrpc and data_api
+// regtest-local uses local Docker environment (localhost:18888 for jsonrpc, localhost:4000 for data_api)
 const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   mainnet: {
     jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
@@ -65,6 +67,10 @@ const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   regtest: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  'regtest-local': {
+    jsonrpc_url: 'http://localhost:18888',
+    data_api_url: 'http://localhost:4000',
   },
   oylnet: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
