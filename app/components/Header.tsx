@@ -193,16 +193,16 @@ import ThemeToggle from "./ThemeToggle";
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-4 md:flex ml-4">
-          <Link href="/" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap ${isActive('/') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}>
+          <Link href="/" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/') ? 'text-[color:var(--sf-primary)] shadow-[0_0_8px_rgba(91,156,255,0.5)]' : 'text-white'}`}>
             Home
           </Link>
-          <Link href="/swap" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap ${isActive('/swap') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}>
+          <Link href="/swap" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/swap') ? 'text-[color:var(--sf-primary)] shadow-[0_0_8px_rgba(91,156,255,0.5)]' : 'text-white'}`}>
             Swap
           </Link>
-          <Link href="/vaults" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap ${isActive('/vaults') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}>
+          <Link href="/vaults" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] shadow-[0_0_8px_rgba(91,156,255,0.5)]' : 'text-white'}`}>
             Vaults
           </Link>
-          <Link href="/futures" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap ${isActive('/futures') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}>
+          <Link href="/futures" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/futures') ? 'text-[color:var(--sf-primary)] shadow-[0_0_8px_rgba(91,156,255,0.5)]' : 'text-white'}`}>
             Futures
           </Link>
           {walletConnected && (
@@ -212,7 +212,7 @@ import ThemeToggle from "./ThemeToggle";
               onMouseEnter={() => setWalletNavOpen(true)}
               onMouseLeave={() => setWalletNavOpen(false)}
             >
-              <Link href="/wallet" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap ${isActive('/wallet') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}>
+              <Link href="/wallet" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/wallet') ? 'text-[color:var(--sf-primary)] shadow-[0_0_8px_rgba(91,156,255,0.5)]' : 'text-white'}`}>
                 Wallet
               </Link>
               {walletNavOpen && (
@@ -490,11 +490,6 @@ import ThemeToggle from "./ThemeToggle";
                      )}
                    </>
                  )}
-                 {/* Theme Toggle in Mobile Menu */}
-                 <div className="px-6 py-4 flex items-center justify-between border-b border-[color:var(--sf-glass-border)]">
-                   <span className="text-sm font-semibold text-[color:var(--sf-text)]">Theme</span>
-                   <ThemeToggle />
-                 </div>
                 </nav>
              </div>
            )}

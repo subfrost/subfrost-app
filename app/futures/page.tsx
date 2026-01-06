@@ -117,11 +117,9 @@ export default function FuturesPage() {
                 className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 title="Generate a new future on regtest (requires local node)"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline-block">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <span className="ml-2">Generate Future</span>
+                Generate Future
               </button>
+              <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
               <button
                 type="button"
                 onClick={handleRefresh}
@@ -148,10 +146,8 @@ export default function FuturesPage() {
                   <path d="M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,0,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,0-6.23-12.66A87.59,87.59,0,0,1,40,104.49C39.74,56.83,78.26,17.14,125.88,16A88,88,0,0,1,216,104Zm-16,0a72,72,0,0,0-73.74-72c-39,.92-70.47,33.39-70.26,72.39a71.65,71.65,0,0,0,27.64,56.3A32,32,0,0,1,96,186v6h24V147.31L90.34,117.66a8,8,0,0,1,11.32-11.32L128,132.69l26.34-26.35a8,8,0,0,1,11.32,11.32L136,147.31V192h24v-6a32.12,32.12,0,0,1,12.47-25.35A71.65,71.65,0,0,0,200,104Z"/>
                 </svg>
               </button>
+              {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
             </div>
-          }
-          actions={
-            <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
           }
         />
       }>
@@ -198,9 +194,6 @@ export default function FuturesPage() {
 
             {/* Section 3: Active Markets Table */}
             <MarketsTable contracts={contracts} onContractSelect={setSelectedContract} />
-
-            {/* How It Works Modal */}
-            {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
 
             {/* Section 4: Contract Detail Modal */}
             {selectedContract && contractData && (
