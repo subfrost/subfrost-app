@@ -67,7 +67,7 @@ jobs:
             --tag "${IMAGE}:${{ github.sha }}" \
             --tag "${IMAGE}:latest" \
             --build-arg NEXT_PUBLIC_NETWORK=mainnet \
-            --cache-from "${IMAGE}:latest" \
+            --no-cache \
             .
 
       - name: Push Docker image

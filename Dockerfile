@@ -15,7 +15,9 @@ RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 COPY package.json pnpm-lock.yaml* ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+# Note: Using --no-frozen-lockfile because @alkanes/ts-sdk is from a tarball URL
+# that may be republished with same version but different content
+RUN pnpm install
 
 # ============================================
 # Stage 2: Builder
