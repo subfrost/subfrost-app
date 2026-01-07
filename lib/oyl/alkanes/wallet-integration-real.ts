@@ -131,6 +131,7 @@ export async function createAlkanesProvider(
     mainnet: 'https://api.subfrost.com',
     testnet: 'https://testnet-api.subfrost.com',
     regtest: 'http://localhost:18443',
+    'regtest-local': 'http://localhost:18888',
     signet: 'https://signet-api.subfrost.com',
     oylnet: 'https://oylnet-api.subfrost.com',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',

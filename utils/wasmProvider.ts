@@ -14,6 +14,7 @@ const NETWORK_URLS: Record<Network, string> = {
   testnet: 'testnet',
   signet: 'signet',
   regtest: 'regtest',
+  'regtest-local': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
 };
@@ -35,6 +36,10 @@ const NETWORK_CONFIG: Record<Network, Record<string, string>> = {
   regtest: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  'regtest-local': {
+    jsonrpc_url: 'http://localhost:18888',
+    data_api_url: 'http://localhost:4000',
   },
   oylnet: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',

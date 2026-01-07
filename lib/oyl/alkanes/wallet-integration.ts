@@ -262,6 +262,7 @@ export async function createAlkanesProvider(
     mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',
     testnet: 'https://testnet.sandshrew.io/v4/wrlckwrld',
     regtest: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
+    'regtest-local': 'http://localhost:18888',
     signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
     oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
