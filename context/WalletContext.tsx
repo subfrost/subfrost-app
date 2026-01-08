@@ -44,6 +44,7 @@ function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
     case 'signet':
       return 'testnet';
     case 'regtest':
+    case 'regtest-local':
     case 'subfrost-regtest':
     case 'oylnet':
       return 'regtest';
@@ -772,6 +773,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         case 'signet':
           return bitcoin.networks.testnet;
         case 'regtest':
+        case 'regtest-local':
         case 'subfrost-regtest':
         case 'oylnet':
           return bitcoin.networks.regtest;
@@ -868,6 +870,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         case 'signet':
           return bitcoin.networks.testnet;
         case 'regtest':
+        case 'regtest-local':
         case 'subfrost-regtest':
         case 'oylnet':
           return bitcoin.networks.regtest;

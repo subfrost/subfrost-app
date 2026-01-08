@@ -1,3 +1,17 @@
+/**
+ * useEnrichedWalletData - Fetches enriched wallet data including UTXOs and alkane balances
+ *
+ * LOCAL TESTING SUPPORT (regtest-local):
+ * This hook includes fallback mechanisms for local Docker testing where lua scripts
+ * may not be available or may timeout. The fallback uses direct esplora RPC calls
+ * (esplora_address::utxo) to fetch UTXOs when getEnrichedBalances fails.
+ *
+ * PRODUCTION BEHAVIOR:
+ * On hosted regtest and mainnet, lua scripts (balances.lua via lua_evalscript) are
+ * the standard method for fetching enriched balance data. The timeouts and fallbacks
+ * here ensure the UI remains responsive even when those scripts are slow.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
@@ -132,11 +146,60 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         throw new Error('No wallet addresses available');
       }
 
+      // Helper: timeout wrapper for slow RPC calls
+      const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+        return Promise.race([
+          promise,
+          new Promise<T>((resolve) => setTimeout(() => {
+            console.log(`[BALANCE] Request timed out after ${timeoutMs}ms, using fallback`);
+            resolve(fallback);
+          }, timeoutMs))
+        ]);
+      };
+
+      // Helper function to fetch UTXOs via direct JSON-RPC (most reliable for regtest-local)
+      const fetchUtxosDirectRpc = async (address: string) => {
+        const network = process.env.NEXT_PUBLIC_NETWORK;
+        const rpcUrl = network === 'regtest-local'
+          ? 'http://localhost:18888'
+          : 'https://regtest.subfrost.io/v4/subfrost';
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'esplora_address::utxo',
+            params: [address],
+            id: 1
+          })
+        });
+        const json = await response.json();
+        if (json.result && Array.isArray(json.result)) {
+          return json.result.map((utxo: any) => ({
+            outpoint: `${utxo.txid}:${utxo.vout}`,
+            value: utxo.value,
+            height: utxo.status?.block_height || 0,
+          }));
+        }
+        return null;
+      };
+
       // Use provider methods instead of direct fetch
+      // Note: getEnrichedBalances uses lua_evalscript which can be very slow on hosted regtest
+      // We add a timeout and fallback to esplora-based balance fetching
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
-          // Get enriched balances using WASM WebProvider's balances.lua method
-          const rawResult = await provider.getEnrichedBalances(address);
+          // Try getEnrichedBalances with a 5 second timeout
+          const rawResult = await withTimeout(
+            provider.getEnrichedBalances(address),
+            5000,
+            null
+          );
+
+          // If timeout or null, fallback to simple esplora UTXOs
+          if (!rawResult) {
+            throw new Error('getEnrichedBalances returned null/timeout');
+          }
 
           let enrichedData: any;
           if (rawResult instanceof Map) {
@@ -161,16 +224,45 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
           return { address, data: enrichedData };
         } catch (error) {
-          console.error(`[BALANCE] Failed to fetch enriched data for ${address}:`, error);
+          // Fallback to direct RPC for UTXOs when getEnrichedBalances fails
+          console.log(`[BALANCE] getEnrichedBalances failed for ${address}, using direct RPC fallback`);
+          try {
+            const spendable = await fetchUtxosDirectRpc(address);
+            if (spendable) {
+              console.log(`[BALANCE] Direct RPC fallback succeeded for ${address}:`, spendable.length, 'UTXOs');
+              return {
+                address,
+                data: {
+                  spendable,
+                  assets: [],
+                  pending: [],
+                  ordHeight: 0,
+                  metashrewHeight: 0
+                }
+              };
+            }
+          } catch (fallbackError) {
+            console.error(`[BALANCE] Direct RPC fallback also failed for ${address}:`, fallbackError);
+          }
           return { address, data: null };
         }
       });
 
       // Fetch protorune/alkane balances via alkanesByAddress
       // This is the primary source of truth for protorune assets (frBTC)
+      // Add timeout since this can be slow on hosted regtest
       const protorunePromises = addresses.map(async (address) => {
         try {
-          const rawResult = await provider.alkanesByAddress(address, 'latest', 1);
+          const rawResult = await withTimeout(
+            provider.alkanesByAddress(address, 'latest', 1),
+            10000, // 10 second timeout
+            null
+          );
+
+          if (!rawResult) {
+            console.log(`[BALANCE] alkanesByAddress timed out for ${address}`);
+            return { address, data: null };
+          }
 
           console.log('[useEnrichedWalletData] Raw alkanesByAddress result type:', typeof rawResult);
           console.log('[useEnrichedWalletData] Raw result is Map:', rawResult instanceof Map);
@@ -187,10 +279,19 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       });
 
       // Also try alkanesBalance as a simpler fallback (returns aggregated balances)
+      // Add timeout since this can also be slow
       const alkanesBalancePromises = addresses.map(async (address) => {
         try {
           console.log('[useEnrichedWalletData] Fetching alkanesBalance for:', address);
-          const rawResult = await provider.alkanesBalance(address);
+          const rawResult = await withTimeout(
+            provider.alkanesBalance(address),
+            10000, // 10 second timeout
+            null
+          );
+          if (!rawResult) {
+            console.log(`[useEnrichedWalletData] alkanesBalance timed out for ${address}`);
+            return { address, data: null };
+          }
           const result = mapToObject(rawResult);
           console.log('[useEnrichedWalletData] alkanesBalance result for', address, result);
           return { address, data: result };

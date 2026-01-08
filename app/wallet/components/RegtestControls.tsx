@@ -27,8 +27,8 @@ export default function RegtestControls() {
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Only show for regtest networks (local regtest, subfrost-regtest, oylnet)
-  if (network !== 'regtest' && network !== 'subfrost-regtest' && network !== 'oylnet') {
+  // Only show for regtest networks (local regtest, subfrost-regtest, oylnet, regtest-local)
+  if (network !== 'regtest' && network !== 'subfrost-regtest' && network !== 'oylnet' && network !== 'regtest-local') {
     return null;
   }
 
@@ -239,7 +239,8 @@ export default function RegtestControls() {
   };
 
   const networkLabel = network === 'subfrost-regtest' ? 'Subfrost Regtest' :
-                       network === 'regtest' ? 'Local Regtest' : 'Oylnet';
+                       network === 'regtest' ? 'Local Regtest' :
+                       network === 'regtest-local' ? 'Local Docker' : 'Oylnet';
 
   return (
     <div className="mt-8 rounded-xl bg-[color:var(--sf-primary)]/5 p-6">

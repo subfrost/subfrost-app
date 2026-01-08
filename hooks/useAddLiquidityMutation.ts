@@ -166,6 +166,7 @@ export function useAddLiquidityMutation() {
       case 'signet':
         return bitcoin.networks.testnet;
       case 'regtest':
+      case 'regtest-local':
       case 'subfrost-regtest':
       case 'oylnet':
         return bitcoin.networks.regtest;

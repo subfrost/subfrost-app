@@ -6,7 +6,14 @@
  * - fromAddresses: ['p2wpkh:0', 'p2tr:0'] (sources from both SegWit and Taproot)
  * - changeAddress: 'p2wpkh:0' (BTC change -> SegWit)
  * - alkanesChangeAddress: 'p2tr:0' (alkane change -> Taproot)
+ *
+ * LOCAL TESTING SUPPORT:
+ * Includes RPC logging via @/lib/rpcLogger for debugging WASM SDK calls.
+ * This is particularly useful when testing against regtest-local (local Docker).
+ * Enable verbose logging in browser console: rpcDebug.enable()
  */
+
+import { logWasmCall, logWasmResult, logWasmError } from '@/lib/rpcLogger';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -115,16 +122,39 @@ export async function alkanesExecuteTyped(
 
   // Use alkanesExecuteWithStrings which returns a PSBT for external signing
   // The caller (useWrapMutation, useSwapMutation) handles signing and broadcasting
-  const result = await provider.alkanesExecuteWithStrings(
+  const startTime = Date.now();
+  logWasmCall('alkanesExecuteWithStrings', [
     toAddressesJson,
     params.inputRequirements,
     params.protostones,
     params.feeRate ?? null,
     params.envelopeHex ?? null,
-    optionsJson
-  );
+    optionsJson,
+  ]);
 
-  return typeof result === 'string' ? JSON.parse(result) : result;
+  try {
+    const result = await provider.alkanesExecuteWithStrings(
+      toAddressesJson,
+      params.inputRequirements,
+      params.protostones,
+      params.feeRate ?? null,
+      params.envelopeHex ?? null,
+      optionsJson
+    );
+
+    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+    logWasmResult('alkanesExecuteWithStrings', parsed, Date.now() - startTime);
+    return parsed;
+  } catch (error) {
+    logWasmError('alkanesExecuteWithStrings', error, [
+      toAddressesJson,
+      params.inputRequirements,
+      params.protostones,
+      params.feeRate,
+      optionsJson,
+    ]);
+    throw error;
+  }
 }
 
 /**

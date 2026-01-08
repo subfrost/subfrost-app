@@ -3,6 +3,18 @@
  *
  * This module provides a single entry point for all alkanes/metashrew/esplora calls,
  * using @alkanes/ts-sdk as the underlying driver.
+ *
+ * NETWORK SUPPORT:
+ * - mainnet: Production Bitcoin mainnet
+ * - testnet/signet: Bitcoin test networks
+ * - regtest: Hosted regtest at regtest.subfrost.io (lua scripts are the standard)
+ * - regtest-local: Local Docker environment (localhost:18888 for RPC, localhost:4000 for data API)
+ *
+ * LOCAL TESTING (regtest-local):
+ * The regtest-local network connects to a local alkanes-rs Docker stack. This is useful
+ * for development and testing without relying on hosted infrastructure. Note that lua
+ * scripts are the standard for production regtest - local testing uses direct RPC calls
+ * as fallbacks when lua scripts are unavailable.
  */
 
 import { AlkanesProvider } from '@alkanes/ts-sdk';
@@ -132,6 +144,14 @@ export function getNetworkConfig(networkName?: string): NetworkConfig {
         networkType: 'regtest',
         url: process.env.ALKANES_RPC_URL || 'https://mainnet.subfrost.io/v4/subfrost',
         dataApiUrl: process.env.ALKANES_DATA_API_URL || 'https://mainnet.subfrost.io/v4/subfrost',
+      };
+    case 'regtest-local':
+      // regtest-local uses local Docker environment
+      return {
+        network: 'regtest-local',
+        networkType: 'regtest',
+        url: 'http://localhost:18888',
+        dataApiUrl: 'http://localhost:4000',
       };
     case 'regtest':
     case 'oylnet':
