@@ -168,7 +168,7 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
   return (
     <div className="relative" style={{ height }}>
       {pairLabel && (
-        <div className="absolute left-3 top-3 z-10 rounded-md bg-black/40 px-2 py-1 text-xs font-semibold text-[color:var(--sf-text)]/80 backdrop-blur-sm">
+        <div className="absolute left-3 top-3 z-10 rounded-md bg-[color:var(--sf-primary)]/10 px-2.5 py-1 text-xs font-semibold text-[color:var(--sf-text)]/60">
           {pairLabel}
         </div>
       )}
