@@ -215,135 +215,138 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
             </div>
           )}
           
-          <Row
-            label="Exchange Rate"
-            value={isWrapPair
-              ? '1 BTC = 1 frBTC'
-              : isUnwrapPair
-                ? '1 frBTC = 1 BTC'
-                : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
-            highlight
-          />
-          {direction === 'sell' ? (
-            <Row label="Minimum Received" value={`${(() => {
-              const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
-              const decimals = isBtcToken ? 8 : 2;
-              return formatAlks(quote.minimumReceived, decimals, decimals);
-            })()} ${buyName ?? buyId}`} />
-          ) : (
-            <Row label="Maximum Sent" value={`${(() => {
-              const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
-              const decimals = isBtcToken ? 8 : 2;
-              return formatAlks(quote.maximumSent, decimals, decimals);
-            })()} ${sellName ?? sellId}`} />
-          )}
-          {/* Deadline (blocks) row */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-              Deadline (blocks)
-            </span>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <input
-                  aria-label="Transaction deadline in blocks"
-                  type="number"
-                  min={1}
-                  max={100}
-                  step={1}
-                  value={deadlineBlocks}
-                  onChange={(e) => setDeadlineBlocks(Number(e.target.value) || 3)}
-                  placeholder="3"
-                  className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                />
-              </div>
-            </div>
-          </div>
-          {/* Slippage Tolerance row */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-              Slippage Tolerance
-            </span>
-            <div className="flex items-center gap-2">
-              {(isWrapPair || isUnwrapPair) ? (
-                <span className="font-semibold text-[color:var(--sf-text)]">N/A</span>
-              ) : (
-                <>
-                  {slippageSelection === 'custom' ? (
-                    <div className="relative">
-                      <input
-                        aria-label="Custom slippage tolerance"
-                        type="text"
-                        inputMode="numeric"
-                        value={maxSlippage}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          // Allow empty, or valid format: up to 2 digits (whole numbers only)
-                          if (val === '' || /^\d{0,2}$/.test(val)) {
-                            const num = parseInt(val, 10);
-                            if (val === '' || (num >= 0 && num <= 99)) {
-                              setMaxSlippage(val);
-                            }
-                          }
-                        }}
-                        placeholder="5"
-                        className="h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                      />
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
-                    </div>
-                  ) : (
-                    <span className="font-semibold text-[color:var(--sf-text)]">
-                      {maxSlippage}%
-                    </span>
-                  )}
-                  <SlippageButton
-                    selection={slippageSelection}
-                    setSelection={setSlippageSelection}
-                    setValue={setMaxSlippage}
-                  />
-                </>
-              )}
-            </div>
-          </div>
-          {/* Miner Fee Rate row */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-              {isCrossChainFrom ? "Bitcoin & Ethereum Network Fee" : "Miner Fee Rate (sats/vB)"}
-            </span>
-            <div className="flex items-center gap-2">
-              {isCrossChainFrom ? (
-                <span className="font-semibold text-[color:var(--sf-text)]">$0.00 USDT</span>
-              ) : feeSelection === 'custom' && setCustomFee ? (
+          {/* Settings rows - px-4 to align with Swap Route content */}
+          <div className="flex flex-col gap-2.5 px-4">
+            <Row
+              label="Exchange Rate"
+              value={isWrapPair
+                ? '1 BTC = 1 frBTC'
+                : isUnwrapPair
+                  ? '1 frBTC = 1 BTC'
+                  : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
+              highlight
+            />
+            {direction === 'sell' ? (
+              <Row label="Minimum Received" value={`${(() => {
+                const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
+                const decimals = isBtcToken ? 8 : 2;
+                return formatAlks(quote.minimumReceived, decimals, decimals);
+              })()} ${buyName ?? buyId}`} />
+            ) : (
+              <Row label="Maximum Sent" value={`${(() => {
+                const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
+                const decimals = isBtcToken ? 8 : 2;
+                return formatAlks(quote.maximumSent, decimals, decimals);
+              })()} ${sellName ?? sellId}`} />
+            )}
+            {/* Deadline (blocks) row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                Deadline (blocks)
+              </span>
+              <div className="flex items-center gap-2">
                 <div className="relative">
                   <input
-                    aria-label="Custom miner fee rate"
+                    aria-label="Transaction deadline in blocks"
                     type="number"
                     min={1}
-                    max={999}
+                    max={100}
                     step={1}
-                    value={customFee}
-                    onChange={(e) => setCustomFee(e.target.value)}
-                    placeholder="0"
+                    value={deadlineBlocks}
+                    onChange={(e) => setDeadlineBlocks(Number(e.target.value) || 3)}
+                    placeholder="3"
                     className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                   />
                 </div>
-              ) : (
-                <span className="font-semibold text-[color:var(--sf-text)]">
-                  {Math.round(feeRate)}
-                </span>
-              )}
-              {!isCrossChainFrom && (
-                <MinerFeeButton
-                  selection={feeSelection}
-                  setSelection={setFeeSelection}
-                  customFee={customFee}
-                  setCustomFee={setCustomFee}
-                  feeRate={feeRate}
-                  presets={feePresets}
-                />
-              )}
+              </div>
             </div>
+            {/* Slippage Tolerance row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                Slippage Tolerance
+              </span>
+              <div className="flex items-center gap-2">
+                {(isWrapPair || isUnwrapPair) ? (
+                  <span className="font-semibold text-[color:var(--sf-text)]">N/A</span>
+                ) : (
+                  <>
+                    {slippageSelection === 'custom' ? (
+                      <div className="relative">
+                        <input
+                          aria-label="Custom slippage tolerance"
+                          type="text"
+                          inputMode="numeric"
+                          value={maxSlippage}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            // Allow empty, or valid format: up to 2 digits (whole numbers only)
+                            if (val === '' || /^\d{0,2}$/.test(val)) {
+                              const num = parseInt(val, 10);
+                              if (val === '' || (num >= 0 && num <= 99)) {
+                                setMaxSlippage(val);
+                              }
+                            }
+                          }}
+                          placeholder="5"
+                          className="h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                        />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
+                      </div>
+                    ) : (
+                      <span className="font-semibold text-[color:var(--sf-text)]">
+                        {maxSlippage}%
+                      </span>
+                    )}
+                    <SlippageButton
+                      selection={slippageSelection}
+                      setSelection={setSlippageSelection}
+                      setValue={setMaxSlippage}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+            {/* Miner Fee Rate row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                {isCrossChainFrom ? "Bitcoin & Ethereum Network Fee" : "Miner Fee Rate (sats/vB)"}
+              </span>
+              <div className="flex items-center gap-2">
+                {isCrossChainFrom ? (
+                  <span className="font-semibold text-[color:var(--sf-text)]">$0.00 USDT</span>
+                ) : feeSelection === 'custom' && setCustomFee ? (
+                  <div className="relative">
+                    <input
+                      aria-label="Custom miner fee rate"
+                      type="number"
+                      min={1}
+                      max={999}
+                      step={1}
+                      value={customFee}
+                      onChange={(e) => setCustomFee(e.target.value)}
+                      placeholder="0"
+                      className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    />
+                  </div>
+                ) : (
+                  <span className="font-semibold text-[color:var(--sf-text)]">
+                    {Math.round(feeRate)}
+                  </span>
+                )}
+                {!isCrossChainFrom && (
+                  <MinerFeeButton
+                    selection={feeSelection}
+                    setSelection={setFeeSelection}
+                    customFee={customFee}
+                    setCustomFee={setCustomFee}
+                    feeRate={feeRate}
+                    presets={feePresets}
+                  />
+                )}
+              </div>
+            </div>
+            {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
           </div>
-          {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
           
           {hasHighSlippage && slippagePercent !== null && !isWrapPair && !isUnwrapPair && (
             <div className="mt-2 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3">
