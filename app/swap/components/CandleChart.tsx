@@ -10,6 +10,7 @@ import {
   ISeriesApi,
   CandlestickSeries,
 } from 'lightweight-charts';
+import { useTheme } from '@/context/ThemeContext';
 
 export interface CandleDataPoint {
   timestamp: number;
@@ -31,6 +32,16 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const { theme } = useTheme();
+
+  // Theme-aware colors matching CSS variables
+  // Dark: --sf-primary: #5b9cff, --sf-text: #e8f0ff
+  // Light: --sf-primary: #284372, --sf-text: #284372
+  const isDark = theme === 'dark';
+  const textColor = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(40, 67, 114, 0.6)';
+  const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(40, 67, 114, 0.1)';
+  const borderColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(40, 67, 114, 0.15)';
+  const crosshairColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(40, 67, 114, 0.2)';
 
   // Convert data to lightweight-charts format
   const chartData: CandlestickData<Time>[] = useMemo(() => {
@@ -55,36 +66,36 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'rgba(255, 255, 255, 0.6)',
+        textColor,
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: gridColor },
+        horzLines: { color: gridColor },
       },
       width: chartContainerRef.current.clientWidth,
       height: height,
       crosshair: {
         vertLine: {
-          color: 'rgba(255, 255, 255, 0.2)',
+          color: crosshairColor,
           width: 1,
           style: 2,
         },
         horzLine: {
-          color: 'rgba(255, 255, 255, 0.2)',
+          color: crosshairColor,
           width: 1,
           style: 2,
         },
       },
       rightPriceScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor,
         scaleMargins: {
           top: 0.1,
           bottom: 0.1,
         },
       },
       timeScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor,
         timeVisible: true,
         secondsVisible: false,
       },
@@ -123,7 +134,7 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [height]);
+  }, [height, textColor, gridColor, borderColor, crosshairColor]);
 
   // Update data when it changes
   useEffect(() => {
