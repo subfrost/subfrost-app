@@ -251,6 +251,12 @@ export default function SwapShell() {
     ]);
   }, [network]);
 
+  // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
+  // Alt tokens can only swap to/from these base tokens, not to other alts
+  const baseTokenIds = useMemo(() => {
+    return new Set(['btc', FRBTC_ALKANE_ID, BUSD_ALKANE_ID].filter(Boolean));
+  }, [FRBTC_ALKANE_ID, BUSD_ALKANE_ID]);
+
   // Build FROM options: Only whitelisted tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
@@ -306,14 +312,59 @@ export default function SwapShell() {
     return opts;
   }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, userCurrencies]);
 
-  // Build TO options: Only whitelisted tokens
+  // Build TO options based on FROM token type:
+  // - If FROM is a base token (BTC, frBTC, bUSD): show all tokens with pools
+  // - If FROM is an alt token: only show base tokens (no alt-to-alt swaps)
   const toOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
     const fromId = fromToken?.id;
+    const isFromBaseToken = fromId ? baseTokenIds.has(fromId) : true;
 
-    // Add BTC first (unless FROM token is BTC)
-    if ((whitelistedTokenIds === null || whitelistedTokenIds.has('btc')) && fromId !== 'btc') {
+    // For BTC, also treat it as frBTC for pool lookups (BTC swaps go through frBTC)
+    const fromIdForPoolLookup = fromId === 'btc' ? FRBTC_ALKANE_ID : fromId;
+
+    // Build a set of tokens that have pools with the FROM token
+    const tokensWithPoolsForFrom = new Set<string>();
+    if (fromIdForPoolLookup) {
+      markets.forEach((pool) => {
+        if (pool.token0.id === fromIdForPoolLookup) {
+          tokensWithPoolsForFrom.add(pool.token1.id);
+        } else if (pool.token1.id === fromIdForPoolLookup) {
+          tokensWithPoolsForFrom.add(pool.token0.id);
+        }
+      });
+      // If FROM is BTC, frBTC pool tokens are also available via wrap
+      if (fromId === 'btc' && FRBTC_ALKANE_ID) {
+        tokensWithPoolsForFrom.add(FRBTC_ALKANE_ID);
+      }
+      // If FROM is frBTC, BTC is available via unwrap
+      if (fromId === FRBTC_ALKANE_ID) {
+        tokensWithPoolsForFrom.add('btc');
+      }
+    }
+
+    // Helper to check if a token should be shown
+    const shouldShowToken = (tokenId: string): boolean => {
+      if (tokenId === fromId) return false; // Can't swap to self
+      if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
+
+      if (isFromBaseToken) {
+        // From base token: show tokens that have pools with it
+        // For BTC/frBTC wrapping, always allow
+        if (fromId === 'btc' && tokenId === FRBTC_ALKANE_ID) return true;
+        if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
+        // Check if there's a pool for this pair
+        const tokenIdForLookup = tokenId === 'btc' ? FRBTC_ALKANE_ID : tokenId;
+        return tokensWithPoolsForFrom.has(tokenIdForLookup) || tokensWithPoolsForFrom.has(tokenId);
+      } else {
+        // From alt token: only show base tokens
+        return baseTokenIds.has(tokenId);
+      }
+    };
+
+    // Add BTC first (if allowed)
+    if (shouldShowToken('btc')) {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
@@ -323,8 +374,8 @@ export default function SwapShell() {
       seen.add('btc');
     }
 
-    // Always add frBTC (BTC <-> frBTC wrapping is always allowed) unless FROM token is frBTC
-    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID)) && fromId !== FRBTC_ALKANE_ID) {
+    // Add frBTC (BTC <-> frBTC wrapping is always allowed)
+    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID)) {
       opts.push({
         id: FRBTC_ALKANE_ID,
         symbol: 'frBTC',
@@ -334,33 +385,47 @@ export default function SwapShell() {
       seen.add(FRBTC_ALKANE_ID);
     }
 
-    // Add whitelisted tokens from pool data (excluding FROM token, null = allow all)
-    Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id) && poolToken.id !== fromId) {
-        opts.push({
-          ...poolToken,
-          isAvailable: true
-        });
-        seen.add(poolToken.id);
-      }
-    });
+    // Add bUSD if it should be shown
+    if (BUSD_ALKANE_ID && !seen.has(BUSD_ALKANE_ID) && shouldShowToken(BUSD_ALKANE_ID)) {
+      const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      opts.push({
+        id: BUSD_ALKANE_ID,
+        symbol: busdToken?.symbol ?? 'bUSD',
+        name: busdToken?.name ?? 'bUSD',
+        isAvailable: true
+      });
+      seen.add(BUSD_ALKANE_ID);
+    }
 
-    // Also add tokens from user's wallet that aren't in pools yet
-    userCurrencies.forEach((currency: any) => {
-      if (!seen.has(currency.id) && currency.id !== fromId && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
-        seen.add(currency.id);
-        opts.push({
-          id: currency.id,
-          symbol: currency.symbol || currency.name || currency.id,
-          name: currency.name || currency.symbol || currency.id,
-          iconUrl: currency.iconUrl,
-          isAvailable: true,
-        });
-      }
-    });
+    // Add remaining tokens from pool data (only if from base token)
+    if (isFromBaseToken) {
+      Array.from(poolTokenMap.values()).forEach((poolToken) => {
+        if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id)) {
+          opts.push({
+            ...poolToken,
+            isAvailable: true
+          });
+          seen.add(poolToken.id);
+        }
+      });
+
+      // Also add tokens from user's wallet that have pools with FROM token
+      userCurrencies.forEach((currency: any) => {
+        if (!seen.has(currency.id) && shouldShowToken(currency.id)) {
+          seen.add(currency.id);
+          opts.push({
+            id: currency.id,
+            symbol: currency.symbol || currency.name || currency.id,
+            name: currency.name || currency.symbol || currency.id,
+            iconUrl: currency.iconUrl,
+            isAvailable: true,
+          });
+        }
+      });
+    }
 
     return opts;
-  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, userCurrencies]);
+  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets]);
 
   // Balances - use useEnrichedWalletData for alkane balances, useBtcBalance for spendable BTC
   const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();

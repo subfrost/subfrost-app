@@ -167,17 +167,12 @@ export default function VaultShell() {
           </div>
 
           {/* Sorting Header - only visible on md+ screens */}
-          <div className="hidden md:flex items-center gap-2 md:gap-3 lg:gap-4 px-4 pb-1 bg-transparent w-full lg:w-auto lg:mx-auto">
-            {/* Empty space for icon - matches VaultListItem icon */}
-            <div className="relative flex-shrink-0">
-              <div className="h-12 w-12"></div>
-            </div>
-
-            {/* Filter Buttons in vault info space */}
-            <div className="min-w-[200px] max-w-[300px] lg:max-w-[400px] text-left flex items-center gap-2">
+          <div className="hidden md:flex items-center pb-1 bg-transparent w-full">
+            {/* Filter Buttons at left */}
+            <div className="flex items-center gap-2 ml-[165px]">
               <button
                 onClick={() => setVaultFilter('all')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'all'
                     ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
                     : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
@@ -187,7 +182,7 @@ export default function VaultShell() {
               </button>
               <button
                 onClick={() => setVaultFilter('mains')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'mains'
                     ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
                     : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
@@ -197,7 +192,7 @@ export default function VaultShell() {
               </button>
               <button
                 onClick={() => setVaultFilter('alts')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'alts'
                     ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
                     : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
@@ -207,7 +202,12 @@ export default function VaultShell() {
               </button>
             </div>
 
-            {/* Est. APY */}
+            {/* Spacer */}
+            <div className="flex-1"></div>
+
+            {/* Column Headers */}
+            <div className="flex items-center gap-2 md:gap-3 lg:gap-4 mr-[175px]">
+              {/* Est. APY */}
             <button
               onClick={() => handleSort('estimatedApy')}
               className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
@@ -223,7 +223,7 @@ export default function VaultShell() {
             {/* Hist. APY - hidden on < lg screens, matches VaultListItem */}
             <button
               onClick={() => handleSort('historicalApy')}
-              className="hidden lg:flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+              className="hidden lg:flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 ml-[2px] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
             >
               <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
                 Hist. APY
@@ -236,7 +236,7 @@ export default function VaultShell() {
             {/* Risk Level - hidden on < md screens to match VaultListItem */}
             <button
               onClick={() => handleSort('riskLevel')}
-              className="hidden md:flex flex-col items-center min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+              className="hidden md:flex flex-col items-center min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 ml-[14px] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
             >
               <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
                 Risk Level
@@ -249,7 +249,7 @@ export default function VaultShell() {
             {/* Available */}
             <button
               onClick={() => handleSort('available')}
-              className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+              className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 -ml-[11px] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
             >
               <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
                 Available
@@ -262,7 +262,7 @@ export default function VaultShell() {
             {/* Deposits */}
             <button
               onClick={() => handleSort('deposits')}
-              className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+              className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 -ml-[2px] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
             >
               <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
                 Deposits
@@ -271,6 +271,7 @@ export default function VaultShell() {
                 )}
               </div>
             </button>
+            </div>
           </div>
 
           {/* Vault List */}
