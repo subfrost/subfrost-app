@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
@@ -62,6 +62,14 @@ export default function SwapInputs({
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
+
+  // Refs for focusing inputs when clicking the container
+  const fromInputRef = useRef<HTMLInputElement>(null);
+  const toInputRef = useRef<HTMLInputElement>(null);
+
+  // Track which input is focused for glow effect
+  const [fromFocused, setFromFocused] = useState(false);
+  const [toFocused, setToFocused] = useState(false);
 
   // Bridge state
   const [bridgeActive, setBridgeActive] = useState(false);
@@ -213,88 +221,80 @@ export default function SwapInputs({
             : "max-h-[1000px] opacity-100 translate-y-0 overflow-visible"
         }`}
       >
-        {/* You Send - input field with integrated label */}
-        <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-          <div className="flex flex-col gap-2">
-            {/* Label + Balance row */}
+        {/* You Send - entire panel clickable to focus input */}
+        <div
+          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-300 cursor-text ${fromFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+          onClick={() => fromInputRef.current?.focus()}
+        >
+          {/* Token Selector - floating top-right */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openTokenSelector('from');
+            }}
+            className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+          >
+            {from && (
+              <TokenIcon
+                key={`from-${from.id}-${from.symbol}`}
+                symbol={from.symbol}
+                id={from.id}
+                iconUrl={from.iconUrl}
+                size="sm"
+                network={network}
+              />
+            )}
+            <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+              {from?.symbol ?? 'Select'}
+            </span>
+            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+          </button>
+
+          {/* Main content area */}
+          <div className="flex flex-col gap-1">
+            {/* Label */}
+            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">You Send</span>
+
+            {/* Input - full width */}
+            <div className="pr-32">
+              <NumberField
+                ref={fromInputRef}
+                placeholder={"0.00"}
+                align="left"
+                value={fromAmount}
+                onChange={onChangeFromAmount}
+                onFocus={() => setFromFocused(true)}
+                onBlur={() => setFromFocused(false)}
+              />
+            </div>
+
+            {/* Fiat value + Percentage Buttons row */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Send</span>
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
+              {/* Percentage Buttons (hidden for bridge tokens) */}
               {!isFromBridgeToken && (
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  {fromBalanceText}
-                  {balanceUsage > 0 && (
-                    <span className="ml-1.5">
-                      ({balanceUsage.toFixed(1)}%)
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Input + Token Selector */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <NumberField placeholder={"0.00"} align="left" value={fromAmount} onChange={onChangeFromAmount} />
-              </div>
-              <button
-                type="button"
-                onClick={() => openTokenSelector('from')}
-                className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none flex-shrink-0"
-              >
-                {from && (
-                  <TokenIcon
-                    key={`from-${from.id}-${from.symbol}`}
-                    symbol={from.symbol}
-                    id={from.id}
-                    iconUrl={from.iconUrl}
-                    size="sm"
-                    network={network}
-                  />
-                )}
-                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                  {from?.symbol ?? 'Select'}
-                </span>
-                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
-              </button>
-            </div>
-
-            {/* Fiat value */}
-            <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
-
-            {/* Balance Bar + Percentage Buttons (hidden for bridge tokens) */}
-            {!isFromBridgeToken && (
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex-1">
-                  {balanceUsage > 0 && (
-                    <div className={`h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
-                      <div
-                        className={`h-full ${getBalanceColor()} transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none`}
-                        style={{ width: `${balanceUsage}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   {onPercentFrom && (
                     <>
                       <button
                         type="button"
                         onClick={() => onPercentFrom(0.25)}
-                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-[color:var(--sf-primary)]/10`}`}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-[color:var(--sf-primary)]/10`}`}
                       >
                         25%
                       </button>
                       <button
                         type="button"
                         onClick={() => onPercentFrom(0.5)}
-                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-[color:var(--sf-primary)]/10`}`}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-[color:var(--sf-primary)]/10`}`}
                       >
                         50%
                       </button>
                       <button
                         type="button"
                         onClick={() => onPercentFrom(0.75)}
-                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-[color:var(--sf-primary)]/10`}`}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-[color:var(--sf-primary)]/10`}`}
                       >
                         75%
                       </button>
@@ -303,11 +303,31 @@ export default function SwapInputs({
                   <button
                     type="button"
                     onClick={onMaxFrom}
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none ${onMaxFrom ? (activePercent === 1 ? "bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-percent-btn)]" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10`) : "opacity-40 cursor-not-allowed"}`}
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none ${onMaxFrom ? (activePercent === 1 ? "bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-percent-btn)]" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} text-[color:var(--sf-percent-btn)] hover:bg-[color:var(--sf-primary)]/10`) : "opacity-40 cursor-not-allowed"}`}
                     disabled={!onMaxFrom}
                   >
                     Max
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Balance row at bottom (hidden for bridge tokens) */}
+            {!isFromBridgeToken && (
+              <div className="flex items-center justify-end gap-2">
+                {balanceUsage > 0 && (
+                  <div className={`w-16 h-1 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
+                    <div
+                      className={`h-full ${getBalanceColor()} transition-all duration-300`}
+                      style={{ width: `${balanceUsage}%` }}
+                    />
+                  </div>
+                )}
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  {fromBalanceText}
+                  {balanceUsage > 0 && (
+                    <span className="ml-1.5">({balanceUsage.toFixed(1)}%)</span>
+                  )}
                 </div>
               </div>
             )}
@@ -328,46 +348,63 @@ export default function SwapInputs({
           </button>
         </div>
 
-        {/* You Receive - input field with integrated label */}
-        <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-          <div className="flex flex-col gap-2">
-            {/* Label + Balance row */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">You Receive</span>
-              {!isToBridgeToken && (
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
-              )}
-            </div>
+        {/* You Receive - entire panel clickable to focus input */}
+        <div
+          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-300 cursor-text ${toFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+          onClick={() => toInputRef.current?.focus()}
+        >
+          {/* Token Selector - floating top-right */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openTokenSelector('to');
+            }}
+            className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+          >
+            {to && (
+              <TokenIcon
+                key={`to-${to.id}-${to.symbol}`}
+                symbol={to.symbol}
+                id={to.id}
+                iconUrl={to.iconUrl}
+                size="sm"
+                network={network}
+              />
+            )}
+            <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+              {to?.symbol ?? 'Select'}
+            </span>
+            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+          </button>
 
-            {/* Input + Token Selector */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <NumberField placeholder={"0.00"} align="left" value={toAmount} onChange={onChangeToAmount} />
-              </div>
-              <button
-                type="button"
-                onClick={() => openTokenSelector('to')}
-                className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none flex-shrink-0"
-              >
-                {to && (
-                  <TokenIcon
-                    key={`to-${to.id}-${to.symbol}`}
-                    symbol={to.symbol}
-                    id={to.id}
-                    iconUrl={to.iconUrl}
-                    size="sm"
-                    network={network}
-                  />
-                )}
-                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                  {to?.symbol ?? 'Select'}
-                </span>
-                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
-              </button>
+          {/* Main content area */}
+          <div className="flex flex-col gap-1">
+            {/* Label */}
+            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">You Receive</span>
+
+            {/* Input - full width */}
+            <div className="pr-32">
+              <NumberField
+                ref={toInputRef}
+                placeholder={"0.00"}
+                align="left"
+                value={toAmount}
+                onChange={onChangeToAmount}
+                onFocus={() => setToFocused(true)}
+                onBlur={() => setToFocused(false)}
+              />
             </div>
 
             {/* Fiat value */}
             <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{toFiatText}</div>
+
+            {/* Balance row at bottom (hidden for bridge tokens) */}
+            {!isToBridgeToken && (
+              <div className="flex items-center justify-end">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
+              </div>
+            )}
           </div>
         </div>
       </div>

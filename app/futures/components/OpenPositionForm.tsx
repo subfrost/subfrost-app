@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { calculateProfitAtLockPeriod } from '../utils/calculations';
 import { type Contract } from '../data/mockContracts';
 import TokenIcon from '@/app/components/TokenIcon';
@@ -26,6 +26,8 @@ type PayoutMarker = {
 export default function OpenPositionForm({ contracts, onContractSelect }: OpenPositionFormProps) {
   const [selectedBlocks, setSelectedBlocks] = useState<number>(30);
   const [investmentAmount, setInvestmentAmount] = useState<string>('1.0');
+  const [inputFocused, setInputFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Get wallet connection state
   const { isConnected, onConnectModalOpenChange } = useWallet();
@@ -294,42 +296,34 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
         <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md space-y-6">
           {/* Investment Amount */}
           <div className="space-y-3">
-            <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-              Investment Amount
-            </label>
-            <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-                <div className="flex items-center gap-3">
-                  <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" className="flex-shrink-0" />
-                  <div className="flex-1">
-                    <NumberField
-                      value={investmentAmount}
-                      onChange={setInvestmentAmount}
-                      placeholder="1.0"
-                      align="left"
-                    />
+            <div
+              className={`relative rounded-xl bg-[color:var(--sf-input-bg)] p-4 transition-shadow duration-300 cursor-text ${inputFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+              onClick={() => inputRef.current?.focus()}
+            >
+              {/* Floating BTC icon */}
+              <div
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" />
+              </div>
+              <div className="flex flex-col gap-1 pl-14">
+                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Investment Amount</span>
+                <NumberField
+                  ref={inputRef}
+                  value={investmentAmount}
+                  onChange={setInvestmentAmount}
+                  placeholder="1.0"
+                  align="left"
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                />
+                {/* Balance and percentage buttons row */}
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/40">
+                    Enter BTC amount
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="mb-2">
-                    <div className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
-                      {balanceText}
-                      {balanceUsage > 0 && (
-                        <span className="ml-1.5">
-                          ({balanceUsage.toFixed(1)}%)
-                        </span>
-                      )}
-                    </div>
-                    {balanceUsage > 0 && (
-                      <div className={`w-full h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
-                        <div
-                          className={`h-full ${getBalanceColor()} transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none`}
-                          style={{ width: `${balanceUsage}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.25)}
@@ -361,10 +355,26 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     </button>
                   </div>
                 </div>
+                {/* Balance row */}
+                <div className="flex items-center justify-end gap-2">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                    {balanceText}
+                    {balanceUsage > 0 && (
+                      <span className="ml-1.5">
+                        ({balanceUsage.toFixed(1)}%)
+                      </span>
+                    )}
+                  </div>
+                  {balanceUsage > 0 && (
+                    <div className={`w-16 h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
+                      <div
+                        className={`h-full ${getBalanceColor()} transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none`}
+                        style={{ width: `${balanceUsage}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-              Enter the amount of BTC you want to invest
             </div>
           </div>
 

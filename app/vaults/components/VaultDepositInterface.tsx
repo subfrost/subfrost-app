@@ -83,10 +83,12 @@ export default function VaultDepositInterface({
     getInitialInputTokenForVault(vault)
   );
   const [showTokenSelector, setShowTokenSelector] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   const selectorRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const canExecute = mode === 'deposit' 
     ? (isConnected && amount && parseFloat(amount) > 0)
@@ -177,138 +179,159 @@ export default function VaultDepositInterface({
         /* Deposit Mode: Swap-like UI */
         <div className="relative flex flex-col gap-3">
           {/* From Wallet Panel */}
-          <div className="relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
-            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">From Wallet</span>
-            <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-              <div className="flex flex-col gap-2">
-                {/* Row 1: Input + Token Selector */}
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <NumberField placeholder={"0.00"} align="left" value={amount} onChange={setAmount} />
-                  </div>
-                  <div className="relative" ref={selectorRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShowTokenSelector(!showTokenSelector)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06]  focus:outline-none flex-shrink-0"
-                    >
-                      <TokenIcon 
-                        key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
-                        symbol={selectedInputToken.symbol}
-                        id={selectedInputToken.id}
-                        size="sm"
-                        network={network}
-                      />
-                      <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                        {selectedInputToken.symbol}
-                      </span>
-                      <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
-                    </button>
-                    
-                    {/* Token Selector Dropdown */}
-                    {showTokenSelector && (
-                      <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
-                        {ALL_VAULT_TOKENS.map((token) => {
-                          const tokenVault = getVaultForInputToken(token.id);
-                          return (
-                            <button
-                              key={token.id}
-                              type="button"
-                              onClick={() => handleInputTokenSelect(token)}
-                              className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-xl last:rounded-b-xl ${
-                                selectedInputToken.id === token.id
-                                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <TokenIcon 
-                                  symbol={token.symbol}
-                                  id={token.id}
-                                  size="sm"
-                                  network={network}
-                                />
-                                <div className="flex-1">
-                                  <div className="font-semibold">{token.symbol}</div>
-                                  {tokenVault && (
-                                    <div className="text-[10px] text-[color:var(--sf-text)]/50">
-                                      → {tokenVault.outputAsset}
-                                    </div>
-                                  )}
-                                </div>
+          <div
+            className={`relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-300 cursor-text ${inputFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            onClick={() => inputRef.current?.focus()}
+          >
+            {/* Token Selector - floating top-right */}
+            <div className="absolute right-4 top-4 z-10" ref={selectorRef} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setShowTokenSelector(!showTokenSelector)}
+                className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
+              >
+                <TokenIcon
+                  key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
+                  symbol={selectedInputToken.symbol}
+                  id={selectedInputToken.id}
+                  size="sm"
+                  network={network}
+                />
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {selectedInputToken.symbol}
+                </span>
+                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+              </button>
+
+              {/* Token Selector Dropdown */}
+              {showTokenSelector && (
+                <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
+                  {ALL_VAULT_TOKENS.map((token) => {
+                    const tokenVault = getVaultForInputToken(token.id);
+                    return (
+                      <button
+                        key={token.id}
+                        type="button"
+                        onClick={() => handleInputTokenSelect(token)}
+                        className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-300 first:rounded-t-xl last:rounded-b-xl ${
+                          selectedInputToken.id === token.id
+                            ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                            : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <TokenIcon
+                            symbol={token.symbol}
+                            id={token.id}
+                            size="sm"
+                            network={network}
+                          />
+                          <div className="flex-1">
+                            <div className="font-semibold">{token.symbol}</div>
+                            {tokenVault && (
+                              <div className="text-[10px] text-[color:var(--sf-text)]/50">
+                                → {tokenVault.outputAsset}
                               </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                
-                {/* Row 2: Fiat + Balance */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                    Balance {userBalance}
-                  </div>
-                </div>
-                
-                {/* Row 3: Percentage Buttons */}
-                <div className="flex items-center justify-end gap-1.5">
+              )}
+            </div>
+
+            {/* Main content area */}
+            <div className="flex flex-col gap-1">
+              {/* Label */}
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">From Wallet</span>
+
+              {/* Input - full width */}
+              <div className="pr-32">
+                <NumberField
+                  ref={inputRef}
+                  placeholder={"0.00"}
+                  align="left"
+                  value={amount}
+                  onChange={setAmount}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                />
+              </div>
+
+              {/* Fiat value + Percentage Buttons row */}
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.25).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none  outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     25%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.5).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none  outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     50%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.75).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none  outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     75%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount(userBalance)}
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none  outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     Max
                   </button>
+                </div>
+              </div>
+
+              {/* Balance row at bottom */}
+              <div className="flex items-center justify-end">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  Balance {userBalance}
                 </div>
               </div>
             </div>
           </div>
 
           {/* To Vault Panel */}
-          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] ">
-            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">To Vault</span>
-            <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            {/* Token display - floating top-right */}
+            <div className="absolute right-4 top-4 z-10">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <TokenIcon
+                  key={`vault-${vault.id}-${vault.outputAsset}`}
+                  symbol={vault.outputAsset}
+                  id={vault.tokenId}
+                  iconUrl={vault.iconPath}
+                  size="sm"
+                  network={network}
+                />
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {vault.outputAsset}
+                </span>
+              </div>
+            </div>
+
+            {/* Main content area */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">To Vault</span>
+              <div className="pr-32">
                 <NumberField placeholder={"0.00"} align="left" value={amount} onChange={() => {}} disabled />
-                <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-                  <TokenIcon 
-                    key={`vault-${vault.id}-${vault.outputAsset}`}
-                    symbol={vault.outputAsset}
-                    id={vault.tokenId}
-                    iconUrl={vault.iconPath}
-                    size="sm"
-                    network={network}
-                  />
-                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                    {vault.outputAsset}
-                  </span>
-                </div>
+              </div>
+              <div className="flex items-center justify-between">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
-                <div className="text-right text-xs font-medium text-[color:var(--sf-text)]/60">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                   APY {apy}%
                 </div>
               </div>
