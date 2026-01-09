@@ -59,7 +59,7 @@ const MarketsSkeleton = () => (
 
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
-  const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
+  const { data: poolsData, isLoading: isLoadingPools, error: poolsError, refetch: refetchPools } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
 
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats } = useAllPoolStats();
@@ -1260,6 +1260,9 @@ export default function SwapShell() {
             onSelect={handleSelectPool}
             volumePeriod={volumePeriod}
             onVolumePeriodChange={setVolumePeriod}
+            isLoading={isLoadingPools}
+            error={poolsError}
+            onRetry={refetchPools}
           />
         </div>
         </Suspense>

@@ -16,9 +16,12 @@ type Props = {
   onSelect: (pool: PoolSummary) => void;
   volumePeriod?: VolumePeriod;
   onVolumePeriodChange?: (period: VolumePeriod) => void;
+  isLoading?: boolean;
+  error?: Error | null;
+  onRetry?: () => void;
 };
 
-export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange }: Props) {
+export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange, isLoading, error, onRetry }: Props) {
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const [showAll, setShowAll] = useState(false);
@@ -208,8 +211,45 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         </div>
       </div>
 
+      {/* Loading State */}
+      {isLoading && (
+        <div className="rounded-2xl bg-[color:var(--sf-surface)]/50 backdrop-blur-sm p-12 text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[color:var(--sf-primary)] border-t-transparent mb-4" />
+          <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">Loading pools...</h3>
+          <p className="text-sm text-[color:var(--sf-text)]/60">
+            Fetching market data
+          </p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {!isLoading && error && (
+        <div className="rounded-2xl bg-[color:var(--sf-surface)]/50 backdrop-blur-sm p-12 text-center">
+          <svg className="mx-auto h-12 w-12 text-red-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">Failed to load pools</h3>
+          <p className="text-sm text-[color:var(--sf-text)]/60 mb-4">
+            {error.message?.includes('timed out') || error.message?.includes('500')
+              ? 'The API server is experiencing issues. Please try again.'
+              : error.message || 'An error occurred while fetching pools.'}
+          </p>
+          {onRetry && (
+            <button
+              onClick={() => onRetry()}
+              className="inline-flex items-center gap-2 rounded-xl bg-[color:var(--sf-primary)] px-6 py-3 font-bold text-white uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary-pressed)] focus:outline-none"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Try Again
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Empty State */}
-      {filteredPools.length === 0 && (
+      {!isLoading && !error && filteredPools.length === 0 && (
         <div className="rounded-2xl bg-[color:var(--sf-surface)]/50 backdrop-blur-sm p-12 text-center">
           <svg className="mx-auto h-12 w-12 text-[color:var(--sf-text)]/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -218,6 +258,19 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
           <p className="text-sm text-[color:var(--sf-text)]/60">
             {searchQuery ? `No pools match "${searchQuery}"` : 'No pools available'}
           </p>
+          {!searchQuery && (network === 'regtest' || network === 'regtest-local' || network === 'subfrost-regtest') && (
+            <div className="mt-4 p-4 rounded-xl bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] text-left">
+              <p className="text-xs font-semibold text-[color:var(--sf-info-yellow-title)] mb-2">Regtest Network</p>
+              <p className="text-xs text-[color:var(--sf-text)]/70">
+                No pools are indexed on this regtest environment. Make sure:
+              </p>
+              <ul className="mt-2 text-xs text-[color:var(--sf-text)]/70 list-disc list-inside space-y-1">
+                <li>Pools have been deployed to the regtest chain</li>
+                <li>The indexer is running and has synced the pools</li>
+                <li>If running locally, switch to &apos;regtest-local&apos; network</li>
+              </ul>
+            </div>
+          )}
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
@@ -230,7 +283,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
       )}
 
       {/* Desktop Table View */}
-      {filteredPools.length > 0 && (
+      {!isLoading && !error && filteredPools.length > 0 && (
         <div className="hidden md:block rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
         <div className="px-4 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
           <div className="flex items-center justify-between gap-2">
@@ -380,7 +433,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
       )}
 
       {/* Mobile/Tablet Card View */}
-      {filteredPools.length > 0 && (
+      {!isLoading && !error && filteredPools.length > 0 && (
         <div className="grid grid-cols-1 gap-3 md:hidden">
         {displayedPools.map((pool) => (
           <button
@@ -436,7 +489,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         </div>
       )}
 
-      {hasMore && !showAll && filteredPools.length > 0 && (
+      {!isLoading && !error && hasMore && !showAll && filteredPools.length > 0 && (
         <div className="mt-6 flex justify-center">
           <button
             onClick={() => setShowAll(true)}

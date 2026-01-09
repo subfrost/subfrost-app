@@ -162,7 +162,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         const network = process.env.NEXT_PUBLIC_NETWORK;
         const rpcUrl = network === 'regtest-local'
           ? 'http://localhost:18888'
-          : 'https://regtest.subfrost.io/v4/subfrost';
+          : 'https://regtest.subfrost.io/v4/jsonrpc';
         const response = await fetch(rpcUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

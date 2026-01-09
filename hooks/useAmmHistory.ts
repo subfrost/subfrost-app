@@ -13,14 +13,18 @@ type AmmPageResponse<T> = {
 
 export type AmmTransactionType = 'swap' | 'mint' | 'burn' | 'creation' | 'wrap' | 'unwrap';
 
-// Network to API base URL mapping for REST API (using subfrost API key)
+// Subfrost API key for higher rate limits (used in URL path)
+const SUBFROST_API_KEY = 'd5ccdb288adb17eeab785a15766cc897';
+
+// Network to API base URL mapping for REST API (Data API)
 const NETWORK_API_URLS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+  mainnet: `https://mainnet.subfrost.io/v4/${SUBFROST_API_KEY}`,
+  testnet: `https://testnet.subfrost.io/v4/${SUBFROST_API_KEY}`,
+  signet: `https://signet.subfrost.io/v4/${SUBFROST_API_KEY}`,
+  regtest: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
+  oylnet: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
+  'regtest-local': 'http://localhost:4000',
+  'subfrost-regtest': `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
 };
 
 // Pool metadata cache type

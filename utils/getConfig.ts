@@ -32,7 +32,7 @@ export function getConfig(network: string) {
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0', // frBTC (hardcoded in indexer)
         OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'http://localhost:18888',
-        API_URL: 'https://regtest.subfrost.io/v4/subfrost',
+        API_URL: 'https://regtest.subfrost.io/v4/api',
         BLOCK_EXPLORER_URL_BTC: 'http://localhost:50010',
         BLOCK_EXPLORER_URL_ETH: '',
       } as const;

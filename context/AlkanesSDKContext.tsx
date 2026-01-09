@@ -48,37 +48,40 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   'subfrost-regtest': 'subfrost-regtest',
 };
 
+// Subfrost API key for higher rate limits (used in URL path)
+const SUBFROST_API_KEY = 'd5ccdb288adb17eeab785a15766cc897';
+
 // Custom URL overrides for networks
-// Subfrost networks use /v4/subfrost endpoint for both jsonrpc and data_api
+// API key is embedded in URL path for authenticated access
 // regtest-local uses local Docker environment (localhost:18888 for jsonrpc, localhost:4000 for data_api)
 const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   mainnet: {
-    jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
-    data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    jsonrpc_url: `https://mainnet.subfrost.io/v4/${SUBFROST_API_KEY}`,
+    data_api_url: `https://mainnet.subfrost.io/v4/${SUBFROST_API_KEY}`,
   },
   testnet: {
-    jsonrpc_url: 'https://testnet.subfrost.io/v4/subfrost',
-    data_api_url: 'https://testnet.subfrost.io/v4/subfrost',
+    jsonrpc_url: `https://testnet.subfrost.io/v4/${SUBFROST_API_KEY}`,
+    data_api_url: `https://testnet.subfrost.io/v4/${SUBFROST_API_KEY}`,
   },
   signet: {
-    jsonrpc_url: 'https://signet.subfrost.io/v4/subfrost',
-    data_api_url: 'https://signet.subfrost.io/v4/subfrost',
+    jsonrpc_url: `https://signet.subfrost.io/v4/${SUBFROST_API_KEY}`,
+    data_api_url: `https://signet.subfrost.io/v4/${SUBFROST_API_KEY}`,
   },
   regtest: {
-    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
-    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+    jsonrpc_url: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
+    data_api_url: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
   },
   'regtest-local': {
     jsonrpc_url: 'http://localhost:18888',
     data_api_url: 'http://localhost:4000',
   },
   oylnet: {
-    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
-    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+    jsonrpc_url: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
+    data_api_url: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
   },
   'subfrost-regtest': {
-    jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
-    data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+    jsonrpc_url: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
+    data_api_url: `https://regtest.subfrost.io/v4/${SUBFROST_API_KEY}`,
   },
 };
 
