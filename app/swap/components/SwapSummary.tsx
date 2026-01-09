@@ -165,13 +165,13 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const isUnwrapPair = (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && buyId === 'btc';
 
   return (
-    <div className="mt-3 flex flex-col gap-2.5 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+    <div className="mt-3 flex flex-col gap-2.5 text-sm">
       {isCalculating ? (
         <SkeletonLines />
       ) : quote ? (
         <>
           {swapRoute && (
-            <div className="mb-2 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3">
+            <div className="mb-2 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
               <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
                 {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
               </div>
