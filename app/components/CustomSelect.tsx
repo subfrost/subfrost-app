@@ -63,7 +63,7 @@ export default function CustomSelect({
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`h-11 w-full appearance-none rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-br from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-3.5 pr-10 text-left text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,0.2)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-[color:var(--sf-primary)]/40 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+        className={`h-11 w-full appearance-none rounded-lg border-2 border-[color:var(--sf-primary)]/20 bg-gradient-to-br from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-3.5 pr-10 text-left text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-[color:var(--sf-primary)]/40 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
           ''
         }`}
       >
@@ -76,7 +76,7 @@ export default function CustomSelect({
           />
         )}
         <span className="flex-1 truncate">{displayLabel}</span>
-        <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-white/95 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`}>
+        <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-white/95 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
@@ -92,7 +92,7 @@ export default function CustomSelect({
                 key={option.value}
                 type="button"
                 onClick={() => handleSelect(option.value)}
-                className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-3 ${
+                className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-3 ${
                   isSelected
                     ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                     : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'

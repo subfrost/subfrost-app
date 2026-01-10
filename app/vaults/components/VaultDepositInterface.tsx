@@ -86,11 +86,11 @@ export default function VaultDepositInterface({
   const [inputFocused, setInputFocused] = useState(false);
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
-  // Local deadline state to allow empty field while typing
-  const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
+  // Local deadline state to allow empty field while typing
+  const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
   const selectorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -159,7 +159,7 @@ export default function VaultDepositInterface({
       <div className="flex gap-4 mb-6">
         <button
           onClick={() => onModeChange('deposit')}
-          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
             mode === 'deposit'
               ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
@@ -169,7 +169,7 @@ export default function VaultDepositInterface({
         </button>
         <button
           onClick={() => onModeChange('withdraw')}
-          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
             mode === 'withdraw'
               ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
@@ -184,7 +184,7 @@ export default function VaultDepositInterface({
         <div className="relative flex flex-col gap-3">
           {/* From Wallet Panel */}
           <div
-            className={`relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-300 cursor-text ${inputFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            className={`relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${inputFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
             onClick={() => inputRef.current?.focus()}
           >
             {/* Token Selector - floating top-right */}
@@ -192,7 +192,7 @@ export default function VaultDepositInterface({
               <button
                 type="button"
                 onClick={() => setShowTokenSelector(!showTokenSelector)}
-                className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
+                className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
               >
                 <TokenIcon
                   key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
@@ -217,7 +217,7 @@ export default function VaultDepositInterface({
                         key={token.id}
                         type="button"
                         onClick={() => handleInputTokenSelect(token)}
-                        className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-300 first:rounded-t-xl last:rounded-b-xl ${
+                        className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[400ms] first:rounded-t-xl last:rounded-b-xl ${
                           selectedInputToken.id === token.id
                             ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                             : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
@@ -271,28 +271,28 @@ export default function VaultDepositInterface({
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.25).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-[400ms] outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     25%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.5).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-[400ms] outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     50%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.75).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all duration-[400ms] outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     75%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount(userBalance)}
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all duration-300 outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all duration-[400ms] outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                   >
                     Max
                   </button>
@@ -309,7 +309,7 @@ export default function VaultDepositInterface({
           </div>
 
           {/* To Vault Panel */}
-          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             {/* Token display - floating top-right */}
             <div className="absolute right-4 top-4 z-10">
               <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
@@ -343,7 +343,7 @@ export default function VaultDepositInterface({
           </div>
 
           {/* Transaction Settings */}
-          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] ">
+          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] ">
             <div className="flex flex-col gap-2.5">
               {/* Minimum Received row */}
               <div className="flex items-center justify-between">
@@ -382,8 +382,8 @@ export default function VaultDepositInterface({
                         }
                       }}
                       placeholder="3"
-                      style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      style={{ outline: 'none', border: 'none' }}
+                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                     />
                   </div>
                 </div>
@@ -419,8 +419,8 @@ export default function VaultDepositInterface({
                           }
                         }}
                         placeholder="5"
-                        style={{ outline: 'none', border: focusedField === 'slippage' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                        className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        style={{ outline: 'none', border: 'none' }}
+                        className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                       />
                       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
                     </div>
@@ -461,8 +461,8 @@ export default function VaultDepositInterface({
                           }
                         }}
                         placeholder="0"
-                        style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        style={{ outline: 'none', border: 'none' }}
+                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                       />
                     </div>
                   ) : (
@@ -493,7 +493,7 @@ export default function VaultDepositInterface({
               onExecute(amount);
             }}
             disabled={!canExecute}
-            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
           >
             {isConnected ? 'DEPOSIT' : 'CONNECT WALLET'}
           </button>
@@ -516,7 +516,7 @@ export default function VaultDepositInterface({
                     <button
                       key={unit.alkaneId}
                       onClick={() => onUnitSelect(unit.alkaneId)}
-                      className={`w-full p-3 rounded-lg border transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none  ${
+                      className={`w-full p-3 rounded-lg border transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none  ${
                         selectedUnitId === unit.alkaneId
                           ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
                           : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-gray-50'
@@ -554,7 +554,7 @@ export default function VaultDepositInterface({
               onExecute('1'); // Vault units are typically 1 per deposit
             }}
             disabled={!canExecute}
-            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
           >
             {isConnected ? 'WITHDRAW' : 'CONNECT WALLET'}
           </button>
@@ -609,10 +609,10 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]  focus:outline-none"
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
       >
         <span>{getDisplayText()}</span>
-        <ChevronDown size={12} className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
@@ -622,7 +622,7 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
@@ -695,10 +695,10 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]  focus:outline-none"
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
       >
         <span>{getDisplayText()}</span>
-        <ChevronDown size={12} className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
@@ -708,7 +708,7 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'

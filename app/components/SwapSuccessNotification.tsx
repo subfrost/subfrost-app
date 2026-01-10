@@ -62,7 +62,7 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
     <>
       {/* Flash overlay */}
       <div
-        className={`fixed inset-0 z-[9998] bg-[color:var(--sf-primary)]/10 pointer-events-none transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+        className={`fixed inset-0 z-[9998] bg-[color:var(--sf-primary)]/10 pointer-events-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
           isFlashing ? "opacity-100" : "opacity-0"
         }`}
       />
@@ -75,7 +75,7 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
       >
         <button
           onClick={handleExpand}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_6px_28px_rgba(34,197,94,0.4)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_6px_28px_rgba(34,197,94,0.4)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
           aria-label="Expand swap notification"
         >
           <div className="flex gap-0.5">
@@ -116,7 +116,7 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
             {/* Collapse button */}
             <button
               onClick={handleCollapse}
-              className="flex h-6 w-6 items-center justify-center rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
+              className="flex h-6 w-6 items-center justify-center rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
               aria-label="Collapse"
             >
               <Minus size={14} className="text-[color:var(--sf-info-green-title)]" strokeWidth={2.5} />
@@ -125,7 +125,7 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
             {/* Dismiss button */}
             <button
               onClick={handleDismiss}
-              className="flex h-6 w-6 items-center justify-center rounded-full transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
+              className="flex h-6 w-6 items-center justify-center rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-info-green-border)] focus:outline-none"
               aria-label="Dismiss"
             >
               <svg

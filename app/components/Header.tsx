@@ -193,16 +193,16 @@ import ThemeToggle from "./ThemeToggle";
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-4 md:flex ml-4">
-          <Link href="/" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`} style={isActive('/') ? { textShadow: '0 0 8px rgba(0, 0, 0, 0.4)' } : undefined}>
+          <Link href="/" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
             Home
           </Link>
-          <Link href="/swap" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/swap') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`} style={isActive('/swap') ? { textShadow: '0 0 8px rgba(0, 0, 0, 0.4)' } : undefined}>
+          <Link href="/swap" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/swap') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
             Swap
           </Link>
-          <Link href="/vaults" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/vaults') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`} style={isActive('/vaults') ? { textShadow: '0 0 8px rgba(0, 0, 0, 0.4)' } : undefined}>
+          <Link href="/vaults" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/vaults') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
             Vaults
           </Link>
-          <Link href="/futures" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/futures') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`} style={isActive('/futures') ? { textShadow: '0 0 8px rgba(0, 0, 0, 0.4)' } : undefined}>
+          <Link href="/futures" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/futures') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
             Futures
           </Link>
           {walletConnected && (
@@ -212,7 +212,7 @@ import ThemeToggle from "./ThemeToggle";
               onMouseEnter={() => setWalletNavOpen(true)}
               onMouseLeave={() => setWalletNavOpen(false)}
             >
-              <Link href="/wallet" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/wallet') ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`} style={isActive('/wallet') ? { textShadow: '0 0 8px rgba(0, 0, 0, 0.4)' } : undefined}>
+              <Link href="/wallet" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/wallet') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
                 Wallet
               </Link>
               {walletNavOpen && (
@@ -397,7 +397,7 @@ import ThemeToggle from "./ThemeToggle";
             <button
               type="button"
               onClick={() => onConnectModalOpenChange(true)}
-              className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden"
+              className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-3 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap"
             >
               <span className="relative z-10">Connect Wallet</span>
               <div className="absolute inset-0 pointer-events-none">

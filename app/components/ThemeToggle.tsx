@@ -16,18 +16,18 @@ export default function ThemeToggle() {
     >
       <Sun
         size={14}
-        className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLight ? 'text-white' : 'text-[color:var(--sf-muted)]'}`}
+        className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLight ? 'text-white' : 'text-[color:var(--sf-muted)]'}`}
       />
-      <div className="relative w-8 h-4 rounded-full bg-[color:var(--sf-outline)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+      <div className="relative w-8 h-4 rounded-full bg-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
         <div
-          className={`absolute top-0.5 w-3 h-3 rounded-full bg-[color:var(--sf-primary)] shadow-sm transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+          className={`absolute top-0.5 w-3 h-3 rounded-full bg-[color:var(--sf-primary)] shadow-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
             isLight ? 'left-0.5' : 'left-[18px]'
           }`}
         />
       </div>
       <Moon
         size={14}
-        className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${!isLight ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-muted)]'}`}
+        className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${!isLight ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-muted)]'}`}
       />
     </button>
   );

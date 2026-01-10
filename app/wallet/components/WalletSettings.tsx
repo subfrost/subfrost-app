@@ -326,7 +326,7 @@ export default function WalletSettings() {
                 <select
                   value={network}
                   onChange={(e) => setNetwork(e.target.value as NetworkType)}
-                  className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-10 pr-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+                  className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-10 pr-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
                 >
                   <option value="mainnet">Mainnet</option>
                   <option value="signet">Signet</option>
@@ -380,7 +380,7 @@ export default function WalletSettings() {
           {!isBrowserWallet && hasNetworkChanges && (
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
             >
               <Save size={20} />
               {saved ? 'Settings Saved!' : 'Save Settings'}
@@ -437,7 +437,7 @@ export default function WalletSettings() {
             {/* Configure Derivation Toggle Button */}
             <button
               onClick={() => setShowDerivationConfig(!showDerivationConfig)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
             >
               {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               <span>Configure Derivation</span>
@@ -473,7 +473,7 @@ export default function WalletSettings() {
                         <select
                           value={taprootConfig.changeIndex}
                           onChange={(e) => setTaprootConfig({ ...taprootConfig, changeIndex: parseInt(e.target.value) })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
                         >
                           <option value="0">External (0)</option>
                           <option value="1">Change (1)</option>
@@ -501,7 +501,7 @@ export default function WalletSettings() {
                       </div>
                       <button
                         onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
-                        className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                        className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                         title="Copy address"
                       >
                         {copiedAddress === 'taproot' ? (
@@ -541,7 +541,7 @@ export default function WalletSettings() {
                         <select
                           value={segwitConfig.changeIndex}
                           onChange={(e) => setSegwitConfig({ ...segwitConfig, changeIndex: parseInt(e.target.value) })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
                         >
                           <option value="0">External (0)</option>
                           <option value="1">Change (1)</option>
@@ -569,7 +569,7 @@ export default function WalletSettings() {
                       </div>
                       <button
                         onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
-                        className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                        className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                         title="Copy address"
                       >
                         {copiedAddress === 'segwit' ? (
@@ -585,7 +585,7 @@ export default function WalletSettings() {
                 {/* Save Button - inside collapsible section */}
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
+                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
                 >
                   <Save size={20} />
                   {saved ? 'Settings Saved!' : 'Save Settings'}
@@ -612,7 +612,7 @@ export default function WalletSettings() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <button
                 onClick={exportKeystore}
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
               >
                 <Download size={18} />
                 <span>Export Keystore</span>
@@ -620,7 +620,7 @@ export default function WalletSettings() {
 
               <button
                 onClick={() => setShowSeedModal(true)}
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
               >
                 <Eye size={18} />
                 <span>Reveal Seed Phrase</span>
@@ -629,7 +629,7 @@ export default function WalletSettings() {
               <button
                 onClick={handleBackupToDrive}
                 disabled={isBackingUp}
-                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-[color:var(--sf-outline)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] overflow-hidden relative ${
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] overflow-hidden relative ${
                   backupSuccess
                     ? 'bg-green-500/20 border-green-500/30'
                     : 'bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10'
@@ -638,7 +638,7 @@ export default function WalletSettings() {
                 {/* Progress bar background */}
                 {isBackingUp && !backupSuccess && (
                   <div
-                    className="absolute inset-0 bg-[color:var(--sf-primary)]/20 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    className="absolute inset-0 bg-[color:var(--sf-primary)]/20 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                     style={{ width: `${backupProgress}%` }}
                   />
                 )}
@@ -708,13 +708,13 @@ export default function WalletSettings() {
                   <div className="flex gap-3">
                     <button
                       onClick={revealSeed}
-                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
+                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
                     >
                       Reveal
                     </button>
                     <button
                       onClick={closeSeedModal}
-                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
                     >
                       Cancel
                     </button>
@@ -732,14 +732,14 @@ export default function WalletSettings() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => copyToClipboard(revealedSeed)}
-                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium flex items-center justify-center gap-2"
+                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium flex items-center justify-center gap-2"
                     >
                       <Copy size={18} />
                       Copy to Clipboard
                     </button>
                     <button
                       onClick={closeSeedModal}
-                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
                     >
                       Close
                     </button>

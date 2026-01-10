@@ -140,7 +140,7 @@ export default function PoolDetailsCard({ pool, volumePeriod = '24h', onVolumePe
             <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Pool Balance Distribution</div>
             <div className="h-3 w-full overflow-hidden rounded-full bg-[color:var(--sf-outline)]/20 shadow-inner">
               <div
-                className="h-full bg-gradient-to-r from-[color:var(--sf-primary)] to-blue-500 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                className="h-full bg-gradient-to-r from-[color:var(--sf-primary)] to-blue-500 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 style={{ width: `${getToken0Percentage(pool)}%` }}
               />
             </div>

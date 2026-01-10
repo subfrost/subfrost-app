@@ -373,7 +373,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                 key={s}
                 type="button"
                 onClick={() => setFeeSelection(s)}
-                className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                   feeSelection === s
                     ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                     : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
@@ -385,7 +385,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             <button
               type="button"
               onClick={() => setFeeSelection('custom')}
-              className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+              className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 feeSelection === 'custom'
                   ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
@@ -404,7 +404,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
                   placeholder="10"
-                  className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sat/vB</span>
               </div>
@@ -439,13 +439,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       <div className="flex gap-3">
         <button
           onClick={handleNext}
-          className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
+          className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
         >
           {autoSelectUtxos ? 'Review & Send' : 'Select UTXOs'}
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+          className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
         >
           Cancel
         </button>
@@ -482,7 +482,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                 key={key}
                 onClick={() => !isFrozen && toggleUtxo(utxo.txid, utxo.vout)}
                 disabled={isFrozen}
-                className={`w-full p-3 rounded-lg border transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
+                className={`w-full p-3 rounded-lg border transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
                   isSelected
                     ? 'bg-[color:var(--sf-primary)]/20 border-[color:var(--sf-primary)]/50'
                     : isFrozen
@@ -531,14 +531,14 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       <div className="flex gap-3">
         <button
           onClick={() => setStep('input')}
-          className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+          className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
         >
           Back
         </button>
         <button
           onClick={handleNext}
           disabled={selectedUtxos.size === 0}
-          className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Review & Send
         </button>
@@ -594,13 +594,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         <div className="flex gap-3">
           <button
             onClick={() => setStep(autoSelectUtxos ? 'input' : 'utxo-selection')}
-            className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+            className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
           >
             Back
           </button>
           <button
             onClick={handleNext}
-            className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center justify-center gap-2"
           >
             <Send size={18} />
             Send Transaction
@@ -641,7 +641,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
       <button
         onClick={onClose}
-        className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
+        className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
       >
         Close
       </button>
@@ -656,7 +656,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">Send Bitcoin</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
           >
             <X size={20} />
           </button>
@@ -733,13 +733,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowFeeWarning(false)}
-                  className="flex-1 px-4 py-3 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)] rounded-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-medium"
+                  className="flex-1 px-4 py-3 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)] rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-medium"
                 >
                   Go Back
                 </button>
                 <button
                   onClick={proceedWithHighFee}
-                  className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-medium"
+                  className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-medium"
                 >
                   Proceed Anyway
                 </button>

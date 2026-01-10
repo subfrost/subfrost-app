@@ -147,7 +147,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
           >
             <X size={20} />
           </button>
@@ -241,14 +241,14 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               <div className="flex gap-3">
                 <button
                   onClick={handleSplit}
-                  className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium flex items-center justify-center gap-2"
                 >
                   <Scissors size={18} />
                   Split UTXO
                 </button>
                 <button
                   onClick={handleClose}
-                  className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                  className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
                 >
                   Cancel
                 </button>
@@ -287,7 +287,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
               <button
                 onClick={handleClose}
-                className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
+                className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
               >
                 Close
               </button>

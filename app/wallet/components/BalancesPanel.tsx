@@ -71,7 +71,7 @@ export default function BalancesPanel() {
         <div className="text-red-400 mb-4">{error}</div>
         <button
           onClick={refresh}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
         >
           Try Again
         </button>
@@ -106,7 +106,7 @@ export default function BalancesPanel() {
           <button
             onClick={handleRefresh}
             disabled={isLoadingData}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
             title="Refresh balances"
           >
             <RefreshCw size={20} className={isLoadingData ? 'animate-spin' : ''} />
@@ -140,7 +140,7 @@ export default function BalancesPanel() {
               href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
+              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
               title={account?.nativeSegwit?.address ? `View ${account.nativeSegwit.address} on mempool.space` : 'No address'}
             >
               <span className="truncate">{account?.nativeSegwit?.address ? `${account.nativeSegwit.address.slice(0, 6)}...${account.nativeSegwit.address.slice(-4)}` : 'Not Found'}</span>
@@ -156,7 +156,7 @@ export default function BalancesPanel() {
               href={account?.taproot?.address ? `https://mempool.space/address/${account.taproot.address}` : '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
+              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
               title={account?.taproot?.address ? `View ${account.taproot.address} on mempool.space` : 'No address'}
             >
               <span className="truncate">{account?.taproot?.address ? `${account.taproot.address.slice(0, 6)}...${account.taproot.address.slice(-4)}` : 'Not Found'}</span>
@@ -170,7 +170,7 @@ export default function BalancesPanel() {
                 href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-[#5b9cff] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                className="hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                 title={account?.nativeSegwit?.address ? `View ${account.nativeSegwit.address} on mempool.space` : 'No address'}
               >
                 +{balances.pendingTxCount.p2wpkh}
@@ -180,7 +180,7 @@ export default function BalancesPanel() {
                 href={account?.taproot?.address ? `https://mempool.space/address/${account.taproot.address}` : '#'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-[#5b9cff] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                className="hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                 title={account?.taproot?.address ? `View ${account.taproot.address} on mempool.space` : 'No address'}
               >
                 +{balances.pendingTxCount.p2tr}
@@ -207,7 +207,7 @@ export default function BalancesPanel() {
               {balances.alkanes.map((alkane) => (
                 <div
                   key={alkane.alkaneId}
-                  className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 >
                   <div className="flex items-center gap-3">
                     {/* Token Logo */}

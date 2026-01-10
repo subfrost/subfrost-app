@@ -89,7 +89,7 @@ export default function InscriptionRenderer({
             href={contentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
             <ExternalLink size={16} className="text-white" />
           </a>
@@ -115,7 +115,7 @@ export default function InscriptionRenderer({
             href={contentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg hover:bg-black/80 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg hover:bg-black/80 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
             <ExternalLink size={16} className="text-white" />
           </a>
@@ -137,7 +137,7 @@ export default function InscriptionRenderer({
             href={contentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg hover:bg-black/80 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-10"
+            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg hover:bg-black/80 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-10"
           >
             <ExternalLink size={16} className="text-white" />
           </a>
@@ -179,7 +179,7 @@ export default function InscriptionRenderer({
             href={contentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg hover:bg-black/80 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="absolute top-2 right-2 p-2 bg-black/60 rounded-lg hover:bg-black/80 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
             <ExternalLink size={16} className="text-white" />
           </a>

@@ -442,6 +442,10 @@ textarea:focus-visible,
   animation: sfSnow 60s linear infinite;
 }
 
+.sf-snow {
+  opacity: 0.75;
+}
+
 .sf-snow::before {
   opacity: 0.55;
   background-size: 520px auto;

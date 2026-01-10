@@ -55,7 +55,7 @@ export default function YveDieselVault() {
             <button
               key={tab}
               onClick={() => setInfoTab(tab as any)}
-              className={`pb-3 text-sm font-semibold capitalize transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+              className={`pb-3 text-sm font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 infoTab === tab
                   ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'

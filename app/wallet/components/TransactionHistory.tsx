@@ -139,7 +139,7 @@ export default function TransactionHistory() {
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('visual')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+            className={`px-4 py-2 rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
               viewMode === 'visual'
                 ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
                 : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
@@ -149,7 +149,7 @@ export default function TransactionHistory() {
           </button>
           <button
             onClick={() => setViewMode('raw')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+            className={`px-4 py-2 rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
               viewMode === 'raw'
                 ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
                 : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
@@ -161,7 +161,7 @@ export default function TransactionHistory() {
         <button
           onClick={handleRefresh}
           disabled={loading || isRefreshing}
-          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
           title="Refresh transactions"
         >
           <RefreshCw size={20} className={loading || isRefreshing ? 'animate-spin' : ''} />
@@ -390,7 +390,7 @@ export default function TransactionHistory() {
               </div>
               <button
                 onClick={closeInspection}
-                className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
+                className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
               >
                 ✕
               </button>
@@ -485,7 +485,7 @@ export default function TransactionHistory() {
             <div className="p-6 border-t border-[color:var(--sf-outline)] sticky bottom-0 bg-[color:var(--sf-surface)]">
               <button
                 onClick={closeInspection}
-                className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-medium"
+                className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-medium"
               >
                 Close
               </button>

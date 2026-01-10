@@ -114,7 +114,7 @@ export default function FuturesPage() {
                 type="button"
                 onClick={handleGenerateFuture}
                 disabled={loading}
-                className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 title="Generate a new future on regtest (requires local node)"
               >
                 Generate Future
@@ -124,7 +124,7 @@ export default function FuturesPage() {
                 type="button"
                 onClick={handleRefresh}
                 disabled={loading || isRefreshing}
-                className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+                className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
                 title="Refresh futures data"
               >
                 <RefreshCw size={20} className={loading || isRefreshing ? 'animate-spin' : ''} />
@@ -139,7 +139,7 @@ export default function FuturesPage() {
             >
               <button
                 type="button"
-                className="flex items-center justify-center w-6 h-6 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/50 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                className="flex items-center justify-center w-6 h-6 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 aria-label="How it works"
               >
                 <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor">

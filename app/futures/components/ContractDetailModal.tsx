@@ -101,7 +101,7 @@ export default function ContractDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
             <svg
               width="24"
@@ -128,7 +128,7 @@ export default function ContractDetailModal({
               {chartData.map((point, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-2">
                   <div
-                    className="w-full rounded-t bg-[color:var(--sf-primary)]/60 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]"
+                    className="w-full rounded-t bg-[color:var(--sf-primary)]/60 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]"
                     style={{ height: `${point.value * 100}%` }}
                   />
                   <div className="text-xs text-[color:var(--sf-text)]/70">{point.time}d</div>
@@ -185,13 +185,13 @@ export default function ContractDetailModal({
               <div className="flex gap-4">
                 <button
                   type="button"
-                  className="flex-1 px-6 py-3 rounded-lg bg-[color:var(--sf-primary)] text-white font-bold tracking-[0.08em] uppercase shadow-[0_2px_8px_rgba(0,0,0,0.2)] hover:opacity-90 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="flex-1 px-6 py-3 rounded-lg bg-[color:var(--sf-primary)] text-white font-bold tracking-[0.08em] uppercase shadow-[0_2px_8px_rgba(0,0,0,0.2)] hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 >
                   Buy ftrBTC
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 px-6 py-3 rounded-lg font-bold tracking-[0.08em] uppercase transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  className={`flex-1 px-6 py-3 rounded-lg font-bold tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                     theme === 'dark'
                       ? 'border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
                       : 'border-2 border-[color:var(--sf-primary)] bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/5'
@@ -217,7 +217,7 @@ export default function ContractDetailModal({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
-                  className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${showAdvanced ? 'rotate-180' : ''}`}
+                  className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${showAdvanced ? 'rotate-180' : ''}`}
                 >
                   <path d="M6 9l6 6 6-6" />
                 </svg>

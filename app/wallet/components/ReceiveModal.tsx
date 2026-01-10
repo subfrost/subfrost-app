@@ -37,7 +37,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">Receive Bitcoin</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
           >
             <X size={20} />
           </button>
@@ -61,7 +61,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
               </div>
               <button
                 onClick={copyAddress}
-                className="p-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
+                className="p-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
                 title="Copy address"
               >
                 {copied ? <Check size={20} /> : <Copy size={20} />}
@@ -103,7 +103,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
         <div className="p-6 border-t border-[color:var(--sf-outline)]">
           <button
             onClick={onClose}
-            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-medium"
+            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-medium"
           >
             Close
           </button>
