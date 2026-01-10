@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { useWallet } from "@/context/WalletContext";
 import { VaultConfig } from "../constants";
 import TokenIcon from "@/app/components/TokenIcon";
+import ApySparkline from "./ApySparkline";
 
 type Props = {
   vault: VaultConfig;
@@ -26,6 +28,11 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   const availableUsd = "$0.00";
   const availableToken = "0.00";
 
+  // Mock 30-day APY history - replace with real data
+  // For now, all values are 0 (horizontal line)
+  const apyHistory = useMemo(() => Array(30).fill(0), []);
+  const currentHistoricalApy = parseFloat(vault.historicalApy || "0");
+
   const riskLevelColors = {
     low: 'text-green-600',
     medium: 'text-yellow-600',
@@ -46,7 +53,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   return (
     <Element
       onClick={interactive ? onClick : undefined}
-      className={`w-full lg:w-auto lg:mx-auto rounded-2xl transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] ${
+      className={`w-full rounded-2xl transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] ${
         interactive ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer' : 'cursor-default'
       } ${
         isSelected
@@ -54,8 +61,8 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           : 'bg-[color:var(--sf-glass-bg)]'
       }`}
     >
-      {/* Card layout for small screens */}
-      <div className="md:hidden p-4">
+      {/* Card layout for small/medium screens */}
+      <div className="lg:hidden p-4">
         <div className="flex items-center gap-3 mb-3">
           <div className="h-10 w-10 flex-shrink-0 flex items-center justify-center">
             <img
@@ -68,7 +75,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-sm font-bold text-[color:var(--sf-text)] truncate">{vault.name}</h3>
               {vault.badge && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
+                <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
                   {vault.badge}
                 </span>
               )}
@@ -118,8 +125,8 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         </div>
       </div>
 
-      {/* List layout for medium screens and up */}
-      <div className="hidden md:flex items-start gap-2 md:gap-3 lg:gap-4 p-4">
+      {/* List layout for large screens and up */}
+      <div className="hidden lg:flex items-start gap-2 lg:gap-4 p-4">
         {/* Vault Icon */}
         <div className="relative flex-shrink-0">
           <div className="flex h-12 w-12 items-center justify-center">
@@ -136,7 +143,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-sm font-bold text-[color:var(--sf-text)] whitespace-nowrap">{vault.name}</h3>
             {vault.badge && (
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
+              <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
                 {vault.badge}
               </span>
             )}
@@ -161,7 +168,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         </div>
 
         {/* Risk Level */}
-        <div className="hidden md:flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
+        <div className="hidden lg:flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
           <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">Risk Level</div>
           <div className="flex gap-0.5 justify-end">
             {[1, 2, 3, 4, 5].map((level) => {
@@ -192,6 +199,14 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">Deposits</div>
           <div className="text-lg font-bold text-[color:var(--sf-text)] whitespace-nowrap">{depositsToken}</div>
           <div className="text-xs text-[color:var(--sf-text)]/60 whitespace-nowrap">{depositsUsd}</div>
+        </div>
+
+        {/* 30-day APY Sparkline - LG+ screens */}
+        <div className="hidden lg:flex flex-1 min-w-0">
+          <ApySparkline
+            data={apyHistory}
+            currentApy={currentHistoricalApy}
+          />
         </div>
       </div>
     </Element>

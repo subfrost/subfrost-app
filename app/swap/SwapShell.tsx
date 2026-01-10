@@ -1174,7 +1174,7 @@ export default function SwapShell() {
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
           </div>
 
-          <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
+          <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
           <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (
             <SwapInputs

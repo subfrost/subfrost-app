@@ -99,7 +99,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 'dx-btc',
     name: 'dxBTC Token',
-    description: 'Stake BTC/frBTC for pure BTC yield',
+    description: 'Stake BTC or frBTC for pure BTC yield',
     tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     iconPath: '/tokens/btc_snowflake.svg',
