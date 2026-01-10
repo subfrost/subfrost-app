@@ -84,10 +84,8 @@ export default function VaultDepositInterface({
   );
   const [showTokenSelector, setShowTokenSelector] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
-  // Settings input focus states for glow effect
-  const [deadlineFocused, setDeadlineFocused] = useState(false);
-  const [slippageFocused, setSlippageFocused] = useState(false);
-  const [feeFocused, setFeeFocused] = useState(false);
+  // Single state to track which settings field is focused (only one can be focused at a time)
+  const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
   // Local deadline state to allow empty field while typing
   const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
@@ -372,9 +370,9 @@ export default function VaultDepositInterface({
                       step={1}
                       value={deadlineLocal}
                       onChange={(e) => setDeadlineLocal(e.target.value)}
-                      onFocus={() => setDeadlineFocused(true)}
+                      onFocus={() => setFocusedField('deadline')}
                       onBlur={() => {
-                        setDeadlineFocused(false);
+                        setFocusedField(null);
                         const val = parseInt(deadlineLocal, 10);
                         if (!deadlineLocal || isNaN(val) || val < 1) {
                           setDeadlineLocal('3');
@@ -384,7 +382,8 @@ export default function VaultDepositInterface({
                         }
                       }}
                       placeholder="3"
-                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none transition-shadow duration-300 ${deadlineFocused ? 'shadow-[0_0_12px_rgba(91,156,255,0.3),0_2px_8px_rgba(0,0,0,0.1)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                     />
                   </div>
                 </div>
@@ -412,15 +411,16 @@ export default function VaultDepositInterface({
                             }
                           }
                         }}
-                        onFocus={() => setSlippageFocused(true)}
+                        onFocus={() => setFocusedField('slippage')}
                         onBlur={() => {
-                          setSlippageFocused(false);
+                          setFocusedField(null);
                           if (!maxSlippage) {
                             setMaxSlippage('5');
                           }
                         }}
                         placeholder="5"
-                        className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none transition-shadow duration-300 ${slippageFocused ? 'shadow-[0_0_12px_rgba(91,156,255,0.3),0_2px_8px_rgba(0,0,0,0.1)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        style={{ outline: 'none', border: focusedField === 'slippage' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                        className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                       />
                       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
                     </div>
@@ -453,15 +453,16 @@ export default function VaultDepositInterface({
                         step={1}
                         value={customFee}
                         onChange={(e) => setCustomFee(e.target.value)}
-                        onFocus={() => setFeeFocused(true)}
+                        onFocus={() => setFocusedField('fee')}
                         onBlur={() => {
-                          setFeeFocused(false);
+                          setFocusedField(null);
                           if (!customFee) {
                             setCustomFee(String(feePresets.medium));
                           }
                         }}
                         placeholder="0"
-                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center outline-none transition-shadow duration-300 ${feeFocused ? 'shadow-[0_0_12px_rgba(91,156,255,0.3),0_2px_8px_rgba(0,0,0,0.1)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                       />
                     </div>
                   ) : (
