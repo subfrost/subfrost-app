@@ -8,7 +8,7 @@ export const metadata = { title: 'Vaults' };
 export default function VaultsPage() {
   return (
     <PageContent>
-      <AlkanesMainWrapper header={<PageHeader title="DeFi Vaults" />}>
+      <AlkanesMainWrapper header={<PageHeader title="DeFi Vaults (Coming Soon)" />}>
         <VaultShell />
       </AlkanesMainWrapper>
     </PageContent>

@@ -3,9 +3,11 @@
 type ApySparklineProps = {
   data: number[]; // Array of APY values (30 days)
   currentApy: number; // Current/latest APY to display
+  showLabel?: boolean; // Whether to show the APY label (default: true)
+  fillHeight?: boolean; // Whether to fill parent height (default: false)
 };
 
-export default function ApySparkline({ data, currentApy }: ApySparklineProps) {
+export default function ApySparkline({ data, currentApy, showLabel = true, fillHeight = false }: ApySparklineProps) {
   // Chart dimensions - using viewBox for responsive scaling
   const width = 180;
   const height = 48;
@@ -34,40 +36,46 @@ export default function ApySparkline({ data, currentApy }: ApySparklineProps) {
     ? `M ${points.map(p => `${p.x},${p.y}`).join(' L ')}`
     : '';
 
-  // Last point for the pulsating dot
+  // Last point for the pulsating dot - calculate percentage positions
   const lastPoint = points[points.length - 1] || { x: padding.left + chartWidth, y: padding.top + chartHeight / 2 };
+  const lastPointXPercent = (lastPoint.x / width) * 100;
+  const lastPointYPercent = (lastPoint.y / height) * 100;
 
   return (
-    <div className="flex flex-col items-end gap-1 w-full">
+    <div className={`flex flex-col items-end gap-1 w-full ${fillHeight ? 'h-full' : ''}`}>
       <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">
         30-day APY
       </div>
-      <div className="relative w-full h-12 flex items-center">
+      <div className={`relative w-full ${fillHeight ? 'flex-1' : 'h-12'}`}>
         {/* Chart line - stretches to fill available width */}
-        <div className="flex-1 h-full min-w-0">
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            preserveAspectRatio="none"
-            className="w-full h-full text-[color:var(--sf-info-green-title)]"
-          >
-            <path
-              d={pathD}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+          className="w-full h-full text-[color:var(--sf-info-green-title)]"
+        >
+          <path
+            d={pathD}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
 
-        {/* Pulsating dot - separate element to maintain perfect circle */}
-        <div className="w-2 h-2 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse flex-shrink-0 -ml-1" />
+        {/* Pulsating dot - positioned at last data point */}
+        <div
+          className="absolute w-2 h-2 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse -translate-x-1/2 -translate-y-1/2"
+          style={{ left: `${lastPointXPercent}%`, top: `${lastPointYPercent}%` }}
+        />
 
-        {/* APY label */}
-        <div className="text-xs font-bold text-[color:var(--sf-text)]/60 whitespace-nowrap animate-pulse flex-shrink-0 ml-2">
-          {currentApy.toFixed(1)}%
-        </div>
+        {/* APY label - right-aligned, positioned at bottom */}
+        {showLabel && (
+          <div className="absolute right-0 bottom-0 text-xs font-bold text-[color:var(--sf-text)]/60 whitespace-nowrap">
+            {currentApy.toFixed(1)}%
+          </div>
+        )}
       </div>
     </div>
   );

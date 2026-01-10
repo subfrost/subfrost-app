@@ -134,6 +134,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             userBalance={stats.userBalance}
             badges={currentVault.badge ? [currentVault.tokenSymbol, currentVault.badge] : [currentVault.tokenSymbol]}
             riskLevel={currentVault.riskLevel}
+            apyHistory={currentVault.apyHistory}
           />
         </div>
       </div>

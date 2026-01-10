@@ -202,7 +202,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         </div>
 
         {/* 30-day APY Sparkline - LG+ screens */}
-        <div className="hidden lg:flex flex-1 min-w-0">
+        <div className="hidden lg:block flex-1 min-w-0">
           <ApySparkline
             data={apyHistory}
             currentApy={currentHistoricalApy}

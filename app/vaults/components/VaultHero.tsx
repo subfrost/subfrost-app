@@ -2,6 +2,7 @@
 
 import { useWallet } from "@/context/WalletContext";
 import TokenIcon from "@/app/components/TokenIcon";
+import ApySparkline from "./ApySparkline";
 
 type Props = {
   tokenId: string; // Alkane ID like "2:0"
@@ -16,6 +17,7 @@ type Props = {
   userBalance: string;
   badges?: string[];
   riskLevel?: 'low' | 'medium' | 'high' | 'very-high';
+  apyHistory?: number[];
 };
 
 export default function VaultHero({
@@ -31,65 +33,79 @@ export default function VaultHero({
   userBalance,
   badges = [],
   riskLevel = 'medium',
+  apyHistory = [],
 }: Props) {
   const { network } = useWallet();
   
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
     <div className="relative overflow-hidden rounded-2xl p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] w-full h-full flex flex-col bg-[color:var(--sf-glass-bg)] backdrop-blur-md text-[color:var(--sf-text)] border-t border-[color:var(--sf-top-highlight)]">
-      {/* Token Icon */}
-      <div className="mb-4 flex justify-center items-center relative z-10">
-        <div className="w-40 h-40 flex items-center justify-center">
-          <img
-            src={iconPath || `/tokens/${tokenSymbol.toLowerCase()}.svg`}
-            alt={`${tokenSymbol} icon`}
-            className={`object-contain rounded-2xl ${tokenSymbol === 'DIESEL' ? 'w-32 h-32' : 'w-40 h-40'}`}
-          />
+      {/* Header - 2 Column Grid */}
+      <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
+        {/* Left Column: Title, Contract, Badges */}
+        <div className="flex flex-col justify-center items-center text-center">
+          {/* Vault Name */}
+          <h1 className="text-3xl font-bold mb-2 text-[color:var(--sf-text)] drop-shadow-lg">{vaultSymbol}</h1>
+
+          {/* Contract Address */}
+          <div className="mb-3">
+            <button className="text-xs text-[color:var(--sf-text)]/80 hover:text-[color:var(--sf-text)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+              {contractAddress.slice(0, 6)}...{contractAddress.slice(-4)}
+            </button>
+          </div>
+
+          {/* Badges */}
+          {badges.length > 0 && (
+            <div className="flex flex-col items-center gap-2">
+              {badges.map((badge, i) => {
+                let badgeClassName = "";
+
+                // Determine badge styling based on content
+                if (badge === 'Coming Soon') {
+                  badgeClassName = "rounded-full bg-[color:var(--sf-badge-coming-soon-bg)] text-[color:var(--sf-badge-coming-soon-text)] px-3 py-1 text-xs font-bold shadow-md border border-[color:var(--sf-badge-coming-soon-border)]";
+                } else if (badge === 'BTC' || badge === 'Bitcoin') {
+                  badgeClassName = "rounded-full bg-[#F7931A] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#F7931A]";
+                } else if (badge === 'USD' || badge === 'bUSD') {
+                  badgeClassName = "rounded-full bg-[#539393] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#539393]";
+                } else if (badge === 'DIESEL') {
+                  badgeClassName = "rounded-full bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 text-white border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
+                } else if (badge === 'ETH' || badge === 'Ethereum') {
+                  badgeClassName = "rounded-full bg-[#987fd9] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#987fd9]";
+                } else if (badge === 'ZEC' || badge === 'Zcash') {
+                  badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
+                } else if (badge === 'ORDI') {
+                  badgeClassName = "rounded-full bg-black text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-black";
+                } else {
+                  // Default styling for other badges
+                  badgeClassName = "rounded-full bg-[color:var(--sf-surface)]/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
+                }
+
+                return (
+                  <span key={i} className={badgeClassName}>
+                    {badge}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Token Icon */}
+        <div className="flex justify-center items-center">
+          <div className="w-40 h-40 flex items-center justify-center">
+            <img
+              src={iconPath || `/tokens/${tokenSymbol.toLowerCase()}.svg`}
+              alt={`${tokenSymbol} icon`}
+              className={`object-contain rounded-2xl ${tokenSymbol === 'DIESEL' ? 'w-32 h-32' : 'w-40 h-40'}`}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Vault Name */}
-      <h1 className="text-center text-3xl font-bold mb-2 text-[color:var(--sf-text)] drop-shadow-lg relative z-10">{vaultSymbol}</h1>
-
-      {/* Contract Address */}
-      <div className="flex justify-center mb-3 relative z-10">
-        <button className="text-xs text-[color:var(--sf-text)]/80 hover:text-[color:var(--sf-text)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-          {contractAddress.slice(0, 6)}...{contractAddress.slice(-4)}
-        </button>
-      </div>
-
-      {/* Badges */}
-      {badges.length > 0 && (
-        <div className="flex flex-col items-center gap-2 mb-6 relative z-10">
-          {badges.map((badge, i) => {
-            let badgeClassName = "";
-            
-            // Determine badge styling based on content
-            if (badge === 'Coming Soon') {
-              badgeClassName = "rounded-full bg-[color:var(--sf-badge-coming-soon-bg)] text-[color:var(--sf-badge-coming-soon-text)] px-3 py-1 text-xs font-bold shadow-md border border-[color:var(--sf-badge-coming-soon-border)]";
-            } else if (badge === 'BTC' || badge === 'Bitcoin') {
-              badgeClassName = "rounded-full bg-[#F7931A] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#F7931A]";
-            } else if (badge === 'USD' || badge === 'bUSD') {
-              badgeClassName = "rounded-full bg-[#539393] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#539393]";
-            } else if (badge === 'DIESEL') {
-              badgeClassName = "rounded-full bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 text-white border-2 border-black px-3 py-1 text-xs font-bold shadow-md";
-            } else if (badge === 'ETH' || badge === 'Ethereum') {
-              badgeClassName = "rounded-full bg-[#987fd9] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#987fd9]";
-            } else if (badge === 'ZEC' || badge === 'Zcash') {
-              badgeClassName = "rounded-full bg-[#dfb870] text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-[#dfb870]";
-            } else if (badge === 'ORDI') {
-              badgeClassName = "rounded-full bg-black text-white px-3 py-1 text-xs font-bold shadow-md border-2 border-black";
-            } else {
-              // Default styling for other badges
-              badgeClassName = "rounded-full bg-[color:var(--sf-surface)]/30 px-3 py-1 text-xs font-bold backdrop-blur-sm text-white border-2 border-white/30 shadow-md";
-            }
-            
-            return (
-              <span key={i} className={badgeClassName}>
-                {badge}
-              </span>
-            );
-          })}
+      {/* APY Sparkline - Full Width Row */}
+      {apyHistory.length > 0 && (
+        <div className="w-full h-40 mb-6 relative z-10">
+          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} showLabel={false} fillHeight={true} />
         </div>
       )}
 
