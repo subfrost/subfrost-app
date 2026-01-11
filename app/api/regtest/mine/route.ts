@@ -28,32 +28,41 @@ export async function POST(request: NextRequest) {
       ? 'http://localhost:18888'
       : 'https://regtest.subfrost.io/v4/subfrost';
 
-    // Call the regtest RPC directly
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'bitcoind_generatetoaddress',
-        params: [blocks, address],
-        id: 1,
-      }),
-    });
+    // Mine blocks sequentially (the RPC only mines 1 at a time reliably)
+    const allBlockHashes: string[] = [];
+    const blocksToMine = Math.min(blocks, 10); // Cap at 10 to prevent timeout
 
-    const result = await response.json();
-    console.log('[API /regtest/mine] RPC Response:', result);
+    for (let i = 0; i < blocksToMine; i++) {
+      try {
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'bitcoind_generatetoaddress',
+            params: [1, address],
+            id: i + 1,
+          }),
+        });
 
-    if (result.error) {
-      return NextResponse.json(
-        { error: result.error.message || 'RPC error' },
-        { status: 500 }
-      );
+        const result = await response.json();
+
+        if (result.result) {
+          const hashes = Array.isArray(result.result) ? result.result : [result.result];
+          allBlockHashes.push(...hashes);
+        }
+      } catch (err) {
+        console.error('[API /regtest/mine] Error mining block', i, err);
+      }
     }
+
+    console.log('[API /regtest/mine] Mined', allBlockHashes.length, 'blocks');
 
     return NextResponse.json({
       success: true,
-      blocks: result.result,
-      count: blocks,
+      blocks: allBlockHashes,
+      count: allBlockHashes.length,
+      requested: blocks,
     });
   } catch (error) {
     console.error('Mine blocks error:', error);

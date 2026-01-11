@@ -21,7 +21,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 export default function RegtestControls() {
-  const { network, account, refreshBalances, signTaprootPsbt } = useWallet() as any;
+  const { network, account, signTaprootPsbt } = useWallet();
   const { provider, isWalletLoaded } = useAlkanesSDK();
   const queryClient = useQueryClient();
   const [mining, setMining] = useState(false);
@@ -60,24 +60,18 @@ export default function RegtestControls() {
       }
 
       console.log('[RegtestControls] Mined blocks:', result);
-      showMessage(`✅ Mined ${count} block(s) successfully! Waiting for indexer...`);
+      showMessage(`✅ Mined ${count} block(s) successfully! Refreshing...`);
 
-      // Wait for indexer to process blocks (typically takes 1-3 seconds)
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait briefly for indexer to start processing
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Invalidate all queries to refresh data
-      // Invalidate multiple times over 10 seconds to handle backend cache delays
-      for (let i = 0; i < 3; i++) {
-        await queryClient.invalidateQueries();
-        if (refreshBalances) {
-          await refreshBalances();
-        }
-        if (i < 2) {
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-      }
+      // Invalidate queries but don't wait for refetch to complete (fire and forget)
+      // This prevents hanging if some queries take too long
+      queryClient.invalidateQueries().catch((err) => {
+        console.warn('[RegtestControls] Query invalidation error (non-fatal):', err);
+      });
 
-      showMessage(`✅ Mined ${count} block(s) and refreshed balances!`);
+      showMessage(`✅ Mined ${count} block(s)!`);
     } catch (error) {
       console.error('Mining error:', error);
       showMessage(`❌ Failed to mine blocks: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
@@ -107,12 +101,10 @@ export default function RegtestControls() {
       console.log('[RegtestControls] Generated future:', result);
       showMessage(`✅ Generated future block with Subfrost address!`);
 
-      // Invalidate all queries to refresh data
-      await queryClient.invalidateQueries();
-      // Also refresh wallet balances if available
-      if (refreshBalances) {
-        await refreshBalances();
-      }
+      // Invalidate queries (fire and forget to prevent hanging)
+      queryClient.invalidateQueries().catch((err) => {
+        console.warn('[RegtestControls] Query invalidation error (non-fatal):', err);
+      });
     } catch (error) {
       console.error('Generate future error:', error);
       showMessage(`❌ Failed to generate future: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
@@ -211,10 +203,7 @@ export default function RegtestControls() {
         const broadcastTxid = await provider.broadcastTransaction(txHex);
         console.log('[DIESEL] Broadcast successful:', broadcastTxid);
 
-        showMessage(`✅ DIESEL minted! TX: ${(broadcastTxid || txid).slice(0, 16)}...`);
-
-        // Mine a block to confirm
-        await mineBlocks(1);
+        showMessage(`✅ DIESEL minted! TX: ${(broadcastTxid || txid).slice(0, 16)}... Mine a block to confirm.`);
 
       } else if (result?.complete) {
         const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
@@ -224,11 +213,10 @@ export default function RegtestControls() {
         throw new Error('Unexpected result format');
       }
 
-      // Refresh balances
-      await queryClient.invalidateQueries();
-      if (refreshBalances) {
-        await refreshBalances();
-      }
+      // Refresh balances (fire and forget to prevent hanging)
+      queryClient.invalidateQueries().catch((err) => {
+        console.warn('[DIESEL] Query invalidation error (non-fatal):', err);
+      });
 
     } catch (error) {
       console.error('[DIESEL] Mining error:', error);
