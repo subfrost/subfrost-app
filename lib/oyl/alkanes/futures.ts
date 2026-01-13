@@ -6,7 +6,7 @@
  * 
  * Commands:
  * - Generate future: alkanes-cli -p regtest bitcoind generatefuture
- * - Claim futures: cellpack [31, 0, 14] targets all pending futures
+ * - Claim futures: cellpack [800000000, 31, 14] targets master to claim pending futures
  */
 
 import type { AlkanesWalletInstance } from './wallet-integration';
@@ -180,9 +180,9 @@ export async function claimFutures(
   wallet: AlkanesWalletInstance,
   provider: any
 ): Promise<string> {
-  // Build cellpack [31, 0, 14] to claim all pending futures
+  // Build cellpack [800000000, 31, 14] to claim all pending futures from master
   const cellpack = {
-    target: { block: 31, tx: 0 },
+    target: { block: 800000000, tx: 31 },
     inputs: [14], // Opcode 14 = claim futures
   };
   
