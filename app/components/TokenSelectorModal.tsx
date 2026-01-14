@@ -264,7 +264,6 @@ export default function TokenSelectorModal({
                         ? 'bg-[color:var(--sf-primary)]/10 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                         : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                     }`}
-                    disabled={!isAvailable}
                   >
                     <div className="flex items-center gap-3">
                       <TokenIcon
@@ -308,6 +307,11 @@ export default function TokenSelectorModal({
                         {token.price && !token.balance && (
                           <span className="text-xs font-medium text-[color:var(--sf-text)]/60">
                             ${token.price.toFixed(4)}
+                          </span>
+                        )}
+                        {!isAvailable && mode === 'from' && (
+                          <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                            Not available
                           </span>
                         )}
                       </div>
