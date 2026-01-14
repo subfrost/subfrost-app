@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { GlobalStore } from '@/stores/global';
@@ -16,9 +16,18 @@ type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
-// Detect network from localStorage, hostname, or env variable
-function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'mainnet';
+// Get initial network (can be called during SSR with fallback)
+function getInitialNetwork(): Network {
+  // Check env var first (works on SSR)
+  if (process.env.NEXT_PUBLIC_NETWORK) {
+    return process.env.NEXT_PUBLIC_NETWORK as Network;
+  }
+  return 'mainnet';
+}
+
+// Detect network from localStorage, hostname, or env variable (client only)
+function detectNetworkClient(): Network {
+  if (typeof window === 'undefined') return getInitialNetwork();
 
   // First check localStorage for user selection
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
@@ -40,8 +49,9 @@ function detectNetwork(): Network {
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  const [network, setNetwork] = useState<Network>('mainnet');
+  // Use ref to track if we've initialized to avoid re-running detection
+  const initialized = useRef(false);
+  const [network, setNetwork] = useState<Network>(getInitialNetwork);
 
   // Memoize QueryClient to prevent recreation on re-renders
   const queryClient = useMemo(
@@ -61,8 +71,14 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   // Initialize network on mount and listen for storage changes
   useEffect(() => {
-    const initialNetwork = detectNetwork();
-    setNetwork(initialNetwork);
+    // Only run network detection once on client
+    if (!initialized.current) {
+      initialized.current = true;
+      const clientNetwork = detectNetworkClient();
+      if (clientNetwork !== network) {
+        setNetwork(clientNetwork);
+      }
+    }
 
     // Listen for network changes from other tabs/components
     const handleStorageChange = (e: StorageEvent) => {
@@ -88,13 +104,7 @@ export default function Providers({ children }: { children: ReactNode }) {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('network-changed' as any, handleNetworkChange as any);
     };
-  }, [queryClient]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
+  }, [queryClient, network]);
 
   return (
     <QueryClientProvider client={queryClient}>

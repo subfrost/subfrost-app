@@ -2,7 +2,6 @@
 
 import type { ReactNode } from 'react';
 import { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
 
 import { NetworkMap, type Network } from '@/utils/constants';
 // Import directly from sub-modules to avoid WASM dependency
@@ -299,7 +298,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     return spendableUtxos;
   }, [wallet, account, network]);
 
-  // Get spendable balance
+  // Get spendable balance - uses simple esplora API for speed
   const getSpendableTotalBalance = useCallback(async (): Promise<number> => {
     if (!wallet || !account.nativeSegwit?.address) {
       return 0;
@@ -308,23 +307,44 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     try {
       const { getNetworkUrls } = await import('@/utils/alkanesProvider');
       const networkUrls = getNetworkUrls(network);
-      
-      // Dynamic import WASM to avoid SSR issues
-      const { WebProvider } = await import('@/ts-sdk/build/wasm/alkanes_web_sys');
-      const provider = new WebProvider(networkUrls.rpc, null);
-      
-      // Get enriched balances which includes spendable/assets/pending categorization
-      const enriched = await provider.getEnrichedBalances(account.nativeSegwit.address, '1');
-      
-      // enriched.spendable is an array of UTXOs
-      // Calculate total balance from spendable UTXOs
-      if (enriched && enriched.spendable && Array.isArray(enriched.spendable)) {
-        return enriched.spendable.reduce((total: number, utxo: any) => {
-          return total + (utxo.value || 0);
-        }, 0);
+
+      // Use esplora REST API directly for fast balance lookup
+      // For regtest, esplora is on port 50010
+      const esploraUrl = process.env.NEXT_PUBLIC_ESPLORA_URL || networkUrls.rpc;
+
+      let totalBalance = 0;
+      const addresses = [account.nativeSegwit?.address, account.taproot?.address].filter(Boolean);
+
+      for (const address of addresses) {
+        try {
+          // Try REST endpoint first (esplora on port 50010)
+          const restResponse = await fetch(`${esploraUrl}/address/${address}/utxo`);
+          if (restResponse.ok) {
+            const utxos = await restResponse.json();
+            if (Array.isArray(utxos)) {
+              totalBalance += utxos.reduce((sum: number, utxo: any) => sum + (utxo.value || 0), 0);
+            }
+          }
+        } catch {
+          // Fallback to RPC method
+          const rpcResponse = await fetch(networkUrls.rpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'esplora_address::utxo',
+              params: [address],
+            }),
+          });
+          const data = await rpcResponse.json();
+          if (data.result && Array.isArray(data.result)) {
+            totalBalance += data.result.reduce((sum: number, utxo: any) => sum + (utxo.value || 0), 0);
+          }
+        }
       }
-      
-      return 0;
+
+      return totalBalance;
     } catch (error) {
       console.error('[WalletContext] Error fetching balance:', error);
       return 0;
@@ -386,14 +406,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     ]
   );
 
-  if (isInitializing) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 size={32} color="#449CFF" className="animate-spin" />
-      </div>
-    );
-  }
-
+  // Render children even during initialization - components can handle
+  // the unconnected state. This prevents blocking navigation.
   return (
     <WalletContext.Provider value={contextValue}>
       {children}
