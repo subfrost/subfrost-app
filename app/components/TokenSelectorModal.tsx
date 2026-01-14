@@ -191,23 +191,15 @@ export default function TokenSelectorModal({
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
                         isSelectedInOther
                           ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
-                          : token.enabled
-                          ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
-                          : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
+                          : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
                       }`}
                     >
                       <img
                         src={`/tokens/${token.symbol.toLowerCase()}.svg`}
                         alt={token.symbol}
-                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
+                        className="w-5 h-5 rounded-full flex-shrink-0"
                       />
-                      <span className={`font-bold text-sm whitespace-nowrap ${
-                        isSelectedInOther
-                          ? 'text-[color:var(--sf-text)]'
-                          : token.enabled
-                          ? 'text-[color:var(--sf-text)]'
-                          : 'text-[color:var(--sf-text)]/40'
-                      }`}>
+                      <span className="font-bold text-sm whitespace-nowrap text-[color:var(--sf-text)]">
                         {token.symbol}
                       </span>
                       {isSelectedInOther && (
@@ -268,9 +260,7 @@ export default function TokenSelectorModal({
                     key={token.id}
                     onClick={() => handleSelect(token.id)}
                     className={`group relative w-full rounded-xl p-4 text-left shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-                      !isAvailable
-                        ? 'bg-[color:var(--sf-input-bg)]/50 opacity-50 cursor-not-allowed'
-                        : isSelected
+                      isSelected
                         ? 'bg-[color:var(--sf-primary)]/10 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                         : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                     }`}
