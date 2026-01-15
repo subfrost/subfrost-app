@@ -234,22 +234,8 @@ export default function SwapShell() {
     }
   }, [poolToken1, selectedTab]);
 
-  // Whitelisted token IDs (mainnet-specific)
-  // On non-mainnet networks, allow all tokens from pools
-  const whitelistedTokenIds = useMemo(() => {
-    if (network !== 'mainnet') {
-      // On non-mainnet, return null to indicate "allow all"
-      return null;
-    }
-    return new Set([
-      '32:0',      // frBTC
-      'btc',       // BTC
-      '2:56801',   // bUSD
-      '2:25720',   // ALKAMIST
-      '2:35275',   // GOLD DUST
-      '2:0',       // DIESEL
-    ]);
-  }, [network]);
+  // Allow all tokens - no filtering
+  const whitelistedTokenIds = null as Set<string> | null;
 
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
   // Alt tokens can only swap to/from these base tokens, not to other alts
@@ -846,23 +832,8 @@ export default function SwapShell() {
     });
   };
 
-  // Whitelisted pool IDs (mainnet-specific)
-  // On non-mainnet networks, allow all pools
-  const whitelistedPoolIds = useMemo(() => {
-    if (network !== 'mainnet') {
-      // On non-mainnet, return null to indicate "allow all"
-      return null;
-    }
-    return new Set([
-      '2:77222',
-      '2:77087',
-      '2:77221',
-      '2:77228',
-      '2:77237',
-      '2:68441',
-      '2:68433',
-    ]);
-  }, [network]);
+  // Allow all pools - no filtering
+  const whitelistedPoolIds = null as Set<string> | null;
 
   // Helper function to check if a pair is in the allowed list
   const isAllowedPair = useMemo(() => (token1Id: string, token2Id: string): boolean => {

@@ -34,22 +34,8 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   const volumePeriod = externalVolumePeriod ?? internalVolumePeriod;
   const setVolumePeriod = onVolumePeriodChange ?? setInternalVolumePeriod;
 
-  // Whitelisted pool IDs (mainnet-specific)
-  // On non-mainnet networks, allow all pools
-  const whitelistedPoolIds = useMemo(() => {
-    if (network !== 'mainnet') {
-      return null; // Allow all pools on non-mainnet
-    }
-    return new Set([
-      '2:77222',
-      '2:77087',
-      '2:77221',
-      '2:77228',
-      '2:77237',
-      '2:68441',
-      '2:68433',
-    ]);
-  }, [network]);
+  // Allow all pools - no filtering
+  const whitelistedPoolIds = null as Set<string> | null;
 
   const sortedPools = useMemo(() => {
     let filtered = whitelistedPoolIds === null

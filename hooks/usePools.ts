@@ -40,6 +40,15 @@ export type PoolsListItem = {
 // Token IDs for TVL calculation
 const FRBTC_TOKEN_ID = '32:0';
 
+// Known token name to ID mappings (for when API doesn't return token IDs)
+const KNOWN_TOKEN_IDS: Record<string, string> = {
+  'frBTC': '32:0',
+  'DIESEL': '2:0',
+  'bUSD': '2:56801',
+  'ALKAMIST': '2:25720',
+  'GOLD DUST': '2:35275',
+};
+
 /**
  * Calculate TVL in USD from pool reserves
  *
@@ -115,66 +124,60 @@ export function usePools(params: UsePoolsParams = {}) {
       const items: PoolsListItem[] = [];
 
       try {
-        // Parse factory ID into block and tx components
-        const [factoryBlock, factoryTx] = ALKANE_FACTORY_ID.split(':');
+        console.log('[usePools] Fetching pools for network:', network);
 
-        console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID, 'on network:', network);
-
-        // Use REST API directly for reliable pool data
-        const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
-        console.log('[usePools] API URL:', `${apiUrl}/get-pools`);
-
-        const response = await fetch(`${apiUrl}/get-pools`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            factoryId: { block: factoryBlock, tx: factoryTx }
-          }),
-        });
-
-        console.log('[usePools] Response status:', response.status);
-
-        // Check if response contains an error (some APIs return 200 with error in body)
-        const poolsResult = await response.json();
-
-        if (!response.ok || poolsResult?.error || poolsResult?.statusCode >= 400) {
-          console.warn('[usePools] REST API failed, trying RPC fallback:', poolsResult?.error || response.status);
-          throw new Error(poolsResult?.error || `API request failed: ${response.status}`);
-        }
+        // Use the local /api/pools endpoint which uses pool-service
+        // This has the reliable pool data from the pool configuration
+        const localResponse = await fetch(`/api/pools?network=${network}`);
+        const poolsResult = await localResponse.json();
 
         console.log('[usePools] Got pools result:', poolsResult);
 
-        // dataApiGetPools returns { data: { pools: [...] } } or { pools: [...] } or array directly
+        // dataApiGetPools returns { data: { pools: {...} } } or { pools: [...] } or array directly
+        // The API may return pools as an object keyed by pool name, so we need to handle both cases
         const rawData = poolsResult?.data?.pools || poolsResult?.data || poolsResult?.pools || poolsResult || [];
-        const poolsArray = Array.isArray(rawData) ? rawData : [];
+        const poolsArray = Array.isArray(rawData)
+          ? rawData
+          : (typeof rawData === 'object' && rawData !== null ? Object.values(rawData) : []);
 
         console.log('[usePools] Parsing', poolsArray.length, 'pools');
 
         for (const p of poolsArray) {
-          // API returns fields like: pool_block_id, pool_tx_id, token0_block_id, token0_tx_id, pool_name
+          // API returns fields in various formats (snake_case or camelCase)
           // Construct IDs from block:tx format
-          const poolId = p.pool_id || (p.pool_block_id && p.pool_tx_id ? `${p.pool_block_id}:${p.pool_tx_id}` : p.id || '');
-          const token0Id = p.token0_id || (p.token0_block_id && p.token0_tx_id ? `${p.token0_block_id}:${p.token0_tx_id}` : '');
-          const token1Id = p.token1_id || (p.token1_block_id && p.token1_tx_id ? `${p.token1_block_id}:${p.token1_tx_id}` : '');
+          const poolId = p.poolId || p.pool_id || (p.pool_block_id && p.pool_tx_id ? `${p.pool_block_id}:${p.pool_tx_id}` : p.id || '');
+          let token0Id = p.token0Id || p.token0_id || (p.token0_block_id && p.token0_tx_id ? `${p.token0_block_id}:${p.token0_tx_id}` : '');
+          let token1Id = p.token1Id || p.token1_id || (p.token1_block_id && p.token1_tx_id ? `${p.token1_block_id}:${p.token1_tx_id}` : '');
 
-          // Extract token names from pool_name (format: "TOKEN0 / TOKEN1 LP")
+          // Extract token names from poolName (format: "TOKEN0/TOKEN1" or "TOKEN0 / TOKEN1 LP")
           let token0Name = '';
           let token1Name = '';
-          const poolName = p.pool_name || '';
+          const poolName = p.poolName || p.pool_name || '';
           if (poolName) {
-            const match = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+            // Try both formats: "TOKEN0/TOKEN1" and "TOKEN0 / TOKEN1 LP"
+            const matchWithLP = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+            const matchSimple = poolName.match(/^(.+?)\s*\/\s*(.+?)$/);
+            const match = matchWithLP || matchSimple;
             if (match) {
               token0Name = match[1].trim().replace('SUBFROST BTC', 'frBTC');
               token1Name = match[2].trim().replace('SUBFROST BTC', 'frBTC');
             }
           }
 
-          // Fall back to other field names if pool_name parsing didn't work
+          // Fall back to other field names if poolName parsing didn't work
           if (!token0Name) {
             token0Name = (p.token0_name || p.token0_symbol || p.token0?.name || p.token0?.symbol || '').replace('SUBFROST BTC', 'frBTC');
           }
           if (!token1Name) {
             token1Name = (p.token1_name || p.token1_symbol || p.token1?.name || p.token1?.symbol || '').replace('SUBFROST BTC', 'frBTC');
+          }
+
+          // If we have token names but not IDs, try to look them up from known tokens
+          if (!token0Id && token0Name) {
+            token0Id = KNOWN_TOKEN_IDS[token0Name] || '';
+          }
+          if (!token1Id && token1Name) {
+            token1Id = KNOWN_TOKEN_IDS[token1Name] || '';
           }
 
           // Skip pools without valid token IDs or names
