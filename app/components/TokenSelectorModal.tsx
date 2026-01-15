@@ -191,15 +191,23 @@ export default function TokenSelectorModal({
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
                         isSelectedInOther
                           ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
-                          : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
+                          : token.enabled
+                          ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
+                          : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
                       }`}
                     >
                       <img
                         src={`/tokens/${token.symbol.toLowerCase()}.svg`}
                         alt={token.symbol}
-                        className="w-5 h-5 rounded-full flex-shrink-0"
+                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
                       />
-                      <span className="font-bold text-sm whitespace-nowrap text-[color:var(--sf-text)]">
+                      <span className={`font-bold text-sm whitespace-nowrap ${
+                        isSelectedInOther
+                          ? 'text-[color:var(--sf-text)]'
+                          : token.enabled
+                          ? 'text-[color:var(--sf-text)]'
+                          : 'text-[color:var(--sf-text)]/40'
+                      }`}>
                         {token.symbol}
                       </span>
                       {isSelectedInOther && (

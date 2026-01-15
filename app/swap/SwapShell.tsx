@@ -1237,18 +1237,18 @@ export default function SwapShell() {
             <LiquidityInputs
               token0={poolToken0}
               token1={poolToken1}
-              token0Options={toOptions}
-              token1Options={toOptions}
+              token0Options={poolTokenOptions}
+              token1Options={poolTokenOptions}
               token0Amount={poolToken0Amount}
               token1Amount={poolToken1Amount}
               onChangeToken0Amount={setPoolToken0Amount}
               onChangeToken1Amount={setPoolToken1Amount}
               onSelectToken0={(id) => {
-                const t = toOptions.find((x) => x.id === id);
+                const t = poolTokenOptions.find((x) => x.id === id);
                 if (t) setPoolToken0(t);
               }}
               onSelectToken1={(id) => {
-                const t = toOptions.find((x) => x.id === id);
+                const t = poolTokenOptions.find((x) => x.id === id);
                 if (t) setPoolToken1(t);
               }}
               onAddLiquidity={handleAddLiquidity}
