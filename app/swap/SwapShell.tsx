@@ -284,6 +284,21 @@ export default function SwapShell() {
       seen.add(FRBTC_ALKANE_ID);
     }
 
+    // Always add BUSD/DIESEL as a base token (available before pools load)
+    if (BUSD_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(BUSD_ALKANE_ID))) {
+      // Use poolTokenMap for correct symbol if available, otherwise use network-appropriate default
+      const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      const symbol = busdToken?.symbol ?? (network === 'mainnet' ? 'bUSD' : 'DIESEL');
+      const name = busdToken?.name ?? symbol;
+      opts.push({
+        id: BUSD_ALKANE_ID,
+        symbol,
+        name,
+        isAvailable: true
+      });
+      seen.add(BUSD_ALKANE_ID);
+    }
+
     // Add whitelisted tokens from pool data (null = allow all)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
       if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id)) {
@@ -310,7 +325,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, userCurrencies]);
+  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network]);
 
   // Build TO options based on FROM token type:
   // - If FROM is a base token (BTC, frBTC, bUSD): show all tokens with pools
@@ -354,7 +369,10 @@ export default function SwapShell() {
         // For BTC/frBTC wrapping, always allow
         if (fromId === 'btc' && tokenId === FRBTC_ALKANE_ID) return true;
         if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
-        // Check if there's a pool for this pair
+        // Always allow other base tokens (BTC, frBTC, bUSD) to swap between each other
+        // This ensures they show even before pools have loaded
+        if (baseTokenIds.has(tokenId)) return true;
+        // Check if there's a pool for this pair (for non-base tokens)
         const tokenIdForLookup = tokenId === 'btc' ? FRBTC_ALKANE_ID : tokenId;
         return tokensWithPoolsForFrom.has(tokenIdForLookup) || tokensWithPoolsForFrom.has(tokenId);
       } else {
@@ -388,10 +406,12 @@ export default function SwapShell() {
     // Add bUSD if it should be shown
     if (BUSD_ALKANE_ID && !seen.has(BUSD_ALKANE_ID) && shouldShowToken(BUSD_ALKANE_ID)) {
       const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      // Use network-appropriate default symbol when pool data isn't loaded yet
+      const defaultSymbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
       opts.push({
         id: BUSD_ALKANE_ID,
-        symbol: busdToken?.symbol ?? 'bUSD',
-        name: busdToken?.name ?? 'bUSD',
+        symbol: busdToken?.symbol ?? defaultSymbol,
+        name: busdToken?.name ?? defaultSymbol,
         isAvailable: true
       });
       seen.add(BUSD_ALKANE_ID);
@@ -425,7 +445,7 @@ export default function SwapShell() {
     }
 
     return opts;
-  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets]);
+  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets, network]);
 
   // Balances - use useEnrichedWalletData for alkane balances, useBtcBalance for spendable BTC
   const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
@@ -1004,9 +1024,53 @@ export default function SwapShell() {
       price: undefined,
       isAvailable: btcIsAvailable,
     });
-    
+
     // Get whitelisted pool tokens only
     const seen = new Set(['btc']); // BTC already added above
+
+    // Always add frBTC as a base token (available before pools load)
+    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID)) && !seen.has(FRBTC_ALKANE_ID)) {
+      seen.add(FRBTC_ALKANE_ID);
+      const frbtcCurrency = idToUserCurrency.get(FRBTC_ALKANE_ID);
+      let frbtcIsAvailable = true;
+      if (counterpartToken) {
+        frbtcIsAvailable = isAllowedPair(FRBTC_ALKANE_ID, counterpartToken.id);
+        // For LP mode, disallow BTC/frBTC pairing
+        if (counterpartToken.id === 'btc') {
+          frbtcIsAvailable = false;
+        }
+      }
+      opts.push({
+        id: FRBTC_ALKANE_ID,
+        symbol: 'frBTC',
+        name: 'frBTC',
+        iconUrl: frbtcCurrency?.iconUrl,
+        balance: frbtcCurrency?.balance,
+        price: frbtcCurrency?.priceInfo?.price,
+        isAvailable: frbtcIsAvailable,
+      });
+    }
+
+    // Always add BUSD/DIESEL as a base token (available before pools load)
+    if (BUSD_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(BUSD_ALKANE_ID)) && !seen.has(BUSD_ALKANE_ID)) {
+      seen.add(BUSD_ALKANE_ID);
+      const busdCurrency = idToUserCurrency.get(BUSD_ALKANE_ID);
+      const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      const defaultSymbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
+      let busdIsAvailable = true;
+      if (counterpartToken) {
+        busdIsAvailable = isAllowedPair(BUSD_ALKANE_ID, counterpartToken.id);
+      }
+      opts.push({
+        id: BUSD_ALKANE_ID,
+        symbol: busdToken?.symbol ?? defaultSymbol,
+        name: busdToken?.name ?? defaultSymbol,
+        iconUrl: busdToken?.iconUrl || busdCurrency?.iconUrl,
+        balance: busdCurrency?.balance,
+        price: busdCurrency?.priceInfo?.price,
+        isAvailable: busdIsAvailable,
+      });
+    }
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
       if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id)) {
         seen.add(poolToken.id);
@@ -1070,7 +1134,7 @@ export default function SwapShell() {
     console.log('[poolTokenOptions] opts:', opts.map(o => ({ id: o.id, symbol: o.symbol })));
 
     return sortTokenOptions(opts);
-  }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds]);
+  }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds, network]);
 
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {
