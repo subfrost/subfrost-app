@@ -31,7 +31,7 @@ import { useLPPositions } from "@/hooks/useLPPositions";
 const SwapInputs = lazy(() => import("./components/SwapInputs"));
 const LiquidityInputs = lazy(() => import("./components/LiquidityInputs"));
 const MarketsGrid = lazy(() => import("./components/MarketsGrid"));
-const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
+const PriceChartCard = lazy(() => import("./components/PriceChartCard"));
 const SwapSummary = lazy(() => import("./components/SwapSummary"));
 const TransactionSettingsModal = lazy(() => import("@/app/components/TransactionSettingsModal"));
 const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModal"));
@@ -1329,32 +1329,7 @@ export default function SwapShell() {
         {/* Right Column: TVL and Markets */}
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
-          <PoolDetailsCard
-            pool={selectedTab === 'lp' && poolToken0 && poolToken1
-              ? markets.find(p => {
-                  // Map BTC to frBTC for pool lookup
-                  const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
-                  const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
-                  return (
-                    (p.token0.id === token0Id && p.token1.id === token1Id) ||
-                    (p.token0.id === token1Id && p.token1.id === token0Id)
-                  );
-                })
-              : selectedTab === 'swap' && fromToken && toToken
-              ? markets.find(p => {
-                  // Map BTC to frBTC for pool lookup in swap mode
-                  const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
-                  const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
-                  return (
-                    (p.token0.id === from0Id && p.token1.id === to1Id) ||
-                    (p.token0.id === to1Id && p.token1.id === from0Id)
-                  );
-                })
-              : selectedPool
-            }
-            volumePeriod={volumePeriod}
-            onVolumePeriodChange={setVolumePeriod}
-          />
+          <PriceChartCard />
           <MarketsGrid
             pools={markets}
             onSelect={handleSelectPool}
