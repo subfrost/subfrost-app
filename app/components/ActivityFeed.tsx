@@ -231,12 +231,19 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-1 lg:gap-4 px-4 lg:px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+      {/* Medium+ screens: 5 columns */}
+      <div className="hidden md:grid grid-cols-[minmax(60px,0.8fr)_minmax(120px,1.2fr)_minmax(100px,1.2fr)_minmax(80px,1fr)_minmax(70px,0.8fr)] lg:grid-cols-[minmax(80px,1fr)_minmax(160px,1.5fr)_minmax(120px,1.2fr)_minmax(90px,1fr)_minmax(80px,1fr)] xl:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-2 lg:gap-3 xl:gap-4 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
         <div>Txn</div>
         <div>Pair</div>
         <div className="text-right">Amounts</div>
         <div className="text-right">Address</div>
         <div className="text-right">Time</div>
+      </div>
+      {/* Small and smaller: 3 columns (Address/Time shown in row) */}
+      <div className="md:hidden grid grid-cols-[minmax(80px,1fr)_minmax(120px,1.5fr)_minmax(100px,1.5fr)] gap-4 px-4 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+        <div>Txn</div>
+        <div>Pair</div>
+        <div className="text-right">Amounts</div>
       </div>
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
@@ -307,20 +314,102 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               key={(row as any).transactionId + '-' + idx}
               href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
               target="_blank"
-              className="grid grid-cols-[60px_minmax(auto,120px)_130px_minmax(80px,1fr)_55px] lg:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-1 lg:gap-4 px-4 lg:px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+              className="block px-4 md:px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
             >
-              <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
+              {/* Medium+ screens: single row with 5 columns */}
+              <div className="hidden md:grid grid-cols-[minmax(60px,0.8fr)_minmax(120px,1.2fr)_minmax(100px,1.2fr)_minmax(80px,1fr)_minmax(70px,0.8fr)] lg:grid-cols-[minmax(80px,1fr)_minmax(160px,1.5fr)_minmax(120px,1.2fr)_minmax(90px,1fr)_minmax(80px,1fr)] xl:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-2 lg:gap-3 xl:gap-4">
+                <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
-              <div className="flex items-center gap-1 lg:gap-3">
-                <PairIcon
-                  leftId={pairNames.leftId}
-                  rightId={pairNames.rightId}
-                  leftSymbol={pairNames.leftName}
-                  rightSymbol={pairNames.rightName}
-                />
-                <div className="min-w-0">
-                  {/* Desktop: single line */}
-                  <div className="hidden lg:block truncate text-sm text-[color:var(--sf-text)]">
+                <div className="flex items-center gap-3">
+                  <PairIcon
+                    leftId={pairNames.leftId}
+                    rightId={pairNames.rightId}
+                    leftSymbol={pairNames.leftName}
+                    rightSymbol={pairNames.rightName}
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-[color:var(--sf-text)]">
+                      {(row.type === 'mint' || row.type === 'burn')
+                        ? `${pairNames.leftName} / ${pairNames.rightName}`
+                        : (row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap')
+                        ? `${pairNames.leftName} → ${pairNames.rightName}`
+                        : `${pairNames.leftName} · ${pairNames.rightName}`
+                      }
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right text-xs text-[color:var(--sf-text)]">
+                  {row.type === 'swap' && (
+                    <>
+                      <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                      <div className="text-green-500">+ {formatAmount(row.boughtAmount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                    </>
+                  )}
+                  {row.type === 'mint' && (
+                    <>
+                      <div>- {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                      <div>- {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                    </>
+                  )}
+                  {(row.type === 'burn' || row.type === 'creation') && (
+                    <>
+                      <div className="text-green-500">+ {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                      <div className="text-green-500">+ {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                    </>
+                  )}
+                  {row.type === 'wrap' && (
+                    <>
+                      <div>- {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
+                      <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
+                    </>
+                  )}
+                  {row.type === 'unwrap' && (
+                    <>
+                      <div>- {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
+                      <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
+                    </>
+                  )}
+                </div>
+
+                <div className="truncate text-right text-sm text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
+                <div className="text-right text-sm text-[color:var(--sf-text)]/60">{timeLabel}</div>
+              </div>
+
+              {/* Small and smaller: three rows */}
+              <div className="md:hidden flex flex-col gap-1">
+                {/* Row 1: Txn type, Pair icons, First amount */}
+                <div className="grid grid-cols-[minmax(80px,1fr)_minmax(80px,1fr)_minmax(100px,1.5fr)] items-center gap-4">
+                  <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
+                  <PairIcon
+                    leftId={pairNames.leftId}
+                    rightId={pairNames.rightId}
+                    leftSymbol={pairNames.leftName}
+                    rightSymbol={pairNames.rightName}
+                  />
+                  <div className="text-right text-sm text-[color:var(--sf-text)]">
+                    {row.type === 'swap' && (
+                      <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                    )}
+                    {row.type === 'mint' && (
+                      <div>- {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                    )}
+                    {(row.type === 'burn' || row.type === 'creation') && (
+                      <div className="text-green-500">+ {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                    )}
+                    {row.type === 'wrap' && (
+                      <div>- {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
+                    )}
+                    {row.type === 'unwrap' && (
+                      <div>- {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 2: Address, Pair text, Second amount */}
+                <div className="grid grid-cols-[minmax(80px,1fr)_minmax(80px,1fr)_minmax(100px,1.5fr)] items-center gap-4">
+                  <div className="truncate text-sm text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
+                  <div className="truncate text-sm text-[color:var(--sf-text)]">
                     {(row.type === 'mint' || row.type === 'burn')
                       ? `${pairNames.leftName} / ${pairNames.rightName}`
                       : (row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap')
@@ -328,57 +417,28 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                       : `${pairNames.leftName} · ${pairNames.rightName}`
                     }
                   </div>
-                  {/* Mobile/tablet: two lines */}
-                  <div className="lg:hidden text-xs text-[color:var(--sf-text)]">
-                    <div className="truncate">
-                      {pairNames.leftName} {(row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap') ? '→' : (row.type === 'mint' || row.type === 'burn') ? '/' : '·'}
-                    </div>
-                    <div className="truncate">{pairNames.rightName}</div>
+                  <div className="text-right text-sm text-[color:var(--sf-text)]">
+                    {row.type === 'swap' && (
+                      <div className="text-green-500">+ {formatAmount(row.boughtAmount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                    )}
+                    {row.type === 'mint' && (
+                      <div>- {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                    )}
+                    {(row.type === 'burn' || row.type === 'creation') && (
+                      <div className="text-green-500">+ {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                    )}
+                    {row.type === 'wrap' && (
+                      <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
+                    )}
+                    {row.type === 'unwrap' && (
+                      <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
+                    )}
                   </div>
                 </div>
-              </div>
 
-              <div className="text-right text-xs text-[color:var(--sf-text)]">
-                {row.type === 'swap' && (
-                  <>
-                    <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
-                    <div className="text-green-500">+ {formatAmount(row.boughtAmount, 8, pairNames.rightName)} {pairNames.rightName}</div>
-                  </>
-                )}
-                {row.type === 'mint' && (
-                  <>
-                    <div>- {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
-                    <div>- {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
-                  </>
-                )}
-                {(row.type === 'burn' || row.type === 'creation') && (
-                  <>
-                    <div className="text-green-500">+ {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
-                    <div className="text-green-500">+ {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
-                  </>
-                )}
-                {row.type === 'wrap' && (
-                  <>
-                    <div>- {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
-                    <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
-                  </>
-                )}
-                {row.type === 'unwrap' && (
-                  <>
-                    <div>- {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
-                    <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
-                  </>
-                )}
-              </div>
-
-              <div className="truncate text-right text-sm text-[color:var(--sf-text)]/60">{truncateAddress(address || '')}</div>
-              <div className="text-right text-sm text-[color:var(--sf-text)]/60">
-                {/* Desktop: single line */}
-                <span className="hidden lg:inline">{timeLabel}</span>
-                {/* Mobile/tablet: two lines */}
-                <div className="lg:hidden">
-                  <div>{dateLabel}</div>
-                  <div>{hourMinLabel}</div>
+                {/* Row 3: Time/date (smaller, right-aligned) */}
+                <div className="text-right text-xs text-[color:var(--sf-text)]/50">
+                  {timeLabel}
                 </div>
               </div>
             </Link>
