@@ -31,7 +31,7 @@ import { useLPPositions } from "@/hooks/useLPPositions";
 const SwapInputs = lazy(() => import("./components/SwapInputs"));
 const LiquidityInputs = lazy(() => import("./components/LiquidityInputs"));
 const MarketsGrid = lazy(() => import("./components/MarketsGrid"));
-const PriceChartCard = lazy(() => import("./components/PriceChartCard"));
+const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
 const SwapSummary = lazy(() => import("./components/SwapSummary"));
 const TransactionSettingsModal = lazy(() => import("@/app/components/TransactionSettingsModal"));
 const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModal"));
@@ -1349,7 +1349,7 @@ export default function SwapShell() {
         {/* Right Column: TVL and Markets */}
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
-          <PriceChartCard
+          <PoolDetailsCard
             pool={selectedTab === 'lp' && poolToken0 && poolToken1
               ? markets.find(p => {
                   const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
@@ -1370,6 +1370,8 @@ export default function SwapShell() {
                 })
               : selectedPool
             }
+            volumePeriod={volumePeriod}
+            onVolumePeriodChange={setVolumePeriod}
           />
           <MarketsGrid
             pools={markets}
