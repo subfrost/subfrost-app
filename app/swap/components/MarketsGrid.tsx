@@ -4,7 +4,7 @@ import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 
-type SortField = 'pair' | 'tvl' | 'volume' | 'apr';
+type SortField = 'pair' | 'volume' | 'apr';
 type SortOrder = 'asc' | 'desc';
 
 type MarketFilter = 'all' | 'btc' | 'usd';
@@ -22,7 +22,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const [showAll, setShowAll] = useState(false);
-  const [sortField, setSortField] = useState<SortField>('tvl');
+  const [sortField, setSortField] = useState<SortField>('volume');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,10 +61,6 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         case 'pair':
           aVal = a.pairLabel.toLowerCase();
           bVal = b.pairLabel.toLowerCase();
-          break;
-        case 'tvl':
-          aVal = a.tvlUsd ?? 0;
-          bVal = b.tvlUsd ?? 0;
           break;
         case 'volume':
           // Use the appropriate volume field based on selected period
@@ -266,35 +262,13 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         <div className="overflow-x-auto">
           <table className="w-full table-fixed">
             <colgroup>
-              <col className="w-[35%]" />
-              <col className="w-[22%]" />
-              <col className="w-[22%]" />
-              <col className="w-[21%]" />
+              <col className="w-[45%]" />
+              <col className="w-[30%]" />
+              <col className="w-[25%]" />
             </colgroup>
             <thead>
               <tr className="border-b border-[color:var(--sf-row-border)]">
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
-                <th className="px-2 py-3 text-right">
-                  <button
-                    onClick={() => handleSort('tvl')}
-                    className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                      sortField === 'tvl' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
-                    }`}
-                  >
-                    <span>TVL</span>
-                    <span className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${sortField === 'tvl' ? 'opacity-100' : 'opacity-30'}`}>
-                      {sortField === 'tvl' && sortOrder === 'desc' ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </span>
-                  </button>
-                </th>
                 <th className="px-2 py-3 text-right">
                   <button
                     onClick={() => handleSort('volume')}
@@ -343,11 +317,6 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                       </span>
                     </div>
                   </td>
-                  <td className="px-2 py-3 text-right">
-                    <span className="text-xs font-semibold text-[color:var(--sf-text)]">
-                      {formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}
-                    </span>
-                  </td>
                   <td className="px-2 py-3 text-right text-xs font-semibold text-[color:var(--sf-text)]">
                     {volumePeriod === '24h' && formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}
                     {volumePeriod === '30d' && formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice, true)}
@@ -388,33 +357,10 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                 {formatPercent(pool.apr)}
               </span>
             </div>
-            <div className="flex flex-col gap-2.5">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Volume</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-[color:var(--sf-outline)] rounded-full overflow-hidden">
-                  <div className="h-full flex">
-                    <div 
-                      className="h-full bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary)]/70"
-                      style={{ width: `${getToken0Percentage(pool)}%` }}
-                    />
-                    <div 
-                      className="h-full bg-gradient-to-r from-blue-400 to-blue-300"
-                      style={{ width: `${getToken1Percentage(pool)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-[10px] font-medium text-[color:var(--sf-text)]/60">
-                  <span>{getToken0Percentage(pool).toFixed(1)}/{getToken1Percentage(pool).toFixed(1)}</span>
-                </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Volume</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}</div>
               </div>
             </div>
           </button>
@@ -501,20 +447,6 @@ function formatCurrency(v?: number, currency: CurrencyDisplay = 'usd', btcPrice?
 function formatPercent(v?: number) {
   if (v == null) return "-";
   return `${v.toFixed(2)}%`;
-}
-
-function getToken0Percentage(pool: PoolSummary): number {
-  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
-  const total = pool.token0TvlUsd + pool.token1TvlUsd;
-  if (total === 0) return 50;
-  return (pool.token0TvlUsd / total) * 100;
-}
-
-function getToken1Percentage(pool: PoolSummary): number {
-  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
-  const total = pool.token0TvlUsd + pool.token1TvlUsd;
-  if (total === 0) return 50;
-  return (pool.token1TvlUsd / total) * 100;
 }
 
 
