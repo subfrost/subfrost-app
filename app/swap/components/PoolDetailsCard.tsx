@@ -6,12 +6,8 @@ import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
 import CandleChart from "./CandleChart";
 
-type VolumePeriod = '24h' | '30d';
-
 type Props = {
   pool?: PoolSummary;
-  volumePeriod?: VolumePeriod;
-  onVolumePeriodChange?: (period: VolumePeriod) => void;
 };
 
 type CandleTimeframe = '1h' | '4h' | '1d' | '1w';
@@ -82,7 +78,7 @@ function generateMockCandles(timeframe: CandleTimeframe) {
   return candles;
 }
 
-export default function PoolDetailsCard({ pool, volumePeriod = '24h', onVolumePeriodChange }: Props) {
+export default function PoolDetailsCard({ pool }: Props) {
   const { network } = useWallet();
   const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
 
@@ -125,33 +121,36 @@ export default function PoolDetailsCard({ pool, volumePeriod = '24h', onVolumePe
       {/* Show pool details if selected, otherwise hint */}
       {pool ? (
         <>
-          <div className="mt-5 flex items-start justify-between gap-4">
+          {/* Token pair and stats row */}
+          <div className="mt-5 flex items-center gap-3 mb-4">
+            <div className="flex -space-x-2">
+              <TokenIcon key={pool.token0.id} symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="lg" network={network} />
+              <TokenIcon key={pool.token1.id} symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="lg" network={network} />
+            </div>
+            <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
+            <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
+              {formatPercent(pool.apr)} APY
+            </div>
+          </div>
+
+          {/* Stats columns: TVL | 24h Volume | 30d Volume */}
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">Total Value Locked</div>
-              <div className="text-3xl font-extrabold text-[color:var(--sf-primary)]">
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">TVL</div>
+              <div className="text-lg font-bold text-[color:var(--sf-primary)]">
                 {formatUsd(pool.tvlUsd)}
               </div>
-              <div className="mt-1.5 flex flex-col items-start gap-1.5">
-                <div className="inline-flex items-center gap-2">
-                  <TokenIcon key={pool.token0.id} symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="sm" network={network} />
-                  <span className="text-[color:var(--sf-text)]">/</span>
-                  <TokenIcon key={pool.token1.id} symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="sm" network={network} />
-                </div>
-                <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
+            </div>
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">24h Volume</div>
+              <div className="text-lg font-bold text-[color:var(--sf-text)]">
+                {formatUsd(pool.vol24hUsd)}
               </div>
             </div>
-            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
-              <div className="mb-2">
-                <span className="text-xs font-semibold text-[color:var(--sf-text)]/60">
-                  Volume ({volumePeriod === '24h' ? '24H' : '30D'})
-                </span>
-              </div>
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">30d Volume</div>
               <div className="text-lg font-bold text-[color:var(--sf-text)]">
-                {volumePeriod === '24h' ? formatUsd(pool.vol24hUsd) : formatUsd(pool.vol30dUsd)}
-              </div>
-              <div className="mt-3 text-xs font-semibold text-[color:var(--sf-text)]/60">APY</div>
-              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
-                {formatPercent(pool.apr)}
+                {formatUsd(pool.vol30dUsd)}
               </div>
             </div>
           </div>

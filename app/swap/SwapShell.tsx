@@ -1370,8 +1370,6 @@ export default function SwapShell() {
                 })
               : selectedPool
             }
-            volumePeriod={volumePeriod}
-            onVolumePeriodChange={setVolumePeriod}
           />
           <MarketsGrid
             pools={markets}
