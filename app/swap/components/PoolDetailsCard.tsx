@@ -19,25 +19,45 @@ const TIMEFRAME_MS: Record<CandleTimeframe, number> = {
   '1w': 7 * 24 * 60 * 60 * 1000,
 };
 
-// Generate mock BTC/USDT candle data
+// Fixed current price - this should be the same regardless of timeframe
+const CURRENT_PRICE = 97500;
+
+// Generate mock BTC/USDT candle data working backwards from current price
 function generateMockCandles(timeframe: CandleTimeframe) {
   const candles = [];
   const now = Date.now();
   const interval = TIMEFRAME_MS[timeframe];
-  const basePrice = 97500;
-  let price = basePrice;
 
-  for (let i = 99; i >= 0; i--) {
-    const timestamp = now - (i * interval);
+  // Use a seeded random based on timeframe to get consistent results
+  // but different patterns for each timeframe
+  const seed = timeframe === '1h' ? 1 : timeframe === '4h' ? 2 : timeframe === '1d' ? 3 : 4;
+  const seededRandom = (i: number) => {
+    const x = Math.sin(seed * 1000 + i * 9999) * 10000;
+    return x - Math.floor(x);
+  };
 
-    // Random price movement
-    const change = price * (Math.random() - 0.48) * 0.02;
-    const open = price;
-    price = price + change;
-    const close = price;
+  // Generate prices backwards from current price
+  const prices: number[] = [CURRENT_PRICE];
+  for (let i = 1; i < 100; i++) {
+    const prevPrice = prices[i - 1];
+    // Random movement going backwards (so we subtract to go back in time)
+    const change = prevPrice * (seededRandom(i) - 0.48) * 0.02;
+    prices.push(prevPrice - change);
+  }
 
-    const high = Math.max(open, close) * (1 + Math.random() * 0.01);
-    const low = Math.min(open, close) * (1 - Math.random() * 0.01);
+  // Reverse so oldest is first
+  prices.reverse();
+
+  for (let i = 0; i < 100; i++) {
+    const timestamp = now - ((99 - i) * interval);
+    const close = prices[i];
+    const nextClose = i < 99 ? prices[i + 1] : close;
+
+    // Open is closer to previous close for continuity
+    const open = i > 0 ? prices[i - 1] + (close - prices[i - 1]) * 0.1 : close * (1 - (seededRandom(i + 100) - 0.5) * 0.01);
+
+    const high = Math.max(open, close) * (1 + seededRandom(i + 200) * 0.01);
+    const low = Math.min(open, close) * (1 - seededRandom(i + 300) * 0.01);
 
     candles.push({
       timestamp,
