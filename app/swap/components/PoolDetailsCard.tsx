@@ -154,26 +154,6 @@ export default function PoolDetailsCard({ pool }: Props) {
               </div>
             </div>
           </div>
-
-          <div className="mt-4">
-            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Pool Balance Distribution</div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-[color:var(--sf-outline)]/20 shadow-inner">
-              <div
-                className="h-full bg-gradient-to-r from-[color:var(--sf-primary)] to-blue-500 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                style={{ width: `${getToken0Percentage(pool)}%` }}
-              />
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-full bg-[color:var(--sf-primary)]" />
-                <span className="font-semibold text-[color:var(--sf-text)]">{pool.token0.symbol} {formatPercent(getToken0Percentage(pool))}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-[color:var(--sf-text)]">{pool.token1.symbol} {formatPercent(getToken1Percentage(pool))}</span>
-                <div className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-              </div>
-            </div>
-          </div>
         </>
       ) : (
         <p className="mt-4 text-center text-xs text-[color:var(--sf-text)]/50">
@@ -192,18 +172,4 @@ function formatUsd(v?: number) {
 function formatPercent(v?: number) {
   if (v == null) return "-";
   return `${v.toFixed(1)}%`;
-}
-
-function getToken0Percentage(pool: PoolSummary): number {
-  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
-  const total = pool.token0TvlUsd + pool.token1TvlUsd;
-  if (total === 0) return 50;
-  return (pool.token0TvlUsd / total) * 100;
-}
-
-function getToken1Percentage(pool: PoolSummary): number {
-  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
-  const total = pool.token0TvlUsd + pool.token1TvlUsd;
-  if (total === 0) return 50;
-  return (pool.token1TvlUsd / total) * 100;
 }
