@@ -172,7 +172,7 @@ import ThemeToggle from "./ThemeToggle";
     <header className="relative z-50 w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.05)]">
       <div className="relative flex h-[58px] w-full items-center px-6">
         {/* Brand */}
-        <Link href="/" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">
+        <a href="https://subfrost.io" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">
           <Image
             src="/brand/snowflake_2025.svg"
             alt="Subfrost snowflake logo"
@@ -189,7 +189,7 @@ import ThemeToggle from "./ThemeToggle";
             priority
             className=" hover:opacity-80 h-6 w-auto sf-wordmark"
           />
-        </Link>
+        </a>
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-4 md:flex ml-4">
