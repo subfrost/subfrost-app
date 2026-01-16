@@ -115,15 +115,15 @@ export default function VaultHero({
         <div className="space-y-4">
           <div className="text-center">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Est. APY</div>
-            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{apy}%</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)]">{apy}%</div>
           </div>
           <div className="text-center">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Hist. APY</div>
-            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{historicalApy ? `${historicalApy}%` : '-'}</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)]">{historicalApy ? `${historicalApy}%` : '-'}</div>
           </div>
           <div className="text-center">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Boosted APY</div>
-            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">-</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)]">-</div>
           </div>
         </div>
 
@@ -146,12 +146,12 @@ export default function VaultHero({
           </div>
           <div className="text-center">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Total Deposited</div>
-            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{tvl}</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)]">{tvl}</div>
             <div className="text-xs text-[color:var(--sf-text)]/70">${tvl}</div>
           </div>
           <div className="text-center">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Your Balance</div>
-            <div className="text-2xl font-bold text-[color:var(--sf-text)] drop-shadow-lg">{userBalance}</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-text)]">{userBalance}</div>
             <div className="text-xs text-[color:var(--sf-text)]/70">$0.00</div>
           </div>
         </div>

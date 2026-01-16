@@ -238,18 +238,38 @@ export default function SwapShell() {
   const whitelistedTokenIds = null as Set<string> | null;
 
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
-  // Alt tokens can only swap to/from these base tokens, not to other alts
+  // Alt tokens (including DIESEL) can only swap to/from these base tokens, not to other alts
+  // DIESEL is always 2:0, so we exclude it from base tokens even if BUSD_ALKANE_ID points to it
+  const DIESEL_ALKANE_ID = '2:0';
   const baseTokenIds = useMemo(() => {
-    return new Set(['btc', FRBTC_ALKANE_ID, BUSD_ALKANE_ID].filter(Boolean));
+    const ids = ['btc', FRBTC_ALKANE_ID];
+    // Only include BUSD_ALKANE_ID if it's actual bUSD, not DIESEL
+    if (BUSD_ALKANE_ID && BUSD_ALKANE_ID !== DIESEL_ALKANE_ID) {
+      ids.push(BUSD_ALKANE_ID);
+    }
+    return new Set(ids.filter(Boolean));
   }, [FRBTC_ALKANE_ID, BUSD_ALKANE_ID]);
 
-  // Build FROM options: Only whitelisted tokens
+  // Build FROM options based on TO token type:
+  // - If TO is an alt token: only show base tokens (no alt-to-alt swaps)
+  // - If TO is a base token or not set: show all tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
+    const toId = toToken?.id;
+    const isToAltToken = toId ? !baseTokenIds.has(toId) : false;
+
+    // Helper to check if a token should be shown
+    const shouldShowToken = (tokenId: string): boolean => {
+      if (tokenId === toId) return false; // Can't swap from self
+      if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
+      // If TO is an alt token, only allow base tokens in FROM
+      if (isToAltToken && !baseTokenIds.has(tokenId)) return false;
+      return true;
+    };
 
     // Always add BTC first (always available)
-    if (whitelistedTokenIds === null || whitelistedTokenIds.has('btc')) {
+    if (shouldShowToken('btc')) {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
@@ -260,7 +280,7 @@ export default function SwapShell() {
     }
 
     // Always add frBTC (BTC <-> frBTC wrapping is always allowed)
-    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID))) {
+    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID)) {
       opts.push({
         id: FRBTC_ALKANE_ID,
         symbol: 'frBTC',
@@ -270,8 +290,8 @@ export default function SwapShell() {
       seen.add(FRBTC_ALKANE_ID);
     }
 
-    // Always add BUSD/DIESEL as a base token (available before pools load)
-    if (BUSD_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(BUSD_ALKANE_ID))) {
+    // Add bUSD/DIESEL (available before pools load)
+    if (BUSD_ALKANE_ID && shouldShowToken(BUSD_ALKANE_ID)) {
       // Use poolTokenMap for correct symbol if available, otherwise use network-appropriate default
       const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
       const symbol = busdToken?.symbol ?? (network === 'mainnet' ? 'bUSD' : 'DIESEL');
@@ -285,9 +305,9 @@ export default function SwapShell() {
       seen.add(BUSD_ALKANE_ID);
     }
 
-    // Add whitelisted tokens from pool data (null = allow all)
+    // Add tokens from pool data (only if TO is not an alt token)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id)) {
+      if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id)) {
         opts.push({
           ...poolToken,
           isAvailable: true
@@ -298,7 +318,7 @@ export default function SwapShell() {
 
     // Also add tokens from user's wallet that aren't in pools yet
     userCurrencies.forEach((currency: any) => {
-      if (!seen.has(currency.id) && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
+      if (!seen.has(currency.id) && shouldShowToken(currency.id)) {
         seen.add(currency.id);
         opts.push({
           id: currency.id,
@@ -311,7 +331,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network]);
+  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network, toToken, baseTokenIds]);
 
   // Build TO options based on FROM token type:
   // - If FROM is a base token (BTC, frBTC, bUSD): show all tokens with pools

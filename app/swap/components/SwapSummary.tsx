@@ -176,7 +176,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
       ) : quote ? (
         <>
           {swapRoute && (
-            <div className="mb-2 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
+            <div className="rounded-2xl bg-transparent p-4 pb-0">
               <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
                 {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
               </div>

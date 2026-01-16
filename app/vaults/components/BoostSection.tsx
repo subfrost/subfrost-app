@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { VaultConfig } from "../constants";
 import { TrendingUp, Lock, AlertCircle } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
+import { useWallet } from "@/context/WalletContext";
+import NumberField from "@/app/components/NumberField";
+import TokenIcon from "@/app/components/TokenIcon";
 
 type Props = {
   vault: VaultConfig;
@@ -11,16 +15,21 @@ type Props = {
 export default function BoostSection({ vault }: Props) {
   const [stakeAmount, setStakeAmount] = useState("");
   const [activeTab, setActiveTab] = useState<"stake" | "unstake">("stake");
+  const [inputFocused, setInputFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { theme } = useTheme();
+  const { network } = useWallet();
 
   // Mock data - replace with real data
-  const userVeTokenBalance = "1,250.50";
+  const userVeTokenBalance = "1250.50";
+  const userVeTokenBalanceFormatted = "1,250.50";
   const totalVxTokenStaked = "850.00";
   const baseApy = vault.estimatedApy || "0";
   const multiplier = vault.boostMultiplier || 1.5;
   const boostedApy = (parseFloat(baseApy) * multiplier).toFixed(1);
   const boostMultiplier = `${multiplier}x`;
 
-  // Check if this is the special dxBTC vault with FROST
+  // Check if this is the special dxBTC vault with FUEL
   const isComingSoon = vault.isBoostComingSoon;
 
   if (!vault.hasBoost) {
@@ -73,7 +82,7 @@ export default function BoostSection({ vault }: Props) {
             <span className="text-sm font-semibold">Coming Soon</span>
           </div>
           <p className="mt-1 text-xs text-[color:var(--sf-coming-soon-text)]">
-            FROST token features are not yet available. Stay tuned for the TGE announcement!
+            FUEL token features are not yet available. We will make announcements when TGE plans are finalized.
           </p>
         </div>
       )}
@@ -109,7 +118,7 @@ export default function BoostSection({ vault }: Props) {
               Your {vault.outputAsset} Balance
             </p>
             <p className="text-lg font-bold text-[color:var(--sf-text)]">
-              {userVeTokenBalance}
+              {userVeTokenBalanceFormatted}
             </p>
           </div>
           <div>
@@ -152,26 +161,90 @@ export default function BoostSection({ vault }: Props) {
           </button>
         </div>
 
-        {/* Stake Input */}
+        {/* Stake Input - styled like From Wallet */}
         <div className="space-y-3">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="0.00"
-              value={stakeAmount}
-              onChange={(e) => setStakeAmount(e.target.value)}
-              className="w-full rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-4 py-3 text-lg font-semibold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/30 focus:border-[color:var(--sf-primary)] focus:outline-none"
-            />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <button
-                onClick={() => setStakeAmount(userVeTokenBalance)}
-                className="text-xs font-bold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)]"
-              >
-                MAX
-              </button>
-              <span className="text-sm font-bold text-[color:var(--sf-text)]">
-                {vault.boostTokenSymbol}
+          <div
+            className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            onClick={() => inputRef.current?.focus()}
+          >
+            {/* Token display - floating top-right (non-selectable) */}
+            <div className="absolute right-4 top-4 z-10">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <TokenIcon
+                  key={`boost-${vault.boostTokenSymbol}`}
+                  symbol={vault.boostTokenSymbol || 'vxDIESEL'}
+                  id={vault.boostTokenId || vault.tokenId}
+                  iconUrl={vault.boostIconPath}
+                  size="sm"
+                  network={network}
+                />
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {vault.boostTokenSymbol}
+                </span>
+              </div>
+            </div>
+
+            {/* Main content area */}
+            <div className="flex flex-col gap-1">
+              {/* Label */}
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">
+                {activeTab === "stake" ? "Stake Amount" : "Unstake Amount"}
               </span>
+
+              {/* Input - full width */}
+              <div className="pr-32">
+                <NumberField
+                  ref={inputRef}
+                  placeholder="0.00"
+                  align="left"
+                  value={stakeAmount}
+                  onChange={setStakeAmount}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                />
+              </div>
+
+              {/* Fiat value + Percentage Buttons row */}
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setStakeAmount((parseFloat(userVeTokenBalance) * 0.25).toString())}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStakeAmount((parseFloat(userVeTokenBalance) * 0.5).toString())}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStakeAmount((parseFloat(userVeTokenBalance) * 0.75).toString())}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  >
+                    75%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStakeAmount(userVeTokenBalance)}
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  >
+                    Max
+                  </button>
+                </div>
+              </div>
+
+              {/* Balance row at bottom */}
+              <div className="flex items-center justify-end">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  Balance {userVeTokenBalanceFormatted}
+                </div>
+              </div>
             </div>
           </div>
 

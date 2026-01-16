@@ -41,6 +41,18 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
 };
 
 // Get the initial input token for a vault (first supported token)
+// Check if a vault uses BTC-like decimals (8 decimals)
+const isBtcBasedVault = (vault: VaultConfig): boolean => {
+  return vault.outputAsset === 'dxBTC' || vault.outputAsset === 'yvfrBTC';
+};
+
+// Format amount with appropriate decimals based on vault type
+const formatVaultAmount = (amount: string, vault: VaultConfig): string => {
+  const decimals = isBtcBasedVault(vault) ? 8 : 2;
+  if (!amount || isNaN(parseFloat(amount))) return (0).toFixed(decimals);
+  return parseFloat(amount).toFixed(decimals);
+};
+
 const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol: string } => {
   // Map of output asset to default input token
   const defaultInputMap: Record<string, { id: string; symbol: string }> = {
@@ -257,7 +269,7 @@ export default function VaultDepositInterface({
               <div className="pr-32">
                 <NumberField
                   ref={inputRef}
-                  placeholder={"0.00"}
+                  placeholder={selectedInputToken.id === 'btc' || selectedInputToken.id === '32:0' ? "0.00000000" : "0.00"}
                   align="left"
                   value={amount}
                   onChange={setAmount}
@@ -333,7 +345,7 @@ export default function VaultDepositInterface({
             <div className="flex flex-col gap-1">
               <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">To Vault</span>
               <div className="pr-32">
-                <NumberField placeholder={"0.00"} align="left" value={amount} onChange={() => {}} disabled />
+                <NumberField placeholder={isBtcBasedVault(vault) ? "0.00000000" : "0.00"} align="left" value={amount ? formatVaultAmount(amount, vault) : ""} onChange={() => {}} disabled />
               </div>
               <div className="flex items-center justify-between">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
@@ -345,7 +357,7 @@ export default function VaultDepositInterface({
           </div>
 
           {/* Transaction Settings */}
-          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] ">
+          <div className="relative z-[5] rounded-2xl bg-transparent p-5 pb-0 text-sm">
             <div className="flex flex-col gap-2.5">
               {/* Minimum Received row */}
               <div className="flex items-center justify-between">
@@ -353,7 +365,7 @@ export default function VaultDepositInterface({
                   Minimum Received
                 </span>
                 <span className="font-semibold text-[color:var(--sf-text)]">
-                  {amount ? amount : '0.00'} {vault.outputAsset}
+                  {formatVaultAmount(amount, vault)} {vault.outputAsset}
                 </span>
               </div>
 

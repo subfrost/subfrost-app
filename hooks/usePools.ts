@@ -47,6 +47,7 @@ const KNOWN_TOKEN_IDS: Record<string, string> = {
   'bUSD': '2:56801',
   'ALKAMIST': '2:25720',
   'GOLD DUST': '2:35275',
+  'METHANE': '2:16',
 };
 
 /**
