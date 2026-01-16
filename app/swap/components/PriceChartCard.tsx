@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import type { PoolSummary } from "../types";
+import TokenIcon from "@/app/components/TokenIcon";
+import { useWallet } from "@/context/WalletContext";
 import CandleChart from "./CandleChart";
+
+type Props = {
+  pool?: PoolSummary;
+};
 
 type CandleTimeframe = '1h' | '4h' | '1d' | '1w';
 
@@ -51,7 +58,8 @@ function generateMockCandles(timeframe: CandleTimeframe) {
   return candles;
 }
 
-export default function PriceChartCard() {
+export default function PriceChartCard({ pool }: Props) {
+  const { network } = useWallet();
   const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
 
   // Generate mock data directly
@@ -89,6 +97,17 @@ export default function PriceChartCard() {
         loading={false}
         pairLabel="BTC/USDT"
       />
+
+      {/* Token Pair Icons and Label */}
+      {pool && (
+        <div className="mt-4 flex items-center gap-3">
+          <div className="flex -space-x-2">
+            <TokenIcon symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="lg" network={network} />
+            <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="lg" network={network} />
+          </div>
+          <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -1329,7 +1329,28 @@ export default function SwapShell() {
         {/* Right Column: TVL and Markets */}
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
-          <PriceChartCard />
+          <PriceChartCard
+            pool={selectedTab === 'lp' && poolToken0 && poolToken1
+              ? markets.find(p => {
+                  const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
+                  const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
+                  return (
+                    (p.token0.id === token0Id && p.token1.id === token1Id) ||
+                    (p.token0.id === token1Id && p.token1.id === token0Id)
+                  );
+                })
+              : selectedTab === 'swap' && fromToken && toToken
+              ? markets.find(p => {
+                  const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
+                  const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+                  return (
+                    (p.token0.id === from0Id && p.token1.id === to1Id) ||
+                    (p.token0.id === to1Id && p.token1.id === from0Id)
+                  );
+                })
+              : selectedPool
+            }
+          />
           <MarketsGrid
             pools={markets}
             onSelect={handleSelectPool}
