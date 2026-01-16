@@ -1,18 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import type { PoolSummary } from "../types";
-import TokenIcon from "@/app/components/TokenIcon";
-import { useWallet } from "@/context/WalletContext";
 import CandleChart from "./CandleChart";
-
-type VolumePeriod = '24h' | '30d';
-
-type Props = {
-  pool?: PoolSummary;
-  volumePeriod?: VolumePeriod;
-  onVolumePeriodChange?: (period: VolumePeriod) => void;
-};
 
 type CandleTimeframe = '1h' | '4h' | '1d' | '1w';
 
@@ -62,8 +51,7 @@ function generateMockCandles(timeframe: CandleTimeframe) {
   return candles;
 }
 
-export default function PoolDetailsCard({ pool, volumePeriod = '24h', onVolumePeriodChange }: Props) {
-  const { network } = useWallet();
+export default function PoolDetailsCard() {
   const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
 
   // Generate mock data directly
@@ -101,90 +89,6 @@ export default function PoolDetailsCard({ pool, volumePeriod = '24h', onVolumePe
         loading={false}
         pairLabel="BTC/USDT"
       />
-
-      {/* Show pool details if selected, otherwise hint */}
-      {pool ? (
-        <>
-          <div className="mt-5 flex items-start justify-between gap-4">
-            <div>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">Total Value Locked</div>
-              <div className="text-3xl font-extrabold text-[color:var(--sf-primary)]">
-                {formatUsd(pool.tvlUsd)}
-              </div>
-              <div className="mt-1.5 flex flex-col items-start gap-1.5">
-                <div className="inline-flex items-center gap-2">
-                  <TokenIcon key={pool.token0.id} symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="sm" network={network} />
-                  <span className="text-[color:var(--sf-text)]">/</span>
-                  <TokenIcon key={pool.token1.id} symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="sm" network={network} />
-                </div>
-                <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
-              </div>
-            </div>
-            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
-              <div className="mb-2">
-                <span className="text-xs font-semibold text-[color:var(--sf-text)]/60">
-                  Volume ({volumePeriod === '24h' ? '24H' : '30D'})
-                </span>
-              </div>
-              <div className="text-lg font-bold text-[color:var(--sf-text)]">
-                {volumePeriod === '24h' ? formatUsd(pool.vol24hUsd) : formatUsd(pool.vol30dUsd)}
-              </div>
-              <div className="mt-3 text-xs font-semibold text-[color:var(--sf-text)]/60">APY</div>
-              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
-                {formatPercent(pool.apr)}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">Pool Balance Distribution</div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-[color:var(--sf-outline)]/20 shadow-inner">
-              <div
-                className="h-full bg-gradient-to-r from-[color:var(--sf-primary)] to-blue-500 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                style={{ width: `${getToken0Percentage(pool)}%` }}
-              />
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-full bg-[color:var(--sf-primary)]" />
-                <span className="font-semibold text-[color:var(--sf-text)]">{pool.token0.symbol} {formatPercent(getToken0Percentage(pool))}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-[color:var(--sf-text)]">{pool.token1.symbol} {formatPercent(getToken1Percentage(pool))}</span>
-                <div className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-              </div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <p className="mt-4 text-center text-xs text-[color:var(--sf-text)]/50">
-          Select a market below to view pool details
-        </p>
-      )}
     </div>
   );
-}
-
-function formatUsd(v?: number) {
-  if (v == null) return "-";
-  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
-}
-
-function formatPercent(v?: number) {
-  if (v == null) return "-";
-  return `${v.toFixed(1)}%`;
-}
-
-function getToken0Percentage(pool: PoolSummary): number {
-  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
-  const total = pool.token0TvlUsd + pool.token1TvlUsd;
-  if (total === 0) return 50;
-  return (pool.token0TvlUsd / total) * 100;
-}
-
-function getToken1Percentage(pool: PoolSummary): number {
-  if (!pool.token0TvlUsd || !pool.token1TvlUsd) return 50;
-  const total = pool.token0TvlUsd + pool.token1TvlUsd;
-  if (total === 0) return 50;
-  return (pool.token1TvlUsd / total) * 100;
 }

@@ -19,8 +19,10 @@ export interface VaultConfig {
   hasBoost: boolean;
   boostTokenSymbol?: string; // e.g., "vxDIESEL"
   boostTokenName?: string;
+  boostTokenId?: string; // Alkane ID for boost token icon
+  boostIconPath?: string; // Direct path to boost token icon
   boostMultiplier?: number; // Boost multiplier value (e.g., 1.5 for 1.5x)
-  isBoostComingSoon?: boolean; // For FROST-based boosts
+  isBoostComingSoon?: boolean; // For FUEL-based boosts
   escrowNftName?: string; // For special vaults like dxBTC
 }
 
@@ -59,6 +61,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     hasBoost: true,
     boostTokenSymbol: 'vxDIESEL',
     boostTokenName: 'Staked DIESEL Gauge',
+    boostTokenId: '2:0', // Uses DIESEL icon from Oyl CDN
     boostMultiplier: 1.5,
   },
   {
@@ -79,6 +82,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     hasBoost: true,
     boostTokenSymbol: 'vxORDI',
     boostTokenName: 'Staked ORDI Gauge',
+    boostIconPath: '/tokens/ordi.svg', // Uses ORDI local icon
     boostMultiplier: 1.5,
   },
   {
@@ -99,6 +103,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     hasBoost: true,
     boostTokenSymbol: 'vxUSD',
     boostTokenName: 'Staked USD Gauge',
+    boostIconPath: '/tokens/usdt_snowflake.svg', // Uses USD snowflake icon
     boostMultiplier: 1.5,
   },
   {
@@ -117,10 +122,11 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     apyHistory: [4.8, 4.9, 5.0, 5.1, 5.0, 5.2, 5.1, 5.0, 5.2, 5.3, 5.2, 5.1, 5.0, 5.2, 5.3, 5.2, 5.1, 5.2, 5.3, 5.2, 5.1, 5.2, 5.3, 5.2, 5.1, 5.2, 5.3, 5.2, 5.2, 5.2],
     riskLevel: 'medium',
     hasBoost: true,
-    boostTokenSymbol: 'vxFROST',
-    boostTokenName: 'Staked FROST',
+    boostTokenSymbol: 'vxFUEL',
+    boostTokenName: 'Staked FUEL',
+    boostIconPath: '/tokens/btc_snowflake.svg', // Uses BTC snowflake icon as placeholder
     boostMultiplier: 1.5,
-    isBoostComingSoon: true, // Grey out FROST features
+    isBoostComingSoon: true, // Grey out FUEL features
     escrowNftName: 'Escrow NFT', // TODO: needs proper name
   },
 ];

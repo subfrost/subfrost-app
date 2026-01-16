@@ -178,8 +178,11 @@ export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decima
   '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
   '32:0': { symbol: 'frBTC', name: 'Fractional BTC', decimals: 8 },
   '2:56801': { symbol: 'bUSD', name: 'Bitcoin USD', decimals: 8 },
+  '2:16': { symbol: 'METHANE', name: 'METHANE', decimals: 8 },
   '2:68441': { symbol: 'DIESEL/bUSD LP', name: 'DIESEL/bUSD LP Token', decimals: 8 },
   '2:77087': { symbol: 'DIESEL/frBTC LP', name: 'DIESEL/frBTC LP Token', decimals: 8 },
+  '2:68433': { symbol: 'METHANE/bUSD LP', name: 'METHANE/bUSD LP Token', decimals: 8 },
+  '2:77221': { symbol: 'METHANE/frBTC LP', name: 'METHANE/frBTC LP Token', decimals: 8 },
   // Note: frBTC is always 32:0 on all networks
 };
 
@@ -262,6 +265,28 @@ export const MAINNET_POOLS: Record<string, PoolConfig> = {
     token1Decimals: 8,
     protobufPayload: generatePoolPayload(2, 77237),
     alkaneId: { block: 2, tx: 77237 },
+  },
+  METHANE_FRBTC: {
+    id: '2:77221',
+    key: 'METHANE_FRBTC',
+    name: 'METHANE/frBTC',
+    token0Symbol: 'METHANE',
+    token1Symbol: 'frBTC',
+    token0Decimals: 8,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(2, 77221),
+    alkaneId: { block: 2, tx: 77221 },
+  },
+  METHANE_BUSD: {
+    id: '2:68433',
+    key: 'METHANE_BUSD',
+    name: 'METHANE/bUSD',
+    token0Symbol: 'METHANE',
+    token1Symbol: 'bUSD',
+    token0Decimals: 8,
+    token1Decimals: 8,
+    protobufPayload: generatePoolPayload(2, 68433),
+    alkaneId: { block: 2, tx: 68433 },
   },
 };
 
