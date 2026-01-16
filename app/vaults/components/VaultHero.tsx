@@ -39,7 +39,7 @@ export default function VaultHero({
   
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
-    <div className="relative overflow-hidden rounded-2xl p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] w-full h-full flex flex-col bg-[color:var(--sf-glass-bg)] backdrop-blur-md text-[color:var(--sf-text)] border-t border-[color:var(--sf-top-highlight)]">
+    <div className="relative overflow-hidden rounded-2xl p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md text-[color:var(--sf-text)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Header - 2 Column Grid */}
       <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
         {/* Left Column: Title, Contract, Badges */}
@@ -104,15 +104,15 @@ export default function VaultHero({
 
       {/* APY Sparkline - Full Width Row */}
       {apyHistory.length > 0 && (
-        <div className="w-full h-40 mb-6 relative z-10">
+        <div className="w-full h-60 mb-6 relative z-10">
           <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} showLabel={false} fillHeight={true} />
         </div>
       )}
 
-      {/* Stats - 2 Column Grid */}
-      <div className="grid grid-cols-2 gap-4 relative z-10">
-        {/* Left Column: Est. APY, Hist. APY, Boosted APY */}
-        <div className="space-y-4">
+      {/* Stats - 3x2 Grid */}
+      <div className="relative z-10">
+        {/* Row 1: Est. APY, Hist. APY, Boosted APY */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <div className="text-center">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Est. APY</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">{apy}%</div>
@@ -127,8 +127,8 @@ export default function VaultHero({
           </div>
         </div>
 
-        {/* Right Column: Risk Level, Total Deposited, Your Balance */}
-        <div className="space-y-4">
+        {/* Row 2: Risk Level, Total Deposited, Your Balance */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
           <div className="text-center">
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Risk Level</div>
             <div className="flex gap-1 justify-center">
