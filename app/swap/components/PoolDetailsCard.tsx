@@ -87,7 +87,7 @@ export default function PoolDetailsCard({ pool }: Props) {
 
   // Always show chart with BTC/USDT for now
   return (
-    <div className="hidden md:block rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Timeframe selector */}
       <div className="mb-4 flex items-center justify-between">
         <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 uppercase tracking-wider">
@@ -118,48 +118,50 @@ export default function PoolDetailsCard({ pool }: Props) {
         pairLabel="BTC/USDT"
       />
 
-      {/* Show pool details if selected, otherwise hint */}
-      {pool ? (
-        <>
-          {/* Token pair and stats row */}
-          <div className="mt-5 flex items-center gap-3 mb-4">
-            <div className="flex -space-x-2">
-              <TokenIcon key={pool.token0.id} symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="lg" network={network} />
-              <TokenIcon key={pool.token1.id} symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="lg" network={network} />
+      {/* Show pool details if selected, otherwise hint - hidden on mobile */}
+      <div className="hidden md:block">
+        {pool ? (
+          <>
+            {/* Token pair and stats row */}
+            <div className="mt-5 flex items-center gap-3 mb-4">
+              <div className="flex -space-x-2">
+                <TokenIcon key={pool.token0.id} symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="lg" network={network} />
+                <TokenIcon key={pool.token1.id} symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="lg" network={network} />
+              </div>
+              <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
+              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
+                {formatPercent(pool.apr)}
+              </div>
             </div>
-            <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
-            <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
-              {formatPercent(pool.apr)} APY
-            </div>
-          </div>
 
-          {/* Stats columns: TVL | 24h Volume | 30d Volume */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">TVL</div>
-              <div className="text-lg font-bold text-[color:var(--sf-primary)]">
-                {formatUsd(pool.tvlUsd)}
+            {/* Stats columns: TVL | 24h Volume | 30d Volume */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">TVL</div>
+                <div className="text-lg font-bold text-[color:var(--sf-primary)]">
+                  {formatUsd(pool.tvlUsd)}
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">24h Volume</div>
+                <div className="text-lg font-bold text-[color:var(--sf-text)]">
+                  {formatUsd(pool.vol24hUsd)}
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">30d Volume</div>
+                <div className="text-lg font-bold text-[color:var(--sf-text)]">
+                  {formatUsd(pool.vol30dUsd)}
+                </div>
               </div>
             </div>
-            <div>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">24h Volume</div>
-              <div className="text-lg font-bold text-[color:var(--sf-text)]">
-                {formatUsd(pool.vol24hUsd)}
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">30d Volume</div>
-              <div className="text-lg font-bold text-[color:var(--sf-text)]">
-                {formatUsd(pool.vol30dUsd)}
-              </div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <p className="mt-4 text-center text-xs text-[color:var(--sf-text)]/50">
-          Select a market below to view pool details
-        </p>
-      )}
+          </>
+        ) : (
+          <p className="mt-4 text-center text-xs text-[color:var(--sf-text)]/50">
+            Select a market below to view pool details
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,7 +3,8 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePools } from '@/hooks/usePools';
-import { useAllPoolVolumes } from '@/hooks/usePoolData';
+import { useAllPoolCandleVolumes } from '@/hooks/usePoolCandleVolumes';
+import { useAllPoolStats } from '@/hooks/usePoolData';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 
@@ -44,7 +45,18 @@ function formatUsd(n?: number, showZeroAsDash = false) {
 export default function TrendingPairs() {
   const { network } = useWallet();
   const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
-  const { data: poolVolumes } = useAllPoolVolumes();
+
+  // Enhanced pool stats from our local API (TVL, Volume, APR)
+  const { data: poolStats } = useAllPoolStats();
+
+  // Build pool list for candle volume fetching
+  const poolsForVolume = useMemo(() => {
+    const pools = data?.items ?? [];
+    return pools.map(p => ({ id: p.id, token1Id: p.token1.id }));
+  }, [data?.items]);
+
+  // Fetch volume data using ammdata.get_candles (24h and 30d volumes)
+  const { data: candleVolumes } = useAllPoolCandleVolumes(poolsForVolume);
 
   const pairs = useMemo(() => {
     // Filter to whitelisted pools on mainnet, allow all on other networks
@@ -53,25 +65,29 @@ export default function TrendingPairs() {
       ? allPools.filter(p => MAINNET_WHITELISTED_POOL_IDS.has(p.id))
       : allPools;
 
-    // Create volume lookup map by pool ID
-    const volumeMap = new Map<string, number>();
-    if (poolVolumes) {
-      for (const volume of Object.values(poolVolumes)) {
-        if (volume.volume24hUsd !== undefined) {
-          volumeMap.set(volume.poolId, volume.volume24hUsd);
-        }
+    // Create stats lookup map
+    const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
+    if (poolStats) {
+      for (const [, stats] of Object.entries(poolStats)) {
+        statsMap.set(stats.poolId, stats);
       }
     }
 
-    // Merge volume data with pools and sort by TVL, take the top one
+    // Merge stats and volume data with pools and sort by TVL, take the top one
     return filtered
-      .map(p => ({
-        ...p,
-        vol24hUsd: volumeMap.get(p.id) ?? p.vol24hUsd,
-      }))
+      .map(p => {
+        const stats = statsMap.get(p.id);
+        const candleVolume = candleVolumes?.[p.id];
+        return {
+          ...p,
+          tvlUsd: stats?.tvlUsd ?? p.tvlUsd,
+          vol24hUsd: candleVolume?.volume24hUsd ?? p.vol24hUsd,
+          vol30dUsd: candleVolume?.volume30dUsd ?? p.vol30dUsd,
+        };
+      })
       .sort((a, b) => (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0))
       .slice(0, 1);
-  }, [data?.items, network, poolVolumes]);
+  }, [data?.items, network, poolStats, candleVolumes]);
 
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
@@ -92,14 +108,18 @@ export default function TrendingPairs() {
               <div className="flex items-center justify-between gap-3 mb-3">
                 <PairBadge a={{ id: p.token0.id, symbol: p.token0.symbol }} b={{ id: p.token1.id, symbol: p.token1.symbol }} />
               </div>
-              <div className="flex items-center justify-between gap-4">
-                <div className="text-left">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Volume</div>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Vol</div>
                   <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">30d Vol</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
                 </div>
               </div>
             </Link>

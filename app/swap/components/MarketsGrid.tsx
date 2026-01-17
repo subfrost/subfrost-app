@@ -27,7 +27,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
-  const [internalVolumePeriod, setInternalVolumePeriod] = useState<VolumePeriod>('24h');
+  const [internalVolumePeriod, setInternalVolumePeriod] = useState<VolumePeriod>('30d');
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyDisplay>('usd');
 
   // Use external volume period if provided, otherwise use internal state
@@ -402,33 +402,18 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                 {formatPercent(pool.apr)}
               </span>
             </div>
-            <div className="flex flex-col gap-2.5">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Volume</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}</div>
-                </div>
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}</div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-[color:var(--sf-outline)] rounded-full overflow-hidden">
-                  <div className="h-full flex">
-                    <div 
-                      className="h-full bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary)]/70"
-                      style={{ width: `${getToken0Percentage(pool)}%` }}
-                    />
-                    <div 
-                      className="h-full bg-gradient-to-r from-blue-400 to-blue-300"
-                      style={{ width: `${getToken1Percentage(pool)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-[10px] font-medium text-[color:var(--sf-text)]/60">
-                  <span>{getToken0Percentage(pool).toFixed(1)}/{getToken1Percentage(pool).toFixed(1)}</span>
-                </div>
+              <div className="text-center">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Vol</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">30d Vol</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice, true)}</div>
               </div>
             </div>
           </button>

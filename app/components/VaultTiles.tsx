@@ -30,18 +30,23 @@ export default function VaultTiles() {
               href={`/vaults?vault=${v.id}`}
               className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
             >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="h-10 w-10 rounded-full bg-transparent flex items-center justify-center">
-                  <TokenIcon id={v.tokenId} symbol={v.tokenSymbol} size="md" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold text-[color:var(--sf-text)]">{v.name}</div>
-                  <div className="truncate text-xs text-[color:var(--sf-text)]/60">{v.description}</div>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6">
+                    <TokenIcon id={v.tokenId} symbol={v.tokenSymbol} size="sm" />
+                  </div>
+                  <span className="text-sm font-bold text-[color:var(--sf-text)]">{v.name}</span>
                 </div>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">Est. APY</div>
-                <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] px-3 py-1 text-sm font-bold text-[color:var(--sf-info-green-title)]">{v.estimatedApy ? `${v.estimatedApy}%` : '-'}</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Deposits</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">-</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
+                  <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2.5 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">{v.estimatedApy ? `${v.estimatedApy}%` : '-'}</div>
+                </div>
               </div>
             </Link>
           ))}

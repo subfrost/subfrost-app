@@ -19,7 +19,8 @@ import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { usePools } from "@/hooks/usePools";
-import { useAllPoolStats, useAllPoolVolumes } from "@/hooks/usePoolData";
+import { useAllPoolStats } from "@/hooks/usePoolData";
+import { useAllPoolCandleVolumes } from "@/hooks/usePoolCandleVolumes";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
@@ -64,8 +65,14 @@ export default function SwapShell() {
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats } = useAllPoolStats();
 
-  // Dedicated volume data from volume API (more reliable than stats API)
-  const { data: poolVolumes } = useAllPoolVolumes();
+  // Build pool list for candle volume fetching
+  const poolsForVolume = useMemo(() => {
+    const pools = poolsData?.items ?? [];
+    return pools.map(p => ({ id: p.id, token1Id: p.token1.id }));
+  }, [poolsData?.items]);
+
+  // Fetch volume data using ammdata.get_candles (24h and 30d volumes)
+  const { data: candleVolumes } = useAllPoolCandleVolumes(poolsForVolume);
 
   // Merge external pool data with our enhanced stats and volume data
   const markets = useMemo<PoolSummary[]>(() => {
@@ -73,7 +80,6 @@ export default function SwapShell() {
 
     // Create maps for quick lookup
     const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
-    const volumeMap = new Map<string, NonNullable<typeof poolVolumes>[string]>();
 
     if (poolStats) {
       for (const [, stats] of Object.entries(poolStats)) {
@@ -81,24 +87,19 @@ export default function SwapShell() {
       }
     }
 
-    if (poolVolumes) {
-      for (const [, volume] of Object.entries(poolVolumes)) {
-        volumeMap.set(volume.poolId, volume);
-      }
-    }
-
     // Enhance each pool with stats and volume data
     return basePools.map(pool => {
       const stats = statsMap.get(pool.id);
-      const volume = volumeMap.get(pool.id);
+      const candleVolume = candleVolumes?.[pool.id];
 
       // Calculate token TVL percentages from reserves
       const totalTvl = stats?.tvlUsd || pool.tvlUsd || 0;
       const token0Tvl = totalTvl / 2;
       const token1Tvl = totalTvl / 2;
 
-      // Get volume from dedicated volume API, fall back to stats, then to pool data
-      const vol24hUsd = volume?.volume24hUsd ?? stats?.volume24hUsd ?? pool.vol24hUsd;
+      // Get volume from candle API (ammdata.get_candles), fall back to stats, then to pool data
+      const vol24hUsd = candleVolume?.volume24hUsd ?? stats?.volume24hUsd ?? pool.vol24hUsd;
+      const vol30dUsd = candleVolume?.volume30dUsd ?? stats?.volume30dUsd ?? pool.vol30dUsd;
 
       // Calculate APR: (daily_volume * fee_rate * 365) / TVL * 100
       // Fee rate is 0.8% for LPs (8/1000)
@@ -115,14 +116,14 @@ export default function SwapShell() {
         token0TvlUsd: stats?.tvlToken0 ?? token0Tvl,
         token1TvlUsd: stats?.tvlToken1 ?? token1Tvl,
         vol24hUsd,
-        vol30dUsd: stats?.volume30dUsd ?? pool.vol30dUsd,
+        vol30dUsd,
         apr,
       } as PoolSummary;
     });
-  }, [poolsData?.items, poolStats, poolVolumes]);
+  }, [poolsData?.items, poolStats, candleVolumes]);
 
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
-  const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('24h');
+  const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
 
   // Tab state
   const [selectedTab, setSelectedTab] = useState<'swap' | 'lp'>('swap');
@@ -1222,11 +1223,39 @@ export default function SwapShell() {
       </Suspense>
 
       <div className="flex flex-col md:grid md:grid-cols-2 gap-6 flex-1 min-h-0">
-        {/* Left Column: Swap/LP Module + My Wallet Swaps */}
+        {/* Left Column: Swap/LP Module */}
         <div className="flex flex-col min-h-0 md:min-h-0">
           {/* Swap/Liquidity Tabs */}
           <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
+          </div>
+
+          {/* Mobile-only Chart - shown above swap form on small screens */}
+          <div className="md:hidden mb-4">
+            <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
+              <PoolDetailsCard
+                pool={selectedTab === 'lp' && poolToken0 && poolToken1
+                  ? markets.find(p => {
+                      const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
+                      const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
+                      return (
+                        (p.token0.id === token0Id && p.token1.id === token1Id) ||
+                        (p.token0.id === token1Id && p.token1.id === token0Id)
+                      );
+                    })
+                  : selectedTab === 'swap' && fromToken && toToken
+                  ? markets.find(p => {
+                      const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
+                      const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+                      return (
+                        (p.token0.id === from0Id && p.token1.id === to1Id) ||
+                        (p.token0.id === to1Id && p.token1.id === from0Id)
+                      );
+                    })
+                  : selectedPool
+                }
+              />
+            </Suspense>
           </div>
 
           <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
@@ -1338,8 +1367,8 @@ export default function SwapShell() {
           </Suspense>
           </section>
 
-          {/* My Wallet Swaps - under swap modal */}
-          <div className="mt-8">
+          {/* My Wallet Swaps - desktop only, under swap modal */}
+          <div className="hidden md:block mt-8">
             <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
               <MyWalletSwaps />
             </Suspense>
@@ -1349,6 +1378,8 @@ export default function SwapShell() {
         {/* Right Column: TVL and Markets */}
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
+          {/* Desktop-only Chart - hidden on mobile where it appears above swap form */}
+          <div className="hidden md:block">
           <PoolDetailsCard
             pool={selectedTab === 'lp' && poolToken0 && poolToken1
               ? markets.find(p => {
@@ -1371,6 +1402,7 @@ export default function SwapShell() {
               : selectedPool
             }
           />
+          </div>
           <MarketsGrid
             pools={markets}
             onSelect={handleSelectPool}
@@ -1378,6 +1410,13 @@ export default function SwapShell() {
             onVolumePeriodChange={setVolumePeriod}
           />
         </div>
+        </Suspense>
+      </div>
+
+      {/* My Wallet Swaps - mobile only, at the bottom under market cards */}
+      <div className="md:hidden mt-6">
+        <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
+          <MyWalletSwaps />
         </Suspense>
       </div>
 
