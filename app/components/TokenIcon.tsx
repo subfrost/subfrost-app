@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 
 // Define Network type locally to avoid import issues with ts-sdk
 import type { Network } from '@/utils/constants';
@@ -35,10 +35,11 @@ const ALKANE_IDS_WITH_LOCAL_ICONS = new Set([
 export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className = '', network = 'mainnet' }: TokenIconProps) {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   // Generate icon paths - try multiple sources
   // Only try local paths for tokens we know have icons to avoid 404 console noise
-  const getIconPaths = (): string[] => {
+  const getIconPaths = useCallback((): string[] => {
     const paths: string[] = [];
     const symbolLower = symbol?.toLowerCase() || '';
     const hasLocalIcon = TOKENS_WITH_LOCAL_ICONS.has(symbolLower);
@@ -87,20 +88,28 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     }
 
     return paths;
-  };
+  }, [symbol, id, iconUrl, network]);
 
   // Use useMemo to recompute icon paths when id, symbol, iconUrl, or network changes
-  const iconPaths = useMemo(() => getIconPaths(), [id, symbol, iconUrl, network]);
+  const iconPaths = useMemo(() => getIconPaths(), [getIconPaths]);
   const [currentPathIndex, setCurrentPathIndex] = useState(0);
+
+  const currentPath = iconPaths[currentPathIndex];
 
   // Reset path index when icon paths change (props updated)
   useEffect(() => {
     setCurrentPathIndex(0);
     setHasError(false);
     setIsLoading(true);
-  }, [iconPaths]);
+  }, [getIconPaths]);
 
-  const currentPath = iconPaths[currentPathIndex];
+  // Handle cached images that load before onLoad handler is attached
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setIsLoading(false);
+    }
+  }, [currentPath]);
   
   // Fallback gradient colors based on symbol
   const getGradientColors = (sym: string) => {
@@ -152,6 +161,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
         </div>
       )}
       <img
+        ref={imgRef}
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}

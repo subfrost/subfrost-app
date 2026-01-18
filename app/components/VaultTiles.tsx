@@ -4,6 +4,12 @@ import Link from 'next/link';
 import TokenIcon from '@/app/components/TokenIcon';
 import { AVAILABLE_VAULTS } from '@/app/vaults/constants';
 
+function getHistoricalApy(apyHistory?: number[]): string {
+  if (!apyHistory || apyHistory.length === 0) return '-';
+  const avg = apyHistory.reduce((sum, val) => sum + val, 0) / apyHistory.length;
+  return `${avg.toFixed(1)}%`;
+}
+
 export default function VaultTiles() {
   const filteredVaults = AVAILABLE_VAULTS
     .filter(vault => vault.id !== 'yv-frbtc')
@@ -23,7 +29,7 @@ export default function VaultTiles() {
         </div>
       </div>
       <div className="p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           {featured.map((v) => (
             <Link
               key={v.id}
@@ -38,10 +44,14 @@ export default function VaultTiles() {
                   <span className="text-sm font-bold text-[color:var(--sf-text)]">{v.name}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="grid grid-cols-3 gap-2 text-sm">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Deposits</div>
                   <div className="font-bold text-[color:var(--sf-text)]">-</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Hist. APY</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{getHistoricalApy(v.apyHistory)}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
