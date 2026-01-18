@@ -126,15 +126,135 @@ export function usePools(params: UsePoolsParams = {}) {
       const items: PoolsListItem[] = [];
 
       // =====================================================================
-      // PRIMARY: Use WASM provider's alkanesGetAllPoolsWithDetails
+      // PRIMARY: Use local /api/pools endpoint (pool-service)
+      //
+      // This uses the pool-service which has reliable pool configuration.
+      // This was the original working method before the WASM refactor.
+      // =====================================================================
+      try {
+        console.log('[usePools] Trying primary method: local /api/pools endpoint for network:', network);
+        const localResponse = await fetch(`/api/pools?network=${network}`);
+        if (localResponse.ok) {
+          const localResult = await localResponse.json();
+          console.log('[usePools] Local API result:', localResult);
+
+          if (localResult?.success && localResult?.data?.pools) {
+            const poolEntries = Object.entries(localResult.data.pools);
+            console.log('[usePools] Local API returned', poolEntries.length, 'pools');
+
+            if (poolEntries.length > 0) {
+              for (const [poolKey, poolData] of poolEntries) {
+                const p = poolData as any;
+                // Get pool config to access metadata
+                const poolsConfig = network === 'mainnet' ? MAINNET_POOLS : REGTEST_POOLS;
+                const poolConfig = poolsConfig[poolKey];
+
+                if (!poolConfig) {
+                  console.log('[usePools] Skipping unknown pool key:', poolKey);
+                  continue;
+                }
+
+                const poolId = poolConfig.id;
+                const token0Name = poolConfig.token0Symbol;
+                const token1Name = poolConfig.token1Symbol;
+
+                // Get token IDs from known tokens
+                const token0Id = KNOWN_TOKEN_IDS[token0Name] || '';
+                const token1Id = KNOWN_TOKEN_IDS[token1Name] || '';
+
+                if (!token0Id || !token1Id) {
+                  console.log('[usePools] Skipping pool with unknown token IDs:', { poolKey, token0Name, token1Name });
+                  continue;
+                }
+
+                // Parse token IDs for icon URLs
+                const [t0Block, t0Tx] = token0Id.split(':');
+                const [t1Block, t1Tx] = token1Id.split(':');
+                const token0IconUrl = t0Block && t0Tx
+                  ? `https://asset.oyl.gg/alkanes/${network}/${t0Block}-${t0Tx}.png`
+                  : '';
+                const token1IconUrl = t1Block && t1Tx
+                  ? `https://asset.oyl.gg/alkanes/${network}/${t1Block}-${t1Tx}.png`
+                  : '';
+
+                // Calculate TVL from reserves
+                let tvlUsd = 0;
+                let token0TvlUsd = 0;
+                let token1TvlUsd = 0;
+
+                if (btcPrice && (p.reserve0 || p.reserve1)) {
+                  const calculated = calculateTvlFromReserves(
+                    token0Id,
+                    token1Id,
+                    p.reserve0 || '0',
+                    p.reserve1 || '0',
+                    btcPrice,
+                    BUSD_ALKANE_ID
+                  );
+                  tvlUsd = calculated.tvlUsd;
+                  token0TvlUsd = calculated.token0TvlUsd;
+                  token1TvlUsd = calculated.token1TvlUsd;
+                }
+
+                items.push({
+                  id: poolId,
+                  pairLabel: `${token0Name} / ${token1Name} LP`,
+                  token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: token0IconUrl },
+                  token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: token1IconUrl },
+                  tvlUsd,
+                  token0TvlUsd,
+                  token1TvlUsd,
+                  vol24hUsd: 0,
+                  vol7dUsd: 0,
+                  vol30dUsd: 0,
+                  apr: 0,
+                });
+              }
+
+              if (items.length > 0) {
+                console.log('[usePools] Local API returned', items.length, 'valid pools');
+
+                // Apply search filter
+                let filtered = items;
+                if (params.search) {
+                  const searchLower = params.search.toLowerCase();
+                  filtered = items.filter(
+                    (p) =>
+                      p.pairLabel.toLowerCase().includes(searchLower) ||
+                      p.token0.symbol.toLowerCase().includes(searchLower) ||
+                      p.token1.symbol.toLowerCase().includes(searchLower)
+                  );
+                }
+
+                // Sort by TVL
+                const sorted = [...filtered].sort((a, b) =>
+                  params.order === 'asc'
+                    ? (a.tvlUsd ?? 0) - (b.tvlUsd ?? 0)
+                    : (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0)
+                );
+
+                const start = params.offset ?? 0;
+                const end = start + (params.limit ?? 100);
+                const paginated = sorted.slice(start, end);
+
+                return { items: paginated, total: sorted.length };
+              }
+            }
+          }
+        }
+      } catch (localApiError) {
+        console.warn('[usePools] Local API failed, trying WASM method:', localApiError);
+      }
+
+      // =====================================================================
+      // FALLBACK 1: Use WASM provider's alkanesGetAllPoolsWithDetails
       //
       // This uses the alkanes-cli-sys tx-script API to fetch pools directly
-      // from the Alkanes indexer via RPC simulation. This is the most reliable
-      // method and doesn't depend on the database being populated.
+      // from the Alkanes indexer via RPC simulation.
       // =====================================================================
       if (provider) {
         try {
-          console.log('[usePools] Using primary method: alkanesGetAllPoolsWithDetails for factory:', ALKANE_FACTORY_ID);
+          console.log('[usePools] Using WASM method: alkanesGetAllPoolsWithDetails for factory:', ALKANE_FACTORY_ID);
           const rpcResult = await provider.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID);
           console.log('[usePools] RPC result:', rpcResult);
 
