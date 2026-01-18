@@ -14,7 +14,6 @@ import { useWallet } from "@/context/WalletContext";
 import { getConfig } from "@/utils/getConfig";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
-import { useBtcBalance } from "@/hooks/useBtcBalance";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -454,11 +453,12 @@ export default function SwapShell() {
     return opts;
   }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets, network]);
 
-  // Balances - use useEnrichedWalletData for alkane balances, useBtcBalance for spendable BTC
+  // Balances - use useEnrichedWalletData for all balances (BTC and alkanes)
+  // This is the same data source used by the Header for consistency
   const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
-  const { data: spendableBtcSats, isLoading: isLoadingBtcBalance } = useBtcBalance();
-  const btcBalanceSats = spendableBtcSats ?? 0;
-  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData || isLoadingBtcBalance);
+  // Use walletBalances.bitcoin.total for BTC balance (same as Header)
+  const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
+  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
 
   // Build a map from alkane ID to balance from wallet data (more reliable than useSellableCurrencies)
   const walletAlkaneBalances = useMemo(() => {
@@ -475,7 +475,7 @@ export default function SwapShell() {
     if (isBalancesLoading) return 'Loading...';
     if (!id) return 'Balance: 0';
 
-    // BTC balance
+    // BTC balance (btcBalanceSats now uses walletBalances.bitcoin.total)
     if (id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
       const btc = sats / 1e8;
@@ -1150,22 +1150,36 @@ export default function SwapShell() {
         setToToken(token);
       }
     } else if (tokenSelectorMode === 'pool0') {
-      const filteredToken = toOptions.find((t) => t.id === tokenId);
-      if (filteredToken) {
+      // For pool token selection, look in poolTokenOptions which includes all wallet tokens
+      const poolOption = poolTokenOptions.find((t) => t.id === tokenId);
+      if (poolOption) {
         // If selecting the same token as pool1, swap them
         if (poolToken1 && poolToken1.id === tokenId) {
           setPoolToken1(poolToken0);
         }
-        setPoolToken0(filteredToken);
+        // Convert TokenOption to TokenMeta
+        setPoolToken0({
+          id: poolOption.id,
+          symbol: poolOption.symbol,
+          name: poolOption.name,
+          iconUrl: poolOption.iconUrl,
+        });
       }
     } else if (tokenSelectorMode === 'pool1') {
-      const filteredToken = toOptions.find((t) => t.id === tokenId);
-      if (filteredToken) {
+      // For pool token selection, look in poolTokenOptions which includes all wallet tokens
+      const poolOption = poolTokenOptions.find((t) => t.id === tokenId);
+      if (poolOption) {
         // If selecting the same token as pool0, swap them
         if (poolToken0 && poolToken0.id === tokenId) {
           setPoolToken0(poolToken1);
         }
-        setPoolToken1(filteredToken);
+        // Convert TokenOption to TokenMeta
+        setPoolToken1({
+          id: poolOption.id,
+          symbol: poolOption.symbol,
+          name: poolOption.name,
+          iconUrl: poolOption.iconUrl,
+        });
       }
     }
   };

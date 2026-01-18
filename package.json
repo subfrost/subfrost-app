@@ -49,7 +49,7 @@
     "varuint-bitcoin": "^2.0.0"
   },
   "devDependencies": {
-    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk",
+    "@alkanes/ts-sdk": "file:./ts-sdk-0.1.4.tgz",
     "@noble/curves": "^2.0.1",
     "@playwright/experimental-ct-react": "^1.56.1",
     "@playwright/test": "^1.56.1",

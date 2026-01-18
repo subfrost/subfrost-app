@@ -10,39 +10,28 @@ type AlkaneId = { block: number | string; tx: number | string };
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
 /**
- * Query pool fee using a WASM provider
- * This function is used by both the hook and standalone callers like useSwapQuotes
+ * Query pool fee for a given pool
+ *
+ * NOTE: Pool fees are HARDCODED in the Alkanes AMM pool contracts at 0.8% (LP fee)
+ * plus 0.2% protocol fee = 1% total (TOTAL_PROTOCOL_FEE = 0.01).
+ *
+ * The fee is not dynamically stored or queryable via RPC - it's compiled into the
+ * pool contract bytecode. This function returns the static fee value.
+ *
+ * Reference:
+ * - Pool opcodes: alkanes-rs-dev/crates/alkanes-cli-common/src/alkanes/asc/alkanes-asm-common/assembly/staticcall.ts
+ * - Fee calculation: alkanes-rs-dev/crates/alkanes-cli-common/src/alkanes/amm.rs
+ * - SwapShell.tsx uses: lpFeeRate = 0.008 (0.8%)
  */
 export const queryPoolFeeWithProvider = async (
-  provider: WebProvider | null,
+  _provider: WebProvider | null,
   alkaneId?: AlkaneId
 ): Promise<number> => {
-  if (!alkaneId) return TOTAL_PROTOCOL_FEE;
-  if (!provider) return TOTAL_PROTOCOL_FEE;
-
-  try {
-    console.log('[usePoolFee] Fetching pool fee for:', { alkaneId });
-
-    // Use alkanes RPC method to get storage
-    // This calls the Sandshrew RPC's alkanes_getstorageatstring method
-    const contractId = `${alkaneId.block}:${alkaneId.tx}`;
-
-    // For now, return default fee as we need to implement proper storage reading
-    // TODO: Implement proper storage reading through WebProvider
-    // The pool contract stores fee at path '/totalfeeper1000'
-    console.log('[usePoolFee] TODO: Implement storage reading for contract:', contractId);
-
-    return TOTAL_PROTOCOL_FEE;
-  } catch (error) {
-    console.error('[usePoolFee] Error fetching pool fee:', {
-      error,
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      alkaneId,
-    });
+  // Pool fee is hardcoded in the contract at 1% total (0.8% LP + 0.2% protocol)
+  // No RPC call needed - return the static value directly
+  if (alkaneId) {
+    console.log('[usePoolFee] Using static pool fee for:', `${alkaneId.block}:${alkaneId.tx}`);
   }
-
-  console.log('[usePoolFee] Returning default fee:', TOTAL_PROTOCOL_FEE);
   return TOTAL_PROTOCOL_FEE;
 };
 

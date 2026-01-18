@@ -1,15 +1,14 @@
 /**
  * useEnrichedWalletData - Fetches enriched wallet data including UTXOs and alkane balances
  *
- * LOCAL TESTING SUPPORT (regtest-local):
- * This hook includes fallback mechanisms for local Docker testing where lua scripts
- * may not be available or may timeout. The fallback uses direct esplora RPC calls
- * (esplora_address::utxo) to fetch UTXOs when getEnrichedBalances fails.
+ * This hook uses the WASM SDK provider to fetch balance data via lua scripts
+ * (balances.lua via lua_evalscript). This is the production-aligned flow that works
+ * identically across all networks (mainnet, regtest, regtest-local).
  *
- * PRODUCTION BEHAVIOR:
- * On hosted regtest and mainnet, lua scripts (balances.lua via lua_evalscript) are
- * the standard method for fetching enriched balance data. The timeouts and fallbacks
- * here ensure the UI remains responsive even when those scripts are slow.
+ * Flow:
+ * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + assets
+ * 2. provider.alkanesByAddress(address) - Calls protorunesbyaddress for alkane balances
+ * 3. provider.alkanesBalance(address) - Fallback for aggregated alkane balances
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -157,42 +156,14 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         ]);
       };
 
-      // Helper function to fetch UTXOs via direct JSON-RPC (most reliable for regtest-local)
-      const fetchUtxosDirectRpc = async (address: string) => {
-        const network = process.env.NEXT_PUBLIC_NETWORK;
-        const rpcUrl = network === 'regtest-local'
-          ? 'http://localhost:18888'
-          : 'https://regtest.subfrost.io/v4/subfrost';
-        const response = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'esplora_address::utxo',
-            params: [address],
-            id: 1
-          })
-        });
-        const json = await response.json();
-        if (json.result && Array.isArray(json.result)) {
-          return json.result.map((utxo: any) => ({
-            outpoint: `${utxo.txid}:${utxo.vout}`,
-            value: utxo.value,
-            height: utxo.status?.block_height || 0,
-          }));
-        }
-        return null;
-      };
-
-      // Use provider methods instead of direct fetch
-      // Note: getEnrichedBalances uses lua_evalscript which can be very slow on hosted regtest
-      // We add a timeout and fallback to esplora-based balance fetching
+      // Use provider methods (lua scripts) for balance fetching
+      // This is the production-aligned flow that works identically across all networks
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
-          // Try getEnrichedBalances with a 5 second timeout
+          // Try getEnrichedBalances with a 15 second timeout (regtest can be slow)
           const rawResult = await withTimeout(
             provider.getEnrichedBalances(address),
-            5000,
+            15000,
             null
           );
 
@@ -224,26 +195,8 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
           return { address, data: enrichedData };
         } catch (error) {
-          // Fallback to direct RPC for UTXOs when getEnrichedBalances fails
-          console.log(`[BALANCE] getEnrichedBalances failed for ${address}, using direct RPC fallback`);
-          try {
-            const spendable = await fetchUtxosDirectRpc(address);
-            if (spendable) {
-              console.log(`[BALANCE] Direct RPC fallback succeeded for ${address}:`, spendable.length, 'UTXOs');
-              return {
-                address,
-                data: {
-                  spendable,
-                  assets: [],
-                  pending: [],
-                  ordHeight: 0,
-                  metashrewHeight: 0
-                }
-              };
-            }
-          } catch (fallbackError) {
-            console.error(`[BALANCE] Direct RPC fallback also failed for ${address}:`, fallbackError);
-          }
+          // Let the error propagate - no fallback to ensure production parity
+          console.error(`[BALANCE] getEnrichedBalances failed for ${address}:`, error);
           return { address, data: null };
         }
       });
@@ -255,7 +208,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         try {
           const rawResult = await withTimeout(
             provider.alkanesByAddress(address, 'latest', 1),
-            10000, // 10 second timeout
+            20000, // 20 second timeout (regtest can be slow)
             null
           );
 
@@ -285,7 +238,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           console.log('[useEnrichedWalletData] Fetching alkanesBalance for:', address);
           const rawResult = await withTimeout(
             provider.alkanesBalance(address),
-            10000, // 10 second timeout
+            20000, // 20 second timeout (regtest can be slow)
             null
           );
           if (!rawResult) {

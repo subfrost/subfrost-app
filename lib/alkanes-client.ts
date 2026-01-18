@@ -4,17 +4,16 @@
  * This module provides a single entry point for all alkanes/metashrew/esplora calls,
  * using @alkanes/ts-sdk as the underlying driver.
  *
+ * PRODUCTION-ALIGNED FLOW:
+ * All methods use the SDK provider directly, ensuring identical behavior across
+ * all networks (mainnet, regtest, regtest-local). This guarantees that if local
+ * testing works, production will work.
+ *
  * NETWORK SUPPORT:
  * - mainnet: Production Bitcoin mainnet
  * - testnet/signet: Bitcoin test networks
- * - regtest: Hosted regtest at regtest.subfrost.io (lua scripts are the standard)
+ * - regtest: Hosted regtest at regtest.subfrost.io
  * - regtest-local: Local Docker environment (localhost:18888 for RPC, localhost:4000 for data API)
- *
- * LOCAL TESTING (regtest-local):
- * The regtest-local network connects to a local alkanes-rs Docker stack. This is useful
- * for development and testing without relying on hosted infrastructure. Note that lua
- * scripts are the standard for production regtest - local testing uses direct RPC calls
- * as fallbacks when lua scripts are unavailable.
  */
 
 import { AlkanesProvider } from '@alkanes/ts-sdk';
@@ -95,6 +94,38 @@ export interface PoolConfig {
 
 // ============================================================================
 // Network Configuration
+// ============================================================================
+//
+// REGTEST INFRASTRUCTURE NOTES (see docs/REGTEST_INFRASTRUCTURE_JOURNAL.md):
+//
+// The hosted regtest environment at regtest.subfrost.io has this architecture:
+//
+//   External: https://regtest.subfrost.io
+//       │
+//       ▼
+//   OpenResty (namespace: openresty)
+//       │
+//       ├── /v4/subfrost, /v4/jsonrpc → jsonrpc.regtest-alkanes:18888
+//       ├── /v4/data/* → alkanes-data-api.regtest-alkanes:3000
+//       └── /v4/api/* → esplora (BROKEN - not configured in openresty-config!)
+//
+// RPC Method Routing (in alkanes-jsonrpc):
+//   - alkanes_* → metashrew (rockshrew-mono:8080)
+//   - metashrew_* → metashrew
+//   - esplora_* → esplora:50010 (works via RPC, not direct HTTP)
+//   - bitcoind_* → bitcoind:18443
+//   - subfrost_* → NOT ROUTED (falls through to bitcoind - BUG!)
+//
+// Genesis Alkanes (auto-deployed by alkanes-rs):
+//   - DIESEL: [2, 0]
+//   - frBTC: [32, 0]
+//   - frSIGIL: [32, 1]
+//   - ftrBTC Master: [31, 0]
+//
+// View function format:
+//   metashrew_view with params: ["functionName", "protobufEncodedParams", "latest"]
+//   Example for DIESEL [2,0]: metashrew_view(["getbytecode", "0x0a080a02080212020800", "latest"])
+//
 // ============================================================================
 
 type NetworkType = 'mainnet' | 'testnet' | 'regtest';
@@ -480,31 +511,9 @@ class AlkanesClient {
   // ==========================================================================
 
   async getCurrentHeight(): Promise<number> {
-    // TODO: Migrate to @alkanes/ts-sdk once SDK correctly constructs JSON-RPC URLs
-    // Currently the SDK uses /v4/jsonrpc instead of /v4/subfrost/jsonrpc
-    try {
-      const jsonRpcUrl = `${this.networkConfig.url}/jsonrpc`;
-      const response = await fetch(jsonRpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'metashrew_height',
-          params: [],
-        }),
-      });
-      const result = await response.json();
-      if (result?.result) {
-        return parseInt(result.result, 10);
-      }
-      // Fallback to SDK
-      const provider = await this.ensureProvider();
-      return provider.getBlockHeight();
-    } catch {
-      const provider = await this.ensureProvider();
-      return provider.getBlockHeight();
-    }
+    // Use SDK directly - production-aligned flow
+    const provider = await this.ensureProvider();
+    return provider.getBlockHeight();
   }
 
   async metashrewView(viewFn: string, payload: string, blockTag: string = 'latest'): Promise<string> {
@@ -513,50 +522,15 @@ class AlkanesClient {
   }
 
   async executeLuaScript<T>(script: string, args: unknown[]): Promise<T> {
-    // TODO: Migrate to @alkanes/ts-sdk once SDK correctly constructs JSON-RPC URLs
-    // Currently the SDK uses /v4/jsonrpc instead of /v4/subfrost/jsonrpc, causing rate limits
-    try {
-      const jsonRpcUrl = `${this.networkConfig.url}/jsonrpc`;
-      const response = await fetch(jsonRpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'lua_evalscript',
-          params: [script, args],
-        }),
-      });
-      const result = await response.json();
+    // Use SDK directly - production-aligned flow
+    const provider = await this.ensureProvider();
+    const result = await provider.lua.eval(script, args);
 
-      if (result?.error) {
-        throw new Error(`Lua eval failed: ${result.error.message || JSON.stringify(result.error)}`);
-      }
-
-      if (result?.result !== undefined) {
-        // Handle the returns wrapper if present
-        if (result.result && typeof result.result === 'object' && 'returns' in result.result) {
-          return result.result.returns as T;
-        }
-        return result.result as T;
-      }
-
-      // Fallback to SDK
-      const provider = await this.ensureProvider();
-      const sdkResult = await provider.lua.eval(script, args);
-      if (sdkResult && sdkResult.returns !== undefined) {
-        return sdkResult.returns as T;
-      }
-      return sdkResult as T;
-    } catch (error) {
-      // If our direct call fails, try SDK as fallback
-      const provider = await this.ensureProvider();
-      const result = await provider.lua.eval(script, args);
-      if (result && result.returns !== undefined) {
-        return result.returns as T;
-      }
-      return result as T;
+    // Handle the returns wrapper if present
+    if (result && typeof result === 'object' && 'returns' in result) {
+      return result.returns as T;
     }
+    return result as T;
   }
 
   // ==========================================================================

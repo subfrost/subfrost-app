@@ -86,9 +86,17 @@ export async function alkanesExecuteTyped(
   const options: Record<string, any> = {};
 
   // Apply automatic defaults for address separation
-  options.from_addresses = params.fromAddresses ?? ['p2wpkh:0', 'p2tr:0'];
+  // NOTE: SDK requires BOTH 'from' and 'from_addresses' for reliable UTXO discovery
+  // This matches the working implementation in useWrapMutation
+  const fromAddrs = params.fromAddresses ?? ['p2wpkh:0', 'p2tr:0'];
+  options.from = fromAddrs;
+  options.from_addresses = fromAddrs;
   options.change_address = params.changeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address = params.alkanesChangeAddress ?? 'p2tr:0';
+
+  // lock_alkanes prevents the SDK from accidentally spending alkane UTXOs as plain BTC
+  // This is critical for operations that require specific alkane inputs
+  options.lock_alkanes = true;
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
