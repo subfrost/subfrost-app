@@ -1,6 +1,11 @@
 /**
  * useSwapMutation - Execute AMM swap transactions
  *
+ * ## WASM Dependency Note
+ *
+ * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
+ * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
+ *
  * ## CRITICAL IMPLEMENTATION NOTES (January 2026)
  *
  * ### Why We Call the Pool Directly (Not the Factory)
@@ -221,6 +226,13 @@ export function useSwapMutation() {
         throw new Error('Provider not available');
       }
 
+      // Get addresses - use actual addresses instead of SDK descriptors
+      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress) throw new Error('No taproot address available');
+      console.log('[useSwapMutation] Using addresses:', { taprootAddress, segwitAddress });
+
       // NOTE: BTC → token swaps (other than frBTC) should be handled in SwapShell.tsx
       // by first wrapping BTC to frBTC, then calling swapMutation with frBTC.
       // If we reach here with BTC as sellCurrency for a non-frBTC target, something is wrong.
@@ -329,20 +341,49 @@ export function useSwapMutation() {
       console.log('═══════════════════════════════════════════════════════════════');
 
       // Determine btcNetwork for PSBT operations
-      const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
+      // Must match network detection in other mutation hooks (useWrapMutation, etc.)
+      let btcNetwork: bitcoin.Network;
+      switch (network) {
+        case 'mainnet':
+          btcNetwork = bitcoin.networks.bitcoin;
+          break;
+        case 'testnet':
+        case 'signet':
+          btcNetwork = bitcoin.networks.testnet;
+          break;
+        case 'regtest':
+        case 'regtest-local':
+        case 'subfrost-regtest':
+        case 'oylnet':
+        default:
+          btcNetwork = bitcoin.networks.regtest;
+          break;
+      }
 
       try {
-        // Execute using alkanesExecuteTyped with SDK defaults:
-        // - fromAddresses: ['p2wpkh:0', 'p2tr:0'] (sources from both SegWit and Taproot)
-        // - changeAddress: 'p2wpkh:0' (BTC change -> SegWit)
-        // - alkanesChangeAddress: 'p2tr:0' (alkane change -> Taproot)
-        // - toAddresses: auto-generated from protostone vN references
+        // Build fromAddresses array - use actual wallet addresses, not SDK descriptors
+        // This ensures the SDK can find UTXOs correctly even when wallet isn't loaded via mnemonic
+        const fromAddresses: string[] = [];
+        if (segwitAddress) fromAddresses.push(segwitAddress);
+        if (taprootAddress) fromAddresses.push(taprootAddress);
+
+        // Execute using alkanesExecuteTyped with ACTUAL addresses:
+        // - fromAddresses: actual wallet addresses (fixes "Available: []" issue)
+        // - changeAddress: segwit address for BTC change
+        // - alkanesChangeAddress: taproot address for alkane change
+        // - toAddresses: taproot address for outputs
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: swapData.feeRate,
           autoConfirm: true,
+          fromAddresses,
+          toAddresses: [taprootAddress], // Swapped tokens go to taproot
+          changeAddress: segwitAddress || taprootAddress, // BTC change to segwit
+          alkanesChangeAddress: taprootAddress, // Alkane change to taproot
         });
+
+        console.log('[useSwapMutation] Called alkanesExecuteTyped with fromAddresses:', fromAddresses);
 
         console.log('[useSwapMutation] ✓ Execute result:', JSON.stringify(result, null, 2));
 

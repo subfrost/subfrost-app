@@ -3,6 +3,11 @@
  *
  * This hook handles removing liquidity from AMM pools by burning LP tokens.
  *
+ * ## WASM Dependency Note
+ *
+ * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
+ * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
+ *
  * ## CRITICAL IMPLEMENTATION NOTES (January 2026)
  *
  * ### Why We Call the Pool Directly (Not the Factory)
@@ -221,9 +226,13 @@ export function useRemoveLiquidityMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      // Get addresses for validation
+      // Get addresses - use actual addresses instead of SDK descriptors
+      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
       const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
       if (!taprootAddress) throw new Error('No taproot address available');
+
+      console.log('[RemoveLiquidity] Using addresses:', { taprootAddress, segwitAddress });
 
       // Convert display amounts to alks
       const lpAmountAlks = toAlks(data.lpAmount, data.lpDecimals ?? 8);
@@ -272,17 +281,29 @@ export function useRemoveLiquidityMutation() {
       const btcNetwork = getBitcoinNetwork();
 
       try {
-        // Execute using alkanesExecuteTyped with SDK defaults:
-        // - fromAddresses: ['p2wpkh:0', 'p2tr:0'] (sources from both SegWit and Taproot)
-        // - changeAddress: 'p2wpkh:0' (BTC change -> SegWit)
-        // - alkanesChangeAddress: 'p2tr:0' (alkane change -> Taproot)
-        // - toAddresses: auto-generated from protostone vN references
+        // Build fromAddresses array - use actual wallet addresses, not SDK descriptors
+        // This ensures the SDK can find UTXOs correctly even when wallet isn't loaded via mnemonic
+        const fromAddresses: string[] = [];
+        if (segwitAddress) fromAddresses.push(segwitAddress);
+        if (taprootAddress) fromAddresses.push(taprootAddress);
+
+        // Execute using alkanesExecuteTyped with ACTUAL addresses:
+        // - fromAddresses: actual wallet addresses (fixes "Available: []" issue)
+        // - changeAddress: segwit address for BTC change
+        // - alkanesChangeAddress: taproot address for alkane change
+        // - toAddresses: taproot address for outputs
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: data.feeRate,
           autoConfirm: false,
+          fromAddresses,
+          toAddresses: [taprootAddress], // Returned tokens go to taproot
+          changeAddress: segwitAddress || taprootAddress, // BTC change to segwit
+          alkanesChangeAddress: taprootAddress, // Alkane change to taproot
         });
+
+        console.log('[RemoveLiquidity] Called alkanesExecuteTyped with fromAddresses:', fromAddresses);
 
         console.log('[RemoveLiquidity] Execute result:', JSON.stringify(result, null, 2));
 

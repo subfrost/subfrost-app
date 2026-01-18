@@ -3,6 +3,17 @@
  *
  * This hook handles adding liquidity to AMM pools.
  *
+ * ## WASM Dependency Note (January 2026)
+ *
+ * This hook uses `alkanesExecuteWithStrings` from `@alkanes/ts-sdk/wasm` which is
+ * aliased to `lib/oyl/alkanes/` in next.config.mjs. If you see "Insufficient alkanes"
+ * errors despite having sufficient balance, the lib/oyl WASM may be out of sync.
+ *
+ * To fix: Copy the updated WASM from node_modules (see next.config.mjs comments).
+ *
+ * The fix (in @alkanes/ts-sdk@0.1.4-dfe27c6) uses `protorunes_by_address` directly
+ * for UTXO balance fetching instead of the lua batch script which had parsing issues.
+ *
  * ## IMPORTANT: Factory vs Pool Opcodes (January 2026)
  *
  * There are TWO different contracts with different opcodes:
@@ -188,9 +199,13 @@ export function useAddLiquidityMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      // Get addresses
+      // Get addresses - use actual addresses instead of SDK descriptors
+      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
       const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
       if (!taprootAddress) throw new Error('No taproot address available');
+
+      console.log('[AddLiquidity] Using addresses:', { taprootAddress, segwitAddress });
 
       // Convert display amounts to alks
       const amount0Alks = toAlks(data.token0Amount, data.token0Decimals ?? 8);
@@ -242,17 +257,29 @@ export function useAddLiquidityMutation() {
       const btcNetwork = getBitcoinNetwork();
 
       try {
-        // Execute using alkanesExecuteTyped with SDK defaults:
-        // - fromAddresses: ['p2wpkh:0', 'p2tr:0'] (sources from both SegWit and Taproot)
-        // - changeAddress: 'p2wpkh:0' (BTC change -> SegWit)
-        // - alkanesChangeAddress: 'p2tr:0' (alkane change -> Taproot)
-        // - toAddresses: auto-generated from protostone vN references
+        // Build fromAddresses array - use actual wallet addresses, not SDK descriptors
+        // This ensures the SDK can find UTXOs correctly even when wallet isn't loaded via mnemonic
+        const fromAddresses: string[] = [];
+        if (segwitAddress) fromAddresses.push(segwitAddress);
+        if (taprootAddress) fromAddresses.push(taprootAddress);
+
+        // Execute using alkanesExecuteTyped with ACTUAL addresses:
+        // - fromAddresses: actual wallet addresses (fixes "Available: []" issue)
+        // - changeAddress: segwit address for BTC change
+        // - alkanesChangeAddress: taproot address for alkane change
+        // - toAddresses: taproot address for outputs
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: data.feeRate,
           autoConfirm: false,
+          fromAddresses,
+          toAddresses: [taprootAddress], // LP tokens go to taproot
+          changeAddress: segwitAddress || taprootAddress, // BTC change to segwit (or taproot if no segwit)
+          alkanesChangeAddress: taprootAddress, // Alkane change to taproot
         });
+
+        console.log('[AddLiquidity] Called alkanesExecuteTyped with fromAddresses:', fromAddresses);
 
         console.log('[AddLiquidity] Execute result:', JSON.stringify(result, null, 2));
 

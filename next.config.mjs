@@ -4,11 +4,20 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use LOCAL WASM (fixed version with from_addresses parsing)
-// The npm package version has a bug where from_addresses is always None
-// and UTXO serialization returns empty objects
-// This causes the SDK to fall back to p2wsh change address derivation which fails
-// Once the SDK fix is merged and published, this can be reverted
+// IMPORTANT: Local WASM alias for @alkanes/ts-sdk/wasm
+// ================================================
+// This alias redirects the WASM import to lib/oyl/alkanes/ instead of node_modules.
+// This is necessary because Next.js/Turbopack has issues loading WASM from node_modules.
+//
+// ⚠️ SYNC REQUIREMENT: When updating @alkanes/ts-sdk, you MUST also update lib/oyl/alkanes/:
+//
+//   cp node_modules/@alkanes/ts-sdk/wasm/*.wasm lib/oyl/alkanes/
+//   cp node_modules/@alkanes/ts-sdk/wasm/*.js lib/oyl/alkanes/
+//   cp node_modules/@alkanes/ts-sdk/wasm/*.d.ts lib/oyl/alkanes/
+//
+// LAST SYNCED: 2026-01-18 with @alkanes/ts-sdk@0.1.4-dfe27c6
+// Fix included: Uses protorunes_by_address directly for UTXO balance fetching
+// ================================================
 const localWasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 
 const nextConfig = {
