@@ -47,3 +47,6 @@ scripts/rust-deployer/target/
 # lock files (use your preferred package manager locally)
 package-lock.json
 yarn.lock
+
+# SDK tarballs (temporary downloads during development)
+*.tgz
