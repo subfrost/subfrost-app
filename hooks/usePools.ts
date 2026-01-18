@@ -258,6 +258,9 @@ export function usePools(params: UsePoolsParams = {}) {
         console.log('[usePools] Fetching pools for network:', network);
         console.log('[usePools] Trying REST API fallback for factory:', ALKANE_FACTORY_ID, 'on network:', network);
 
+        // Parse factory ID (format: "block:tx", e.g., "4:65522")
+        const [factoryBlock, factoryTx] = ALKANE_FACTORY_ID.split(':');
+
         // Use REST API directly for reliable pool data
         const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
         console.log('[usePools] API URL:', `${apiUrl}/get-pools`);
