@@ -469,23 +469,23 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 pt-4">
-                  <div>
-                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment (BTC)</div>
-                    <div className="text-lg font-semibold text-[color:var(--sf-text)]">
-                      {totalInvestment.toFixed(8)}
+                <div className="grid grid-cols-3 gap-2 sm:gap-4 pt-4 border-t border-[color:var(--sf-row-border)]">
+                  <div className="text-left">
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment</div>
+                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                      {totalInvestment.toFixed(4)} <span className="text-xs text-[color:var(--sf-text)]/60">BTC</span>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout (BTC)</div>
-                    <div className="text-lg font-semibold text-[color:var(--sf-text)]">
-                      {totalPayout.toFixed(8)}
-                    </div>
-                  </div>
-                  <div>
+                  <div className="text-center">
                     <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Contracts</div>
-                    <div className="text-lg font-semibold text-[color:var(--sf-text)]">
+                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
                       {payoutMarkers.length}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout</div>
+                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                      {totalPayout.toFixed(4)} <span className="text-xs text-[color:var(--sf-text)]/60">BTC</span>
                     </div>
                   </div>
                 </div>
@@ -586,15 +586,16 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between">
                               <div className="truncate text-sm font-bold text-[color:var(--sf-text)]">{marker.contractId}</div>
-                              <div className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] text-[color:var(--sf-info-green-title)]' : 'bg-red-500/20 text-red-500'}`}>
+                              <div className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-bold border ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]' : 'bg-[color:var(--sf-info-red-bg)] border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)]'}`}>
                                 {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%
                               </div>
                             </div>
-                            <div className="flex items-center justify-between mt-1">
-                              <div className="truncate text-xs text-[color:var(--sf-text)]/60">
-                                {marker.investmentAmount.toFixed(6)} BTC • In {marker.blocksUntil} blocks
-                              </div>
+                            <div className="flex items-start justify-between mt-1">
                               <div className="text-xs text-[color:var(--sf-text)]/60">
+                                <div>{marker.investmentAmount.toFixed(6)} BTC</div>
+                                <div className="text-[color:var(--sf-text)]/40">In {marker.blocksUntil} blocks</div>
+                              </div>
+                              <div className="text-xs text-[color:var(--sf-text)]/60 text-right">
                                 {marker.payoutAmount >= 0 ? '+' : ''}{marker.payoutAmount.toFixed(6)} BTC
                               </div>
                             </div>

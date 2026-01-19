@@ -64,10 +64,23 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
       </div>
 
       {/* Main Table */}
-      <div className="overflow-x-auto">
+      <div className="sm:overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[color:var(--sf-row-border)]">
+              {/* Mobile header (xs only) - 3 columns */}
+              <tr className="sm:hidden border-b border-[color:var(--sf-row-border)]">
+                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
+                  Contract
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
+                  Market Price
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
+                  Exercise Price
+                </th>
+              </tr>
+              {/* Desktop header (sm+) - 5 columns */}
+              <tr className="hidden sm:table-row border-b border-[color:var(--sf-row-border)]">
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Contract
                 </th>
@@ -94,8 +107,94 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
-                    <td colSpan={5} className="px-6 py-4">
-                      {/* Data grid */}
+                    {/* Mobile layout (xs only) */}
+                    <td colSpan={3} className="sm:hidden px-6 py-4">
+                      {/* Data grid - 3 columns for mobile */}
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-4 items-start mb-3">
+                        {/* Contract with Time Left and View Details underneath */}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              className={`text-[color:var(--sf-text)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isExpanded ? 'rotate-90' : ''}`}
+                            >
+                              <path d="M9 18l6-6-6-6" />
+                            </svg>
+                            <div className="font-semibold text-[color:var(--sf-text)]">{contract.id}</div>
+                          </div>
+                          <div className="text-xs text-[color:var(--sf-text)]/60 ml-5">
+                            {contract.blocksLeft} blocks remaining
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onContractSelect({ id: contract.id, blocksLeft: contract.blocksLeft });
+                            }}
+                            className="ml-5 px-3 py-1.5 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none w-fit"
+                          >
+                            View Details
+                          </button>
+                        </div>
+                        {/* Market Price */}
+                        <div className="text-sm text-[color:var(--sf-text)] text-right">
+                          {contract.marketPrice}
+                        </div>
+                        {/* Exercise Price */}
+                        <div className="text-sm font-medium text-[color:var(--sf-text)] text-right">
+                          {calculateExercisePrice(contract.blocksLeft).toFixed(3)} BTC
+                        </div>
+                      </div>
+                      {/* Distribution bar */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2.5 rounded-full bg-[color:var(--sf-glass-border)] overflow-hidden relative">
+                            {/* Exercised portion (filled) */}
+                            <div
+                              className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-10"
+                              style={{
+                                width: `${(contract.exercised / contract.totalSupply) * 100}%`,
+                              }}
+                            />
+                            {/* Mempool queue portion (different color) */}
+                            {contract.mempoolQueue > 0 && (
+                              <div
+                                className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-20"
+                                style={{
+                                  width: `${(contract.mempoolQueue / contract.totalSupply) * 100}%`,
+                                  left: `${(contract.exercised / contract.totalSupply) * 100}%`,
+                                }}
+                              />
+                            )}
+                          </div>
+                          <span className="text-xs font-medium text-[color:var(--sf-text)] whitespace-nowrap">
+                            {contract.remaining.toFixed(1)}/{contract.totalSupply.toFixed(1)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-[color:var(--sf-text)]/60">
+                          <span>
+                            {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) remaining
+                            {contract.mempoolQueue > 0 && (
+                              <span className="ml-1 text-[color:var(--sf-primary)]/90">
+                                ({contract.mempoolQueue.toFixed(1)} in mempool)
+                              </span>
+                            )}
+                          </span>
+                          <span>
+                            {contract.exercised.toFixed(1)} BTC ({((contract.exercised / contract.totalSupply) * 100).toFixed(1)}%) exercised
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Desktop layout (sm+) */}
+                    <td colSpan={5} className="hidden sm:table-cell px-6 py-4">
+                      {/* Data grid - 5 columns for desktop */}
                       <div className="grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-4 items-center mb-3">
                         {/* Contract */}
                         <div className="flex items-center gap-2">
@@ -114,7 +213,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                         </div>
                         {/* Time Left */}
                         <div className="text-sm text-[color:var(--sf-text)]">
-                          {contract.timeLeft}
+                          {contract.blocksLeft} blocks remaining
                         </div>
                         {/* Market Price */}
                         <div className="text-sm text-[color:var(--sf-text)]">
@@ -184,7 +283,57 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 if (isExpanded) {
                   rows.push(
                     <tr key={`${contract.id}-details`} className="bg-[color:var(--sf-primary)]/5">
-                      <td colSpan={5} className="px-6 py-4">
+                      <td colSpan={3} className="sm:hidden px-6 py-4">
+                        <div className="space-y-2 text-sm text-[color:var(--sf-text)]/80">
+                          <div className="font-semibold text-[color:var(--sf-text)] mb-2">
+                            {contract.id}
+                          </div>
+                          <div className="grid grid-cols-1 gap-4">
+                            <div className="space-y-3">
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Total supply:</span>
+                                <div className="font-medium">{contract.totalSupply.toFixed(1)} BTC</div>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Remaining:</span>
+                                <div className="font-medium">
+                                  {contract.remaining.toFixed(1)} BTC
+                                  {contract.mempoolQueue > 0 && (
+                                    <span className="ml-2 text-[color:var(--sf-primary)]/90">
+                                      ({contract.mempoolQueue.toFixed(1)} BTC in queue)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Exercised:</span>
+                                <div className="font-medium">{contract.exercised.toFixed(1)} BTC</div>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Exercise price:</span>
+                                <div className="font-medium">{calculateExercisePrice(contract.blocksLeft).toFixed(3)} BTC</div>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Exercise premium:</span>
+                                <div className="font-medium">{calculateExercisePremium(contract.blocksLeft).toFixed(2)}%</div>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Expiry Block:</span>
+                                <div className="font-medium">{contract.expiryBlock.toLocaleString()}</div>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Created:</span>
+                                <div className="font-medium">{contract.created}</div>
+                              </div>
+                              <div>
+                                <span className="text-xs text-[color:var(--sf-text)]/70">Underlying yield:</span>
+                                <div className="font-medium">{contract.underlyingYield}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td colSpan={5} className="hidden sm:table-cell px-6 py-4">
                         <div className="space-y-2 text-sm text-[color:var(--sf-text)]/80">
                           <div className="font-semibold text-[color:var(--sf-text)] mb-2">
                             {contract.id}
