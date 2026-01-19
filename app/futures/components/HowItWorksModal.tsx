@@ -36,7 +36,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
       >
         {/* Header */}
         <div className="sticky top-0 z-10 border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">How It Works (Coming Soon!)</h2>
+          <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">How It Works</h2>
           <button
             type="button"
             onClick={onClose}

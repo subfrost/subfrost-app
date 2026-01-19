@@ -323,7 +323,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
                   <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-1">
                     <PairIcon
                       leftId={pairNames.leftId}
                       rightId={pairNames.rightId}
