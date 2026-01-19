@@ -154,7 +154,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
   }
 
   return (
-    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center ${shouldBeCircular ? 'overflow-hidden rounded-full' : ''}`}>
+    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center ${shouldBeCircular ? 'rounded-full border border-[color:var(--sf-text)]/30 bg-transparent p-0.5' : ''}`}>
       {isLoading && (
         <div className={`absolute inset-0 inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white`}>
           {displayText}
@@ -165,7 +165,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}
-        className={`${sizeClass} ${className} object-cover transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'} ${shouldBeCircular ? 'rounded-full' : ''}`}
+        className={`${shouldBeCircular ? 'h-full w-full object-contain' : sizeClass} ${shouldBeCircular ? '' : className} transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
         onError={handleError}
       />
