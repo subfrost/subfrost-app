@@ -23,6 +23,7 @@ import { useAllPoolCandleVolumes } from "@/hooks/usePoolCandleVolumes";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
+import { useWrapSwapMutation } from "@/hooks/useWrapSwapMutation";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
@@ -178,6 +179,7 @@ export default function SwapShell() {
   const swapMutation = useSwapMutation();
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
+  const wrapSwapMutation = useWrapSwapMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
   const removeLiquidityMutation = useRemoveLiquidityMutation();
 
@@ -637,37 +639,35 @@ export default function SwapShell() {
       return;
     }
 
-    // BTC → Token swap: First wrap BTC to frBTC, then swap frBTC to target token
+    // BTC → Token swap: One-click wrap + swap in a single transaction
     if (isBtcToTokenSwap) {
-      const confirmTwoStep = window.confirm(
-        `This BTC → ${toToken.symbol} swap requires two transactions:\n\n` +
-        `1. Wrap BTC to frBTC\n` +
-        `2. Swap frBTC for ${toToken.symbol}\n\n` +
-        `Both transactions require confirmation. Continue?`
-      );
-
-      if (!confirmTwoStep) return;
+      // We need a quote with poolId for the swap portion
+      if (!quote || !quote.poolId) {
+        console.error('[SWAP] BTC → Token swap requires quote with poolId');
+        window.alert('Unable to find pool for this swap. Please try again.');
+        return;
+      }
 
       try {
-        const wrapAmount = direction === 'sell' ? fromAmount : toAmount;
-        const wrapRes = await wrapMutation.mutateAsync({ amount: wrapAmount, feeRate: fee.feeRate });
+        console.log('[SWAP] Executing one-click BTC →', toToken.symbol, 'swap');
+        const btcAmount = direction === 'sell' ? fromAmount : toAmount;
 
-        if (!wrapRes?.success || !wrapRes.transactionId) {
-          throw new Error('Wrap transaction failed');
+        const res = await wrapSwapMutation.mutateAsync({
+          btcAmount,
+          buyAmount: quote.buyAmount,
+          buyCurrency: toToken.id,
+          maxSlippage,
+          feeRate: fee.feeRate,
+          poolId: quote.poolId,
+          deadlineBlocks,
+        });
+
+        if (res?.success && res.transactionId) {
+          console.log('[SWAP] One-click BTC → Token swap success:', res.transactionId);
+          setSuccessOperationType('swap');
+          setSuccessTxId(res.transactionId);
+          setTimeout(() => refreshWalletData(), 2000);
         }
-
-        window.alert(
-          `Step 1 complete: BTC wrapped to frBTC.\n\n` +
-          `Transaction: ${wrapRes.transactionId.slice(0, 16)}...\n\n` +
-          `IMPORTANT: Wait for the transaction to confirm (1-2 blocks), ` +
-          `then select frBTC → ${toToken.symbol} to complete your swap.`
-        );
-
-        setSuccessOperationType('wrap');
-        setSuccessTxId(wrapRes.transactionId);
-        setTimeout(() => refreshWalletData(), 2000);
-        setFromToken({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
-
       } catch (e: any) {
         console.error('[SWAP] BTC → Token swap failed:', e);
         window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
