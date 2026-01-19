@@ -73,19 +73,29 @@ export default function TrendingPairs() {
       }
     }
 
-    // Merge stats and volume data with pools and sort by TVL, take the top one
-    return filtered
-      .map(p => {
-        const stats = statsMap.get(p.id);
-        const candleVolume = candleVolumes?.[p.id];
-        return {
-          ...p,
-          tvlUsd: stats?.tvlUsd ?? p.tvlUsd,
-          vol24hUsd: candleVolume?.volume24hUsd ?? p.vol24hUsd,
-          vol30dUsd: candleVolume?.volume30dUsd ?? p.vol30dUsd,
-        };
+    // Merge stats and volume data with pools
+    const enrichedPools = filtered.map(p => {
+      const stats = statsMap.get(p.id);
+      const candleVolume = candleVolumes?.[p.id];
+      return {
+        ...p,
+        tvlUsd: stats?.tvlUsd ?? p.tvlUsd,
+        vol24hUsd: candleVolume?.volume24hUsd ?? p.vol24hUsd,
+        vol30dUsd: candleVolume?.volume30dUsd ?? p.vol30dUsd,
+      };
+    });
+
+    // Check if any pool has 24h volume
+    const hasAny24hVolume = enrichedPools.some(p => (p.vol24hUsd ?? 0) > 0);
+
+    // Sort by 24h volume if any exists, otherwise fall back to 30d volume
+    return enrichedPools
+      .sort((a, b) => {
+        if (hasAny24hVolume) {
+          return (b.vol24hUsd ?? 0) - (a.vol24hUsd ?? 0);
+        }
+        return (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
       })
-      .sort((a, b) => (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0))
       .slice(0, 1);
   }, [data?.items, network, poolStats, candleVolumes]);
 
