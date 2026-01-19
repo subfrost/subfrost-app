@@ -24,6 +24,7 @@ import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
 import { useWrapSwapMutation } from "@/hooks/useWrapSwapMutation";
+import { useSwapUnwrapMutation } from "@/hooks/useSwapUnwrapMutation";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
@@ -180,6 +181,7 @@ export default function SwapShell() {
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
   const wrapSwapMutation = useWrapSwapMutation();
+  const swapUnwrapMutation = useSwapUnwrapMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
   const removeLiquidityMutation = useRemoveLiquidityMutation();
 
@@ -670,6 +672,42 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] BTC → Token swap failed:', e);
+        window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
+      }
+      return;
+    }
+
+    // Token → BTC swap: One-click swap + unwrap in a single transaction
+    if (isTokenToBtcSwap) {
+      // We need a quote with poolId for the swap portion
+      if (!quote || !quote.poolId) {
+        console.error('[SWAP] Token → BTC swap requires quote with poolId');
+        window.alert('Unable to find pool for this swap. Please try again.');
+        return;
+      }
+
+      try {
+        console.log('[SWAP] Executing one-click', fromToken.symbol, '→ BTC swap');
+        const sellAmount = direction === 'sell' ? quote.sellAmount : quote.sellAmount;
+
+        const res = await swapUnwrapMutation.mutateAsync({
+          sellCurrency: fromToken.id,
+          sellAmount,
+          expectedBtcAmount: quote.buyAmount, // frBTC amount ≈ BTC amount
+          maxSlippage,
+          feeRate: fee.feeRate,
+          poolId: quote.poolId,
+          deadlineBlocks,
+        });
+
+        if (res?.success && res.transactionId) {
+          console.log('[SWAP] One-click Token → BTC swap success:', res.transactionId);
+          setSuccessOperationType('swap');
+          setSuccessTxId(res.transactionId);
+          setTimeout(() => refreshWalletData(), 2000);
+        }
+      } catch (e: any) {
+        console.error('[SWAP] Token → BTC swap failed:', e);
         window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
       }
       return;
