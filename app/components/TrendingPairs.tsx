@@ -85,16 +85,21 @@ export default function TrendingPairs() {
       };
     });
 
-    // Check if any pool has 24h volume
+    // Check if any pool has volume data
     const hasAny24hVolume = enrichedPools.some(p => (p.vol24hUsd ?? 0) > 0);
+    const hasAny30dVolume = enrichedPools.some(p => (p.vol30dUsd ?? 0) > 0);
 
-    // Sort by 24h volume if any exists, otherwise fall back to 30d volume
+    // Sort by 24h volume if any exists, otherwise 30d volume, otherwise TVL
     return enrichedPools
       .sort((a, b) => {
         if (hasAny24hVolume) {
           return (b.vol24hUsd ?? 0) - (a.vol24hUsd ?? 0);
         }
-        return (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
+        if (hasAny30dVolume) {
+          return (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
+        }
+        // Final fallback to TVL
+        return (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0);
       })
       .slice(0, 1);
   }, [data?.items, network, poolStats, candleVolumes]);
