@@ -97,7 +97,7 @@ export default function FuturesPage() {
           title={<>Coinbase Futures<span className="block text-lg font-semibold text-[color:var(--sf-text)]/60">(Coming Soon)</span></>}
           subtitle={
             <div className="flex flex-col gap-3">
-              {/* Row 1: Block info, futures count, Generate Future button */}
+              {/* Row 1: Block info, futures count, Generate Future button, Info button */}
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm text-[color:var(--sf-text)]/70">
                 <span className="whitespace-nowrap">Block: {currentBlock || '...'}</span>
                 <span className="hidden sm:inline">•</span>
@@ -117,6 +117,24 @@ export default function FuturesPage() {
                 >
                   Generate Future
                 </button>
+                {/* Info/How it works button */}
+                <div className="relative group">
+                  <button
+                    type="button"
+                    onClick={() => setShowHowItWorks(true)}
+                    className="flex items-center justify-center w-6 h-6 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    aria-label="How it works"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor">
+                      <path d="M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,0,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,0-6.23-12.66A87.59,87.59,0,0,1,40,104.49C39.74,56.83,78.26,17.14,125.88,16A88,88,0,0,1,216,104Zm-16,0a72,72,0,0,0-73.74-72c-39,.92-70.47,33.39-70.26,72.39a71.65,71.65,0,0,0,27.64,56.3A32,32,0,0,1,96,186v6h24V147.31L90.34,117.66a8,8,0,0,1,11.32-11.32L128,132.69l26.34-26.35a8,8,0,0,1,11.32,11.32L136,147.31V192h24v-6a32.12,32.12,0,0,1,12.47-25.35A71.65,71.65,0,0,0,200,104Z"/>
+                    </svg>
+                  </button>
+                  {/* Learn more popover on hover */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-[color:var(--sf-primary)] rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                    Learn more!
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[color:var(--sf-primary)]" />
+                  </div>
+                </div>
               </div>
 
               {/* Row 2: Markets/Positions tabs and Refresh button */}
@@ -134,26 +152,10 @@ export default function FuturesPage() {
               </div>
             </div>
           }
-          howItWorksButton={
-            <div
-              className="relative group"
-              onMouseEnter={() => setShowHowItWorks(true)}
-              onMouseLeave={() => setShowHowItWorks(false)}
-            >
-              <button
-                type="button"
-                className="flex items-center justify-center w-6 h-6 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                aria-label="How it works"
-              >
-                <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor">
-                  <path d="M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,0,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,0-6.23-12.66A87.59,87.59,0,0,1,40,104.49C39.74,56.83,78.26,17.14,125.88,16A88,88,0,0,1,216,104Zm-16,0a72,72,0,0,0-73.74-72c-39,.92-70.47,33.39-70.26,72.39a71.65,71.65,0,0,0,27.64,56.3A32,32,0,0,1,96,186v6h24V147.31L90.34,117.66a8,8,0,0,1,11.32-11.32L128,132.69l26.34-26.35a8,8,0,0,1,11.32,11.32L136,147.31V192h24v-6a32.12,32.12,0,0,1,12.47-25.35A71.65,71.65,0,0,0,200,104Z"/>
-                </svg>
-              </button>
-              {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
-            </div>
-          }
         />
       }>
+        {/* How It Works Modal - shown on click */}
+        {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
         {activeTab === 'markets' ? (
           <>
             {/* Data Source Banner */}
