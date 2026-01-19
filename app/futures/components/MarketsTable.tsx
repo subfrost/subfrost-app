@@ -355,7 +355,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           <div className="font-semibold text-[color:var(--sf-text)] mb-2">
                             {contract.id}
                           </div>
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {/* Column 1 */}
                             <div className="space-y-3">
                               <div>
