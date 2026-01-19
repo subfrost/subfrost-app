@@ -235,7 +235,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
       {/* Mobile header (xs only) - 3 columns */}
       <div className="sm:hidden grid grid-cols-[auto_1fr_auto] gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
         <div>Txn</div>
-        <div className="text-center">Pair</div>
+        <div>Pair</div>
         <div className="text-right">Amounts</div>
       </div>
       {/* Desktop header (sm+) - 5 columns */}
@@ -323,7 +323,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
                   <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center gap-2">
                     <PairIcon
                       leftId={pairNames.leftId}
                       rightId={pairNames.rightId}

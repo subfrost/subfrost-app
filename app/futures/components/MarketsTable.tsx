@@ -64,11 +64,11 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
       </div>
 
       {/* Main Table */}
-      <div className="sm:overflow-x-auto">
+      <div className="md:overflow-x-auto">
           <table className="w-full">
             <thead>
-              {/* Mobile header (xs only) - 3 columns */}
-              <tr className="sm:hidden border-b border-[color:var(--sf-row-border)]">
+              {/* Mobile header (xs and sm) - 3 columns */}
+              <tr className="md:hidden border-b border-[color:var(--sf-row-border)]">
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Contract
                 </th>
@@ -79,8 +79,8 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                   Exercise Price
                 </th>
               </tr>
-              {/* Desktop header (sm+) - 4 columns */}
-              <tr className="hidden sm:table-row border-b border-[color:var(--sf-row-border)]">
+              {/* Desktop header (md+) - 4 columns */}
+              <tr className="hidden md:table-row border-b border-[color:var(--sf-row-border)]">
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Contract
                 </th>
@@ -101,10 +101,10 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 const rows = [
                   <tr
                     key={contract.id}
-                    className="sm:hidden border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                    className="md:hidden border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
-                    {/* Mobile layout (xs only) - 3 separate cells */}
+                    {/* Mobile layout (xs and sm) - 3 separate cells */}
                     {/* Contract */}
                     <td className="px-6 py-4 align-top">
                       <div className="flex flex-col gap-2">
@@ -153,7 +153,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                   /* Mobile distribution bar row */
                   <tr
                     key={`${contract.id}-bar-mobile`}
-                    className="sm:hidden border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer"
+                    className="md:hidden border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
                     <td colSpan={3} className="px-6 pb-4 pt-0">
@@ -196,10 +196,10 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                       </div>
                     </td>
                   </tr>,
-                  /* Desktop layout (sm+) - separate row */
+                  /* Desktop layout (md+) - separate row */
                   <tr
                     key={`${contract.id}-desktop`}
-                    className="hidden sm:table-row border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                    className="hidden md:table-row border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
                     {/* Contract */}
@@ -253,7 +253,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                   /* Desktop distribution bar row */
                   <tr
                     key={`${contract.id}-bar-desktop`}
-                    className="hidden sm:table-row border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer"
+                    className="hidden md:table-row border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
                     <td colSpan={4} className="px-6 pb-4 pt-0">
@@ -300,7 +300,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 if (isExpanded) {
                   rows.push(
                     <tr key={`${contract.id}-details`} className="bg-[color:var(--sf-primary)]/5">
-                      <td colSpan={3} className="sm:hidden px-6 py-4">
+                      <td colSpan={3} className="md:hidden px-6 py-4">
                         <div className="space-y-2 text-sm text-[color:var(--sf-text)]/80">
                           <div className="font-semibold text-[color:var(--sf-text)] mb-2">
                             {contract.id}
@@ -350,7 +350,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           </div>
                         </div>
                       </td>
-                      <td colSpan={4} className="hidden sm:table-cell px-6 py-4">
+                      <td colSpan={4} className="hidden md:table-cell px-6 py-4">
                         <div className="space-y-2 text-sm text-[color:var(--sf-text)]/80">
                           <div className="font-semibold text-[color:var(--sf-text)] mb-2">
                             {contract.id}
