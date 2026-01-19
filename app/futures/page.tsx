@@ -92,43 +92,44 @@ export default function FuturesPage() {
     <PageContent>
       <AlkanesMainWrapper header={
         <PageHeader
-          title="Coinbase Futures (Coming Soon)"
+          title={<>Coinbase Futures<span className="block text-lg font-semibold text-[color:var(--sf-text)]/60">(Coming Soon)</span></>}
           subtitle={
-            <div className="flex items-center gap-3 text-sm text-[color:var(--sf-text)]/70">
-              <span>Block: {currentBlock || '...'}</span>
-              <span>•</span>
-              <span>{futures.length} active futures</span>
-              {loading && (
-                <>
-                  <span>•</span>
-                  <span>Loading...</span>
-                </>
-              )}
-              {error && (
-                <>
-                  <span>•</span>
-                  <span className="text-red-400">Error: {error}</span>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={handleGenerateFuture}
-                disabled={loading}
-                className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                title="Generate a new future on regtest (requires local node)"
-              >
-                Generate Future
-              </button>
-              <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={loading || isRefreshing}
-                className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
-                title="Refresh futures data"
-              >
-                <RefreshCw size={20} className={loading || isRefreshing ? 'animate-spin' : ''} />
-              </button>
+            <div className="flex flex-col gap-3">
+              {/* Row 1: Block info, futures count, Generate Future button */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm text-[color:var(--sf-text)]/70">
+                <span className="whitespace-nowrap">Block: {currentBlock || '...'}</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="whitespace-nowrap">{futures.length} active futures</span>
+                {loading && (
+                  <>
+                    <span className="hidden sm:inline">•</span>
+                    <span>Loading...</span>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={handleGenerateFuture}
+                  disabled={loading}
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  title="Generate a new future on regtest (requires local node)"
+                >
+                  Generate Future
+                </button>
+              </div>
+
+              {/* Row 2: Markets/Positions tabs and Refresh button */}
+              <div className="flex items-center gap-3">
+                <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={loading || isRefreshing}
+                  className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+                  title="Refresh futures data"
+                >
+                  <RefreshCw size={20} className={loading || isRefreshing ? 'animate-spin' : ''} />
+                </button>
+              </div>
             </div>
           }
           howItWorksButton={
@@ -155,34 +156,34 @@ export default function FuturesPage() {
           <>
             {/* Data Source Banner */}
             {futures.length === 0 && !loading && (
-              <div className="rounded-lg border border-red-900/30 bg-red-900/10 p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-800 flex-shrink-0 mt-0.5">
+              <div className="rounded-lg border border-red-900/30 bg-red-900/10 p-3 sm:p-4 mb-4">
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-800 flex-shrink-0 mt-0.5 sm:w-5 sm:h-5">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                     <line x1="12" y1="9" x2="12" y2="13"/>
                     <line x1="12" y1="17" x2="12.01" y2="17"/>
                   </svg>
                   <div>
-                    <div className="font-semibold text-[color:var(--sf-no-futures-title)] mb-1">No Futures Found</div>
-                    <div className="text-sm text-[color:var(--sf-no-futures-text)]/80">
-                      No deployed futures detected on the blockchain. Click "Generate Future" to create one, or displaying mock data for demo purposes.
+                    <div className="text-sm sm:text-base font-semibold text-[color:var(--sf-no-futures-title)] mb-1">No Futures Found</div>
+                    <div className="text-xs sm:text-sm text-[color:var(--sf-no-futures-text)]/80">
+                      No deployed futures detected. Click "Generate Future" to create one.
                     </div>
                   </div>
                 </div>
               </div>
             )}
-            
+
             {futures.length > 0 && (
-              <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500 flex-shrink-0 mt-0.5">
+              <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-3 sm:p-4 mb-4">
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500 flex-shrink-0 mt-0.5 sm:w-5 sm:h-5">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                     <polyline points="22 4 12 14.01 9 11.01"/>
                   </svg>
                   <div>
-                    <div className="font-semibold text-green-200 mb-1">Live Blockchain Data</div>
-                    <div className="text-sm text-green-200/80">
-                      Showing {futures.length} real future{futures.length === 1 ? '' : 's'} from the blockchain at block {currentBlock}.
+                    <div className="text-sm sm:text-base font-semibold text-green-200 mb-1">Live Blockchain Data</div>
+                    <div className="text-xs sm:text-sm text-green-200/80">
+                      Showing {futures.length} future{futures.length === 1 ? '' : 's'} from block {currentBlock}.
                     </div>
                   </div>
                 </div>
