@@ -27,10 +27,11 @@ type ContractDetailModalProps = {
   data: {
     expiryBlock: number;
     created: string;
-    underlyingYield: string;
+    totalSupply: number;
+    remaining: number;
+    exercised: number;
     vaultFreeCapital: number;
     liquidityDepth: number;
-    dxBTCStatus: string;
   };
   onClose: () => void;
 };
@@ -88,14 +89,14 @@ export default function ContractDetailModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div
         ref={modalRef}
-        className="relative w-full max-w-6xl max-h-[90vh] overflow-y-auto mx-4 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.2)]"
+        className="relative w-full max-w-6xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-4 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.2)]"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 flex items-center justify-between">
+        <div className="sticky top-0 z-10 border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4 sm:p-6 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">{contractId}</h2>
-            <p className="text-sm text-[color:var(--sf-text)]/70 mt-1">
-              Expiry in {timeLeft}, exercise value: {exerciseValue}
+            <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--sf-text)]">{contractId}</h2>
+            <p className="text-xs sm:text-sm text-[color:var(--sf-text)]/70 mt-1">
+              Expiry in {timeLeft} ({data.expiryBlock.toLocaleString()}), exercise value: {exerciseValue}
             </p>
           </div>
           <button
@@ -117,10 +118,10 @@ export default function ContractDetailModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Chart Section */}
-          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
-            <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-4">
+          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-4 sm:p-6">
+            <h3 className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)] mb-4">
               Unlock Value Over Time
             </h3>
             {/* Simple chart visualization */}
@@ -141,8 +142,8 @@ export default function ContractDetailModal({
           </div>
 
           {/* Buy / Sell Panel */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+            <div className="sm:col-span-2 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-4 sm:p-6 space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">Exercise Price (poly):</span>
@@ -182,16 +183,16 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex flex-col xs:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  className="flex-1 px-6 py-3 rounded-lg bg-[color:var(--sf-primary)] text-white font-bold tracking-[0.08em] uppercase shadow-[0_2px_8px_rgba(0,0,0,0.2)] hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="flex-1 px-4 sm:px-6 py-3 rounded-lg bg-[color:var(--sf-primary)] text-white font-bold text-sm sm:text-base tracking-[0.08em] uppercase shadow-[0_2px_8px_rgba(0,0,0,0.2)] hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 >
                   Buy ftrBTC
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 px-6 py-3 rounded-lg font-bold tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  className={`flex-1 px-4 sm:px-6 py-3 rounded-lg font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                     theme === 'dark'
                       ? 'border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
                       : 'border-2 border-[color:var(--sf-primary)] bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/5'
@@ -203,11 +204,12 @@ export default function ContractDetailModal({
             </div>
 
             {/* Advanced Info */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
+            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-4 sm:p-6">
+              {/* Dropdown toggle - only visible on small screens */}
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="w-full flex items-center justify-between text-sm font-semibold text-[color:var(--sf-text)] mb-4"
+                className="sm:hidden w-full flex items-center justify-between text-sm font-semibold text-[color:var(--sf-text)] mb-4"
               >
                 <span>Advanced Info</span>
                 <svg
@@ -222,48 +224,49 @@ export default function ContractDetailModal({
                   <path d="M6 9l6 6 6-6" />
                 </svg>
               </button>
-              {showAdvanced && (
-                <div className="space-y-3 text-xs text-[color:var(--sf-text)]/80">
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">Expiry Block:</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">
-                      {data.expiryBlock.toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">Created:</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">{data.created}</div>
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">Exercise Premium:</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">{exercisePremium.toFixed(2)}%</div>
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">Exercise Price (per 1 BTC):</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">{exerciseValue}</div>
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">Vault free capital:</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">
-                      {data.vaultFreeCapital} BTC
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">Liquidity depth:</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">
-                      {data.liquidityDepth} BTC
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">dxBTC status:</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">{data.dxBTCStatus}</div>
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--sf-text)]/70">Underlying yield:</span>
-                    <div className="font-medium text-[color:var(--sf-text)]">{data.underlyingYield}</div>
+
+              {/* Title - only visible on sm+ screens */}
+              <div className="hidden sm:block text-sm font-semibold text-[color:var(--sf-text)] mb-4">
+                Advanced Info
+              </div>
+
+              {/* Content - dropdown on small screens, always visible on sm+ */}
+              <div className={`space-y-3 text-xs text-[color:var(--sf-text)]/80 ${showAdvanced ? 'block' : 'hidden'} sm:block`}>
+                <div>
+                  <span className="text-[color:var(--sf-text)]/70">Total supply:</span>
+                  <div className="font-medium text-[color:var(--sf-text)]">
+                    {data.totalSupply.toFixed(1)} BTC
                   </div>
                 </div>
-              )}
+                <div>
+                  <span className="text-[color:var(--sf-text)]/70">Remaining:</span>
+                  <div className="font-medium text-[color:var(--sf-text)]">
+                    {data.remaining.toFixed(1)} BTC
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[color:var(--sf-text)]/70">Exercised:</span>
+                  <div className="font-medium text-[color:var(--sf-text)]">
+                    {data.exercised.toFixed(1)} BTC
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[color:var(--sf-text)]/70">Vault free capital:</span>
+                  <div className="font-medium text-[color:var(--sf-text)]">
+                    {data.vaultFreeCapital} BTC
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[color:var(--sf-text)]/70">Liquidity depth:</span>
+                  <div className="font-medium text-[color:var(--sf-text)]">
+                    {data.liquidityDepth} BTC
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[color:var(--sf-text)]/70">Created:</span>
+                  <div className="font-medium text-[color:var(--sf-text)]">{data.created}</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

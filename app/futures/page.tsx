@@ -41,17 +41,19 @@ export default function FuturesPage() {
     remaining: f.remaining,
   })) : mockContracts;
 
-  // Mock contract data
+  // Mock contract data - find the actual contract to get real values
+  const selectedContractData = contracts.find(c => c.id === selectedContract?.id);
   const contractData = selectedContract
     ? {
         id: selectedContract.id,
         blocksLeft: selectedContract.blocksLeft,
-        expiryBlock: 982110,
-        created: '6 blocks ago',
-        underlyingYield: 'auto-compounding',
+        expiryBlock: selectedContractData?.expiryBlock ?? 982110,
+        created: selectedContractData?.created ?? '6 blocks ago',
+        totalSupply: selectedContractData?.totalSupply ?? 100,
+        remaining: selectedContractData?.remaining ?? 75,
+        exercised: selectedContractData?.exercised ?? 25,
         vaultFreeCapital: 310,
         liquidityDepth: 21,
-        dxBTCStatus: 'Healthy',
       }
     : null;
 

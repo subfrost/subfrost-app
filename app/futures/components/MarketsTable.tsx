@@ -79,13 +79,10 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                   Exercise Price
                 </th>
               </tr>
-              {/* Desktop header (sm+) - 5 columns */}
+              {/* Desktop header (sm+) - 4 columns */}
               <tr className="hidden sm:table-row border-b border-[color:var(--sf-row-border)]">
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Contract
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                  Time Left
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Market Price
@@ -136,7 +133,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                               e.stopPropagation();
                               onContractSelect({ id: contract.id, blocksLeft: contract.blocksLeft });
                             }}
-                            className="ml-5 px-3 py-1.5 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none w-fit"
+                            className="ml-5 px-3 py-1.5 text-[10px] font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap"
                           >
                             View Details
                           </button>
@@ -193,27 +190,28 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     </td>
 
                     {/* Desktop layout (sm+) */}
-                    <td colSpan={5} className="hidden sm:table-cell px-6 py-4">
-                      {/* Data grid - 5 columns for desktop */}
-                      <div className="grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-4 items-center mb-3">
-                        {/* Contract */}
-                        <div className="flex items-center gap-2">
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            className={`text-[color:var(--sf-text)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isExpanded ? 'rotate-90' : ''}`}
-                          >
-                            <path d="M9 18l6-6-6-6" />
-                          </svg>
-                          <div className="font-semibold text-[color:var(--sf-text)]">{contract.id}</div>
-                        </div>
-                        {/* Time Left */}
-                        <div className="text-sm text-[color:var(--sf-text)]">
-                          {contract.blocksLeft} blocks remaining
+                    <td colSpan={4} className="hidden sm:table-cell px-6 py-4">
+                      {/* Data grid - 4 columns for desktop */}
+                      <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 items-center mb-3">
+                        {/* Contract with Time Left underneath */}
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              className={`text-[color:var(--sf-text)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isExpanded ? 'rotate-90' : ''}`}
+                            >
+                              <path d="M9 18l6-6-6-6" />
+                            </svg>
+                            <div className="font-semibold text-[color:var(--sf-text)]">{contract.id}</div>
+                          </div>
+                          <div className="text-xs text-[color:var(--sf-text)]/60 ml-5">
+                            {contract.blocksLeft} blocks remaining
+                          </div>
                         </div>
                         {/* Market Price */}
                         <div className="text-sm text-[color:var(--sf-text)]">
@@ -333,7 +331,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           </div>
                         </div>
                       </td>
-                      <td colSpan={5} className="hidden sm:table-cell px-6 py-4">
+                      <td colSpan={4} className="hidden sm:table-cell px-6 py-4">
                         <div className="space-y-2 text-sm text-[color:var(--sf-text)]/80">
                           <div className="font-semibold text-[color:var(--sf-text)] mb-2">
                             {contract.id}
