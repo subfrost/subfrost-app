@@ -215,14 +215,8 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
           <table className="w-full">
             <thead>
               <tr className="border-b border-[color:var(--sf-row-border)]">
-                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                  Contract
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                  Market Price
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                  Exercise Price
+                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70" colSpan={3}>
+                  Contract Details
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
                   Actions
@@ -238,42 +232,88 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
-                    {/* Contract */}
-                    <td className="px-6 py-4 align-top">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            className={`text-[color:var(--sf-text)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isExpanded ? 'rotate-90' : ''}`}
-                          >
-                            <path d="M9 18l6-6-6-6" />
-                          </svg>
-                          <div className="font-semibold text-[color:var(--sf-text)]">{contract.id}</div>
+                    {/* Contract + Distribution Bar */}
+                    <td className="px-6 py-4" colSpan={3}>
+                      <div className="flex flex-col gap-3">
+                        {/* Contract Info Row */}
+                        <div className="flex items-start gap-8">
+                          {/* Contract */}
+                          <div className="flex flex-col gap-1 min-w-[180px]">
+                            <div className="flex items-center gap-2">
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                className={`text-[color:var(--sf-text)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isExpanded ? 'rotate-90' : ''}`}
+                              >
+                                <path d="M9 18l6-6-6-6" />
+                              </svg>
+                              <div className="font-semibold text-[color:var(--sf-text)]">{contract.id}</div>
+                            </div>
+                            <div className="text-xs text-[color:var(--sf-text)]/60 ml-5">
+                              {contract.blocksLeft} blocks remaining
+                            </div>
+                          </div>
+                          {/* Market Price */}
+                          <div className="min-w-[120px]">
+                            <div className="text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/50 mb-1">Market Price</div>
+                            <div className="text-sm text-[color:var(--sf-text)]">
+                              {contract.marketPriceNum.toFixed(3)} BTC
+                            </div>
+                          </div>
+                          {/* Exercise Price */}
+                          <div className="min-w-[120px]">
+                            <div className="text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/50 mb-1">Exercise Price</div>
+                            <div className="text-sm font-medium text-[color:var(--sf-text)]">
+                              {calculateExercisePrice(contract.blocksLeft).toFixed(3)} BTC
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60 ml-5">
-                          {contract.blocksLeft} blocks remaining
+                        {/* Distribution Bar */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2.5 rounded-full bg-[color:var(--sf-glass-border)] overflow-hidden relative">
+                              <div
+                                className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-10"
+                                style={{
+                                  width: `${(contract.exercised / contract.totalSupply) * 100}%`,
+                                }}
+                              />
+                              {contract.mempoolQueue > 0 && (
+                                <div
+                                  className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-20"
+                                  style={{
+                                    width: `${(contract.mempoolQueue / contract.totalSupply) * 100}%`,
+                                    left: `${(contract.exercised / contract.totalSupply) * 100}%`,
+                                  }}
+                                />
+                              )}
+                            </div>
+                            <span className="text-xs font-medium text-[color:var(--sf-text)] whitespace-nowrap">
+                              {contract.remaining.toFixed(1)}/{contract.totalSupply.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-[color:var(--sf-text)]/60">
+                            <span>
+                              {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) remaining
+                              {contract.mempoolQueue > 0 && (
+                                <span className="ml-1 text-[color:var(--sf-primary)]/90">
+                                  ({contract.mempoolQueue.toFixed(1)} in mempool)
+                                </span>
+                              )}
+                            </span>
+                            <span>
+                              {((contract.exercised / contract.totalSupply) * 100).toFixed(1)}% exercised
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    {/* Market Price */}
-                    <td className="px-6 py-4 align-top">
-                      <div className="text-sm text-[color:var(--sf-text)]">
-                        {contract.marketPriceNum.toFixed(3)} BTC
-                      </div>
-                    </td>
-                    {/* Exercise Price */}
-                    <td className="px-6 py-4 align-top">
-                      <div className="text-sm font-medium text-[color:var(--sf-text)]">
-                        {calculateExercisePrice(contract.blocksLeft).toFixed(3)} BTC
                       </div>
                     </td>
                     {/* Actions */}
-                    <td className="px-6 py-4 align-top">
+                    <td className="px-6 py-4 align-middle">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -284,51 +324,6 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                       >
                         Buy/Sell
                       </button>
-                    </td>
-                  </tr>,
-                  <tr
-                    key={`${contract.id}-bar-desktop`}
-                    className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer"
-                    onClick={() => toggleRow(contract.id)}
-                  >
-                    <td colSpan={4} className="px-6 pb-4 pt-0">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2.5 rounded-full bg-[color:var(--sf-glass-border)] overflow-hidden relative">
-                            <div
-                              className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-10"
-                              style={{
-                                width: `${(contract.exercised / contract.totalSupply) * 100}%`,
-                              }}
-                            />
-                            {contract.mempoolQueue > 0 && (
-                              <div
-                                className="absolute left-0 top-0 h-full bg-[color:var(--sf-primary)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-20"
-                                style={{
-                                  width: `${(contract.mempoolQueue / contract.totalSupply) * 100}%`,
-                                  left: `${(contract.exercised / contract.totalSupply) * 100}%`,
-                                }}
-                              />
-                            )}
-                          </div>
-                          <span className="text-xs font-medium text-[color:var(--sf-text)] whitespace-nowrap">
-                            {contract.remaining.toFixed(1)}/{contract.totalSupply.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-[color:var(--sf-text)]/60">
-                          <span>
-                            {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) remaining
-                            {contract.mempoolQueue > 0 && (
-                              <span className="ml-1 text-[color:var(--sf-primary)]/90">
-                                ({contract.mempoolQueue.toFixed(1)} in mempool)
-                              </span>
-                            )}
-                          </span>
-                          <span>
-                            {contract.exercised.toFixed(1)} BTC ({((contract.exercised / contract.totalSupply) * 100).toFixed(1)}%) exercised
-                          </span>
-                        </div>
-                      </div>
                     </td>
                   </tr>,
                 ];
