@@ -154,7 +154,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
   }
 
   return (
-    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center ${shouldBeCircular ? 'rounded-full border border-[color:var(--sf-text)]/30 bg-transparent p-0.5' : ''}`}>
+    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center ${shouldBeCircular ? 'overflow-hidden rounded-full border border-[color:var(--sf-text)]/30 bg-transparent p-0.5' : ''}`}>
       {isLoading && (
         <div className={`absolute inset-0 inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white`}>
           {displayText}
