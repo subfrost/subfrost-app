@@ -68,7 +68,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
             <img
               src={vault.iconPath || `/tokens/${vault.tokenSymbol.toLowerCase()}.svg`}
               alt={`${vault.tokenSymbol} icon`}
-              className={`object-contain ${vault.tokenSymbol === 'DIESEL' ? 'w-8 h-8' : 'w-full h-full'}`}
+              className={`object-contain rounded-full ${vault.tokenSymbol === 'DIESEL' ? 'w-8 h-8' : 'w-full h-full'}`}
             />
           </div>
           <div className="min-w-0 flex-1 text-left">
@@ -133,7 +133,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
             <img
               src={vault.iconPath || `/tokens/${vault.tokenSymbol.toLowerCase()}.svg`}
               alt={`${vault.tokenSymbol} icon`}
-              className={`object-contain ${vault.tokenSymbol === 'DIESEL' ? 'w-10 h-10' : 'w-full h-full'}`}
+              className={`object-contain rounded-full ${vault.tokenSymbol === 'DIESEL' ? 'w-10 h-10' : 'w-full h-full'}`}
             />
           </div>
         </div>

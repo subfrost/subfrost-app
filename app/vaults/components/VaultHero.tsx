@@ -96,7 +96,7 @@ export default function VaultHero({
             <img
               src={iconPath || `/tokens/${tokenSymbol.toLowerCase()}.svg`}
               alt={`${tokenSymbol} icon`}
-              className={`object-contain rounded-2xl ${tokenSymbol === 'DIESEL' ? 'w-32 h-32' : 'w-40 h-40'}`}
+              className={`object-contain rounded-full ${tokenSymbol === 'DIESEL' ? 'w-32 h-32' : 'w-40 h-40'}`}
             />
           </div>
         </div>
