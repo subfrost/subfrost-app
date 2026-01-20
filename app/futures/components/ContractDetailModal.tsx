@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import NumberField from '@/app/components/NumberField';
+import TokenIcon from '@/app/components/TokenIcon';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)
@@ -44,7 +46,8 @@ export default function ContractDetailModal({
   const [amount, setAmount] = useState('1.00');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  
+  const { data: btcPrice } = useBtcPrice();
+
   // Calculate exercise values
   const exercisePremium = calculateExercisePremium(blocksLeft);
   const exercisePrice = calculateExercisePrice(blocksLeft);
@@ -157,8 +160,22 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-                <div className="flex flex-col gap-1">
+              <div className="relative rounded-2xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                {/* Token display - floating top-right */}
+                <div className="absolute right-4 top-4 z-10">
+                  <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                    <TokenIcon
+                      symbol="BTC"
+                      id="btc"
+                      size="sm"
+                    />
+                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                      ftrBTC
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1 pr-32">
                   <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to buy</span>
                   <NumberField
                     value={amount}
@@ -166,7 +183,9 @@ export default function ContractDetailModal({
                     placeholder="0.00"
                     align="left"
                   />
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/50">ftrBTC</div>
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                    ${amount && parseFloat(amount) > 0 && btcPrice ? (parseFloat(amount) * btcPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                  </div>
                 </div>
               </div>
 
