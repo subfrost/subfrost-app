@@ -73,7 +73,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 className="p-4 cursor-pointer hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 onClick={() => toggleRow(contract.id)}
               >
-                {/* Header row: Contract ID + View Details */}
+                {/* Header row: Contract ID + Buy/Sell */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <svg
@@ -97,7 +97,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     }}
                     className="px-3 py-1.5 text-[10px] font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap"
                   >
-                    View Details
+                    Buy/Sell
                   </button>
                 </div>
 
@@ -282,7 +282,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                         }}
                         className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                       >
-                        View Details
+                        Buy/Sell
                       </button>
                     </td>
                   </tr>,

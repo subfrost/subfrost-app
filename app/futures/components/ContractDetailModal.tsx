@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import NumberField from '@/app/components/NumberField';
-import { useTheme } from '@/context/ThemeContext';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)
@@ -45,7 +44,6 @@ export default function ContractDetailModal({
   const [amount, setAmount] = useState('1.00');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  const { theme } = useTheme();
   
   // Calculate exercise values
   const exercisePremium = calculateExercisePremium(blocksLeft);
@@ -86,32 +84,32 @@ export default function ContractDetailModal({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
       <div
         ref={modalRef}
-        className="relative w-full max-w-6xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-4 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.2)]"
+        className="relative w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4 sm:p-6 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--sf-text)]">{contractId}</h2>
-            <p className="text-xs sm:text-sm text-[color:var(--sf-text)]/70 mt-1">
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{contractId}</h2>
+            <p className="text-xs sm:text-sm font-medium text-[color:var(--sf-text)]/60 mt-1">
               Expiry in {timeLeft} ({data.expiryBlock.toLocaleString()}), exercise value: {exerciseValue}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+            aria-label="Close"
           >
             <svg
-              width="24"
-              height="24"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
-              className="text-[color:var(--sf-text)]"
             >
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
@@ -120,7 +118,7 @@ export default function ContractDetailModal({
 
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Chart Section */}
-          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-4 sm:p-6">
+          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <h3 className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)] mb-4">
               Unlock Value Over Time
             </h3>
@@ -143,7 +141,7 @@ export default function ContractDetailModal({
 
           {/* Buy / Sell Panel */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-            <div className="sm:col-span-2 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-4 sm:p-6 space-y-4">
+            <div className="sm:col-span-2 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">Exercise Price (poly):</span>
@@ -159,22 +157,20 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-[color:var(--sf-text)] mb-2">
-                  Amount to buy:
-                </label>
-                <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4">
+              <div className="rounded-2xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to buy</span>
                   <NumberField
                     value={amount}
                     onChange={setAmount}
                     placeholder="0.00"
                     align="left"
                   />
-                  <div className="text-xs text-[color:var(--sf-text)]/70 mt-1">ftrBTC</div>
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/50">ftrBTC</div>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/50 p-4">
+              <div className="rounded-xl bg-[color:var(--sf-primary)]/20 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">Estimated cost:</span>
                   <span className="font-medium text-[color:var(--sf-text)]">
@@ -186,17 +182,13 @@ export default function ContractDetailModal({
               <div className="flex flex-col xs:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  className="flex-1 px-4 sm:px-6 py-3 rounded-lg bg-[color:var(--sf-primary)] text-white font-bold text-sm sm:text-base tracking-[0.08em] uppercase shadow-[0_2px_8px_rgba(0,0,0,0.2)] hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="flex-1 px-4 sm:px-6 py-3 rounded-xl bg-[color:var(--sf-primary)] text-white font-bold text-sm sm:text-base tracking-[0.08em] uppercase shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)] hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 >
                   Buy ftrBTC
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 px-4 sm:px-6 py-3 rounded-lg font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                    theme === 'dark'
-                      ? 'border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                      : 'border-2 border-[color:var(--sf-primary)] bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary)]/5'
-                  }`}
+                  className="flex-1 px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
                   Sell ftrBTC
                 </button>
@@ -204,7 +196,7 @@ export default function ContractDetailModal({
             </div>
 
             {/* Advanced Info */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-4 sm:p-6">
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
               {/* Dropdown toggle - only visible on small screens */}
               <button
                 type="button"
