@@ -59,6 +59,18 @@ const MarketsSkeleton = () => (
   </div>
 );
 
+// Whitelisted token symbols (mainnet only)
+// On non-mainnet networks, all tokens are allowed
+const MAINNET_WHITELISTED_TOKEN_SYMBOLS = new Set([
+  'BTC',
+  'frBTC',
+  'bUSD',
+  'DIESEL',
+  'ALKAMIST',
+  'GOLD DUST',
+  'METHANE',
+]);
+
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
   const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
@@ -263,17 +275,19 @@ export default function SwapShell() {
     const toId = toToken?.id;
     const isToAltToken = toId ? !baseTokenIds.has(toId) : false;
 
-    // Helper to check if a token should be shown
-    const shouldShowToken = (tokenId: string): boolean => {
+    // Helper to check if a token should be shown (by ID and symbol)
+    const shouldShowToken = (tokenId: string, symbol: string): boolean => {
       if (tokenId === toId) return false; // Can't swap from self
       if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
+      // On mainnet, only show whitelisted tokens by symbol
+      if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
       // If TO is an alt token, only allow base tokens in FROM
       if (isToAltToken && !baseTokenIds.has(tokenId)) return false;
       return true;
     };
 
     // Always add BTC first (always available)
-    if (shouldShowToken('btc')) {
+    if (shouldShowToken('btc', 'BTC')) {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
@@ -284,7 +298,7 @@ export default function SwapShell() {
     }
 
     // Always add frBTC (BTC <-> frBTC wrapping is always allowed)
-    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID)) {
+    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID, 'frBTC')) {
       opts.push({
         id: FRBTC_ALKANE_ID,
         symbol: 'frBTC',
@@ -295,23 +309,25 @@ export default function SwapShell() {
     }
 
     // Add bUSD/DIESEL (available before pools load)
-    if (BUSD_ALKANE_ID && shouldShowToken(BUSD_ALKANE_ID)) {
+    if (BUSD_ALKANE_ID) {
       // Use poolTokenMap for correct symbol if available, otherwise use network-appropriate default
       const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
       const symbol = busdToken?.symbol ?? (network === 'mainnet' ? 'bUSD' : 'DIESEL');
       const name = busdToken?.name ?? symbol;
-      opts.push({
-        id: BUSD_ALKANE_ID,
-        symbol,
-        name,
-        isAvailable: true
-      });
-      seen.add(BUSD_ALKANE_ID);
+      if (shouldShowToken(BUSD_ALKANE_ID, symbol)) {
+        opts.push({
+          id: BUSD_ALKANE_ID,
+          symbol,
+          name,
+          isAvailable: true
+        });
+        seen.add(BUSD_ALKANE_ID);
+      }
     }
 
     // Add tokens from pool data (only if TO is not an alt token)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id)) {
+      if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
         opts.push({
           ...poolToken,
           isAvailable: true
@@ -322,11 +338,12 @@ export default function SwapShell() {
 
     // Also add tokens from user's wallet that aren't in pools yet
     userCurrencies.forEach((currency: any) => {
-      if (!seen.has(currency.id) && shouldShowToken(currency.id)) {
+      const symbol = currency.symbol || currency.name || currency.id;
+      if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
         seen.add(currency.id);
         opts.push({
           id: currency.id,
-          symbol: currency.symbol || currency.name || currency.id,
+          symbol,
           name: currency.name || currency.symbol || currency.id,
           iconUrl: currency.iconUrl,
           isAvailable: true,
@@ -369,10 +386,12 @@ export default function SwapShell() {
       }
     }
 
-    // Helper to check if a token should be shown
-    const shouldShowToken = (tokenId: string): boolean => {
+    // Helper to check if a token should be shown (by ID and symbol)
+    const shouldShowToken = (tokenId: string, symbol: string): boolean => {
       if (tokenId === fromId) return false; // Can't swap to self
       if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
+      // On mainnet, only show whitelisted tokens by symbol
+      if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
 
       if (isFromBaseToken) {
         // From base token: show tokens that have pools with it
@@ -392,7 +411,7 @@ export default function SwapShell() {
     };
 
     // Add BTC first (if allowed)
-    if (shouldShowToken('btc')) {
+    if (shouldShowToken('btc', 'BTC')) {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
@@ -403,7 +422,7 @@ export default function SwapShell() {
     }
 
     // Add frBTC (BTC <-> frBTC wrapping is always allowed)
-    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID)) {
+    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID, 'frBTC')) {
       opts.push({
         id: FRBTC_ALKANE_ID,
         symbol: 'frBTC',
@@ -414,23 +433,26 @@ export default function SwapShell() {
     }
 
     // Add bUSD if it should be shown
-    if (BUSD_ALKANE_ID && !seen.has(BUSD_ALKANE_ID) && shouldShowToken(BUSD_ALKANE_ID)) {
+    if (BUSD_ALKANE_ID && !seen.has(BUSD_ALKANE_ID)) {
       const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
       // Use network-appropriate default symbol when pool data isn't loaded yet
       const defaultSymbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
-      opts.push({
-        id: BUSD_ALKANE_ID,
-        symbol: busdToken?.symbol ?? defaultSymbol,
-        name: busdToken?.name ?? defaultSymbol,
-        isAvailable: true
-      });
-      seen.add(BUSD_ALKANE_ID);
+      const symbol = busdToken?.symbol ?? defaultSymbol;
+      if (shouldShowToken(BUSD_ALKANE_ID, symbol)) {
+        opts.push({
+          id: BUSD_ALKANE_ID,
+          symbol,
+          name: busdToken?.name ?? defaultSymbol,
+          isAvailable: true
+        });
+        seen.add(BUSD_ALKANE_ID);
+      }
     }
 
     // Add remaining tokens from pool data (only if from base token)
     if (isFromBaseToken) {
       Array.from(poolTokenMap.values()).forEach((poolToken) => {
-        if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id)) {
+        if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
           opts.push({
             ...poolToken,
             isAvailable: true
@@ -441,11 +463,12 @@ export default function SwapShell() {
 
       // Also add tokens from user's wallet that have pools with FROM token
       userCurrencies.forEach((currency: any) => {
-        if (!seen.has(currency.id) && shouldShowToken(currency.id)) {
+        const symbol = currency.symbol || currency.name || currency.id;
+        if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
           seen.add(currency.id);
           opts.push({
             id: currency.id,
-            symbol: currency.symbol || currency.name || currency.id,
+            symbol,
             name: currency.name || currency.symbol || currency.id,
             iconUrl: currency.iconUrl,
             isAvailable: true,
@@ -1102,7 +1125,11 @@ export default function SwapShell() {
       });
     }
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id)) {
+      // Check ID whitelist and symbol whitelist (mainnet only)
+      const passesIdWhitelist = whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id);
+      const passesSymbolWhitelist = network !== 'mainnet' || MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(poolToken.symbol);
+
+      if (passesIdWhitelist && passesSymbolWhitelist && !seen.has(poolToken.id)) {
         seen.add(poolToken.id);
         const currency = idToUserCurrency.get(poolToken.id);
 
@@ -1132,7 +1159,12 @@ export default function SwapShell() {
     // Also add tokens from user's wallet that aren't in pools yet
     // This allows users to add liquidity for new token pairs
     userCurrencies.forEach((currency: any) => {
-      if (!seen.has(currency.id) && (whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id))) {
+      const symbol = currency.symbol || currency.name || currency.id;
+      // Check ID whitelist and symbol whitelist (mainnet only)
+      const passesIdWhitelist = whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id);
+      const passesSymbolWhitelist = network !== 'mainnet' || MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol);
+
+      if (!seen.has(currency.id) && passesIdWhitelist && passesSymbolWhitelist) {
         seen.add(currency.id);
 
         // Check if this token can pair with the counterpart token (if selected)
@@ -1148,7 +1180,7 @@ export default function SwapShell() {
 
         opts.push({
           id: currency.id,
-          symbol: currency.symbol || currency.name || currency.id,
+          symbol,
           name: currency.name || currency.symbol || currency.id,
           iconUrl: currency.iconUrl,
           balance: currency.balance,
