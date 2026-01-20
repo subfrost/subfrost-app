@@ -130,9 +130,6 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
   const gradient = getGradientColors(symbol || id || 'BTC');
   const sizeClass = sizeMap[size];
   const displayText = (symbol || id || '??').slice(0, 2).toUpperCase();
-  
-  // Check if this token should be displayed as a circle
-  const shouldBeCircular = symbol === 'ALKAMIST' || symbol === 'GOLD DUST';
 
   const handleError = () => {
     // Try next path if available
@@ -153,8 +150,9 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     );
   }
 
+  // All token icons are rendered as circles
   return (
-    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center ${shouldBeCircular ? 'overflow-hidden rounded-full border border-[color:var(--sf-text)]/30 bg-transparent p-0.5' : ''}`}>
+    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center overflow-hidden rounded-full`}>
       {isLoading && (
         <div className={`absolute inset-0 inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white`}>
           {displayText}
@@ -165,7 +163,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}
-        className={`${shouldBeCircular ? 'h-full w-full object-contain' : sizeClass} ${shouldBeCircular ? '' : className} transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        className={`${sizeClass} rounded-full object-cover transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
         onError={handleError}
       />
