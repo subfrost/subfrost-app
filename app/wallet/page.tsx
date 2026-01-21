@@ -62,29 +62,56 @@ export default function WalletDashboardPage() {
       <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-4 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
           {/* Header */}
           <div className="mb-8">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-              <h1 className="text-2xl sm:text-3xl font-bold text-[color:var(--sf-text)]">Wallet Dashboard</h1>
-              <div className="flex gap-2 items-center">
+            {/* Mobile: Title + gear on top, Send/Receive below */}
+            <div className="md:hidden">
+              <div className="flex items-center justify-between mb-4">
+                <h1 className="text-2xl font-bold text-[color:var(--sf-text)]">Wallet Dashboard</h1>
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className={`p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                    activeTab === 'settings'
+                      ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
+                      : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
+                  }`}
+                  title="Settings"
+                >
+                  <Settings size={18} />
+                </button>
+              </div>
+              <div className="flex gap-2 mb-4">
                 <button
                   onClick={() => setShowSendModal(true)}
-                  className="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm sm:text-base"
+                  className="px-3 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm"
                 >
                   <Send size={18} />
                   Send
                 </button>
                 <button
                   onClick={() => setShowReceiveModal(true)}
-                  className="px-3 sm:px-4 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-sm sm:text-base"
+                  className="px-3 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-sm"
                 >
                   <QrCode size={18} />
                   Receive
                 </button>
+              </div>
+            </div>
+            {/* Desktop: Title + Send/Receive on same row */}
+            <div className="hidden md:flex md:items-center md:justify-between mb-4">
+              <h1 className="text-3xl font-bold text-[color:var(--sf-text)]">Wallet Dashboard</h1>
+              <div className="flex gap-2 items-center">
                 <button
-                  onClick={() => setActiveTab('settings')}
-                  className="p-2.5 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms]"
-                  title="Settings"
+                  onClick={() => setShowSendModal(true)}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-base"
                 >
-                  <Settings size={18} />
+                  <Send size={18} />
+                  Send
+                </button>
+                <button
+                  onClick={() => setShowReceiveModal(true)}
+                  className="px-4 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-base"
+                >
+                  <QrCode size={18} />
+                  Receive
                 </button>
               </div>
             </div>
@@ -132,7 +159,7 @@ export default function WalletDashboardPage() {
 
           {/* Tab Navigation */}
           <div className="border-b border-[color:var(--sf-outline)] mb-6">
-            <div className="flex gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -150,6 +177,20 @@ export default function WalletDashboardPage() {
                   </button>
                 );
               })}
+              {/* Spacer to push gear to the right - desktop only */}
+              <div className="hidden md:block flex-grow" />
+              {/* Settings gear button - desktop only (mobile has it in header) */}
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`hidden md:block p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 ${
+                  activeTab === 'settings'
+                    ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
+                    : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
+                }`}
+                title="Settings"
+              >
+                <Settings size={18} />
+              </button>
             </div>
           </div>
 
