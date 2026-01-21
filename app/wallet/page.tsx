@@ -66,13 +66,6 @@ export default function WalletDashboardPage() {
               <h1 className="text-2xl sm:text-3xl font-bold text-[color:var(--sf-text)]">Wallet Dashboard</h1>
               <div className="flex gap-2 items-center">
                 <button
-                  onClick={() => setActiveTab('settings')}
-                  className="p-2.5 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms]"
-                  title="Settings"
-                >
-                  <Settings size={18} />
-                </button>
-                <button
                   onClick={() => setShowSendModal(true)}
                   className="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm sm:text-base"
                 >
@@ -85,6 +78,13 @@ export default function WalletDashboardPage() {
                 >
                   <QrCode size={18} />
                   Receive
+                </button>
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="p-2.5 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms]"
+                  title="Settings"
+                >
+                  <Settings size={18} />
                 </button>
               </div>
             </div>
