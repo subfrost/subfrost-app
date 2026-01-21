@@ -74,9 +74,6 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
                 )}
               </button>
             </div>
-            {copied && (
-              <div className="text-sm text-green-500 dark:text-green-400">Address copied to clipboard!</div>
-            )}
           </div>
 
           {/* Warning */}
