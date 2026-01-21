@@ -13,7 +13,7 @@ interface ReceiveModalProps {
 export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   const { address } = useWallet() as any;
   const [copied, setCopied] = useState(false);
-  const qrSize = 300; // Fixed size
+  const qrSize = 225; // 75% of original 300
 
   if (!isOpen) return null;
 
@@ -92,18 +92,6 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
             </div>
           </div>
 
-          {/* Bitcoin URL (for wallet apps) */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">Bitcoin URL</label>
-            <div className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-              <span className="text-xs break-all text-[color:var(--sf-text)]/80">
-                bitcoin:{address}
-              </span>
-            </div>
-            <div className="text-xs text-[color:var(--sf-text)]/40">
-              Use this URL to open directly in mobile wallets.
-            </div>
-          </div>
         </div>
 
       </div>
