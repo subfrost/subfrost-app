@@ -58,16 +58,20 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           {/* Address */}
           <div className="space-y-2">
             <label className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">Your Bitcoin Address</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm break-all text-[color:var(--sf-text)]">
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <span className="flex-1 text-sm break-all text-[color:var(--sf-text)]">
                 {address}
-              </div>
+              </span>
               <button
                 onClick={copyAddress}
-                className="p-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
+                className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0"
                 title="Copy address"
               >
-                {copied ? <Check size={20} /> : <Copy size={20} />}
+                {copied ? (
+                  <Check size={14} className="text-green-500" />
+                ) : (
+                  <Copy size={14} className="text-[color:var(--sf-text)]/60" />
+                )}
               </button>
             </div>
             {copied && (
@@ -102,15 +106,6 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-6">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   );
