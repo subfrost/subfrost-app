@@ -50,11 +50,11 @@ export default function WalletDashboardPage() {
     return null;
   }
 
+  // Settings tab is rendered separately for responsive control
   const tabs = [
     { id: 'balances' as TabView, label: 'Balances', icon: Wallet },
     { id: 'utxos' as TabView, label: 'UTXO Management', icon: BarChart2 },
     { id: 'transactions' as TabView, label: 'Transaction History', icon: Activity },
-    { id: 'settings' as TabView, label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -64,7 +64,14 @@ export default function WalletDashboardPage() {
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
               <h1 className="text-2xl sm:text-3xl font-bold text-[color:var(--sf-text)]">Wallet Dashboard</h1>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="p-2.5 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms]"
+                  title="Settings"
+                >
+                  <Settings size={18} />
+                </button>
                 <button
                   onClick={() => setShowSendModal(true)}
                   className="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm sm:text-base"
