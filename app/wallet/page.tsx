@@ -67,16 +67,16 @@ export default function WalletDashboardPage() {
               <div className="flex gap-2 items-center">
                 <button
                   onClick={() => setShowSendModal(true)}
-                  className="px-3 md:px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm md:text-base"
+                  className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-primary)] text-white text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
                 >
-                  <Send size={18} />
+                  <Send size={16} />
                   Send
                 </button>
                 <button
                   onClick={() => setShowReceiveModal(true)}
-                  className="px-3 md:px-4 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-sm md:text-base"
+                  className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
                 >
-                  <QrCode size={18} />
+                  <QrCode size={16} />
                   Receive
                 </button>
               </div>
