@@ -125,22 +125,22 @@ export default function WalletDashboardPage() {
 
           {/* Tab Navigation */}
           <div className="border-b border-[color:var(--sf-outline)] mb-6">
-            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-xs sm:text-base shrink-0 ${
+                    className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-xs md:text-base shrink-0 ${
                       activeTab === tab.id
                         ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                         : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
                     }`}
                   >
-                    <Icon size={16} className="sm:w-5 sm:h-5" />
-                    <span className="whitespace-nowrap sm:hidden">{tab.shortLabel}</span>
-                    <span className="whitespace-nowrap hidden sm:inline">{tab.label}</span>
+                    <Icon size={16} className="md:w-5 md:h-5" />
+                    <span className="whitespace-nowrap md:hidden">{tab.shortLabel}</span>
+                    <span className="whitespace-nowrap hidden md:inline">{tab.label}</span>
                   </button>
                 );
               })}
@@ -149,14 +149,14 @@ export default function WalletDashboardPage() {
               {/* Settings gear button */}
               <button
                 onClick={() => setActiveTab('settings')}
-                className={`p-2 sm:p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 ${
+                className={`p-2 md:p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 ${
                   activeTab === 'settings'
                     ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
                     : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
                 title="Settings"
               >
-                <Settings size={16} className="sm:w-[18px] sm:h-[18px]" />
+                <Settings size={16} className="md:w-[18px] md:h-[18px]" />
               </button>
             </div>
           </div>

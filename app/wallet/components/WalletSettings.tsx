@@ -322,313 +322,319 @@ export default function WalletSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Network Selection */}
-      <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Network size={24} className="text-[color:var(--sf-primary)]" />
-          <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Network Configuration</h3>
+      {/* Grid layout: HD Wallet on left, Network + Security on right (md+) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Left Column: HD Wallet Derivation */}
+        <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6 md:order-1">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Key size={24} className="text-yellow-400" />
+              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">HD Wallet Derivation</h3>
+            </div>
+          </div>
+
+          {!wallet ? (
+            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
+              Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Current Addresses Display */}
+              <div className="rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4">
+                <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-3">Current Active Addresses:</div>
+                <div className="space-y-3">
+                  {account?.taproot && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
+                      <div>
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
+                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
+                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.taproot.hdPath}</div>
+                      </div>
+                    </div>
+                  )}
+                  {account?.nativeSegwit && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
+                      <div>
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
+                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
+                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.nativeSegwit.hdPath}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Tip - shown above Configure Derivation button */}
+              <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-3 text-xs text-[color:var(--sf-primary)]">
+                💡 Tip: Use different account indices to manage multiple wallets from the same seed phrase. The address index is typically incremented for each new receiving address.
+              </div>
+
+              {/* Configure Derivation Toggle Button */}
+              <button
+                onClick={() => setShowDerivationConfig(!showDerivationConfig)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+              >
+                {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                <span>Configure Derivation</span>
+              </button>
+
+              {/* Collapsible Derivation Configuration */}
+              {showDerivationConfig && (
+                <div className="space-y-6 pt-2">
+                  {/* Taproot Path Configuration */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
+                        Taproot (BIP-86) - {taprootPath}
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Account</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={taprootConfig.accountIndex}
+                          onChange={(e) => setTaprootConfig({ ...taprootConfig, accountIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
+                        <div className="relative">
+                          <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
+                          <select
+                            value={taprootConfig.changeIndex}
+                            onChange={(e) => setTaprootConfig({ ...taprootConfig, changeIndex: parseInt(e.target.value) })}
+                            className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+                          >
+                            <option value="0">External (0)</option>
+                            <option value="1">Change (1)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Address Index</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={taprootConfig.addressIndex}
+                          onChange={(e) => setTaprootConfig({ ...taprootConfig, addressIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                    </div>
+
+                    {previewAddresses.taproot && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
+                        <div className="flex-1 mr-2">
+                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
+                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
+                        </div>
+                        <button
+                          onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
+                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          title="Copy address"
+                        >
+                          {copiedAddress === 'taproot' ? (
+                            <Check size={16} className="text-green-400" />
+                          ) : (
+                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SegWit Path Configuration */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
+                        Native SegWit (BIP-84) - {segwitPath}
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Account</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={segwitConfig.accountIndex}
+                          onChange={(e) => setSegwitConfig({ ...segwitConfig, accountIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
+                        <div className="relative">
+                          <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
+                          <select
+                            value={segwitConfig.changeIndex}
+                            onChange={(e) => setSegwitConfig({ ...segwitConfig, changeIndex: parseInt(e.target.value) })}
+                            className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+                          >
+                            <option value="0">External (0)</option>
+                            <option value="1">Change (1)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Address Index</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={segwitConfig.addressIndex}
+                          onChange={(e) => setSegwitConfig({ ...segwitConfig, addressIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                    </div>
+
+                    {previewAddresses.segwit && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
+                        <div className="flex-1 mr-2">
+                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
+                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
+                        </div>
+                        <button
+                          onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
+                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          title="Copy address"
+                        >
+                          {copiedAddress === 'segwit' ? (
+                            <Check size={16} className="text-green-400" />
+                          ) : (
+                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Save Button - inside collapsible section */}
+                  <button
+                    onClick={handleSave}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
+                  >
+                    <Save size={20} />
+                    {saved ? 'Settings Saved!' : 'Save Settings'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
-              Select Network
-            </label>
-            {isBrowserWallet ? (
-              // Browser wallet - show detected network (read-only)
-              <div className="relative">
-                <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/40 pointer-events-none" />
-                {browserWalletNetwork?.isRecognized ? (
-                  <div className="w-full rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-text)]/60 cursor-not-allowed">
-                    {getNetworkDisplayName(browserWalletNetwork.network, browserWalletNetwork.isRecognized)}
+        {/* Right Column: Network Configuration + Security & Backup */}
+        <div className="space-y-6 md:order-2">
+          {/* Network Selection */}
+          <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Network size={24} className="text-[color:var(--sf-primary)]" />
+              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Network Configuration</h3>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
+                  Select Network
+                </label>
+                {isBrowserWallet ? (
+                  // Browser wallet - show detected network (read-only)
+                  <div className="relative">
+                    <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/40 pointer-events-none" />
+                    {browserWalletNetwork?.isRecognized ? (
+                      <div className="w-full rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-text)]/60 cursor-not-allowed">
+                        {getNetworkDisplayName(browserWalletNetwork.network, browserWalletNetwork.isRecognized)}
+                      </div>
+                    ) : (
+                      <div className="w-full rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-info-yellow-text)] flex items-center gap-2">
+                        <AlertTriangle size={18} className="text-[color:var(--sf-info-yellow-text)]" />
+                        Unrecognized Network from Browser Extension Wallet
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="w-full rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-info-yellow-text)] flex items-center gap-2">
-                    <AlertTriangle size={18} className="text-[color:var(--sf-info-yellow-text)]" />
-                    Unrecognized Network from Browser Extension Wallet
+                  // Keystore wallet - allow network selection (custom dropdown)
+                  <div className="relative" ref={networkDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setNetworkDropdownOpen((v) => !v)}
+                      className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                    >
+                      <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? 'Select Network'}</span>
+                      <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {networkDropdownOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                        {NETWORK_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setNetwork(option.value);
+                              setNetworkDropdownOpen(false);
+                            }}
+                            className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                              network === option.value
+                                ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                                : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            ) : (
-              // Keystore wallet - allow network selection (custom dropdown)
-              <div className="relative" ref={networkDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setNetworkDropdownOpen((v) => !v)}
-                  className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                >
-                  <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? 'Select Network'}</span>
-                  <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {networkDropdownOpen && (
-                  <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                    {NETWORK_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          setNetwork(option.value);
-                          setNetworkDropdownOpen(false);
-                        }}
-                        className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                          network === option.value
-                            ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                            : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
 
-          {!isBrowserWallet && network === 'custom' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
-                  Custom Data API Endpoint
-                </label>
-                <input
-                  type="text"
-                  value={customDataApiUrl}
-                  onChange={(e) => setCustomDataApiUrl(e.target.value)}
-                  placeholder="https://your-dataapi.com"
-                  className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
-                  Custom Sandshrew RPC URL
-                </label>
-                <input
-                  type="text"
-                  value={customSandshrewUrl}
-                  onChange={(e) => setCustomSandshrewUrl(e.target.value)}
-                  placeholder="https://your-sandshrew-rpc.com"
-                  className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                />
-              </div>
-            </>
-          )}
-
-          {/* Browser wallet info message - shown instead of save button */}
-          {isBrowserWallet && (
-            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-              Network Configuration is only available for keystore wallets. Please navigate to your browser extension wallet to change the network.
-            </div>
-          )}
-
-          {/* Save Settings Button - appears when network is changed (only for keystore wallets) */}
-          {!isBrowserWallet && hasNetworkChanges && (
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
-            >
-              <Save size={20} />
-              {saved ? 'Settings Saved!' : 'Save Settings'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Derivation Paths */}
-      <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <Key size={24} className="text-yellow-400" />
-            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">HD Wallet Derivation</h3>
-          </div>
-        </div>
-
-        {!wallet ? (
-          <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-            Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Current Addresses Display */}
-            <div className="rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4">
-              <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-3">Current Active Addresses:</div>
-              <div className="space-y-3">
-                {account?.taproot && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
-                    <div>
-                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
-                      <div className="text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
-                      <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.taproot.hdPath}</div>
-                    </div>
-                  </div>
-                )}
-                {account?.nativeSegwit && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
-                    <div>
-                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
-                      <div className="text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
-                      <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.nativeSegwit.hdPath}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Tip - shown above Configure Derivation button */}
-            <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-3 text-xs text-[color:var(--sf-primary)]">
-              💡 Tip: Use different account indices to manage multiple wallets from the same seed phrase. The address index is typically incremented for each new receiving address.
-            </div>
-
-            {/* Configure Derivation Toggle Button */}
-            <button
-              onClick={() => setShowDerivationConfig(!showDerivationConfig)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
-            >
-              {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-              <span>Configure Derivation</span>
-            </button>
-
-            {/* Collapsible Derivation Configuration */}
-            {showDerivationConfig && (
-              <div className="space-y-6 pt-2">
-                {/* Taproot Path Configuration */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                      Taproot (BIP-86) - {taprootPath}
+              {!isBrowserWallet && network === 'custom' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
+                      Custom Data API Endpoint
                     </label>
+                    <input
+                      type="text"
+                      value={customDataApiUrl}
+                      onChange={(e) => setCustomDataApiUrl(e.target.value)}
+                      placeholder="https://your-dataapi.com"
+                      className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Account</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="2147483647"
-                        value={taprootConfig.accountIndex}
-                        onChange={(e) => setTaprootConfig({ ...taprootConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                        className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
-                      <div className="relative">
-                        <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
-                        <select
-                          value={taprootConfig.changeIndex}
-                          onChange={(e) => setTaprootConfig({ ...taprootConfig, changeIndex: parseInt(e.target.value) })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
-                        >
-                          <option value="0">External (0)</option>
-                          <option value="1">Change (1)</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Address Index</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="2147483647"
-                        value={taprootConfig.addressIndex}
-                        onChange={(e) => setTaprootConfig({ ...taprootConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                        className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                      />
-                    </div>
-                  </div>
-
-                  {previewAddresses.taproot && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
-                      <div className="flex-1 mr-2">
-                        <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
-                        <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
-                      </div>
-                      <button
-                        onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
-                        className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                        title="Copy address"
-                      >
-                        {copiedAddress === 'taproot' ? (
-                          <Check size={16} className="text-green-400" />
-                        ) : (
-                          <Copy size={16} className="text-[color:var(--sf-text)]/60" />
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* SegWit Path Configuration */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                      Native SegWit (BIP-84) - {segwitPath}
+                  <div>
+                    <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
+                      Custom Sandshrew RPC URL
                     </label>
+                    <input
+                      type="text"
+                      value={customSandshrewUrl}
+                      onChange={(e) => setCustomSandshrewUrl(e.target.value)}
+                      placeholder="https://your-sandshrew-rpc.com"
+                      className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                    />
                   </div>
+                </>
+              )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Account</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="2147483647"
-                        value={segwitConfig.accountIndex}
-                        onChange={(e) => setSegwitConfig({ ...segwitConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                        className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
-                      <div className="relative">
-                        <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
-                        <select
-                          value={segwitConfig.changeIndex}
-                          onChange={(e) => setSegwitConfig({ ...segwitConfig, changeIndex: parseInt(e.target.value) })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
-                        >
-                          <option value="0">External (0)</option>
-                          <option value="1">Change (1)</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Address Index</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="2147483647"
-                        value={segwitConfig.addressIndex}
-                        onChange={(e) => setSegwitConfig({ ...segwitConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                        className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                      />
-                    </div>
-                  </div>
-
-                  {previewAddresses.segwit && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
-                      <div className="flex-1 mr-2">
-                        <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
-                        <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
-                      </div>
-                      <button
-                        onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
-                        className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                        title="Copy address"
-                      >
-                        {copiedAddress === 'segwit' ? (
-                          <Check size={16} className="text-green-400" />
-                        ) : (
-                          <Copy size={16} className="text-[color:var(--sf-text)]/60" />
-                        )}
-                      </button>
-                    </div>
-                  )}
+              {/* Browser wallet info message - shown instead of save button */}
+              {isBrowserWallet && (
+                <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
+                  Network Configuration is only available for keystore wallets. Please navigate to your browser extension wallet to change the network.
                 </div>
+              )}
 
-                {/* Save Button - inside collapsible section */}
+              {/* Save Settings Button - appears when network is changed (only for keystore wallets) */}
+              {!isBrowserWallet && hasNetworkChanges && (
                 <button
                   onClick={handleSave}
                   className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
@@ -636,87 +642,87 @@ export default function WalletSettings() {
                   <Save size={20} />
                   {saved ? 'Settings Saved!' : 'Save Settings'}
                 </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Security & Backup */}
-      {wallet && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Shield size={24} className="text-red-400" />
-            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Security & Backup</h3>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-              ⚠️ <strong>Warning:</strong> Never share your seed phrase or private keys with anyone. Subfrost will never ask for this information.
+              )}
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <button
-                onClick={exportKeystore}
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
-              >
-                <Download size={18} />
-                <span>Export Keystore</span>
-              </button>
+          {/* Security & Backup */}
+          {wallet && (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Shield size={24} className="text-red-400" />
+                <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Security & Backup</h3>
+              </div>
 
-              <button
-                onClick={() => setShowSeedModal(true)}
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
-              >
-                <Eye size={18} />
-                <span>Reveal Seed Phrase</span>
-              </button>
+              <div className="space-y-3">
+                <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
+                  ⚠️ <strong>Warning:</strong> Never share your seed phrase or private keys with anyone. Subfrost will never ask for this information.
+                </div>
 
-              <button
-                onClick={handleBackupToDrive}
-                disabled={isBackingUp}
-                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] overflow-hidden relative ${
-                  backupSuccess
-                    ? 'bg-green-500/20 border-green-500/30'
-                    : 'bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10'
-                } disabled:opacity-50`}
-              >
-                {/* Progress bar background */}
-                {isBackingUp && !backupSuccess && (
-                  <div
-                    className="absolute inset-0 bg-[color:var(--sf-primary)]/20 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                    style={{ width: `${backupProgress}%` }}
-                  />
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={exportKeystore}
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                  >
+                    <Download size={18} />
+                    <span>Export Keystore</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowSeedModal(true)}
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                  >
+                    <Eye size={18} />
+                    <span>Reveal Seed Phrase</span>
+                  </button>
+
+                  <button
+                    onClick={handleBackupToDrive}
+                    disabled={isBackingUp}
+                    className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] overflow-hidden relative ${
+                      backupSuccess
+                        ? 'bg-green-500/20 border-green-500/30'
+                        : 'bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10'
+                    } disabled:opacity-50`}
+                  >
+                    {/* Progress bar background */}
+                    {isBackingUp && !backupSuccess && (
+                      <div
+                        className="absolute inset-0 bg-[color:var(--sf-primary)]/20 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                        style={{ width: `${backupProgress}%` }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-2">
+                      {backupSuccess ? (
+                        <>
+                          <Check size={18} className="text-green-400" />
+                          <span>Backed Up!</span>
+                        </>
+                      ) : isBackingUp ? (
+                        <>
+                          <Cloud className="animate-bounce" size={18} />
+                          <span>Backing up...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Cloud size={18} />
+                          <span>Backup to Google Drive</span>
+                        </>
+                      )}
+                    </span>
+                  </button>
+                </div>
+
+                {backupError && (
+                  <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+                    {backupError}
+                  </div>
                 )}
-                <span className="relative z-10 flex items-center gap-2">
-                  {backupSuccess ? (
-                    <>
-                      <Check size={18} className="text-green-400" />
-                      <span>Backed Up!</span>
-                    </>
-                  ) : isBackingUp ? (
-                    <>
-                      <Cloud className="animate-bounce" size={18} />
-                      <span>Backing up...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Cloud size={18} />
-                      <span>Backup to Google Drive</span>
-                    </>
-                  )}
-                </span>
-              </button>
-            </div>
-
-            {backupError && (
-              <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-                {backupError}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Seed Phrase Modal */}
       {showSeedModal && (
