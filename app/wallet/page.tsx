@@ -52,9 +52,9 @@ export default function WalletDashboardPage() {
 
   // Settings tab is rendered separately for responsive control
   const tabs = [
-    { id: 'balances' as TabView, label: 'Balances', icon: Wallet },
-    { id: 'utxos' as TabView, label: 'UTXO Management', icon: BarChart2 },
-    { id: 'transactions' as TabView, label: 'Transaction History', icon: Activity },
+    { id: 'balances' as TabView, label: 'Balances', shortLabel: 'Balances', icon: Wallet },
+    { id: 'utxos' as TabView, label: 'UTXO Management', shortLabel: 'UTXOs', icon: BarChart2 },
+    { id: 'transactions' as TabView, label: 'Transaction History', shortLabel: 'History', icon: Activity },
   ];
 
   return (
@@ -62,53 +62,19 @@ export default function WalletDashboardPage() {
       <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-4 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
           {/* Header */}
           <div className="mb-8">
-            {/* Mobile: Title + gear on top, Send/Receive below */}
-            <div className="md:hidden">
-              <div className="flex items-center justify-between mb-4">
-                <h1 className="text-2xl font-bold text-[color:var(--sf-text)]">Wallet Dashboard</h1>
-                <button
-                  onClick={() => setActiveTab('settings')}
-                  className={`p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                    activeTab === 'settings'
-                      ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
-                      : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-                  }`}
-                  title="Settings"
-                >
-                  <Settings size={18} />
-                </button>
-              </div>
-              <div className="flex gap-2 mb-4">
-                <button
-                  onClick={() => setShowSendModal(true)}
-                  className="px-3 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm"
-                >
-                  <Send size={18} />
-                  Send
-                </button>
-                <button
-                  onClick={() => setShowReceiveModal(true)}
-                  className="px-3 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-sm"
-                >
-                  <QrCode size={18} />
-                  Receive
-                </button>
-              </div>
-            </div>
-            {/* Desktop: Title + Send/Receive on same row */}
-            <div className="hidden md:flex md:items-center md:justify-between mb-4">
-              <h1 className="text-3xl font-bold text-[color:var(--sf-text)]">Wallet Dashboard</h1>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+              <h1 className="text-2xl md:text-3xl font-bold text-[color:var(--sf-text)] mb-4 md:mb-0">Wallet Dashboard</h1>
               <div className="flex gap-2 items-center">
                 <button
                   onClick={() => setShowSendModal(true)}
-                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-base"
+                  className="px-3 md:px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-white font-medium flex items-center gap-2 text-sm md:text-base"
                 >
                   <Send size={18} />
                   Send
                 </button>
                 <button
                   onClick={() => setShowReceiveModal(true)}
-                  className="px-4 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-base"
+                  className="px-3 md:px-4 py-2 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] text-[color:var(--sf-text)] font-medium flex items-center gap-2 text-sm md:text-base"
                 >
                   <QrCode size={18} />
                   Receive
@@ -166,30 +132,31 @@ export default function WalletDashboardPage() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-sm sm:text-base shrink-0 ${
+                    className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-xs sm:text-base shrink-0 ${
                       activeTab === tab.id
                         ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                         : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
                     }`}
                   >
-                    <Icon size={18} className="sm:w-5 sm:h-5" />
-                    <span className="whitespace-nowrap">{tab.label}</span>
+                    <Icon size={16} className="sm:w-5 sm:h-5" />
+                    <span className="whitespace-nowrap sm:hidden">{tab.shortLabel}</span>
+                    <span className="whitespace-nowrap hidden sm:inline">{tab.label}</span>
                   </button>
                 );
               })}
-              {/* Spacer to push gear to the right - desktop only */}
-              <div className="hidden md:block flex-grow" />
-              {/* Settings gear button - desktop only (mobile has it in header) */}
+              {/* Spacer to push gear to the right */}
+              <div className="flex-grow" />
+              {/* Settings gear button */}
               <button
                 onClick={() => setActiveTab('settings')}
-                className={`hidden md:block p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 ${
+                className={`p-2 sm:p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 ${
                   activeTab === 'settings'
                     ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
                     : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
                 title="Settings"
               >
-                <Settings size={18} />
+                <Settings size={16} className="sm:w-[18px] sm:h-[18px]" />
               </button>
             </div>
           </div>
