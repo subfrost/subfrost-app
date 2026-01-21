@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle } from 'lucide-react';
@@ -86,6 +86,8 @@ export default function WalletSettings() {
   const [saved, setSaved] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showDerivationConfig, setShowDerivationConfig] = useState(false);
+  const [networkDropdownOpen, setNetworkDropdownOpen] = useState(false);
+  const networkDropdownRef = useRef<HTMLDivElement>(null);
 
   // Track if network has unsaved changes
   const hasNetworkChanges = network !== initialNetwork;
@@ -144,6 +146,34 @@ export default function WalletSettings() {
     initGoogleDrive().catch(console.error);
     setDriveConfigured(isDriveConfigured());
   }, []);
+
+  // Close network dropdown on click outside
+  useEffect(() => {
+    if (!networkDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (networkDropdownRef.current && !networkDropdownRef.current.contains(e.target as Node)) {
+        setNetworkDropdownOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNetworkDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [networkDropdownOpen]);
+
+  const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
+    { value: 'mainnet', label: 'Mainnet' },
+    { value: 'signet', label: 'Signet' },
+    { value: 'subfrost-regtest', label: 'Subfrost Regtest (regtest.subfrost.io)' },
+    { value: 'regtest-local', label: 'Local Docker (localhost:18888)' },
+    { value: 'regtest', label: 'Local Regtest (legacy)' },
+    { value: 'custom', label: 'Custom' },
+  ];
 
   const handleSave = () => {
     console.log('Saving settings:', {
@@ -309,32 +339,48 @@ export default function WalletSettings() {
               <div className="relative">
                 <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/40 pointer-events-none" />
                 {browserWalletNetwork?.isRecognized ? (
-                  <div className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 pl-10 pr-4 py-3 text-[color:var(--sf-text)]/60 cursor-not-allowed">
+                  <div className="w-full rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-text)]/60 cursor-not-allowed">
                     {getNetworkDisplayName(browserWalletNetwork.network, browserWalletNetwork.isRecognized)}
                   </div>
                 ) : (
-                  <div className="w-full rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] pl-10 pr-4 py-3 text-[color:var(--sf-info-yellow-text)] flex items-center gap-2">
+                  <div className="w-full rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-info-yellow-text)] flex items-center gap-2">
                     <AlertTriangle size={18} className="text-[color:var(--sf-info-yellow-text)]" />
                     Unrecognized Network from Browser Extension Wallet
                   </div>
                 )}
               </div>
             ) : (
-              // Keystore wallet - allow network selection
-              <div className="relative">
-                <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
-                <select
-                  value={network}
-                  onChange={(e) => setNetwork(e.target.value as NetworkType)}
-                  className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-10 pr-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+              // Keystore wallet - allow network selection (custom dropdown)
+              <div className="relative" ref={networkDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setNetworkDropdownOpen((v) => !v)}
+                  className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                 >
-                  <option value="mainnet">Mainnet</option>
-                  <option value="signet">Signet</option>
-                  <option value="subfrost-regtest">Subfrost Regtest (regtest.subfrost.io)</option>
-                  <option value="regtest-local">Local Docker (localhost:18888)</option>
-                  <option value="regtest">Local Regtest (legacy)</option>
-                  <option value="custom">Custom</option>
-                </select>
+                  <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? 'Select Network'}</span>
+                  <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {networkDropdownOpen && (
+                  <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                    {NETWORK_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setNetwork(option.value);
+                          setNetworkDropdownOpen(false);
+                        }}
+                        className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                          network === option.value
+                            ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                            : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
