@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle } from 'lucide-react';
+import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 
@@ -724,47 +724,60 @@ export default function WalletSettings() {
 
       {/* Seed Phrase Modal */}
       {showSeedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-lg w-full mx-4">
-            <div className="p-6 border-b border-[color:var(--sf-outline)]">
-              <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">Reveal Seed Phrase</h2>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+            {/* Header */}
+            <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Reveal Seed Phrase</h2>
+                <button
+                  onClick={closeSeedModal}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
-            <div className="p-6 space-y-4">
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {!revealedSeed ? (
                 <>
-                  <div className="rounded-lg border border-[color:var(--sf-info-red-border)] bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)]">
+                  <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                     <Lock size={20} className="inline mr-2" />
                     Enter your password to decrypt and reveal your seed phrase.
                   </div>
 
                   <div>
-                    <label className="block text-sm text-[color:var(--sf-text)]/60 mb-2">Password</label>
+                    <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">Password</label>
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && revealSeed()}
                       placeholder="Enter your password"
-                      className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                      className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                       autoFocus
                     />
                   </div>
 
                   {securityError && (
-                    <div className="text-sm text-red-400">{securityError}</div>
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-red-400 text-sm">
+                      {securityError}
+                    </div>
                   )}
 
                   <div className="flex gap-3">
                     <button
                       onClick={revealSeed}
-                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
+                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
                     >
                       Reveal
                     </button>
                     <button
                       onClick={closeSeedModal}
-                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                      className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
                     >
                       Cancel
                     </button>
@@ -772,9 +785,9 @@ export default function WalletSettings() {
                 </>
               ) : (
                 <>
-                  <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4">
+                  <div className="rounded-xl bg-green-500/10 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                     <div className="text-sm text-green-600 dark:text-green-200 mb-2">Your Seed Phrase:</div>
-                    <div className="p-4 rounded-lg bg-[color:var(--sf-surface)] border border-[color:var(--sf-outline)] text-sm text-[color:var(--sf-text)] break-all select-all">
+                    <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-text)] break-all select-all">
                       {revealedSeed}
                     </div>
                   </div>
@@ -782,14 +795,14 @@ export default function WalletSettings() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => copyToClipboard(revealedSeed)}
-                      className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium flex items-center justify-center gap-2"
+                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide flex items-center justify-center gap-2"
                     >
                       <Copy size={18} />
                       Copy to Clipboard
                     </button>
                     <button
                       onClick={closeSeedModal}
-                      className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+                      className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
                     >
                       Close
                     </button>

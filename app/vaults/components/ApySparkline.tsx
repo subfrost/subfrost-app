@@ -17,7 +17,7 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
   // Chart dimensions - using viewBox for responsive scaling
   const width = 180;
   const height = 48;
-  const padding = { top: 8, right: 8, bottom: 8, left: 4 };
+  const padding = { top: 4, right: 8, bottom: 4, left: 4 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
