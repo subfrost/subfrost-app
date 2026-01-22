@@ -183,9 +183,9 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
         }
       })
      
-    // Filter by whitelist (symbols)
-    const filtered = enrichedPools.filter((pool) => {
-      return allowedTokens.has(pool.token0.symbol) && allowedTokens.has(pool.token1.symbol);
+    // Filter out nulls and by whitelist (symbols)
+    const filtered = enrichedPools.filter((pool): pool is NonNullable<typeof pool> => {
+      return pool !== null && allowedTokens.has(pool.token0.symbol) && allowedTokens.has(pool.token1.symbol);
     });
     
     console.log('[ExchangeContext] Loaded pools:', {

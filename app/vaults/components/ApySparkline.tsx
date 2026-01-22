@@ -48,7 +48,7 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
   const lastPointYPercent = (lastPoint.y / height) * 100;
 
   return (
-    <div className={`flex flex-col items-end gap-1 w-full ${fillHeight ? 'h-full' : ''}`}>
+    <div className={`flex flex-col items-end w-full ${fillHeight ? 'h-full' : ''}`}>
       <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">
         30-day APY
       </div>

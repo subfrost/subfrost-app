@@ -323,9 +323,10 @@ export default function WalletSettings() {
   return (
     <div className="space-y-6">
       {/* Grid layout: HD Wallet on left, Network + Security on right (md+) */}
+      {/* Mobile order: Network (1), Security (2), HD Wallet (3) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left Column: HD Wallet Derivation */}
-        <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6 md:order-1">
+        {/* HD Wallet Derivation - Last on mobile, left column on desktop */}
+        <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6 order-3 md:order-1 md:row-span-2">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <Key size={24} className="text-yellow-400" />
@@ -531,10 +532,8 @@ export default function WalletSettings() {
           )}
         </div>
 
-        {/* Right Column: Network Configuration + Security & Backup */}
-        <div className="space-y-6 md:order-2">
-          {/* Network Selection */}
-          <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
+        {/* Network Configuration - First on mobile, right column row 1 on desktop */}
+        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6 order-1 md:order-2">
             <div className="flex items-center gap-3 mb-4">
               <Network size={24} className="text-[color:var(--sf-primary)]" />
               <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Network Configuration</h3>
@@ -646,9 +645,9 @@ export default function WalletSettings() {
             </div>
           </div>
 
-          {/* Security & Backup */}
-          {wallet && (
-            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
+        {/* Security & Backup - Second on mobile, right column row 2 on desktop */}
+        {wallet && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 order-2 md:order-3">
               <div className="flex items-center gap-3 mb-4">
                 <Shield size={24} className="text-red-400" />
                 <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Security & Backup</h3>
@@ -718,10 +717,9 @@ export default function WalletSettings() {
                     {backupError}
                   </div>
                 )}
-              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Seed Phrase Modal */}
