@@ -182,8 +182,7 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
           return null;
         }
       })
-      .filter((p): p is EnrichedPool => p !== null);
-    
+     
     // Filter by whitelist (symbols)
     const filtered = enrichedPools.filter((pool) => {
       return allowedTokens.has(pool.token0.symbol) && allowedTokens.has(pool.token1.symbol);

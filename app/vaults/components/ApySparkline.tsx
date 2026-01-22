@@ -1,5 +1,7 @@
 "use client";
 
+import { useTheme } from "@/context/ThemeContext";
+
 type ApySparklineProps = {
   data: number[]; // Array of APY values (30 days)
   currentApy: number; // Current/latest APY to display
@@ -8,6 +10,10 @@ type ApySparklineProps = {
 };
 
 export default function ApySparkline({ data, currentApy, showLabel = true, fillHeight = false }: ApySparklineProps) {
+  const { theme } = useTheme();
+
+  // Grid line color matching CandleChart styling
+  const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(40, 67, 114, 0.1)';
   // Chart dimensions - using viewBox for responsive scaling
   const width = 180;
   const height = 48;
@@ -53,6 +59,38 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
           preserveAspectRatio="none"
           className="w-full h-full text-[color:var(--sf-info-green-title)]"
         >
+          {/* Horizontal gridlines - 4 lines evenly spaced */}
+          {[0, 1, 2, 3].map((i) => {
+            const y = padding.top + (chartHeight * i) / 3;
+            return (
+              <line
+                key={`grid-h-${i}`}
+                x1={padding.left}
+                y1={y}
+                x2={width - padding.right}
+                y2={y}
+                stroke={gridColor}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })}
+          {/* Vertical gridlines - 5 lines evenly spaced */}
+          {[0, 1, 2, 3, 4].map((i) => {
+            const x = padding.left + (chartWidth * i) / 4;
+            return (
+              <line
+                key={`grid-v-${i}`}
+                x1={x}
+                y1={padding.top}
+                x2={x}
+                y2={height - padding.bottom}
+                stroke={gridColor}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })}
           <path
             d={pathD}
             fill="none"
@@ -69,6 +107,14 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
           className="absolute w-2 h-2 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse -translate-x-1/2 -translate-y-1/2"
           style={{ left: `${lastPointXPercent}%`, top: `${lastPointYPercent}%` }}
         />
+
+        {/* Hist APY label - positioned below the pulsating dot */}
+        <div
+          className="absolute z-10 rounded-md bg-[color:var(--sf-info-green-title)] px-1.5 py-0.5 text-[10px] font-semibold text-white whitespace-nowrap -translate-x-1/2"
+          style={{ left: `${lastPointXPercent}%`, top: `calc(${lastPointYPercent}% + 8px)` }}
+        >
+          {currentApy.toFixed(1)}%
+        </div>
 
         {/* APY label - right-aligned, positioned at bottom */}
         {showLabel && (
