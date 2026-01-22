@@ -89,6 +89,12 @@ export default function WalletSettings() {
   const [networkDropdownOpen, setNetworkDropdownOpen] = useState(false);
   const networkDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Change dropdown states
+  const [taprootChangeDropdownOpen, setTaprootChangeDropdownOpen] = useState(false);
+  const [segwitChangeDropdownOpen, setSegwitChangeDropdownOpen] = useState(false);
+  const taprootChangeDropdownRef = useRef<HTMLDivElement>(null);
+  const segwitChangeDropdownRef = useRef<HTMLDivElement>(null);
+
   // Track if network has unsaved changes
   const hasNetworkChanges = network !== initialNetwork;
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
@@ -165,6 +171,49 @@ export default function WalletSettings() {
       document.removeEventListener('keydown', handleEscape);
     };
   }, [networkDropdownOpen]);
+
+  // Close taproot change dropdown on click outside
+  useEffect(() => {
+    if (!taprootChangeDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (taprootChangeDropdownRef.current && !taprootChangeDropdownRef.current.contains(e.target as Node)) {
+        setTaprootChangeDropdownOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTaprootChangeDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [taprootChangeDropdownOpen]);
+
+  // Close segwit change dropdown on click outside
+  useEffect(() => {
+    if (!segwitChangeDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (segwitChangeDropdownRef.current && !segwitChangeDropdownRef.current.contains(e.target as Node)) {
+        setSegwitChangeDropdownOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSegwitChangeDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [segwitChangeDropdownOpen]);
+
+  const CHANGE_OPTIONS = [
+    { value: 0, label: 'External (0)' },
+    { value: 1, label: 'Change (1)' },
+  ];
 
   const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
     { value: 'mainnet', label: 'Mainnet' },
@@ -376,7 +425,7 @@ export default function WalletSettings() {
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
               >
                 {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                <span>Configure Derivation</span>
+                <span>Adv. Configuration</span>
               </button>
 
               {/* Collapsible Derivation Configuration */}
@@ -404,16 +453,36 @@ export default function WalletSettings() {
                       </div>
                       <div>
                         <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
-                        <div className="relative">
-                          <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
-                          <select
-                            value={taprootConfig.changeIndex}
-                            onChange={(e) => setTaprootConfig({ ...taprootConfig, changeIndex: parseInt(e.target.value) })}
-                            className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+                        <div className="relative" ref={taprootChangeDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setTaprootChangeDropdownOpen((v) => !v)}
+                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                           >
-                            <option value="0">External (0)</option>
-                            <option value="1">Change (1)</option>
-                          </select>
+                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === taprootConfig.changeIndex)?.label ?? 'External (0)'}</span>
+                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${taprootChangeDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                          {taprootChangeDropdownOpen && (
+                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                              {CHANGE_OPTIONS.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setTaprootConfig({ ...taprootConfig, changeIndex: option.value });
+                                    setTaprootChangeDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                                    taprootConfig.changeIndex === option.value
+                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div>
@@ -472,16 +541,36 @@ export default function WalletSettings() {
                       </div>
                       <div>
                         <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
-                        <div className="relative">
-                          <ChevronDown size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/60 pointer-events-none" />
-                          <select
-                            value={segwitConfig.changeIndex}
-                            onChange={(e) => setSegwitConfig({ ...segwitConfig, changeIndex: parseInt(e.target.value) })}
-                            className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 pl-9 pr-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none appearance-none cursor-pointer"
+                        <div className="relative" ref={segwitChangeDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setSegwitChangeDropdownOpen((v) => !v)}
+                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                           >
-                            <option value="0">External (0)</option>
-                            <option value="1">Change (1)</option>
-                          </select>
+                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === segwitConfig.changeIndex)?.label ?? 'External (0)'}</span>
+                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${segwitChangeDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                          {segwitChangeDropdownOpen && (
+                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                              {CHANGE_OPTIONS.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setSegwitConfig({ ...segwitConfig, changeIndex: option.value });
+                                    setSegwitChangeDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                                    segwitConfig.changeIndex === option.value
+                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div>
