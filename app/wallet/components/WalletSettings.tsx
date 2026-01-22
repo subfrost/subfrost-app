@@ -367,7 +367,7 @@ export default function WalletSettings() {
 
               {/* Tip - shown above Configure Derivation button */}
               <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-4 text-sm text-[color:var(--sf-primary)]">
-                💡 Use account indices to manage multiple wallets from the same seed phrase. Only configure this if you know what you are doing.
+                💡 Use account indices to manage multiple wallets from the same seed phrase. <strong>Only configure this if you know what you are doing.</strong>
               </div>
 
               {/* Configure Derivation Toggle Button */}
