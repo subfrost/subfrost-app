@@ -35,7 +35,7 @@ export default function YveDieselVault() {
         apy={stats.apy}
         userBalance={stats.userBalance}
         badges={['DIESEL Token', 'Bitcoin']}
-        apyHistory={[18, 18, 19, 19, 19, 18, 19, 20, 20, 20, 20, 19, 20, 20, 21, 21, 20, 21, 21, 21, 21, 22, 21, 22, 22, 22, 21, 22, 22, 21]}
+        apyHistory={[17, 18, 19, 19, 18, 19, 20, 21, 20, 20, 21, 21, 22, 21, 20, 21, 22, 22, 21, 22, 23, 22, 22, 23, 23, 22, 23, 22, 23, 22]}
       />
 
       <VaultDepositInterface
