@@ -366,8 +366,8 @@ export default function WalletSettings() {
               </div>
 
               {/* Tip - shown above Configure Derivation button */}
-              <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-3 text-xs text-[color:var(--sf-primary)]">
-                💡 Tip: Use different account indices to manage multiple wallets from the same seed phrase. The address index is typically incremented for each new receiving address.
+              <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-4 text-sm text-[color:var(--sf-primary)]">
+                💡 Use account indices to manage multiple wallets from the same seed phrase. Only configure this if you know what you are doing.
               </div>
 
               {/* Configure Derivation Toggle Button */}
