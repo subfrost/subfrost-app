@@ -10,7 +10,7 @@
 
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode, useMemo, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useMemo, useRef } from 'react';
 import { useWallet } from './WalletContext';
 import { useDynamicPools, type DynamicPool } from '@/hooks/useDynamicPools';
 import { getConfig } from '@/utils/getConfig';
