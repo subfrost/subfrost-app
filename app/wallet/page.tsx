@@ -85,7 +85,7 @@ export default function WalletDashboardPage() {
               {/* Native Segwit Address */}
               {paymentAddress && (
                 <div className="flex items-center gap-3">
-                  <AddressAvatar address={paymentAddress} size={24} />
+                  <AddressAvatar address={paymentAddress} size={24} className="shrink-0" />
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Native SegWit:</span>
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{paymentAddress}</span>
                   <button
@@ -104,7 +104,7 @@ export default function WalletDashboardPage() {
               {/* Taproot Address */}
               {address && (
                 <div className="flex items-center gap-3">
-                  <AddressAvatar address={address} size={24} />
+                  <AddressAvatar address={address} size={24} className="shrink-0" />
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Taproot:</span>
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{address}</span>
                   <button

@@ -93,7 +93,7 @@ export default function BalancesPanel() {
             </div>
             <div>
               <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">Bitcoin Balance</div>
-              <div className="text-3xl font-bold text-[color:var(--sf-text)]">{showValue(`${totalBTC} BTC`)}</div>
+              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)] whitespace-nowrap">{showValue(`${totalBTC} BTC`)}</div>
               <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
                 {isLoadingData ? (
                   <span>Loading...</span>

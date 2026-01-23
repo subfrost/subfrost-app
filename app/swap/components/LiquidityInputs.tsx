@@ -4,6 +4,7 @@ import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
 import { useWallet } from "@/context/WalletContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
@@ -44,6 +45,8 @@ type Props = {
   token1BalanceText?: string;
   token0FiatText?: string;
   token1FiatText?: string;
+  onPercentToken0?: (percent: number) => void;
+  onPercentToken1?: (percent: number) => void;
   minimumToken0?: string;
   minimumToken1?: string;
   feeRate?: number;
@@ -83,6 +86,8 @@ export default function LiquidityInputs({
   token1BalanceText = "No balance",
   token0FiatText = "$0.00",
   token1FiatText = "$0.00",
+  onPercentToken0,
+  onPercentToken1,
   minimumToken0,
   minimumToken1,
   feeRate = 0,
@@ -101,8 +106,28 @@ export default function LiquidityInputs({
   summary,
 }: Props) {
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
+  const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
+
+  // Calculate active percentage for token inputs
+  const getActivePercent = (amount: string, balanceText: string): number | null => {
+    if (!amount || !balanceText) return null;
+    const balanceMatch = balanceText.match(/[\d.]+/);
+    if (!balanceMatch) return null;
+    const balance = parseFloat(balanceMatch[0]);
+    const value = parseFloat(amount);
+    if (!balance || balance === 0 || !value) return null;
+    const tolerance = 0.0001;
+    if (Math.abs(value - balance * 0.25) < tolerance) return 0.25;
+    if (Math.abs(value - balance * 0.5) < tolerance) return 0.5;
+    if (Math.abs(value - balance * 0.75) < tolerance) return 0.75;
+    if (Math.abs(value - balance) < tolerance) return 1;
+    return null;
+  };
+
+  const activePercentToken0 = getActivePercent(token0Amount, token0BalanceText);
+  const activePercentToken1 = getActivePercent(token1Amount, token1BalanceText);
 
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
@@ -467,7 +492,34 @@ export default function LiquidityInputs({
               </div>
               <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token0Amount} onChange={onChangeToken0Amount} />
-                <div className="mt-1 text-right text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
+                <div className="mt-1 flex items-center justify-between">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
+                  {onPercentToken0 && (
+                    <div className="flex items-center gap-1">
+                      {[
+                        { label: '25%', value: 0.25 },
+                        { label: '50%', value: 0.5 },
+                        { label: '75%', value: 0.75 },
+                      ].map(({ label, value }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => onPercentToken0(value)}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onPercentToken0(1)}
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      >
+                        Max
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -485,7 +537,34 @@ export default function LiquidityInputs({
               </div>
               <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token1Amount} onChange={onChangeToken1Amount} />
-                <div className="mt-1 text-right text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
+                <div className="mt-1 flex items-center justify-between">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
+                  {onPercentToken1 && (
+                    <div className="flex items-center gap-1">
+                      {[
+                        { label: '25%', value: 0.25 },
+                        { label: '50%', value: 0.5 },
+                        { label: '75%', value: 0.75 },
+                      ].map(({ label, value }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => onPercentToken1(value)}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onPercentToken1(1)}
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      >
+                        Max
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

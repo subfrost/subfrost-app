@@ -1294,6 +1294,50 @@ export default function SwapShell() {
     }
   };
 
+  // Handle percentage of balance click for LP token 0
+  const handlePercentToken0 = (percent: number) => {
+    if (!poolToken0) return;
+    if (poolToken0.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = (sats * percent) / 1e8;
+      setPoolToken0Amount(btc.toFixed(8));
+    } else {
+      // Try walletAlkaneBalances first, then idToUserCurrency
+      let balance = walletAlkaneBalances.get(poolToken0.id);
+      if (!balance) {
+        const cur = idToUserCurrency.get(poolToken0.id);
+        balance = cur?.balance;
+      }
+      if (balance) {
+        const amt = (Number(balance) * percent) / 1e8;
+        const decimals = poolToken0.id === FRBTC_ALKANE_ID ? 8 : 4;
+        setPoolToken0Amount(amt.toFixed(decimals));
+      }
+    }
+  };
+
+  // Handle percentage of balance click for LP token 1
+  const handlePercentToken1 = (percent: number) => {
+    if (!poolToken1) return;
+    if (poolToken1.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = (sats * percent) / 1e8;
+      setPoolToken1Amount(btc.toFixed(8));
+    } else {
+      // Try walletAlkaneBalances first, then idToUserCurrency
+      let balance = walletAlkaneBalances.get(poolToken1.id);
+      if (!balance) {
+        const cur = idToUserCurrency.get(poolToken1.id);
+        balance = cur?.balance;
+      }
+      if (balance) {
+        const amt = (Number(balance) * percent) / 1e8;
+        const decimals = poolToken1.id === FRBTC_ALKANE_ID ? 8 : 4;
+        setPoolToken1Amount(amt.toFixed(decimals));
+      }
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-8 h-full">
       <Suspense fallback={null}>
@@ -1427,6 +1471,8 @@ export default function SwapShell() {
               token1BalanceText={formatBalance(poolToken1?.id)}
               token0FiatText="$0.00"
               token1FiatText="$0.00"
+              onPercentToken0={poolToken0 ? handlePercentToken0 : undefined}
+              onPercentToken1={poolToken1 ? handlePercentToken1 : undefined}
               minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(
                 poolToken0?.id === 'btc' || poolToken0?.id === FRBTC_ALKANE_ID ? 8 : 2
               ) : undefined}
