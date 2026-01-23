@@ -7,7 +7,7 @@
  import { useWallet } from "@/context/WalletContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
- import { Menu, X, Copy, Check, ChevronDown } from "lucide-react";
+ import { Copy, Check } from "lucide-react";
  import AddressAvatar from "./AddressAvatar";
 import ThemeToggle from "./ThemeToggle";
 
@@ -76,12 +76,9 @@ import ThemeToggle from "./ThemeToggle";
    const { balances, isLoading: isBalanceLoading } = useEnrichedWalletData();
    const pathname = usePathname();
    const [menuOpen, setMenuOpen] = useState(false);
-   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
    const [walletNavOpen, setWalletNavOpen] = useState(false);
-   const [mobileWalletExpanded, setMobileWalletExpanded] = useState(false);
    const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
    const menuRootRef = useRef<HTMLDivElement | null>(null);
-   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
    const mobileWalletRef = useRef<HTMLDivElement | null>(null);
    const walletNavRef = useRef<HTMLDivElement | null>(null);
    const menuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -146,27 +143,6 @@ import ThemeToggle from "./ThemeToggle";
        document.removeEventListener('keydown', handleKey);
      };
    }, [menuOpen]);
-
-   useEffect(() => {
-     if (!mobileMenuOpen) return;
-     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-       if (!mobileMenuRef.current) return;
-       if (!mobileMenuRef.current.contains(e.target as Node)) {
-         setMobileMenuOpen(false);
-       }
-     };
-     const handleKey = (e: KeyboardEvent) => {
-       if (e.key === 'Escape') setMobileMenuOpen(false);
-     };
-     document.addEventListener('mousedown', handleClickOutside);
-     document.addEventListener('touchstart', handleClickOutside, { passive: true } as any);
-     document.addEventListener('keydown', handleKey);
-     return () => {
-       document.removeEventListener('mousedown', handleClickOutside);
-       document.removeEventListener('touchstart', handleClickOutside as any);
-       document.removeEventListener('keydown', handleKey);
-     };
-   }, [mobileMenuOpen]);
 
    return (
     <header className="relative z-50 w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.05)]">
@@ -296,6 +272,34 @@ import ThemeToggle from "./ThemeToggle";
                       </div>
                     </div>
                   )}
+                  <Link
+                    href="/wallet?tab=balances"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                  >
+                    Balances
+                  </Link>
+                  <Link
+                    href="/wallet?tab=utxos"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                  >
+                    UTXO Management
+                  </Link>
+                  <Link
+                    href="/wallet?tab=transactions"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                  >
+                    Transaction History
+                  </Link>
+                  <Link
+                    href="/wallet?tab=settings"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
+                  >
+                    Settings
+                  </Link>
                   <button
                     type="button"
                     onClick={async () => {
@@ -307,7 +311,7 @@ import ThemeToggle from "./ThemeToggle";
                         setMenuOpen(false);
                       }
                     }}
-                     className="w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                     className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                    >
                      Disconnect Wallet
                    </button>
@@ -332,14 +336,15 @@ import ThemeToggle from "./ThemeToggle";
 
         {/* Mobile Header Right Section */}
         <div className="ml-auto flex items-center gap-2 md:hidden">
-          {walletConnected && (
+          <ThemeToggle />
+          {walletConnected ? (
             <div className="relative" ref={mobileWalletRef}>
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="flex items-center gap-2 rounded-full bg-[color:var(--sf-panel-bg)] px-4 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
+                className="flex items-center gap-2 rounded-full bg-[color:var(--sf-panel-bg)] px-3 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
               >
-                <AddressAvatar address={address} size={20} />
+                <AddressAvatar address={address} size={20} className="shrink-0" />
                 <span className="text-sm font-semibold text-[color:var(--sf-text)]">{isBalanceLoading ? '...' : btcBalance} BTC</span>
               </button>
               {menuOpen && (
@@ -374,6 +379,34 @@ import ThemeToggle from "./ThemeToggle";
                       </div>
                     </div>
                   )}
+                  <Link
+                    href="/wallet?tab=balances"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                  >
+                    Balances
+                  </Link>
+                  <Link
+                    href="/wallet?tab=utxos"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                  >
+                    UTXO Management
+                  </Link>
+                  <Link
+                    href="/wallet?tab=transactions"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                  >
+                    Transaction History
+                  </Link>
+                  <Link
+                    href="/wallet?tab=settings"
+                    onClick={() => setMenuOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
+                  >
+                    Settings
+                  </Link>
                   <button
                     type="button"
                     onClick={async () => {
@@ -385,15 +418,14 @@ import ThemeToggle from "./ThemeToggle";
                         setMenuOpen(false);
                       }
                     }}
-                    className="w-full px-4 py-3 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                    className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                   >
                     Disconnect Wallet
                   </button>
                 </div>
               )}
             </div>
-          )}
-          {!walletConnected && (
+          ) : (
             <button
               type="button"
               onClick={() => onConnectModalOpenChange(true)}
@@ -405,95 +437,6 @@ import ThemeToggle from "./ThemeToggle";
               </div>
             </button>
           )}
-          <div ref={mobileMenuRef}>
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              className="flex items-center justify-center w-10 h-10 rounded-lg text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
-              aria-label="Toggle mobile menu"
-            >
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-
-           {mobileMenuOpen && (
-             <div className="fixed left-0 right-0 top-[58px] mx-0 overflow-hidden border-t border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-               <nav className="flex flex-col">
-                 <Link
-                   href="/"
-                   onClick={() => setMobileMenuOpen(false)}
-                   className={`px-6 py-4 text-sm font-semibold hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none ${isActive('/') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                 >
-                   Home
-                 </Link>
-                 <Link
-                   href="/swap"
-                   onClick={() => setMobileMenuOpen(false)}
-                   className={`px-6 py-4 text-sm font-semibold hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none ${isActive('/swap') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                 >
-                   Swap
-                 </Link>
-                 <Link
-                   href="/vaults"
-                   onClick={() => setMobileMenuOpen(false)}
-                   className={`px-6 py-4 text-sm font-semibold hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none ${isActive('/vaults') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                 >
-                   Vaults
-                 </Link>
-                 <Link
-                   href="/futures"
-                   onClick={() => setMobileMenuOpen(false)}
-                   className={`px-6 py-4 text-sm font-semibold hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none ${isActive('/futures') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                 >
-                   Futures
-                 </Link>
-                 {walletConnected && (
-                   <>
-                     <button
-                       type="button"
-                       onClick={() => setMobileWalletExpanded((v) => !v)}
-                       className={`w-full flex items-center justify-between px-6 py-4 text-sm font-semibold hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] outline-none ${isActive('/wallet') ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 border-l-4 border-l-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
-                     >
-                       Wallet
-                       <ChevronDown size={18} className={`transition-transform ${mobileWalletExpanded ? 'rotate-180' : ''}`} />
-                     </button>
-                     {mobileWalletExpanded && (
-                       <>
-                         <Link
-                           href="/wallet?tab=balances"
-                           onClick={() => setMobileMenuOpen(false)}
-                           className="pl-10 pr-6 py-3 text-sm font-medium text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
-                         >
-                           Balances
-                         </Link>
-                         <Link
-                           href="/wallet?tab=utxos"
-                           onClick={() => setMobileMenuOpen(false)}
-                           className="pl-10 pr-6 py-3 text-sm font-medium text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
-                         >
-                           UTXO Management
-                         </Link>
-                         <Link
-                           href="/wallet?tab=transactions"
-                           onClick={() => setMobileMenuOpen(false)}
-                           className="pl-10 pr-6 py-3 text-sm font-medium text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
-                         >
-                           Transaction History
-                         </Link>
-                         <Link
-                           href="/wallet?tab=settings"
-                           onClick={() => setMobileMenuOpen(false)}
-                           className="pl-10 pr-6 py-3 text-sm font-medium text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
-                         >
-                           Settings
-                         </Link>
-                       </>
-                     )}
-                   </>
-                 )}
-                </nav>
-             </div>
-           )}
-          </div>
         </div>
       </div>
     </header>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
-import { Bitcoin, Coins, DollarSign, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
+import { Bitcoin, Coins, RefreshCw, ExternalLink } from 'lucide-react';
 
 export default function BalancesPanel() {
   const { account } = useWallet() as any;
