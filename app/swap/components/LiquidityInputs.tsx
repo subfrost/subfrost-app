@@ -492,7 +492,7 @@ export default function LiquidityInputs({
               </div>
               <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token0Amount} onChange={onChangeToken0Amount} />
-                <div className="mt-1 flex items-center justify-between">
+                <div className="mt-1 flex flex-col items-end gap-1">
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
                   {onPercentToken0 && (
                     <div className="flex items-center gap-1">
@@ -537,7 +537,7 @@ export default function LiquidityInputs({
               </div>
               <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token1Amount} onChange={onChangeToken1Amount} />
-                <div className="mt-1 flex items-center justify-between">
+                <div className="mt-1 flex flex-col items-end gap-1">
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
                   {onPercentToken1 && (
                     <div className="flex items-center gap-1">
