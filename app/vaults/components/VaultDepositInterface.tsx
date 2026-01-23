@@ -278,9 +278,11 @@ export default function VaultDepositInterface({
                 />
               </div>
 
-              {/* Fiat value + Percentage Buttons row */}
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
+              {/* Balance + Percentage Buttons stacked */}
+              <div className="flex flex-col items-end gap-1">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  Balance {userBalance}
+                </div>
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
@@ -310,13 +312,6 @@ export default function VaultDepositInterface({
                   >
                     Max
                   </button>
-                </div>
-              </div>
-
-              {/* Balance row at bottom */}
-              <div className="flex items-center justify-end">
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  Balance {userBalance}
                 </div>
               </div>
             </div>
