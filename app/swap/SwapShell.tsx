@@ -138,6 +138,9 @@ export default function SwapShell() {
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
 
+  // Mobile chart visibility state
+  const [showMobileChart, setShowMobileChart] = useState(false);
+
   // Tab state
   const [selectedTab, setSelectedTab] = useState<'swap' | 'lp'>('swap');
   
@@ -1358,34 +1361,6 @@ export default function SwapShell() {
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
           </div>
 
-          {/* Mobile-only Chart - shown above swap form on small screens */}
-          <div className="md:hidden mb-4">
-            <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-              <PoolDetailsCard
-                pool={selectedTab === 'lp' && poolToken0 && poolToken1
-                  ? markets.find(p => {
-                      const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
-                      const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
-                      return (
-                        (p.token0.id === token0Id && p.token1.id === token1Id) ||
-                        (p.token0.id === token1Id && p.token1.id === token0Id)
-                      );
-                    })
-                  : selectedTab === 'swap' && fromToken && toToken
-                  ? markets.find(p => {
-                      const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
-                      const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
-                      return (
-                        (p.token0.id === from0Id && p.token1.id === to1Id) ||
-                        (p.token0.id === to1Id && p.token1.id === from0Id)
-                      );
-                    })
-                  : selectedPool
-                }
-              />
-            </Suspense>
-          </div>
-
           <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
           <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (
@@ -1496,6 +1471,49 @@ export default function SwapShell() {
           )}
           </Suspense>
           </section>
+
+          {/* Mobile Chart Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowMobileChart(!showMobileChart)}
+            className="md:hidden mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/80 hover:text-[color:var(--sf-text)]"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3v18h18" />
+              <path d="m19 9-5 5-4-4-3 3" />
+            </svg>
+            {showMobileChart ? 'Hide Chart' : 'Show Chart'}
+          </button>
+
+          {/* Mobile-only Chart - below swap form */}
+          {showMobileChart && (
+            <div className="md:hidden mt-4">
+              <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
+                <PoolDetailsCard
+                  pool={selectedTab === 'lp' && poolToken0 && poolToken1
+                    ? markets.find(p => {
+                        const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
+                        const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
+                        return (
+                          (p.token0.id === token0Id && p.token1.id === token1Id) ||
+                          (p.token0.id === token1Id && p.token1.id === token0Id)
+                        );
+                      })
+                    : selectedTab === 'swap' && fromToken && toToken
+                    ? markets.find(p => {
+                        const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
+                        const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+                        return (
+                          (p.token0.id === from0Id && p.token1.id === to1Id) ||
+                          (p.token0.id === to1Id && p.token1.id === from0Id)
+                        );
+                      })
+                    : selectedPool
+                  }
+                />
+              </Suspense>
+            </div>
+          )}
 
           {/* My Wallet Swaps - desktop only, under swap modal */}
           <div className="hidden md:block mt-8">
