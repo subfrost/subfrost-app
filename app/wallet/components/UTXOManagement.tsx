@@ -282,7 +282,7 @@ export default function UTXOManagement() {
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
                           <a
-                            href={`https://ordiscan.com/tx/${utxo.txid}`}
+                            href={`https://espo.sh/tx/${utxo.txid}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[color:var(--sf-primary)] hover:opacity-80"

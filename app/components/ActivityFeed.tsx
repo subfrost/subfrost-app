@@ -313,7 +313,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
           return (
             <Link
               key={(row as any).transactionId + '-' + idx}
-              href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
+              href={`https://espo.sh/tx/${(row as any).transactionId}`}
               target="_blank"
               className="block px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
             >

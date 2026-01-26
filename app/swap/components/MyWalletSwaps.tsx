@@ -227,7 +227,7 @@ export default function MyWalletSwaps() {
               return (
                 <Link
                   key={(row as any).transactionId + '-' + idx}
-                  href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
+                  href={`https://espo.sh/tx/${(row as any).transactionId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="grid grid-cols-[220px_1fr_minmax(100px,150px)] items-center gap-4 px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)] last:border-b-0"

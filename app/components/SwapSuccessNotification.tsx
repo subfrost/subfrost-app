@@ -102,7 +102,7 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               Transaction ID:{" "}
               <Link
-                href={`https://ordiscan.com/tx/${txId}`}
+                href={`https://espo.sh/tx/${txId}`}
                 target="_blank"
                 className="font-semibold text-xs break-all hover:underline"
               >
