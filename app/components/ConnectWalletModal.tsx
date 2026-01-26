@@ -145,7 +145,7 @@ export default function ConnectWalletModal() {
     }
     setInviteCodeValidated(true);
     setError(null);
-    setView('create');
+    // Stay on invite-code view to show success state
   };
 
   const handleClose = () => {
@@ -458,14 +458,14 @@ export default function ConnectWalletModal() {
                 )}
 
                 <button
-                  onClick={() => setView('invite-code')}
+                  onClick={() => setView('create')}
                   className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 mb-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
                   <div className="flex items-center gap-3">
                     <Plus size={24} className="text-green-400" />
                     <div className="text-left">
                       <div className="font-bold text-[color:var(--sf-text)]">Create New Wallet</div>
-                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">Requires an invite code.</div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">Generate a new Bitcoin wallet.</div>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
@@ -521,45 +521,70 @@ export default function ConnectWalletModal() {
 
           {view === 'invite-code' && (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col items-center gap-3 py-2">
-                <div className="p-4 rounded-full bg-amber-500/20 border border-amber-500/30">
-                  <Ticket size={32} className="text-amber-400" />
-                </div>
-                <p className="text-sm text-[color:var(--sf-text)]/60 text-center">
-                  Enter your invite code to create a new wallet. Invite codes are distributed to whitelisted users.
-                </p>
-              </div>
+              {inviteCodeValidated ? (
+                <>
+                  <div className="flex flex-col items-center gap-3 py-4">
+                    <div className="p-4 rounded-full bg-green-500/20 border border-green-500/30">
+                      <Check size={32} className="text-green-400" />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-[color:var(--sf-text)] mb-1">Invite Code Verified!</div>
+                      <p className="text-sm text-[color:var(--sf-text)]/60">
+                        Your code <span className="font-bold text-amber-400">{inviteCode}</span> has been validated.
+                      </p>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Invite Code</label>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === 'Enter' && validateInviteCode()}
-                  className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-bold tracking-wider text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 placeholder:font-medium placeholder:tracking-normal focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none uppercase"
-                  placeholder="Enter your invite code"
-                  autoFocus
-                />
-              </div>
+                  <button
+                    onClick={() => setView('create')}
+                    className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white"
+                  >
+                    Continue to Create Wallet
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col items-center gap-3 py-2">
+                    <div className="p-4 rounded-full bg-amber-500/20 border border-amber-500/30">
+                      <Ticket size={32} className="text-amber-400" />
+                    </div>
+                    <p className="text-sm text-[color:var(--sf-text)]/60 text-center">
+                      Enter your invite code if you were referred by someone.
+                    </p>
+                  </div>
 
-              {error && <div className="text-sm font-medium text-red-400">{error}</div>}
+                  <div>
+                    <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Invite Code</label>
+                    <input
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => e.key === 'Enter' && validateInviteCode()}
+                      className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-bold tracking-wider text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 placeholder:font-medium placeholder:tracking-normal focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none uppercase"
+                      placeholder="Enter your invite code"
+                      autoFocus
+                    />
+                  </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setView('select'); resetForm(); }}
-                  className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
-                >
-                  Back
-                </button>
-                <button
-                  onClick={validateInviteCode}
-                  disabled={!inviteCode.trim()}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
-                >
-                  Verify Code
-                </button>
-              </div>
+                  {error && <div className="text-sm font-medium text-red-400">{error}</div>}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { setView('create'); setError(null); }}
+                      className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={validateInviteCode}
+                      disabled={!inviteCode.trim()}
+                      className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                    >
+                      Verify Code
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -679,6 +704,22 @@ export default function ConnectWalletModal() {
                   {isLoading ? 'Creating...' : 'Create Wallet'}
                 </button>
               </div>
+
+              {/* Invite Code Section */}
+              {inviteCodeValidated ? (
+                <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium text-green-400">
+                  <Check size={16} />
+                  <span>Invite code verified: <span className="font-bold">{inviteCode}</span></span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setView('invite-code')}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-amber-400 hover:text-amber-300 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                >
+                  <Ticket size={16} />
+                  <span>Invited?</span>
+                </button>
+              )}
             </div>
           )}
 
