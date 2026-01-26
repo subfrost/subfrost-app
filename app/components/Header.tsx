@@ -160,10 +160,10 @@ import ThemeToggle from "./ThemeToggle";
             <Image
               src="/brand/subfrost-wordmark.svg"
               alt="SUBFROST wordmark"
-              width={120}
-              height={20}
+              width={180}
+              height={24}
               priority
-              className="hover:opacity-80 h-5 w-auto sf-wordmark"
+              className="hover:opacity-80 h-6 w-auto sf-wordmark"
             />
           </a>
 
