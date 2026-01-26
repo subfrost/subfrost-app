@@ -130,13 +130,7 @@ export default function WalletDashboardPage() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="border-b border-[color:var(--sf-outline)] mb-6 relative">
-            {/* Coming Soon tooltip - rendered outside overflow container */}
-            {showComingSoon && (
-              <div className="absolute -top-6 right-16 md:right-24 px-3 py-1 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold whitespace-nowrap animate-fade-in-out z-50 shadow-lg">
-                Coming Soon!
-              </div>
-            )}
+          <div className="border-b border-[color:var(--sf-outline)] mb-6">
             <div className="flex items-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -158,6 +152,12 @@ export default function WalletDashboardPage() {
                   </button>
                 );
               })}
+              {/* Coming Soon tooltip - appears to the right of UTXO tab */}
+              {showComingSoon && (
+                <div className="px-3 py-1 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold whitespace-nowrap animate-fade-in-out shrink-0">
+                  Coming Soon!
+                </div>
+              )}
               {/* Spacer to push gear to the right */}
               <div className="flex-grow" />
               {/* Settings gear button */}
