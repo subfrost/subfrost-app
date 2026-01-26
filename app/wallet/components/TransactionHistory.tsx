@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionHistory } from '@/hooks/useTransactionHistory';
-import { ExternalLink, Clock, CheckCircle, Code, RefreshCw, Zap } from 'lucide-react';
+import { Clock, CheckCircle, Code, RefreshCw, Zap } from 'lucide-react';
 
 export default function TransactionHistory() {
   const { account } = useWallet() as any;
@@ -41,10 +41,6 @@ export default function TransactionHistory() {
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleString();
-  };
-
-  const formatSats = (sats: number) => {
-    return (sats / 100000000).toFixed(8);
   };
 
   if (loading) {
@@ -104,62 +100,51 @@ export default function TransactionHistory() {
       <div className="space-y-4">
         {transactions.length > 0 ? (
           transactions.map((tx) => (
-            <div
+            <a
               key={tx.txid}
-              className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10"
+              href={`https://espo.sh/tx/${tx.txid}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 cursor-pointer"
             >
               {/* Transaction Header */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
                   {tx.confirmed ? (
-                    <CheckCircle size={20} className="text-green-400 mt-0.5" />
+                    <CheckCircle size={20} className="text-green-400" />
                   ) : (
-                    <Clock size={20} className="text-yellow-400 mt-0.5" />
+                    <Clock size={20} className="text-yellow-400" />
                   )}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-[color:var(--sf-text)]">
-                        {tx.txid.slice(0, 8)}...{tx.txid.slice(-8)}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[color:var(--sf-text)]">
+                      {tx.txid.slice(0, 8)}...{tx.txid.slice(-8)}
+                    </span>
+                    {tx.hasProtostones && (
+                      <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                        <Zap size={12} />
+                        Alkanes
                       </span>
-                      <a
-                        href={`https://espo.sh/tx/${tx.txid}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[color:var(--sf-primary)] hover:opacity-80"
-                      >
-                        <ExternalLink size={14} />
-                      </a>
-                      {tx.hasProtostones && (
-                        <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
-                          <Zap size={12} />
-                          Alkanes
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">
-                      {tx.blockTime ? formatDate(tx.blockTime) : 'Pending'}
-                      {tx.blockHeight && (
-                        <span className="ml-2">• Block {tx.blockHeight}</span>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      tx.confirmed
-                        ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                        : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
-                    }`}
-                  >
-                    {tx.confirmed ? 'Confirmed' : 'Pending'}
-                  </span>
-                  {tx.fee && (
-                    <span className="text-xs text-[color:var(--sf-text)]/60">
-                      Fee: {formatSats(tx.fee)} BTC
-                    </span>
-                  )}
-                </div>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    tx.confirmed
+                      ? 'bg-green-500/20 text-green-600 dark:text-green-400'
+                      : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+                  }`}
+                >
+                  {tx.confirmed ? 'Confirmed' : 'Pending'}
+                </span>
+              </div>
+              <div className="text-xs text-[color:var(--sf-text)]/60 mt-2 ml-8">
+                {tx.blockTime ? formatDate(tx.blockTime) : 'Pending'}
+                {tx.blockHeight && (
+                  <span className="ml-2">• Block {tx.blockHeight}</span>
+                )}
+                {tx.fee && (
+                  <span className="ml-2">• Fee: {tx.fee.toLocaleString()} sats</span>
+                )}
               </div>
 
               {viewMode === 'raw' && (
@@ -173,7 +158,7 @@ export default function TransactionHistory() {
                   </div>
                 </div>
               )}
-            </div>
+            </a>
           ))
         ) : (
           <div className="text-center py-12 text-[color:var(--sf-text)]/60">
