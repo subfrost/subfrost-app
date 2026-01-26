@@ -144,9 +144,29 @@ import ThemeToggle from "./ThemeToggle";
 
    return (
     <>
-      {/* Mobile Fixed Header - Only connect wallet button */}
+      {/* Mobile Fixed Header - Logo and connect wallet button */}
       <header className="fixed top-0 left-0 right-0 z-50 md:hidden bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.05)]">
-        <div className="relative flex h-[58px] w-full items-center justify-end px-6">
+        <div className="relative flex h-[58px] w-full items-center justify-between px-4">
+          {/* Brand */}
+          <a href="https://subfrost.io" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">
+            <Image
+              src="/brand/snowflake_2025.svg"
+              alt="Subfrost snowflake logo"
+              width={24}
+              height={24}
+              priority
+              className="w-6 h-6"
+            />
+            <Image
+              src="/brand/subfrost-wordmark.svg"
+              alt="SUBFROST wordmark"
+              width={120}
+              height={20}
+              priority
+              className="hover:opacity-80 h-5 w-auto sf-wordmark"
+            />
+          </a>
+
           {walletConnected ? (
             <div className="relative" ref={mobileWalletRef}>
               <button
