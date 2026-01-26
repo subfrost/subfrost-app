@@ -179,7 +179,7 @@ export default function ConnectWalletModal() {
 
       // Track invite code usage
       if (inviteCodeValidated && inviteCode) {
-        trackInviteCodeUsage(inviteCode, result.address);
+        trackInviteCodeUsage(inviteCode);
       }
 
       setView('show-mnemonic');
