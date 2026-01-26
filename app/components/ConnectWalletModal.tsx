@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload, RotateCcw, X } from 'lucide-react';
+import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload, RotateCcw, X, Ticket } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -8,7 +8,56 @@ import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
 import { initGoogleDrive, isDriveConfigured, type WalletBackupInfo } from '@/utils/clientSideDrive';
 import { WalletListPicker } from './WalletListPicker';
 
-type WalletView = 'select' | 'create' | 'restore-options' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
+type WalletView = 'select' | 'invite-code' | 'create' | 'restore-options' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
+
+// Valid invite codes - add codes here
+const VALID_INVITE_CODES = new Set([
+  'SUBFROST2024',
+  'EARLYACCESS',
+  'FROSTBETA',
+  'BITCOIN4EVER',
+  // Add more codes as needed
+]);
+
+// Invite code usage tracking
+interface InviteCodeUsage {
+  code: string;
+  timestamp: string;
+  walletAddress?: string;
+}
+
+const INVITE_CODE_STORAGE_KEY = 'subfrost_invite_code_usage';
+
+function getInviteCodeUsage(): InviteCodeUsage[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(INVITE_CODE_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function trackInviteCodeUsage(code: string, walletAddress?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const usage = getInviteCodeUsage();
+    usage.push({
+      code: code.toUpperCase(),
+      timestamp: new Date().toISOString(),
+      walletAddress,
+    });
+    localStorage.setItem(INVITE_CODE_STORAGE_KEY, JSON.stringify(usage));
+    console.log('[InviteCode] Tracked usage:', { code, walletAddress, totalUsages: usage.length });
+  } catch (err) {
+    console.error('[InviteCode] Failed to track usage:', err);
+  }
+}
+
+// Export for debugging - access via browser console: window.getInviteCodeUsage()
+if (typeof window !== 'undefined') {
+  (window as any).getInviteCodeUsage = getInviteCodeUsage;
+}
 
 export default function ConnectWalletModal() {
   const router = useRouter();
@@ -28,6 +77,8 @@ export default function ConnectWalletModal() {
   } = useWallet();
 
   const [view, setView] = useState<WalletView>('select');
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCodeValidated, setInviteCodeValidated] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordHintInput, setPasswordHintInput] = useState('');
@@ -66,6 +117,8 @@ export default function ConnectWalletModal() {
   }, [isConnectModalOpen, hasExistingKeystoreFromContext]);
 
   const resetForm = () => {
+    setInviteCode('');
+    setInviteCodeValidated(false);
     setPassword('');
     setConfirmPassword('');
     setMnemonic('');
@@ -78,6 +131,21 @@ export default function ConnectWalletModal() {
     setUploadedKeystore(null);
     setBackupSuccess(false);
     setBackupProgress(0);
+  };
+
+  const validateInviteCode = () => {
+    const code = inviteCode.trim().toUpperCase();
+    if (!code) {
+      setError('Please enter an invite code');
+      return;
+    }
+    if (!VALID_INVITE_CODES.has(code)) {
+      setError('Invalid invite code. Please check and try again.');
+      return;
+    }
+    setInviteCodeValidated(true);
+    setError(null);
+    setView('create');
   };
 
   const handleClose = () => {
@@ -108,6 +176,12 @@ export default function ConnectWalletModal() {
       // Use WalletContext's createWallet which handles storage correctly
       const result = await createWalletFromContext(password);
       setGeneratedMnemonic(result.mnemonic);
+
+      // Track invite code usage
+      if (inviteCodeValidated && inviteCode) {
+        trackInviteCodeUsage(inviteCode, result.address);
+      }
+
       setView('show-mnemonic');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create wallet');
@@ -337,6 +411,7 @@ export default function ConnectWalletModal() {
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
               {view === 'select' && 'Connect Wallet'}
+              {view === 'invite-code' && 'Enter Invite Code'}
               {view === 'create' && 'Create New Wallet'}
               {view === 'restore-options' && 'Restore Wallet'}
               {view === 'restore-mnemonic' && 'Restore from Mnemonic'}
@@ -383,14 +458,14 @@ export default function ConnectWalletModal() {
                 )}
 
                 <button
-                  onClick={() => setView('create')}
+                  onClick={() => setView('invite-code')}
                   className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 mb-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
                   <div className="flex items-center gap-3">
                     <Plus size={24} className="text-green-400" />
                     <div className="text-left">
                       <div className="font-bold text-[color:var(--sf-text)]">Create New Wallet</div>
-                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">Generate a new Bitcoin wallet.</div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">Requires an invite code.</div>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
@@ -441,6 +516,50 @@ export default function ConnectWalletModal() {
                   Delete stored wallet
                 </button>
               )}
+            </div>
+          )}
+
+          {view === 'invite-code' && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col items-center gap-3 py-2">
+                <div className="p-4 rounded-full bg-amber-500/20 border border-amber-500/30">
+                  <Ticket size={32} className="text-amber-400" />
+                </div>
+                <p className="text-sm text-[color:var(--sf-text)]/60 text-center">
+                  Enter your invite code to create a new wallet. Invite codes are distributed to whitelisted users.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Invite Code</label>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && validateInviteCode()}
+                  className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-bold tracking-wider text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 placeholder:font-medium placeholder:tracking-normal focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none uppercase"
+                  placeholder="Enter your invite code"
+                  autoFocus
+                />
+              </div>
+
+              {error && <div className="text-sm font-medium text-red-400">{error}</div>}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setView('select'); resetForm(); }}
+                  className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={validateInviteCode}
+                  disabled={!inviteCode.trim()}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                >
+                  Verify Code
+                </button>
+              </div>
             </div>
           )}
 

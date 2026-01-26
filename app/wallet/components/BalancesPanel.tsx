@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
-import { Bitcoin, Coins, RefreshCw, ExternalLink } from 'lucide-react';
+import { Bitcoin, Coins, RefreshCw, ExternalLink, Flame, Lock } from 'lucide-react';
 
 export default function BalancesPanel() {
   const { account } = useWallet() as any;
@@ -81,6 +81,13 @@ export default function BalancesPanel() {
 
   const totalBTC = formatBTC(balances.bitcoin.total);
   const totalUSD = bitcoinPrice ? formatUSD(balances.bitcoin.total) : null;
+
+  // Mock FUEL allocation data - replace with API call when ready
+  const fuelAllocation = {
+    amount: 12500,
+    isClaimed: false,
+    claimableAt: null as Date | null, // null means claimable now (when TGE happens)
+  };
 
   return (
     <div className="space-y-6">
@@ -188,6 +195,41 @@ export default function BalancesPanel() {
             </div>
             <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">bc1q / bc1p</div>
           </div>
+        </div>
+      </div>
+
+      {/* FUEL Allocation */}
+      <div className="rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-6 border border-amber-500/20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30">
+              <Flame size={28} className="text-amber-400" />
+            </div>
+            <div>
+              <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">FUEL Allocation</div>
+              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)]">
+                {fuelAllocation.amount.toLocaleString()} FUEL
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            {fuelAllocation.isClaimed ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30">
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+                <span className="text-sm font-medium text-green-400">Claimed</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30">
+                <Lock size={14} className="text-amber-400" />
+                <span className="text-sm font-medium text-amber-400">Not Claimed</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-amber-500/20">
+          <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
+            Your FUEL allocation is reserved and will be released after TGE on the same schedule as investors. TGE timelines are not yet set and if you are allocated FUEL, you must have patience. We will schedule our TGE to maximize investment returns NOT to earn quick profits.
+          </p>
         </div>
       </div>
 
