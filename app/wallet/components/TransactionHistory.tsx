@@ -106,7 +106,7 @@ export default function TransactionHistory() {
           transactions.map((tx) => (
             <div
               key={tx.txid}
-              className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-6"
+              className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10"
             >
               {/* Transaction Header */}
               <div className="flex items-start justify-between">
