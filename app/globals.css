@@ -520,6 +520,29 @@ textarea:focus-visible,
   animation-fill-mode: forwards;
 }
 
+@keyframes fade-in-out {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+}
+
+.animate-fade-in-out {
+  animation: fade-in-out 1.5s ease-in-out forwards;
+}
+
 /* Smooth scroll */
 @media (prefers-reduced-motion: no-preference) {
   html {

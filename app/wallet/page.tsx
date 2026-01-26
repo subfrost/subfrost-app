@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check } from 'lucide-react';
@@ -31,6 +31,12 @@ export default function WalletDashboardPage() {
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
+  const [showComingSoon, setShowComingSoon] = useState(false);
+
+  const handleUtxoClick = useCallback(() => {
+    setShowComingSoon(true);
+    setTimeout(() => setShowComingSoon(false), 1500);
+  }, []);
 
   const copyToClipboard = async (text: string, type: 'segwit' | 'taproot') => {
     try {
@@ -52,9 +58,9 @@ export default function WalletDashboardPage() {
 
   // Settings tab is rendered separately for responsive control
   const tabs = [
-    { id: 'balances' as TabView, label: 'Balances', shortLabel: 'Balances', icon: Wallet },
-    { id: 'utxos' as TabView, label: 'UTXO Management', shortLabel: 'UTXOs', icon: BarChart2 },
-    { id: 'transactions' as TabView, label: 'Transaction History', shortLabel: 'History', icon: Activity },
+    { id: 'balances' as TabView, label: 'Balances', shortLabel: 'Balances', icon: Wallet, disabled: false },
+    { id: 'transactions' as TabView, label: 'Transaction History', shortLabel: 'History', icon: Activity, disabled: false },
+    { id: 'utxos' as TabView, label: 'UTXO Management', shortLabel: 'UTXOs', icon: BarChart2, disabled: true },
   ];
 
   return (
@@ -129,19 +135,27 @@ export default function WalletDashboardPage() {
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-xs md:text-base shrink-0 ${
-                      activeTab === tab.id
-                        ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                        : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
-                    }`}
-                  >
-                    <Icon size={16} className="md:w-5 md:h-5" />
-                    <span className="whitespace-nowrap md:hidden">{tab.shortLabel}</span>
-                    <span className="whitespace-nowrap hidden md:inline">{tab.label}</span>
-                  </button>
+                  <div key={tab.id} className="relative shrink-0">
+                    {tab.disabled && showComingSoon && (
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold whitespace-nowrap animate-fade-in-out z-10">
+                        Coming Soon!
+                      </div>
+                    )}
+                    <button
+                      onClick={() => tab.disabled ? handleUtxoClick() : setActiveTab(tab.id)}
+                      className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-xs md:text-base ${
+                        tab.disabled
+                          ? 'text-[color:var(--sf-text)]/30 cursor-not-allowed'
+                          : activeTab === tab.id
+                            ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                            : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
+                      }`}
+                    >
+                      <Icon size={16} className="md:w-5 md:h-5" />
+                      <span className="whitespace-nowrap md:hidden">{tab.shortLabel}</span>
+                      <span className="whitespace-nowrap hidden md:inline">{tab.label}</span>
+                    </button>
+                  </div>
                 );
               })}
               {/* Spacer to push gear to the right */}
