@@ -130,32 +130,32 @@ export default function WalletDashboardPage() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="border-b border-[color:var(--sf-outline)] mb-6">
+          <div className="border-b border-[color:var(--sf-outline)] mb-6 relative">
+            {/* Coming Soon tooltip - rendered outside overflow container */}
+            {showComingSoon && (
+              <div className="absolute -top-6 right-16 md:right-24 px-3 py-1 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold whitespace-nowrap animate-fade-in-out z-50 shadow-lg">
+                Coming Soon!
+              </div>
+            )}
             <div className="flex items-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
-                  <div key={tab.id} className="relative shrink-0">
-                    {tab.disabled && showComingSoon && (
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold whitespace-nowrap animate-fade-in-out z-10">
-                        Coming Soon!
-                      </div>
-                    )}
-                    <button
-                      onClick={() => tab.disabled ? handleUtxoClick() : setActiveTab(tab.id)}
-                      className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-xs md:text-base ${
-                        tab.disabled
-                          ? 'text-[color:var(--sf-text)]/30 cursor-not-allowed'
-                          : activeTab === tab.id
-                            ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                            : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
-                      }`}
-                    >
-                      <Icon size={16} className="md:w-5 md:h-5" />
-                      <span className="whitespace-nowrap md:hidden">{tab.shortLabel}</span>
-                      <span className="whitespace-nowrap hidden md:inline">{tab.label}</span>
-                    </button>
-                  </div>
+                  <button
+                    key={tab.id}
+                    onClick={() => tab.disabled ? handleUtxoClick() : setActiveTab(tab.id)}
+                    className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-3 font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative text-xs md:text-base shrink-0 ${
+                      tab.disabled
+                        ? 'text-[color:var(--sf-text)]/30 cursor-not-allowed'
+                        : activeTab === tab.id
+                          ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                          : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
+                    }`}
+                  >
+                    <Icon size={16} className="md:w-5 md:h-5" />
+                    <span className="whitespace-nowrap md:hidden">{tab.shortLabel}</span>
+                    <span className="whitespace-nowrap hidden md:inline">{tab.label}</span>
+                  </button>
                 );
               })}
               {/* Spacer to push gear to the right */}
