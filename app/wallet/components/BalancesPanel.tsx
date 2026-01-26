@@ -9,7 +9,7 @@ import { Bitcoin, Coins, RefreshCw, ExternalLink } from 'lucide-react';
 export default function BalancesPanel() {
   const { account } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
-  const { balances, utxos, isLoading, error, refresh } = useEnrichedWalletData();
+  const { balances, isLoading, error, refresh } = useEnrichedWalletData();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
