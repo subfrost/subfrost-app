@@ -76,11 +76,9 @@ import ThemeToggle from "./ThemeToggle";
    const { balances, isLoading: isBalanceLoading } = useEnrichedWalletData();
    const pathname = usePathname();
    const [menuOpen, setMenuOpen] = useState(false);
-   const [walletNavOpen, setWalletNavOpen] = useState(false);
    const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
    const menuRootRef = useRef<HTMLDivElement | null>(null);
    const mobileWalletRef = useRef<HTMLDivElement | null>(null);
-   const walletNavRef = useRef<HTMLDivElement | null>(null);
    const menuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
    const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
@@ -291,48 +289,6 @@ import ThemeToggle from "./ThemeToggle";
           <Link href="/futures" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/futures') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
             Futures
           </Link>
-          {walletConnected && (
-            <div
-              className="relative"
-              ref={walletNavRef}
-              onMouseEnter={() => setWalletNavOpen(true)}
-              onMouseLeave={() => setWalletNavOpen(false)}
-            >
-              <Link href="/wallet" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/wallet') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
-                Wallet
-              </Link>
-              {walletNavOpen && (
-                <div className="absolute left-0 top-full pt-2 z-50">
-                  <div className="w-44 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                    <Link
-                      href="/wallet?tab=balances"
-                      className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                    >
-                      Balances
-                    </Link>
-                    <Link
-                      href="/wallet?tab=utxos"
-                      className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                    >
-                      UTXO Management
-                    </Link>
-                    <Link
-                      href="/wallet?tab=transactions"
-                      className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                    >
-                      Transaction History
-                    </Link>
-                    <Link
-                      href="/wallet?tab=settings"
-                      className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                    >
-                      Settings
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </nav>
 
         {/* Desktop CTA */}

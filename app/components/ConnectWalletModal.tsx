@@ -638,6 +638,21 @@ export default function ConnectWalletModal() {
 
           {view === 'create' && (
             <div className="flex flex-col gap-4">
+              {/* Invite Code Section */}
+              {inviteCodeValidated ? (
+                <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium text-green-400">
+                  <Check size={16} />
+                  <span>Invite code verified: <span className="font-bold">{inviteCode}</span></span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setView('invite-code')}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-amber-400 hover:text-amber-300 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                >
+                  <Ticket size={16} />
+                  <span>Invited?</span>
+                </button>
+              )}
               <div>
                 <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Password (min 8 characters)</label>
                 <div className="relative">
@@ -705,21 +720,7 @@ export default function ConnectWalletModal() {
                 </button>
               </div>
 
-              {/* Invite Code Section */}
-              {inviteCodeValidated ? (
-                <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium text-green-400">
-                  <Check size={16} />
-                  <span>Invite code verified: <span className="font-bold">{inviteCode}</span></span>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setView('invite-code')}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-amber-400 hover:text-amber-300 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                >
-                  <Ticket size={16} />
-                  <span>Invited?</span>
-                </button>
-              )}
+              
             </div>
           )}
 
