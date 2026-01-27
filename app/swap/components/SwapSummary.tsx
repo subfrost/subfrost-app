@@ -43,6 +43,8 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
 
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
+  // Mobile-only collapsible details
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   // Local deadline state to allow empty field while typing
   const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
   const normalizedSell = sellId === 'btc' ? FRBTC_ALKANE_ID : sellId;
@@ -175,6 +177,21 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
         <SkeletonLines />
       ) : quote ? (
         <>
+          {/* Mobile toggle button - hidden on md+ */}
+          <button
+            type="button"
+            onClick={() => setMobileDetailsOpen(!mobileDetailsOpen)}
+            className="flex items-center justify-between w-full px-4 py-2 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60 md:hidden"
+          >
+            <span>Details</span>
+            <ChevronDown
+              size={14}
+              className={`transition-transform duration-300 ${mobileDetailsOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {/* Details content: collapsible on mobile, always visible on md+ */}
+          <div className={`transition-all duration-300 ease-in-out overflow-hidden md:!max-h-none md:!opacity-100 ${mobileDetailsOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
           {swapRoute && (
             <div className="rounded-2xl bg-transparent p-4 pb-0">
               <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
@@ -392,6 +409,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
               </div>
             </div>
           )}
+          </div>
         </>
       ) : null}
     </div>

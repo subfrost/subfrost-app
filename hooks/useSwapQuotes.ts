@@ -123,7 +123,11 @@ async function calculateSwapPrice(
   provider: WebProvider | null,
   wrapFee: number = FRBTC_WRAP_FEE_PER_1000,
   unwrapFee: number = FRBTC_UNWRAP_FEE_PER_1000,
+  originalSellCurrency?: string,
+  originalBuyCurrency?: string,
 ) {
+  const effectiveSell = originalSellCurrency ?? sellCurrency;
+  const effectiveBuy = originalBuyCurrency ?? buyCurrency;
   const poolFee = await queryPoolFeeWithProvider(provider, pool.poolId);
   let buyAmount: string;
   let sellAmount: string;
@@ -151,22 +155,22 @@ async function calculateSwapPrice(
 
   if (direction === 'sell') {
     let amountIn = Number(amountInAlks);
-    if (sellCurrency === 'btc') {
+    if (effectiveSell === 'btc') {
       amountIn = (amountIn * (1000 - wrapFee)) / 1000;
     }
     let calculatedOut = swapCalculateOut({ amountIn, reserveIn, reserveOut, feePercentage: poolFee });
-    if (buyCurrency === 'btc') {
+    if (effectiveBuy === 'btc') {
       calculatedOut = (calculatedOut * (1000 - unwrapFee)) / 1000;
     }
     sellAmount = amountInAlks;
     buyAmount = calculatedOut.toString();
   } else {
     let amountOut = Number(amountInAlks);
-    if (buyCurrency === 'btc') {
+    if (effectiveBuy === 'btc') {
       amountOut = (amountOut * (1000 + unwrapFee)) / 1000;
     }
     let calculatedIn = swapCalculateIn({ amountOut, reserveIn, reserveOut, feePercentage: poolFee });
-    if (sellCurrency === 'btc') {
+    if (effectiveSell === 'btc') {
       calculatedIn = (calculatedIn * (1000 + wrapFee)) / 1000;
     }
     buyAmount = amountInAlks;
@@ -357,6 +361,8 @@ export function useSwapQuotes(
           provider,
           wrapFee,
           unwrapFee,
+          sellCurrency,
+          buyCurrency,
         );
       }
 
@@ -394,6 +400,7 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              sellCurrency,
             );
             const secondHop = await calculateSwapPrice(
               mid,
@@ -405,8 +412,12 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              undefined,
+              buyCurrency,
             );
-            routes.push({ ...secondHop, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+            const overallSellAmount = toAlks(debouncedAmount);
+            const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
+            routes.push({ ...secondHop, sellAmount: overallSellAmount, displaySellAmount: fromAlks(overallSellAmount), exchangeRate: overallExchangeRate, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
             console.warn('BUSD bridge route failed:', e);
           }
@@ -422,6 +433,8 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              undefined,
+              buyCurrency,
             );
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
@@ -433,8 +446,11 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              sellCurrency,
             );
-            routes.push({ ...firstHop, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+            const overallBuyAmount = toAlks(debouncedAmount);
+            const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();
+            routes.push({ ...firstHop, buyAmount: overallBuyAmount, displayBuyAmount: fromAlks(overallBuyAmount), exchangeRate: overallExchangeRate, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
             console.warn('BUSD bridge route failed:', e);
           }
@@ -456,6 +472,7 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              sellCurrency,
             );
             const secondHop = await calculateSwapPrice(
               mid,
@@ -467,8 +484,12 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              undefined,
+              buyCurrency,
             );
-            routes.push({ ...secondHop, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+            const overallSellAmount = toAlks(debouncedAmount);
+            const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
+            routes.push({ ...secondHop, sellAmount: overallSellAmount, displaySellAmount: fromAlks(overallSellAmount), exchangeRate: overallExchangeRate, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
             console.warn('frBTC bridge route failed:', e);
           }
@@ -484,6 +505,8 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              undefined,
+              buyCurrency,
             );
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
@@ -495,8 +518,11 @@ export function useSwapQuotes(
               provider,
               wrapFee,
               unwrapFee,
+              sellCurrency,
             );
-            routes.push({ ...firstHop, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
+            const overallBuyAmount = toAlks(debouncedAmount);
+            const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();
+            routes.push({ ...firstHop, buyAmount: overallBuyAmount, displayBuyAmount: fromAlks(overallBuyAmount), exchangeRate: overallExchangeRate, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
             console.warn('frBTC bridge route failed:', e);
           }
