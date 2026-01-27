@@ -177,6 +177,8 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
         <SkeletonLines />
       ) : quote ? (
         <>
+          {/* Mobile: panel container with toggle + collapsible content */}
+          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] md:bg-transparent md:shadow-none md:backdrop-blur-none">
           {/* Mobile toggle button - hidden on md+ */}
           <button
             type="button"
@@ -409,6 +411,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
               </div>
             </div>
           )}
+          </div>
           </div>
         </>
       ) : null}
