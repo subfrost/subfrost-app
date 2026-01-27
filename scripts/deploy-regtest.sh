@@ -1,8 +1,34 @@
 #!/bin/bash
 
 # Subfrost Alkanes Deployment Script for Regtest
-# This script deploys all subfrost alkanes to a local regtest environment
+# This script deploys all subfrost alkanes to a regtest environment
 # Pattern follows reference/oyl-amm/deploy-oyl-amm.sh
+#
+# ============================================================================
+# USAGE:
+# ============================================================================
+#
+#   ./deploy-regtest.sh [local|hosted]
+#
+#   local  - Deploy to local Docker regtest (localhost:18888)
+#   hosted - Deploy to hosted Kubernetes regtest (regtest.subfrost.io)
+#
+#   Default: hosted
+#
+# ============================================================================
+# IMPORTANT NOTES (see docs/REGTEST_INFRASTRUCTURE_JOURNAL.md):
+# ============================================================================
+#
+# LOCAL vs HOSTED REGTEST:
+#   - LOCAL: Uses localhost:18888 (Docker environment), provider: regtest
+#   - HOSTED: Uses regtest.subfrost.io (Kubernetes environment), provider: subfrost-regtest
+#
+# Genesis alkanes are auto-deployed by alkanes-rs when indexer starts:
+#   - DIESEL [2,0], frBTC [32,0], frSIGIL [32,1], ftrBTC [31,0]
+#
+# Deployment pattern: [3, tx] + envelope → creates alkane at [4, tx]
+#
+# ============================================================================
 
 set -e
 
@@ -13,13 +39,61 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Parse command line argument for deployment mode
+DEPLOY_MODE="${1:-hosted}"
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ALKANES_DIR="${ALKANES_DIR:-$SCRIPT_DIR/../.subfrost-build/alkanes-rs}"
-CLI_BINARY="${ALKANES_CLI:-$ALKANES_DIR/target/release/alkanes-cli}"
-WASM_DIR="$SCRIPT_DIR/../prod_wasms"
-WALLET_FILE="${WALLET_FILE:-$HOME/.alkanes/regtest-wallet.json}"
-RPC_URL="http://localhost:18888"
+
+# WASM directories - try multiple locations
+WASM_DIRS=(
+    "$SCRIPT_DIR/../prod_wasms"
+    "$SCRIPT_DIR/../../alkanes-rs-dev/prod_wasms"
+    "$HOME/Documents/GitHub/alkanes-rs-dev/prod_wasms"
+    "/Users/erickdelgado/Documents/GitHub/alkanes-rs-dev/prod_wasms"
+)
+
+# Find the first existing WASM directory
+WASM_DIR=""
+for dir in "${WASM_DIRS[@]}"; do
+    if [ -d "$dir" ] && [ -n "$(ls -A "$dir"/*.wasm 2>/dev/null)" ]; then
+        WASM_DIR="$dir"
+        break
+    fi
+done
+
+# CLI binary locations - try multiple
+CLI_DIRS=(
+    "$SCRIPT_DIR/../.subfrost-build/alkanes-rs/target/release/alkanes-cli"
+    "$SCRIPT_DIR/../../alkanes-rs-dev/target/release/alkanes-cli"
+    "$HOME/Documents/GitHub/alkanes-rs-dev/target/release/alkanes-cli"
+    "/Users/erickdelgado/Documents/GitHub/alkanes-rs-dev/target/release/alkanes-cli"
+)
+
+# Find CLI binary
+CLI_BINARY="${ALKANES_CLI:-}"
+if [ -z "$CLI_BINARY" ]; then
+    for cli in "${CLI_DIRS[@]}"; do
+        if [ -f "$cli" ]; then
+            CLI_BINARY="$cli"
+            break
+        fi
+    done
+fi
+
+# Set provider and RPC URL based on mode
+if [ "$DEPLOY_MODE" = "local" ]; then
+    PROVIDER="regtest"
+    RPC_URL="http://localhost:18888"
+    WALLET_FILE="${WALLET_FILE:-$HOME/.alkanes/regtest-wallet.json}"
+else
+    PROVIDER="subfrost-regtest"
+    RPC_URL="https://regtest.subfrost.io/v4/jsonrpc"
+    WALLET_FILE="${WALLET_FILE:-$HOME/.alkanes/wallet.json}"
+fi
+
+# Default passphrase
+DEPLOY_PASSWORD="${DEPLOY_PASSWORD:-testtesttest}"
 
 # OYL AMM Constants (matching oyl-protocol deployment)
 AMM_FACTORY_ID=65522          # 0xfff2
@@ -48,68 +122,112 @@ log_warn() {
 
 # Check if CLI exists
 check_cli() {
-    if [ -f "$CLI_BINARY" ]; then
+    if [ -n "$CLI_BINARY" ] && [ -f "$CLI_BINARY" ]; then
         log_success "Found CLI at: $CLI_BINARY"
         return 0
     fi
-    
+
     # Fallback to PATH
-    if command -v subfrost-cli &> /dev/null; then
-        CLI_BINARY="subfrost-cli"
-        log_success "Found subfrost-cli in PATH: $(which subfrost-cli)"
+    if command -v alkanes-cli &> /dev/null; then
+        CLI_BINARY="alkanes-cli"
+        log_success "Found alkanes-cli in PATH: $(which alkanes-cli)"
         return 0
     fi
-    
-    log_error "CLI not found at: $CLI_BINARY"
+
+    log_error "alkanes-cli not found"
+    log_info "Searched in:"
+    for cli in "${CLI_DIRS[@]}"; do
+        log_info "  - $cli"
+    done
+    log_info ""
     log_info "Please build the CLI first:"
-    log_info "  cd $ALKANES_DIR && cargo build --release"
+    log_info "  cd ~/Documents/GitHub/alkanes-rs-dev && cargo build --release"
     exit 1
 }
 
 # Check if regtest node is running
 check_regtest() {
-    log_info "Checking if regtest node is running..."
-    if ! curl -s "$RPC_URL" > /dev/null 2>&1; then
+    log_info "Checking if regtest node is running at $RPC_URL..."
+
+    # Test with a simple RPC call
+    local response=$(curl -s -X POST "$RPC_URL" \
+        -H "Content-Type: application/json" \
+        -d '{"jsonrpc":"2.0","method":"metashrew_height","params":[],"id":1}' 2>/dev/null)
+
+    if [ -z "$response" ]; then
         log_error "Cannot connect to regtest node at $RPC_URL"
-        log_info "Please start the regtest node first:"
-        log_info "  cd $ALKANES_DIR && docker-compose up -d"
+        if [ "$DEPLOY_MODE" = "local" ]; then
+            log_info "Please start the local Docker regtest first"
+        else
+            log_info "The hosted regtest at regtest.subfrost.io may be down"
+        fi
         exit 1
     fi
-    log_success "Regtest node is running at $RPC_URL"
+
+    # Extract height from response
+    local height=$(echo "$response" | grep -oE '"result":\s*"?[0-9]+"?' | grep -oE '[0-9]+' | head -1)
+    log_success "Regtest node is running at $RPC_URL (height: ${height:-unknown})"
 }
 
 # Check if WASMs exist
 check_wasms() {
-    log_info "Checking if WASM files exist in prod_wasms..."
-    if [ ! -d "$WASM_DIR" ] || [ -z "$(ls -A $WASM_DIR/*.wasm 2>/dev/null)" ]; then
-        log_error "WASM files not found in $WASM_DIR"
-        log_info "Please ensure WASMs are copied to $WASM_DIR"
-        log_info "Or build them with:"
-        log_info "  cd ../subfrost-alkanes && cargo build --release --target wasm32-unknown-unknown"
-        log_info "  cp target/wasm32-unknown-unknown/release/*.wasm $WASM_DIR/"
+    log_info "Checking if WASM files exist..."
+
+    if [ -z "$WASM_DIR" ] || [ ! -d "$WASM_DIR" ]; then
+        log_error "WASM directory not found"
+        log_info "Searched in:"
+        for dir in "${WASM_DIRS[@]}"; do
+            log_info "  - $dir"
+        done
+        log_info ""
+        log_info "Please ensure WASMs are built and available in one of these locations."
         exit 1
     fi
-    
+
     # Count non-empty WASMs
     local count=$(find "$WASM_DIR" -name "*.wasm" -type f -size +1k | wc -l)
     log_success "Found $count WASM files in $WASM_DIR"
+
+    # List required WASMs for AMM
+    local required_wasms=(
+        "alkanes_std_auth_token.wasm"
+        "alkanes_std_beacon_proxy.wasm"
+        "alkanes_std_upgradeable.wasm"
+        "alkanes_std_upgradeable_beacon.wasm"
+        "factory.wasm"
+        "pool.wasm"
+    )
+
+    local missing=0
+    for wasm in "${required_wasms[@]}"; do
+        if [ ! -f "$WASM_DIR/$wasm" ]; then
+            log_warn "Missing required WASM: $wasm"
+            missing=$((missing + 1))
+        fi
+    done
+
+    if [ $missing -gt 0 ]; then
+        log_error "Missing $missing required WASM files for AMM deployment"
+        exit 1
+    fi
+
+    log_success "All required AMM WASM files present"
 }
 
 # Setup wallet if it doesn't exist
 setup_wallet() {
     if [ ! -f "$WALLET_FILE" ]; then
-        log_info "Creating new wallet..."
+        log_info "Creating new wallet at $WALLET_FILE..."
         mkdir -p "$(dirname "$WALLET_FILE")"
-        # Create wallet interactively - user must provide passphrase
-        log_warn "Please enter passphrase when prompted (use: ${DEPLOY_PASSWORD:-testtesttest})"
-        "$CLI_BINARY" -p regtest wallet create -o "$WALLET_FILE"
+        # Create wallet with passphrase
+        "$CLI_BINARY" -p "$PROVIDER" wallet create -o "$WALLET_FILE" --passphrase "$DEPLOY_PASSWORD"
         log_success "Wallet created at $WALLET_FILE"
     else
         log_success "Using existing wallet at $WALLET_FILE"
     fi
 
     # Get wallet address using passphrase flag
-    WALLET_ADDRESS=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "${DEPLOY_PASSWORD:-testtesttest}" wallet addresses p2tr:0 2>/dev/null | grep -oE 'bcrt1[a-z0-9]+' | head -1)
+    WALLET_ADDRESS=$("$CLI_BINARY" -p "$PROVIDER" --wallet-file "$WALLET_FILE" --passphrase "$DEPLOY_PASSWORD" wallet addresses p2tr:0 2>/dev/null | grep -oE 'bcrt1[a-z0-9]+' | head -1)
 
     if [ -z "$WALLET_ADDRESS" ]; then
         log_warn "Could not get wallet address automatically, using default taproot"
@@ -121,21 +239,29 @@ setup_wallet() {
 # Fund wallet with regtest coins
 fund_wallet() {
     log_info "Checking wallet funding status..."
-    local PASS="${DEPLOY_PASSWORD:-testtesttest}"
 
-    # Check if we have UTXOs via esplora (more reliable than wallet balance which has a bug)
-    UTXO_COUNT=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "$PASS" esplora address-utxo bcrt1p9ny9x5rlra0pl38fqw4ds74a5p56cjyce4pf84tznxx72x50pnps59jcgv 2>/dev/null | grep -c '"txid"' || echo "0")
+    # Try to get UTXO count - use wallet utxos command
+    UTXO_OUTPUT=$("$CLI_BINARY" -p "$PROVIDER" --wallet-file "$WALLET_FILE" --passphrase "$DEPLOY_PASSWORD" wallet utxos p2tr:0 2>&1 || echo "")
+    UTXO_COUNT=$(echo "$UTXO_OUTPUT" | grep -c "Outpoint:" || echo "0")
 
-    if [ "$UTXO_COUNT" -lt "10" ]; then # Less than 10 UTXOs
+    if [ "$UTXO_COUNT" -lt "5" ]; then
         log_info "Wallet needs funding (only $UTXO_COUNT UTXOs), mining blocks..."
 
-        # Mine blocks to wallet's taproot address
-        "$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "$PASS" bitcoind generatetoaddress 201 p2tr:0 > /dev/null 2>&1
+        # Mine 201 blocks to wallet's taproot address (100 for maturity + buffer)
+        log_info "Mining 201 blocks to p2tr:0..."
+        "$CLI_BINARY" -p "$PROVIDER" --wallet-file "$WALLET_FILE" --passphrase "$DEPLOY_PASSWORD" \
+            bitcoind generatetoaddress 201 p2tr:0 > /dev/null 2>&1 || {
+            log_warn "Mining failed - you may need to fund the wallet manually"
+            return 0
+        }
 
-        # Wait for indexer
-        sleep 10
+        # Wait for indexer to sync
+        log_info "Waiting for indexer to sync (15 seconds)..."
+        sleep 15
 
-        UTXO_COUNT=$("$CLI_BINARY" -p regtest --wallet-file "$WALLET_FILE" --passphrase "$PASS" esplora address-utxo bcrt1p9ny9x5rlra0pl38fqw4ds74a5p56cjyce4pf84tznxx72x50pnps59jcgv 2>/dev/null | grep -c '"txid"' || echo "0")
+        # Recheck UTXO count
+        UTXO_OUTPUT=$("$CLI_BINARY" -p "$PROVIDER" --wallet-file "$WALLET_FILE" --passphrase "$DEPLOY_PASSWORD" wallet utxos p2tr:0 2>&1 || echo "")
+        UTXO_COUNT=$(echo "$UTXO_OUTPUT" | grep -c "Outpoint:" || echo "0")
         log_success "Wallet funded! UTXOs: $UTXO_COUNT"
     else
         log_success "Wallet already funded with $UTXO_COUNT UTXOs"
@@ -149,7 +275,6 @@ deploy_contract() {
     local TARGET_TX=$3
     shift 3
     local INIT_ARGS="$@"
-    local PASS="${DEPLOY_PASSWORD:-testtesttest}"
 
     log_info "Deploying $CONTRACT_NAME to [3, $TARGET_TX] -> [4, $TARGET_TX]..."
 
@@ -163,11 +288,12 @@ deploy_contract() {
     local PROTOSTONE="[3,$TARGET_TX$([ -n "$INIT_ARGS" ] && echo ",$INIT_ARGS" || echo "")]:v0:v0"
 
     log_info "  Protostone: $PROTOSTONE"
+    log_info "  Provider: $PROVIDER"
 
-    # Deploy using CLI with envelope and protostone - use --passphrase flag
-    "$CLI_BINARY" -p regtest \
+    # Deploy using CLI with envelope and protostone
+    "$CLI_BINARY" -p "$PROVIDER" \
         --wallet-file "$WALLET_FILE" \
-        --passphrase "$PASS" \
+        --passphrase "$DEPLOY_PASSWORD" \
         alkanes execute "$PROTOSTONE" \
         --envelope "$WASM_FILE" \
         --to p2tr:0 \
@@ -181,6 +307,10 @@ deploy_contract() {
 
     if [ $? -eq 0 ]; then
         log_success "$CONTRACT_NAME deployed at [4, $TARGET_TX]"
+
+        # Wait for indexer to sync
+        log_info "Waiting for indexer to sync (5 seconds)..."
+        sleep 5
     else
         log_error "Failed to deploy $CONTRACT_NAME"
         return 1
@@ -193,16 +323,15 @@ initialize_contract() {
     local ALKANE_ID=$2
     shift 2
     local ARGS="$@"
-    local PASS="${DEPLOY_PASSWORD:-testtesttest}"
 
     log_info "Initializing $CONTRACT_NAME at $ALKANE_ID..."
 
     # Build the protostone format: [block:tx:opcode,args...]
     local PROTOSTONE="[$ALKANE_ID:0$([ -n "$ARGS" ] && echo ",$ARGS" || echo "")]"
 
-    "$CLI_BINARY" -p regtest \
+    "$CLI_BINARY" -p "$PROVIDER" \
         --wallet-file "$WALLET_FILE" \
-        --passphrase "$PASS" \
+        --passphrase "$DEPLOY_PASSWORD" \
         alkanes execute "$PROTOSTONE" \
         --to p2tr:0 \
         --from p2tr:0 \
@@ -227,7 +356,12 @@ main() {
     log_info "Subfrost Alkanes Regtest Deployment"
     log_info "=========================================="
     echo ""
-    
+    log_info "Mode: $DEPLOY_MODE"
+    log_info "Provider: $PROVIDER"
+    log_info "RPC URL: $RPC_URL"
+    log_info "Wallet: $WALLET_FILE"
+    echo ""
+
     # Pre-deployment checks
     check_cli
     check_regtest
@@ -365,7 +499,7 @@ main() {
     PROTOSTONE="[6,$((0x1f21)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
     
-    "$CLI_BINARY" -p regtest \
+    "$CLI_BINARY" -p "$PROVIDER" \
         --wallet-file "$WALLET_FILE" \
         --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$PROTOSTONE" \
@@ -392,7 +526,7 @@ main() {
     PROTOSTONE="[6,$((0x1f22)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
 
-    "$CLI_BINARY" -p regtest \
+    "$CLI_BINARY" -p "$PROVIDER" \
         --wallet-file "$WALLET_FILE" \
         --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$PROTOSTONE" \
@@ -420,7 +554,7 @@ main() {
     PROTOSTONE="[6,$((0x1f23)),0,2,0,2,1,100]"  # [6, template_tx, opcode, lp_token, ve_token, reward_rate]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
 
-    "$CLI_BINARY" -p regtest \
+    "$CLI_BINARY" -p "$PROVIDER" \
         --wallet-file "$WALLET_FILE" \
         --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$PROTOSTONE" \
@@ -447,7 +581,7 @@ main() {
     INIT_PROTOSTONE="[4,$((0x1f00)),0,32,0,4,$((0x1f01))]"
     log_info "  Protostone: $INIT_PROTOSTONE"
 
-    "$CLI_BINARY" -p regtest \
+    "$CLI_BINARY" -p "$PROVIDER" \
         --wallet-file "$WALLET_FILE" \
         --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$INIT_PROTOSTONE" \
@@ -504,7 +638,7 @@ main() {
     INIT_PROTOSTONE="[4,$AMM_FACTORY_PROXY_TX,0,$POOL_BEACON_PROXY_TX,4,$POOL_UPGRADEABLE_BEACON_TX]:v0:v0"
     log_info "  Protostone: $INIT_PROTOSTONE"
     
-    "$CLI_BINARY" -p regtest \
+    "$CLI_BINARY" -p "$PROVIDER" \
         --wallet-file "$WALLET_FILE" \
         --passphrase "${DEPLOY_PASSWORD:-testtesttest}" \
         alkanes execute "$INIT_PROTOSTONE" \
@@ -584,13 +718,13 @@ main() {
     log_info "Example commands:"
     echo ""
     echo "# Check balances:"
-    echo "$CLI_BINARY -p regtest --wallet-file $WALLET_FILE alkanes getbalance"
+    echo "$CLI_BINARY -p "$PROVIDER" --wallet-file $WALLET_FILE alkanes getbalance"
     echo ""
     echo "# Inspect a contract:"
-    echo "$CLI_BINARY -p regtest alkanes inspect 4:10"
+    echo "$CLI_BINARY -p "$PROVIDER" alkanes inspect 4:10"
     echo ""
     echo "# Execute a contract call (e.g., transfer FROST):"
-    echo "$CLI_BINARY -p regtest --wallet-file $WALLET_FILE alkanes execute '[4:10:1,1000,0,0]' --mine -y"
+    echo "$CLI_BINARY -p "$PROVIDER" --wallet-file $WALLET_FILE alkanes execute '[4:10:1,1000,0,0]' --mine -y"
     echo ""
     
     log_success "Deployment complete! Your regtest environment is ready."

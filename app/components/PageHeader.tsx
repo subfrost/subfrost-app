@@ -18,7 +18,7 @@ export default function PageHeader({
       <div className="flex w-full items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {title ? (
-            <h1 className="truncate text-3xl font-bold text-[color:var(--sf-text)]">
+            <h1 className="text-xl sm:text-3xl font-bold text-[color:var(--sf-text)]">
               {title}
             </h1>
           ) : null}

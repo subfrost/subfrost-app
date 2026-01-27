@@ -7,6 +7,48 @@ import { Search, X } from 'lucide-react';
 // Import Network type from constants
 import type { Network } from '@/utils/constants';
 
+/**
+ * Format alkane token balance for display
+ * Handles large numbers with proper decimal precision
+ * Matches the formatting logic in BalancesPanel.tsx
+ */
+function formatAlkaneBalance(balance: string, decimals: number = 8): string {
+  if (!balance || balance === '0') return '0';
+
+  try {
+    const value = BigInt(balance);
+
+    // Handle NFTs (single unit)
+    if (value === BigInt(1)) {
+      return '1';
+    }
+
+    const divisor = BigInt(10 ** decimals);
+    const whole = value / divisor;
+    const remainder = value % divisor;
+    const wholeStr = whole.toString();
+    const remainderStr = remainder.toString().padStart(decimals, '0');
+
+    // Determine decimal places based on whole number size
+    // 3+ digits (100+): show 2 decimal places
+    // 2 or fewer digits: show 4 decimal places
+    const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
+    const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
+
+    // Remove trailing zeros for cleaner display
+    const trimmedRemainder = truncatedRemainder.replace(/0+$/, '') || '0';
+
+    if (trimmedRemainder === '0' && whole > 0) {
+      return wholeStr;
+    }
+
+    return `${wholeStr}.${trimmedRemainder}`;
+  } catch {
+    // Fallback for invalid input
+    return '0';
+  }
+}
+
 export type TokenOption = {
   id: string;
   symbol: string;
@@ -82,18 +124,18 @@ export default function TokenSelectorModal({
       onClick={onClose}
     >
       <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 px-6 py-5">
+        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
               {title}
             </h2>
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 text-[color:var(--sf-text)]/70 transition-all hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/30 focus:outline-none"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
               aria-label="Close"
             >
               <X size={18} />
@@ -106,7 +148,7 @@ export default function TokenSelectorModal({
 
         {/* Bridge Section - Shown in FROM and TO modes */}
         {(mode === 'from' || mode === 'to') && (
-          <div className="border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/20 px-6 py-4">
+          <div className="bg-[color:var(--sf-panel-bg)] mx-4 mt-4 rounded-2xl px-5 py-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
@@ -146,12 +188,12 @@ export default function TokenSelectorModal({
                           }
                         }
                       }}
-                      className={`inline-flex items-center gap-2 rounded-xl border-2 px-3 py-2 transition-all focus:outline-none ${
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
                         isSelectedInOther
-                          ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
+                          ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
                           : token.enabled
-                          ? 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md cursor-pointer'
-                          : 'border-[color:var(--sf-outline)]/50 bg-[color:var(--sf-surface)]/40 cursor-not-allowed'
+                          ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
+                          : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
                       }`}
                     >
                       <img
@@ -184,7 +226,7 @@ export default function TokenSelectorModal({
         )}
 
         {/* Search */}
-        <div className="bg-[color:var(--sf-surface)]/20 px-6 py-4">
+        <div className="px-4 py-4">
           <div className="relative">
             <Search
               size={18}
@@ -195,7 +237,7 @@ export default function TokenSelectorModal({
               placeholder="Search bitcoin-native assets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 py-3 pl-10 pr-4 text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:border-[color:var(--sf-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sf-primary)]/50 transition-all"
+              className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] py-3 pl-10 pr-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
             />
           </div>
         </div>
@@ -213,23 +255,23 @@ export default function TokenSelectorModal({
               {filteredTokens.map((token) => {
                 const isSelected = token.id === selectedTokenId;
                 const isAvailable = token.isAvailable !== false;
+                // Use proper alkane balance formatting with BigInt math
+                const formattedBalance = token.balance ? formatAlkaneBalance(token.balance) : null;
+                // For USD value calculation, parse the raw balance and divide by 1e8
                 const balanceNum = token.balance ? parseFloat(token.balance) / 1e8 : 0;
-                const valueUsd = token.price && token.balance 
-                  ? (balanceNum * token.price).toFixed(2) 
+                const valueUsd = token.price && token.balance
+                  ? (balanceNum * token.price).toFixed(2)
                   : null;
 
                 return (
                   <button
                     key={token.id}
                     onClick={() => handleSelect(token.id)}
-                    className={`group relative w-full rounded-xl border-2 p-4 text-left transition-all focus:outline-none ${
-                      !isAvailable
-                        ? 'border-transparent bg-gray-300/50 opacity-50 cursor-not-allowed'
-                        : isSelected
-                        ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 hover:shadow-md'
-                        : 'border-transparent bg-[color:var(--sf-surface)]/40 hover:border-[color:var(--sf-primary)]/30 hover:bg-[color:var(--sf-surface)]/60 hover:shadow-md'
+                    className={`group relative w-full rounded-xl p-4 text-left shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
+                      isSelected
+                        ? 'bg-[color:var(--sf-primary)]/10 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
+                        : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                     }`}
-                    disabled={!isAvailable}
                   >
                     <div className="flex items-center gap-3">
                       <TokenIcon
@@ -242,7 +284,7 @@ export default function TokenSelectorModal({
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-colors">
+                          <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                             {token.symbol}
                           </span>
                           {isSelected && (
@@ -258,10 +300,10 @@ export default function TokenSelectorModal({
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-0.5">
-                        {token.balance && (
+                        {formattedBalance && (
                           <>
                             <span className="text-sm font-bold text-[color:var(--sf-text)]">
-                              {balanceNum.toFixed(6)}
+                              {formattedBalance}
                             </span>
                             {valueUsd && (
                               <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
@@ -273,6 +315,11 @@ export default function TokenSelectorModal({
                         {token.price && !token.balance && (
                           <span className="text-xs font-medium text-[color:var(--sf-text)]/60">
                             ${token.price.toFixed(4)}
+                          </span>
+                        )}
+                        {!isAvailable && mode === 'from' && (
+                          <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                            Not available
                           </span>
                         )}
                       </div>

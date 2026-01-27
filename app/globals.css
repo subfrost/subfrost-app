@@ -44,6 +44,9 @@ body {
   /* Glass variables (dark frosted glass effect) */
   --sf-glass-bg: rgba(15, 28, 48, 0.85);
   --sf-glass-border: rgba(91, 156, 255, 0.15);
+  --sf-dropdown-bg: #152238;
+  --sf-row-border: rgba(255, 255, 255, 0.04);
+  --sf-top-highlight: rgba(255, 255, 255, 0.08);
 
   /* Settings modal */
   --sf-settings-section-bg: #152238;
@@ -96,6 +99,9 @@ body {
   /* Boost icons - dark mode (light purple to dark purple gradient) */
   --sf-boost-icon-from: #a855f7;
   --sf-boost-icon-to: #7c3aed;
+
+  /* Percentage buttons - white in dark mode */
+  --sf-percent-btn: #ffffff;
 }
 
 /* Light Theme (gabes-branch-ui styles) */
@@ -117,6 +123,12 @@ body {
   /* Glass variables (soft white/blue tint) */
   --sf-glass-bg: rgba(240, 247, 255, 0.82);
   --sf-glass-border: rgba(255, 255, 255, 0.55);
+  --sf-panel-bg: rgba(255, 255, 255, 0.5);
+  --sf-input-bg: var(--sf-surface);
+  --sf-list-hover-bg: rgba(255, 255, 255, 0.8);
+  --sf-dropdown-bg: #FFFFFF;
+  --sf-row-border: rgba(200, 210, 230, 0.25);
+  --sf-top-highlight: transparent;
 
   /* Settings modal - white sections in light mode */
   --sf-settings-section-bg: #FFFFFF;
@@ -127,6 +139,9 @@ body {
   --sf-boost-bg-to: #fdf2f8;
   --sf-boost-label: #6b21a8;
   --sf-boost-value: #7c3aed;
+
+  /* Percentage buttons - primary color in light mode */
+  --sf-percent-btn: var(--sf-primary);
 
   /* Coming soon - light mode */
   --sf-coming-soon-bg: #fffbeb;
@@ -188,6 +203,9 @@ body {
 
   --sf-glass-bg: rgba(15, 28, 48, 0.85);
   --sf-glass-border: rgba(91, 156, 255, 0.15);
+  --sf-panel-bg: rgba(255, 255, 255, 0.03);
+  --sf-input-bg: rgba(255, 255, 255, 0.04);
+  --sf-list-hover-bg: rgba(91, 156, 255, 0.1);
 
   /* Settings modal - dark sections in dark mode */
   --sf-settings-section-bg: #152238;
@@ -320,6 +338,13 @@ body {
   opacity: 0.9;
 }
 
+/* Light theme snowflakes (brighter white for light backgrounds) */
+[data-theme="light"] .sf-snow,
+[data-theme="light"] .sf-snow::before,
+[data-theme="light"] .sf-snow::after {
+  background-image: url('/background/snowflakes-bg-light.svg');
+}
+
 /* Light theme stars (white for light backgrounds) */
 [data-theme="light"] .sf-stars {
   background:
@@ -349,6 +374,47 @@ body {
   outline-offset: 2px;
 }
 
+/* Global cursor pointer for clickable elements */
+button,
+a,
+[role="button"],
+[type="button"],
+[type="submit"],
+[type="reset"],
+select,
+summary,
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+label[for],
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Focus state with 1px border - configurable via CSS variables */
+:root {
+  --sf-focus-border-color: #5b9cff;
+}
+
+[data-theme="light"] {
+  --sf-focus-border-color: #284372;
+}
+
+[data-theme="dark"] {
+  --sf-focus-border-color: #5b9cff;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 1px solid var(--sf-focus-border-color);
+  outline-offset: 2px;
+}
+
 /* Watermark background (SVG) - hidden in dark mode */
 .sf-watermark {
   background: url('/background/watermark-bg.svg') center -120px / 1200px auto no-repeat;
@@ -374,6 +440,10 @@ body {
   background-repeat: repeat;
   background-size: 640px auto;
   animation: sfSnow 60s linear infinite;
+}
+
+.sf-snow {
+  opacity: 0.75;
 }
 
 .sf-snow::before {
@@ -448,6 +518,29 @@ body {
 .animate-pulse-fade {
   animation: pulse-fade 1.2s ease-in-out forwards;
   animation-fill-mode: forwards;
+}
+
+@keyframes fade-in-out {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+}
+
+.animate-fade-in-out {
+  animation: fade-in-out 1.5s ease-in-out forwards;
 }
 
 /* Smooth scroll */

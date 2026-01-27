@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useRef, lazy, Suspense } from "react";
 import type { PoolSummary, TokenMeta } from "./types";
 import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import type { LPPosition } from "./components/LiquidityInputs";
+import type { OperationType } from "@/app/components/SwapSuccessNotification";
 
 // Critical path imports - needed immediately
 import SwapHeaderTabs from "./components/SwapHeaderTabs";
@@ -17,11 +18,16 @@ import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { usePools } from "@/hooks/usePools";
-import { useAllPoolStats, useAllPoolVolumes } from "@/hooks/usePoolData";
+import { useAllPoolStats } from "@/hooks/usePoolData";
+import { useAllPoolCandleVolumes } from "@/hooks/usePoolCandleVolumes";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
-import LoadingOverlay from "@/app/components/LoadingOverlay";
+import { useWrapSwapMutation } from "@/hooks/useWrapSwapMutation";
+import { useSwapUnwrapMutation } from "@/hooks/useSwapUnwrapMutation";
+import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
+import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
+import { useLPPositions } from "@/hooks/useLPPositions";
 
 // Lazy loaded components - split into separate chunks
 const SwapInputs = lazy(() => import("./components/SwapInputs"));
@@ -53,6 +59,18 @@ const MarketsSkeleton = () => (
   </div>
 );
 
+// Whitelisted token symbols (mainnet only)
+// On non-mainnet networks, all tokens are allowed
+const MAINNET_WHITELISTED_TOKEN_SYMBOLS = new Set([
+  'BTC',
+  'frBTC',
+  'bUSD',
+  'DIESEL',
+  'ALKAMIST',
+  'GOLD DUST',
+  'METHANE',
+]);
+
 export default function SwapShell() {
   // Markets from API: all pools sorted by TVL desc
   const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
@@ -60,8 +78,14 @@ export default function SwapShell() {
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats } = useAllPoolStats();
 
-  // Dedicated volume data from volume API (more reliable than stats API)
-  const { data: poolVolumes } = useAllPoolVolumes();
+  // Build pool list for candle volume fetching
+  const poolsForVolume = useMemo(() => {
+    const pools = poolsData?.items ?? [];
+    return pools.map(p => ({ id: p.id, token1Id: p.token1.id }));
+  }, [poolsData?.items]);
+
+  // Fetch volume data using ammdata.get_candles (24h and 30d volumes)
+  const { data: candleVolumes } = useAllPoolCandleVolumes(poolsForVolume);
 
   // Merge external pool data with our enhanced stats and volume data
   const markets = useMemo<PoolSummary[]>(() => {
@@ -69,7 +93,6 @@ export default function SwapShell() {
 
     // Create maps for quick lookup
     const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
-    const volumeMap = new Map<string, NonNullable<typeof poolVolumes>[string]>();
 
     if (poolStats) {
       for (const [, stats] of Object.entries(poolStats)) {
@@ -77,24 +100,19 @@ export default function SwapShell() {
       }
     }
 
-    if (poolVolumes) {
-      for (const [, volume] of Object.entries(poolVolumes)) {
-        volumeMap.set(volume.poolId, volume);
-      }
-    }
-
     // Enhance each pool with stats and volume data
     return basePools.map(pool => {
       const stats = statsMap.get(pool.id);
-      const volume = volumeMap.get(pool.id);
+      const candleVolume = candleVolumes?.[pool.id];
 
       // Calculate token TVL percentages from reserves
       const totalTvl = stats?.tvlUsd || pool.tvlUsd || 0;
       const token0Tvl = totalTvl / 2;
       const token1Tvl = totalTvl / 2;
 
-      // Get volume from dedicated volume API, fall back to stats, then to pool data
-      const vol24hUsd = volume?.volume24hUsd ?? stats?.volume24hUsd ?? pool.vol24hUsd;
+      // Get volume from candle API (ammdata.get_candles), fall back to stats, then to pool data
+      const vol24hUsd = candleVolume?.volume24hUsd ?? stats?.volume24hUsd ?? pool.vol24hUsd;
+      const vol30dUsd = candleVolume?.volume30dUsd ?? stats?.volume30dUsd ?? pool.vol30dUsd;
 
       // Calculate APR: (daily_volume * fee_rate * 365) / TVL * 100
       // Fee rate is 0.8% for LPs (8/1000)
@@ -111,14 +129,17 @@ export default function SwapShell() {
         token0TvlUsd: stats?.tvlToken0 ?? token0Tvl,
         token1TvlUsd: stats?.tvlToken1 ?? token1Tvl,
         vol24hUsd,
-        vol30dUsd: stats?.volume30dUsd ?? pool.vol30dUsd,
+        vol30dUsd,
         apr,
       } as PoolSummary;
     });
-  }, [poolsData?.items, poolStats, poolVolumes]);
+  }, [poolsData?.items, poolStats, candleVolumes]);
 
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
-  const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('24h');
+  const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
+
+  // Mobile chart visibility state
+  const [showMobileChart, setShowMobileChart] = useState(false);
 
   // Tab state
   const [selectedTab, setSelectedTab] = useState<'swap' | 'lp'>('swap');
@@ -146,25 +167,20 @@ export default function SwapShell() {
   const [isLPSelectorOpen, setIsLPSelectorOpen] = useState(false);
   const [removeAmount, setRemoveAmount] = useState<string>("");
 
-  // Test LP positions data
-  const testLPPositions: LPPosition[] = [
-    {
-      id: '1',
-      token0Symbol: 'DIESEL',
-      token1Symbol: 'frBTC',
-      amount: '0.1377',
-      valueUSD: 191,
-      gainLoss: {
-        token0: { amount: '+4.973', symbol: 'DIESEL' },
-        token1: { amount: '-0.00025911', symbol: 'frBTC' },
-      },
-    },
-  ];
+  // LP positions from wallet (real data from useLPPositions hook)
+  const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
+
+  // Debug: log LP positions when they change
+  useEffect(() => {
+    console.log('[SwapShell] LP positions updated:', lpPositions);
+    console.log('[SwapShell] LP positions loading:', isLoadingLPPositions);
+  }, [lpPositions, isLoadingLPPositions]);
 
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
   const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
   const [successTxId, setSuccessTxId] = useState<string | null>(null);
+  const [successOperationType, setSuccessOperationType] = useState<OperationType>('swap');
   const { data: btcPrice } = useBtcPrice();
 
   const sellId = fromToken?.id ?? '';
@@ -179,6 +195,10 @@ export default function SwapShell() {
   const swapMutation = useSwapMutation();
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
+  const wrapSwapMutation = useWrapSwapMutation();
+  const swapUnwrapMutation = useSwapUnwrapMutation();
+  const addLiquidityMutation = useAddLiquidityMutation();
+  const removeLiquidityMutation = useRemoveLiquidityMutation();
 
   // Wallet/config
   const { address, network } = useWallet();
@@ -195,72 +215,93 @@ export default function SwapShell() {
   // Build a map from tokenId to token metadata from pools data (has correct symbols)
   const poolTokenMap = useMemo(() => {
     const map = new Map<string, TokenMeta>();
+    console.log('[SwapShell] Building poolTokenMap from', markets.length, 'markets');
     markets.forEach((pool) => {
       if (!map.has(pool.token0.id)) {
         map.set(pool.token0.id, pool.token0);
+        console.log('[SwapShell] Added token to map:', pool.token0.id, pool.token0.symbol);
       }
       if (!map.has(pool.token1.id)) {
         map.set(pool.token1.id, pool.token1);
+        console.log('[SwapShell] Added token to map:', pool.token1.id, pool.token1.symbol);
       }
     });
+    console.log('[SwapShell] poolTokenMap has', map.size, 'tokens:', Array.from(map.keys()));
     return map;
   }, [markets]);
 
-  // Default from/to tokens: BTC → bUSD
+  // Default from/to tokens: BTC → BUSD (use pool data for correct symbol)
   useEffect(() => {
-    if (!fromToken) setFromToken({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+    if (!fromToken) setFromToken({ id: 'btc', symbol: 'BTC', name: 'BTC' });
   }, [fromToken]);
   const toInitializedRef = useRef(false);
   useEffect(() => {
-    if (!toInitializedRef.current && !toToken) {
-      setToToken({ id: BUSD_ALKANE_ID, symbol: 'bUSD', name: 'bUSD' });
+    if (!toInitializedRef.current && !toToken && BUSD_ALKANE_ID) {
+      // Use poolTokenMap for correct symbol if available, otherwise fallback
+      const poolToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      const symbol = poolToken?.symbol ?? 'DIESEL';
+      const name = poolToken?.name ?? 'DIESEL';
+      setToToken({ id: BUSD_ALKANE_ID, symbol, name });
       toInitializedRef.current = true;
     }
-  }, [toToken, BUSD_ALKANE_ID]);
+  }, [toToken, BUSD_ALKANE_ID, poolTokenMap]);
 
   // Default LP tokens: Select Token / BTC
   useEffect(() => {
     if (!poolToken1 && selectedTab === 'lp') {
-      setPoolToken1({ id: 'btc', symbol: 'BTC', name: 'Bitcoin' });
+      setPoolToken1({ id: 'btc', symbol: 'BTC', name: 'BTC' });
     }
   }, [poolToken1, selectedTab]);
 
-  // Whitelisted token IDs (mainnet-specific)
-  // On non-mainnet networks, allow all tokens from pools
-  const whitelistedTokenIds = useMemo(() => {
-    if (network !== 'mainnet') {
-      // On non-mainnet, return null to indicate "allow all"
-      return null;
-    }
-    return new Set([
-      '32:0',      // frBTC
-      'btc',       // BTC
-      '2:56801',   // bUSD
-      '2:16',      // METHANE
-      '2:25720',   // ALKAMIST
-      '2:35275',   // GOLD DUST
-      '2:0',       // DIESEL
-    ]);
-  }, [network]);
+  // Allow all tokens - no filtering
+  const whitelistedTokenIds = null as Set<string> | null;
 
-  // Build FROM options: Only whitelisted tokens
+  // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
+  // Alt tokens (including DIESEL) can only swap to/from these base tokens, not to other alts
+  // DIESEL is always 2:0, so we exclude it from base tokens even if BUSD_ALKANE_ID points to it
+  const DIESEL_ALKANE_ID = '2:0';
+  const baseTokenIds = useMemo(() => {
+    const ids = ['btc', FRBTC_ALKANE_ID];
+    // Only include BUSD_ALKANE_ID if it's actual bUSD, not DIESEL
+    if (BUSD_ALKANE_ID && BUSD_ALKANE_ID !== DIESEL_ALKANE_ID) {
+      ids.push(BUSD_ALKANE_ID);
+    }
+    return new Set(ids.filter(Boolean));
+  }, [FRBTC_ALKANE_ID, BUSD_ALKANE_ID]);
+
+  // Build FROM options based on TO token type:
+  // - If TO is an alt token: only show base tokens (no alt-to-alt swaps)
+  // - If TO is a base token or not set: show all tokens
   const fromOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
+    const toId = toToken?.id;
+    const isToAltToken = toId ? !baseTokenIds.has(toId) : false;
+
+    // Helper to check if a token should be shown (by ID and symbol)
+    const shouldShowToken = (tokenId: string, symbol: string): boolean => {
+      if (tokenId === toId) return false; // Can't swap from self
+      if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
+      // On mainnet, only show whitelisted tokens by symbol
+      if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
+      // If TO is an alt token, only allow base tokens in FROM
+      if (isToAltToken && !baseTokenIds.has(tokenId)) return false;
+      return true;
+    };
 
     // Always add BTC first (always available)
-    if (whitelistedTokenIds === null || whitelistedTokenIds.has('btc')) {
+    if (shouldShowToken('btc', 'BTC')) {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
-        name: 'Bitcoin',
+        name: 'BTC',
         isAvailable: true
       });
       seen.add('btc');
     }
 
     // Always add frBTC (BTC <-> frBTC wrapping is always allowed)
-    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID))) {
+    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID, 'frBTC')) {
       opts.push({
         id: FRBTC_ALKANE_ID,
         symbol: 'frBTC',
@@ -270,9 +311,26 @@ export default function SwapShell() {
       seen.add(FRBTC_ALKANE_ID);
     }
 
-    // Add whitelisted tokens from pool data (null = allow all)
+    // Add bUSD/DIESEL (available before pools load)
+    if (BUSD_ALKANE_ID) {
+      // Use poolTokenMap for correct symbol if available, otherwise use network-appropriate default
+      const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      const symbol = busdToken?.symbol ?? (network === 'mainnet' ? 'bUSD' : 'DIESEL');
+      const name = busdToken?.name ?? symbol;
+      if (shouldShowToken(BUSD_ALKANE_ID, symbol)) {
+        opts.push({
+          id: BUSD_ALKANE_ID,
+          symbol,
+          name,
+          isAvailable: true
+        });
+        seen.add(BUSD_ALKANE_ID);
+      }
+    }
+
+    // Add tokens from pool data (only if TO is not an alt token)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id)) {
+      if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
         opts.push({
           ...poolToken,
           isAvailable: true
@@ -281,28 +339,93 @@ export default function SwapShell() {
       }
     });
 
-    return opts;
-  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
+    // Also add tokens from user's wallet that aren't in pools yet
+    userCurrencies.forEach((currency: any) => {
+      const symbol = currency.symbol || currency.name || currency.id;
+      if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
+        seen.add(currency.id);
+        opts.push({
+          id: currency.id,
+          symbol,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          isAvailable: true,
+        });
+      }
+    });
 
-  // Build TO options: Only whitelisted tokens
+    return opts;
+  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network, toToken, baseTokenIds]);
+
+  // Build TO options based on FROM token type:
+  // - If FROM is a base token (BTC, frBTC, bUSD): show all tokens with pools
+  // - If FROM is an alt token: only show base tokens (no alt-to-alt swaps)
   const toOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
     const fromId = fromToken?.id;
+    const isFromBaseToken = fromId ? baseTokenIds.has(fromId) : true;
 
-    // Add BTC first (unless FROM token is BTC)
-    if ((whitelistedTokenIds === null || whitelistedTokenIds.has('btc')) && fromId !== 'btc') {
+    // For BTC, also treat it as frBTC for pool lookups (BTC swaps go through frBTC)
+    const fromIdForPoolLookup = fromId === 'btc' ? FRBTC_ALKANE_ID : fromId;
+
+    // Build a set of tokens that have pools with the FROM token
+    const tokensWithPoolsForFrom = new Set<string>();
+    if (fromIdForPoolLookup) {
+      markets.forEach((pool) => {
+        if (pool.token0.id === fromIdForPoolLookup) {
+          tokensWithPoolsForFrom.add(pool.token1.id);
+        } else if (pool.token1.id === fromIdForPoolLookup) {
+          tokensWithPoolsForFrom.add(pool.token0.id);
+        }
+      });
+      // If FROM is BTC, frBTC pool tokens are also available via wrap
+      if (fromId === 'btc' && FRBTC_ALKANE_ID) {
+        tokensWithPoolsForFrom.add(FRBTC_ALKANE_ID);
+      }
+      // If FROM is frBTC, BTC is available via unwrap
+      if (fromId === FRBTC_ALKANE_ID) {
+        tokensWithPoolsForFrom.add('btc');
+      }
+    }
+
+    // Helper to check if a token should be shown (by ID and symbol)
+    const shouldShowToken = (tokenId: string, symbol: string): boolean => {
+      if (tokenId === fromId) return false; // Can't swap to self
+      if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
+      // On mainnet, only show whitelisted tokens by symbol
+      if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
+
+      if (isFromBaseToken) {
+        // From base token: show tokens that have pools with it
+        // For BTC/frBTC wrapping, always allow
+        if (fromId === 'btc' && tokenId === FRBTC_ALKANE_ID) return true;
+        if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
+        // Always allow other base tokens (BTC, frBTC, bUSD) to swap between each other
+        // This ensures they show even before pools have loaded
+        if (baseTokenIds.has(tokenId)) return true;
+        // Check if there's a pool for this pair (for non-base tokens)
+        const tokenIdForLookup = tokenId === 'btc' ? FRBTC_ALKANE_ID : tokenId;
+        return tokensWithPoolsForFrom.has(tokenIdForLookup) || tokensWithPoolsForFrom.has(tokenId);
+      } else {
+        // From alt token: only show base tokens
+        return baseTokenIds.has(tokenId);
+      }
+    };
+
+    // Add BTC first (if allowed)
+    if (shouldShowToken('btc', 'BTC')) {
       opts.push({
         id: 'btc',
         symbol: 'BTC',
-        name: 'Bitcoin',
+        name: 'BTC',
         isAvailable: true
       });
       seen.add('btc');
     }
 
-    // Always add frBTC (BTC <-> frBTC wrapping is always allowed) unless FROM token is frBTC
-    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID)) && fromId !== FRBTC_ALKANE_ID) {
+    // Add frBTC (BTC <-> frBTC wrapping is always allowed)
+    if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID, 'frBTC')) {
       opts.push({
         id: FRBTC_ALKANE_ID,
         symbol: 'frBTC',
@@ -312,61 +435,125 @@ export default function SwapShell() {
       seen.add(FRBTC_ALKANE_ID);
     }
 
-    // Add whitelisted tokens from pool data (excluding FROM token, null = allow all)
-    Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id) && poolToken.id !== fromId) {
+    // Add bUSD if it should be shown
+    if (BUSD_ALKANE_ID && !seen.has(BUSD_ALKANE_ID)) {
+      const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      // Use network-appropriate default symbol when pool data isn't loaded yet
+      const defaultSymbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
+      const symbol = busdToken?.symbol ?? defaultSymbol;
+      if (shouldShowToken(BUSD_ALKANE_ID, symbol)) {
         opts.push({
-          ...poolToken,
+          id: BUSD_ALKANE_ID,
+          symbol,
+          name: busdToken?.name ?? defaultSymbol,
           isAvailable: true
         });
-        seen.add(poolToken.id);
+        seen.add(BUSD_ALKANE_ID);
       }
-    });
+    }
+
+    // Add remaining tokens from pool data (only if from base token)
+    if (isFromBaseToken) {
+      Array.from(poolTokenMap.values()).forEach((poolToken) => {
+        if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
+          opts.push({
+            ...poolToken,
+            isAvailable: true
+          });
+          seen.add(poolToken.id);
+        }
+      });
+
+      // Also add tokens from user's wallet that have pools with FROM token
+      userCurrencies.forEach((currency: any) => {
+        const symbol = currency.symbol || currency.name || currency.id;
+        if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
+          seen.add(currency.id);
+          opts.push({
+            id: currency.id,
+            symbol,
+            name: currency.name || currency.symbol || currency.id,
+            iconUrl: currency.iconUrl,
+            isAvailable: true,
+          });
+        }
+      });
+    }
 
     return opts;
-  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID]);
+  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets, network]);
 
-  // Balances - use useEnrichedWalletData for BTC balance (more reliable than useBtcBalance)
+  // Balances - use useEnrichedWalletData for all balances (BTC and alkanes)
+  // This is the same data source used by the Header for consistency
   const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
+  // Use walletBalances.bitcoin.total for BTC balance (same as Header)
   const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
   const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
+
+  // Build a map from alkane ID to balance from wallet data (more reliable than useSellableCurrencies)
+  const walletAlkaneBalances = useMemo(() => {
+    const map = new Map<string, string>();
+    if (walletBalances?.alkanes) {
+      for (const alkane of walletBalances.alkanes) {
+        map.set(alkane.alkaneId, alkane.balance);
+      }
+    }
+    return map;
+  }, [walletBalances?.alkanes]);
+
   const formatBalance = (id?: string): string => {
+    if (isBalancesLoading) return 'Loading...';
     if (!id) return 'Balance: 0';
 
-    // BTC balance
+    // BTC balance (btcBalanceSats now uses walletBalances.bitcoin.total)
     if (id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
       const btc = sats / 1e8;
-      console.log(`[SwapShell.formatBalance] BTC: ${sats} sats → ${btc.toFixed(8)} BTC`);
       return `Balance: ${btc.toFixed(8)}`;
     }
 
     // Alkane token balance (frBTC, DIESEL, etc.)
-    const cur = idToUserCurrency.get(id);
-    if (!cur?.balance) {
-      console.log(`[SwapShell.formatBalance] Token ${id}: No balance data`);
+    // Prefer walletAlkaneBalances (from useEnrichedWalletData) over useSellableCurrencies
+    // as it's more reliable and consistent with the wallet dashboard
+    let balance = walletAlkaneBalances.get(id);
+    if (!balance) {
+      const cur = idToUserCurrency.get(id);
+      balance = cur?.balance;
+    }
+
+    if (!balance) {
       return 'Balance: 0';
     }
 
-    // Balance sheet returns values with 5 decimal places of precision
-    // Example: 749,250,000 raw = 7,492.50000 display
-    // Divide by 100,000 (1e5) to get display value
-    const rawBalance = Number(cur.balance);
-    const displayBalance = rawBalance / 1e5;
+    // Alkane balances use 8 decimal places (like satoshis)
+    // Example: 99000000 raw = 0.99 frBTC
+    // Use BigInt for precision to avoid floating point errors
+    try {
+      const value = BigInt(balance);
+      const divisor = BigInt(1e8);
+      const whole = value / divisor;
+      const remainder = value % divisor;
+      const wholeStr = whole.toString();
+      const remainderStr = remainder.toString().padStart(8, '0');
 
-    // Use 2 decimals for display
-    const decimals = 2;
-    const formatted = `Balance: ${displayBalance.toFixed(decimals)}`;
+      // Show 2 decimals for large values (100+), 4 decimals for smaller values
+      const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
+      const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
 
-    console.log(`[SwapShell.formatBalance] ${cur.name || id}:`, {
-      rawBalance: rawBalance.toLocaleString(),
-      conversionFactor: '1e5 (100,000)',
-      displayBalance: displayBalance.toFixed(decimals),
-      symbol: cur.symbol,
-      formatted,
-    });
+      // Remove trailing zeros
+      const trimmedRemainder = truncatedRemainder.replace(/0+$/, '') || '0';
 
-    return formatted;
+      if (trimmedRemainder === '0' && whole > 0) {
+        return `Balance: ${wholeStr}`;
+      }
+
+      return `Balance: ${wholeStr}.${trimmedRemainder}`;
+    } catch {
+      // Fallback for non-BigInt compatible values
+      const rawBalance = Number(balance);
+      const displayBalance = rawBalance / 1e8;
+      return `Balance: ${displayBalance.toFixed(4)}`;
+    }
   };
 
   // Get price for any token (from user currencies or derive from pools)
@@ -420,40 +607,45 @@ export default function SwapShell() {
   const isWrapPair = useMemo(() => fromToken?.id === 'btc' && toToken?.id === FRBTC_ALKANE_ID, [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
   const isUnwrapPair = useMemo(() => fromToken?.id === FRBTC_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
 
+  // Check if this is a BTC → token swap (not direct wrap to frBTC)
+  const isBtcToTokenSwap = useMemo(() =>
+    fromToken?.id === 'btc' && toToken?.id !== FRBTC_ALKANE_ID && toToken?.id !== 'btc',
+    [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]
+  );
+
+  // Check if this is a token → BTC swap (requires unwrap after swap)
+  const isTokenToBtcSwap = useMemo(() =>
+    fromToken?.id !== 'btc' && fromToken?.id !== FRBTC_ALKANE_ID && toToken?.id === 'btc',
+    [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]
+  );
+
   const handleSwap = async () => {
-    console.log('[SwapShell] handleSwap called', {
+    console.log('[handleSwap] Called with:', {
       fromToken: fromToken?.id,
-      fromSymbol: fromToken?.symbol,
       toToken: toToken?.id,
-      toSymbol: toToken?.symbol,
+      FRBTC_ALKANE_ID,
       isWrapPair,
       isUnwrapPair,
-      FRBTC_ALKANE_ID,
       fromAmount,
       toAmount,
       direction,
     });
-    if (!fromToken || !toToken) {
-      console.log('[SwapShell] Missing fromToken or toToken, returning');
-      return;
-    }
+
+    if (!fromToken || !toToken) return;
 
     // Wrap/Unwrap direct pairs
     if (isWrapPair) {
-      console.log('[SwapShell] isWrapPair detected, calling wrapMutation');
+      console.log('[handleSwap] isWrapPair=true, calling wrapMutation...');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
+          setSuccessOperationType('wrap');
           setSuccessTxId(res.transactionId);
-          // Refresh wallet data after a short delay to allow indexer to process
-          setTimeout(() => {
-            console.log('[SwapShell] Refreshing wallet data after wrap...');
-            refreshWalletData();
-          }, 2000);
+          setTimeout(() => refreshWalletData(), 2000);
         }
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        console.error('[SWAP] Wrap error:', e);
         window.alert('Wrap failed. See console for details.');
       }
       return;
@@ -464,22 +656,99 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
+          setSuccessOperationType('unwrap');
           setSuccessTxId(res.transactionId);
-          // Refresh wallet data after a short delay to allow indexer to process
-          setTimeout(() => {
-            console.log('[SwapShell] Refreshing wallet data after unwrap...');
-            refreshWalletData();
-          }, 2000);
+          setTimeout(() => refreshWalletData(), 2000);
         }
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        console.error('[SWAP] Unwrap error:', e);
         window.alert('Unwrap failed. See console for details.');
       }
       return;
     }
 
-    // Default AMM swap
+    // BTC → Token swap: One-click wrap + swap in a single transaction
+    if (isBtcToTokenSwap) {
+      // We need a quote with poolId for the swap portion
+      if (!quote || !quote.poolId) {
+        console.error('[SWAP] BTC → Token swap requires quote with poolId');
+        window.alert('Unable to find pool for this swap. Please try again.');
+        return;
+      }
+
+      try {
+        console.log('[SWAP] Executing one-click BTC →', toToken.symbol, 'swap');
+        const btcAmount = direction === 'sell' ? fromAmount : toAmount;
+
+        const res = await wrapSwapMutation.mutateAsync({
+          btcAmount,
+          buyAmount: quote.buyAmount,
+          buyCurrency: toToken.id,
+          maxSlippage,
+          feeRate: fee.feeRate,
+          poolId: quote.poolId,
+          deadlineBlocks,
+        });
+
+        if (res?.success && res.transactionId) {
+          console.log('[SWAP] One-click BTC → Token swap success:', res.transactionId);
+          setSuccessOperationType('swap');
+          setSuccessTxId(res.transactionId);
+          setTimeout(() => refreshWalletData(), 2000);
+        }
+      } catch (e: any) {
+        console.error('[SWAP] BTC → Token swap failed:', e);
+        window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
+      }
+      return;
+    }
+
+    // Token → BTC swap: One-click swap + unwrap in a single transaction
+    if (isTokenToBtcSwap) {
+      // We need a quote with poolId for the swap portion
+      if (!quote || !quote.poolId) {
+        console.error('[SWAP] Token → BTC swap requires quote with poolId');
+        window.alert('Unable to find pool for this swap. Please try again.');
+        return;
+      }
+
+      try {
+        console.log('[SWAP] Executing one-click', fromToken.symbol, '→ BTC swap');
+        const sellAmount = direction === 'sell' ? quote.sellAmount : quote.sellAmount;
+
+        const res = await swapUnwrapMutation.mutateAsync({
+          sellCurrency: fromToken.id,
+          sellAmount,
+          expectedBtcAmount: quote.buyAmount, // frBTC amount ≈ BTC amount
+          maxSlippage,
+          feeRate: fee.feeRate,
+          poolId: quote.poolId,
+          deadlineBlocks,
+        });
+
+        if (res?.success && res.transactionId) {
+          console.log('[SWAP] One-click Token → BTC swap success:', res.transactionId);
+          setSuccessOperationType('swap');
+          setSuccessTxId(res.transactionId);
+          setTimeout(() => refreshWalletData(), 2000);
+        }
+      } catch (e: any) {
+        console.error('[SWAP] Token → BTC swap failed:', e);
+        window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
+      }
+      return;
+    }
+
+    // Default AMM swap (frBTC/DIESEL or other alkane pairs)
     if (!quote) return;
+
+    // Validate that we have a poolId - required for the two-protostone swap pattern
+    if (!quote.poolId) {
+      console.error('[SWAP] No poolId in quote - cannot execute swap');
+      window.alert('Swap failed: Pool not found. Please try again.');
+      return;
+    }
+
     const payload = {
       sellCurrency: fromToken.id,
       buyCurrency: toToken.id,
@@ -489,16 +758,19 @@ export default function SwapShell() {
       maxSlippage,
       feeRate: fee.feeRate,
       tokenPath: quote.route ?? [fromToken.id, toToken.id],
+      poolId: quote.poolId, // Required for two-protostone swap pattern
       deadlineBlocks,
     } as const;
+
     try {
       const res = await swapMutation.mutateAsync(payload as any);
       if (res?.success && res.transactionId) {
+        setSuccessOperationType('swap');
         setSuccessTxId(res.transactionId);
       }
-    } catch (e) {
-      console.error(e);
-      window.alert('Swap failed. See console for details.');
+    } catch (e: any) {
+      console.error('[SWAP] Mutation error:', e?.message);
+      window.alert(e?.message || 'Swap failed. See console for details.');
     }
   };
 
@@ -513,12 +785,15 @@ export default function SwapShell() {
 
   const tokenOptions = useMemo<TokenMeta[]>(() => {
     if (selectedPool) return [selectedPool.token0, selectedPool.token1];
+    // Fallback options - use poolTokenMap for correct symbols when available
+    const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+    const frbtcToken = poolTokenMap.get(FRBTC_ALKANE_ID);
     return [
-      { id: "btc", symbol: "BTC", name: "Bitcoin" },
-      { id: "frbtc", symbol: "frBTC", name: "frBTC" },
-      { id: "busd", symbol: "bUSD", name: "bUSD" },
+      { id: "btc", symbol: "BTC", name: "BTC" },
+      { id: FRBTC_ALKANE_ID, symbol: frbtcToken?.symbol ?? "frBTC", name: frbtcToken?.name ?? "frBTC" },
+      { id: BUSD_ALKANE_ID, symbol: busdToken?.symbol ?? "DIESEL", name: busdToken?.name ?? "DIESEL" },
     ];
-  }, [selectedPool]);
+  }, [selectedPool, poolTokenMap, BUSD_ALKANE_ID, FRBTC_ALKANE_ID]);
 
   const handleSelectPool = (pool: PoolSummary) => {
     setSelectedPool(pool);
@@ -532,9 +807,99 @@ export default function SwapShell() {
   };
 
   const handleAddLiquidity = async () => {
-    console.log('Add liquidity', { poolToken0, poolToken1, poolToken0Amount, poolToken1Amount });
-    // TODO: Implement liquidity addition logic
-    window.alert('Add liquidity feature coming soon!');
+    console.log('[handleAddLiquidity] Starting...', { poolToken0, poolToken1, poolToken0Amount, poolToken1Amount });
+
+    if (!poolToken0 || !poolToken1) {
+      window.alert('Please select both tokens');
+      return;
+    }
+
+    if (!poolToken0Amount || !poolToken1Amount ||
+        parseFloat(poolToken0Amount) <= 0 || parseFloat(poolToken1Amount) <= 0) {
+      window.alert('Please enter valid amounts for both tokens');
+      return;
+    }
+
+    // Handle BTC: requires wrap to frBTC first
+    const hasBtc = poolToken0.id === 'btc' || poolToken1.id === 'btc';
+    if (hasBtc) {
+      window.alert(
+        'Adding liquidity with BTC requires wrapping to frBTC first.\n\n' +
+        'Please wrap your BTC to frBTC using the Swap tab, then add liquidity with frBTC.'
+      );
+      return;
+    }
+
+    try {
+      const result = await addLiquidityMutation.mutateAsync({
+        token0Id: poolToken0.id,
+        token1Id: poolToken1.id,
+        token0Amount: poolToken0Amount,
+        token1Amount: poolToken1Amount,
+        token0Decimals: 8, // Default for alkanes
+        token1Decimals: 8,
+        maxSlippage,
+        feeRate: fee.feeRate,
+        deadlineBlocks,
+      });
+
+      if (result?.success && result.transactionId) {
+        console.log('[handleAddLiquidity] Success! txid:', result.transactionId);
+        setSuccessOperationType('addLiquidity');
+        setSuccessTxId(result.transactionId);
+        // Clear amounts after success
+        setPoolToken0Amount('');
+        setPoolToken1Amount('');
+      }
+    } catch (e: any) {
+      console.error('[handleAddLiquidity] Error:', e);
+      window.alert(`Add liquidity failed: ${e?.message || 'See console for details'}`);
+    }
+  };
+
+  const handleRemoveLiquidity = async () => {
+    console.log('[handleRemoveLiquidity] Starting...', { selectedLPPosition, removeAmount });
+
+    if (!selectedLPPosition) {
+      window.alert('Please select an LP position to remove');
+      return;
+    }
+
+    if (!removeAmount || parseFloat(removeAmount) <= 0) {
+      window.alert('Please enter a valid amount to remove');
+      return;
+    }
+
+    if (parseFloat(removeAmount) > parseFloat(selectedLPPosition.amount)) {
+      window.alert('Amount exceeds your LP position balance');
+      return;
+    }
+
+    try {
+      const result = await removeLiquidityMutation.mutateAsync({
+        lpTokenId: selectedLPPosition.id,  // LP token's alkane ID (same as pool ID)
+        lpAmount: removeAmount,
+        lpDecimals: 8,
+        minAmount0: '0',  // No slippage protection for now
+        minAmount1: '0',
+        token0Decimals: 8,
+        token1Decimals: 8,
+        feeRate: fee.feeRate,
+        deadlineBlocks,
+      });
+
+      if (result?.success && result.transactionId) {
+        console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
+        setSuccessOperationType('removeLiquidity');
+        setSuccessTxId(result.transactionId);
+        // Clear state after success
+        setRemoveAmount('');
+        setSelectedLPPosition(null);
+      }
+    } catch (e: any) {
+      console.error('[handleRemoveLiquidity] Error:', e);
+      window.alert(`Remove liquidity failed: ${e?.message || 'See console for details'}`);
+    }
   };
 
   const handleInvert = () => {
@@ -552,26 +917,17 @@ export default function SwapShell() {
     });
   };
 
-  // Whitelisted pool IDs (mainnet-specific)
-  // On non-mainnet networks, allow all pools
-  const whitelistedPoolIds = useMemo(() => {
-    if (network !== 'mainnet') {
-      // On non-mainnet, return null to indicate "allow all"
-      return null;
-    }
-    return new Set([
-      '2:77222',
-      '2:77087',
-      '2:77221',
-      '2:77228',
-      '2:77237',
-      '2:68441',
-      '2:68433',
-    ]);
-  }, [network]);
+  // Allow all pools - no filtering
+  const whitelistedPoolIds = null as Set<string> | null;
 
   // Helper function to check if a pair is in the allowed list
   const isAllowedPair = useMemo(() => (token1Id: string, token2Id: string): boolean => {
+    // On non-mainnet networks (whitelistedPoolIds === null), allow all pairs
+    // This enables LP token selection on regtest/signet where pools may not be loaded yet
+    if (whitelistedPoolIds === null) {
+      return true;
+    }
+
     // Special case: BTC <-> frBTC wrap/unwrap is always allowed
     if ((token1Id === 'btc' && token2Id === FRBTC_ALKANE_ID) ||
         (token1Id === FRBTC_ALKANE_ID && token2Id === 'btc')) {
@@ -607,25 +963,25 @@ export default function SwapShell() {
     return pool ? (whitelistedPoolIds === null || whitelistedPoolIds.has(pool.id)) : false;
   }, [markets, FRBTC_ALKANE_ID, whitelistedPoolIds]);
 
-  // Custom sort function for token options: BTC, bUSD, frBTC, then alphabetical
+  // Custom sort function for token options: BTC, DIESEL/bUSD, frBTC, then alphabetical
   const sortTokenOptions = (options: TokenOption[]): TokenOption[] => {
     return [...options].sort((a, b) => {
-      // Priority order
+      // Priority order (DIESEL and bUSD are the same token on different networks)
       const getPriority = (symbol: string) => {
         if (symbol === 'BTC') return 0;
-        if (symbol === 'bUSD') return 1;
+        if (symbol === 'bUSD' || symbol === 'DIESEL') return 1;
         if (symbol === 'frBTC') return 2;
         return 3;
       };
-      
+
       const priorityA = getPriority(a.symbol);
       const priorityB = getPriority(b.symbol);
-      
+
       // If different priorities, sort by priority
       if (priorityA !== priorityB) {
         return priorityA - priorityB;
       }
-      
+
       // If same priority (both are priority 3, i.e., other tokens), sort alphabetically
       return a.symbol.localeCompare(b.symbol);
     });
@@ -665,20 +1021,20 @@ export default function SwapShell() {
         // Check if this pair is in the allowed list
         isAvailable = isAllowedPair(token.id, fromToken.id);
       }
-      
+
       return {
         id: token.id,
         symbol: token.symbol,
         name: token.name,
-        iconUrl: token.iconUrl || currency?.iconUrl,
-        balance: currency?.balance,
+        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
+        balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: currency?.priceInfo?.price,
         isAvailable,
       };
     });
-    
+
     return sortTokenOptions(options);
-  }, [toOptions, idToUserCurrency, fromToken, isAllowedPair]);
+  }, [toOptions, idToUserCurrency, btcBalanceSats, fromToken, isAllowedPair]);
 
   // Pool token options - filtered to only show tokens that are in the whitelisted pools
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
@@ -718,17 +1074,65 @@ export default function SwapShell() {
     opts.push({
       id: 'btc',
       symbol: 'BTC',
-      name: 'Bitcoin',
+      name: 'BTC',
       iconUrl: undefined,
       balance: String(btcBalanceSats ?? 0),
       price: undefined,
       isAvailable: btcIsAvailable,
     });
-    
+
     // Get whitelisted pool tokens only
     const seen = new Set(['btc']); // BTC already added above
+
+    // Always add frBTC as a base token (available before pools load)
+    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID)) && !seen.has(FRBTC_ALKANE_ID)) {
+      seen.add(FRBTC_ALKANE_ID);
+      const frbtcCurrency = idToUserCurrency.get(FRBTC_ALKANE_ID);
+      let frbtcIsAvailable = true;
+      if (counterpartToken) {
+        frbtcIsAvailable = isAllowedPair(FRBTC_ALKANE_ID, counterpartToken.id);
+        // For LP mode, disallow BTC/frBTC pairing
+        if (counterpartToken.id === 'btc') {
+          frbtcIsAvailable = false;
+        }
+      }
+      opts.push({
+        id: FRBTC_ALKANE_ID,
+        symbol: 'frBTC',
+        name: 'frBTC',
+        iconUrl: frbtcCurrency?.iconUrl,
+        balance: frbtcCurrency?.balance,
+        price: frbtcCurrency?.priceInfo?.price,
+        isAvailable: frbtcIsAvailable,
+      });
+    }
+
+    // Always add BUSD/DIESEL as a base token (available before pools load)
+    if (BUSD_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(BUSD_ALKANE_ID)) && !seen.has(BUSD_ALKANE_ID)) {
+      seen.add(BUSD_ALKANE_ID);
+      const busdCurrency = idToUserCurrency.get(BUSD_ALKANE_ID);
+      const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
+      const defaultSymbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
+      let busdIsAvailable = true;
+      if (counterpartToken) {
+        busdIsAvailable = isAllowedPair(BUSD_ALKANE_ID, counterpartToken.id);
+      }
+      opts.push({
+        id: BUSD_ALKANE_ID,
+        symbol: busdToken?.symbol ?? defaultSymbol,
+        name: busdToken?.name ?? defaultSymbol,
+        iconUrl: busdToken?.iconUrl || busdCurrency?.iconUrl,
+        balance: busdCurrency?.balance,
+        price: busdCurrency?.priceInfo?.price,
+        isAvailable: busdIsAvailable,
+      });
+    }
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      if ((whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id)) && !seen.has(poolToken.id)) {
+      // Check ID whitelist and symbol whitelist (mainnet only)
+      const passesIdWhitelist = whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id);
+      const passesSymbolWhitelist = network !== 'mainnet' || MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(poolToken.symbol);
+
+      if (passesIdWhitelist && passesSymbolWhitelist && !seen.has(poolToken.id)) {
         seen.add(poolToken.id);
         const currency = idToUserCurrency.get(poolToken.id);
 
@@ -755,8 +1159,47 @@ export default function SwapShell() {
       }
     });
 
+    // Also add tokens from user's wallet that aren't in pools yet
+    // This allows users to add liquidity for new token pairs
+    userCurrencies.forEach((currency: any) => {
+      const symbol = currency.symbol || currency.name || currency.id;
+      // Check ID whitelist and symbol whitelist (mainnet only)
+      const passesIdWhitelist = whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id);
+      const passesSymbolWhitelist = network !== 'mainnet' || MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol);
+
+      if (!seen.has(currency.id) && passesIdWhitelist && passesSymbolWhitelist) {
+        seen.add(currency.id);
+
+        // Check if this token can pair with the counterpart token (if selected)
+        let isAvailable = true;
+        if (counterpartToken) {
+          isAvailable = isAllowedPair(currency.id, counterpartToken.id);
+
+          // For LP mode, disallow BTC/frBTC pairing
+          if (currency.id === FRBTC_ALKANE_ID && counterpartToken.id === 'btc') {
+            isAvailable = false;
+          }
+        }
+
+        opts.push({
+          id: currency.id,
+          symbol,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          balance: currency.balance,
+          price: currency.priceInfo?.price,
+          isAvailable,
+        });
+      }
+    });
+
+    console.log('[poolTokenOptions] Built options:', opts.length, 'tokens');
+    console.log('[poolTokenOptions] userCurrencies count:', userCurrencies?.length || 0);
+    console.log('[poolTokenOptions] poolTokenMap size:', poolTokenMap?.size || 0);
+    console.log('[poolTokenOptions] opts:', opts.map(o => ({ id: o.id, symbol: o.symbol })));
+
     return sortTokenOptions(opts);
-  }, [markets, idToUserCurrency, FRBTC_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds]);
+  }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds, network]);
 
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {
@@ -780,22 +1223,36 @@ export default function SwapShell() {
         setToToken(token);
       }
     } else if (tokenSelectorMode === 'pool0') {
-      const filteredToken = toOptions.find((t) => t.id === tokenId);
-      if (filteredToken) {
+      // For pool token selection, look in poolTokenOptions which includes all wallet tokens
+      const poolOption = poolTokenOptions.find((t) => t.id === tokenId);
+      if (poolOption) {
         // If selecting the same token as pool1, swap them
         if (poolToken1 && poolToken1.id === tokenId) {
           setPoolToken1(poolToken0);
         }
-        setPoolToken0(filteredToken);
+        // Convert TokenOption to TokenMeta
+        setPoolToken0({
+          id: poolOption.id,
+          symbol: poolOption.symbol,
+          name: poolOption.name,
+          iconUrl: poolOption.iconUrl,
+        });
       }
     } else if (tokenSelectorMode === 'pool1') {
-      const filteredToken = toOptions.find((t) => t.id === tokenId);
-      if (filteredToken) {
+      // For pool token selection, look in poolTokenOptions which includes all wallet tokens
+      const poolOption = poolTokenOptions.find((t) => t.id === tokenId);
+      if (poolOption) {
         // If selecting the same token as pool0, swap them
         if (poolToken0 && poolToken0.id === tokenId) {
           setPoolToken0(poolToken1);
         }
-        setPoolToken1(filteredToken);
+        // Convert TokenOption to TokenMeta
+        setPoolToken1({
+          id: poolOption.id,
+          symbol: poolOption.symbol,
+          name: poolOption.name,
+          iconUrl: poolOption.iconUrl,
+        });
       }
     }
   };
@@ -840,6 +1297,50 @@ export default function SwapShell() {
     }
   };
 
+  // Handle percentage of balance click for LP token 0
+  const handlePercentToken0 = (percent: number) => {
+    if (!poolToken0) return;
+    if (poolToken0.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = (sats * percent) / 1e8;
+      setPoolToken0Amount(btc.toFixed(8));
+    } else {
+      // Try walletAlkaneBalances first, then idToUserCurrency
+      let balance = walletAlkaneBalances.get(poolToken0.id);
+      if (!balance) {
+        const cur = idToUserCurrency.get(poolToken0.id);
+        balance = cur?.balance;
+      }
+      if (balance) {
+        const amt = (Number(balance) * percent) / 1e8;
+        const decimals = poolToken0.id === FRBTC_ALKANE_ID ? 8 : 4;
+        setPoolToken0Amount(amt.toFixed(decimals));
+      }
+    }
+  };
+
+  // Handle percentage of balance click for LP token 1
+  const handlePercentToken1 = (percent: number) => {
+    if (!poolToken1) return;
+    if (poolToken1.id === 'btc') {
+      const sats = Number(btcBalanceSats || 0);
+      const btc = (sats * percent) / 1e8;
+      setPoolToken1Amount(btc.toFixed(8));
+    } else {
+      // Try walletAlkaneBalances first, then idToUserCurrency
+      let balance = walletAlkaneBalances.get(poolToken1.id);
+      if (!balance) {
+        const cur = idToUserCurrency.get(poolToken1.id);
+        balance = cur?.balance;
+      }
+      if (balance) {
+        const amt = (Number(balance) * percent) / 1e8;
+        const decimals = poolToken1.id === FRBTC_ALKANE_ID ? 8 : 4;
+        setPoolToken1Amount(amt.toFixed(decimals));
+      }
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-8 h-full">
       <Suspense fallback={null}>
@@ -847,36 +1348,20 @@ export default function SwapShell() {
           <SwapSuccessNotification
             txId={successTxId}
             onClose={() => setSuccessTxId(null)}
+            operationType={successOperationType}
           />
         )}
       </Suspense>
 
-      <div className="flex flex-col md:grid md:grid-cols-2 gap-8 flex-1 min-h-0">
-        {/* Left Column: Swap/LP Module + My Wallet Swaps */}
+      <div className="flex flex-col md:grid md:grid-cols-2 gap-6 flex-1 min-h-0">
+        {/* Left Column: Swap/LP Module */}
         <div className="flex flex-col min-h-0 md:min-h-0">
           {/* Swap/Liquidity Tabs */}
-          <div className="flex w-full items-center justify-center gap-1 mb-4">
-            {/* Invisible spacer to balance the +/- button and keep tabs centered */}
-            <div className="w-10 h-10" />
+          <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
-            <button
-              type="button"
-              onClick={() => setLiquidityMode(liquidityMode === 'provide' ? 'remove' : 'provide')}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 text-[color:var(--sf-text)] transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md outline-none focus:outline-none ${selectedTab !== 'lp' ? 'invisible' : ''}`}
-              title={liquidityMode === 'provide' ? 'Switch to Remove Liquidity' : 'Switch to Provide Liquidity'}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {liquidityMode === 'provide' ? (
-                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                ) : (
-                  <path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                )}
-              </svg>
-            </button>
           </div>
 
-          <section className="relative w-full rounded-[24px] border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 sm:p-9 shadow-[0_12px_48px_rgba(0,0,0,0.18)] backdrop-blur-xl flex-shrink-0">
-          {isBalancesLoading && <LoadingOverlay />}
+          <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
           <Suspense fallback={<SwapFormSkeleton />}>
           {selectedTab === 'swap' ? (
             <SwapInputs
@@ -927,6 +1412,11 @@ export default function SwapShell() {
                   isCalculating={!!isCalculating}
                   feeRate={fee.feeRate}
                   isCrossChainFrom={['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '')}
+                  feeSelection={fee.selection}
+                  setFeeSelection={fee.setSelection}
+                  customFee={fee.custom}
+                  setCustomFee={fee.setCustom}
+                  feePresets={fee.presets}
                 />
               }
             />
@@ -934,25 +1424,30 @@ export default function SwapShell() {
             <LiquidityInputs
               token0={poolToken0}
               token1={poolToken1}
-              token0Options={toOptions}
-              token1Options={toOptions}
+              token0Options={poolTokenOptions}
+              token1Options={poolTokenOptions}
               token0Amount={poolToken0Amount}
               token1Amount={poolToken1Amount}
               onChangeToken0Amount={setPoolToken0Amount}
               onChangeToken1Amount={setPoolToken1Amount}
               onSelectToken0={(id) => {
-                const t = toOptions.find((x) => x.id === id);
+                const t = poolTokenOptions.find((x) => x.id === id);
                 if (t) setPoolToken0(t);
               }}
               onSelectToken1={(id) => {
-                const t = toOptions.find((x) => x.id === id);
+                const t = poolTokenOptions.find((x) => x.id === id);
                 if (t) setPoolToken1(t);
               }}
               onAddLiquidity={handleAddLiquidity}
+              onRemoveLiquidity={handleRemoveLiquidity}
+              isLoading={addLiquidityMutation.isPending}
+              isRemoveLoading={removeLiquidityMutation.isPending}
               token0BalanceText={formatBalance(poolToken0?.id)}
               token1BalanceText={formatBalance(poolToken1?.id)}
               token0FiatText="$0.00"
               token1FiatText="$0.00"
+              onPercentToken0={poolToken0 ? handlePercentToken0 : undefined}
+              onPercentToken1={poolToken1 ? handlePercentToken1 : undefined}
               minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(
                 poolToken0?.id === 'btc' || poolToken0?.id === FRBTC_ALKANE_ID ? 8 : 2
               ) : undefined}
@@ -966,6 +1461,7 @@ export default function SwapShell() {
               setCustomFee={fee.setCustom}
               feePresets={fee.presets}
               liquidityMode={liquidityMode}
+              onModeChange={setLiquidityMode}
               selectedLPPosition={selectedLPPosition}
               onSelectLPPosition={setSelectedLPPosition}
               onOpenLPSelector={() => setIsLPSelectorOpen(true)}
@@ -976,8 +1472,51 @@ export default function SwapShell() {
           </Suspense>
           </section>
 
-          {/* My Wallet Swaps - under swap modal */}
-          <div className="mt-8">
+          {/* Mobile Chart Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowMobileChart(!showMobileChart)}
+            className="md:hidden mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/80 hover:text-[color:var(--sf-text)]"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3v18h18" />
+              <path d="m19 9-5 5-4-4-3 3" />
+            </svg>
+            {showMobileChart ? 'Hide Chart' : 'Show Chart'}
+          </button>
+
+          {/* Mobile-only Chart - below swap form */}
+          {showMobileChart && (
+            <div className="md:hidden mt-4">
+              <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
+                <PoolDetailsCard
+                  pool={selectedTab === 'lp' && poolToken0 && poolToken1
+                    ? markets.find(p => {
+                        const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
+                        const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
+                        return (
+                          (p.token0.id === token0Id && p.token1.id === token1Id) ||
+                          (p.token0.id === token1Id && p.token1.id === token0Id)
+                        );
+                      })
+                    : selectedTab === 'swap' && fromToken && toToken
+                    ? markets.find(p => {
+                        const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
+                        const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+                        return (
+                          (p.token0.id === from0Id && p.token1.id === to1Id) ||
+                          (p.token0.id === to1Id && p.token1.id === from0Id)
+                        );
+                      })
+                    : selectedPool
+                  }
+                />
+              </Suspense>
+            </div>
+          )}
+
+          {/* My Wallet Swaps - desktop only, under swap modal */}
+          <div className="hidden md:block mt-8">
             <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
               <MyWalletSwaps />
             </Suspense>
@@ -987,10 +1526,11 @@ export default function SwapShell() {
         {/* Right Column: TVL and Markets */}
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
+          {/* Desktop-only Chart - hidden on mobile where it appears above swap form */}
+          <div className="hidden md:block">
           <PoolDetailsCard
             pool={selectedTab === 'lp' && poolToken0 && poolToken1
               ? markets.find(p => {
-                  // Map BTC to frBTC for pool lookup
                   const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
                   const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
                   return (
@@ -1000,7 +1540,6 @@ export default function SwapShell() {
                 })
               : selectedTab === 'swap' && fromToken && toToken
               ? markets.find(p => {
-                  // Map BTC to frBTC for pool lookup in swap mode
                   const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
                   const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
                   return (
@@ -1010,9 +1549,8 @@ export default function SwapShell() {
                 })
               : selectedPool
             }
-            volumePeriod={volumePeriod}
-            onVolumePeriodChange={setVolumePeriod}
           />
+          </div>
           <MarketsGrid
             pools={markets}
             onSelect={handleSelectPool}
@@ -1020,6 +1558,13 @@ export default function SwapShell() {
             onVolumePeriodChange={setVolumePeriod}
           />
         </div>
+        </Suspense>
+      </div>
+
+      {/* My Wallet Swaps - mobile only, at the bottom under market cards */}
+      <div className="md:hidden mt-6">
+        <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
+          <MyWalletSwaps />
         </Suspense>
       </div>
 
@@ -1098,7 +1643,7 @@ export default function SwapShell() {
       <LPPositionSelectorModal
         isOpen={isLPSelectorOpen}
         onClose={() => setIsLPSelectorOpen(false)}
-        positions={testLPPositions}
+        positions={lpPositions}
         onSelectPosition={setSelectedLPPosition}
         selectedPositionId={selectedLPPosition?.id}
       />

@@ -539,7 +539,7 @@ async function runTestSuite() {
 
       const hasVaults = await page.evaluate(() => {
         const text = document.body.textContent || '';
-        const vaultNames = ['dxBTC', 'veDIESEL', 'veUSD', 'veMETHANE'];
+        const vaultNames = ['dxBTC', 'veDIESEL', 'veUSD'];
         return vaultNames.some(v => text.includes(v));
       });
 

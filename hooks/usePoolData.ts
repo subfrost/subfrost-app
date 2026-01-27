@@ -16,11 +16,21 @@ export interface PoolPrice {
   timestamp?: number;
 }
 
+/** Volume period type */
+export type VolumePeriod = '24h' | '7d' | '30d';
+
 export interface PoolVolume {
   poolId: string;
   poolName: string;
+  volume: number;
+  volumeUsd?: number;
   volume24h: number;
   volume24hUsd?: number;
+  volume7d?: number;
+  volume7dUsd?: number;
+  volume30d?: number;
+  volume30dUsd?: number;
+  period: VolumePeriod;
   startHeight: number;
   endHeight: number;
   timestamp: number;
@@ -159,8 +169,8 @@ async function fetchDashboardStats(network?: string): Promise<DashboardStats> {
   return json.data;
 }
 
-async function fetchAllPoolVolumes(network?: string): Promise<Record<string, PoolVolume>> {
-  const url = buildUrl('/api/pools/volume', { pool: 'all', network });
+async function fetchAllPoolVolumes(period: VolumePeriod = '24h', network?: string): Promise<Record<string, PoolVolume>> {
+  const url = buildUrl('/api/pools/volume', { pool: 'all', period, network });
   const response = await fetch(url);
   const json = await response.json();
 
@@ -171,8 +181,8 @@ async function fetchAllPoolVolumes(network?: string): Promise<Record<string, Poo
   return json.data;
 }
 
-async function fetchPoolVolume(poolKey: string, network?: string): Promise<PoolVolume> {
-  const url = buildUrl('/api/pools/volume', { pool: poolKey, network });
+async function fetchPoolVolume(poolKey: string, period: VolumePeriod = '24h', network?: string): Promise<PoolVolume> {
+  const url = buildUrl('/api/pools/volume', { pool: poolKey, period, network });
   const response = await fetch(url);
   const json = await response.json();
 
@@ -263,32 +273,44 @@ export function useDashboardStats(): UseQueryResult<DashboardStats> {
   });
 }
 
+/** Stale times for different volume periods */
+const VOLUME_STALE_TIMES: Record<VolumePeriod, number> = {
+  '24h': 300_000,   // 5 minutes
+  '7d': 600_000,    // 10 minutes
+  '30d': 900_000,   // 15 minutes
+};
+
 /**
- * Fetch all pool 24h volumes for current network
+ * Fetch all pool volumes for current network
+ * @param period - Time period ('24h', '7d', or '30d') - default: '24h'
  */
-export function useAllPoolVolumes(): UseQueryResult<Record<string, PoolVolume>> {
+export function useAllPoolVolumes(period: VolumePeriod = '24h'): UseQueryResult<Record<string, PoolVolume>> {
   const { network } = useWallet();
+  const staleTime = VOLUME_STALE_TIMES[period];
 
   return useQuery({
-    queryKey: ['pool-volumes', 'all', network],
-    queryFn: () => fetchAllPoolVolumes(network),
-    staleTime: 300_000, // 5 minutes
-    refetchInterval: 300_000,
+    queryKey: ['pool-volumes', 'all', period, network],
+    queryFn: () => fetchAllPoolVolumes(period, network),
+    staleTime,
+    refetchInterval: staleTime,
     enabled: !!network,
   });
 }
 
 /**
- * Fetch single pool 24h volume for current network
+ * Fetch single pool volume for current network
+ * @param poolKey - Pool key (e.g., 'DIESEL_BUSD')
+ * @param period - Time period ('24h', '7d', or '30d') - default: '24h'
  */
-export function usePoolVolume(poolKey: string): UseQueryResult<PoolVolume> {
+export function usePoolVolume(poolKey: string, period: VolumePeriod = '24h'): UseQueryResult<PoolVolume> {
   const { network } = useWallet();
+  const staleTime = VOLUME_STALE_TIMES[period];
 
   return useQuery({
-    queryKey: ['pool-volume', poolKey, network],
-    queryFn: () => fetchPoolVolume(poolKey, network),
-    staleTime: 300_000,
-    refetchInterval: 300_000,
+    queryKey: ['pool-volume', poolKey, period, network],
+    queryFn: () => fetchPoolVolume(poolKey, period, network),
+    staleTime,
+    refetchInterval: staleTime,
     enabled: !!poolKey && !!network,
   });
 }

@@ -2,11 +2,9 @@
   "name": "subfrost-app",
   "version": "0.1.0",
   "private": true,
-  "sdkBranch": "develop",
   "scripts": {
     "dev": "next dev",
     "dev:turbo": "next dev --turbopack",
-    "build:external": "node build-external.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -39,6 +37,7 @@
     "bitcoinjs-message": "^2.2.0",
     "ecpair": "^3.0.0",
     "jest": "^29.7.0",
+    "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.556.0",
     "next": "^16.0.7",
     "qrcode": "^1.5.4",
@@ -50,7 +49,7 @@
     "varuint-bitcoin": "^2.0.0"
   },
   "devDependencies": {
-    "@alkanes/ts-sdk": "https://alkanes.build/api/pkg/@alkanes/ts-sdk",
+    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk",
     "@noble/curves": "^2.0.1",
     "@playwright/experimental-ct-react": "^1.56.1",
     "@playwright/test": "^1.56.1",

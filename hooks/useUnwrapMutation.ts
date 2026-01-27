@@ -1,7 +1,28 @@
+/**
+ * useUnwrapMutation - Unwrap frBTC back to BTC
+ *
+ * ## WASM Dependency Note
+ *
+ * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
+ * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
+ */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+
+bitcoin.initEccLib(ecc);
+
+// Helper to convert Uint8Array to base64
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
 
 export type UnwrapTransactionBaseData = {
   amount: string; // display units (frBTC)
@@ -52,7 +73,7 @@ function buildUnwrapInputRequirements(params: {
 }
 
 export function useUnwrapMutation() {
-  const { account, network, isConnected } = useWallet();
+  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { FRBTC_ALKANE_ID } = getConfig(network);
@@ -61,6 +82,18 @@ export function useUnwrapMutation() {
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
+
+      // Get addresses - use actual addresses instead of SDK descriptors
+      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress) throw new Error('No taproot address available');
+      console.log('[useUnwrapMutation] Using addresses:', { taprootAddress, segwitAddress });
+
+      // Verify wallet is loaded in provider
+      if (!provider.walletIsLoaded()) {
+        throw new Error('Wallet not loaded in provider');
+      }
 
       const unwrapAmount = toAlks(unwrapData.amount);
 
@@ -79,34 +112,124 @@ export function useUnwrapMutation() {
       const recipientAddress = account?.nativeSegwit?.address || account?.taproot?.address;
       if (!recipientAddress) throw new Error('No recipient address available');
 
-      const toAddresses = JSON.stringify([recipientAddress]);
+      // Determine btcNetwork for PSBT operations
+      // Must match network detection in other mutation hooks
+      let btcNetwork: bitcoin.Network;
+      switch (network) {
+        case 'mainnet':
+          btcNetwork = bitcoin.networks.bitcoin;
+          break;
+        case 'testnet':
+        case 'signet':
+          btcNetwork = bitcoin.networks.testnet;
+          break;
+        case 'regtest':
+        case 'regtest-local':
+        case 'subfrost-regtest':
+        case 'oylnet':
+        default:
+          btcNetwork = bitcoin.networks.regtest;
+          break;
+      }
 
-      // Use p2tr:0 for change address instead of the default p2wsh:0
-      // (p2wsh is not supported by single-sig wallets)
-      const options = JSON.stringify({
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: true,
-        change_address: 'p2tr:0',
+      console.log('[useUnwrapMutation] Executing unwrap:', {
+        amount: unwrapAmount,
+        frbtcId: FRBTC_ALKANE_ID,
+        recipient: recipientAddress,
+        feeRate: unwrapData.feeRate,
       });
 
-      // Execute using alkanesExecuteWithStrings
-      const result = await provider.alkanesExecuteWithStrings(
-        toAddresses,
+      // Build fromAddresses array - use actual wallet addresses, not SDK descriptors
+      // This ensures the SDK can find UTXOs correctly even when wallet isn't loaded via mnemonic
+      const fromAddresses: string[] = [];
+      if (segwitAddress) fromAddresses.push(segwitAddress);
+      if (taprootAddress) fromAddresses.push(taprootAddress);
+
+      // Execute using alkanesExecuteTyped with ACTUAL addresses:
+      // - fromAddresses: actual wallet addresses (fixes "Available: []" issue)
+      // - changeAddress: segwit address for BTC change
+      // - alkanesChangeAddress: taproot address for alkane change
+      const result = await provider.alkanesExecuteTyped({
+        toAddresses: [recipientAddress],  // SegWit address for BTC output
         inputRequirements,
-        protostone,
-        unwrapData.feeRate,
-        undefined, // envelope_hex
-        options
-      );
+        protostones: protostone,
+        feeRate: unwrapData.feeRate,
+        autoConfirm: false,  // Handle PSBT signing manually for consistency
+        fromAddresses,
+        changeAddress: segwitAddress || taprootAddress, // BTC change to segwit
+        alkanesChangeAddress: taprootAddress, // Alkane change to taproot
+      });
 
-      // Parse result
+      console.log('[useUnwrapMutation] Called alkanesExecuteTyped with fromAddresses:', fromAddresses);
+
+      console.log('[useUnwrapMutation] Execute result:', JSON.stringify(result, null, 2));
+
+      // Handle auto-completed transaction
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        console.log('[useUnwrapMutation] Transaction auto-completed, txid:', txId);
+        return { success: true, transactionId: txId };
+      }
+
+      // Handle readyToSign state (need to sign PSBT manually)
+      if (result?.readyToSign) {
+        console.log('[useUnwrapMutation] Got readyToSign, signing PSBT...');
+        const readyToSign = result.readyToSign;
+
+        // Convert PSBT to base64
+        let psbtBase64: string;
+        if (readyToSign.psbt instanceof Uint8Array) {
+          psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
+        } else if (typeof readyToSign.psbt === 'string') {
+          psbtBase64 = readyToSign.psbt;
+        } else if (typeof readyToSign.psbt === 'object') {
+          const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
+          const bytes = new Uint8Array(keys.length);
+          for (let i = 0; i < keys.length; i++) {
+            bytes[i] = readyToSign.psbt[keys[i]];
+          }
+          psbtBase64 = uint8ArrayToBase64(bytes);
+        } else {
+          throw new Error('Unexpected PSBT format');
+        }
+
+        // Sign the PSBT with both keys (SegWit first, then Taproot)
+        // The PSBT may have inputs from both address types
+        console.log('[useUnwrapMutation] Signing PSBT with SegWit key first, then Taproot key...');
+        let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+
+        // Finalize and extract transaction
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+
+        const tx = signedPsbt.extractTransaction();
+        const txHex = tx.toHex();
+        const txid = tx.getId();
+
+        console.log('[useUnwrapMutation] Transaction built:', txid);
+
+        // Broadcast
+        const broadcastTxid = await provider.broadcastTransaction(txHex);
+        console.log('[useUnwrapMutation] Broadcast successful:', broadcastTxid);
+
+        return {
+          success: true,
+          transactionId: broadcastTxid || txid,
+        };
+      }
+
+      // Handle complete state
+      if (result?.complete) {
+        const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+        console.log('[useUnwrapMutation] Complete, txid:', txId);
+        return { success: true, transactionId: txId };
+      }
+
+      // Fallback
       const txId = result?.txid || result?.reveal_txid;
-
-      return {
-        success: true,
-        transactionId: txId,
-      } as { success: boolean; transactionId?: string };
+      console.log('[useUnwrapMutation] Transaction ID:', txId);
+      return { success: true, transactionId: txId };
     },
     onSuccess: (data) => {
       console.log('[useUnwrapMutation] Unwrap successful, invalidating balance queries...');
@@ -126,6 +249,8 @@ export function useUnwrapMutation() {
       // Invalidate pool-related queries
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
+      // Invalidate activity feed so it shows the new unwrap transaction
+      queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
       console.log('[useUnwrapMutation] Balance queries invalidated for address:', walletAddress);
     },

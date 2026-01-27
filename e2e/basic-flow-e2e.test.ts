@@ -274,7 +274,6 @@ async function runTestSuite(): Promise<void> {
         const hasVaultTokens =
           bodyText.includes('dxBTC') ||
           bodyText.includes('veDIESEL') ||
-          bodyText.includes('veMETHANE') ||
           bodyText.includes('yvfrBTC') ||
           bodyText.includes('frBTC');
 
@@ -284,7 +283,7 @@ async function runTestSuite(): Promise<void> {
         );
         let vaultClickables = 0;
         clickableItems.forEach((item) => {
-          if (item.textContent?.match(/(BTC|DIESEL|METHANE|Vault|APY)/i)) {
+          if (item.textContent?.match(/(BTC|DIESEL|Vault|APY)/i)) {
             vaultClickables++;
           }
         });

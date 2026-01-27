@@ -4,10 +4,21 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use LOCAL WASM (fixed version with from_addresses parsing)
-// The npm package version has a bug where from_addresses is always None
-// Once the SDK fix is merged and published, revert to: '@alkanes/ts-sdk/build/wasm/alkanes_web_sys.js'
-const wasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
+// IMPORTANT: Local WASM alias for @alkanes/ts-sdk/wasm
+// ================================================
+// This alias redirects the WASM import to lib/oyl/alkanes/ instead of node_modules.
+// This is necessary because Next.js/Turbopack has issues loading WASM from node_modules.
+//
+// ⚠️ SYNC REQUIREMENT: When updating @alkanes/ts-sdk, you MUST also update lib/oyl/alkanes/:
+//
+//   cp node_modules/@alkanes/ts-sdk/wasm/*.wasm lib/oyl/alkanes/
+//   cp node_modules/@alkanes/ts-sdk/wasm/*.js lib/oyl/alkanes/
+//   cp node_modules/@alkanes/ts-sdk/wasm/*.d.ts lib/oyl/alkanes/
+//
+// LAST SYNCED: 2026-01-18 with @alkanes/ts-sdk@0.1.4-dfe27c6
+// Fix included: Uses protorunes_by_address directly for UTXO balance fetching
+// ================================================
+const localWasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -24,19 +35,38 @@ const nextConfig = {
       },
     ];
   },
-  // Turbopack configuration (for dev mode)
+  // Turbopack configuration (for dev mode and turbo builds)
   turbopack: {
     resolveAlias: {
-      '@alkanes/ts-sdk/wasm': wasmPath,
+      // Use local WASM with fixes for from_addresses parsing and UTXO serialization
+      '@alkanes/ts-sdk/wasm': localWasmPath,
+      // Prevent Node.js-specific loader from being bundled for browser
+      '@alkanes/ts-sdk/wasm/node-loader.cjs': { browser: './lib/empty-module.js' },
+      // Stub out Node.js built-in modules for browser builds
+      fs: { browser: './lib/empty-module.js' },
+      path: { browser: './lib/empty-module.js' },
+      net: { browser: './lib/empty-module.js' },
+      tls: { browser: './lib/empty-module.js' },
+      crypto: { browser: './lib/empty-module.js' },
+      stream: { browser: './lib/empty-module.js' },
+      util: { browser: './lib/empty-module.js' },
     },
   },
   // Webpack configuration (for production)
   webpack: (config, { isServer, webpack }) => {
-    // WASM alias - use npm package
+    // Use local WASM with fixes for from_addresses parsing and UTXO serialization
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@alkanes/ts-sdk/wasm': wasmPath,
+      '@alkanes/ts-sdk/wasm': path.join(__dirname, localWasmPath),
     };
+
+    // Prevent Node.js-specific loader from being bundled for browser
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@alkanes/ts-sdk/wasm/node-loader.cjs': path.join(__dirname, 'lib/empty-module.js'),
+      };
+    }
 
     // WASM support
     config.experiments = {

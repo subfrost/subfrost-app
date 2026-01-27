@@ -2,7 +2,7 @@
   <title>Snowflakes Background</title>
   <desc>Static distribution of semi-transparent white snowflake dots across a 1920x1080 canvas. Scales responsively.</desc>
   <rect width="100%" height="100%" fill="none"/>
-  <g fill="rgba(255,255,255,0.12)">
+  <g fill="rgba(255,255,255,0.2)">
     <!-- Generated dot field approximating the canvas effect -->
     <circle cx="120" cy="80" r="3"/>
     <circle cx="240" cy="160" r="2"/>

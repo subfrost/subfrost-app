@@ -59,6 +59,11 @@ export function useVaultWithdraw() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
+      // Verify wallet is loaded in provider
+      if (!provider.walletIsLoaded()) {
+        throw new Error('Wallet not loaded in provider');
+      }
+
       // Build protostone for vault withdrawal
       const protostone = buildVaultWithdrawProtostone({
         vaultContractId: withdrawData.vaultContractId,

@@ -37,7 +37,7 @@ export default function VaultActionPanel({
   const showStakeUnstake = mode === 'stake' || mode === 'unstake';
 
   return (
-    <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm sticky top-4">
+    <div className="rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm sticky top-4">
       <h3 className="text-xl font-bold text-[color:var(--sf-text)] mb-6">{title}</h3>
 
       {/* Mode Tabs */}
@@ -46,7 +46,7 @@ export default function VaultActionPanel({
           <>
             <button
               onClick={() => onModeChange('deposit')}
-              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 mode === 'deposit'
                   ? 'bg-[color:var(--sf-primary)] text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -56,7 +56,7 @@ export default function VaultActionPanel({
             </button>
             <button
               onClick={() => onModeChange('withdraw')}
-              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 mode === 'withdraw'
                   ? 'bg-[color:var(--sf-primary)] text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -70,7 +70,7 @@ export default function VaultActionPanel({
           <>
             <button
               onClick={() => onModeChange('stake')}
-              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 mode === 'stake'
                   ? 'bg-[color:var(--sf-primary)] text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -80,7 +80,7 @@ export default function VaultActionPanel({
             </button>
             <button
               onClick={() => onModeChange('unstake')}
-              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 mode === 'unstake'
                   ? 'bg-[color:var(--sf-primary)] text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -108,7 +108,7 @@ export default function VaultActionPanel({
           />
           <button
             onClick={() => onAmountChange(balance)}
-            className="px-4 h-12 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-semibold text-gray-700 transition-colors"
+            className="px-4 h-12 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-semibold text-gray-700 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
             MAX
           </button>
@@ -128,7 +128,7 @@ export default function VaultActionPanel({
           onExecute();
         }}
         disabled={isConnected && (!amount || parseFloat(amount) <= 0)}
-        className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)] mb-4"
+        className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)] mb-4"
       >
         {isConnected ? mode.toUpperCase() : 'CONNECT WALLET'}
       </button>
@@ -144,7 +144,7 @@ export default function VaultActionPanel({
           </div>
           <button
             onClick={onClaim}
-            className="w-full rounded-lg bg-green-500 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-600"
+            className="w-full rounded-lg bg-green-500 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-green-600"
           >
             CLAIM REWARDS
           </button>

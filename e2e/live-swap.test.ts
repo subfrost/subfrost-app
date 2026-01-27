@@ -172,7 +172,7 @@ async function fundWalletViaFaucet(address: string): Promise<boolean> {
   const faucetResult = await page.evaluate(async (addr) => {
     // Try the Sandshrew/Subfrost regtest faucet if available
     const endpoints = [
-      'https://regtest.subfrost.io/v4/api/faucet',
+      'https://regtest.subfrost.io/v4/subfrost/faucet',
       'https://ladder-chain-sieve.sandshrew.io/v4/faucet',
     ];
 

@@ -90,13 +90,7 @@ jobs:
           HOSTNAME=$(echo $URL | sed 's|https://||')
           echo "hostname=${HOSTNAME}" >> $GITHUB_OUTPUT
 
-      - name: Create Cloud Run domain mapping
-        continue-on-error: true
-        run: |
-          gcloud run domain-mappings create \
-            --service=${{ env.SERVICE_NAME }} \
-            --domain=${{ env.CUSTOM_DOMAIN }} \
-            --region=${{ env.REGION }} 2>/dev/null || echo "Domain mapping already exists"
+      # Domain mapping is already configured - skip creation step
 
       - name: Update Cloudflare DNS
         env:
@@ -148,6 +142,27 @@ jobs:
               --data "{\"type\":\"A\",\"name\":\"staging-app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
             echo "Created A record: ${DOMAIN} -> ${TARGET}"
           fi
+
+          # Also add AAAA records for IPv6
+          AAAA_TARGETS=("2001:4860:4802:32::15" "2001:4860:4802:34::15" "2001:4860:4802:36::15" "2001:4860:4802:38::15")
+
+          for AAAA_TARGET in "${AAAA_TARGETS[@]}"; do
+            AAAA_RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}&type=AAAA&content=${AAAA_TARGET}" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json")
+
+            AAAA_RECORD_ID=$(echo "$AAAA_RESPONSE" | jq -r '.result[0].id')
+
+            if [ "$AAAA_RECORD_ID" != "null" ] && [ -n "$AAAA_RECORD_ID" ]; then
+              echo "AAAA record already exists: ${AAAA_TARGET}"
+            else
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"type\":\"AAAA\",\"name\":\"staging-app\",\"content\":\"${AAAA_TARGET}\",\"ttl\":1,\"proxied\":false}"
+              echo "Created AAAA record: ${DOMAIN} -> ${AAAA_TARGET}"
+            fi
+          done
 
       - name: Deployment Summary
         run: |

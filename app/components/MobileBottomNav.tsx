@@ -1,0 +1,48 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Home, ArrowLeftRight, Vault, TrendingUp } from 'lucide-react';
+
+const navItems = [
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
+  { href: '/vaults', label: 'Vaults', icon: Vault },
+  { href: '/futures', label: 'Futures', icon: TrendingUp },
+];
+
+export default function MobileBottomNav() {
+  const pathname = usePathname();
+
+  const isActive = (path: string) => {
+    if (path === '/') {
+      return pathname === '/';
+    }
+    return pathname.startsWith(path);
+  };
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-glass-border)] safe-area-bottom">
+      <div className="flex items-center justify-around h-16 px-2">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                active
+                  ? 'text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+              }`}
+            >
+              <Icon size={22} strokeWidth={active ? 2.5 : 2} />
+              <span className="text-[10px] font-semibold">{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}

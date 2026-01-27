@@ -1,16 +1,16 @@
 /**
- * Test ts-sdk UTXO enrichment with alkane balances
+ * Test @alkanes/ts-sdk UTXO enrichment with alkane balances
  * This verifies that the getAddressUtxos method properly enriches
  * UTXOs with alkane balance data via protorunesbyoutpoint
  *
  * Run: node e2e/test-sdk-enrichment.mjs
  */
 
-import { AlkanesProvider } from '../ts-sdk/dist/index.mjs';
+import { AlkanesProvider } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 
 async function testAlkaneEnrichment() {
-  console.log('Testing ts-sdk Alkane UTXO Enrichment...\n');
+  console.log('Testing @alkanes/ts-sdk Alkane UTXO Enrichment...\n');
 
   // Create provider for regtest
   const provider = new AlkanesProvider({
@@ -60,7 +60,7 @@ async function testAlkaneEnrichment() {
 
     // Summary
     console.log('\n═══════════════════════════════════════');
-    console.log('✅ ts-sdk enrichment test completed!');
+    console.log('✅ @alkanes/ts-sdk enrichment test completed!');
     console.log('═══════════════════════════════════════');
     console.log(`   Total UTXOs: ${result.utxos.length}`);
     console.log(`   All have alkanes property: ${hasAlkanesProperty}`);

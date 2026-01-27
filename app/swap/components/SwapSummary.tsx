@@ -10,8 +10,12 @@ import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 import { useMemo } from 'react';
-import { useModalStore } from '@/stores/modals';
 import { useGlobalStore } from '@/stores/global';
+import type { SlippageSelection } from '@/stores/global';
+
+import type { FeeSelection } from '@/hooks/useFeeRate';
+import { useState, useRef, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 type Props = {
   sellId: string;
@@ -24,14 +28,23 @@ type Props = {
   feeRate: number;
   network?: 'mainnet' | 'testnet';
   isCrossChainFrom?: boolean;
+  feeSelection?: FeeSelection;
+  setFeeSelection?: (s: FeeSelection) => void;
+  customFee?: string;
+  setCustomFee?: (v: string) => void;
+  feePresets?: { slow: number; medium: number; fast: number };
 };
 
-export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp, isCrossChainFrom }: Props) {
+export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp, isCrossChainFrom, feeSelection = 'medium', setFeeSelection, customFee = '', setCustomFee, feePresets = { slow: 2, medium: 8, fast: 25 } }: Props) {
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
-  const { openTxSettings } = useModalStore();
-  const { maxSlippage } = useGlobalStore();
+  const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
+
+  // Single state to track which settings field is focused (only one can be focused at a time)
+  const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
+  // Local deadline state to allow empty field while typing
+  const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
   const normalizedSell = sellId === 'btc' ? FRBTC_ALKANE_ID : sellId;
   const normalizedBuy = buyId === 'btc' ? FRBTC_ALKANE_ID : buyId;
   
@@ -123,7 +136,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
     // Handle BTC wrap/unwrap cases
     if (sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID) {
       return [
-        { id: 'btc', symbol: 'BTC', label: 'Bitcoin' },
+        { id: 'btc', symbol: 'BTC', label: 'BTC' },
         { id: 'frbtc', symbol: 'frBTC', label: 'Wrap' },
         { id: buyId, symbol: buyName || buyId, label: buyName || buyId }
       ];
@@ -157,21 +170,21 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const isUnwrapPair = (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && buyId === 'btc';
 
   return (
-    <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 text-sm backdrop-blur-sm transition-all">
+    <div className="mt-3 flex flex-col gap-2.5 text-sm">
       {isCalculating ? (
         <SkeletonLines />
       ) : quote ? (
         <>
           {swapRoute && (
-            <div className="mb-2 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/20 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)] mb-2">
+            <div className="rounded-2xl bg-transparent p-4 pb-0">
+              <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
                 {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {swapRoute.map((step, index) => (
                   <div key={`${step.id}-${index}`} className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-[10px] font-bold text-[color:var(--sf-primary)]">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-xs font-bold text-[color:var(--sf-primary)]">
                         {index + 1}
                       </div>
                       <span className="text-xs font-semibold text-[color:var(--sf-text)]">{step.symbol}</span>
@@ -185,69 +198,188 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 ))}
               </div>
               {(quote?.hops === 2 || sellId === 'btc' || buyId === 'btc') && (
-                <div className="mt-1.5 text-[10px] text-[color:var(--sf-text)]/70">
-                  {quote?.hops === 2 && swapRoute.length === 3 && (
-                    <>
-                      {swapRoute[1].id === BUSD_ALKANE_ID && '⚡ Using bUSD as bridge token'}
-                      {swapRoute[1].id === FRBTC_ALKANE_ID && '⚡ Using frBTC as bridge token'}
-                    </>
-                  )}
-                  {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && 'BTC will seamlessly wrap to frBTC in this Tx.'}
-                  {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
-                  {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && 'NOTE: frBTC will be unwrapped to BTC in this Tx. BTC will be sent to your wallet after 3 block confirmations.'}
-                  {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
-                  {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
+                <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[color:var(--sf-text)]/60">
+                  <svg className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 256 256" fill="currentColor">
+                    <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z"/>
+                  </svg>
+                  <span>
+                    {quote?.hops === 2 && swapRoute.length === 3 && (
+                      <>
+                        {swapRoute[1].id === BUSD_ALKANE_ID && 'Using bUSD as bridge token'}
+                        {swapRoute[1].id === FRBTC_ALKANE_ID && 'Using frBTC as bridge token'}
+                      </>
+                    )}
+                    {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && 'BTC will seamlessly wrap to frBTC in this Tx.'}
+                    {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
+                    {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && 'NOTE: frBTC will be unwrapped to BTC in this Tx. BTC will be sent to your wallet after 3 block confirmations.'}
+                    {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
+                    {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
+                  </span>
                 </div>
               )}
             </div>
           )}
           
-          {/* Settings button */}
-          <div className="flex items-center justify-end mb-2">
-            <button
-              type="button"
-              onClick={() => openTxSettings()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span>Settings</span>
-            </button>
+          {/* Settings rows - px-4 to align with Swap Route content */}
+          <div className="flex flex-col gap-2.5 px-4">
+            <Row
+              label="Exchange Rate"
+              value={isWrapPair
+                ? '1 BTC = 1 frBTC'
+                : isUnwrapPair
+                  ? '1 frBTC = 1 BTC'
+                  : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
+              highlight
+            />
+            {direction === 'sell' ? (
+              <Row label="Minimum Received" value={`${(() => {
+                const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
+                const decimals = isBtcToken ? 8 : 2;
+                return formatAlks(quote.minimumReceived, decimals, decimals);
+              })()} ${buyName ?? buyId}`} />
+            ) : (
+              <Row label="Maximum Sent" value={`${(() => {
+                const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
+                const decimals = isBtcToken ? 8 : 2;
+                return formatAlks(quote.maximumSent, decimals, decimals);
+              })()} ${sellName ?? sellId}`} />
+            )}
+            {/* Deadline (blocks) row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                Deadline (blocks)
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <input
+                    aria-label="Transaction deadline in blocks"
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={deadlineLocal}
+                    onChange={(e) => setDeadlineLocal(e.target.value)}
+                    onFocus={() => setFocusedField('deadline')}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      const val = parseInt(deadlineLocal, 10);
+                      if (!deadlineLocal || isNaN(val) || val < 1) {
+                        setDeadlineLocal('3');
+                        setDeadlineBlocks(3);
+                      } else {
+                        setDeadlineBlocks(Math.min(100, val));
+                      }
+                    }}
+                    placeholder="3"
+                    style={{ outline: 'none', border: 'none' }}
+                    className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  />
+                </div>
+              </div>
+            </div>
+            {/* Slippage Tolerance row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                Slippage Tolerance
+              </span>
+              <div className="flex items-center gap-2">
+                {(isWrapPair || isUnwrapPair) ? (
+                  <span className="font-semibold text-[color:var(--sf-text)]">N/A</span>
+                ) : (
+                  <>
+                    {slippageSelection === 'custom' ? (
+                      <div className="relative">
+                        <input
+                          aria-label="Custom slippage tolerance"
+                          type="text"
+                          inputMode="numeric"
+                          value={maxSlippage}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            // Allow empty, or valid format: up to 2 digits (whole numbers only)
+                            if (val === '' || /^\d{0,2}$/.test(val)) {
+                              const num = parseInt(val, 10);
+                              if (val === '' || (num >= 0 && num <= 99)) {
+                                setMaxSlippage(val);
+                              }
+                            }
+                          }}
+                          onFocus={() => setFocusedField('slippage')}
+                          onBlur={() => {
+                            setFocusedField(null);
+                            if (!maxSlippage) {
+                              setMaxSlippage('5');
+                            }
+                          }}
+                          placeholder="5"
+                          style={{ outline: 'none', border: 'none' }}
+                          className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
+                      </div>
+                    ) : (
+                      <span className="font-semibold text-[color:var(--sf-text)]">
+                        {maxSlippage}%
+                      </span>
+                    )}
+                    <SlippageButton
+                      selection={slippageSelection}
+                      setSelection={setSlippageSelection}
+                      setValue={setMaxSlippage}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+            {/* Miner Fee Rate row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                {isCrossChainFrom ? "Bitcoin & Ethereum Network Fee" : "Miner Fee Rate (sats/vB)"}
+              </span>
+              <div className="flex items-center gap-2">
+                {isCrossChainFrom ? (
+                  <span className="font-semibold text-[color:var(--sf-text)]">$0.00 USDT</span>
+                ) : feeSelection === 'custom' && setCustomFee ? (
+                  <div className="relative">
+                    <input
+                      aria-label="Custom miner fee rate"
+                      type="number"
+                      min={1}
+                      max={999}
+                      step={1}
+                      value={customFee}
+                      onChange={(e) => setCustomFee(e.target.value)}
+                      onFocus={() => setFocusedField('fee')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        if (!customFee) {
+                          setCustomFee(String(feePresets.medium));
+                        }
+                      }}
+                      placeholder="0"
+                      style={{ outline: 'none', border: 'none' }}
+                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                    />
+                  </div>
+                ) : (
+                  <span className="font-semibold text-[color:var(--sf-text)]">
+                    {Math.round(feeRate)}
+                  </span>
+                )}
+                {!isCrossChainFrom && (
+                  <MinerFeeButton
+                    selection={feeSelection}
+                    setSelection={setFeeSelection}
+                    customFee={customFee}
+                    setCustomFee={setCustomFee}
+                    feeRate={feeRate}
+                    presets={feePresets}
+                  />
+                )}
+              </div>
+            </div>
+            {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
           </div>
-          
-          <Row
-            label="Exchange Rate"
-            value={isWrapPair
-              ? '1 BTC = 1 frBTC'
-              : isUnwrapPair
-                ? '1 frBTC = 1 BTC'
-                : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
-            highlight
-          />
-          {direction === 'sell' ? (
-            <Row label="Minimum Received" value={`${(() => {
-              const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
-              const decimals = isBtcToken ? 8 : 2;
-              return formatAlks(quote.minimumReceived, decimals, decimals);
-            })()} ${buyName ?? buyId}`} />
-          ) : (
-            <Row label="Maximum Sent" value={`${(() => {
-              const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
-              const decimals = isBtcToken ? 8 : 2;
-              return formatAlks(quote.maximumSent, decimals, decimals);
-            })()} ${sellName ?? sellId}`} />
-          )}
-          <Row
-            label="Slippage Tolerance"
-            value={(isWrapPair || isUnwrapPair) ? 'N/A' : `${Number(maxSlippage || 0.5).toFixed(2)}%`}
-          />
-          <Row
-            label={isCrossChainFrom ? "Bitcoin & Ethereum Network Fee" : "Miner Fee Rate"}
-            value={isCrossChainFrom ? "$0.00 USDT" : `${feeRate} sats/vB`}
-          />
-          {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
           
           {hasHighSlippage && slippagePercent !== null && !isWrapPair && !isUnwrapPair && (
             <div className="mt-2 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3">
@@ -300,7 +432,7 @@ function Row({ label, value, highlight, warning, danger }: { label: string; valu
 
 function SkeletonLines() {
   return (
-    <div className="flex flex-col gap-2.5 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-2.5 animate-in fade-in duration-[400ms]">
       <div className="h-4 w-full animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
       <div className="h-4 w-3/4 animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
       <div className="h-4 w-2/3 animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
@@ -328,4 +460,166 @@ function formatAlks(alks: string, min = 2, max = 8) {
   }
 }
 
+type MinerFeeButtonProps = {
+  selection: FeeSelection;
+  setSelection?: (s: FeeSelection) => void;
+  customFee: string;
+  setCustomFee?: (v: string) => void;
+  feeRate: number;
+  presets: { slow: number; medium: number; fast: number };
+};
 
+function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleSelect = (s: FeeSelection) => {
+    if (setSelection) setSelection(s);
+    setIsOpen(false);
+  };
+
+  const getDisplayText = () => {
+    if (selection === 'custom') return 'Custom';
+    return selection.charAt(0).toUpperCase() + selection.slice(1);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+      >
+        <span>{getDisplayText()}</span>
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{option}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {presets[option as keyof typeof presets]}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SLIPPAGE_PRESETS: Record<Exclude<SlippageSelection, 'custom'>, string> = {
+  low: '1',
+  medium: '5',
+  high: '10',
+};
+
+type SlippageButtonProps = {
+  selection: SlippageSelection;
+  setSelection: (s: SlippageSelection) => void;
+  setValue: (v: string) => void;
+};
+
+function SlippageButton({ selection, setSelection, setValue }: SlippageButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleSelect = (s: SlippageSelection) => {
+    setSelection(s);
+    if (s !== 'custom') {
+      setValue(SLIPPAGE_PRESETS[s]);
+    }
+    setIsOpen(false);
+  };
+
+  const getDisplayText = () => {
+    if (selection === 'custom') return 'Custom';
+    return selection.charAt(0).toUpperCase() + selection.slice(1);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+      >
+        <span>{getDisplayText()}</span>
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          {(['low', 'medium', 'high', 'custom'] as SlippageSelection[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{option}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {SLIPPAGE_PRESETS[option]}%
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

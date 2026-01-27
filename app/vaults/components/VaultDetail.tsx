@@ -134,6 +134,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             userBalance={stats.userBalance}
             badges={currentVault.badge ? [currentVault.tokenSymbol, currentVault.badge] : [currentVault.tokenSymbol]}
             riskLevel={currentVault.riskLevel}
+            apyHistory={currentVault.apyHistory}
           />
         </div>
       </div>
@@ -151,13 +152,13 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           <BoostSection vault={currentVault} />
 
           {/* Right Column: Info Tabs - starts in column 2 after Boosted APY */}
-          <div className={`rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit md:col-start-2 ${currentVault.isBoostComingSoon ? 'md:row-start-4' : 'md:row-start-3'}`}>
+          <div className={`rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit md:col-start-2 border-t border-[color:var(--sf-top-highlight)] ${currentVault.isBoostComingSoon ? 'md:row-start-4' : 'md:row-start-3'}`}>
         <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
           {['about', 'strategies', 'info', 'risk'].map((tab) => (
             <button
               key={tab}
               onClick={() => setInfoTab(tab as any)}
-              className={`pb-3 text-sm font-semibold capitalize transition-colors ${
+              className={`pb-3 text-sm font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 infoTab === tab
                   ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
@@ -202,7 +203,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                   Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                 </div>
                 <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
-                  Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                  Formula: <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
                 </div>
               </div>
               <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
@@ -254,7 +255,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             </div>
             <div className="pt-3 border-t border-[color:var(--sf-outline)]">
               <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
-              <div className="font-mono text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
+              <div className="text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                 {currentVault.contractAddress}
               </div>
             </div>
@@ -296,13 +297,13 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         </div>
 
         {/* Info Tabs Section - Mobile/Tablet Only */}
-        <div className="md:hidden rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
+        <div className="md:hidden rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm border-t border-[color:var(--sf-top-highlight)]">
           <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
             {['about', 'strategies', 'info', 'risk'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setInfoTab(tab as any)}
-                className={`pb-3 text-sm font-semibold capitalize transition-colors ${
+                className={`pb-3 text-sm font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                   infoTab === tab
                     ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                     : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
@@ -347,7 +348,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                     Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
                   </div>
                   <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
-                    Formula: <code className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</code>
+                    Formula: <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
                   </div>
                 </div>
                 <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
@@ -399,7 +400,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
               </div>
               <div className="pt-3 border-t border-[color:var(--sf-outline)]">
                 <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
-                <div className="font-mono text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
+                <div className="text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                   {currentVault.contractAddress}
                 </div>
               </div>

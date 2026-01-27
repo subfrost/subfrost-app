@@ -5,6 +5,7 @@ import { X, Send, AlertCircle, CheckCircle, Loader2, Lock } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 
 interface SendModalProps {
   isOpen: boolean;
@@ -26,11 +27,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const { address, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const { utxos, refresh } = useEnrichedWalletData();
+  const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('');
-  const [feeSelection, setFeeSelection] = useState<'low' | 'medium' | 'high' | 'custom'>('medium');
-  const [customFeeRate, setCustomFeeRate] = useState('10');
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'input' | 'utxo-selection' | 'confirm' | 'broadcasting' | 'success'>('input');
   const [error, setError] = useState('');
@@ -55,17 +55,6 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   };
 
   const frozenUtxos = getFrozenUtxos();
-
-  // Compute actual fee rate based on selection
-  const feeRate = (() => {
-    switch (feeSelection) {
-      case 'low': return 1;
-      case 'medium': return 10;
-      case 'high': return 20;
-      case 'custom': return parseInt(customFeeRate) || 10;
-      default: return 10;
-    }
-  })();
 
   // Filter available UTXOs (only from current address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
@@ -100,12 +89,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
   useEffect(() => {
     if (!isOpen) {
-      // Reset state when modal closes
+      // Reset state when modal closes (fee selection is persisted via useFeeRate)
       setStep('input');
       setRecipientAddress('');
       setAmount('');
-      setFeeSelection('medium');
-      setCustomFeeRate('10');
       setSelectedUtxos(new Set());
       setError('');
       setTxid('');
@@ -347,7 +334,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     <>
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
+          <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
             Recipient Address
           </label>
           <input
@@ -355,12 +342,12 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
             placeholder="bc1q... or 1... or 3..."
-            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] font-mono text-sm"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
+          <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
             Amount (BTC)
           </label>
           <input
@@ -369,7 +356,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00000000"
-            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
           <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
             Available: {(availableUtxos.reduce((sum, u) => sum + u.value, 0) / 100000000).toFixed(8)} BTC
@@ -377,31 +364,31 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
+          <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
             Fee Rate
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            {(['low', 'medium', 'high'] as const).map((s) => (
+            {(['slow', 'medium', 'fast'] as const).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setFeeSelection(s)}
-                className={`rounded-lg border-2 px-4 py-2 text-sm font-bold capitalize transition-all ${
+                className={`rounded-xl px-4 py-2 text-sm font-bold capitalize shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                   feeSelection === s
-                    ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                    : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                    ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
+                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                 }`}
               >
-                {s}
+                {s} ({presets[s]} sat/vB)
               </button>
             ))}
             <button
               type="button"
               onClick={() => setFeeSelection('custom')}
-              className={`rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all ${
+              className={`rounded-xl px-4 py-2 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 feeSelection === 'custom'
-                  ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                  : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] hover:border-[color:var(--sf-primary)]/50'
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
+                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
               }`}
             >
               Custom
@@ -417,13 +404,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
                   placeholder="10"
-                  className="h-10 w-36 rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                  className="h-10 w-36 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sat/vB</span>
               </div>
             )}
           </div>
-          <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm">
+          <div className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
             <span className="font-semibold text-[color:var(--sf-text)]/70">Selected:</span>
             <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sat/vB</span>
           </div>
@@ -442,7 +429,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-red-400 text-sm">
             <AlertCircle size={16} />
             {error}
           </div>
@@ -452,13 +439,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       <div className="flex gap-3">
         <button
           onClick={handleNext}
-          className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium"
+          className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
         >
           {autoSelectUtxos ? 'Review & Send' : 'Select UTXOs'}
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]"
+          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           Cancel
         </button>
@@ -484,7 +471,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           </label>
         </div>
 
-        <div className="max-h-96 overflow-y-auto space-y-2 border border-[color:var(--sf-outline)] rounded-lg p-3 bg-[color:var(--sf-primary)]/5">
+        <div className="max-h-96 overflow-y-auto space-y-2 rounded-xl p-3 bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           {availableUtxos.map((utxo) => {
             const key = `${utxo.txid}:${utxo.vout}`;
             const isSelected = selectedUtxos.has(key);
@@ -495,17 +482,17 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                 key={key}
                 onClick={() => !isFrozen && toggleUtxo(utxo.txid, utxo.vout)}
                 disabled={isFrozen}
-                className={`w-full p-3 rounded-lg border transition-colors text-left ${
+                className={`w-full p-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
                   isSelected
-                    ? 'bg-[color:var(--sf-primary)]/20 border-[color:var(--sf-primary)]/50'
+                    ? 'bg-[color:var(--sf-primary)]/20 shadow-[0_4px_12px_rgba(0,0,0,0.15)]'
                     : isFrozen
-                    ? 'bg-[color:var(--sf-primary)]/5 border-[color:var(--sf-outline)] opacity-50 cursor-not-allowed'
-                    : 'bg-[color:var(--sf-primary)]/5 border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/10'
+                    ? 'bg-[color:var(--sf-input-bg)] opacity-50 cursor-not-allowed'
+                    : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)]'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <div className="font-mono text-xs text-[color:var(--sf-text)]/80">
+                    <div className="text-xs text-[color:var(--sf-text)]/80">
                       {utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}
                     </div>
                     <div className="text-sm text-[color:var(--sf-text)] font-medium">
@@ -522,7 +509,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           })}
         </div>
 
-        <div className="p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/20 text-sm">
+        <div className="p-3 rounded-xl bg-[color:var(--sf-primary)]/10 shadow-[0_2px_8px_rgba(0,0,0,0.1)] text-sm">
           <div className="flex justify-between text-[color:var(--sf-text)]/80">
             <span>Total Selected:</span>
             <span className="font-medium">{(totalSelectedValue / 100000000).toFixed(8)} BTC</span>
@@ -534,7 +521,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-red-400 text-sm">
             <AlertCircle size={16} />
             {error}
           </div>
@@ -544,14 +531,14 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       <div className="flex gap-3">
         <button
           onClick={() => setStep('input')}
-          className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]"
+          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           Back
         </button>
         <button
           onClick={handleNext}
           disabled={selectedUtxos.size === 0}
-          className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Review & Send
         </button>
@@ -567,10 +554,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     return (
       <>
         <div className="space-y-4">
-          <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] space-y-3">
+          <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-3">
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">Recipient:</span>
-              <span className="font-mono text-sm text-[color:var(--sf-text)] break-all ml-4">
+              <span className="text-sm text-[color:var(--sf-text)] break-all ml-4">
                 {recipientAddress}
               </span>
             </div>
@@ -586,18 +573,18 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               <span className="text-[color:var(--sf-text)]/60">Estimated Fee:</span>
               <span className="text-[color:var(--sf-text)]">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
             </div>
-            <div className="border-t border-[color:var(--sf-outline)] pt-2 flex justify-between">
+            <div className="border-t border-[color:var(--sf-text)]/10 pt-2 flex justify-between">
               <span className="text-[color:var(--sf-text)]/80 font-medium">Total:</span>
               <span className="text-[color:var(--sf-text)] font-medium">{(total / 100000000).toFixed(8)} BTC</span>
             </div>
           </div>
 
-          <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-600 dark:text-yellow-200">
+          <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
             ⚠️ Please verify the recipient address before sending. Transactions cannot be reversed.
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-red-400 text-sm">
               <AlertCircle size={16} />
               {error}
             </div>
@@ -607,13 +594,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         <div className="flex gap-3">
           <button
             onClick={() => setStep(autoSelectUtxos ? 'input' : 'utxo-selection')}
-            className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]"
+            className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
           >
             Back
           </button>
           <button
             onClick={handleNext}
-            className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide flex items-center justify-center gap-2"
           >
             <Send size={18} />
             Send Transaction
@@ -637,9 +624,9 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         <CheckCircle size={64} className="text-green-400" />
         <div className="text-xl font-bold text-[color:var(--sf-text)]">Transaction Sent!</div>
 
-        <div className="w-full p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+        <div className="w-full p-4 rounded-xl bg-green-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="text-sm text-green-600 dark:text-green-200 mb-2">Transaction ID:</div>
-          <div className="font-mono text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
+          <div className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
         </div>
 
         <a
@@ -654,7 +641,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
       <button
         onClick={onClose}
-        className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium"
+        className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
       >
         Close
       </button>
@@ -662,21 +649,24 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[color:var(--sf-outline)]">
-          <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">Send Bitcoin</h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
-          >
-            <X size={20} />
-          </button>
+        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Send Bitcoin</h2>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {step === 'input' && renderInput()}
           {step === 'utxo-selection' && renderUtxoSelection()}
           {step === 'confirm' && renderConfirm()}
@@ -687,13 +677,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
       {/* Fee Warning Modal */}
       {showFeeWarning && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
-          <div className="relative bg-[color:var(--sf-surface)] border-2 border-red-500/50 rounded-lg w-full max-w-md m-4 shadow-2xl">
+        <div className="fixed inset-0 z-[60] grid place-items-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl w-full max-w-md m-4">
             <div className="p-6 space-y-4">
               <div className="flex items-center gap-3 text-red-500">
                 <AlertCircle size={32} />
-                <h3 className="text-xl font-bold">High Fee Warning!</h3>
+                <h3 className="text-xl font-extrabold tracking-wider uppercase">High Fee Warning!</h3>
               </div>
 
               <div className="space-y-2 text-[color:var(--sf-text)]/80">
@@ -701,34 +691,34 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   This transaction has unusually high fees. Please review carefully:
                 </p>
 
-                <div className="bg-red-500/10 border border-red-500/30 rounded p-3 space-y-1">
+                <div className="bg-red-500/10 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Estimated Fee:</span>
-                    <span className="text-red-400 font-mono">
+                    <span className="text-red-400">
                       {(estimatedFee / 100000000).toFixed(8)} BTC
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Fee Rate:</span>
-                    <span className="text-red-400 font-mono">{feeRate} sat/vB</span>
+                    <span className="text-red-400">{feeRate} sat/vB</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Number of Inputs:</span>
-                    <span className="text-red-400 font-mono">{selectedUtxos.size}</span>
+                    <span className="text-red-400">{selectedUtxos.size}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[color:var(--sf-text)]/60">Fee Percentage:</span>
-                    <span className="text-red-400 font-mono">
+                    <span className="text-red-400">
                       {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
-                  <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                <div className="bg-[color:var(--sf-info-yellow-bg)] rounded-xl p-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                  <p className="text-xs text-[color:var(--sf-info-yellow-text)]">
                     <strong>⚠️ Recommendations:</strong>
                   </p>
-                  <ul className="text-xs text-yellow-600/80 dark:text-yellow-300/80 mt-1 space-y-1 list-disc list-inside">
+                  <ul className="text-xs text-[color:var(--sf-info-yellow-text)]/80 mt-1 space-y-1 list-disc list-inside">
                     {selectedUtxos.size > 100 && (
                       <li>Reduce the number of UTXOs ({selectedUtxos.size} selected)</li>
                     )}
@@ -746,13 +736,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowFeeWarning(false)}
-                  className="flex-1 px-4 py-3 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)] rounded-lg transition-colors font-medium"
+                  className="flex-1 px-4 py-3 bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-[color:var(--sf-text)] rounded-xl transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
                 >
                   Go Back
                 </button>
                 <button
                   onClick={proceedWithHighFee}
-                  className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-colors font-medium"
+                  className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
                 >
                   Proceed Anyway
                 </button>

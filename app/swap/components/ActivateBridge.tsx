@@ -54,7 +54,7 @@ function Snowflake({
       width="32"
       height="32"
       viewBox="0 0 256 256"
-      className={`${colorClass} transition-colors duration-300 ${isRotating ? 'animate-spin' : ''}`}
+      className={`${colorClass} transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isRotating ? 'animate-spin' : ''}`}
       style={isRotating ? { animationDuration: '3s' } : undefined}
     >
       <rect width="100%" height="100%" fill="none"/>
@@ -199,7 +199,7 @@ export default function ActivateBridge({
 
   return (
     <div
-      className={`overflow-hidden transition-all duration-500 ease-out ${
+      className={`overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${
         isVisible ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
       }`}
     >
@@ -230,15 +230,15 @@ export default function ActivateBridge({
           {/* Address with copy button */}
           <div className="flex items-center justify-center gap-2 mb-6">
             {/* Full address on lg+ screens, truncated on smaller */}
-            <code className="hidden lg:block text-xs font-mono text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
+            <span className="hidden lg:block text-xs text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
               {depositAddress}
-            </code>
-            <code className="lg:hidden text-xs font-mono text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
+            </span>
+            <span className="lg:hidden text-xs text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] whitespace-nowrap">
               {`${depositAddress.slice(0, 6)}...${depositAddress.slice(-4)}`}
-            </code>
+            </span>
             <button
               onClick={handleCopy}
-              className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all"
+              className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)]"
               title={copied ? "Copied!" : "Copy address"}
             >
               {copied ? (
@@ -259,7 +259,7 @@ export default function ActivateBridge({
                 isCompleted={completedSteps.includes(1)}
                 isRotating={currentStep === 1 && !completedSteps.includes(1)}
               />
-              <span className={`text-xs font-semibold text-center transition-colors duration-300 ${getTextColorClass(1)}`}>
+              <span className={`text-xs font-semibold text-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${getTextColorClass(1)}`}>
                 1. {STEP_LABELS[1]}
               </span>
             </div>
@@ -271,7 +271,7 @@ export default function ActivateBridge({
                 isCompleted={completedSteps.includes(2)}
                 isRotating={currentStep === 2 && !completedSteps.includes(2)}
               />
-              <span className={`text-xs font-semibold text-center transition-colors duration-300 ${getTextColorClass(2)}`}>
+              <span className={`text-xs font-semibold text-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${getTextColorClass(2)}`}>
                 2. {STEP_LABELS[2]}
               </span>
             </div>
@@ -283,7 +283,7 @@ export default function ActivateBridge({
                 isCompleted={completedSteps.includes(3)}
                 isRotating={currentStep === 3 && !completedSteps.includes(3)}
               />
-              <span className={`text-xs font-semibold text-center transition-colors duration-300 ${getTextColorClass(3)}`}>
+              <span className={`text-xs font-semibold text-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${getTextColorClass(3)}`}>
                 3. {STEP_LABELS[3]}
               </span>
             </div>
@@ -296,7 +296,7 @@ export default function ActivateBridge({
                 isRotating={currentStep === 4 && !completedSteps.includes(4)}
                 isGold={isStep4Gold}
               />
-              <span className={`text-xs font-semibold text-center transition-colors duration-300 ${isStep4Gold ? "text-[color:var(--sf-muted)]" : getTextColorClass(4)}`}>
+              <span className={`text-xs font-semibold text-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isStep4Gold ? "text-[color:var(--sf-muted)]" : getTextColorClass(4)}`}>
                 {isStep4Gold ? getStep4Label() : `4. ${getStep4Label()}`}
               </span>
             </div>
@@ -304,17 +304,17 @@ export default function ActivateBridge({
 
           {/* Transaction link - appears 1 second after step 5 */}
           <div
-            className={`mt-6 transition-all duration-500 ease-out ${
+            className={`mt-6 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${
               showTransaction ? "max-h-[100px] opacity-100" : "max-h-0 opacity-0 overflow-hidden"
             }`}
           >
             <div className="flex items-center justify-center gap-2">
-              <code className="text-xs font-mono text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] truncate max-w-[240px]">
+              <span className="text-xs text-[color:var(--sf-text)]/80 bg-[color:var(--sf-glass-bg)] px-3 py-2 rounded-lg border border-[color:var(--sf-outline)] truncate max-w-[240px]">
                 {transactionHash}
-              </code>
+              </span>
               <button
                 onClick={handleCopyTransaction}
-                className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all"
+                className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)]"
                 title={txCopied ? "Copied!" : "Copy transaction"}
               >
                 {txCopied ? (
@@ -327,7 +327,7 @@ export default function ActivateBridge({
                 href={etherscanUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all"
+                className="flex-shrink-0 p-2 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-glass-bg)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)]"
                 title="View on Etherscan"
               >
                 <ExternalLink size={16} className="text-[color:var(--sf-text)]/60" />

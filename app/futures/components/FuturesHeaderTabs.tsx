@@ -9,29 +9,27 @@ type Props = {
 
 export default function FuturesHeaderTabs({ activeTab, onTabChange }: Props) {
   return (
-    <div className="relative inline-flex items-center gap-2 bg-[color:var(--sf-glass-bg)] p-1 rounded-lg border-2 border-[color:var(--sf-glass-border)] backdrop-blur-md">
+    <div className="relative inline-flex items-center gap-1 sm:gap-2 p-1 rounded-lg">
       <button
         type="button"
-        className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-colors duration-300 focus:outline-none rounded-md ${
-          activeTab === "markets" ? "text-white" : "text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]/80"
+        className={`relative z-10 px-3 py-1.5 sm:px-6 sm:py-2 text-[10px] sm:text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+          activeTab === "markets"
+            ? "bg-[color:var(--sf-primary)] text-white shadow-lg"
+            : "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]"
         }`}
         onClick={() => onTabChange("markets")}
       >
-        {activeTab === "markets" && (
-          <span className="absolute inset-0 bg-[color:var(--sf-primary)] rounded-md shadow-lg -z-10 transition-all duration-300 ease-out" />
-        )}
         MARKETS
       </button>
       <button
         type="button"
-        className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-colors duration-300 focus:outline-none rounded-md ${
-          activeTab === "positions" ? "text-white" : "text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]/80"
+        className={`relative z-10 px-3 py-1.5 sm:px-6 sm:py-2 text-[10px] sm:text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+          activeTab === "positions"
+            ? "bg-[color:var(--sf-primary)] text-white shadow-lg"
+            : "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]"
         }`}
         onClick={() => onTabChange("positions")}
       >
-        {activeTab === "positions" && (
-          <span className="absolute inset-0 bg-[color:var(--sf-primary)] rounded-md shadow-lg -z-10 transition-all duration-300 ease-out" />
-        )}
         POSITIONS
       </button>
     </div>

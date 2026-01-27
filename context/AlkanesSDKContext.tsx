@@ -18,21 +18,6 @@ interface FeeEstimates {
   lastUpdated: number;
 }
 
-// Helper to recursively convert Map to plain object (serde_wasm_bindgen returns nested Maps)
-function mapToObject(value: any): any {
-  if (value instanceof Map) {
-    const obj: Record<string, any> = {};
-    for (const [k, v] of value.entries()) {
-      obj[k] = mapToObject(v);
-    }
-    return obj;
-  }
-  if (Array.isArray(value)) {
-    return value.map(mapToObject);
-  }
-  return value;
-}
-
 interface AlkanesSDKContextType {
   provider: WebProvider | null;
   isInitialized: boolean;
@@ -58,12 +43,14 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   testnet: 'testnet',
   signet: 'signet',
   regtest: 'regtest',
+  'regtest-local': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
 };
 
 // Custom URL overrides for networks
 // Subfrost networks use /v4/subfrost endpoint for both jsonrpc and data_api
+// regtest-local uses local Docker environment (localhost:18888 for jsonrpc, localhost:4000 for data_api)
 const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   mainnet: {
     jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
@@ -80,6 +67,10 @@ const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   regtest: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  'regtest-local': {
+    jsonrpc_url: 'http://localhost:18888',
+    data_api_url: 'http://localhost:4000',
   },
   oylnet: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
@@ -144,42 +135,17 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
   }, [network]);
 
   // Poll Bitcoin price every 30 seconds
+  // Uses API route to avoid CORS issues with direct WASM calls
   const refreshBitcoinPrice = async () => {
-    if (!provider) return;
-
     try {
-      const priceData = await provider.dataApiGetBitcoinPrice();
-      console.log('[AlkanesSDK] Bitcoin price data:', priceData);
+      const response = await fetch('/api/btc-price');
+      const data = await response.json();
 
-      if (priceData) {
-        // Handle different response formats:
-        // - { data: { bitcoin: { usd: number } } } (REST API format)
-        // - { bitcoin: { usd: number } } (direct format)
-        // - { usd: number } (simple format)
-        // - Map objects from serde_wasm_bindgen (nested Maps)
-        let usdPrice = 0;
-
-        // Convert Map to object recursively (serde_wasm_bindgen returns nested Maps)
-        const data = mapToObject(priceData);
-
-        if (data?.data?.bitcoin?.usd) {
-          usdPrice = data.data.bitcoin.usd;
-        } else if (data?.bitcoin?.usd) {
-          usdPrice = data.bitcoin.usd;
-        } else if (data?.usd) {
-          usdPrice = data.usd;
-        } else if (data?.price) {
-          usdPrice = data.price;
-        }
-
-        console.log('[AlkanesSDK] Extracted USD price:', usdPrice);
-
-        if (usdPrice > 0) {
-          setBitcoinPrice({
-            usd: usdPrice,
-            lastUpdated: Date.now(),
-          });
-        }
+      if (data?.usd && data.usd > 0) {
+        setBitcoinPrice({
+          usd: data.usd,
+          lastUpdated: data.timestamp || Date.now(),
+        });
       }
     } catch (error) {
       console.error('Failed to fetch Bitcoin price:', error);
@@ -187,34 +153,17 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
   };
 
   // Poll fee estimates every 30 seconds
+  // Uses API route to avoid CORS issues with direct WASM calls
   const refreshFeeEstimates = async () => {
-    if (!provider) return;
-
     try {
-      const feeData = await provider.esploraGetFeeEstimates();
-      console.log('[AlkanesSDK] Fee estimates data:', feeData);
+      const response = await fetch('/api/fees');
+      const data = await response.json();
 
-      if (feeData) {
-        // Convert Map to object recursively (serde_wasm_bindgen returns nested Maps)
-        const data = mapToObject(feeData);
-
-        // Esplora fee estimates format: { "1": rate, "2": rate, "3": rate, ... "144": rate }
-        // We want: fast (1 block), medium (6 blocks), slow (144 blocks)
-        const getRate = (target: string): number => {
-          const rate = data[target] || data.estimates?.[target];
-          return typeof rate === 'number' ? Math.ceil(rate) : 1;
-        };
-
-        const fast = getRate('1') || getRate('2') || 25;
-        const medium = getRate('6') || getRate('3') || 10;
-        const slow = getRate('144') || getRate('25') || 2;
-
-        console.log('[AlkanesSDK] Extracted fee rates:', { fast, medium, slow });
-
+      if (data) {
         setFeeEstimates({
-          fast: Math.max(1, fast),
-          medium: Math.max(1, medium),
-          slow: Math.max(1, slow),
+          fast: Math.max(1, data.fast || 25),
+          medium: Math.max(1, data.medium || 10),
+          slow: Math.max(1, data.slow || 2),
           lastUpdated: Date.now(),
         });
       }

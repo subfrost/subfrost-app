@@ -86,7 +86,7 @@ export default function StakeCard() {
               if (!isConnected) onConnectModalOpenChange(true);
             }}
             disabled={isStakeDisabled}
-            className="w-full rounded-lg bg-[color:var(--sf-primary)] py-3 text-sm font-semibold tracking-wide text-white shadow-sm transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none"
+            className="w-full rounded-lg bg-[color:var(--sf-primary)] py-3 text-sm font-semibold tracking-wide text-white shadow-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none"
           >
             {isConnected ? 'STAKE BTC' : 'CONNECT WALLET'}
           </button>

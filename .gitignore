@@ -40,13 +40,13 @@ reference
 e2e/screenshots/*.png
 /references
 # external build artifacts
-# .external-build is ignored (only used for local builds)
-# ./ts-sdk is NOT ignored (committed to repo for Vercel deployment)
 .external-build/
 .subfrost-build/
 scripts/rust-deployer/target/
-ts-sdk/node_modules/
 
 # lock files (use your preferred package manager locally)
 package-lock.json
 yarn.lock
+
+# SDK tarballs (temporary downloads during development)
+*.tgz

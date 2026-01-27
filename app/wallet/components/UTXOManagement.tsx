@@ -19,7 +19,10 @@ export default function UTXOManagement() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([
+        refresh(),
+        new Promise(resolve => setTimeout(resolve, 500)) // minimum 500ms spin
+      ]);
     } finally {
       setIsRefreshing(false);
     }
@@ -127,7 +130,7 @@ export default function UTXOManagement() {
         <div className="text-red-400 mb-4">{error}</div>
         <button
           onClick={refresh}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white"
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
         >
           Try Again
         </button>
@@ -148,7 +151,7 @@ export default function UTXOManagement() {
         <button
           onClick={handleRefresh}
           disabled={isLoading || isRefreshing}
-          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+          className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
           title="Refresh UTXOs"
         >
           <RefreshCw size={20} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
@@ -165,8 +168,8 @@ export default function UTXOManagement() {
         <div className="flex gap-2 flex-wrap">
           {[
             { id: 'all', label: 'All' },
-            { id: 'p2wpkh', label: 'P2WPKH' },
-            { id: 'p2tr', label: 'P2TR' },
+            { id: 'p2wpkh', label: 'Native SegWit' },
+            { id: 'p2tr', label: 'Taproot' },
             { id: 'runes', label: 'Runes' },
             { id: 'protorunes', label: 'Protorunes (Alkanes)' },
             { id: 'brc20', label: 'Inscriptions (BRC20)' },
@@ -174,7 +177,7 @@ export default function UTXOManagement() {
             <button
               key={f.id}
               onClick={() => toggleFilter(f.id as UTXOFilterType)}
-              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 selectedFilters.has(f.id as UTXOFilterType)
                   ? 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white'
                   : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/60 hover:bg-[color:var(--sf-primary)]/10 hover:text-[color:var(--sf-text)]/80'
@@ -200,12 +203,12 @@ export default function UTXOManagement() {
               >
                 <button
                   onClick={() => toggleUtxo(utxoKey)}
-                  className="w-full p-4 flex items-center justify-between hover:bg-[color:var(--sf-primary)]/5 transition-colors"
+                  className="w-full p-4 flex items-center justify-between hover:bg-[color:var(--sf-primary)]/5 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 >
                   <div className="flex items-center gap-4">
                     <Box size={20} className="text-[color:var(--sf-primary)]" />
                     <div className="text-left">
-                      <div className="font-mono text-sm flex items-center gap-2 text-[color:var(--sf-text)]">
+                      <div className="text-sm flex items-center gap-2 text-[color:var(--sf-text)]">
                         <span>{utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}</span>
                         {isFrozen(utxoKey) && (
                           <span title="Frozen UTXO">
@@ -242,7 +245,7 @@ export default function UTXOManagement() {
                     <div className="flex gap-2 pb-3 border-b border-[color:var(--sf-outline)]">
                       <button
                         onClick={() => toggleFreezeUtxo(utxoKey)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                           isFrozen(utxoKey)
                             ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/30'
                             : 'bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10'
@@ -264,7 +267,7 @@ export default function UTXOManagement() {
                       {utxo.inscriptions && utxo.inscriptions.length > 0 && (
                         <button
                           onClick={() => setSplitUtxo(utxo)}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 text-sm transition-colors"
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 text-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                         >
                           <Scissors size={16} />
                           Split Ordinals
@@ -277,9 +280,9 @@ export default function UTXOManagement() {
                       <div>
                         <span className="text-[color:var(--sf-text)]/60">Transaction ID:</span>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="font-mono text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
+                          <span className="text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
                           <a
-                            href={`https://ordiscan.com/tx/${utxo.txid}`}
+                            href={`https://espo.sh/tx/${utxo.txid}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[color:var(--sf-primary)] hover:opacity-80"
@@ -312,7 +315,7 @@ export default function UTXOManagement() {
                                 <div className="font-medium text-[color:var(--sf-text)]">{alkane.symbol || alkane.name}</div>
                                 <div className="text-xs text-[color:var(--sf-text)]/40">{alkaneId}</div>
                               </div>
-                              <span className="font-mono text-[color:var(--sf-text)]">{alkane.value}</span>
+                              <span className="text-[color:var(--sf-text)]">{alkane.value}</span>
                             </div>
                           ))}
                         </div>
@@ -327,7 +330,7 @@ export default function UTXOManagement() {
                           {Object.entries(utxo.runes).map(([runeId, rune]) => (
                             <div key={runeId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
                               <span className="text-[color:var(--sf-text)]">{rune.symbol}</span>
-                              <span className="font-mono text-[color:var(--sf-text)]">{rune.amount}</span>
+                              <span className="text-[color:var(--sf-text)]">{rune.amount}</span>
                             </div>
                           ))}
                         </div>

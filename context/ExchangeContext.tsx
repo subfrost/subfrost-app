@@ -10,7 +10,7 @@
 
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode, useMemo, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useMemo, useRef } from 'react';
 import { useWallet } from './WalletContext';
 import { useDynamicPools, type DynamicPool } from '@/hooks/useDynamicPools';
 import { getConfig } from '@/utils/getConfig';
@@ -62,7 +62,6 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
     'SUBFROST BTC',
     'bUSD',
     'DIESEL',
-    'METHANE',
     'ALKAMIST',
     'GOLD DUST'
   ]));
@@ -183,11 +182,10 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
           return null;
         }
       })
-      .filter((p): p is EnrichedPool => p !== null);
-    
-    // Filter by whitelist (symbols)
-    const filtered = enrichedPools.filter((pool) => {
-      return allowedTokens.has(pool.token0.symbol) && allowedTokens.has(pool.token1.symbol);
+     
+    // Filter out nulls and by whitelist (symbols)
+    const filtered = enrichedPools.filter((pool): pool is NonNullable<typeof pool> => {
+      return pool !== null && allowedTokens.has(pool.token0.symbol) && allowedTokens.has(pool.token1.symbol);
     });
     
     console.log('[ExchangeContext] Loaded pools:', {

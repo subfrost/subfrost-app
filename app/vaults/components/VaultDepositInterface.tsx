@@ -2,11 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "@/context/WalletContext";
+import { useTheme } from "@/context/ThemeContext";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { VaultUnit } from "@/hooks/useVaultUnits";
 import { AVAILABLE_VAULTS, VaultConfig } from "../constants";
 import { useFeeRate } from "@/hooks/useFeeRate";
+import type { FeeSelection } from "@/hooks/useFeeRate";
+import { useGlobalStore } from "@/stores/global";
+import type { SlippageSelection } from "@/stores/global";
 import { ChevronDown } from "lucide-react";
 
 // All available tokens that can be deposited into vaults
@@ -15,10 +19,7 @@ const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
   { id: '32:0', symbol: 'frBTC' },
   { id: 'usd', symbol: 'bUSD' },
   { id: '2:0', symbol: 'DIESEL' },
-  { id: 'eth_empty', symbol: 'frETH' },
-  { id: '2:16', symbol: 'METHANE' },
   { id: 'frUSD', symbol: 'frUSD' },
-  { id: 'zec_empty', symbol: 'frZEC' },
   { id: 'ordi', symbol: 'ORDI' },
 ];
 
@@ -27,12 +28,9 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
   const tokenToVaultMap: Record<string, string> = {
     'btc': 'dx-btc',       // BTC -> dxBTC
     '32:0': 'dx-btc',      // frBTC -> dxBTC (prioritize dxBTC over yvfrBTC)
-    '2:16': 've-methane',  // METHANE -> veMETHANE
     '2:0': 've-diesel',    // DIESEL -> veDIESEL
     'usd': 've-usd',       // bUSD -> veUSD
     'frUSD': 've-usd',     // frUSD -> veUSD
-    'zec_empty': 've-zec', // frZEC -> veZEC
-    'eth_empty': 've-eth', // frETH -> veETH
     'ordi': 've-ordi',     // ORDI -> veORDI
   };
   
@@ -43,15 +41,24 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
 };
 
 // Get the initial input token for a vault (first supported token)
+// Check if a vault uses BTC-like decimals (8 decimals)
+const isBtcBasedVault = (vault: VaultConfig): boolean => {
+  return vault.outputAsset === 'dxBTC' || vault.outputAsset === 'yvfrBTC';
+};
+
+// Format amount with appropriate decimals based on vault type
+const formatVaultAmount = (amount: string, vault: VaultConfig): string => {
+  const decimals = isBtcBasedVault(vault) ? 8 : 2;
+  if (!amount || isNaN(parseFloat(amount))) return (0).toFixed(decimals);
+  return parseFloat(amount).toFixed(decimals);
+};
+
 const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol: string } => {
   // Map of output asset to default input token
   const defaultInputMap: Record<string, { id: string; symbol: string }> = {
     'dxBTC': { id: 'btc', symbol: 'BTC' },
-    'veMETHANE': { id: '2:16', symbol: 'METHANE' },
     'veDIESEL': { id: '2:0', symbol: 'DIESEL' },
     'veUSD': { id: 'usd', symbol: 'bUSD' },
-    'veZEC': { id: 'zec_empty', symbol: 'frZEC' },
-    'veETH': { id: 'eth_empty', symbol: 'frETH' },
     'yvfrBTC': { id: '32:0', symbol: 'frBTC' },
     'veORDI': { id: 'ordi', symbol: 'ORDI' },
   };
@@ -89,9 +96,17 @@ export default function VaultDepositInterface({
     getInitialInputTokenForVault(vault)
   );
   const [showTokenSelector, setShowTokenSelector] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
+  // Single state to track which settings field is focused (only one can be focused at a time)
+  const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
-  const { selection, setSelection, custom, setCustom, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
+  const { theme } = useTheme();
+  const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
+  const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
+  // Local deadline state to allow empty field while typing
+  const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
   const selectorRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const canExecute = mode === 'deposit' 
     ? (isConnected && amount && parseFloat(amount) > 0)
@@ -153,12 +168,12 @@ export default function VaultDepositInterface({
   };
 
   return (
-    <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
       {/* Tabs */}
-      <div className="flex gap-4 mb-6 border-b border-[color:var(--sf-outline)]">
+      <div className="flex gap-4 mb-6">
         <button
           onClick={() => onModeChange('deposit')}
-          className={`pb-3 px-1 text-sm font-semibold transition-colors ${
+          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
             mode === 'deposit'
               ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
@@ -168,7 +183,7 @@ export default function VaultDepositInterface({
         </button>
         <button
           onClick={() => onModeChange('withdraw')}
-          className={`pb-3 px-1 text-sm font-semibold transition-colors ${
+          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
             mode === 'withdraw'
               ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
@@ -182,109 +197,118 @@ export default function VaultDepositInterface({
         /* Deposit Mode: Swap-like UI */
         <div className="relative flex flex-col gap-3">
           {/* From Wallet Panel */}
-          <div className="relative z-30 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">From Wallet</span>
-            <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
-              <div className="flex flex-col gap-2">
-                {/* Row 1: Input + Token Selector */}
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <NumberField placeholder={"0.00"} align="left" value={amount} onChange={setAmount} />
-                  </div>
-                  <div className="relative" ref={selectorRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShowTokenSelector(!showTokenSelector)}
-                      className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none flex-shrink-0"
-                    >
-                      <TokenIcon 
-                        key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
-                        symbol={selectedInputToken.symbol}
-                        id={selectedInputToken.id}
-                        size="sm"
-                        network={network}
-                      />
-                      <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                        {selectedInputToken.symbol}
-                      </span>
-                      <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
-                    </button>
-                    
-                    {/* Token Selector Dropdown */}
-                    {showTokenSelector && (
-                      <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
-                        {ALL_VAULT_TOKENS.map((token) => {
-                          const tokenVault = getVaultForInputToken(token.id);
-                          return (
-                            <button
-                              key={token.id}
-                              type="button"
-                              onClick={() => handleInputTokenSelect(token)}
-                              className={`w-full px-4 py-3 text-left text-sm font-semibold transition-colors first:rounded-t-xl last:rounded-b-xl ${
-                                selectedInputToken.id === token.id
-                                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <TokenIcon 
-                                  symbol={token.symbol}
-                                  id={token.id}
-                                  size="sm"
-                                  network={network}
-                                />
-                                <div className="flex-1">
-                                  <div className="font-semibold">{token.symbol}</div>
-                                  {tokenVault && (
-                                    <div className="text-[10px] text-[color:var(--sf-text)]/50">
-                                      → {tokenVault.outputAsset}
-                                    </div>
-                                  )}
-                                </div>
+          <div
+            className={`relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            onClick={() => inputRef.current?.focus()}
+          >
+            {/* Token Selector - floating top-right */}
+            <div className="absolute right-4 top-4 z-10" ref={selectorRef} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setShowTokenSelector(!showTokenSelector)}
+                className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
+              >
+                <TokenIcon
+                  key={`selected-${selectedInputToken.id}-${selectedInputToken.symbol}`}
+                  symbol={selectedInputToken.symbol}
+                  id={selectedInputToken.id}
+                  size="sm"
+                  network={network}
+                />
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {selectedInputToken.symbol}
+                </span>
+                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+              </button>
+
+              {/* Token Selector Dropdown */}
+              {showTokenSelector && (
+                <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
+                  {ALL_VAULT_TOKENS.map((token) => {
+                    const tokenVault = getVaultForInputToken(token.id);
+                    return (
+                      <button
+                        key={token.id}
+                        type="button"
+                        onClick={() => handleInputTokenSelect(token)}
+                        className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[400ms] first:rounded-t-xl last:rounded-b-xl ${
+                          selectedInputToken.id === token.id
+                            ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                            : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <TokenIcon
+                            symbol={token.symbol}
+                            id={token.id}
+                            size="sm"
+                            network={network}
+                          />
+                          <div className="flex-1">
+                            <div className="font-semibold">{token.symbol}</div>
+                            {tokenVault && (
+                              <div className="text-[10px] text-[color:var(--sf-text)]/50">
+                                → {tokenVault.outputAsset}
                               </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                
-                {/* Row 2: Fiat + Balance */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                    Balance {userBalance}
-                  </div>
+              )}
+            </div>
+
+            {/* Main content area */}
+            <div className="flex flex-col gap-1">
+              {/* Label */}
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">From Wallet</span>
+
+              {/* Input - full width */}
+              <div className="pr-32">
+                <NumberField
+                  ref={inputRef}
+                  placeholder={selectedInputToken.id === 'btc' || selectedInputToken.id === '32:0' ? "0.00000000" : "0.00"}
+                  align="left"
+                  value={amount}
+                  onChange={setAmount}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                />
+              </div>
+
+              {/* Balance + Percentage Buttons stacked */}
+              <div className="flex flex-col items-end gap-1">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  Balance {userBalance}
                 </div>
-                
-                {/* Row 3: Percentage Buttons */}
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.25).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.25 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
                   >
                     25%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.5).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.5 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
                   >
                     50%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.75).toString())}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 0.75 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
                   >
                     75%
                   </button>
                   <button
                     type="button"
                     onClick={() => setAmount(userBalance)}
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${activePercent === 1 ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
                   >
                     Max
                   </button>
@@ -294,65 +318,174 @@ export default function VaultDepositInterface({
           </div>
 
           {/* To Vault Panel */}
-          <div className="relative z-10 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">To Vault</span>
-            <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3">
-              <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-                <NumberField placeholder={"0.00"} align="left" value={amount} onChange={() => {}} disabled />
-                <div className="inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 py-2">
-                  <TokenIcon 
-                    key={`vault-${vault.id}-${vault.outputAsset}`}
-                    symbol={vault.outputAsset}
-                    id={vault.tokenId}
-                    iconUrl={vault.iconPath}
-                    size="sm"
-                    network={network}
-                  />
-                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                    {vault.outputAsset}
-                  </span>
-                </div>
+          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            {/* Token display - floating top-right */}
+            <div className="absolute right-4 top-4 z-10">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <TokenIcon
+                  key={`vault-${vault.id}-${vault.outputAsset}`}
+                  symbol={vault.outputAsset}
+                  id={vault.tokenId}
+                  iconUrl={vault.iconPath}
+                  size="sm"
+                  network={network}
+                />
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {vault.outputAsset}
+                </span>
+              </div>
+            </div>
+
+            {/* Main content area */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">To Vault</span>
+              <div className="pr-32">
+                <NumberField placeholder={isBtcBasedVault(vault) ? "0.00000000" : "0.00"} align="left" value={amount ? formatVaultAmount(amount, vault) : ""} onChange={() => {}} disabled />
+              </div>
+              <div className="flex items-center justify-between">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/50">$0.00</div>
-                <div className="text-right text-xs font-medium text-[color:var(--sf-text)]/60">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                   APY {apy}%
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Miner Fee Section */}
-          <div className="relative z-[5] rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 p-4 backdrop-blur-sm">
-            <div>
-              <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 mb-1">Miner Fee:</div>
-              <div className="flex items-center gap-2">
-                {selection === 'custom' && setCustom ? (
-                  <div className="relative w-40">
+          {/* Transaction Settings */}
+          <div className="relative z-[5] rounded-2xl bg-transparent p-5 pb-0 text-sm">
+            <div className="flex flex-col gap-2.5">
+              {/* Minimum Received row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Minimum Received
+                </span>
+                <span className="font-semibold text-[color:var(--sf-text)]">
+                  {formatVaultAmount(amount, vault)} {vault.outputAsset}
+                </span>
+              </div>
+
+              {/* Deadline (blocks) row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Deadline (blocks)
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
                     <input
-                      aria-label="Custom miner fee rate"
+                      aria-label="Transaction deadline in blocks"
                       type="number"
                       min={1}
-                      max={999}
+                      max={100}
                       step={1}
-                      value={custom}
-                      onChange={(e) => setCustom(e.target.value)}
-                      placeholder="0"
-                      className="h-9 w-full rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                      value={deadlineLocal}
+                      onChange={(e) => setDeadlineLocal(e.target.value)}
+                      onFocus={() => setFocusedField('deadline')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        const val = parseInt(deadlineLocal, 10);
+                        if (!deadlineLocal || isNaN(val) || val < 1) {
+                          setDeadlineLocal('3');
+                          setDeadlineBlocks(3);
+                        } else {
+                          setDeadlineBlocks(Math.min(100, val));
+                        }
+                      }}
+                      placeholder="3"
+                      style={{ outline: 'none', border: 'none' }}
+                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">Sats / vByte</span>
                   </div>
-                ) : (
-                  <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                    {feeRate} Sats / vByte
-                  </div>
-                )}
-                <div className="ml-auto">
-                  <MinerFeeButton 
-                    selection={selection}
-                    setSelection={setSelection}
-                    customFee={custom}
-                    setCustomFee={setCustom}
+                </div>
+              </div>
+
+              {/* Slippage Tolerance row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Slippage Tolerance
+                </span>
+                <div className="flex items-center gap-2">
+                  {slippageSelection === 'custom' ? (
+                    <div className="relative">
+                      <input
+                        aria-label="Custom slippage tolerance"
+                        type="text"
+                        inputMode="numeric"
+                        value={maxSlippage}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d{0,2}$/.test(val)) {
+                            const num = parseInt(val, 10);
+                            if (val === '' || (num >= 0 && num <= 99)) {
+                              setMaxSlippage(val);
+                            }
+                          }
+                        }}
+                        onFocus={() => setFocusedField('slippage')}
+                        onBlur={() => {
+                          setFocusedField(null);
+                          if (!maxSlippage) {
+                            setMaxSlippage('5');
+                          }
+                        }}
+                        placeholder="5"
+                        style={{ outline: 'none', border: 'none' }}
+                        className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
+                    </div>
+                  ) : (
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      {maxSlippage}%
+                    </span>
+                  )}
+                  <SlippageButton
+                    selection={slippageSelection}
+                    setSelection={setSlippageSelection}
+                    setValue={setMaxSlippage}
+                  />
+                </div>
+              </div>
+
+              {/* Miner Fee Rate row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Miner Fee Rate (sats/vB)
+                </span>
+                <div className="flex items-center gap-2">
+                  {feeSelection === 'custom' && setCustomFee ? (
+                    <div className="relative">
+                      <input
+                        aria-label="Custom miner fee rate"
+                        type="number"
+                        min={1}
+                        max={999}
+                        step={1}
+                        value={customFee}
+                        onChange={(e) => setCustomFee(e.target.value)}
+                        onFocus={() => setFocusedField('fee')}
+                        onBlur={() => {
+                          setFocusedField(null);
+                          if (!customFee) {
+                            setCustomFee(String(feePresets.medium));
+                          }
+                        }}
+                        placeholder="0"
+                        style={{ outline: 'none', border: 'none' }}
+                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      />
+                    </div>
+                  ) : (
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      {Math.round(feeRate)}
+                    </span>
+                  )}
+                  <MinerFeeButton
+                    selection={feeSelection}
+                    setSelection={setFeeSelection}
+                    customFee={customFee}
+                    setCustomFee={setCustomFee}
                     feeRate={feeRate}
-                    presets={presets}
+                    presets={feePresets}
                   />
                 </div>
               </div>
@@ -369,7 +502,7 @@ export default function VaultDepositInterface({
               onExecute(amount);
             }}
             disabled={!canExecute}
-            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
           >
             {isConnected ? 'DEPOSIT' : 'CONNECT WALLET'}
           </button>
@@ -392,7 +525,7 @@ export default function VaultDepositInterface({
                     <button
                       key={unit.alkaneId}
                       onClick={() => onUnitSelect(unit.alkaneId)}
-                      className={`w-full p-3 rounded-lg border transition-all ${
+                      className={`w-full p-3 rounded-lg border transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none  ${
                         selectedUnitId === unit.alkaneId
                           ? 'border-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
                           : 'border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] hover:bg-gray-50'
@@ -430,7 +563,7 @@ export default function VaultDepositInterface({
               onExecute('1'); // Vault units are typically 1 per deposit
             }}
             disabled={!canExecute}
-            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
           >
             {isConnected ? 'WITHDRAW' : 'CONNECT WALLET'}
           </button>
@@ -440,10 +573,10 @@ export default function VaultDepositInterface({
   );
 }
 
-// Miner Fee Button Component (copied from LiquidityInputs)
+// Miner Fee Button Component
 type MinerFeeButtonProps = {
-  selection: any;
-  setSelection?: (s: any) => void;
+  selection: FeeSelection;
+  setSelection?: (s: FeeSelection) => void;
   customFee: string;
   setCustomFee?: (v: string) => void;
   feeRate: number;
@@ -470,7 +603,7 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
     };
   }, [isOpen]);
 
-  const handleSelect = (s: any) => {
+  const handleSelect = (s: FeeSelection) => {
     if (setSelection) setSelection(s);
     setIsOpen(false);
   };
@@ -485,20 +618,20 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
       >
         <span>{getDisplayText()}</span>
-        <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
-          {(['slow', 'medium', 'fast', 'custom'] as const).map((option) => (
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
             <button
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-colors first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
@@ -509,6 +642,92 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
                 {option !== 'custom' && (
                   <span className="text-[10px] text-[color:var(--sf-text)]/50">
                     {presets[option as keyof typeof presets]}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Slippage Button Component
+const SLIPPAGE_PRESETS: Record<Exclude<SlippageSelection, 'custom'>, string> = {
+  low: '1',
+  medium: '5',
+  high: '10',
+};
+
+type SlippageButtonProps = {
+  selection: SlippageSelection;
+  setSelection: (s: SlippageSelection) => void;
+  setValue: (v: string) => void;
+};
+
+function SlippageButton({ selection, setSelection, setValue }: SlippageButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleSelect = (s: SlippageSelection) => {
+    setSelection(s);
+    if (s !== 'custom') {
+      setValue(SLIPPAGE_PRESETS[s]);
+    }
+    setIsOpen(false);
+  };
+
+  const getDisplayText = () => {
+    if (selection === 'custom') return 'Custom';
+    return selection.charAt(0).toUpperCase() + selection.slice(1);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+      >
+        <span>{getDisplayText()}</span>
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          {(['low', 'medium', 'high', 'custom'] as SlippageSelection[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{option}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {SLIPPAGE_PRESETS[option]}%
                   </span>
                 )}
               </div>

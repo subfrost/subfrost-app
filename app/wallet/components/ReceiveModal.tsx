@@ -13,7 +13,7 @@ interface ReceiveModalProps {
 export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   const { address } = useWallet() as any;
   const [copied, setCopied] = useState(false);
-  const qrSize = 300; // Fixed size
+  const qrSize = 225; // 75% of original 300
 
   if (!isOpen) return null;
 
@@ -30,52 +30,56 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[color:var(--sf-outline)]">
-          <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">Receive Bitcoin</h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
-          >
-            <X size={20} />
-          </button>
+        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Receive Bitcoin</h2>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* QR Code */}
           <div className="flex flex-col items-center">
-            <div className="bg-white p-4 rounded-xl">
+            <div className="bg-white p-4 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
               <QRCode value={address || ''} size={qrSize} />
             </div>
           </div>
 
           {/* Address */}
           <div className="space-y-2">
-            <label className="text-sm text-[color:var(--sf-text)]/60">Your Bitcoin Address</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] font-mono text-sm break-all text-[color:var(--sf-text)]">
+            <label className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">Your Bitcoin Address</label>
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <span className="flex-1 text-sm break-all text-[color:var(--sf-text)]">
                 {address}
-              </div>
+              </span>
               <button
                 onClick={copyAddress}
-                className="p-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white"
+                className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0"
                 title="Copy address"
               >
-                {copied ? <Check size={20} /> : <Copy size={20} />}
+                {copied ? (
+                  <Check size={14} className="text-green-500" />
+                ) : (
+                  <Copy size={14} className="text-[color:var(--sf-text)]/60" />
+                )}
               </button>
             </div>
-            {copied && (
-              <div className="text-sm text-green-500 dark:text-green-400">Address copied to clipboard!</div>
-            )}
           </div>
 
           {/* Warning */}
-          <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-            <div className="text-sm text-yellow-600 dark:text-yellow-400/90 space-y-2">
-              <div className="font-medium">⚠️ Important:</div>
+          <div className="p-4 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+            <div className="text-sm text-[color:var(--sf-info-yellow-text)] space-y-2">
+              <div className="font-bold text-[color:var(--sf-info-yellow-title)]">Important:</div>
               <ul className="list-disc list-inside space-y-1 text-xs">
                 <li>Only send Bitcoin to this address</li>
                 <li>Sending other cryptocurrencies may result in permanent loss</li>
@@ -85,29 +89,8 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
             </div>
           </div>
 
-          {/* Bitcoin URI (for wallet apps) */}
-          <div className="space-y-2">
-            <label className="text-sm text-[color:var(--sf-text)]/60">Bitcoin URI</label>
-            <div className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <code className="text-xs break-all text-[color:var(--sf-text)]/80">
-                bitcoin:{address}
-              </code>
-            </div>
-            <div className="text-xs text-[color:var(--sf-text)]/40">
-              Use this URI to open directly in mobile wallets
-            </div>
-          </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-[color:var(--sf-outline)]">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)] font-medium"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   );

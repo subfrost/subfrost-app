@@ -6,9 +6,13 @@ import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
 import { useWallet } from '@/context/WalletContext';
+import type { Network } from '@/utils/constants';
 
 type AmmRow =
   | ({ type: 'swap'; soldAmount: string; boughtAmount: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; soldTokenBlockId: string; soldTokenTxId: string; boughtTokenBlockId: string; boughtTokenTxId: string; address?: string; sellerAddress?: string })
+  | ({ type: 'mint'; token0Amount: string; token1Amount: string; lpTokenAmount: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; token0BlockId: string; token0TxId: string; token1BlockId: string; token1TxId: string; address?: string; minterAddress?: string })
+  | ({ type: 'burn'; token0Amount: string; token1Amount: string; lpTokenAmount: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; token0BlockId: string; token0TxId: string; token1BlockId: string; token1TxId: string; address?: string; burnerAddress?: string })
+  | ({ type: 'creation'; token0Amount: string; token1Amount: string; tokenSupply: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; token0BlockId: string; token0TxId: string; token1BlockId: string; token1TxId: string; address?: string; creatorAddress?: string })
   | ({ type: 'wrap'; address?: string; transactionId: string; timestamp: string; amount: string })
   | ({ type: 'unwrap'; address?: string; transactionId: string; timestamp: string; amount: string });
 
@@ -34,26 +38,28 @@ function PairIcon({
   rightId,
   leftSymbol,
   rightSymbol,
+  network,
 }: {
   leftId?: string;
   rightId?: string;
   leftSymbol?: string;
   rightSymbol?: string;
+  network?: Network;
 }) {
   return (
     <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
-        <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="lg" />
+      <div className="absolute left-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-transparent">
+        <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="lg" network={network} />
       </div>
-      <div className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)]/5">
-        <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="lg" />
+      <div className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[color:var(--sf-glass-border)] bg-transparent">
+        <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="lg" network={network} />
       </div>
     </div>
   );
 }
 
 export default function MyWalletSwaps() {
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   
   const {
     data,
@@ -68,11 +74,10 @@ export default function MyWalletSwaps() {
     transactionType: undefined // We'll filter client-side for swap, wrap, unwrap
   });
 
-  // Filter to only show swap, wrap, and unwrap transactions
+  // Include all transaction types (swap, mint, burn, creation, wrap, unwrap)
   const items: AmmRow[] = useMemo(() => {
     return (data?.pages ?? [])
-      .flatMap((p) => (p.items as AmmRow[]))
-      .filter((row) => row.type === 'swap' || row.type === 'wrap' || row.type === 'unwrap');
+      .flatMap((p) => (p.items as AmmRow[]));
   }, [data?.pages]);
 
   const tokenIds = useMemo(() => {
@@ -81,6 +86,15 @@ export default function MyWalletSwaps() {
       if (row.type === 'swap') {
         out.add(`${row.soldTokenBlockId}:${row.soldTokenTxId}`);
         out.add(`${row.boughtTokenBlockId}:${row.boughtTokenTxId}`);
+      } else if (row.type === 'mint' || row.type === 'burn' || row.type === 'creation') {
+        const r: any = row;
+        // Only add if we have the token IDs (enriched from pool metadata)
+        if (r.token0BlockId && r.token0TxId) {
+          out.add(`${r.token0BlockId}:${r.token0TxId}`);
+        }
+        if (r.token1BlockId && r.token1TxId) {
+          out.add(`${r.token1BlockId}:${r.token1TxId}`);
+        }
       }
     });
     return Array.from(out);
@@ -101,24 +115,34 @@ export default function MyWalletSwaps() {
     return () => obs.disconnect();
   }, [hasNextPage, fetchNextPage]);
 
+  // Known token ID to name mappings for fallback
+  const KNOWN_TOKEN_NAMES: Record<string, string> = {
+    '32:0': 'frBTC',
+    '2:0': 'DIESEL',
+    '2:56801': 'bUSD',
+    'btc': 'BTC',
+    'frbtc': 'frBTC',
+  };
+
   const getName = (id: string | undefined) => {
     if (!id) return '';
     const d = displayMap?.[id];
-    return d?.symbol || d?.name || id;
+    // Try displayMap first, then known tokens, then fall back to id
+    return d?.symbol || d?.name || KNOWN_TOKEN_NAMES[id] || id;
   };
 
   // Determine if scrollbar is needed (more than 3 items)
   const hasScrollbar = items.length > 3;
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] backdrop-blur-xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.12)] flex flex-col">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
-        <h3 className="text-base font-bold text-[color:var(--sf-text)]">My Wallet Swaps</h3>
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col">
+      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
+        <h3 className="text-base font-bold text-[color:var(--sf-text)]">My Wallet Activity</h3>
       </div>
 
       {!address ? (
         <div className="px-6 py-4 text-center text-sm text-[color:var(--sf-text)]/60 flex items-center justify-center min-h-[72px]">
-          Connect your wallet to view your swap history
+          Connect your wallet to view your activity
         </div>
       ) : (
         <>
@@ -130,7 +154,7 @@ export default function MyWalletSwaps() {
             }}
           >
         {/* Header */}
-        <div className="grid grid-cols-[220px_1fr_minmax(100px,150px)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 bg-[color:var(--sf-surface)]/40 border-b-2 border-[color:var(--sf-glass-border)] sticky top-0">
+        <div className="grid grid-cols-[220px_1fr_minmax(100px,150px)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)] sticky top-0">
           <div>Pair</div>
           <div className="text-right">Amounts</div>
           <div className="text-right">Time</div>
@@ -139,7 +163,7 @@ export default function MyWalletSwaps() {
         {/* Rows */}
         {items.length === 0 && !isLoading ? (
           <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
-            No swap activity found for your wallet
+            No activity found for your wallet
           </div>
         ) : (
           <>
@@ -152,6 +176,13 @@ export default function MyWalletSwaps() {
                 minute: '2-digit',
               }).format(time);
 
+              const typeLabel =
+                row.type === 'swap' ? 'Swap' :
+                row.type === 'mint' ? 'Supply' :
+                row.type === 'burn' ? 'Withdraw' :
+                row.type === 'creation' ? 'Create' :
+                row.type === 'wrap' ? 'Wrap' : 'Unwrap';
+
               const pairNames = (() => {
                 if (row.type === 'swap') {
                   const leftId = `${row.soldTokenBlockId}:${row.soldTokenTxId}`;
@@ -161,6 +192,28 @@ export default function MyWalletSwaps() {
                     leftName: getName(leftId),
                     rightName: getName(rightId),
                   };
+                } else if (row.type === 'mint' || row.type === 'burn' || row.type === 'creation') {
+                  const r: any = row;
+                  // Check if we have enriched token IDs from pool metadata
+                  const hasTokenIds = r.token0BlockId && r.token0TxId && r.token1BlockId && r.token1TxId;
+                  if (hasTokenIds) {
+                    const leftId = `${r.token0BlockId}:${r.token0TxId}`;
+                    const rightId = `${r.token1BlockId}:${r.token1TxId}`;
+                    return {
+                      leftId, rightId,
+                      leftName: getName(leftId),
+                      rightName: getName(rightId),
+                    };
+                  } else {
+                    // Fallback to pool ID display while loading metadata
+                    const poolId = `${r.poolBlockId}:${r.poolTxId}`;
+                    return {
+                      leftId: poolId,
+                      rightId: poolId,
+                      leftName: 'LP',
+                      rightName: `Pool ${poolId}`,
+                    };
+                  }
                 } else {
                   return {
                     leftId: 'btc',
@@ -174,10 +227,10 @@ export default function MyWalletSwaps() {
               return (
                 <Link
                   key={(row as any).transactionId + '-' + idx}
-                  href={`https://ordiscan.com/tx/${(row as any).transactionId}`}
+                  href={`https://espo.sh/tx/${(row as any).transactionId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="grid grid-cols-[220px_1fr_minmax(100px,150px)] items-center gap-4 px-6 py-4 transition-all hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)] last:border-b-0"
+                  className="grid grid-cols-[220px_1fr_minmax(100px,150px)] items-center gap-4 px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)] last:border-b-0"
                 >
                   <div className="flex items-center gap-3">
                     <PairIcon
@@ -185,19 +238,38 @@ export default function MyWalletSwaps() {
                       rightId={pairNames.rightId}
                       leftSymbol={pairNames.leftName}
                       rightSymbol={pairNames.rightName}
+                      network={network}
                     />
                     <div className="min-w-0">
+                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-0.5">{typeLabel}</div>
                       <div className="truncate text-sm text-[color:var(--sf-text)]">
-                        {pairNames.leftName} → {pairNames.rightName}
+                        {(row.type === 'mint' || row.type === 'burn')
+                          ? `${pairNames.leftName} / ${pairNames.rightName}`
+                          : (row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap')
+                          ? `${pairNames.leftName} → ${pairNames.rightName}`
+                          : `${pairNames.leftName} · ${pairNames.rightName}`
+                        }
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-right font-mono text-xs text-[color:var(--sf-text)]">
+                  <div className="text-right text-xs text-[color:var(--sf-text)]">
                     {row.type === 'swap' && (
                       <>
                         <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
                         <div className="text-green-500">+ {formatAmount(row.boughtAmount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                      </>
+                    )}
+                    {row.type === 'mint' && (
+                      <>
+                        <div>- {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                        <div>- {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
+                      </>
+                    )}
+                    {(row.type === 'burn' || row.type === 'creation') && (
+                      <>
+                        <div className="text-green-500">+ {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
+                        <div className="text-green-500">+ {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
                       </>
                     )}
                     {row.type === 'wrap' && (
@@ -214,7 +286,7 @@ export default function MyWalletSwaps() {
                     )}
                   </div>
 
-                  <div className="text-right font-mono text-[10px] text-[color:var(--sf-text)]/60">{timeLabel}</div>
+                  <div className="text-right text-[10px] text-[color:var(--sf-text)]/60">{timeLabel}</div>
                 </Link>
               );
             })}

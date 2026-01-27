@@ -12,8 +12,8 @@ type SortDirection = 'asc' | 'desc' | null;
 type VaultFilter = 'all' | 'mains' | 'alts';
 
 // Vault category definitions
-const MAINS_VAULT_IDS = ['dx-btc', 've-usd', 've-zec', 've-eth'];
-const ALTS_VAULT_IDS = ['ve-diesel', 've-ordi', 've-methane'];
+const MAINS_VAULT_IDS = ['dx-btc', 've-usd', 've-eth'];
+const ALTS_VAULT_IDS = ['ve-diesel', 've-ordi'];
 
 export default function VaultShell() {
   const { network } = useWallet();
@@ -111,166 +111,101 @@ export default function VaultShell() {
     return vaults;
   }, [sortField, sortDirection, isTestNetwork, vaultFilter]);
 
+  // Vault detail view - full width with 1/2 + 1/2 grid
+  if (selectedVault) {
+    return (
+      <div className="flex w-full flex-col gap-6">
+        {/* Back Button */}
+        <button
+          onClick={() => setSelectedVault(null)}
+          className="flex items-center gap-2 text-[color:var(--sf-text)] hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          <span className="text-sm font-semibold">Back to Vaults Overview</span>
+        </button>
+
+        {/* Vault Detail with integrated boost */}
+        <VaultDetail vault={selectedVault} />
+      </div>
+    );
+  }
+
+  // Vault overview - full width
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Content */}
-      {selectedVault ? (
-        <div className="space-y-4">
-          {/* Back Button */}
-          <button
-            onClick={() => setSelectedVault(null)}
-            className="flex items-center gap-2 text-[color:var(--sf-text)] hover:text-[color:var(--sf-primary)] transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span className="text-sm font-semibold">Back to Vaults Overview</span>
-          </button>
-
-          {/* Vault Detail with integrated boost */}
-          <VaultDetail vault={selectedVault} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-col gap-3">
-          {/* Filter Buttons - mobile only */}
-          <div className="col-span-full flex items-center gap-2 mb-2 md:hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-3">
+          {/* Filter Buttons - mobile/tablet only */}
+          <div className="col-span-full flex items-center gap-2 mb-2 lg:hidden">
             <button
               onClick={() => setVaultFilter('all')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                 vaultFilter === 'all'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
               All
             </button>
             <button
               onClick={() => setVaultFilter('mains')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                 vaultFilter === 'mains'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
               Mains
             </button>
             <button
               onClick={() => setVaultFilter('alts')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all border-2 ${
+              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                 vaultFilter === 'alts'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                  : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
               Alts
             </button>
           </div>
 
-          {/* Sorting Header - only visible on md+ screens */}
-          <div className="hidden md:flex items-center gap-2 md:gap-3 lg:gap-4 px-4 pb-1 bg-transparent w-full lg:w-auto lg:mx-auto">
-            {/* Empty space for icon - matches VaultListItem icon */}
-            <div className="relative flex-shrink-0">
-              <div className="h-12 w-12"></div>
-            </div>
-
-            {/* Filter Buttons in vault info space */}
-            <div className="min-w-[200px] max-w-[300px] lg:max-w-[400px] text-left flex items-center gap-2">
+          {/* Sorting Header - only visible on lg+ screens */}
+          <div className="hidden lg:flex items-center pb-1 bg-transparent w-full">
+            {/* Filter Buttons at left */}
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setVaultFilter('all')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'all'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
                 All
               </button>
               <button
                 onClick={() => setVaultFilter('mains')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'mains'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
                 Mains
               </button>
               <button
                 onClick={() => setVaultFilter('alts')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-all border-2 ${
+                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
                   vaultFilter === 'alts'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg border-transparent'
-                    : 'bg-[color:var(--sf-surface)]/60 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]/80 border-[color:var(--sf-glass-border)]'
+                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
                 Alts
               </button>
             </div>
 
-            {/* Est. APY */}
-            <button
-              onClick={() => handleSort('estimatedApy')}
-              className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
-                Est. APY
-                {sortField === 'estimatedApy' && (
-                  <span className="text-[10px]">{sortDirection === 'desc' ? '▼' : '▲'}</span>
-                )}
-              </div>
-            </button>
-
-            {/* Hist. APY - hidden on < lg screens, matches VaultListItem */}
-            <button
-              onClick={() => handleSort('historicalApy')}
-              className="hidden lg:flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
-                Hist. APY
-                {sortField === 'historicalApy' && (
-                  <span className="text-[10px]">{sortDirection === 'desc' ? '▼' : '▲'}</span>
-                )}
-              </div>
-            </button>
-
-            {/* Risk Level - hidden on < md screens to match VaultListItem */}
-            <button
-              onClick={() => handleSort('riskLevel')}
-              className="hidden md:flex flex-col items-center min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
-                Risk Level
-                {sortField === 'riskLevel' && (
-                  <span className="text-[10px]">{sortDirection === 'desc' ? '▼' : '▲'}</span>
-                )}
-              </div>
-            </button>
-
-            {/* Available */}
-            <button
-              onClick={() => handleSort('available')}
-              className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
-                Available
-                {sortField === 'available' && (
-                  <span className="text-[10px]">{sortDirection === 'desc' ? '▼' : '▲'}</span>
-                )}
-              </div>
-            </button>
-
-            {/* Deposits */}
-            <button
-              onClick={() => handleSort('deposits')}
-              className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-1 text-xs font-bold whitespace-nowrap">
-                Deposits
-                {sortField === 'deposits' && (
-                  <span className="text-[10px]">{sortDirection === 'desc' ? '▼' : '▲'}</span>
-                )}
-              </div>
-            </button>
           </div>
 
           {/* Vault List */}
@@ -289,7 +224,6 @@ export default function VaultShell() {
             </div>
           )}
         </div>
-      )}
     </div>
   );
 }

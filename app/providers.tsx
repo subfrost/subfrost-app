@@ -22,7 +22,7 @@ function detectNetwork(): Network {
 
   // First check localStorage for user selection
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'subfrost-regtest', 'oylnet'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet'].includes(stored)) {
     return stored as Network;
   }
 

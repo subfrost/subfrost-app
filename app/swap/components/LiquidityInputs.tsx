@@ -4,16 +4,21 @@ import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
 import { useWallet } from "@/context/WalletContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
+import { useGlobalStore } from "@/stores/global";
+import type { SlippageSelection } from "@/stores/global";
 import { ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 
 type LPPosition = {
-  id: string;
+  id: string;                    // LP token alkane ID (same as pool ID)
   token0Symbol: string;
   token1Symbol: string;
-  amount: string;
+  token0Id?: string;             // Token 0 alkane ID (for remove liquidity)
+  token1Id?: string;             // Token 1 alkane ID (for remove liquidity)
+  amount: string;                // LP token balance (display units)
   valueUSD: number;
   gainLoss: {
     token0: { amount: string; symbol: string };
@@ -33,10 +38,15 @@ type Props = {
   onSelectToken0?: (id: string) => void;
   onSelectToken1?: (id: string) => void;
   onAddLiquidity: () => void;
+  onRemoveLiquidity?: () => void;
+  isLoading?: boolean;
+  isRemoveLoading?: boolean;
   token0BalanceText?: string;
   token1BalanceText?: string;
   token0FiatText?: string;
   token1FiatText?: string;
+  onPercentToken0?: (percent: number) => void;
+  onPercentToken1?: (percent: number) => void;
   minimumToken0?: string;
   minimumToken1?: string;
   feeRate?: number;
@@ -46,6 +56,7 @@ type Props = {
   setCustomFee?: (v: string) => void;
   feePresets?: { slow: number; medium: number; fast: number };
   liquidityMode?: 'provide' | 'remove';
+  onModeChange?: (mode: 'provide' | 'remove') => void;
   selectedLPPosition?: LPPosition | null;
   onSelectLPPosition?: (position: LPPosition | null) => void;
   onOpenLPSelector?: () => void;
@@ -68,10 +79,15 @@ export default function LiquidityInputs({
   onSelectToken0,
   onSelectToken1,
   onAddLiquidity,
+  onRemoveLiquidity,
+  isLoading = false,
+  isRemoveLoading = false,
   token0BalanceText = "No balance",
   token1BalanceText = "No balance",
   token0FiatText = "$0.00",
   token1FiatText = "$0.00",
+  onPercentToken0,
+  onPercentToken1,
   minimumToken0,
   minimumToken1,
   feeRate = 0,
@@ -81,6 +97,7 @@ export default function LiquidityInputs({
   setCustomFee,
   feePresets = { slow: 2, medium: 8, fast: 25 },
   liquidityMode = 'provide',
+  onModeChange,
   selectedLPPosition,
   onSelectLPPosition,
   onOpenLPSelector,
@@ -89,39 +106,107 @@ export default function LiquidityInputs({
   summary,
 }: Props) {
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
+  const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
+  const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
 
-  
+  // Calculate active percentage for token inputs
+  const getActivePercent = (amount: string, balanceText: string): number | null => {
+    if (!amount || !balanceText) return null;
+    const balanceMatch = balanceText.match(/[\d.]+/);
+    if (!balanceMatch) return null;
+    const balance = parseFloat(balanceMatch[0]);
+    const value = parseFloat(amount);
+    if (!balance || balance === 0 || !value) return null;
+    const tolerance = 0.0001;
+    if (Math.abs(value - balance * 0.25) < tolerance) return 0.25;
+    if (Math.abs(value - balance * 0.5) < tolerance) return 0.5;
+    if (Math.abs(value - balance * 0.75) < tolerance) return 0.75;
+    if (Math.abs(value - balance) < tolerance) return 1;
+    return null;
+  };
+
+  const activePercentToken0 = getActivePercent(token0Amount, token0BalanceText);
+  const activePercentToken1 = getActivePercent(token1Amount, token1BalanceText);
+
+  // Single state to track which settings field is focused (only one can be focused at a time)
+  const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
+  // Local deadline state to allow empty field while typing
+  const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
+
   const canAddLiquidity = isConnected &&
     !!token0Amount && !!token1Amount &&
     isFinite(parseFloat(token0Amount)) && isFinite(parseFloat(token1Amount)) &&
     parseFloat(token0Amount) > 0 && parseFloat(token1Amount) > 0 &&
     !!token0 && !!token1;
-  
-  const ctaText = isConnected ? "ADD LIQUIDITY" : "CONNECT WALLET";
-  
+
+  const canRemoveLiquidity = isConnected &&
+    !!selectedLPPosition &&
+    !!removeAmount &&
+    parseFloat(removeAmount) > 0 &&
+    parseFloat(removeAmount) <= parseFloat(selectedLPPosition.amount);
+
+  // Dynamic CTA text and handler based on mode
+  const getCtaText = () => {
+    if (!isConnected) return "CONNECT WALLET";
+    if (liquidityMode === 'remove') {
+      return isRemoveLoading ? "REMOVING LIQUIDITY..." : "REMOVE LIQUIDITY";
+    }
+    return isLoading ? "ADDING LIQUIDITY..." : "ADD LIQUIDITY";
+  };
+
+  const ctaText = getCtaText();
+
   const onCtaClick = () => {
     if (!isConnected) {
       onConnectModalOpenChange(true);
       return;
     }
-    onAddLiquidity();
+    if (liquidityMode === 'remove' && onRemoveLiquidity) {
+      onRemoveLiquidity();
+    } else {
+      onAddLiquidity();
+    }
   };
 
   return (
     <>
+      {/* Add/Remove Tabs */}
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => onModeChange?.('provide')}
+          className={`pb-3 px-1 text-sm font-semibold ${
+            liquidityMode === 'provide'
+              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+          }`}
+        >
+          Add
+        </button>
+        <button
+          onClick={() => onModeChange?.('remove')}
+          className={`pb-3 px-1 text-sm font-semibold ${
+            liquidityMode === 'remove'
+              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+          }`}
+        >
+          Remove
+        </button>
+      </div>
+
       <div className="relative flex flex-col gap-3">
         {liquidityMode === 'remove' ? (
         /* Remove Mode: LP Position Selector */
         <>
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select LP Position to Remove
             </span>
             <button
               type="button"
               onClick={onOpenLPSelector}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
             >
               <span className="font-bold text-sm text-[color:var(--sf-text)]">
                 {selectedLPPosition ? `${selectedLPPosition.amount} ${selectedLPPosition.token0Symbol}/${selectedLPPosition.token1Symbol} LP` : 'Select Position'}
@@ -133,9 +218,9 @@ export default function LiquidityInputs({
           {/* Remove Amount Input */}
           {selectedLPPosition && (
             <>
-              <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
+              <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
                 <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
-                <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-3 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+                <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                   <div className="flex flex-col gap-2">
                     {/* Row 1: Input */}
                     <NumberField 
@@ -170,7 +255,7 @@ export default function LiquidityInputs({
                             key={label}
                             type="button"
                             onClick={() => onChangeRemoveAmount?.(targetAmount)}
-                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all outline-none focus:outline-none border text-[color:var(--sf-primary)] ${isActive ? "border-[color:var(--sf-primary)]/50 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-primary)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10 hover:border-[color:var(--sf-primary)]/40"}`}
+                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${isActive ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
                           >
                             {label}
                           </button>
@@ -181,49 +266,143 @@ export default function LiquidityInputs({
                 </div>
               </div>
 
-              {/* LP Details - Swap Summary Style */}
-              <div className="relative z-20 rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 text-sm backdrop-blur-sm transition-all">
-                {/* Header row - LP Details title + Settings button */}
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Details</span>
-                  <SettingsButton />
-                </div>
-
+              {/* Transaction Details - Same style as SwapSummary */}
+              <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
                 <div className="flex flex-col gap-2.5">
-                  {/* VALUE row */}
+                  {/* Minimum Received row */}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-primary)]">
-                      Value
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Minimum Received
                     </span>
-                    <span className="font-semibold text-[color:var(--sf-primary)]">
-                      ${selectedLPPosition.valueUSD}
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      {selectedLPPosition.token0Symbol} / {selectedLPPosition.token1Symbol}
                     </span>
                   </div>
 
-                  {/* GAIN/LOSS row */}
+                  {/* Deadline (blocks) row */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                      Gain/Loss
+                      Deadline (blocks)
                     </span>
-                    <span className="font-semibold text-[color:var(--sf-text)]">
-                      <span className={selectedLPPosition.gainLoss.token0.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'}>
-                        {selectedLPPosition.gainLoss.token0.amount} {selectedLPPosition.gainLoss.token0.symbol}
-                      </span>
-                      {' / '}
-                      <span className={selectedLPPosition.gainLoss.token1.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'}>
-                        {selectedLPPosition.gainLoss.token1.amount} {selectedLPPosition.gainLoss.token1.symbol}
-                      </span>
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <input
+                          aria-label="Transaction deadline in blocks"
+                          type="number"
+                          min={1}
+                          max={100}
+                          step={1}
+                          value={deadlineLocal}
+                          onChange={(e) => setDeadlineLocal(e.target.value)}
+                          onFocus={() => setFocusedField('deadline')}
+                          onBlur={() => {
+                            setFocusedField(null);
+                            const val = parseInt(deadlineLocal, 10);
+                            if (!deadlineLocal || isNaN(val) || val < 1) {
+                              setDeadlineLocal('3');
+                              setDeadlineBlocks(3);
+                            } else {
+                              setDeadlineBlocks(Math.min(100, val));
+                            }
+                          }}
+                          placeholder="3"
+                          style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                          className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Miner Fee Rate - bottom row */}
+                  {/* Slippage Tolerance row */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                      Miner Fee Rate
+                      Slippage Tolerance
                     </span>
-                    <span className="font-semibold text-[color:var(--sf-text)]">
-                      {feeRate} sats/vB
+                    <div className="flex items-center gap-2">
+                      {slippageSelection === 'custom' ? (
+                        <div className="relative">
+                          <input
+                            aria-label="Custom slippage tolerance"
+                            type="text"
+                            inputMode="numeric"
+                            value={maxSlippage}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || /^\d{0,2}$/.test(val)) {
+                                const num = parseInt(val, 10);
+                                if (val === '' || (num >= 0 && num <= 99)) {
+                                  setMaxSlippage(val);
+                                }
+                              }
+                            }}
+                            onFocus={() => setFocusedField('slippage')}
+                            onBlur={() => {
+                              setFocusedField(null);
+                              if (!maxSlippage) {
+                                setMaxSlippage('5');
+                              }
+                            }}
+                            placeholder="5"
+                            style={{ outline: 'none', border: focusedField === 'slippage' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                            className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                          />
+                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
+                        </div>
+                      ) : (
+                        <span className="font-semibold text-[color:var(--sf-text)]">
+                          {maxSlippage}%
+                        </span>
+                      )}
+                      <SlippageButton
+                        selection={slippageSelection}
+                        setSelection={setSlippageSelection}
+                        setValue={setMaxSlippage}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Miner Fee Rate row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Miner Fee Rate (sats/vB)
                     </span>
+                    <div className="flex items-center gap-2">
+                      {feeSelection === 'custom' && setCustomFee ? (
+                        <div className="relative">
+                          <input
+                            aria-label="Custom miner fee rate"
+                            type="number"
+                            min={1}
+                            max={999}
+                            step={1}
+                            value={customFee}
+                            onChange={(e) => setCustomFee(e.target.value)}
+                            onFocus={() => setFocusedField('fee')}
+                            onBlur={() => {
+                              setFocusedField(null);
+                              if (!customFee) {
+                                setCustomFee(String(feePresets.medium));
+                              }
+                            }}
+                            placeholder="0"
+                            style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                            className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                          />
+                        </div>
+                      ) : (
+                        <span className="font-semibold text-[color:var(--sf-text)]">
+                          {Math.round(feeRate)}
+                        </span>
+                      )}
+                      <MinerFeeButton
+                        selection={feeSelection}
+                        setSelection={setFeeSelection}
+                        customFee={customFee}
+                        setCustomFee={setCustomFee}
+                        feeRate={feeRate}
+                        presets={feePresets}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -234,7 +413,7 @@ export default function LiquidityInputs({
         /* Provide Mode: Token Pair Selection */
         <>
           {/* Select Pair Panel */}
-          <div className="relative z-20 rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
               Select Pair to Provide
             </span>
@@ -246,7 +425,7 @@ export default function LiquidityInputs({
                 <button
                   type="button"
                   onClick={() => openTokenSelector('pool0')}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
                 >
                   {token0 && (
                     <TokenIcon 
@@ -275,7 +454,7 @@ export default function LiquidityInputs({
               <button
                 type="button"
                 onClick={() => openTokenSelector('pool1')}
-                className="flex-1 md:flex-none lg:flex-1 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-3 transition-all hover:border-[color:var(--sf-primary)]/40 hover:bg-[color:var(--sf-surface)] hover:shadow-md focus:outline-none"
+                className="flex-1 md:flex-none lg:flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
               >
                 {token1 && (
                   <TokenIcon 
@@ -300,81 +479,225 @@ export default function LiquidityInputs({
             <>
               <div className="relative z-20 grid grid-cols-2 gap-3">
             {/* Token 0 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
-                <TokenIcon 
-                  symbol={token0.symbol} 
-                  id={token0.id} 
-                  iconUrl={token0.iconUrl} 
-                  size="sm" 
-                  network={network} 
+                <TokenIcon
+                  symbol={token0.symbol}
+                  id={token0.id}
+                  iconUrl={token0.iconUrl}
+                  size="sm"
+                  network={network}
                 />
-                <span className="text-xs font-bold text-[color:var(--sf-text)]">{token0.symbol}</span>
+                <span className="text-xs font-bold text-white">{token0.symbol}</span>
               </div>
-              <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-2 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+              <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token0Amount} onChange={onChangeToken0Amount} />
-                <div className="mt-1 text-right text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
+                <div className="mt-1 flex flex-col items-end gap-1">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
+                  {onPercentToken0 && (
+                    <div className="flex items-center gap-1">
+                      {[
+                        { label: '25%', value: 0.25 },
+                        { label: '50%', value: 0.5 },
+                        { label: '75%', value: 0.75 },
+                      ].map(({ label, value }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => onPercentToken0(value)}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onPercentToken0(1)}
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      >
+                        Max
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Token 1 Amount Input */}
-            <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
               <div className="mb-2 flex items-center gap-2">
-                <TokenIcon 
-                  symbol={token1.symbol} 
-                  id={token1.id} 
-                  iconUrl={token1.iconUrl} 
-                  size="sm" 
-                  network={network} 
+                <TokenIcon
+                  symbol={token1.symbol}
+                  id={token1.id}
+                  iconUrl={token1.iconUrl}
+                  size="sm"
+                  network={network}
                 />
-                <span className="text-xs font-bold text-[color:var(--sf-text)]">{token1.symbol}</span>
+                <span className="text-xs font-bold text-white">{token1.symbol}</span>
               </div>
-              <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] p-2 focus-within:ring-2 focus-within:ring-[color:var(--sf-primary)]/50 focus-within:border-[color:var(--sf-primary)] transition-all">
+              <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token1Amount} onChange={onChangeToken1Amount} />
-                <div className="mt-1 text-right text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
+                <div className="mt-1 flex flex-col items-end gap-1">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
+                  {onPercentToken1 && (
+                    <div className="flex items-center gap-1">
+                      {[
+                        { label: '25%', value: 0.25 },
+                        { label: '50%', value: 0.5 },
+                        { label: '75%', value: 0.75 },
+                      ].map(({ label, value }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => onPercentToken1(value)}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onPercentToken1(1)}
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      >
+                        Max
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Fee Component */}
-          <div className="relative z-10 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/40 p-4 backdrop-blur-sm">
-            {/* Minimum Received with Settings Button */}
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <div className="text-xs font-semibold text-[color:var(--sf-text)]/60">Minimum Received:</div>
-                <SettingsButton />
+          {/* Transaction Details - Same style as SwapSummary */}
+          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+            <div className="flex flex-col gap-2.5">
+              {/* Minimum Received row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Minimum Received
+                </span>
+                <span className="font-semibold text-[color:var(--sf-text)]">
+                  {minimumToken0 || (token0.id === 'btc' || token0.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token0.symbol} / {minimumToken1 || (token1.id === 'btc' || token1.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token1.symbol}
+                </span>
               </div>
-              <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                {minimumToken0 || (token0.id === 'btc' || token0.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token0.symbol} / {minimumToken1 || (token1.id === 'btc' || token1.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token1.symbol}
-              </div>
-            </div>
 
-            {/* Miner Fee */}
-            <div>
-              <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 mb-1">Miner Fee:</div>
-              <div className="flex items-center gap-2">
-                {feeSelection === 'custom' && setCustomFee ? (
-                  <div className="relative w-40">
+              {/* Deadline (blocks) row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Deadline (blocks)
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
                     <input
-                      aria-label="Custom miner fee rate"
+                      aria-label="Transaction deadline in blocks"
                       type="number"
                       min={1}
-                      max={999}
+                      max={100}
                       step={1}
-                      value={customFee}
-                      onChange={(e) => setCustomFee(e.target.value)}
-                      placeholder="0"
-                      className="h-9 w-full rounded-lg border-2 border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)] transition-colors"
+                      value={deadlineLocal}
+                      onChange={(e) => setDeadlineLocal(e.target.value)}
+                      onFocus={() => setFocusedField('deadline')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        const val = parseInt(deadlineLocal, 10);
+                        if (!deadlineLocal || isNaN(val) || val < 1) {
+                          setDeadlineLocal('3');
+                          setDeadlineBlocks(3);
+                        } else {
+                          setDeadlineBlocks(Math.min(100, val));
+                        }
+                      }}
+                      placeholder="3"
+                      style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                          className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">Sats / vByte</span>
                   </div>
-                ) : (
-                  <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                    {feeRate} Sats / vByte
-                  </div>
-                )}
-                <div className="ml-auto">
-                  <MinerFeeButton 
+                </div>
+              </div>
+
+              {/* Slippage Tolerance row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Slippage Tolerance
+                </span>
+                <div className="flex items-center gap-2">
+                  {slippageSelection === 'custom' ? (
+                    <div className="relative">
+                      <input
+                        aria-label="Custom slippage tolerance"
+                        type="text"
+                        inputMode="numeric"
+                        value={maxSlippage}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d{0,2}$/.test(val)) {
+                            const num = parseInt(val, 10);
+                            if (val === '' || (num >= 0 && num <= 99)) {
+                              setMaxSlippage(val);
+                            }
+                          }
+                        }}
+                        onFocus={() => setFocusedField('slippage')}
+                        onBlur={() => {
+                          setFocusedField(null);
+                          if (!maxSlippage) {
+                            setMaxSlippage('5');
+                          }
+                        }}
+                        placeholder="5"
+                        style={{ outline: 'none', border: focusedField === 'slippage' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                            className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
+                    </div>
+                  ) : (
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      {maxSlippage}%
+                    </span>
+                  )}
+                  <SlippageButton
+                    selection={slippageSelection}
+                    setSelection={setSlippageSelection}
+                    setValue={setMaxSlippage}
+                  />
+                </div>
+              </div>
+
+              {/* Miner Fee Rate row */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  Miner Fee Rate (sats/vB)
+                </span>
+                <div className="flex items-center gap-2">
+                  {feeSelection === 'custom' && setCustomFee ? (
+                    <div className="relative">
+                      <input
+                        aria-label="Custom miner fee rate"
+                        type="number"
+                        min={1}
+                        max={999}
+                        step={1}
+                        value={customFee}
+                        onChange={(e) => setCustomFee(e.target.value)}
+                        onFocus={() => setFocusedField('fee')}
+                        onBlur={() => {
+                          setFocusedField(null);
+                          if (!customFee) {
+                            setCustomFee(String(feePresets.medium));
+                          }
+                        }}
+                        placeholder="0"
+                        style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
+                            className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-300 ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      />
+                    </div>
+                  ) : (
+                    <span className="font-semibold text-[color:var(--sf-text)]">
+                      {Math.round(feeRate)}
+                    </span>
+                  )}
+                  <MinerFeeButton
                     selection={feeSelection}
                     setSelection={setFeeSelection}
                     customFee={customFee}
@@ -402,8 +725,12 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          disabled={!canAddLiquidity && isConnected}
-          className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+          disabled={
+            (liquidityMode === 'remove'
+              ? (!canRemoveLiquidity && isConnected) || isRemoveLoading
+              : (!canAddLiquidity && isConnected) || isLoading)
+          }
+          className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
         >
           {ctaText}
         </button>
@@ -412,22 +739,6 @@ export default function LiquidityInputs({
   );
 }
 
-function SettingsButton() {
-  const { openTxSettings } = useModalStore();
-  return (
-    <button
-      type="button"
-      onClick={() => openTxSettings()}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-      <span>Settings</span>
-    </button>
-  );
-}
 
 type MinerFeeButtonProps = {
   selection: FeeSelection;
@@ -473,20 +784,20 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/80 px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] backdrop-blur-sm transition-all hover:bg-[color:var(--sf-surface)] hover:border-[color:var(--sf-primary)]/30 hover:shadow-sm focus:outline-none"
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)] focus:outline-none"
       >
         <span>{getDisplayText()}</span>
-        <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
           {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
             <button
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-colors first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
@@ -497,6 +808,91 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
                 {option !== 'custom' && (
                   <span className="text-[10px] text-[color:var(--sf-text)]/50">
                     {presets[option as keyof typeof presets]}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SLIPPAGE_PRESETS: Record<Exclude<SlippageSelection, 'custom'>, string> = {
+  low: '1',
+  medium: '5',
+  high: '10',
+};
+
+type SlippageButtonProps = {
+  selection: SlippageSelection;
+  setSelection: (s: SlippageSelection) => void;
+  setValue: (v: string) => void;
+};
+
+function SlippageButton({ selection, setSelection, setValue }: SlippageButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleSelect = (s: SlippageSelection) => {
+    setSelection(s);
+    if (s !== 'custom') {
+      setValue(SLIPPAGE_PRESETS[s]);
+    }
+    setIsOpen(false);
+  };
+
+  const getDisplayText = () => {
+    if (selection === 'custom') return 'Custom';
+    return selection.charAt(0).toUpperCase() + selection.slice(1);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)] focus:outline-none"
+      >
+        <span>{getDisplayText()}</span>
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          {(['low', 'medium', 'high', 'custom'] as SlippageSelection[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{option}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {SLIPPAGE_PRESETS[option]}%
                   </span>
                 )}
               </div>

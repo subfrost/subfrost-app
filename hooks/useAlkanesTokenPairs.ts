@@ -1,3 +1,12 @@
+/**
+ * useAlkanesTokenPairs - Find pools containing a specific token
+ *
+ * Uses ts-sdk methods exclusively with a fallback chain:
+ * 1. dataApiGetPools (Data API - more reliable)
+ * 2. alkanesGetAllPoolsWithDetails (RPC simulate)
+ *
+ * @see Blueprint: Phase 3 - Swap Quote Migration
+ */
 import { useQuery } from '@tanstack/react-query';
 import type { AlkanesTokenPairsResult } from '@/lib/api-provider/apiclient/types';
 
@@ -54,14 +63,6 @@ function extractPoolsArray(response: any): any[] {
 }
 
 /**
- * Helper to get value from pool object (may be Map or plain object)
- */
-function getPoolValue(pool: any, key: string): any {
-  if (pool instanceof Map) return pool.get(key);
-  return pool?.[key];
-}
-
-/**
  * Convert pool object to plain object
  */
 function poolToObject(pool: any): any {
@@ -92,17 +93,63 @@ export function useAlkanesTokenPairs(
     queryKey: ['alkanesTokenPairs', normalizedId, limit, offset, sortBy, searchQuery, network],
     staleTime: 30_000, // 30 seconds - poll more frequently for realtime quotes
     refetchInterval: 30_000, // Auto-refresh every 30s for up-to-date reserves
+    // Retry transient failures
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     queryFn: async () => {
       if (!provider) {
         throw new Error('Provider not initialized');
       }
 
-      // Use the WASM provider's dataApiGetPools to get pools via JSON-RPC
-      // This uses the same endpoint as our tests: https://regtest.subfrost.io/v4/subfrost
-      const poolsResponse = await provider.dataApiGetPools(ALKANE_FACTORY_ID);
-      const poolsArray = extractPoolsArray(poolsResponse);
+      let poolsArray: any[] = [];
 
-      console.log('[useAlkanesTokenPairs] Got', poolsArray.length, 'pools for token:', normalizedId);
+      // =====================================================================
+      // Method 1: dataApiGetPools (Data API - more reliable)
+      // =====================================================================
+      try {
+        console.log('[useAlkanesTokenPairs] Trying dataApiGetPools...');
+        const poolsResponse = await provider.dataApiGetPools(ALKANE_FACTORY_ID);
+        poolsArray = extractPoolsArray(poolsResponse);
+        console.log('[useAlkanesTokenPairs] dataApiGetPools returned', poolsArray.length, 'pools');
+      } catch (e) {
+        console.warn('[useAlkanesTokenPairs] dataApiGetPools failed:', e);
+      }
+
+      // =====================================================================
+      // Method 2: alkanesGetAllPoolsWithDetails (RPC simulate)
+      // =====================================================================
+      if (poolsArray.length === 0) {
+        try {
+          console.log('[useAlkanesTokenPairs] Trying alkanesGetAllPoolsWithDetails...');
+          const rpcResult = await provider.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID);
+          const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+          const rpcPools = parsed?.pools || [];
+
+          // Convert RPC format to standard format
+          poolsArray = rpcPools.map((p: any) => ({
+            pool_block_id: p.pool_id_block,
+            pool_tx_id: p.pool_id_tx,
+            token0_block_id: p.details?.token_a_block,
+            token0_tx_id: p.details?.token_a_tx,
+            token1_block_id: p.details?.token_b_block,
+            token1_tx_id: p.details?.token_b_tx,
+            token0_amount: p.details?.reserve_a || '0',
+            token1_amount: p.details?.reserve_b || '0',
+            pool_name: p.details?.pool_name || '',
+          }));
+          console.log('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails returned', poolsArray.length, 'pools');
+        } catch (e) {
+          console.warn('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails failed:', e);
+        }
+      }
+
+      // If both methods failed, throw error for React Query to handle
+      if (poolsArray.length === 0) {
+        console.error('[useAlkanesTokenPairs] All ts-sdk methods failed to return pools');
+        throw new Error('Failed to fetch pools from ts-sdk');
+      }
+
+      console.log('[useAlkanesTokenPairs] Total pools found:', poolsArray.length, 'for token:', normalizedId);
 
       // Filter pools that contain this token
       const matchingPools: AlkanesTokenPair[] = [];

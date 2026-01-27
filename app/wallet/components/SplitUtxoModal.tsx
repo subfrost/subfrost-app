@@ -138,7 +138,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-lg w-full mx-4">
+      <div className="bg-[color:var(--sf-surface)] rounded-2xl border border-[color:var(--sf-outline)] max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[color:var(--sf-outline)]">
           <div className="flex items-center gap-3">
@@ -147,7 +147,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
+            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
           >
             <X size={20} />
           </button>
@@ -160,7 +160,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               {/* UTXO Info */}
               <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
                 <div className="text-sm text-[color:var(--sf-text)]/60 mb-2">UTXO to Split:</div>
-                <div className="font-mono text-xs text-[color:var(--sf-text)]/80 mb-2">
+                <div className="text-xs text-[color:var(--sf-text)]/80 mb-2">
                   {utxo.txid.slice(0, 16)}...:{utxo.vout}
                 </div>
                 <div className="text-sm text-[color:var(--sf-text)]">
@@ -241,14 +241,14 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               <div className="flex gap-3">
                 <button
                   onClick={handleSplit}
-                  className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium flex items-center justify-center gap-2"
                 >
                   <Scissors size={18} />
                   Split UTXO
                 </button>
                 <button
                   onClick={handleClose}
-                  className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-colors text-[color:var(--sf-text)]"
+                  className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
                 >
                   Cancel
                 </button>
@@ -272,7 +272,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
                 <div className="w-full p-4 rounded-lg bg-green-500/10 border border-green-500/20">
                   <div className="text-sm text-green-600 dark:text-green-200 mb-2">Transaction ID:</div>
-                  <div className="font-mono text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
+                  <div className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
                 </div>
 
                 <a
@@ -287,7 +287,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
               <button
                 onClick={handleClose}
-                className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all text-white font-medium"
+                className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
               >
                 Close
               </button>

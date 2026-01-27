@@ -12,11 +12,20 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['node_modules', '.next', 'ts-sdk/node_modules'],
+    exclude: ['**/node_modules/**', '.next', 'ts-sdk/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
     // Setup file to polyfill fetch for Node.js
     setupFiles: ['./__tests__/setup.ts'],
+    // Enable WASM support in tests
+    server: {
+      deps: {
+        // Inline the SDK to allow vite to process WASM imports
+        inline: ['@alkanes/ts-sdk'],
+      },
+    },
+    // Use forks pool for better WASM compatibility
+    pool: 'forks',
   },
   resolve: {
     alias: {
@@ -24,6 +33,11 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['@alkanes/ts-sdk/wasm'],
+    // Don't exclude - let vite process it
+    include: ['@alkanes/ts-sdk', '@alkanes/ts-sdk/wasm'],
+  },
+  // Enable WASM in SSR/Node context
+  ssr: {
+    noExternal: ['@alkanes/ts-sdk'],
   },
 });

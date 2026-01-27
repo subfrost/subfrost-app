@@ -74,7 +74,7 @@ export default function GaugeVault() {
               <button
                 key={tab}
                 onClick={() => setInfoTab(tab as any)}
-                className={`pb-3 text-sm font-semibold capitalize transition-colors ${
+                className={`pb-3 text-sm font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                   infoTab === tab
                     ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                     : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
@@ -115,9 +115,9 @@ export default function GaugeVault() {
               <div className="space-y-3">
                 <div className="rounded-lg bg-purple-50 border border-purple-200 p-3">
                   <div className="font-semibold text-sm text-purple-900 mb-2">Boost Formula</div>
-                  <code className="text-xs text-purple-800 bg-[color:var(--sf-surface)] px-2 py-1 rounded block">
+                  <span className="text-xs text-purple-800 bg-[color:var(--sf-surface)] px-2 py-1 rounded block">
                     boost = min(1 + (veDIESEL × total_stake) / (stake × total_veDIESEL), 2.5)
-                  </code>
+                  </span>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
                   <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">Example Calculation</div>
@@ -172,7 +172,7 @@ export default function GaugeVault() {
               </div>
               <div className="pt-3 border-t border-[color:var(--sf-outline)]">
                 <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Gauge Contract Address</div>
-                <div className="font-mono text-xs text-[color:var(--sf-text)] bg-gray-50 p-2 rounded">
+                <div className="text-xs text-[color:var(--sf-text)] bg-gray-50 p-2 rounded">
                   AlkaneId &#123; block: 2, tx: &lt;deployed_tx&gt; &#125;
                 </div>
               </div>

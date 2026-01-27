@@ -50,13 +50,13 @@ export default function PositionsSection() {
         </div>
         <ul className="list-disc list-inside space-y-1 text-xs md:text-sm">
           <li>
-            Each <span className="font-mono font-semibold">ftrBTC[xxxxxx]</span> is a
+            Each <span className="font-semibold">ftrBTC[xxxxxx]</span> is a
             time-locked BTC position with a deterministic exercise value defined by the
             polynomial fee curve.
           </li>
           <li>
             <span className="font-semibold">Exercise value</span> is what you get if you
-            exercise right now via <span className="font-mono">Exercise</span> (dxBTC
+            exercise right now via <span className="font-semibold">Exercise</span> (dxBTC
             redemption). It only depends on time to expiry, not on secondary market prices.
           </li>
           <li>
@@ -99,7 +99,7 @@ export default function PositionsSection() {
                   const rows = [
                     <tr
                       key={position.contract}
-                      className="border-b border-[color:var(--sf-glass-border)] hover:bg-[color:var(--sf-primary)]/10 transition-colors cursor-pointer"
+                      className="border-b border-[color:var(--sf-glass-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                       onClick={() => toggleRow(position.contract)}
                     >
                       <td className="px-6 py-4">
@@ -111,7 +111,7 @@ export default function PositionsSection() {
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="2"
-                            className={`text-[color:var(--sf-text)]/50 transition-transform ${
+                            className={`text-[color:var(--sf-text)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                               isExpanded ? 'rotate-90' : ''
                             }`}
                           >
@@ -141,7 +141,7 @@ export default function PositionsSection() {
                             e.stopPropagation();
                             // TODO: trigger Exercise call (early or at expiry)
                           }}
-                          className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-red-500 text-white hover:opacity-90 transition-opacity"
+                          className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-red-500 text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                         >
                           Exercise
                         </button>

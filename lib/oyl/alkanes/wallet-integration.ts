@@ -108,6 +108,9 @@ function getAlkanesNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' 
     case 'testnet':
       return 'testnet';
     case 'regtest':
+    case 'regtest-local':
+    case 'subfrost-regtest':
+    case 'oylnet':
       return 'regtest';
     case 'signet':
       return 'signet';
@@ -126,6 +129,9 @@ function getBitcoinJsNetwork(network: Network): bitcoin.Network {
     case 'testnet':
       return bitcoin.networks.testnet;
     case 'regtest':
+    case 'regtest-local':
+    case 'subfrost-regtest':
+    case 'oylnet':
       return bitcoin.networks.regtest;
     default:
       return bitcoin.networks.bitcoin;
@@ -262,6 +268,7 @@ export async function createAlkanesProvider(
     mainnet: 'https://mainnet.sandshrew.io/v4/wrlckwrld',
     testnet: 'https://testnet.sandshrew.io/v4/wrlckwrld',
     regtest: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
+    'regtest-local': 'http://localhost:18888',
     signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
     oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
@@ -269,14 +276,11 @@ export async function createAlkanesProvider(
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
   const networkType = getAlkanesNetwork(network);
-  const bitcoinNetwork = getBitcoinJsNetwork(network);
 
   return new AlkanesProvider({
-    version: '',
-    network: bitcoinNetwork,
+    network: networkType,
     networkType,
     url,
-    projectId: '',
   });
 }
 

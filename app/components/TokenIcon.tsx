@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 
 // Define Network type locally to avoid import issues with ts-sdk
 import type { Network } from '@/utils/constants';
@@ -21,77 +21,95 @@ const sizeMap = {
   xl: 'h-10 w-10 text-base',
 };
 
+// Tokens with known local icons in /public/tokens/
+const TOKENS_WITH_LOCAL_ICONS = new Set([
+  'btc', 'frbtc', 'busd', 'eth', 'ordi', 'sol', 'usdt', 'zec', 'frusd'
+]);
+
+// Alkane IDs with known local icons
+const ALKANE_IDS_WITH_LOCAL_ICONS = new Set([
+  '32:0',    // frBTC
+  '2:56801', // bUSD
+]);
+
 export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className = '', network = 'mainnet' }: TokenIconProps) {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   // Generate icon paths - try multiple sources
-  const getIconPaths = (): string[] => {
+  // Only try local paths for tokens we know have icons to avoid 404 console noise
+  const getIconPaths = useCallback((): string[] => {
     const paths: string[] = [];
-    
-    // Priority 1: Special handling for frBTC - always use local logo first (brand consistency)
-    if (symbol?.toLowerCase() === 'frbtc' || id === '32:0') {
+    const symbolLower = symbol?.toLowerCase() || '';
+    const hasLocalIcon = TOKENS_WITH_LOCAL_ICONS.has(symbolLower);
+    const hasLocalIconById = id ? ALKANE_IDS_WITH_LOCAL_ICONS.has(id) : false;
+
+    // Priority 1: Special handling for frBTC - always use local logo (brand consistency)
+    if (symbolLower === 'frbtc' || id === '32:0') {
       paths.push('/tokens/frbtc.svg');
       paths.push('/tokens/frbtc.png');
-      return paths; // Return early to prevent remote fallback
+      return paths;
     }
-    
-    // Priority 2: Special handling for bUSD - use PNG only
-    if (symbol?.toLowerCase() === 'busd' || id === 'usd') {
+
+    // Priority 2: Special handling for BTC
+    if (symbolLower === 'btc' || id === 'btc') {
+      paths.push('/tokens/btc.svg');
+      return paths;
+    }
+
+    // Priority 3: Special handling for bUSD (check by token ID)
+    if (id === '2:56801' || symbolLower === 'busd') {
       paths.push('/tokens/busd.png');
-      return paths; // Return early to prevent .svg fallback
+      return paths;
     }
-    
-    // Priority 2b: Special handling for frUSD - use usdt_empty.svg
-    if (symbol?.toLowerCase() === 'frusd' || id === 'frUSD') {
+
+    // Priority 4: Special handling for frUSD
+    if (symbolLower === 'frusd' || id === 'frUSD') {
       paths.push('/tokens/usdt_empty.svg');
       return paths;
     }
-    
-    // Priority 3: Special handling for BTC (local file)
-    if (symbol?.toLowerCase() === 'btc' || id === 'btc') {
-      paths.push('/tokens/btc.svg');
-    }
-    
-    // Priority 4: Use direct iconUrl if provided (from API - should be Oyl SDK URL)
+
+    // Priority 5: Use direct iconUrl if provided (from API)
     if (iconUrl) {
       paths.push(iconUrl);
     }
-    
-    // Priority 5: Try Oyl asset for Alkanes tokens (if id is an alkane ID like "32:0" or "2:56801")
-    // Alkane IDs use colon format: "block:tx"
-    // This ensures official images are tried BEFORE local fallbacks
-    if (id && /^\d+:\d+/.test(id)) {
-      // Convert colon to hyphen for URL: "2:56801" becomes "2-56801"
+
+    // Priority 6: Try local token assets by symbol (only if we know the icon exists)
+    if (hasLocalIcon) {
+      paths.push(`/tokens/${symbolLower}.svg`);
+      paths.push(`/tokens/${symbolLower}.png`);
+    }
+
+    // Priority 7: Fallback to Oyl CDN for Alkanes tokens (skip local attempts)
+    if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
       const urlSafeId = id.replace(/:/g, '-');
       paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
     }
-    
-    // Priority 6: Try local token assets by symbol
-    if (symbol) {
-      paths.push(`/tokens/${symbol.toLowerCase()}.svg`);
-      paths.push(`/tokens/${symbol.toLowerCase()}.png`);
-    }
-    
-    // Priority 7: Try local files with alkane ID format (legacy support)
-    if (id && /^\d+:\d+/.test(id)) {
-      const urlSafeId = id.replace(/:/g, '-');
-      paths.push(`/tokens/${urlSafeId}.svg`);
-      paths.push(`/tokens/${urlSafeId}.png`);
-    }
-    
-    // Priority 8: Try local token assets by id (non-alkane IDs)
-    if (id && id !== symbol && !/^\d+:\d+/.test(id)) {
-      paths.push(`/tokens/${id.toLowerCase()}.svg`);
-      paths.push(`/tokens/${id.toLowerCase()}.png`);
-    }
-    
-    return paths;
-  };
 
-  const [iconPaths] = useState(getIconPaths());
+    return paths;
+  }, [symbol, id, iconUrl, network]);
+
+  // Use useMemo to recompute icon paths when id, symbol, iconUrl, or network changes
+  const iconPaths = useMemo(() => getIconPaths(), [getIconPaths]);
   const [currentPathIndex, setCurrentPathIndex] = useState(0);
+
   const currentPath = iconPaths[currentPathIndex];
+
+  // Reset path index when icon paths change (props updated)
+  useEffect(() => {
+    setCurrentPathIndex(0);
+    setHasError(false);
+    setIsLoading(true);
+  }, [getIconPaths]);
+
+  // Handle cached images that load before onLoad handler is attached
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setIsLoading(false);
+    }
+  }, [currentPath]);
   
   // Fallback gradient colors based on symbol
   const getGradientColors = (sym: string) => {
@@ -112,9 +130,6 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
   const gradient = getGradientColors(symbol || id || 'BTC');
   const sizeClass = sizeMap[size];
   const displayText = (symbol || id || '??').slice(0, 2).toUpperCase();
-  
-  // Check if this token should be displayed as a circle
-  const shouldBeCircular = symbol === 'ALKAMIST' || symbol === 'GOLD DUST';
 
   const handleError = () => {
     // Try next path if available
@@ -135,18 +150,20 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     );
   }
 
+  // All token icons are rendered as circles
   return (
-    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center ${shouldBeCircular ? 'overflow-hidden rounded-full' : ''}`}>
+    <div className={`${sizeClass} ${className} relative inline-flex items-center justify-center overflow-hidden rounded-full`}>
       {isLoading && (
         <div className={`absolute inset-0 inline-flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} font-bold text-white`}>
           {displayText}
         </div>
       )}
       <img
+        ref={imgRef}
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}
-        className={`${sizeClass} ${className} object-contain transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        className={`${sizeClass} rounded-full object-cover transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
         onError={handleError}
       />

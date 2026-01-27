@@ -13,13 +13,16 @@ export interface VaultConfig {
   outputAsset: string;
   estimatedApy?: string;
   historicalApy?: string;
+  apyHistory?: number[]; // 30-day APY history for sparkline
   riskLevel?: 'low' | 'medium' | 'high' | 'very-high';
   // Boost configuration
   hasBoost: boolean;
   boostTokenSymbol?: string; // e.g., "vxDIESEL"
   boostTokenName?: string;
+  boostTokenId?: string; // Alkane ID for boost token icon
+  boostIconPath?: string; // Direct path to boost token icon
   boostMultiplier?: number; // Boost multiplier value (e.g., 1.5 for 1.5x)
-  isBoostComingSoon?: boolean; // For FROST-based boosts
+  isBoostComingSoon?: boolean; // For FUEL-based boosts
   escrowNftName?: string; // For special vaults like dxBTC
 }
 
@@ -36,6 +39,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     inputAsset: 'frBTC',
     outputAsset: 'yvfrBTC',
     estimatedApy: '4.2',
+    apyHistory: [3.9, 3.9, 4.0, 4.0, 4.0, 4.1, 4.1, 4.1, 4.1, 4.2, 4.2, 4.2, 4.1, 4.2, 4.2, 4.2, 4.2, 4.3, 4.3, 4.2, 4.3, 4.3, 4.3, 4.3, 4.2, 4.3, 4.3, 4.3, 4.4, 4.3],
     riskLevel: 'medium',
     hasBoost: false, // No boost for yvfrBTC
   },
@@ -52,10 +56,12 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     inputAsset: 'DIESEL',
     outputAsset: 'veDIESEL',
     estimatedApy: '21',
+    apyHistory: [17, 18, 19, 19, 18, 19, 20, 21, 20, 20, 21, 21, 22, 21, 20, 21, 22, 22, 21, 22, 23, 22, 22, 23, 23, 22, 23, 22, 23, 22],
     riskLevel: 'very-high',
     hasBoost: true,
     boostTokenSymbol: 'vxDIESEL',
     boostTokenName: 'Staked DIESEL Gauge',
+    boostTokenId: '2:0', // Uses DIESEL icon from Oyl CDN
     boostMultiplier: 1.5,
   },
   {
@@ -71,10 +77,12 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     inputAsset: 'ORDI',
     outputAsset: 'veORDI',
     estimatedApy: '24',
+    apyHistory: [21, 21, 21, 22, 22, 22, 22, 22, 23, 23, 23, 23, 23, 23, 24, 24, 24, 24, 24, 24, 24, 25, 25, 25, 25, 24, 25, 25, 25, 25],
     riskLevel: 'very-high',
     hasBoost: true,
     boostTokenSymbol: 'vxORDI',
     boostTokenName: 'Staked ORDI Gauge',
+    boostIconPath: '/tokens/ordi.svg', // Uses ORDI local icon
     boostMultiplier: 1.5,
   },
   {
@@ -90,35 +98,18 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     inputAsset: 'bUSD',
     outputAsset: 'veUSD',
     estimatedApy: '3.8',
+    apyHistory: [3.5, 3.5, 3.5, 3.6, 3.6, 3.6, 3.6, 3.6, 3.6, 3.7, 3.7, 3.7, 3.7, 3.7, 3.7, 3.7, 3.8, 3.8, 3.8, 3.8, 3.8, 3.8, 3.8, 3.8, 3.9, 3.9, 3.9, 3.9, 3.9, 3.9],
     riskLevel: 'low',
     hasBoost: true,
     boostTokenSymbol: 'vxUSD',
     boostTokenName: 'Staked USD Gauge',
-    boostMultiplier: 1.5,
-  },
-  {
-    id: 've-methane',
-    name: 'veMETHANE Vault',
-    description: 'Stake METHANE for boosted yield',
-    tokenId: '2:16', // METHANE alkane ID
-    tokenSymbol: 'METHANE',
-    iconPath: '/tokens/methane.png',
-    contractAddress: '0x...',
-    badge: 'Coming Soon',
-    type: 'unit-vault',
-    inputAsset: 'METHANE',
-    outputAsset: 'veMETHANE',
-    estimatedApy: '27',
-    riskLevel: 'very-high',
-    hasBoost: true,
-    boostTokenSymbol: 'vxMETHANE',
-    boostTokenName: 'Staked METHANE Gauge',
+    boostIconPath: '/tokens/usdt_snowflake.svg', // Uses USD snowflake icon
     boostMultiplier: 1.5,
   },
   {
     id: 'dx-btc',
     name: 'dxBTC Token',
-    description: 'Stake BTC/frBTC for pure BTC yield',
+    description: 'Stake BTC or frBTC for pure BTC yield',
     tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     iconPath: '/tokens/btc_snowflake.svg',
@@ -128,50 +119,14 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     inputAsset: 'BTC',
     outputAsset: 'dxBTC',
     estimatedApy: '5.2',
+    apyHistory: [4.9, 5.0, 5.0, 5.1, 5.1, 5.2, 5.1, 5.0, 4.9, 4.9, 5.0, 5.0, 5.1, 5.1, 5.2, 5.2, 5.2, 5.3, 5.3, 5.3, 5.4, 5.4, 5.3, 5.4, 5.4, 5.4, 5.5, 5.4, 5.5, 5.4],
     riskLevel: 'medium',
     hasBoost: true,
-    boostTokenSymbol: 'vxFROST',
-    boostTokenName: 'Staked FROST',
+    boostTokenSymbol: 'vxFUEL',
+    boostTokenName: 'Staked FUEL',
+    boostIconPath: '/tokens/btc_snowflake.svg', // Uses BTC snowflake icon as placeholder
     boostMultiplier: 1.5,
-    isBoostComingSoon: true, // Grey out FROST features
+    isBoostComingSoon: true, // Grey out FUEL features
     escrowNftName: 'Escrow NFT', // TODO: needs proper name
-  },
-  {
-    id: 've-zec',
-    name: 'veZEC Vault',
-    description: 'Stake Zcash for boosted yield',
-    tokenId: 'zec_snowflake',
-    tokenSymbol: 'ZEC',
-    iconPath: '/tokens/zec_snowflake.svg',
-    contractAddress: '0x...',
-    badge: 'Coming Soon',
-    type: 'unit-vault',
-    inputAsset: 'ZEC',
-    outputAsset: 'veZEC',
-    estimatedApy: '8.6',
-    riskLevel: 'high',
-    hasBoost: true,
-    boostTokenSymbol: 'vxZEC',
-    boostTokenName: 'Staked ZEC Gauge',
-    boostMultiplier: 1.5,
-  },
-  {
-    id: 've-eth',
-    name: 'veETH Vault',
-    description: 'Stake Ethereum for boosted yield',
-    tokenId: 'eth_snowflake',
-    tokenSymbol: 'ETH',
-    iconPath: '/tokens/eth_snowflake.svg',
-    contractAddress: '0x...',
-    badge: 'Coming Soon',
-    type: 'unit-vault',
-    inputAsset: 'ETH',
-    outputAsset: 'veETH',
-    estimatedApy: '7.4',
-    riskLevel: 'high',
-    hasBoost: true,
-    boostTokenSymbol: 'vxETH',
-    boostTokenName: 'Staked ETH Gauge',
-    boostMultiplier: 1.5,
   },
 ];
