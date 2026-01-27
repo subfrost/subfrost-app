@@ -93,14 +93,14 @@ export default function BalancesPanel() {
     <div className="space-y-6">
       {/* Bitcoin Balance */}
       <div className="rounded-xl bg-gradient-to-br from-orange-500/10 to-orange-600/5 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-orange-500/20 border border-orange-500/30">
-              <Bitcoin size={28} className="text-orange-400" />
+        <div className="flex items-center justify-between mb-6 gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="p-2 sm:p-3 rounded-xl bg-orange-500/20 border border-orange-500/30 shrink-0">
+              <Bitcoin size={24} className="text-orange-400 sm:w-7 sm:h-7" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">Bitcoin Balance</div>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)] whitespace-nowrap">{showValue(`${totalBTC} BTC`)}</div>
+              <div className="text-lg sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)] break-words">{showValue(`${totalBTC} BTC`)}</div>
               <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
                 {isLoadingData ? (
                   <span>Loading...</span>
@@ -113,10 +113,10 @@ export default function BalancesPanel() {
           <button
             onClick={handleRefresh}
             disabled={isLoadingData}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
+            className="p-1.5 sm:p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50 shrink-0"
             title="Refresh balances"
           >
-            <RefreshCw size={20} className={isLoadingData ? 'animate-spin' : ''} />
+            <RefreshCw size={18} className={`${isLoadingData ? 'animate-spin' : ''} sm:w-5 sm:h-5`} />
           </button>
         </div>
 
@@ -219,17 +219,17 @@ export default function BalancesPanel() {
                 <span className="text-sm font-medium text-green-400">Claimed</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30">
-                <Lock size={14} className="text-amber-400" />
-                <span className="text-sm font-medium text-amber-400">1+ Year</span>
+              <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30">
+                <Lock size={12} className="text-amber-400" />
+                <span className="text-xs sm:text-sm font-medium text-amber-400 whitespace-nowrap">1+ Year</span>
               </div>
             )}
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-amber-500/20">
           <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
-            Your FUEL allocation is reserved and will be released after TGE on the same schedule as investors. If you are allocated FUEL, you must have patience. We will schedule our TGE to maximize investment returns NOT to earn quick profits.</p>
-        </div>
+            Your FUEL allocation is reserved and will be released after TGE on the same schedule as Seed investors.  </p>
+             </div>
       </div>
 
       {/* Token Assets - 2 column grid */}

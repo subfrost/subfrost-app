@@ -423,9 +423,9 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   onFocus={() => setLockPeriodFocused(true)}
                   onBlur={() => setLockPeriodFocused(false)}
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${lockPeriodFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={`h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${lockPeriodFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
-                <span className="text-sm text-[color:var(--sf-text)]/70">blocks</span>
+                <span className="text-base text-[color:var(--sf-text)]/70">blocks</span>
               </div>
             </div>
             <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
@@ -438,7 +438,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
             type="button"
             onClick={handleBuy}
             disabled={isConnected && !canBuy}
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-base uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
           >
             {isConnected ? 'Buy ftrBTC' : 'Connect Wallet'}
           </button>
@@ -452,13 +452,13 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
               <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Yield</div>
+                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">Total Yield</div>
                     <div className={`text-3xl font-bold ${aggregatedYield >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {aggregatedYield >= 0 ? '+' : ''}{aggregatedYield.toFixed(2)}%
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Profit</div>
+                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">Total Profit</div>
                     <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} BTC
                     </div>
@@ -468,19 +468,19 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 <div className="grid grid-cols-3 gap-2 sm:gap-4 pt-4 border-t border-[color:var(--sf-row-border)]">
                   <div className="text-left">
                     <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment</div>
-                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                    <div className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)]">
                       {totalInvestment.toFixed(4)} <span className="text-xs text-[color:var(--sf-text)]/60">BTC</span>
                     </div>
                   </div>
                   <div className="text-center">
                     <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Contracts</div>
-                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                    <div className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)]">
                       {payoutMarkers.length}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout</div>
-                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                    <div className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)]">
                       {totalPayout.toFixed(4)} <span className="text-xs text-[color:var(--sf-text)]/60">BTC</span>
                     </div>
                   </div>
@@ -581,8 +581,8 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between">
-                              <div className="truncate text-sm font-bold text-[color:var(--sf-text)]">{marker.contractId}</div>
-                              <div className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-bold border ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]' : 'bg-[color:var(--sf-info-red-bg)] border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)]'}`}>
+                              <div className="truncate text-base font-bold text-[color:var(--sf-text)]">{marker.contractId}</div>
+                              <div className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-base font-bold border ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]' : 'bg-[color:var(--sf-info-red-bg)] border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)]'}`}>
                                 {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%
                               </div>
                             </div>

@@ -342,7 +342,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
             placeholder="bc1q... or 1... or 3..."
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
 
@@ -404,7 +404,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
                   placeholder="10"
-                  className="h-10 w-36 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="h-10 w-36 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-3 pr-20 text-base font-semibold text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sat/vB</span>
               </div>

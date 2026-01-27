@@ -433,7 +433,7 @@ export default function SwapInputs({
             onFocus={() => setEthAddressFocused(true)}
             onBlur={() => setEthAddressFocused(false)}
             placeholder="Enter USDT recipient address (0x...)"
-            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms]"
+            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms]"
           />
           <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
             Enter the Ethereum address where you want to receive USDT.

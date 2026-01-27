@@ -90,7 +90,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                   }}
                   onFocus={() => setFocusedField('slippage')}
                   onBlur={() => setFocusedField(null)}
-                  className={`h-10 w-28 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-10 text-sm font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
+                  className={`h-10 w-28 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-10 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
               </div>
@@ -113,7 +113,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
               }}
               onFocus={() => setFocusedField('deadline')}
               onBlur={() => setFocusedField(null)}
-              className={`h-10 w-32 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-sm font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
+              className={`h-10 w-32 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
             />
           </section>
 
@@ -167,7 +167,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                       onFocus={() => setFocusedField('fee')}
                       onBlur={() => setFocusedField(null)}
                       placeholder="0"
-                      className={`h-10 w-36 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-20 text-sm font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
+                      className={`h-10 w-36 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-20 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sats/vB</span>
                   </div>
