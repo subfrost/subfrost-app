@@ -218,17 +218,12 @@ export default function BalancesPanel() {
                 <div className="w-2 h-2 rounded-full bg-green-400" />
                 <span className="text-sm font-medium text-green-400">Claimed</span>
               </div>
-            ) : (
-              <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30">
-                <Lock size={12} className="text-amber-400" />
-                <span className="text-xs sm:text-sm font-medium text-amber-400 whitespace-nowrap">1+ Year</span>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-amber-500/20">
           <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
-            Your FUEL allocation is reserved and will be released after TGE on the same schedule as Seed investors.  </p>
+          Your FUEL allocation is reserved and will be released after TGE on the same schedule as other investors. </p>
              </div>
       </div>
 

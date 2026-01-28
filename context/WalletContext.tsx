@@ -424,6 +424,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {
+    // Debug: check Web Crypto API availability before keystore creation
+    console.log('[Wallet] isSecureContext:', typeof window !== 'undefined' && window.isSecureContext);
+    console.log('[Wallet] window.crypto exists:', typeof window !== 'undefined' && !!window.crypto);
+    console.log('[Wallet] window.crypto.subtle exists:', typeof window !== 'undefined' && !!window.crypto?.subtle);
+    console.log('[Wallet] Current origin:', typeof window !== 'undefined' && window.location.origin);
+
     // createKeystore generates mnemonic and returns both encrypted keystore and mnemonic
     const sdkNetwork = toSdkNetwork(network);
     const { keystore: encrypted, mnemonic } = await createKeystore(password, { network: sdkNetwork });
