@@ -56,10 +56,12 @@ const POOL_OPCODES = {
 const FRBTC_WRAP_OPCODE = 77;
 
 // Hardcoded signer addresses per network (same as useWrapMutation)
+// Derived from frBTC contract [32:0] opcode 103 (GET_SIGNER).
+// If the frBTC contract is redeployed, update these. See useWrapMutation.ts header.
 const SIGNER_ADDRESSES: Record<string, string> = {
-  'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
+  'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
 };
 
 // Helper to convert Uint8Array to base64
@@ -102,9 +104,12 @@ function buildWrapSwapProtostone(params: {
   const poolTx = poolId.tx.toString();
 
   // p0: Wrap - call frBTC contract (opcode 77)
-  // pointer=p1 directs minted frBTC to the next protostone (swap)
+  // pointer=p1 directs minted frBTC to next protostone (swap)
   // refund=v0 sends any refunds to user
-  const wrapCellpack = [frbtcBlock, frbtcTx, FRBTC_WRAP_OPCODE].join(',');
+  // Convert block/tx to numbers for proper protobuf encoding
+  const blockNum = parseInt(frbtcBlock, 10);
+  const txNum = parseInt(frbtcTx, 10);
+  const wrapCellpack = `${blockNum},${txNum},${FRBTC_WRAP_OPCODE}`;
   const p0 = `[${wrapCellpack}]:p1:v0`;
 
   // p1: Swap - call pool contract (opcode 3)
@@ -155,9 +160,9 @@ export function useWrapSwapMutation() {
 
   return useMutation({
     mutationFn: async (data: WrapSwapTransactionData) => {
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═════════════════════════════════════════════════════════');
       console.log('[WrapSwap] ████ ONE-CLICK BTC → TOKEN MUTATION STARTED ████');
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═══════════════════════════════════════════════════════════');
       console.log('[WrapSwap] Input data:', JSON.stringify(data, null, 2));
       console.log('[WrapSwap] Network:', network);
       console.log('[WrapSwap] FRBTC_ALKANE_ID:', FRBTC_ALKANE_ID);
@@ -233,9 +238,9 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] From addresses:', fromAddresses);
       console.log('[WrapSwap] To addresses:', toAddresses);
 
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═════════════════════════════════════════════════════════');
       console.log('[WrapSwap] ████ EXECUTING ATOMIC WRAP+SWAP ████');
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═══════════════════════════════════════════════════════════');
 
       try {
         // Execute using alkanesExecuteTyped
@@ -331,9 +336,9 @@ export function useWrapSwapMutation() {
 
         throw new Error('WrapSwap execution did not return a transaction ID');
       } catch (error: any) {
-        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('═════════════════════════════════════════════════════════════');
         console.error('[WrapSwap] ████ EXECUTE ERROR ████');
-        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('═════════════════════════════════════════════════════════════');
         console.error('[WrapSwap] Error:', error?.message);
         console.error('[WrapSwap] Stack:', error?.stack);
         throw error;

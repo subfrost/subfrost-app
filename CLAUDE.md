@@ -60,6 +60,14 @@ Pool Instances [2:N]  ────via beacon────▶  Pool Logic [4:65520
 
 **Key Insight:** Swaps and RemoveLiquidity call the POOL directly, not the factory.
 
+### frBTC Signer Address
+
+The frBTC contract [32:0] has a signer address derived from opcode 103 (GET_SIGNER). This is a P2TR address that must receive BTC for wraps to succeed. The CLI fetches it dynamically; the frontend hardcodes it in `useWrapMutation.ts` and `useWrapSwapMutation.ts`.
+
+**Current regtest signer:** `bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz`
+
+If the frBTC contract is redeployed, update this address in both files.
+
 ---
 
 ## The Two-Protostone Pattern
@@ -92,6 +100,10 @@ The CLI's `--inputs` flag auto-generates p0. The frontend manually constructs bo
 ### "pool doesn't exist in factory"
 **Cause:** Calling AddLiquidity (opcode 11) when pool doesn't exist.
 **Fix:** Use CreateNewPool (opcode 1) first, or check pool exists with opcode 2.
+
+### frBTC wrap sends BTC but never mints frBTC
+**Cause:** Stale hardcoded signer address. The frBTC contract only mints when BTC arrives at the address derived from its GET_SIGNER opcode (103). A wrong address means BTC goes to an unrelated output and the contract sees zero incoming BTC.
+**Fix:** Update `SIGNER_ADDRESSES` in `useWrapMutation.ts` and `useWrapSwapMutation.ts`. Get the correct address by running: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and checking which address receives BTC at output 0.
 
 ---
 
@@ -171,6 +183,15 @@ kubectl logs -n regtest-alkanes -l app=jsonrpc --tail=100
 - AddLiquidity (opcode 11) created new pools instead of adding to existing
 - Caused by missing pool existence check
 - **Lesson:** Always verify pool exists before AddLiquidity
+
+### 2026-01-28: frBTC Wrap Not Minting
+- BTC was sent but frBTC never minted to the user's wallet
+- Root cause: hardcoded signer address in `useWrapMutation.ts` was stale (`bcrt1p5lush...` instead of `bcrt1p466w...`)
+- The frBTC contract [32:0] only mints when BTC arrives at its signer address (derived from opcode 103 GET_SIGNER)
+- Also fixed output ordering to match CLI: signer at output 0 (v0), user at output 1 (v1)
+- Protostone changed from `[32,0,77]:v0:v0` to `[32,0,77]:v1:v1`, inputRequirements from `B:<sats>` to `B:<sats>:v0`
+- Same stale address was present in `useWrapSwapMutation.ts` and was fixed there too
+- **Lesson:** When wrap transactions silently fail (BTC sent, no tokens minted), check the signer address first. Run the CLI wrap-btc command to see the correct address. WASM and CLI share the same Rust encoding path, so if the CLI works, the protostone format is correct.
 
 ### 2026-01-12: Genesis Alkanes Missing
 - `--features regtest` flag missing in metashrew build

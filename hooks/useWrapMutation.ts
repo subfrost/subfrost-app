@@ -5,55 +5,55 @@
  *
  * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
  * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
+ *
+ * ## Implementation Note (2026-01-28)
+ *
+ * Uses alkanesExecuteTyped from the extended provider for cleaner parameter handling.
+ * Uses symbolic addresses (p2tr:0, p2wpkh:0) for user addresses.
+ *
+ * ## Critical: Output Ordering & Signer Address (2026-01-28)
+ *
+ * The wrap transaction MUST match the CLI (wrap_btc.rs) output ordering:
+ *
+ *   - Output 0 (v0): Signer address — receives BTC via `B:amount:v0`
+ *   - Output 1 (v1): User taproot address — receives minted frBTC via pointer=v1
+ *
+ * The protostone is `[32,0,77]:v1:v1` meaning:
+ *   - Cellpack: frBTC contract [32:0], opcode 77 (wrap)
+ *   - pointer=v1: minted frBTC goes to output 1 (user)
+ *   - refund=v1: refunds go to output 1 (user)
+ *
+ * `inputRequirements = "B:<sats>:v0"` explicitly assigns BTC value to output 0 (signer).
+ *
+ * ### Signer Address
+ *
+ * The signer address is the P2TR address derived from the frBTC contract's GET_SIGNER
+ * opcode (103). The CLI fetches this dynamically via `get_subfrost_address()` in
+ * `subfrost.rs`, which calls opcode 103 on [32:0], receives a 32-byte x-only pubkey,
+ * and converts it to a P2TR (bc1p...) address.
+ *
+ * For the frontend, we hardcode this address per network. If the frBTC contract is
+ * redeployed with a different signer key, this address MUST be updated. You can
+ * obtain the correct address by running:
+ *
+ *   alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1
+ *
+ * and observing which address the CLI sends BTC to at output 0.
+ *
+ * ### Debugging History
+ *
+ * The original bug was that BTC was sent but frBTC was never minted. Root cause:
+ * a stale hardcoded signer address. The frBTC contract only mints when BTC arrives
+ * at its expected signer address. A wrong address means BTC is lost to an unrelated
+ * output and the contract sees no incoming BTC. The protostone encoding (two-layer
+ * Protocol field with ProtoPointer/Refund inside Protocol tag 16383) was correct
+ * all along — both WASM and CLI share the same Rust encoding path.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
-
-// Helper to recursively convert serde_wasm_bindgen Maps to plain objects
-// The WASM SDK returns nested Maps that need to be converted
-function mapToObject(value: any): any {
-  if (value instanceof Map) {
-    const obj: Record<string, any> = {};
-    for (const [k, v] of value.entries()) {
-      obj[k] = mapToObject(v);
-    }
-    return obj;
-  }
-  if (Array.isArray(value)) {
-    return value.map(mapToObject);
-  }
-  // Handle objects with numeric keys (WASM sometimes returns these for arrays)
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const keys = Object.keys(value);
-    // Check if this looks like an array (all numeric keys)
-    if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
-      // Could be a pseudo-array, check if sequential
-      const numKeys = keys.map(Number).sort((a, b) => a - b);
-      if (numKeys[0] === 0 && numKeys[numKeys.length - 1] === numKeys.length - 1) {
-        // It's a pseudo-array, convert to real array
-        return numKeys.map(k => mapToObject(value[k]));
-      }
-    }
-    // Regular object, convert each property
-    const obj: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value)) {
-      obj[k] = mapToObject(v);
-    }
-    return obj;
-  }
-  return value;
-}
-
-export type WrapTransactionBaseData = {
-  amount: string; // display units (BTC)
-  feeRate: number; // sats/vB
-};
-
-// frBTC wrap opcode (exchange BTC for frBTC)
-const FRBTC_WRAP_OPCODE = 77;
 
 // Helper to convert Uint8Array to base64
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -64,65 +64,46 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Hardcoded signer addresses per network
-// These are the multisig addresses configured in each frBTC contract deployment
-// NOTE: These addresses depend on how the frBTC contract was deployed on each network.
-// For regtest, this was found by examining successful wrap transactions.
-// If wraps fail, verify the signer address matches the contract's configured signer.
-const SIGNER_ADDRESSES: Record<string, string> = {
-  'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
+export type WrapTransactionBaseData = {
+  amount: string; // display units (BTC)
+  feeRate: number; // sats/vB
 };
 
-/**
- * Get the signer address for the frBTC contract
- * Uses hardcoded addresses since simulate calls don't work reliably on regtest
- */
+// frBTC wrap opcode (exchange BTC for frBTC)
+const FRBTC_WRAP_OPCODE = 77;
+
+// Signer addresses per network - fetched from frBTC contract opcode 103 (GET_SIGNER)
+// The CLI derives this dynamically via get_subfrost_address().
+// Must match the address the frBTC contract expects BTC to be sent to.
+const SIGNER_ADDRESSES: Record<string, string> = {
+  'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+};
+
 function getSignerAddress(network: string): string {
   const signer = SIGNER_ADDRESSES[network];
   if (!signer) {
     throw new Error(`No signer address configured for network: ${network}`);
   }
-  console.log('[WRAP] Using signer address:', signer);
   return signer;
 }
 
 /**
  * Build protostone string for BTC -> frBTC wrap operation
- * Format: [frbtc_block,frbtc_tx,opcode(77)]:pointer:refund
- * Opcode 77 is the exchange/wrap opcode for frBTC contract
+ * Format: [cellpack]:pointer:refund
  *
- * For wrap transactions (output ordering):
- *   - Output 0 (v0): signer address (receives BTC - triggers frBTC minting)
+ * Output ordering matches CLI wrap_btc.rs:
+ *   - Output 0 (v0): signer address (receives BTC via B:amount:v0)
  *   - Output 1 (v1): user address (receives minted frBTC via pointer=v1)
- *   - Output 2+: change, OP_RETURN
- *
- * IMPORTANT: The signer address must receive the full BTC wrap amount.
- * NEW OUTPUT ORDER: User at v0 (receives frBTC), Signer at v1 (receives BTC).
- * The frBTC contract checks BTC sent to signer and mints frBTC to pointer output (v0=user).
  */
 function buildWrapProtostone(params: {
   frbtcId: string;
-  pointer?: string;
-  refund?: string;
 }): string {
-  // pointer: output index where minted frBTC should go
-  // refund: output index where refunds should go
-  //
-  // NEW OUTPUT ORDERING - user first, signer second:
-  //   - Output 0 (v0): user address (receives frBTC via pointer=v0)
-  //   - Output 1 (v1): signer address (receives BTC via B:amount:v1)
-  //
-  // pointer=v0 ensures frBTC goes to user at output 0
-  const { frbtcId, pointer = 'v0', refund = 'v0' } = params;
-  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-
-  // Build cellpack: [frbtc_block, frbtc_tx, opcode(77)]
-  const cellpack = [frbtcBlock, frbtcTx, FRBTC_WRAP_OPCODE].join(',');
-
-  // Format: [cellpack]:pointer:refund
-  return `[${cellpack}]:${pointer}:${refund}`;
+  const [frbtcBlock, frbtcTx] = params.frbtcId.split(':');
+  const cellpack = `${frbtcBlock},${frbtcTx},${FRBTC_WRAP_OPCODE}`;
+  // pointer=v1 (user at output 1), refund=v1 (user at output 1)
+  return `[${cellpack}]:v1:v1`;
 }
 
 export function useWrapMutation() {
@@ -162,73 +143,57 @@ export function useWrapMutation() {
       const wrapAmountSats = Math.floor(parseFloat(wrapData.amount) * 100000000);
       console.log('[WRAP] Starting wrap:', wrapAmountSats, 'sats');
 
-      // Build protostone for wrap operation
+      // Build protostone: [32,0,77]:v1:v1
+      // pointer=v1 sends minted frBTC to output 1 (user)
+      // refund=v1 sends any refund to output 1 (user)
       const protostone = buildWrapProtostone({
         frbtcId: FRBTC_ALKANE_ID,
       });
-      console.log('[WRAP] Protostone:', protostone, '(frbtcId:', FRBTC_ALKANE_ID, ')');
 
-      // Input requirements: BTC amount in sats directed to specific output
-      // Format is "B:amount:v1" - direct all BTC to output v1 (signer address)
-      // Output v0 (user) receives dust (546 sats) to hold the minted frBTC
-      // Output v1 (signer) receives the full wrap amount
-      const inputRequirements = `B:${wrapAmountSats}:v1`;
+      // Input requirements: BTC amount assigned to output v0 (signer)
+      // B:amount:v0 tells the SDK to set output 0's value to the wrap amount
+      const inputRequirements = `B:${wrapAmountSats}:v0`;
 
-      // Get user's taproot address (receives minted frBTC)
+      // Get user's taproot address for output labeling
       const userTaprootAddress = account?.taproot?.address;
       if (!userTaprootAddress) throw new Error('No taproot address available');
 
       // Get bitcoin network for PSBT parsing
       const btcNetwork = getBitcoinNetwork();
 
-      // Get the signer address for this network (hardcoded per network)
+      // Get the signer address for this network
       const signerAddress = getSignerAddress(network);
 
-      // to_addresses: [user, signer]
-      // - Output 0 (v0): user address (receives minted frBTC via pointer=v0)
-      // - Output 1 (v1): signer address (receives full wrap BTC amount via B:amount:v1)
-      // NOTE: User is FIRST (v0) so pointer=v0 sends frBTC to user
-      const toAddresses = JSON.stringify([userTaprootAddress, signerAddress]);
+      // to_addresses: [signer (actual), user (symbolic)]
+      // Matches CLI wrap_btc.rs output ordering:
+      //   Output 0 (v0): signer (receives BTC via B:amount:v0)
+      //   Output 1 (v1): user (receives minted frBTC via pointer=v1)
+      const toAddresses = [signerAddress, 'p2tr:0'];
 
-      // Get both taproot and segwit addresses for UTXOs
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address available for UTXOs');
-
-      // Build list of actual addresses to source funds from
-      // alkanesExecuteWithStrings requires actual Bitcoin addresses, NOT symbolic references
-      // (Symbolic references like 'p2wpkh:0' only work with alkanesExecuteTyped)
-      const fromAddresses: string[] = [];
-      if (segwitAddress) fromAddresses.push(segwitAddress);
-      if (taprootAddress) fromAddresses.push(taprootAddress);
-
-      console.log('[WRAP] Sourcing from addresses:', fromAddresses);
-
-      // Options for the SDK - source from both segwit and taproot
-      // Use actual addresses for change outputs
-      const options: Record<string, any> = {
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: false,  // We'll handle signing ourselves
-        change_address: segwitAddress || taprootAddress,  // BTC change to SegWit
-        alkanes_change_address: taprootAddress,  // Alkane change to Taproot
-        from: fromAddresses,
-        from_addresses: fromAddresses,
-        lock_alkanes: true,
-      };
-
-      const optionsJson = JSON.stringify(options);
+      console.log('[WRAP] ============ alkanesExecuteTyped CALL ============');
+      console.log('[WRAP] to_addresses:', toAddresses);
+      console.log('[WRAP] input_requirements:', inputRequirements);
+      console.log('[WRAP] protostone:', protostone);
+      console.log('[WRAP] fee_rate:', wrapData.feeRate);
+      console.log('[WRAP] ===================================================');
 
       try {
-        // Execute using alkanesExecuteWithStrings
-        const result = await provider.alkanesExecuteWithStrings(
+        // Use alkanesExecuteTyped for cleaner parameter handling
+        const result = await provider.alkanesExecuteTyped({
           toAddresses,
           inputRequirements,
-          protostone,
-          wrapData.feeRate,
-          undefined, // envelope_hex
-          optionsJson
-        );
+          protostones: protostone,
+          feeRate: wrapData.feeRate,
+          // Use symbolic addresses for from/change (resolved by SDK)
+          fromAddresses: ['p2wpkh:0', 'p2tr:0'],
+          changeAddress: 'p2wpkh:0',
+          alkanesChangeAddress: 'p2tr:0',
+          autoConfirm: false,
+          traceEnabled: false,
+          mineEnabled: false,
+        });
+
+        console.log('[WRAP] Execute result:', result);
 
         // Check if execution completed (auto_confirm: true path)
         if (result?.complete) {
@@ -256,8 +221,7 @@ export function useWrapMutation() {
           }
 
           // Sign the PSBT with both SegWit and Taproot keys
-          // The SDK may select UTXOs from either address type
-          console.log('[WRAP] Signing PSBT with SegWit key first, then Taproot key...');
+          console.log('[WRAP] Signing PSBT...');
 
           // First sign with SegWit key (for native segwit inputs)
           let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
@@ -274,18 +238,19 @@ export function useWrapMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          // Log transaction outputs for debugging frBTC balance issue
+          // Log transaction outputs for debugging
           console.log('[WRAP] Transaction built:', txid);
           console.log('[WRAP] Outputs:');
           tx.outs.forEach((output, idx) => {
             const script = Buffer.from(output.script).toString('hex');
             if (script.startsWith('6a')) {
               console.log(`  [${idx}] OP_RETURN (protostone)`);
+              console.log(`        Script hex: ${script}`);
             } else {
               try {
                 const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
-                const label = addr === userTaprootAddress ? 'USER (receives frBTC)' :
-                             addr === signerAddress ? 'SIGNER (receives BTC)' : 'OTHER';
+                const label = addr === signerAddress ? 'SIGNER (BTC)' :
+                             addr === userTaprootAddress ? 'USER (frBTC)' : 'OTHER';
                 console.log(`  [${idx}] ${label}: ${output.value} sats -> ${addr}`);
               } catch {
                 console.log(`  [${idx}] Unknown: ${output.value} sats`);
@@ -305,17 +270,6 @@ export function useWrapMutation() {
           } as { success: boolean; transactionId?: string; wrapAmountSats?: number; txHex?: string };
         }
 
-        // Check if execution completed directly
-        if (result?.complete) {
-          const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[WRAP] Complete, txid:', txId);
-          return {
-            success: true,
-            transactionId: txId,
-            wrapAmountSats,
-          } as { success: boolean; transactionId?: string; wrapAmountSats?: number };
-        }
-
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
         console.log('[WRAP] Transaction ID:', txId);
@@ -333,16 +287,15 @@ export function useWrapMutation() {
     onSuccess: (data) => {
       console.log('[WRAP] Success! txid:', data.transactionId, 'amount:', data.wrapAmountSats, 'sats');
 
-      // Invalidate balance queries - balance will update when indexer processes the transaction
+      // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
-      // Invalidate activity feed so it shows the new wrap transaction
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[WRAP] Balance queries invalidated - waiting for indexer to process block');
+      console.log('[WRAP] Balance queries invalidated');
     },
   });
 }
