@@ -247,27 +247,14 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           
           {/* Settings rows - px-4 to align with Swap Route content */}
           <div className="flex flex-col gap-2.5 px-4">
-            {/* Exchange Rate - desktop only (mobile shows it in the toggle header) */}
-            <div className="hidden md:block mt-2">
-              <Row
-                label="Exchange Rate"
-                value={
-                  isWrapPair
-                    ? '1 BTC = 1 frBTC'
-                    : isUnwrapPair
-                      ? '1 frBTC = 1 BTC'
-                      : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`
-                }
-              />
-            </div>
             {direction === 'sell' ? (
-              <Row className="mt-2 md:mt-0" label="Minimum Received" value={`${(() => {
+              <Row className="mt-3 md:mt-0" label="Minimum Received" value={`${(() => {
                 const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
                 const decimals = isBtcToken ? 8 : 2;
                 return formatAlks(quote.minimumReceived, decimals, decimals);
               })()} ${buyName ?? buyId}`} />
             ) : (
-              <Row className="mt-2 md:mt-0" label="Maximum Sent" value={`${(() => {
+              <Row className="mt-3 md:mt-0" label="Maximum Sent" value={`${(() => {
                 const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
                 const decimals = isBtcToken ? 8 : 2;
                 return formatAlks(quote.maximumSent, decimals, decimals);
