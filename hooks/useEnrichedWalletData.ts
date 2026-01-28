@@ -9,6 +9,26 @@
  * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + assets
  * 2. provider.alkanesByAddress(address) - Calls protorunesbyaddress for alkane balances
  * 3. provider.alkanesBalance(address) - Fallback for aggregated alkane balances
+ *
+ * JOURNAL ENTRY (2026-01-28):
+ * RESTORED esplora fallback for BTC balance fetching. The `enrichedbalances` lua view
+ * function is not deployed on the regtest indexer, causing getEnrichedBalances() to fail
+ * and BTC balances to show as 0. The fallback uses `esplora_address::utxo` RPC which
+ * works reliably on all environments.
+ *
+ * Additionally, CORS issues on regtest.subfrost.io block direct browser fetches from
+ * localhost. The fallback now uses `/api/rpc` proxy route (app/api/rpc/route.ts) to
+ * bypass CORS restrictions.
+ *
+ * TODO: Deploy balances.lua to regtest-alkanes namespace indexer (metashrew) so the
+ * primary lua-based flow works. Once deployed, this fallback becomes a safety net
+ * rather than the primary path for regtest.
+ *
+ * TODO: Fix CORS headers on regtest.subfrost.io nginx/ingress config to allow
+ * localhost origins, so the WASM SDK can make direct calls without proxy.
+ *
+ * Related: The fallback was removed in commit aeaf835 (2026-01-18) to "ensure production
+ * parity" but this broke regtest where the lua script wasn't deployed.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -156,6 +176,35 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         ]);
       };
 
+      // Fallback: fetch UTXOs via API proxy when lua scripts are unavailable
+      // Uses /api/rpc proxy to bypass CORS restrictions on regtest.subfrost.io
+      const fetchUtxosViaEsplora = async (address: string) => {
+        try {
+          // Use the API proxy route to bypass CORS
+          const response = await fetch('/api/rpc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'esplora_address::utxo',
+              params: [address],
+              id: 1
+            })
+          });
+          const json = await response.json();
+          if (json.result && Array.isArray(json.result)) {
+            return json.result.map((utxo: any) => ({
+              outpoint: `${utxo.txid}:${utxo.vout}`,
+              value: utxo.value,
+              height: utxo.status?.block_height || 0,
+            }));
+          }
+        } catch (err) {
+          console.error(`[BALANCE] esplora fallback failed for ${address}:`, err);
+        }
+        return null;
+      };
+
       // Use provider methods (lua scripts) for balance fetching
       // This is the production-aligned flow that works identically across all networks
       const enrichedDataPromises = addresses.map(async (address) => {
@@ -195,8 +244,26 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
           return { address, data: enrichedData };
         } catch (error) {
-          // Let the error propagate - no fallback to ensure production parity
-          console.error(`[BALANCE] getEnrichedBalances failed for ${address}:`, error);
+          // Fallback to esplora when lua scripts are unavailable (e.g., regtest without balances.lua)
+          console.warn(`[BALANCE] getEnrichedBalances failed for ${address}, trying esplora fallback:`, error);
+          try {
+            const spendable = await fetchUtxosViaEsplora(address);
+            if (spendable && spendable.length > 0) {
+              console.log(`[BALANCE] Esplora fallback succeeded for ${address}:`, spendable.length, 'UTXOs');
+              return {
+                address,
+                data: {
+                  spendable,
+                  assets: [],
+                  pending: [],
+                  ordHeight: 0,
+                  metashrewHeight: 0
+                }
+              };
+            }
+          } catch (fallbackError) {
+            console.error(`[BALANCE] Esplora fallback also failed for ${address}:`, fallbackError);
+          }
           return { address, data: null };
         }
       });
