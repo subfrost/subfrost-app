@@ -178,14 +178,20 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
       ) : quote ? (
         <>
           {/* Mobile: panel container with toggle + collapsible content */}
-          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] md:bg-transparent md:shadow-none md:backdrop-blur-none">
+          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible md:bg-transparent md:shadow-none md:backdrop-blur-none">
           {/* Mobile toggle button - hidden on md+ */}
           <button
             type="button"
             onClick={() => setMobileDetailsOpen(!mobileDetailsOpen)}
-            className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60 md:hidden"
+            className="flex items-center justify-between w-full p-4 text-xs font-semibold text-[color:var(--sf-text)]/60 md:hidden"
           >
-            <span>Details</span>
+            <span>
+              {isWrapPair
+                ? '1 BTC = 1 frBTC'
+                : isUnwrapPair
+                  ? '1 frBTC = 1 BTC'
+                  : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
+            </span>
             <ChevronDown
               size={14}
               className={`transition-transform duration-300 ${mobileDetailsOpen ? 'rotate-180' : ''}`}
@@ -193,7 +199,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           </button>
 
           {/* Details content: collapsible on mobile, always visible on md+ */}
-          <div className={`transition-all duration-300 ease-in-out overflow-hidden md:!max-h-none md:!opacity-100 md:!pb-0 ${mobileDetailsOpen ? 'max-h-[1000px] opacity-100 pb-4' : 'max-h-0 opacity-0 pb-0'}`}>
+          <div className={`transition-all duration-300 ease-in-out md:!max-h-none md:!opacity-100 md:!pb-0 md:!overflow-visible ${mobileDetailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
           {swapRoute && (
             <div className="rounded-2xl bg-transparent p-4 pb-0">
               <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
