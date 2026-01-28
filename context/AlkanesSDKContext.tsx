@@ -1,10 +1,48 @@
 'use client';
 
+/**
+ * AlkanesSDKContext - Provides WASM WebProvider for blockchain operations
+ *
+ * JOURNAL ENTRY (2026-01-28):
+ * Added browser-aware URL configuration to bypass CORS issues. When running in browser
+ * context on localhost (development), the SDK is configured to use `/api/rpc` proxy
+ * instead of direct calls to regtest.subfrost.io. This is necessary because:
+ *
+ * 1. The WASM SDK makes direct fetch calls internally for RPC operations
+ * 2. regtest.subfrost.io does not return proper CORS headers for localhost origins
+ * 3. Browser fetch calls get blocked with 403 Forbidden
+ *
+ * The proxy route (app/api/rpc/route.ts) forwards requests server-side, bypassing CORS.
+ *
+ * TODO: Fix CORS headers on regtest.subfrost.io nginx/ingress config to allow
+ * localhost origins, so the WASM SDK can make direct calls without proxy. Once fixed,
+ * this browser detection logic can be simplified or removed.
+ */
+
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Network } from '@/utils/constants';
 
 // Import the WASM WebProvider type
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
+
+/**
+ * Check if we're running in a browser context on localhost (development)
+ * Used to determine whether to route SDK calls through our proxy to avoid CORS
+ */
+const isBrowserLocalhost = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+};
+
+/**
+ * Get the proxy URL for SDK calls when in browser localhost context
+ * Returns the full origin + /api/rpc path
+ */
+const getProxyUrl = (): string => {
+  if (typeof window === 'undefined') return '';
+  return `${window.location.origin}/api/rpc`;
+};
 
 interface BitcoinPrice {
   usd: number;
@@ -48,10 +86,8 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   'subfrost-regtest': 'subfrost-regtest',
 };
 
-// Custom URL overrides for networks
-// Subfrost networks use /v4/subfrost endpoint for both jsonrpc and data_api
-// regtest-local uses local Docker environment (localhost:18888 for jsonrpc, localhost:4000 for data_api)
-const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
+// Direct URL configurations for each network (used in production or server-side)
+const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   mainnet: {
     jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
     data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
@@ -80,6 +116,37 @@ const NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
   },
+};
+
+/**
+ * Networks that should use proxy when in browser localhost context
+ * These are remote networks that don't have proper CORS headers configured
+ *
+ * JOURNAL ENTRY (2026-01-28):
+ * regtest, oylnet, subfrost-regtest all point to regtest.subfrost.io which
+ * blocks browser requests from localhost. regtest-local uses local Docker
+ * which doesn't have CORS issues (same origin or localhost).
+ */
+const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'mainnet', 'testnet', 'signet'];
+
+/**
+ * Get network configuration, using proxy URL when in browser localhost context
+ * for networks that have CORS issues
+ */
+const getNetworkConfig = (network: Network): Record<string, string> | undefined => {
+  const directConfig = DIRECT_NETWORK_CONFIG[network];
+
+  // If we're in browser localhost and this network needs proxy, use proxy URL
+  if (isBrowserLocalhost() && NETWORKS_NEEDING_PROXY.includes(network)) {
+    const proxyUrl = getProxyUrl();
+    console.log(`[AlkanesSDK] Using proxy URL for ${network}:`, proxyUrl);
+    return {
+      jsonrpc_url: proxyUrl,
+      data_api_url: proxyUrl,
+    };
+  }
+
+  return directConfig;
 };
 
 export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProps) {
@@ -115,8 +182,9 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         const wasm = await import('@alkanes/ts-sdk/wasm');
 
         // Get provider preset name and config overrides
+        // Uses proxy URL for networks with CORS issues when in browser localhost context
         const providerName = NETWORK_TO_PROVIDER[network] || 'mainnet';
-        const configOverrides = NETWORK_CONFIG[network];
+        const configOverrides = getNetworkConfig(network);
 
         // Create the WASM WebProvider
         const providerInstance = new wasm.WebProvider(providerName, configOverrides);

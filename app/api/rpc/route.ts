@@ -6,9 +6,21 @@
  * calls are blocked by CORS when the server doesn't return proper headers.
  *
  * JOURNAL ENTRY (2026-01-28):
- * Added to work around CORS issues on regtest.subfrost.io that were blocking
- * balance fetches from localhost:3001. The WASM SDK makes direct fetch calls
- * which get blocked, so this proxy allows the fallback esplora fetch to work.
+ * Created to work around CORS issues on regtest.subfrost.io (and other subfrost
+ * endpoints) that block browser requests from localhost origins.
+ *
+ * This proxy is used by:
+ * 1. useEnrichedWalletData.ts - for esplora_address::utxo fallback balance fetching
+ * 2. AlkanesSDKContext.tsx - WASM WebProvider configured to use this proxy when in
+ *    browser localhost context (jsonrpc_url and data_api_url point here)
+ *
+ * The WASM SDK makes direct fetch calls internally for all RPC operations (balance
+ * lookups, transaction building, UTXO selection, etc.). Without this proxy, the SDK
+ * would fail with 403 Forbidden errors when running on localhost.
+ *
+ * TODO: Fix CORS headers on subfrost.io nginx/ingress config to allow localhost
+ * origins, so direct calls can work without proxy. Once fixed, this proxy becomes
+ * a safety net rather than a required component.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
