@@ -247,15 +247,6 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           
           {/* Settings rows - px-4 to align with Swap Route content */}
           <div className="flex flex-col gap-2.5 px-4">
-            <Row
-              label="Exchange Rate"
-              value={isWrapPair
-                ? '1 BTC = 1 frBTC'
-                : isUnwrapPair
-                  ? '1 frBTC = 1 BTC'
-                  : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
-              highlight
-            />
             {direction === 'sell' ? (
               <Row label="Minimum Received" value={`${(() => {
                 const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
