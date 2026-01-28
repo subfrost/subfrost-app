@@ -205,17 +205,17 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
               <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
                 {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {swapRoute.map((step, index) => (
-                  <div key={`${step.id}-${index}`} className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-xs font-bold text-[color:var(--sf-primary)]">
+                  <div key={`${step.id}-${index}`} className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-[10px] font-bold text-[color:var(--sf-primary)]">
                         {index + 1}
                       </div>
-                      <span className="text-xs font-semibold text-[color:var(--sf-text)]">{step.symbol}</span>
+                      <span className="text-[11px] font-semibold text-[color:var(--sf-text)]">{step.symbol}</span>
                     </div>
                     {index < swapRoute.length - 1 && (
-                      <svg className="h-3 w-3 text-[color:var(--sf-primary)]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-2.5 w-2.5 text-[color:var(--sf-primary)]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
                       </svg>
                     )}
