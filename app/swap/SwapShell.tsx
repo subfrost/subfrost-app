@@ -831,6 +831,14 @@ export default function SwapShell() {
     }
 
     try {
+      // Pass poolId if we have a selected pool, so the mutation can call the pool directly
+      const poolId = selectedPool?.id
+        ? (() => {
+            const [block, tx] = selectedPool.id.split(':').map(Number);
+            return { block, tx };
+          })()
+        : undefined;
+
       const result = await addLiquidityMutation.mutateAsync({
         token0Id: poolToken0.id,
         token1Id: poolToken1.id,
@@ -841,6 +849,7 @@ export default function SwapShell() {
         maxSlippage,
         feeRate: fee.feeRate,
         deadlineBlocks,
+        poolId,
       });
 
       if (result?.success && result.transactionId) {

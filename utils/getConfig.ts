@@ -27,7 +27,7 @@ export function getConfig(network: string) {
     case 'regtest':
     case 'subfrost-regtest':
       return {
-        ALKANE_FACTORY_ID: '4:65522',
+        ALKANE_FACTORY_ID: '4:65498',
         BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0', // frBTC (hardcoded in indexer)

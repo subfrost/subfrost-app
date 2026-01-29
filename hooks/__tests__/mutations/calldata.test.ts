@@ -89,7 +89,10 @@ function buildWrapProtostone(params: {
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
 
   // Build cellpack: [frbtc_block, frbtc_tx, opcode(77)]
-  const cellpack = [frbtcBlock, frbtcTx, FRBTC_WRAP_OPCODE].join(',');
+  // Convert block/tx to numbers for proper protobuf encoding
+  const blockNum = parseInt(frbtcBlock, 10);
+  const txNum = parseInt(frbtcTx, 10);
+  const cellpack = `${blockNum},${txNum},${FRBTC_WRAP_OPCODE}`;
 
   return `[${cellpack}]:${pointer}:${refund}`;
 }
