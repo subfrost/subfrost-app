@@ -9,7 +9,7 @@
  * 1. **p0 (Edict)**: Transfer sell tokens (DIESEL) to p1 (swap call)
  *    - Format: [sellBlock:sellTx:sellAmount:p1]
  *
- * 2. **p1 (Swap)**: Calls pool contract with opcode 3
+ * 2. **p1 (Swap)**: Calls factory contract with opcode 13 (SwapExactTokensForTokens)
  *    - Input: DIESEL from p0 as `incomingAlkanes`
  *    - Output: frBTC directed to p2 (unwrap call) via pointer=p2
  *
@@ -17,19 +17,26 @@
  *    - Input: frBTC from p1 as `incomingAlkanes`
  *    - Output: BTC to user address (v0)
  *
+ * Note: We route through the factory (opcode 13) instead of calling the pool
+ * directly because the deployed pool logic is missing the Swap opcode (3).
+ *
  * ## Transaction Output Ordering
  *
  * - Output 0 (v0): User taproot address (receives final BTC)
  * - Output 1 (v1): Signer address (for unwrap BTC output)
  * - Output 2+: Change, OP_RETURN
  *
- * ## Why This Matters
+ * ### Journal: 2026-01-28 — Factory router fix applied
  *
- * Previously, Token → BTC required TWO transactions:
- * 1. Swap DIESEL to frBTC (wait for confirmation)
- * 2. Unwrap frBTC to BTC
+ * Previously p1 called the pool directly with opcode 3 (Swap). The deployed pool
+ * WASM at [4:65496] is missing opcode 3 — an older build. Swaps silently failed
+ * on-chain (no alkane state changes, no revert visible to user).
  *
- * Now it's ONE atomic transaction - simpler UX, fewer fees, instant.
+ * FIX: p1 now calls the factory [4:65498] with opcode 13 (SwapExactTokensForTokens).
+ * The factory has working router logic that executes swaps through pools internally.
+ * Cellpack format: [factory_block, factory_tx, 13, path_len, ...path, amount_in, min_out, deadline]
+ *
+ * See useSwapMutation.ts journal entry for full investigation details.
  *
  * @see useWrapSwapMutation.ts - The reverse flow (BTC → Token)
  * @see useSwapMutation.ts - Standalone swap logic
@@ -51,10 +58,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 
 bitcoin.initEccLib(ecc);
 
-// Pool operation codes
-const POOL_OPCODES = {
-  Swap: 3,
-};
+// Factory router opcode for swap
+const FACTORY_SWAP_OPCODE = 13; // SwapExactTokensForTokens
 
 // frBTC unwrap opcode (redeem frBTC for BTC)
 const FRBTC_UNWRAP_OPCODE = 78;
@@ -81,7 +86,7 @@ export type SwapUnwrapTransactionData = {
   expectedBtcAmount: string; // Expected BTC output in alks (sats)
   maxSlippage: string;      // Percent string, e.g., '0.5'
   feeRate: number;          // sats/vB
-  poolId: { block: string | number; tx: string | number };
+  poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
   deadlineBlocks?: number;  // Default 3
 };
 
@@ -90,35 +95,47 @@ export type SwapUnwrapTransactionData = {
  *
  * Three protostones chained:
  * - p0: Edict to transfer sell tokens to p1 (swap call)
- * - p1: Swap call with pointer=p2 to forward frBTC to unwrap
+ * - p1: Factory swap (opcode 13) with pointer=p2 to forward frBTC to unwrap
  * - p2: Unwrap call receives frBTC and outputs BTC
  *
- * Format: [sellBlock:sellTx:sellAmount:p1]:v0:v0,[pool_block,pool_tx,3,minFrbtc,deadline]:p2:v0,[frbtc_block,frbtc_tx,78]:v0:v0
+ * Format: [sellBlock:sellTx:sellAmount:p1]:v0:v0,[factory_block,factory_tx,13,...]:p2:v0,[frbtc_block,frbtc_tx,78]:v0:v0
  */
 function buildSwapUnwrapProtostone(params: {
   sellTokenId: string;      // e.g., "2:0" for DIESEL
   sellAmount: string;
   frbtcId: string;
-  poolId: { block: string | number; tx: string | number };
+  factoryId: string;
   minFrbtcOutput: string;   // Minimum frBTC from swap (before unwrap)
   deadline: string;
 }): string {
-  const { sellTokenId, sellAmount, frbtcId, poolId, minFrbtcOutput, deadline } = params;
+  const { sellTokenId, sellAmount, frbtcId, factoryId, minFrbtcOutput, deadline } = params;
 
   const [sellBlock, sellTx] = sellTokenId.split(':');
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const poolBlock = poolId.block.toString();
-  const poolTx = poolId.tx.toString();
+  const [factoryBlock, factoryTx] = factoryId.split(':');
 
   // p0: Edict - Transfer sell tokens to p1 (the swap call)
   // Format: [block:tx:amount:target]
   const edict = `[${sellBlock}:${sellTx}:${sellAmount}:p1]`;
   const p0 = `${edict}:v0:v0`;
 
-  // p1: Swap - call pool contract (opcode 3)
+  // p1: Swap - call factory with SwapExactTokensForTokens (opcode 13)
   // Receives sell tokens from p0 as incomingAlkanes
+  // Path: sellToken → frBTC
   // pointer=p2 directs frBTC output to the unwrap call
-  const swapCellpack = [poolBlock, poolTx, POOL_OPCODES.Swap, minFrbtcOutput, deadline].join(',');
+  const swapCellpack = [
+    factoryBlock,
+    factoryTx,
+    FACTORY_SWAP_OPCODE, // 13
+    2, // path_len
+    sellBlock,
+    sellTx,
+    frbtcBlock,
+    frbtcTx,
+    sellAmount,
+    minFrbtcOutput,
+    deadline,
+  ].join(',');
   const p1 = `[${swapCellpack}]:p2:v0`;
 
   // p2: Unwrap - call frBTC contract (opcode 78)
@@ -135,7 +152,7 @@ export function useSwapUnwrapMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
-  const { FRBTC_ALKANE_ID } = getConfig(network);
+  const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -179,7 +196,6 @@ export function useSwapUnwrapMutation() {
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
-      if (!data.poolId) throw new Error('Pool ID is required');
 
       // Get addresses
       const taprootAddress = account?.taproot?.address;
@@ -212,7 +228,7 @@ export function useSwapUnwrapMutation() {
         sellTokenId: data.sellCurrency,
         sellAmount: new BigNumber(data.sellAmount).integerValue(BigNumber.ROUND_FLOOR).toString(),
         frbtcId: FRBTC_ALKANE_ID,
-        poolId: data.poolId,
+        factoryId: ALKANE_FACTORY_ID,
         minFrbtcOutput: new BigNumber(minFrbtcFromSwap).integerValue(BigNumber.ROUND_FLOOR).toString(),
         deadline: deadline.toString(),
       });

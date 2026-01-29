@@ -742,7 +742,7 @@ export default function SwapShell() {
     // Default AMM swap (frBTC/DIESEL or other alkane pairs)
     if (!quote) return;
 
-    // Validate that we have a poolId - required for the two-protostone swap pattern
+    // Validate that we have a poolId - confirms a pool exists for this pair
     if (!quote.poolId) {
       console.error('[SWAP] No poolId in quote - cannot execute swap');
       window.alert('Swap failed: Pool not found. Please try again.');
@@ -758,7 +758,7 @@ export default function SwapShell() {
       maxSlippage,
       feeRate: fee.feeRate,
       tokenPath: quote.route ?? [fromToken.id, toToken.id],
-      poolId: quote.poolId, // Required for two-protostone swap pattern
+      poolId: quote.poolId,
       deadlineBlocks,
     } as const;
 

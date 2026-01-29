@@ -2,7 +2,10 @@
 
 > This file provides context for Claude Code (and other LLM instances) working on this codebase.
 > It is the single source of truth for architecture, debugging, and operational knowledge.
-> All insights are recorded here as journal entries — do NOT create separate docs/ files.
+
+## Documentation Rules
+
+**Journal entries / investigation notes MUST be written as inline comments in the relevant source files they pertain to — NOT in separate documentation files.** CLAUDE.md is for architectural reference and historical issues only. When documenting a fix or finding, put the notes directly in the file header comment of the hook, component, or utility that was affected. Never create standalone docs/ files for investigation notes.
 
 ## Critical Safety Rules
 
@@ -113,7 +116,7 @@ Source: `oyl-amm/alkanes/pool/src/lib.rs` + `oyl-amm/alkanes/alkanes-runtime-poo
 | 99 | GetName | Get pool name (returns String). |
 | 999 | PoolDetails | Get comprehensive pool details (returns Vec<u8>). |
 
-**Key Insight:** The factory has router methods (11, 12, 13, 14, 29) that call pools internally, AND pools have direct methods (1, 2, 3). Both work. The frontend calls the factory router for swaps (opcode 13) and calls pools directly for add/remove liquidity (opcodes 1, 2).
+**Key Insight:** The factory has router methods (11, 12, 13, 14, 29) that call pools internally, AND pools have direct methods (1, 2, 3). The frontend calls the **factory router for swaps** (opcode 13) because the deployed pool logic [4:65496] is missing Swap opcode 3. Pools are called directly for add liquidity (opcode 1) and remove liquidity (opcode 2), which DO work on the deployed pool.
 
 ### frBTC Signer Address
 
@@ -522,6 +525,45 @@ alkanes-cli -p subfrost-regtest bitcoind generatetoaddress 1 [self:p2tr:0]
 - Test WASMs from subfrost-consensus are NOT on-chain compatible.
 - Rate limiting (20 req/min) makes sequential deployments painful. Wait 90s between each step.
 - The `--trace` flag can cause "error decoding response body" for large WASMs. Omit it for deployments.
+
+### 2026-01-28: Swap Opcode Missing from Deployed Pool — Factory Router Fix
+
+**Symptom:** DIESEL → frBTC swaps would broadcast and confirm on Bitcoin, but no actual swap occurred. The user's DIESEL was not debited and no frBTC was received. Pool reserves remained unchanged.
+
+**Investigation timeline:**
+1. Traced swap transaction on-chain — it confirmed but `alkanes_protorunesbyoutpoint` returned empty for all outputs.
+2. Simulated pool [2:6] opcode 3 (Swap) → returned "Extcall failed: ALKANES: revert: Error: Unrecognized opcode".
+3. Systematically tested all pool opcodes. Results:
+   - Opcode 1 (AddLiquidity): WORKS
+   - Opcode 2 (RemoveLiquidity): WORKS
+   - Opcode 3 (Swap): "Unrecognized opcode" — **BROKEN**
+   - Opcode 4 (SimulateSwap): "Unrecognized opcode" — **BROKEN**
+   - Opcodes 97, 98, 999 (read-only): All work
+4. Ran `strings` on `prod_wasms/pool.wasm` — opcode 3 EXISTS in the binary but the **deployed** version at [4:65496] doesn't have it. The deployed WASM is an older build.
+5. Discovered factory contract [4:65498] has router opcodes 13 (SwapExactTokensForTokens) and 14 (SwapTokensForExactTokens) that route swaps internally through pools.
+6. Verified factory opcode 13 via `alkanes_simulate`: 10,000,000 DIESEL → 950,148 frBTC — **SUCCESS**.
+7. Updated all swap mutation hooks to route through factory opcode 13 instead of pool opcode 3.
+
+**Root cause:** The pool logic WASM deployed at [4:65496] is an older build missing Swap (opcode 3) and SimulateSwap (opcode 4). The factory contract at [4:65498] has working router opcodes (13, 14) that execute swaps by calling into pools internally via a different code path.
+
+**Files changed:**
+- `hooks/useSwapMutation.ts` — Changed `buildSwapProtostone` from `[pool,3,minOut,deadline]` to `[factory,13,pathLen,...path,amountIn,minOut,deadline]`
+- `hooks/useWrapSwapMutation.ts` — Updated p1 (swap step) from pool opcode 3 to factory opcode 13
+- `hooks/useSwapUnwrapMutation.ts` — Updated p1 (swap step) from pool opcode 3 to factory opcode 13
+- `hooks/useSwapQuotes.ts` — Updated comments; poolId field kept for reference/validation
+- `hooks/__tests__/mutations/calldata.test.ts` — Updated factory ID to `4:65498` and opcode to `13`
+- `app/swap/SwapShell.tsx` — Updated comments
+
+**Factory opcode 13 calldata format (verified working):**
+```
+cellpack: [factory_block, factory_tx, 13, path_len, sell_block, sell_tx, buy_block, buy_tx, amount_in, amount_out_min, deadline]
+alkanes: [{id: {block: sell_block, tx: sell_tx}, value: amount_in}]
+```
+
+**Lessons:**
+- The deployed pool WASM can be incomplete even when `prod_wasms/pool.wasm` has the correct opcodes. Always verify deployed contracts via `alkanes_simulate`.
+- Factory router opcodes (13, 14) are a viable alternative when pool direct opcodes are missing. The factory internally delegates to the pool using a different extcall path.
+- When swap transactions confirm but produce no state changes, check if the target opcode exists by simulating it directly.
 
 ### 2026-01-28: frBTC Wrap Not Minting
 - BTC was sent but frBTC never minted to the user's wallet

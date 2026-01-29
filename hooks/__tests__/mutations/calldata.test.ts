@@ -156,13 +156,13 @@ function buildVaultWithdrawProtostone(params: {
 // ==========================================
 
 describe('buildSwapProtostone', () => {
-  const FACTORY_ID = '4:65522';
+  const FACTORY_ID = '4:65498';
 
   describe('basic structure', () => {
     it('should build correct protostone for simple 2-token path', () => {
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1', // SwapExactTokensForTokens
+        opcode: '13', // SwapExactTokensForTokens
         tokenPath: ['32:0', '2:0'],
         amount: '100000000',
         limit: '99000000',
@@ -170,26 +170,26 @@ describe('buildSwapProtostone', () => {
       });
 
       // Format: [factory_block,factory_tx,opcode,path_len,...path_tokens,amount,limit,deadline]:pointer:refund
-      expect(protostone).toBe('[4,65522,1,2,32,0,2,0,100000000,99000000,1000000]:v1:v1');
+      expect(protostone).toBe('[4,65498,13,2,32,0,2,0,100000000,99000000,1000000]:v1:v1');
     });
 
     it('should build correct protostone for 3-token bridge path', () => {
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1',
+        opcode: '13',
         tokenPath: ['32:0', '100:0', '2:0'], // frBTC -> BUSD -> DIESEL
         amount: '100000000',
         limit: '99000000',
         deadline: '1000000',
       });
 
-      expect(protostone).toBe('[4,65522,1,3,32,0,100,0,2,0,100000000,99000000,1000000]:v1:v1');
+      expect(protostone).toBe('[4,65498,13,3,32,0,100,0,2,0,100000000,99000000,1000000]:v1:v1');
     });
 
     it('should use custom pointer and refund', () => {
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1',
+        opcode: '13',
         tokenPath: ['32:0', '2:0'],
         amount: '100000000',
         limit: '99000000',
@@ -203,38 +203,38 @@ describe('buildSwapProtostone', () => {
   });
 
   describe('opcode handling', () => {
-    it('should handle SwapExactTokensForTokens opcode (1)', () => {
+    it('should handle SwapExactTokensForTokens opcode (13)', () => {
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1',
+        opcode: '13',
         tokenPath: ['32:0', '2:0'],
         amount: '100',
         limit: '90',
         deadline: '1000',
       });
 
-      expect(protostone).toContain(',1,'); // opcode 1
+      expect(protostone).toContain(',13,'); // opcode 13
     });
 
-    it('should handle SwapTokensForExactTokens opcode (2)', () => {
+    it('should handle SwapTokensForExactTokens opcode (14)', () => {
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '2',
+        opcode: '14',
         tokenPath: ['32:0', '2:0'],
         amount: '100',
         limit: '110',
         deadline: '1000',
       });
 
-      expect(protostone).toContain(',2,'); // opcode 2
+      expect(protostone).toContain(',14,'); // opcode 14
     });
   });
 
   describe('token path flattening', () => {
     it('should correctly flatten token path to block,tx pairs', () => {
       const protostone = buildSwapProtostone({
-        factoryId: '4:65522',
-        opcode: '1',
+        factoryId: '4:65498',
+        opcode: '13',
         tokenPath: ['1:2', '3:4', '5:6'],
         amount: '100',
         limit: '90',
@@ -250,7 +250,7 @@ describe('buildSwapProtostone', () => {
     it('should encode large amounts correctly', () => {
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1',
+        opcode: '13',
         tokenPath: ['32:0', '2:0'],
         amount: '21000000000000000', // 210M BTC in sats (hypothetical)
         limit: '20000000000000000',
@@ -264,7 +264,7 @@ describe('buildSwapProtostone', () => {
     it('should encode zero amounts', () => {
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1',
+        opcode: '13',
         tokenPath: ['32:0', '2:0'],
         amount: '0',
         limit: '0',
@@ -524,7 +524,7 @@ describe('buildVaultWithdrawProtostone', () => {
 describe('Integration: Transaction Building', () => {
   describe('BTC -> DIESEL swap transaction', () => {
     it('should build complete swap transaction data', () => {
-      const FACTORY_ID = '4:65522';
+      const FACTORY_ID = '4:65498';
       const FRBTC_ID = '32:0';
       const DIESEL_ID = '2:0';
       const SELL_AMOUNT = '100000000'; // 1 BTC
@@ -534,7 +534,7 @@ describe('Integration: Transaction Building', () => {
       // Build protostone
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1', // SwapExactTokensForTokens
+        opcode: '13', // SwapExactTokensForTokens
         tokenPath: [FRBTC_ID, DIESEL_ID],
         amount: SELL_AMOUNT,
         limit: MIN_RECEIVED,
@@ -546,14 +546,14 @@ describe('Integration: Transaction Building', () => {
         bitcoinAmount: SELL_AMOUNT,
       });
 
-      expect(protostone).toBe('[4,65522,1,2,32,0,2,0,100000000,99000000,1000000]:v1:v1');
+      expect(protostone).toBe('[4,65498,13,2,32,0,2,0,100000000,99000000,1000000]:v1:v1');
       expect(inputRequirements).toBe('B:100000000');
     });
   });
 
   describe('DIESEL -> BTC swap transaction', () => {
     it('should build complete swap transaction data', () => {
-      const FACTORY_ID = '4:65522';
+      const FACTORY_ID = '4:65498';
       const FRBTC_ID = '32:0';
       const DIESEL_ID = '2:0';
       const SELL_AMOUNT = '100000000';
@@ -563,7 +563,7 @@ describe('Integration: Transaction Building', () => {
       // Build protostone
       const protostone = buildSwapProtostone({
         factoryId: FACTORY_ID,
-        opcode: '1',
+        opcode: '13',
         tokenPath: [DIESEL_ID, FRBTC_ID],
         amount: SELL_AMOUNT,
         limit: MIN_RECEIVED,
@@ -575,7 +575,7 @@ describe('Integration: Transaction Building', () => {
         alkaneInputs: [{ alkaneId: DIESEL_ID, amount: SELL_AMOUNT }],
       });
 
-      expect(protostone).toBe('[4,65522,1,2,2,0,32,0,100000000,99000000,1000000]:v1:v1');
+      expect(protostone).toBe('[4,65498,13,2,2,0,32,0,100000000,99000000,1000000]:v1:v1');
       expect(inputRequirements).toBe('2:0:100000000');
     });
   });

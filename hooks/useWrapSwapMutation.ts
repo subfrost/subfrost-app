@@ -10,9 +10,12 @@
  *    - Input: BTC directed to signer address (v1)
  *    - Output: frBTC directed to p1 (next protostone) via pointer=p1
  *
- * 2. **p1 (Swap)**: Calls pool contract with opcode 3
+ * 2. **p1 (Swap)**: Calls factory contract with opcode 13 (SwapExactTokensForTokens)
  *    - Input: frBTC from p0 arrives as `incomingAlkanes`
  *    - Output: DIESEL (or target token) to user address (v0)
+ *
+ * Note: We route through the factory (opcode 13) instead of calling the pool
+ * directly because the deployed pool logic is missing the Swap opcode (3).
  *
  * ## Transaction Output Ordering
  *
@@ -20,16 +23,20 @@
  * - Output 1 (v1): Signer address (receives BTC for wrap)
  * - Output 2+: Change, OP_RETURN
  *
- * ## Why This Matters
+ * ### Journal: 2026-01-28 — Factory router fix applied
  *
- * Previously, BTC → DIESEL required TWO transactions:
- * 1. Wrap BTC to frBTC (wait for confirmation)
- * 2. Swap frBTC to DIESEL
+ * Previously p1 called the pool directly with opcode 3 (Swap). The deployed pool
+ * WASM at [4:65496] is missing opcode 3 — an older build. Swaps silently failed
+ * on-chain (no alkane state changes, no revert visible to user).
  *
- * Now it's ONE atomic transaction - simpler UX, fewer fees, instant.
+ * FIX: p1 now calls the factory [4:65498] with opcode 13 (SwapExactTokensForTokens).
+ * The factory has working router logic that executes swaps through pools internally.
+ * Cellpack format: [factory_block, factory_tx, 13, path_len, ...path, amount_in, min_out, deadline]
+ *
+ * See useSwapMutation.ts journal entry for full investigation details.
  *
  * @see useWrapMutation.ts - Standalone wrap logic
- * @see useSwapMutation.ts - Standalone swap logic with two-protostone pattern
+ * @see useSwapMutation.ts - Standalone swap logic with factory-routed pattern
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
@@ -47,10 +54,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 
 bitcoin.initEccLib(ecc);
 
-// Pool operation codes
-const POOL_OPCODES = {
-  Swap: 3,
-};
+// Factory router opcode for swap
+const FACTORY_SWAP_OPCODE = 13; // SwapExactTokensForTokens
 
 // frBTC wrap opcode
 const FRBTC_WRAP_OPCODE = 77;
@@ -79,7 +84,7 @@ export type WrapSwapTransactionData = {
   buyCurrency: string;      // Target token alkane id (e.g., "2:0" for DIESEL)
   maxSlippage: string;      // Percent string, e.g., '0.5'
   feeRate: number;          // sats/vB
-  poolId: { block: string | number; tx: string | number };
+  poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
   deadlineBlocks?: number;  // Default 3
 };
 
@@ -88,34 +93,48 @@ export type WrapSwapTransactionData = {
  *
  * Two protostones chained:
  * - p0: Wrap (frBTC contract) with pointer=p1 to forward frBTC to swap
- * - p1: Swap (pool contract) receives frBTC and outputs target token
+ * - p1: Swap (factory contract opcode 13) receives frBTC and outputs target token
  *
- * Format: [frbtc_block,frbtc_tx,77]:p1:v0,[pool_block,pool_tx,3,minOutput,deadline]:v0:v0
+ * Format: [frbtc_block,frbtc_tx,77]:p1:v0,[factory_block,factory_tx,13,path_len,...path,amount_in,min_out,deadline]:v0:v0
  */
 function buildWrapSwapProtostone(params: {
   frbtcId: string;
-  poolId: { block: string | number; tx: string | number };
+  factoryId: string;
+  buyTokenId: string;
+  frbtcAmount: string;      // Expected frBTC amount after wrap fee
   minOutput: string;
   deadline: string;
 }): string {
-  const { frbtcId, poolId, minOutput, deadline } = params;
+  const { frbtcId, factoryId, buyTokenId, frbtcAmount, minOutput, deadline } = params;
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const poolBlock = poolId.block.toString();
-  const poolTx = poolId.tx.toString();
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
 
   // p0: Wrap - call frBTC contract (opcode 77)
   // pointer=p1 directs minted frBTC to next protostone (swap)
   // refund=v0 sends any refunds to user
-  // Convert block/tx to numbers for proper protobuf encoding
   const blockNum = parseInt(frbtcBlock, 10);
   const txNum = parseInt(frbtcTx, 10);
   const wrapCellpack = `${blockNum},${txNum},${FRBTC_WRAP_OPCODE}`;
   const p0 = `[${wrapCellpack}]:p1:v0`;
 
-  // p1: Swap - call pool contract (opcode 3)
+  // p1: Swap - call factory with SwapExactTokensForTokens (opcode 13)
   // Receives frBTC from p0 as incomingAlkanes
+  // Path: frBTC → buyToken
   // pointer=v0 sends output tokens to user
-  const swapCellpack = [poolBlock, poolTx, POOL_OPCODES.Swap, minOutput, deadline].join(',');
+  const swapCellpack = [
+    factoryBlock,
+    factoryTx,
+    FACTORY_SWAP_OPCODE, // 13
+    2, // path_len
+    frbtcBlock,
+    frbtcTx,
+    buyBlock,
+    buyTx,
+    frbtcAmount,
+    minOutput,
+    deadline,
+  ].join(',');
   const p1 = `[${swapCellpack}]:v0:v0`;
 
   // Chain both protostones
@@ -126,7 +145,7 @@ export function useWrapSwapMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
-  const { FRBTC_ALKANE_ID } = getConfig(network);
+  const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -170,7 +189,6 @@ export function useWrapSwapMutation() {
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
-      if (!data.poolId) throw new Error('Pool ID is required');
 
       // Get addresses
       const taprootAddress = account?.taproot?.address;
@@ -216,7 +234,9 @@ export function useWrapSwapMutation() {
       // Build combined protostone
       const protostone = buildWrapSwapProtostone({
         frbtcId: FRBTC_ALKANE_ID,
-        poolId: data.poolId,
+        factoryId: ALKANE_FACTORY_ID,
+        buyTokenId: data.buyCurrency,
+        frbtcAmount: frbtcAmountAfterFee,
         minOutput: new BigNumber(minAmountOut).integerValue(BigNumber.ROUND_FLOOR).toString(),
         deadline: deadline.toString(),
       });

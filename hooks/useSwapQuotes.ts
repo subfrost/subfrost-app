@@ -3,15 +3,11 @@
  *
  * Calculates swap quotes for AMM token exchanges.
  *
- * ## IMPORTANT: poolId is Required for Swaps (January 2026)
+ * The SwapQuote type includes a `poolId` field for reference. Swaps are now
+ * routed through the factory contract (opcode 13: SwapExactTokensForTokens)
+ * because the deployed pool logic is missing the Swap opcode.
  *
- * The SwapQuote type includes a `poolId` field which is REQUIRED for executing
- * swaps. This is because swaps use a two-protostone pattern that calls the
- * POOL contract directly (not the factory).
- *
- * The poolId comes from the AlkanesTokenPair data returned by useAlkanesTokenPairs.
- *
- * @see useSwapMutation.ts - Uses poolId to build two-protostone swap calls
+ * @see useSwapMutation.ts - Uses factory opcode 13 for swaps
  * @see constants/index.ts - Documentation on factory vs pool opcodes
  */
 import { useQuery } from '@tanstack/react-query';
@@ -50,9 +46,8 @@ export type SwapQuote = {
   route?: string[];
   hops?: number;
   /**
-   * Pool contract ID to call for the swap.
-   * REQUIRED - Swaps call the pool directly with opcode 3, not the factory.
-   * @see useSwapMutation.ts for the two-protostone pattern implementation
+   * Pool contract ID (for reference/validation).
+   * Swaps are routed through the factory with opcode 13, not the pool directly.
    */
   poolId?: { block: string | number; tx: string | number };
 };
