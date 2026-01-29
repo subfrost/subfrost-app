@@ -6,9 +6,9 @@
  * identically across all networks (mainnet, regtest, regtest-local).
  *
  * Flow:
- * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + assets
- * 2. provider.alkanesByAddress(address) - Calls protorunesbyaddress for alkane balances
- * 3. provider.alkanesBalance(address) - Fallback for aggregated alkane balances
+ * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + assets + protorunes
+ *    (protorune data extracted inline from utxo.runes, no separate alkanesByAddress call)
+ * 2. provider.alkanesBalance(address) - Lazy fallback only if Lua script returns no alkane data
  *
  * JOURNAL ENTRY (2026-01-28):
  * RESTORED esplora fallback for BTC balance fetching. The `enrichedbalances` lua view
@@ -268,64 +268,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       });
 
-      // Fetch protorune/alkane balances via alkanesByAddress
-      // This is the primary source of truth for protorune assets (frBTC)
-      // Add timeout since this can be slow on hosted regtest
-      const protorunePromises = addresses.map(async (address) => {
-        try {
-          const rawResult = await withTimeout(
-            provider.alkanesByAddress(address, 'latest', 1),
-            20000, // 20 second timeout (regtest can be slow)
-            null
-          );
-
-          if (!rawResult) {
-            console.log(`[BALANCE] alkanesByAddress timed out for ${address}`);
-            return { address, data: null };
-          }
-
-          console.log('[useEnrichedWalletData] Raw alkanesByAddress result type:', typeof rawResult);
-          console.log('[useEnrichedWalletData] Raw result is Map:', rawResult instanceof Map);
-          console.log('[useEnrichedWalletData] Raw result keys:', rawResult ? Object.keys(rawResult) : 'null');
-          console.log('[useEnrichedWalletData] Raw result:', JSON.stringify(rawResult, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2)?.slice(0, 2000));
-
-          const result = mapToObject(rawResult);
-          console.log('[BALANCE] alkanesByAddress raw for', address, ':', JSON.stringify(result, null, 2));
-          return { address, data: result };
-        } catch (error) {
-          console.error(`[BALANCE] Failed to fetch protorunes for ${address}:`, error);
-          return { address, data: null };
-        }
-      });
-
-      // Also try alkanesBalance as a simpler fallback (returns aggregated balances)
-      // Add timeout since this can also be slow
-      const alkanesBalancePromises = addresses.map(async (address) => {
-        try {
-          console.log('[useEnrichedWalletData] Fetching alkanesBalance for:', address);
-          const rawResult = await withTimeout(
-            provider.alkanesBalance(address),
-            20000, // 20 second timeout (regtest can be slow)
-            null
-          );
-          if (!rawResult) {
-            console.log(`[useEnrichedWalletData] alkanesBalance timed out for ${address}`);
-            return { address, data: null };
-          }
-          const result = mapToObject(rawResult);
-          console.log('[useEnrichedWalletData] alkanesBalance result for', address, result);
-          return { address, data: result };
-        } catch (error) {
-          console.error(`[useEnrichedWalletData] Failed to fetch alkanesBalance for ${address}:`, error);
-          return { address, data: null };
-        }
-      });
-
-      const [enrichedResults, protoruneResults, alkanesBalanceResults] = await Promise.all([
-        Promise.all(enrichedDataPromises),
-        Promise.all(protorunePromises),
-        Promise.all(alkanesBalancePromises),
-      ]);
+      const enrichedResults = await Promise.all(enrichedDataPromises);
 
       // Process results
       let totalBtc = 0;
@@ -355,10 +298,63 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           const [txid, voutStr] = (utxo.outpoint || ':').split(':');
           const vout = parseInt(voutStr || '0', 10);
 
-          // Note: balances.lua returns:
-          // - utxo.runes: protorunes from alkanes_protorunesbyaddress (we enrich from protoruneResults later)
+          // balances.lua returns:
+          // - utxo.runes: protorunes from alkanes_protorunesbyaddress (extracted inline below)
           // - utxo.ord_runes: regular Runes from ord_outputs (this is what the UI expects as "runes")
           // - utxo.inscriptions: inscriptions from ord_outputs
+
+          // Extract alkane data from Lua script's protorune data (utxo.runes)
+          const utxoAlkanes: Record<string, { value: string; name: string; symbol: string; decimals?: number }> = {};
+          if (utxo.runes && Array.isArray(utxo.runes)) {
+            for (const runeEntry of utxo.runes) {
+              const rune = runeEntry.rune;
+              if (!rune) continue;
+
+              const blockStr = String(rune.id?.block || '0');
+              const txStr = String(rune.id?.tx || '0');
+              const block = blockStr.startsWith('0x') ? parseInt(blockStr) : parseInt(blockStr, 16);
+              const tx = txStr.startsWith('0x') ? parseInt(txStr) : parseInt(txStr, 16);
+              const alkaneIdStr = `${block}:${tx}`;
+
+              let balance = '0';
+              if (typeof runeEntry.balance === 'string') {
+                balance = runeEntry.balance;
+              } else if (typeof runeEntry.balance === 'number') {
+                balance = runeEntry.balance.toString();
+              } else if (runeEntry.balance?.value) {
+                balance = String(runeEntry.balance.value);
+              }
+
+              const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+                symbol: rune.name || alkaneIdStr.split(':')[1] || 'ALK',
+                name: rune.name || `Token ${alkaneIdStr}`,
+                decimals: 8,
+              };
+
+              utxoAlkanes[alkaneIdStr] = {
+                value: balance,
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                decimals: tokenInfo.decimals,
+              };
+
+              if (!alkaneMap.has(alkaneIdStr)) {
+                alkaneMap.set(alkaneIdStr, {
+                  alkaneId: alkaneIdStr,
+                  name: tokenInfo.name,
+                  symbol: tokenInfo.symbol,
+                  balance: balance,
+                  decimals: tokenInfo.decimals,
+                });
+              } else {
+                const existing = alkaneMap.get(alkaneIdStr)!;
+                const currentBalance = BigInt(existing.balance);
+                const additionalBalance = BigInt(balance);
+                existing.balance = (currentBalance + additionalBalance).toString();
+              }
+            }
+          }
+
           const enrichedUtxo: EnrichedUTXO = {
             txid,
             vout,
@@ -368,8 +364,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
               confirmed: isConfirmed,
               block_height: utxo.height,
             },
-            // alkanes will be enriched later from protoruneResults
-            alkanes: undefined,
+            alkanes: Object.keys(utxoAlkanes).length > 0 ? utxoAlkanes : undefined,
             inscriptions: utxo.inscriptions,
             // Use ord_runes for regular Runes (not utxo.runes which is protorunes)
             runes: utxo.ord_runes,
@@ -402,10 +397,6 @@ export function useEnrichedWalletData(): EnrichedWalletData {
               pendingTxIdsP2tr.add(txid);
             }
           }
-
-          // Note: Alkanes are NOT aggregated here from balances.lua response
-          // because the lua returns protorunes as 'runes' field, not 'alkanes'.
-          // Alkanes are aggregated separately from protoruneResults (alkanesByAddress).
 
           // Aggregate runes (use ord_runes from balances.lua, which contains regular Runes)
           if (utxo.ord_runes) {
@@ -454,186 +445,54 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
-      // Process protorune/alkane balances from protorunesbyaddress (PRIMARY source)
-      // Clear any alkanes from the Lua script and use protorunesbyaddress as the source of truth
-      alkaneMap.clear();
-
-      // Build a map of outpoint -> alkanes data for UTXO enrichment
-      const utxoAlkanesMap = new Map<string, Record<string, { value: string; name: string; symbol: string; decimals?: number }>>();
-
-      for (const { address, data } of protoruneResults) {
-        if (!data) continue;
-
-        // Log the actual data structure to understand what format we're getting
-        console.log('[BALANCE] alkanesByAddress data structure:', {
-          hasOutpoints: !!data.outpoints,
-          hasBalances: !!data.balances,
-          keys: Object.keys(data),
-        });
-
-        // The RPC alkanes_protorunesbyaddress returns outpoints with runes array
-        // Format: { outpoints: [{ outpoint: "txid:vout", runes: [{ balance: "123", rune: { name: "SUBFROST BTC", id: { block: "0x20", tx: "0x0" } } }] }] }
-        const outpoints = data.outpoints || [];
-
-        for (const outpoint of outpoints) {
-          const runes = outpoint.runes || [];
-          const outpointKey = outpoint.outpoint; // "txid:vout" format
-
-          for (const runeEntry of runes) {
-            const rune = runeEntry.rune;
-            if (!rune) continue;
-
-            // Build alkane ID from block:tx (hex values like "0x20")
-            // parseInt with 0x prefix needs no radix, or we strip the prefix
-            const blockStr = rune.id?.block || '0';
-            const txStr = rune.id?.tx || '0';
-            const block = blockStr.startsWith('0x') ? parseInt(blockStr) : parseInt(blockStr, 16);
-            const tx = txStr.startsWith('0x') ? parseInt(txStr) : parseInt(txStr, 16);
-            const alkaneIdStr = `${block}:${tx}`;
-
-            console.log('[BALANCE] Parsing rune ID:', { blockStr, txStr, block, tx, alkaneIdStr });
-
-            // Balance might be a string, number, or object with value property
-            let balance = '0';
-            if (typeof runeEntry.balance === 'string') {
-              balance = runeEntry.balance;
-            } else if (typeof runeEntry.balance === 'number') {
-              balance = runeEntry.balance.toString();
-            } else if (runeEntry.balance?.value) {
-              balance = String(runeEntry.balance.value);
-            }
-
-            // Get token metadata from KNOWN_TOKENS or use rune name
-            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-              symbol: rune.name || alkaneIdStr.split(':')[1] || 'ALK',
-              name: rune.name || `Token ${alkaneIdStr}`,
-              decimals: 8,
-            };
-
-            console.log('[BALANCE] Found protorune:', alkaneIdStr, '=', balance, 'raw:', runeEntry.balance, 'name:', rune.name);
-
-            // Add to UTXO alkanes map for enrichment
-            if (outpointKey) {
-              if (!utxoAlkanesMap.has(outpointKey)) {
-                utxoAlkanesMap.set(outpointKey, {});
-              }
-              const utxoAlkanes = utxoAlkanesMap.get(outpointKey)!;
-              utxoAlkanes[alkaneIdStr] = {
-                value: balance,
-                name: tokenInfo.name,
-                symbol: tokenInfo.symbol,
-                decimals: tokenInfo.decimals,
-              };
-            }
-
-            if (!alkaneMap.has(alkaneIdStr)) {
-              alkaneMap.set(alkaneIdStr, {
-                alkaneId: alkaneIdStr,
-                name: tokenInfo.name,
-                symbol: tokenInfo.symbol,
-                balance: balance,
-                decimals: tokenInfo.decimals,
-              });
-            } else {
-              // Aggregate balance from multiple UTXOs/addresses
-              const existing = alkaneMap.get(alkaneIdStr)!;
-              const currentBalance = BigInt(existing.balance);
-              const additionalBalance = BigInt(balance);
-              existing.balance = (currentBalance + additionalBalance).toString();
-            }
-          }
-        }
-
-        // Fallback: Also check the old balance_sheet format in case the SDK returns that
-        const balances = data.balances || [];
-        for (const entry of balances) {
-          const tokenBalances = entry.balance_sheet?.cached?.balances || {};
-          const tokenEntries = Object.entries(tokenBalances);
-
-          for (const [alkaneIdStr, amount] of tokenEntries) {
-            const amountStr = String(amount);
-            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-              symbol: alkaneIdStr.split(':')[1] || 'ALK',
-              name: `Token ${alkaneIdStr}`,
-              decimals: 8,
-            };
-
-            console.log('[BALANCE] Found balance_sheet entry:', alkaneIdStr, '=', amountStr);
-
-            if (!alkaneMap.has(alkaneIdStr)) {
-              alkaneMap.set(alkaneIdStr, {
-                alkaneId: alkaneIdStr,
-                name: tokenInfo.name,
-                symbol: tokenInfo.symbol,
-                balance: amountStr,
-                decimals: tokenInfo.decimals,
-              });
-            } else {
-              const existing = alkaneMap.get(alkaneIdStr)!;
-              const currentBalance = BigInt(existing.balance);
-              const additionalBalance = BigInt(amountStr);
-              existing.balance = (currentBalance + additionalBalance).toString();
-            }
-          }
-        }
-      }
-
-      // Fallback: If alkanesByAddress didn't return data, try alkanesBalance (simpler aggregated format)
-      // alkanesBalance returns: [{ alkane_id: { block, tx }, balance: "amount" }, ...]
+      // Alkane data was already extracted inline from Lua script's utxo.runes in processUtxo.
+      // Lazy fallback: only fetch alkanesBalance if the Lua script returned no alkane data.
       if (alkaneMap.size === 0) {
-        console.log('[BALANCE] No alkanes from alkanesByAddress, trying alkanesBalance fallback');
-        for (const { address, data } of alkanesBalanceResults) {
-          if (!data || !Array.isArray(data)) {
-            continue;
-          }
+        console.log('[BALANCE] No alkanes from Lua script, trying alkanesBalance fallback');
+        for (const address of addresses) {
+          try {
+            const rawResult = await withTimeout(
+              provider.alkanesBalance(address),
+              20000,
+              null
+            );
+            if (!rawResult) continue;
+            const fallbackData = mapToObject(rawResult);
+            if (!Array.isArray(fallbackData)) continue;
 
-          for (const entry of data) {
-            // Handle both alkane_id and id field names
-            const alkaneId = entry.alkane_id || entry.id;
-            if (!alkaneId) continue;
+            for (const entry of fallbackData) {
+              const alkaneId = entry.alkane_id || entry.id;
+              if (!alkaneId) continue;
 
-            const alkaneIdStr = `${alkaneId.block}:${alkaneId.tx}`;
-            const amountStr = String(entry.balance || entry.amount || '0');
+              const alkaneIdStr = `${alkaneId.block}:${alkaneId.tx}`;
+              const amountStr = String(entry.balance || entry.amount || '0');
 
-            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-              symbol: entry.symbol || `${alkaneId.tx}`,
-              name: entry.name || `Token ${alkaneIdStr}`,
-              decimals: entry.decimals || 8,
-            };
+              const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+                symbol: entry.symbol || `${alkaneId.tx}`,
+                name: entry.name || `Token ${alkaneIdStr}`,
+                decimals: entry.decimals || 8,
+              };
 
-            if (!alkaneMap.has(alkaneIdStr)) {
-              alkaneMap.set(alkaneIdStr, {
-                alkaneId: alkaneIdStr,
-                name: tokenInfo.name,
-                symbol: tokenInfo.symbol,
-                balance: amountStr,
-                decimals: tokenInfo.decimals,
-              });
-            } else {
-              const existing = alkaneMap.get(alkaneIdStr)!;
-              const currentBalance = BigInt(existing.balance);
-              const additionalBalance = BigInt(amountStr);
-              existing.balance = (currentBalance + additionalBalance).toString();
+              if (!alkaneMap.has(alkaneIdStr)) {
+                alkaneMap.set(alkaneIdStr, {
+                  alkaneId: alkaneIdStr,
+                  name: tokenInfo.name,
+                  symbol: tokenInfo.symbol,
+                  balance: amountStr,
+                  decimals: tokenInfo.decimals,
+                });
+              } else {
+                const existing = alkaneMap.get(alkaneIdStr)!;
+                const currentBalance = BigInt(existing.balance);
+                const additionalBalance = BigInt(amountStr);
+                existing.balance = (currentBalance + additionalBalance).toString();
+              }
             }
+          } catch (error) {
+            console.error(`[BALANCE] alkanesBalance fallback failed for ${address}:`, error);
           }
         }
       }
-
-      // Enrich UTXOs with alkanes data from protoruneResults
-      // This ensures UTXOs have their alkanes property populated for filtering
-      console.log('[BALANCE] Enriching UTXOs with alkanes data. utxoAlkanesMap size:', utxoAlkanesMap.size);
-      for (const utxo of allUtxos) {
-        const outpointKey = `${utxo.txid}:${utxo.vout}`;
-        const alkanes = utxoAlkanesMap.get(outpointKey);
-        if (alkanes && Object.keys(alkanes).length > 0) {
-          utxo.alkanes = alkanes;
-          console.log('[BALANCE] Enriched UTXO', outpointKey, 'with alkanes:', Object.keys(alkanes));
-        }
-      }
-
-      // NOTE: We skip alkanesReflect() for token metadata because the indexer can return
-      // stale/incorrect data. Instead, we rely on KNOWN_TOKENS which has verified values.
-      // Remember: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
 
       // Log final frBTC balance for debugging wrap issue
       // frBTC is always 32:0 on all networks
