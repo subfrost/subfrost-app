@@ -217,13 +217,6 @@ import ThemeToggle from "./ThemeToggle";
                     Balances
                   </Link>
                   <Link
-                    href="/wallet?tab=utxos"
-                    onClick={() => setMenuOpen(false)}
-                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                  >
-                    UTXO Management
-                  </Link>
-                  <Link
                     href="/wallet?tab=transactions"
                     onClick={() => setMenuOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
@@ -364,13 +357,6 @@ import ThemeToggle from "./ThemeToggle";
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
                   >
                     Balances
-                  </Link>
-                  <Link
-                    href="/wallet?tab=utxos"
-                    onClick={() => setMenuOpen(false)}
-                    className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                  >
-                    UTXO Management
                   </Link>
                   <Link
                     href="/wallet?tab=transactions"

@@ -152,7 +152,7 @@ export default function WalletDashboardPage() {
                     </button>
                     {/* Coming Soon tooltip - appears directly above UTXO tab */}
                     {tab.disabled && showComingSoon && (
-                      <div className="absolute left-[calc(50%+28px)] -translate-x-1/2 -top-8 px-3 py-1.5 rounded-lg bg-transparent text-[color:var(--sf-text)]/60 text-sm font-bold whitespace-nowrap z-50 pointer-events-none animate-fade-in-out">
+                      <div className="absolute left-[calc(50%+28px)] -translate-x-1/2 -top-8 px-3 py-1.5 rounded-lg bg-transparent text-[color:var(--sf-text)]/60 text-xs font-normal whitespace-nowrap z-50 pointer-events-none animate-fade-in-out">
                         Coming Soon!
                       </div>
                     )}
