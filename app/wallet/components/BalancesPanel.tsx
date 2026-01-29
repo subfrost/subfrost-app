@@ -251,8 +251,8 @@ export default function BalancesPanel() {
                       {alkane.symbol?.slice(0, 2).toUpperCase() || '??'}
                     </div>
                     <div>
-                      <div className="font-medium text-[color:var(--sf-text)]">{alkane.symbol}</div>
-                      <div className="text-xs text-[color:var(--sf-text)]/40">ID: {alkane.alkaneId}</div>
+                      <div className="font-medium text-[color:var(--sf-text)]">{alkane.name}</div>
+                      <div className="text-xs text-[color:var(--sf-text)]/40">{alkane.symbol} · {alkane.alkaneId}</div>
                     </div>
                   </div>
                   <div className="text-right">
