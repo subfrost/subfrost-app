@@ -7,12 +7,14 @@ import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { Bitcoin, Coins, RefreshCw, ExternalLink, Flame, Lock } from 'lucide-react';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useFuelAllocation } from '@/hooks/useFuelAllocation';
 
 export default function BalancesPanel() {
   const { account } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
   const { balances, isLoading, error, refresh } = useEnrichedWalletData();
+  const fuelAllocation = useFuelAllocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -84,13 +86,6 @@ export default function BalancesPanel() {
 
   const totalBTC = formatBTC(balances.bitcoin.total);
   const totalUSD = bitcoinPrice ? formatUSD(balances.bitcoin.total) : null;
-
-  // Mock FUEL allocation data - replace with API call when ready
-  const fuelAllocation = {
-    amount: 0,
-    isClaimed: false,
-    claimableAt: null as Date | null, // null means claimable now (when TGE happens)
-  };
 
   return (
     <div className="space-y-6">
@@ -201,39 +196,34 @@ export default function BalancesPanel() {
         </div>
       </div>
 
-      {/* FUEL Allocation */}
-      <div className="rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-6 border border-amber-500/20">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30">
-              <Flame size={28} className="text-amber-400" />
-            </div>
-            <div>
-              <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)]">
-                {fuelAllocation.amount.toLocaleString()} FUEL
+      {/* FUEL Allocation - only visible to wallets on the allocation list */}
+      {fuelAllocation.isEligible && (
+        <div className="rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-6 border border-amber-500/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30">
+                <Flame size={28} className="text-amber-400" />
+              </div>
+              <div>
+                <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)]">
+                  {fuelAllocation.amount.toLocaleString()} FUEL
+                </div>
               </div>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            {fuelAllocation.isClaimed ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30">
-                <div className="w-2 h-2 rounded-full bg-green-400" />
-                <span className="text-sm font-medium text-green-400">{t('balances.claimed')}</span>
-              </div>
-            ) : null}
+          <div className="mt-4 pt-4 border-t border-amber-500/20">
+            <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
+              {t('balances.fuelNote')}
+            </p>
           </div>
         </div>
-        <div className="mt-4 pt-4 border-t border-amber-500/20">
-          <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
-          {t('balances.fuelNote')} </p>
-             </div>
-      </div>
+      )}
 
-      {/* Token Assets - 2 column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Protorune Assets (like Alkanes) */}
-        <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-6">
+      {/* Token Assets - 60/40 grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
+        {/* Alkanes Balances */}
+        <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-6 flex flex-col" style={{ maxHeight: '540px' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
               <Coins size={24} className="text-blue-400" />
@@ -242,7 +232,7 @@ export default function BalancesPanel() {
           </div>
 
           {balances.alkanes.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto flex-1 pr-1">
               {balances.alkanes.map((alkane) => (
                 <div
                   key={alkane.alkaneId}
@@ -281,8 +271,8 @@ export default function BalancesPanel() {
           )}
         </div>
 
-        {/* Inscription Assets (like BRC20) */}
-        <div className="rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-6">
+        {/* Inscription & BRC20 Balances */}
+        <div className="rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-6 flex flex-col" style={{ maxHeight: '540px' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
               <Coins size={24} className="text-purple-400" />
@@ -294,12 +284,7 @@ export default function BalancesPanel() {
             {isLoadingData ? (
               <span>{t('balances.loading')}</span>
             ) : (
-              <>
-                {t('balances.noInscription')}
-                <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
-                  {t('balances.inscriptionHint')}
-                </div>
-              </>
+              <span className="text-lg font-medium">{t('balances.noInscription')}</span>
             )}
           </div>
         </div>
