@@ -5,10 +5,12 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { Bitcoin, Coins, RefreshCw, ExternalLink, Flame, Lock } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function BalancesPanel() {
   const { account } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
+  const { t } = useTranslation();
   const { balances, isLoading, error, refresh } = useEnrichedWalletData();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -61,7 +63,7 @@ export default function BalancesPanel() {
   const isLoadingData = isLoading || isRefreshing;
   const showValue = (value: string) => {
     return isLoadingData ? (
-      <span className="text-[color:var(--sf-text)]/60">Loading...</span>
+      <span className="text-[color:var(--sf-text)]/60">{t('balances.loading')}</span>
     ) : value;
   };
 
@@ -73,7 +75,7 @@ export default function BalancesPanel() {
           onClick={refresh}
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
         >
-          Try Again
+          {t('balances.tryAgain')}
         </button>
       </div>
     );
@@ -99,11 +101,11 @@ export default function BalancesPanel() {
               <Bitcoin size={24} className="text-orange-400 sm:w-7 sm:h-7" />
             </div>
             <div className="min-w-0">
-              <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">Bitcoin Balance</div>
+              <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.bitcoinBalance')}</div>
               <div className="text-lg sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)] break-words">{showValue(`${totalBTC} BTC`)}</div>
               <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
                 {isLoadingData ? (
-                  <span>Loading...</span>
+                  <span>{t('balances.loading')}</span>
                 ) : (
                   `$${totalUSD || '0.00'} USD`
                 )}
@@ -123,13 +125,13 @@ export default function BalancesPanel() {
         {/* Balance Breakdown */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[color:var(--sf-outline)]">
           <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
-            <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Spendable BTC</div>
+            <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('balances.spendableBtc')}</div>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               {showValue(`${formatBTC(balances.bitcoin.spendable)} BTC ${!isLoadingData && formatUSD(balances.bitcoin.spendable) ? `($${formatUSD(balances.bitcoin.spendable)})` : ''}`)}
             </div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
-            <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">Unspendable (with Assets)</div>
+            <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">{t('balances.unspendable')}</div>
             <div className="text-sm text-[color:var(--sf-info-yellow-text)]">
               {showValue(`${formatBTC(balances.bitcoin.withAssets)} BTC ${!isLoadingData && formatUSD(balances.bitcoin.withAssets) ? `($${formatUSD(balances.bitcoin.withAssets)})` : ''}`)}
             </div>
@@ -139,7 +141,7 @@ export default function BalancesPanel() {
         {/* Address Breakdown */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-outline)] mt-4">
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('balances.nativeSegwit')}</div>
             <div className="text-sm text-[color:var(--sf-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2wpkh)} BTC`)}
             </div>
@@ -155,7 +157,7 @@ export default function BalancesPanel() {
             </a>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('balances.taproot')}</div>
             <div className="text-sm text-[color:var(--sf-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2tr)} BTC`)}
             </div>
@@ -171,7 +173,7 @@ export default function BalancesPanel() {
             </a>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Pending Transactions</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('balances.pendingTx')}</div>
             <div className="text-sm text-[color:var(--sf-text)] flex items-center gap-1">
               <a
                 href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
@@ -206,7 +208,7 @@ export default function BalancesPanel() {
               <Flame size={28} className="text-amber-400" />
             </div>
             <div>
-              <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">FUEL Allocation</div>
+              <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
               <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)]">
                 {fuelAllocation.amount.toLocaleString()} FUEL
               </div>
@@ -216,14 +218,14 @@ export default function BalancesPanel() {
             {fuelAllocation.isClaimed ? (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30">
                 <div className="w-2 h-2 rounded-full bg-green-400" />
-                <span className="text-sm font-medium text-green-400">Claimed</span>
+                <span className="text-sm font-medium text-green-400">{t('balances.claimed')}</span>
               </div>
             ) : null}
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-amber-500/20">
           <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
-          Your FUEL allocation is reserved and will be released after TGE on the same schedule as other investors. </p>
+          {t('balances.fuelNote')} </p>
              </div>
       </div>
 
@@ -235,7 +237,7 @@ export default function BalancesPanel() {
             <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
               <Coins size={24} className="text-blue-400" />
             </div>
-            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Protorune Assets (like Alkanes)</h3>
+            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('balances.protoruneAssets')}</h3>
           </div>
 
           {balances.alkanes.length > 0 ? (
@@ -267,12 +269,12 @@ export default function BalancesPanel() {
           ) : (
             <div className="text-center py-8 text-[color:var(--sf-text)]/60">
               {isLoadingData ? (
-                <span>Loading...</span>
+                <span>{t('balances.loading')}</span>
               ) : (
                 <>
-                  No protorune assets found
+                  {t('balances.noProtorune')}
                   <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
-                    Protorune assets (like Alkanes) will appear here once detected
+                    {t('balances.protoruneHint')}
                   </div>
                 </>
               )}
@@ -286,17 +288,17 @@ export default function BalancesPanel() {
             <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
               <Coins size={24} className="text-purple-400" />
             </div>
-            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Inscription Assets (like BRC20)</h3>
+            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('balances.inscriptionAssets')}</h3>
           </div>
 
           <div className="text-center py-8 text-[color:var(--sf-text)]/60">
             {isLoadingData ? (
-              <span>Loading...</span>
+              <span>{t('balances.loading')}</span>
             ) : (
               <>
-                No inscription assets found
+                {t('balances.noInscription')}
                 <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
-                  Inscription assets (like BRC20) will appear here once detected
+                  {t('balances.inscriptionHint')}
                 </div>
               </>
             )}

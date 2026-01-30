@@ -7,6 +7,7 @@ import { useAllPoolCandleVolumes } from '@/hooks/usePoolCandleVolumes';
 import { useAllPoolStats } from '@/hooks/usePoolData';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Whitelisted pool IDs (mainnet only)
 const MAINNET_WHITELISTED_POOL_IDS = new Set([
@@ -43,6 +44,7 @@ function formatUsd(n?: number, showZeroAsDash = false) {
 }
 
 export default function TrendingPairs() {
+  const { t } = useTranslation();
   const { network } = useWallet();
   const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
 
@@ -108,8 +110,8 @@ export default function TrendingPairs() {
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-[color:var(--sf-text)]">Trending Pair</h3>
-          <Link href="/swap" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">View all</Link>
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('trending.trendingPair')}</h3>
+          <Link href="/swap" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">{t('trending.viewAll')}</Link>
         </div>
       </div>
       <div className="p-4">
@@ -125,22 +127,22 @@ export default function TrendingPairs() {
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
                   <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Vol</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume24h')}</div>
                   <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">30d Vol</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume30d')}</div>
                   <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
                 </div>
               </div>
             </Link>
           ))}
           {pairs.length === 0 && (
-            <div className="text-sm text-[color:var(--sf-text)]/60">No pairs available.</div>
+            <div className="text-sm text-[color:var(--sf-text)]/60">{t('trending.noPairs')}</div>
           )}
         </div>
       </div>

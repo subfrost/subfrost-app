@@ -10,6 +10,8 @@ import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
  import { Copy, Check } from "lucide-react";
  import AddressAvatar from "./AddressAvatar";
 import ThemeToggle from "./ThemeToggle";
+import LanguageToggle from "./LanguageToggle";
+import { useTranslation } from "@/hooks/useTranslation";
 
  const FallingSnowflakes = memo(function FallingSnowflakes({ white = false }: { white?: boolean }) {
    const snowflakes = useMemo(() => {
@@ -73,6 +75,7 @@ import ThemeToggle from "./ThemeToggle";
  export default function Header() {
   const { connected, isConnected, address, onConnectModalOpenChange, disconnect, account } = useWallet() as any;
   const { theme } = useTheme();
+  const { t } = useTranslation();
    const { balances, isLoading: isBalanceLoading } = useEnrichedWalletData();
    const pathname = usePathname();
    const [menuOpen, setMenuOpen] = useState(false);
@@ -181,7 +184,7 @@ import ThemeToggle from "./ThemeToggle";
                 <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                   {account?.nativeSegwit?.address && (
                     <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit</div>
+                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('header.nativeSegwit')}</div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.nativeSegwit.address)}</span>
                         <button
@@ -196,7 +199,7 @@ import ThemeToggle from "./ThemeToggle";
                   )}
                   {account?.taproot?.address && (
                     <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot</div>
+                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('header.taproot')}</div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.taproot.address)}</span>
                         <button
@@ -214,21 +217,21 @@ import ThemeToggle from "./ThemeToggle";
                     onClick={() => setMenuOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
                   >
-                    Balances
+                    {t('header.balances')}
                   </Link>
                   <Link
                     href="/wallet?tab=transactions"
                     onClick={() => setMenuOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
                   >
-                    Transaction History
+                    {t('header.transactionHistory')}
                   </Link>
                   <Link
                     href="/wallet?tab=settings"
                     onClick={() => setMenuOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
                   >
-                    Settings
+                    {t('header.settings')}
                   </Link>
                   <button
                     type="button"
@@ -243,7 +246,7 @@ import ThemeToggle from "./ThemeToggle";
                     }}
                     className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                   >
-                    Disconnect Wallet
+                    {t('header.disconnectWallet')}
                   </button>
                 </div>
               )}
@@ -252,9 +255,9 @@ import ThemeToggle from "./ThemeToggle";
             <button
               type="button"
               onClick={() => onConnectModalOpenChange(true)}
-              className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-3 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap"
+              className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap min-w-[148px] text-center"
             >
-              <span className="relative z-10">Connect Wallet</span>
+              <span className="relative z-10">{t('header.connectWallet')}</span>
               <div className="absolute inset-0 pointer-events-none">
                 <FallingSnowflakes white={theme === 'dark'} />
               </div>
@@ -291,21 +294,22 @@ import ThemeToggle from "./ThemeToggle";
           {/* Desktop Nav */}
         <nav className="hidden items-center gap-4 md:flex ml-4">
           <Link href="/" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
-            Home
+            {t('nav.home')}
           </Link>
           <Link href="/swap" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/swap') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
-            Swap
+            {t('nav.swap')}
           </Link>
           <Link href="/vaults" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/vaults') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
-            Vaults
+            {t('nav.vaults')}
           </Link>
           <Link href="/futures" className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive('/futures') ? (theme === 'light' ? 'text-[color:var(--sf-text)]/60' : 'text-[color:var(--sf-primary)]') : 'text-[color:var(--sf-text)]'}`}>
-            Futures
+            {t('nav.futures')}
           </Link>
         </nav>
 
         {/* Desktop CTA */}
          <div className="ml-auto relative hidden md:flex items-center gap-4" ref={menuRootRef}>
+          <LanguageToggle />
           <ThemeToggle />
           {walletConnected ? (
              <div
@@ -323,7 +327,7 @@ import ThemeToggle from "./ThemeToggle";
                  <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                   {account?.nativeSegwit?.address && (
                     <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit</div>
+                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('header.nativeSegwit')}</div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.nativeSegwit.address)}</span>
                         <button
@@ -338,7 +342,7 @@ import ThemeToggle from "./ThemeToggle";
                   )}
                   {account?.taproot?.address && (
                     <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot</div>
+                      <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('header.taproot')}</div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-[color:var(--sf-text)]">{truncate(account.taproot.address)}</span>
                         <button
@@ -356,21 +360,21 @@ import ThemeToggle from "./ThemeToggle";
                     onClick={() => setMenuOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
                   >
-                    Balances
+                    {t('header.balances')}
                   </Link>
                   <Link
                     href="/wallet?tab=transactions"
                     onClick={() => setMenuOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
                   >
-                    Transaction History
+                    {t('header.transactionHistory')}
                   </Link>
                   <Link
                     href="/wallet?tab=settings"
                     onClick={() => setMenuOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
                   >
-                    Settings
+                    {t('header.settings')}
                   </Link>
                   <button
                     type="button"
@@ -385,7 +389,7 @@ import ThemeToggle from "./ThemeToggle";
                     }}
                      className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                    >
-                     Disconnect Wallet
+                     {t('header.disconnectWallet')}
                    </button>
                  </div>
                )}
@@ -395,9 +399,9 @@ import ThemeToggle from "./ThemeToggle";
                <button
                  type="button"
                  onClick={() => onConnectModalOpenChange(true)}
-                 className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden"
+                 className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap min-w-[148px] text-center"
                >
-                 <span className="relative z-10">Connect Wallet</span>
+                 <span className="relative z-10">{t('header.connectWallet')}</span>
                  <div className="absolute inset-0 pointer-events-none">
                    <FallingSnowflakes white={theme === 'dark'} />
                  </div>

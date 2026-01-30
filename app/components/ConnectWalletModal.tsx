@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
 import { initGoogleDrive, isDriveConfigured, type WalletBackupInfo } from '@/utils/clientSideDrive';
 import { WalletListPicker } from './WalletListPicker';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type WalletView = 'select' | 'invite-code' | 'create' | 'restore-options' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
 
@@ -60,6 +61,7 @@ if (typeof window !== 'undefined') {
 }
 
 export default function ConnectWalletModal() {
+  const { t } = useTranslation();
   const router = useRouter();
   const {
     network,
@@ -140,7 +142,7 @@ export default function ConnectWalletModal() {
       return;
     }
     if (!VALID_INVITE_CODES.has(code)) {
-      setError('Invalid invite code. Please check and try again.');
+      setError(t('wallet.invalidInviteCode'));
       return;
     }
     setInviteCodeValidated(true);
@@ -410,18 +412,18 @@ export default function ConnectWalletModal() {
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
-              {view === 'select' && 'Connect Wallet'}
-              {view === 'invite-code' && 'Enter Invite Code'}
-              {view === 'create' && 'Create New Wallet'}
-              {view === 'restore-options' && 'Restore Wallet'}
-              {view === 'restore-mnemonic' && 'Restore from Mnemonic'}
-              {view === 'restore-json' && 'Restore from Keystore'}
-              {view === 'restore-drive' && 'Restore from Google Drive'}
-              {view === 'restore-drive-picker' && 'Select Wallet'}
-              {view === 'restore-drive-unlock' && 'Unlock Wallet'}
-              {view === 'browser-extension' && 'Browser Extension Wallets'}
-              {view === 'unlock' && 'Unlock Wallet'}
-              {view === 'show-mnemonic' && 'Save Your Recovery Phrase'}
+              {view === 'select' && t('wallet.connectWallet')}
+              {view === 'invite-code' && t('wallet.enterInviteCode')}
+              {view === 'create' && t('wallet.createNewWallet')}
+              {view === 'restore-options' && t('wallet.restoreWallet')}
+              {view === 'restore-mnemonic' && t('wallet.restoreFromMnemonic')}
+              {view === 'restore-json' && t('wallet.restoreFromKeystore')}
+              {view === 'restore-drive' && t('wallet.restoreFromGoogleDrive')}
+              {view === 'restore-drive-picker' && t('wallet.selectWallet')}
+              {view === 'restore-drive-unlock' && t('wallet.unlockWallet')}
+              {view === 'browser-extension' && t('wallet.browserExtensionWallets')}
+              {view === 'unlock' && t('wallet.unlockWallet')}
+              {view === 'show-mnemonic' && t('wallet.saveRecoveryPhrase')}
             </h2>
             <button
               onClick={handleClose}
@@ -439,7 +441,7 @@ export default function ConnectWalletModal() {
             <div className="flex flex-col gap-3">
               {/* Keystore Wallet Options */}
               <div className="mb-2">
-                <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Keystore Wallet</div>
+                <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.keystoreWallet')}</div>
 
                 {hasExistingKeystore && (
                   <button
@@ -449,8 +451,8 @@ export default function ConnectWalletModal() {
                     <div className="flex items-center gap-3">
                       <Lock size={24} className="text-blue-400" />
                       <div className="text-left">
-                        <div className="font-bold text-[color:var(--sf-text)]">Unlock Existing Wallet</div>
-                        <div className="text-xs font-medium text-[color:var(--sf-text)]/60">Enter password to unlock</div>
+                        <div className="font-bold text-[color:var(--sf-text)]">{t('wallet.unlockExisting')}</div>
+                        <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{t('wallet.enterPasswordToUnlock')}</div>
                       </div>
                     </div>
                     <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
@@ -464,8 +466,8 @@ export default function ConnectWalletModal() {
                   <div className="flex items-center gap-3">
                     <Plus size={24} className="text-green-400" />
                     <div className="text-left">
-                      <div className="font-bold text-[color:var(--sf-text)]">Create New Wallet</div>
-                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">Generate a new Bitcoin wallet.</div>
+                      <div className="font-bold text-[color:var(--sf-text)]">{t('wallet.createNewWallet')}</div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{t('wallet.generateNewWallet')}</div>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
@@ -478,8 +480,8 @@ export default function ConnectWalletModal() {
                   <div className="flex items-center gap-3">
                     <RotateCcw size={24} className="text-yellow-400" />
                     <div className="text-left">
-                      <div className="font-bold text-[color:var(--sf-text)]">Restore Wallet</div>
-                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">Recover from seed phrase, keystore file, or Google Drive.</div>
+                      <div className="font-bold text-[color:var(--sf-text)]">{t('wallet.restoreWallet')}</div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{t('wallet.recoverFromSeed')}</div>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
@@ -488,7 +490,7 @@ export default function ConnectWalletModal() {
 
               {/* Browser Extension Wallets */}
               <div className="mt-4">
-                <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Browser Extension</div>
+                <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.browserExtension')}</div>
                 <button
                   onClick={() => setView('browser-extension')}
                   className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
@@ -496,11 +498,11 @@ export default function ConnectWalletModal() {
                   <div className="flex items-center gap-3">
                     <Download size={24} className="text-purple-400" />
                     <div className="text-left">
-                      <div className="font-bold text-[color:var(--sf-text)]">Connect Browser Extension</div>
+                      <div className="font-bold text-[color:var(--sf-text)]">{t('wallet.connectBrowserExtension')}</div>
                       <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                         {installedWallets.length > 0
-                          ? `${installedWallets.length} wallet${installedWallets.length > 1 ? 's' : ''} detected.`
-                          : 'No wallets detected.'}
+                          ? t('wallet.walletsDetected', { count: installedWallets.length })
+                          : t('wallet.noWalletsDetected')}
                       </div>
                     </div>
                   </div>
@@ -513,7 +515,7 @@ export default function ConnectWalletModal() {
                   onClick={handleDeleteKeystore}
                   className="mt-3 text-sm text-red-400 hover:text-red-300"
                 >
-                  Delete stored wallet
+                  {t('wallet.deleteStoredWallet')}
                 </button>
               )}
             </div>
@@ -528,7 +530,7 @@ export default function ConnectWalletModal() {
                       <Check size={32} className="text-green-400" />
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-[color:var(--sf-text)] mb-1">Invite Code Verified!</div>
+                      <div className="text-lg font-bold text-[color:var(--sf-text)] mb-1">{t('wallet.inviteCodeVerified')}</div>
                       <p className="text-sm text-[color:var(--sf-text)]/60">
                         Your code <span className="font-bold text-amber-400">{inviteCode}</span> has been validated.
                       </p>
@@ -539,7 +541,7 @@ export default function ConnectWalletModal() {
                     onClick={() => setView('create')}
                     className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white"
                   >
-                    Continue to Create Wallet
+                    {t('wallet.continueToCreate')}
                   </button>
                 </>
               ) : (
@@ -549,19 +551,19 @@ export default function ConnectWalletModal() {
                       <Ticket size={32} className="text-amber-400" />
                     </div>
                     <p className="text-sm text-[color:var(--sf-text)]/60 text-center">
-                      Enter your invite code if you were referred by someone.
+                      {t('wallet.enterInviteCodePrompt')}
                     </p>
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Invite Code</label>
+                    <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.inviteCode')}</label>
                     <input
                       type="text"
                       value={inviteCode}
                       onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                       onKeyDown={(e) => e.key === 'Enter' && validateInviteCode()}
-                      className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-bold tracking-wider text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 placeholder:font-medium placeholder:tracking-normal focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none uppercase"
-                      placeholder="Enter your invite code"
+                      className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-bold tracking-wider text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 placeholder:font-medium placeholder:tracking-normal placeholder:normal-case focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none uppercase"
+                      placeholder={t('wallet.enterYourInviteCode')}
                       autoFocus
                     />
                   </div>
@@ -573,14 +575,14 @@ export default function ConnectWalletModal() {
                       onClick={() => { setView('create'); setError(null); }}
                       className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                     >
-                      Back
+                      {t('common.back')}
                     </button>
                     <button
                       onClick={validateInviteCode}
                       disabled={!inviteCode.trim()}
                       className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
                     >
-                      Verify Code
+                      {t('wallet.verifyCode')}
                     </button>
                   </div>
                 </>
@@ -591,7 +593,7 @@ export default function ConnectWalletModal() {
           {view === 'restore-options' && (
             <div className="flex flex-col gap-4">
               <div className="text-xs font-medium text-[color:var(--sf-text)]/60 text-center">
-                Choose how you want to restore your wallet:
+                {t('wallet.chooseRestoreMethod')}
               </div>
 
               {/* Square grid options */}
@@ -602,7 +604,7 @@ export default function ConnectWalletModal() {
                 >
                   <Key size={32} className="text-yellow-400" />
                   <div className="text-center">
-                    <div className="text-sm font-bold text-[color:var(--sf-text)]">Seed Phrase</div>
+                    <div className="text-sm font-bold text-[color:var(--sf-text)]">{t('wallet.seedPhrase')}</div>
                   </div>
                 </button>
 
@@ -612,7 +614,7 @@ export default function ConnectWalletModal() {
                 >
                   <Upload size={32} className="text-orange-400" />
                   <div className="text-center">
-                    <div className="text-sm font-bold text-[color:var(--sf-text)]">Keystore File</div>
+                    <div className="text-sm font-bold text-[color:var(--sf-text)]">{t('wallet.keystoreFile')}</div>
                   </div>
                 </button>
 
@@ -631,7 +633,7 @@ export default function ConnectWalletModal() {
                 onClick={() => { setView('select'); resetForm(); }}
                 className="w-full rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
               >
-                Back
+                {t('common.back')}
               </button>
             </div>
           )}
@@ -642,26 +644,26 @@ export default function ConnectWalletModal() {
               {inviteCodeValidated ? (
                 <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium text-green-400">
                   <Check size={16} />
-                  <span>Invite code verified: <span className="font-bold">{inviteCode}</span></span>
+                  <span>{t('wallet.inviteCodeVerifiedLabel')} <span className="font-bold">{inviteCode}</span></span>
                 </div>
               ) : (
                 <button
                   onClick={() => setView('invite-code')}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-amber-400 hover:text-amber-300 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-400 shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-amber-500/20 hover:border-amber-400/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
                 >
                   <Ticket size={16} />
-                  <span>Invited?</span>
+                  <span>{t('wallet.invited')}</span>
                 </button>
               )}
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Password (min 8 characters)</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.password')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                    placeholder="Enter password"
+                    placeholder={t('wallet.enterPassword')}
                   />
                   <button
                     type="button"
@@ -674,30 +676,30 @@ export default function ConnectWalletModal() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Confirm Password</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.confirmPassword')}</label>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                  placeholder="Confirm password"
+                  placeholder={t('wallet.confirmPasswordPlaceholder')}
                 />
               </div>
 
               {driveConfigured && (
                 <div>
                   <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-                    Password Hint for Google Drive Backup (Optional)
+                    {t('wallet.passwordHintLabel')}
                   </label>
                   <input
                     type="text"
                     value={passwordHintInput}
                     onChange={(e) => setPasswordHintInput(e.target.value)}
                     className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                    placeholder="e.g., My cat's name + birth year"
+                    placeholder={t('wallet.passwordHintPlaceholder')}
                   />
                   <div className="mt-2 text-xs font-medium text-[color:var(--sf-text)]/50">
-                    Use a vague hint. Don't include your actual password.
+                    {t('wallet.passwordHintTip')}
                   </div>
                 </div>
               )}
@@ -709,14 +711,14 @@ export default function ConnectWalletModal() {
                   onClick={() => { setView('select'); resetForm(); }}
                   className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
-                  Back
+                  {t('common.back')}
                 </button>
                 <button
                   onClick={handleCreateWallet}
                   disabled={isLoading}
                   className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
                 >
-                  {isLoading ? 'Creating...' : 'Create Wallet'}
+                  {isLoading ? t('wallet.creating') : t('wallet.createWallet')}
                 </button>
               </div>
 
@@ -727,7 +729,7 @@ export default function ConnectWalletModal() {
           {view === 'show-mnemonic' && (
             <div className="flex flex-col gap-4">
               <div className="rounded-xl bg-[color:var(--sf-info-yellow-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-info-yellow-text)]">
-                Write down these words in order and store them safely. This is the only way to recover your wallet.
+                {t('wallet.writeDownWords')}
               </div>
 
               <div className="relative rounded-xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
@@ -755,7 +757,7 @@ export default function ConnectWalletModal() {
                   onChange={(e) => setMnemonicConfirmed(e.target.checked)}
                   className="rounded"
                 />
-                I have saved my recovery phrase securely.
+                {t('wallet.savedRecoveryPhrase')}
               </label>
 
               {error && (
@@ -787,17 +789,17 @@ export default function ConnectWalletModal() {
                         {backupSuccess ? (
                           <>
                             <Check size={18} />
-                            Enter App
+                            {t('wallet.enterApp')}
                           </>
                         ) : isLoading ? (
                           <>
                             <Cloud className="animate-bounce" size={18} />
-                            Backing up... {backupProgress}%
+                            {t('wallet.backingUp', { progress: backupProgress })}
                           </>
                         ) : (
                           <>
                             <Cloud size={18} />
-                            Backup to Google Drive
+                            {t('wallet.backupToGoogle')}
                           </>
                         )}
                       </span>
@@ -809,7 +811,7 @@ export default function ConnectWalletModal() {
                       disabled={!mnemonicConfirmed}
                       className="text-sm font-medium text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 py-2"
                     >
-                      Skip Google Drive Backup
+                      {t('wallet.skipBackup')}
                     </button>
                   )}
                 </div>
@@ -821,7 +823,7 @@ export default function ConnectWalletModal() {
                   disabled={!mnemonicConfirmed}
                   className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
                 >
-                  Continue to Wallet
+                  {t('wallet.continueToWallet')}
                 </button>
               )}
             </div>
@@ -830,24 +832,24 @@ export default function ConnectWalletModal() {
           {view === 'restore-mnemonic' && (
             <div className="flex flex-col gap-4">
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Recovery Phrase</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.recoveryPhrase')}</label>
                 <textarea
                   value={mnemonic}
                   onChange={(e) => setMnemonic(e.target.value)}
                   className="h-24 w-full resize-none rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                  placeholder="Enter your 12 or 24 word recovery phrase"
+                  placeholder={t('wallet.enterRecoveryPhrase')}
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">New Password</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.newPassword')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                    placeholder="Create a password"
+                    placeholder={t('wallet.createPassword')}
                   />
                   <button
                     type="button"
@@ -866,14 +868,14 @@ export default function ConnectWalletModal() {
                   onClick={() => { setView('restore-options'); resetForm(); }}
                   className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
-                  Back
+                  {t('common.back')}
                 </button>
                 <button
                   onClick={handleRestoreFromMnemonic}
                   disabled={isLoading}
                   className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
                 >
-                  {isLoading ? 'Restoring...' : 'Restore Wallet'}
+                  {isLoading ? t('wallet.restoring') : t('wallet.restoreWallet')}
                 </button>
               </div>
             </div>
@@ -882,11 +884,11 @@ export default function ConnectWalletModal() {
           {view === 'restore-json' && (
             <div className="flex flex-col gap-4">
               <h3 className="text-sm font-medium text-[color:var(--sf-text)]/60 text-center">
-                Upload a previously exported JSON keystore file to restore your wallet.
+                {t('wallet.uploadKeystoreDesc')}
               </h3>
 
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Keystore File</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.keystoreFileLabel')}</label>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -906,19 +908,19 @@ export default function ConnectWalletModal() {
                   {uploadedKeystore ? (
                     <div className="flex items-center justify-center gap-2 text-green-400 font-bold">
                       <Check size={20} />
-                      <span>Keystore file loaded</span>
+                      <span>{t('wallet.keystoreFileLoaded')}</span>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2 text-[color:var(--sf-text)]/60 font-medium">
                       <Upload size={24} />
-                      <span>Click to upload keystore JSON</span>
+                      <span>{t('wallet.clickToUploadKeystore')}</span>
                     </div>
                   )}
                 </button>
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Password</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.passwordLabel')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -926,7 +928,7 @@ export default function ConnectWalletModal() {
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleRestoreFromJson()}
                     className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                    placeholder="Enter keystore password"
+                    placeholder={t('wallet.enterKeystorePassword')}
                   />
                   <button
                     type="button"
@@ -945,14 +947,14 @@ export default function ConnectWalletModal() {
                   onClick={() => { setView('restore-options'); resetForm(); }}
                   className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
-                  Back
+                  {t('common.back')}
                 </button>
                 <button
                   onClick={handleRestoreFromJson}
                   disabled={isLoading || !uploadedKeystore}
                   className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
                 >
-                  {isLoading ? 'Restoring...' : 'Restore Wallet'}
+                  {isLoading ? t('wallet.restoring') : t('wallet.restoreWallet')}
                 </button>
               </div>
             </div>
@@ -964,7 +966,7 @@ export default function ConnectWalletModal() {
                 {/* Installed Wallets Section */}
                 {installedWallets.length > 0 ? (
                   <div>
-                    <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Installed Wallets</div>
+                    <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.installedWallets')}</div>
                     <div className="space-y-2">
                       {installedWallets.map((wallet) => (
                         <button
@@ -998,7 +1000,7 @@ export default function ConnectWalletModal() {
                   </div>
                 ) : (
                   <div className="text-center py-4">
-                    <div className="text-sm font-medium text-[color:var(--sf-text)]/60">No browser wallets detected.</div>
+                    <div className="text-sm font-medium text-[color:var(--sf-text)]/60">{t('wallet.noBrowserWallets')}</div>
                   </div>
                 )}
 
@@ -1009,7 +1011,7 @@ export default function ConnectWalletModal() {
                   if (notInstalledWallets.length === 0) return null;
                   return (
                     <div>
-                      <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Available Wallets</div>
+                      <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.availableWallets')}</div>
                       <div className="space-y-2">
                         {notInstalledWallets.map((wallet) => (
                           <a
@@ -1036,7 +1038,7 @@ export default function ConnectWalletModal() {
                 onClick={() => { setView('select'); resetForm(); }}
                 className="w-full rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
               >
-                Back
+                {t('common.back')}
               </button>
             </div>
           )}
@@ -1054,25 +1056,25 @@ export default function ConnectWalletModal() {
                 <div className="flex items-center gap-2 mb-2">
                   <Cloud size={16} className="text-[color:var(--sf-info-blue-title)]" />
                   <div className="text-sm font-bold text-[color:var(--sf-info-blue-text)]">
-                    Restoring: {selectedDriveWallet.walletLabel}
+                    {t('wallet.restoring2')} {selectedDriveWallet.walletLabel}
                   </div>
                 </div>
                 {passwordHint && (
                   <div className="text-xs font-medium text-[color:var(--sf-info-blue-text)] mt-2">
-                    <span className="font-bold">Password hint:</span> {passwordHint}
+                    <span className="font-bold">{t('wallet.passwordHintColon')}</span> {passwordHint}
                   </div>
                 )}
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Password</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.passwordLabel')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                    placeholder="Enter wallet password"
+                    placeholder={t('wallet.enterWalletPassword')}
                     onKeyDown={(e) => e.key === 'Enter' && handleRestoreFromDrive()}
                   />
                   <button
@@ -1096,14 +1098,14 @@ export default function ConnectWalletModal() {
                 disabled={isLoading || !password}
                 className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:cursor-not-allowed disabled:opacity-50 text-white"
               >
-                {isLoading ? 'Unlocking...' : 'Unlock Wallet'}
+                {isLoading ? t('wallet.unlocking') : t('wallet.unlockWallet')}
               </button>
 
               <button
                 onClick={() => { setView('restore-drive-picker'); resetForm(); }}
                 className="w-full rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
               >
-                Back
+                {t('common.back')}
               </button>
             </div>
           )}
@@ -1111,14 +1113,14 @@ export default function ConnectWalletModal() {
           {view === 'unlock' && (
             <div className="flex flex-col gap-4">
               <div>
-                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Password</label>
+                <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.passwordLabel')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                    placeholder="Enter your password"
+                    placeholder={t('wallet.enterYourPassword')}
                     onKeyDown={(e) => e.key === 'Enter' && handleUnlockKeystore()}
                   />
                   <button
@@ -1138,14 +1140,14 @@ export default function ConnectWalletModal() {
                   onClick={() => { setView('select'); resetForm(); }}
                   className="flex-1 rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
-                  Back
+                  {t('common.back')}
                 </button>
                 <button
                   onClick={handleUnlockKeystore}
                   disabled={isLoading}
                   className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
                 >
-                  {isLoading ? 'Unlocking...' : 'Unlock'}
+                  {isLoading ? t('wallet.unlocking') : t('wallet.unlock')}
                 </button>
               </div>
             </div>

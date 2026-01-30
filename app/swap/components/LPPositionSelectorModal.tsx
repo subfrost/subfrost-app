@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
 import type { LPPosition } from './LiquidityInputs';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export default function LPPositionSelectorModal({
   onSelectPosition,
   selectedPositionId,
 }: Props) {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredPositions = useMemo(() => {
@@ -52,7 +54,7 @@ export default function LPPositionSelectorModal({
         {/* Header */}
         <div className="flex items-center justify-between bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
           <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
-            Select LP Position
+            {t('lpSelector.title')}
           </h2>
           <button
             onClick={onClose}
@@ -72,7 +74,7 @@ export default function LPPositionSelectorModal({
             />
             <input
               type="text"
-              placeholder="Search positions..."
+              placeholder={t('lpSelector.searchPositions')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] py-3 pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
@@ -85,7 +87,7 @@ export default function LPPositionSelectorModal({
           {filteredPositions.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm font-medium text-[color:var(--sf-text)]/50">
-                No LP positions found
+                {t('lpSelector.noPositions')}
               </p>
             </div>
           ) : (
@@ -118,7 +120,7 @@ export default function LPPositionSelectorModal({
                           )}
                         </div>
                         <p className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
-                          LP Position
+                          {t('lpSelector.lpPosition')}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-0.5">

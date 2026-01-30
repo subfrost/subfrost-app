@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import VaultActionPanel from "./VaultActionPanel";
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function GaugeVault() {
   const [mode, setMode] = useState<'stake' | 'unstake'>('stake');
   const [amount, setAmount] = useState<string>("");
   const [infoTab, setInfoTab] = useState<'about' | 'boost' | 'info' | 'risk'>('about');
+  const { t } = useTranslation();
 
   // Mock data
   const stats = {
@@ -36,9 +38,9 @@ export default function GaugeVault() {
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">DIESEL/frBTC Gauge</h2>
+              <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">{t('gauge.title')}</h2>
               <p className="mt-2 text-sm text-[color:var(--sf-text-secondary)]">
-                Stake LP tokens to earn boosted DIESEL rewards. Boost multiplier based on veDIESEL holdings.
+                {t('gauge.description')}
               </p>
             </div>
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-500">
@@ -50,19 +52,19 @@ export default function GaugeVault() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4">
           <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">TVL</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('gauge.tvl')}</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">${stats.tvl}</div>
           </div>
           <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Base APR</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('gauge.baseApr')}</div>
             <div className="text-2xl font-bold text-green-600">{stats.baseApy}%</div>
           </div>
           <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Your Boost</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('gauge.yourBoost')}</div>
             <div className="text-2xl font-bold text-purple-600">{stats.userBoost}x</div>
           </div>
           <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/60 p-4 backdrop-blur-sm">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Boosted APR</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('gauge.boostedApr')}</div>
             <div className="text-2xl font-bold text-blue-600">{stats.boostedApy}%</div>
           </div>
         </div>
@@ -74,13 +76,13 @@ export default function GaugeVault() {
               <button
                 key={tab}
                 onClick={() => setInfoTab(tab as any)}
-                className={`pb-3 text-sm font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                className={`pb-3 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                   infoTab === tab
                     ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
                     : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
                 }`}
               >
-                {tab}
+                {tab === 'about' ? t('vaultInfo.about') : tab === 'boost' ? t('gauge.boostMechanics') : tab === 'info' ? t('vaultInfo.info') : t('vaultInfo.risk')}
               </button>
             ))}
           </div>
@@ -88,16 +90,10 @@ export default function GaugeVault() {
           {infoTab === 'about' && (
             <div className="space-y-4">
               <p className="text-sm text-[color:var(--sf-text)]">
-                Stake LP tokens to earn boosted DIESEL rewards. Your boost multiplier depends on your veDIESEL holdings.
+                {t('gauge.aboutDesc')}
               </p>
               <div className="space-y-2">
-                {[
-                  'Earn DIESEL rewards from gauge emissions',
-                  'Up to 2.5x boost with veDIESEL holdings',
-                  'No withdrawal penalties or timelock',
-                  'Rewards accrue per-block in real-time',
-                  'Claim anytime to receive accumulated rewards',
-                ].map((feature, i) => (
+                {[t('gauge.feature1'), t('gauge.feature2'), t('gauge.feature3'), t('gauge.feature4'), t('gauge.feature5')].map((feature, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm text-[color:var(--sf-text)]">
                     <svg className="h-4 w-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -111,16 +107,16 @@ export default function GaugeVault() {
 
           {infoTab === 'boost' && (
             <div className="space-y-4">
-              <h4 className="font-semibold text-[color:var(--sf-text)]">Boost Mechanics</h4>
+              <h4 className="font-semibold text-[color:var(--sf-text)]">{t('gauge.boostMechanics')}</h4>
               <div className="space-y-3">
                 <div className="rounded-lg bg-purple-50 border border-purple-200 p-3">
-                  <div className="font-semibold text-sm text-purple-900 mb-2">Boost Formula</div>
+                  <div className="font-semibold text-sm text-purple-900 mb-2">{t('gauge.boostFormula')}</div>
                   <span className="text-xs text-purple-800 bg-[color:var(--sf-surface)] px-2 py-1 rounded block">
                     boost = min(1 + (veDIESEL × total_stake) / (stake × total_veDIESEL), 2.5)
                   </span>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">Example Calculation</div>
+                  <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">{t('gauge.exampleCalculation')}</div>
                   <div className="text-xs text-[color:var(--sf-text)]">
                     User: 100 LP staked, 50 veDIESEL held<br/>
                     Pool: 1000 LP total, 200 veDIESEL total<br/><br/>
@@ -131,7 +127,7 @@ export default function GaugeVault() {
                   </div>
                 </div>
                 <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
-                  <div className="font-semibold text-sm text-blue-900 mb-1">How to Maximize Boost</div>
+                  <div className="font-semibold text-sm text-blue-900 mb-1">{t('gauge.howToMaximize')}</div>
                   <div className="text-xs text-blue-800">
                     1. Lock more DIESEL in yveDIESEL vault<br/>
                     2. Maintain high veDIESEL / LP ratio<br/>
@@ -146,32 +142,32 @@ export default function GaugeVault() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Contract Type</div>
-                  <div className="font-semibold text-[color:var(--sf-text)]">Gauge Staking</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('gauge.contractType')}</div>
+                  <div className="font-semibold text-[color:var(--sf-text)]">{t('gauge.gaugeStaking')}</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Input Asset</div>
-                  <div className="font-semibold text-[color:var(--sf-text)]">LP Tokens</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('gauge.inputAsset')}</div>
+                  <div className="font-semibold text-[color:var(--sf-text)]">{t('gauge.lpTokens')}</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Output Tokens</div>
-                  <div className="font-semibold text-[color:var(--sf-text)]">Gauge Tokens</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('gauge.outputTokens')}</div>
+                  <div className="font-semibold text-[color:var(--sf-text)]">{t('gauge.gaugeTokens')}</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Reward Token</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('gauge.rewardToken')}</div>
                   <div className="font-semibold text-[color:var(--sf-text)]">DIESEL [2:0]</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Max Boost</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('gauge.maxBoost')}</div>
                   <div className="font-semibold text-purple-600">2.5x</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Timelock</div>
-                  <div className="font-semibold text-green-600">None</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('gauge.timelock')}</div>
+                  <div className="font-semibold text-green-600">{t('gauge.none')}</div>
                 </div>
               </div>
               <div className="pt-3 border-t border-[color:var(--sf-outline)]">
-                <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Gauge Contract Address</div>
+                <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('gauge.gaugeContractAddress')}</div>
                 <div className="text-xs text-[color:var(--sf-text)] bg-gray-50 p-2 rounded">
                   AlkaneId &#123; block: 2, tx: &lt;deployed_tx&gt; &#125;
                 </div>
@@ -182,25 +178,25 @@ export default function GaugeVault() {
           {infoTab === 'risk' && (
             <div className="space-y-3">
               <p className="text-sm text-[color:var(--sf-text)]">
-                Gauge staking carries similar risks to vault deposits. Review carefully.
+                {t('gauge.riskIntro')}
               </p>
               <div className="space-y-2">
                 <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-3">
-                  <div className="font-semibold text-sm text-yellow-900 mb-1">Smart Contract Risk</div>
+                  <div className="font-semibold text-sm text-yellow-900 mb-1">{t('gauge.smartContractRisk')}</div>
                   <div className="text-xs text-yellow-800">
-                    Contracts are immutable. Recommend external audit before mainnet.
+                    {t('gauge.smartContractDesc')}
                   </div>
                 </div>
                 <div className="rounded-lg bg-orange-50 border border-orange-200 p-3">
-                  <div className="font-semibold text-sm text-orange-900 mb-1">Boost Competition</div>
+                  <div className="font-semibold text-sm text-orange-900 mb-1">{t('gauge.boostCompetition')}</div>
                   <div className="text-xs text-orange-800">
-                    More veDIESEL in circulation dilutes individual boost multipliers. Boost can decrease over time.
+                    {t('gauge.boostCompetitionDesc')}
                   </div>
                 </div>
                 <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
-                  <div className="font-semibold text-sm text-blue-900 mb-1">Reward Variability</div>
+                  <div className="font-semibold text-sm text-blue-900 mb-1">{t('gauge.rewardVariability')}</div>
                   <div className="text-xs text-blue-800">
-                    Gauge rewards depend on strategist deposits. APR may fluctuate based on reward rate.
+                    {t('gauge.rewardVariabilityDesc')}
                   </div>
                 </div>
               </div>
@@ -222,7 +218,7 @@ export default function GaugeVault() {
           pendingRewards={stats.pendingRewards}
           inputToken="LP"
           outputToken="Gauge"
-          title="Manage Stake"
+          title={t('gauge.manageStake')}
         />
       </div>
     </div>

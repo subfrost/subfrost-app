@@ -11,6 +11,7 @@ import type { SlippageSelection } from "@/stores/global";
 import { ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type LPPosition = {
   id: string;                    // LP token alkane ID (same as pool ID)
@@ -108,6 +109,7 @@ export default function LiquidityInputs({
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
+  const { t } = useTranslation();
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
 
   // Calculate active percentage for token inputs
@@ -148,11 +150,11 @@ export default function LiquidityInputs({
 
   // Dynamic CTA text and handler based on mode
   const getCtaText = () => {
-    if (!isConnected) return "CONNECT WALLET";
+    if (!isConnected) return t('liquidity.connectWallet');
     if (liquidityMode === 'remove') {
-      return isRemoveLoading ? "REMOVING LIQUIDITY..." : "REMOVE LIQUIDITY";
+      return isRemoveLoading ? t('liquidity.removingLiquidity') : t('liquidity.removeLiquidity');
     }
-    return isLoading ? "ADDING LIQUIDITY..." : "ADD LIQUIDITY";
+    return isLoading ? t('liquidity.addingLiquidity') : t('liquidity.addLiquidity');
   };
 
   const ctaText = getCtaText();
@@ -181,7 +183,7 @@ export default function LiquidityInputs({
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
           }`}
         >
-          Add
+          {t('liquidity.add')}
         </button>
         <button
           onClick={() => onModeChange?.('remove')}
@@ -191,7 +193,7 @@ export default function LiquidityInputs({
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
           }`}
         >
-          Remove
+          {t('liquidity.remove')}
         </button>
       </div>
 
@@ -201,7 +203,7 @@ export default function LiquidityInputs({
         <>
           <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-              Select LP Position to Remove
+              {t('liquidity.selectLpPosition')}
             </span>
             <button
               type="button"
@@ -209,7 +211,7 @@ export default function LiquidityInputs({
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
             >
               <span className="font-bold text-sm text-[color:var(--sf-text)]">
-                {selectedLPPosition ? `${selectedLPPosition.amount} ${selectedLPPosition.token0Symbol}/${selectedLPPosition.token1Symbol} LP` : 'Select Position'}
+                {selectedLPPosition ? `${selectedLPPosition.amount} ${selectedLPPosition.token0Symbol}/${selectedLPPosition.token1Symbol} LP` : t('liquidity.selectPosition')}
               </span>
               <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
             </button>
@@ -219,7 +221,7 @@ export default function LiquidityInputs({
           {selectedLPPosition && (
             <>
               <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md">
-                <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Amount to Remove</span>
+                <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('liquidity.amountToRemove')}</span>
                 <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                   <div className="flex flex-col gap-2">
                     {/* Row 1: Input */}
@@ -272,7 +274,7 @@ export default function LiquidityInputs({
                   {/* Minimum Received row */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                      Minimum Received
+                      {t('liquidity.minimumReceived')}
                     </span>
                     <span className="font-semibold text-[color:var(--sf-text)]">
                       {selectedLPPosition.token0Symbol} / {selectedLPPosition.token1Symbol}
@@ -282,7 +284,7 @@ export default function LiquidityInputs({
                   {/* Deadline (blocks) row */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                      Deadline (blocks)
+                      {t('swapSummary.deadlineBlocks')}
                     </span>
                     <div className="flex items-center gap-2">
                       <div className="relative">
@@ -316,7 +318,7 @@ export default function LiquidityInputs({
                   {/* Slippage Tolerance row */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                      Slippage Tolerance
+                      {t('swapSummary.slippageTolerance')}
                     </span>
                     <div className="flex items-center gap-2">
                       {slippageSelection === 'custom' ? (
@@ -364,7 +366,7 @@ export default function LiquidityInputs({
                   {/* Miner Fee Rate row */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                      Miner Fee Rate (sats/vB)
+                      {t('swapSummary.minerFeeRate')}
                     </span>
                     <div className="flex items-center gap-2">
                       {feeSelection === 'custom' && setCustomFee ? (
@@ -415,7 +417,7 @@ export default function LiquidityInputs({
           {/* Select Pair Panel */}
           <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
             <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-              Select Pair to Provide
+              {t('liquidity.selectPair')}
             </span>
             
             {/* Side-by-side token selectors */}
@@ -438,7 +440,7 @@ export default function LiquidityInputs({
                     />
                   )}
                   <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                    {token0?.symbol ?? 'Select Token'}
+                    {token0?.symbol ?? t('liquidity.selectToken')}
                   </span>
                   <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
                 </button>
@@ -619,7 +621,7 @@ export default function LiquidityInputs({
               {/* Slippage Tolerance row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Slippage Tolerance
+                  {t('swapSummary.slippageTolerance')}
                 </span>
                 <div className="flex items-center gap-2">
                   {slippageSelection === 'custom' ? (
@@ -667,7 +669,7 @@ export default function LiquidityInputs({
               {/* Miner Fee Rate row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Miner Fee Rate (sats/vB)
+                  {t('swapSummary.minerFeeRate')}
                 </span>
                 <div className="flex items-center gap-2">
                   {feeSelection === 'custom' && setCustomFee ? (
@@ -752,6 +754,7 @@ type MinerFeeButtonProps = {
 function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -774,9 +777,15 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
     setIsOpen(false);
   };
 
+  const feeDisplayMap: Record<FeeSelection, string> = {
+    slow: t('liquidity.slow'),
+    medium: t('liquidity.medium'),
+    fast: t('liquidity.fast'),
+    custom: t('liquidity.custom'),
+  };
+
   const getDisplayText = () => {
-    if (selection === 'custom') return 'Custom';
-    return selection.charAt(0).toUpperCase() + selection.slice(1);
+    return feeDisplayMap[selection] || selection;
   };
 
   return (
@@ -834,6 +843,7 @@ type SlippageButtonProps = {
 function SlippageButton({ selection, setSelection, setValue }: SlippageButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -859,9 +869,15 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
     setIsOpen(false);
   };
 
+  const slippageDisplayMap: Record<string, string> = {
+    low: t('liquidity.slow'),
+    medium: t('liquidity.medium'),
+    high: t('liquidity.fast'),
+    custom: t('liquidity.custom'),
+  };
+
   const getDisplayText = () => {
-    if (selection === 'custom') return 'Custom';
-    return selection.charAt(0).toUpperCase() + selection.slice(1);
+    return slippageDisplayMap[selection] || selection;
   };
 
   return (

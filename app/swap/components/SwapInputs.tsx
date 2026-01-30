@@ -9,6 +9,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { ChevronDown } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type BridgeStep = 1 | 2 | 3 | 4 | 5;
 
@@ -49,8 +50,8 @@ export default function SwapInputs({
   onSelectToToken,
   onInvert,
   onSwapClick,
-  fromBalanceText = "No balance",
-  toBalanceText = "No balance",
+  fromBalanceText,
+  toBalanceText,
   fromFiatText = "$0.00",
   toFiatText = "$0.00",
   onMaxFrom,
@@ -62,6 +63,11 @@ export default function SwapInputs({
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
+  const { t } = useTranslation();
+
+  // Apply i18n defaults for balance texts
+  const resolvedFromBalanceText = fromBalanceText ?? t('swap.noBalance');
+  const resolvedToBalanceText = toBalanceText ?? t('swap.noBalance');
 
   // Refs for focusing inputs when clicking the container
   const fromInputRef = useRef<HTMLInputElement>(null);
@@ -96,8 +102,8 @@ export default function SwapInputs({
   const isButtonEnabled = canSwap || canSwapCrossChain;
 
   const ctaText = isConnected
-    ? (isToBridgeToken || isFromBridgeToken ? "CONFIRM CROSS-CHAIN SWAP" : "CONFIRM SWAP")
-    : "CONNECT WALLET";
+    ? (isToBridgeToken || isFromBridgeToken ? t('swap.confirmCrossChainSwap') : t('swap.confirmSwap'))
+    : t('swap.connectWallet');
 
   const onCtaClick = () => {
     if (!isConnected) {
@@ -162,10 +168,10 @@ export default function SwapInputs({
 
   // Calculate balance usage percentage
   const calculateBalanceUsage = (): number => {
-    if (!fromAmount || !fromBalanceText) return 0;
+    if (!fromAmount || !resolvedFromBalanceText) return 0;
 
     // Extract balance from text like "Balance 8.908881"
-    const balanceMatch = fromBalanceText.match(/[\d.]+/);
+    const balanceMatch = resolvedFromBalanceText.match(/[\d.]+/);
     if (!balanceMatch) return 0;
 
     const balance = parseFloat(balanceMatch[0]);
@@ -191,9 +197,9 @@ export default function SwapInputs({
 
   // Check if current amount matches a specific percentage of balance
   const getActivePercent = (): number | null => {
-    if (!fromAmount || !fromBalanceText) return null;
+    if (!fromAmount || !resolvedFromBalanceText) return null;
 
-    const balanceMatch = fromBalanceText.match(/[\d.]+/);
+    const balanceMatch = resolvedFromBalanceText.match(/[\d.]+/);
     if (!balanceMatch) return null;
 
     const balance = parseFloat(balanceMatch[0]);
@@ -247,7 +253,7 @@ export default function SwapInputs({
               />
             )}
             <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {from?.symbol ?? 'Select'}
+              {from?.symbol ?? t('swap.select')}
             </span>
             <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
           </button>
@@ -255,7 +261,7 @@ export default function SwapInputs({
           {/* Main content area */}
           <div className="flex flex-col gap-1">
             {/* Label */}
-            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">You Send</span>
+            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">{t('swap.youSend')}</span>
 
             {/* Input - full width */}
             <div className="pr-32">
@@ -288,7 +294,7 @@ export default function SwapInputs({
                     </div>
                   )}
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                    {fromBalanceText}
+                    {resolvedFromBalanceText}
                     {balanceUsage > 0 && (
                       <span className="ml-1.5">({balanceUsage.toFixed(1)}%)</span>
                     )}
@@ -326,7 +332,7 @@ export default function SwapInputs({
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${onMaxFrom ? (activePercent === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`) : "opacity-40 cursor-not-allowed"}`}
                     disabled={!onMaxFrom}
                   >
-                    Max
+                    {t('swap.max')}
                   </button>
                 </div>
               </div>
@@ -373,7 +379,7 @@ export default function SwapInputs({
               />
             )}
             <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {to?.symbol ?? 'Select'}
+              {to?.symbol ?? t('swap.select')}
             </span>
             <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
           </button>
@@ -381,7 +387,7 @@ export default function SwapInputs({
           {/* Main content area */}
           <div className="flex flex-col gap-1">
             {/* Label */}
-            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">You Receive</span>
+            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">{t('swap.youReceive')}</span>
 
             {/* Input - full width */}
             <div className="pr-32">
@@ -402,7 +408,7 @@ export default function SwapInputs({
             {/* Balance row at bottom (hidden for bridge tokens) */}
             {!isToBridgeToken && (
               <div className="flex items-center justify-end">
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? resolvedToBalanceText : `${t('swap.balance')} 0`}</div>
               </div>
             )}
           </div>
@@ -424,7 +430,7 @@ export default function SwapInputs({
       {isToBridgeToken && !bridgeActive && (
         <div className={`relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] ${ethAddressFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}>
           <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-            Ethereum Wallet Address
+            {t('swap.ethWalletAddress')}
           </label>
           <input
             type="text"
@@ -432,11 +438,11 @@ export default function SwapInputs({
             onChange={(e) => onChangeEthereumAddress?.(e.target.value)}
             onFocus={() => setEthAddressFocused(true)}
             onBlur={() => setEthAddressFocused(false)}
-            placeholder="Enter USDT recipient address (0x...)"
+            placeholder={t('swap.enterUsdtRecipient')}
             className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms]"
           />
           <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
-            Enter the Ethereum address where you want to receive USDT.
+            {t('swap.enterEthAddress')}
           </p>
         </div>
       )}

@@ -6,6 +6,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface SendModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ interface UTXO {
 export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const { address, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
+  const { t } = useTranslation();
   const { utxos, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
@@ -125,18 +127,18 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     if (step === 'input') {
       // Validate inputs
       if (!validateAddress(recipientAddress)) {
-        setError('Invalid Bitcoin address');
+        setError(t('send.invalidAddress'));
         return;
       }
 
       const amountSats = Math.floor(parseFloat(amount) * 100000000);
       if (isNaN(amountSats) || amountSats <= 0) {
-        setError('Invalid amount');
+        setError(t('send.invalidAmount'));
         return;
       }
 
       if (feeRate < 1) {
-        setError('Invalid fee rate');
+        setError(t('send.invalidFeeRate'));
         return;
       }
       const feeRateNum = feeRate;
@@ -335,7 +337,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       <div className="space-y-4">
         <div>
           <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-            Recipient Address
+            {t('send.recipientAddress')}
           </label>
           <input
             type="text"
@@ -348,7 +350,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
         <div>
           <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-            Amount (BTC)
+            {t('send.amountBtc')}
           </label>
           <input
             type="number"
@@ -359,13 +361,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
           <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-            Available: {(availableUtxos.reduce((sum, u) => sum + u.value, 0) / 100000000).toFixed(8)} BTC
+            {t('send.available')} {(availableUtxos.reduce((sum, u) => sum + u.value, 0) / 100000000).toFixed(8)} BTC
           </div>
         </div>
 
         <div>
           <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-            Fee Rate
+            {t('send.feeRate')}
           </label>
           <div className="flex flex-wrap items-center gap-2">
             {(['slow', 'medium', 'fast'] as const).map((s) => (
@@ -379,7 +381,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                     : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                 }`}
               >
-                {s} ({presets[s]} sat/vB)
+                {t(`send.${s}`)} ({presets[s]} sat/vB)
               </button>
             ))}
             <button
@@ -391,7 +393,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
               }`}
             >
-              Custom
+              {t('send.custom')}
             </button>
             {feeSelection === 'custom' && (
               <div className="relative">
@@ -411,7 +413,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             )}
           </div>
           <div className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
-            <span className="font-semibold text-[color:var(--sf-text)]/70">Selected:</span>
+            <span className="font-semibold text-[color:var(--sf-text)]/70">{t('send.selected')}</span>
             <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sat/vB</span>
           </div>
         </div>
@@ -424,7 +426,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               onChange={(e) => setAutoSelectUtxos(e.target.checked)}
               className="rounded"
             />
-            <span className="text-sm text-[color:var(--sf-text)]/80">Automatically select UTXOs</span>
+            <span className="text-sm text-[color:var(--sf-text)]/80">{t('send.autoSelectUtxos')}</span>
           </label>
         </div>
 
@@ -441,13 +443,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           onClick={handleNext}
           className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
         >
-          {autoSelectUtxos ? 'Review & Send' : 'Select UTXOs'}
+          {autoSelectUtxos ? t('send.reviewAndSend') : t('send.selectUtxosBtn')}
         </button>
         <button
           onClick={onClose}
           className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
-          Cancel
+          {t('send.cancel')}
         </button>
       </div>
     </>
@@ -458,7 +460,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="text-sm text-[color:var(--sf-text)]/80">
-            Select UTXOs to spend ({selectedUtxos.size} selected)
+            {t('send.selectUtxos', { count: selectedUtxos.size })}
           </div>
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input
@@ -467,7 +469,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               onChange={(e) => setShowFrozenUtxos(e.target.checked)}
               className="rounded"
             />
-            <span className="text-[color:var(--sf-text)]/60">Show frozen</span>
+            <span className="text-[color:var(--sf-text)]/60">{t('send.showFrozen')}</span>
           </label>
         </div>
 
@@ -511,11 +513,11 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
         <div className="p-3 rounded-xl bg-[color:var(--sf-primary)]/10 shadow-[0_2px_8px_rgba(0,0,0,0.1)] text-sm">
           <div className="flex justify-between text-[color:var(--sf-text)]/80">
-            <span>Total Selected:</span>
+            <span>{t('send.totalSelected')}</span>
             <span className="font-medium">{(totalSelectedValue / 100000000).toFixed(8)} BTC</span>
           </div>
           <div className="flex justify-between text-[color:var(--sf-text)]/80 mt-1">
-            <span>Amount to Send:</span>
+            <span>{t('send.amountToSend')}</span>
             <span className="font-medium">{parseFloat(amount).toFixed(8)} BTC</span>
           </div>
         </div>
@@ -533,14 +535,14 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           onClick={() => setStep('input')}
           className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
-          Back
+          {t('send.back')}
         </button>
         <button
           onClick={handleNext}
           disabled={selectedUtxos.size === 0}
           className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Review & Send
+          {t('send.reviewAndSend')}
         </button>
       </div>
     </>
@@ -556,31 +558,31 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         <div className="space-y-4">
           <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-3">
             <div className="flex justify-between">
-              <span className="text-[color:var(--sf-text)]/60">Recipient:</span>
+              <span className="text-[color:var(--sf-text)]/60">{t('send.recipient')}</span>
               <span className="text-sm text-[color:var(--sf-text)] break-all ml-4">
                 {recipientAddress}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[color:var(--sf-text)]/60">Amount:</span>
+              <span className="text-[color:var(--sf-text)]/60">{t('send.amount')}</span>
               <span className="font-medium text-[color:var(--sf-text)]">{parseFloat(amount).toFixed(8)} BTC</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[color:var(--sf-text)]/60">Fee Rate:</span>
+              <span className="text-[color:var(--sf-text)]/60">{t('send.feeRateLabel')}</span>
               <span className="text-[color:var(--sf-text)]">{feeRate} sat/vB</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[color:var(--sf-text)]/60">Estimated Fee:</span>
+              <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
               <span className="text-[color:var(--sf-text)]">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
             </div>
             <div className="border-t border-[color:var(--sf-text)]/10 pt-2 flex justify-between">
-              <span className="text-[color:var(--sf-text)]/80 font-medium">Total:</span>
+              <span className="text-[color:var(--sf-text)]/80 font-medium">{t('send.total')}</span>
               <span className="text-[color:var(--sf-text)] font-medium">{(total / 100000000).toFixed(8)} BTC</span>
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
-            ⚠️ Please verify the recipient address before sending. Transactions cannot be reversed.
+            {t('send.verifyWarning')}
           </div>
 
           {error && (
@@ -596,14 +598,14 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             onClick={() => setStep(autoSelectUtxos ? 'input' : 'utxo-selection')}
             className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
           >
-            Back
+            {t('send.back')}
           </button>
           <button
             onClick={handleNext}
             className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide flex items-center justify-center gap-2"
           >
             <Send size={18} />
-            Send Transaction
+            {t('send.sendTransaction')}
           </button>
         </div>
       </>
@@ -613,8 +615,8 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const renderBroadcasting = () => (
     <div className="flex flex-col items-center justify-center py-12">
       <Loader2 className="animate-spin text-[color:var(--sf-primary)] mb-4" size={48} />
-      <div className="text-lg text-[color:var(--sf-text)]/80">Broadcasting transaction...</div>
-      <div className="text-sm text-[color:var(--sf-text)]/60 mt-2">Please wait</div>
+      <div className="text-lg text-[color:var(--sf-text)]/80">{t('send.broadcasting')}</div>
+      <div className="text-sm text-[color:var(--sf-text)]/60 mt-2">{t('send.pleaseWait')}</div>
     </div>
   );
 
@@ -622,10 +624,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     <>
       <div className="flex flex-col items-center justify-center py-8 space-y-4">
         <CheckCircle size={64} className="text-green-400" />
-        <div className="text-xl font-bold text-[color:var(--sf-text)]">Transaction Sent!</div>
+        <div className="text-xl font-bold text-[color:var(--sf-text)]">{t('send.transactionSent')}</div>
 
         <div className="w-full p-4 rounded-xl bg-green-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-          <div className="text-sm text-green-600 dark:text-green-200 mb-2">Transaction ID:</div>
+          <div className="text-sm text-green-600 dark:text-green-200 mb-2">{t('send.transactionIdLabel')}</div>
           <div className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
         </div>
 
@@ -635,7 +637,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           rel="noopener noreferrer"
           className="text-[color:var(--sf-primary)] hover:opacity-80 text-sm"
         >
-          View on Block Explorer →
+          {t('send.viewOnExplorer')}
         </a>
       </div>
 
@@ -643,7 +645,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         onClick={onClose}
         className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
       >
-        Close
+        {t('send.close')}
       </button>
     </>
   );
@@ -654,7 +656,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Send Bitcoin</h2>
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{t('send.title')}</h2>
             <button
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
@@ -683,23 +685,23 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             <div className="p-6 space-y-4">
               <div className="flex items-center gap-3 text-red-500">
                 <AlertCircle size={32} />
-                <h3 className="text-xl font-extrabold tracking-wider uppercase">High Fee Warning!</h3>
+                <h3 className="text-xl font-extrabold tracking-wider uppercase">{t('send.highFeeWarning')}</h3>
               </div>
 
               <div className="space-y-2 text-[color:var(--sf-text)]/80">
                 <p className="text-sm">
-                  This transaction has unusually high fees. Please review carefully:
+                  {t('send.highFeeDescription')}
                 </p>
 
                 <div className="bg-red-500/10 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">Estimated Fee:</span>
+                    <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
                     <span className="text-red-400">
                       {(estimatedFee / 100000000).toFixed(8)} BTC
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">Fee Rate:</span>
+                    <span className="text-[color:var(--sf-text)]/60">{t('send.feeRateLabel')}</span>
                     <span className="text-red-400">{feeRate} sat/vB</span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -720,13 +722,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   </p>
                   <ul className="text-xs text-[color:var(--sf-info-yellow-text)]/80 mt-1 space-y-1 list-disc list-inside">
                     {selectedUtxos.size > 100 && (
-                      <li>Reduce the number of UTXOs ({selectedUtxos.size} selected)</li>
+                      <li>{t('send.reduceUtxos')} ({selectedUtxos.size})</li>
                     )}
                     {feeRate > 1000 && (
-                      <li>Lower the fee rate (currently {feeRate} sat/vB)</li>
+                      <li>{t('send.lowerFeeRate')} ({feeRate} sat/vB)</li>
                     )}
                     {estimatedFee > 0.01 * 100000000 && (
-                      <li>Consider sending a smaller amount</li>
+                      <li>{t('send.smallerAmount')}</li>
                     )}
                     <li>Manually select fewer UTXOs instead of using auto-select</li>
                   </ul>
@@ -738,13 +740,13 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   onClick={() => setShowFeeWarning(false)}
                   className="flex-1 px-4 py-3 bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-[color:var(--sf-text)] rounded-xl transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
                 >
-                  Go Back
+                  {t('send.back')}
                 </button>
                 <button
                   onClick={proceedWithHighFee}
                   className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
                 >
-                  Proceed Anyway
+                  {t('send.proceedAnyway')}
                 </button>
               </div>
             </div>

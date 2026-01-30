@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 const DISMISS_KEY = 'sf-demo-banner-dismissed';
 
 export default function DemoBanner() {
+  const { t } = useTranslation();
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
@@ -34,10 +36,10 @@ export default function DemoBanner() {
         <div className="flex flex-col gap-4 p-6">
           <section className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">
-              The SUBFROST App is unreleased.
+              {t('demo.warning')}
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-[color:var(--sf-text)]/60">
-              Do not perform transactions until we officially release it. Anything you see here is subject to change.
+              {t('demo.description')}
             </p>
           </section>
 
@@ -47,7 +49,7 @@ export default function DemoBanner() {
               onClick={handleDismiss}
               className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-6 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-xl hover:scale-105 active:scale-95"
             >
-              I Understand
+              {t('demo.understand')}
             </button>
           </div>
         </div>

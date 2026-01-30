@@ -28,6 +28,7 @@ import { useSwapUnwrapMutation } from "@/hooks/useSwapUnwrapMutation";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Lazy loaded components - split into separate chunks
 const SwapInputs = lazy(() => import("./components/SwapInputs"));
@@ -72,6 +73,8 @@ const MAINNET_WHITELISTED_TOKEN_SYMBOLS = new Set([
 ]);
 
 export default function SwapShell() {
+  const { t } = useTranslation();
+
   // Markets from API: all pools sorted by TVL desc
   const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
 
@@ -502,14 +505,14 @@ export default function SwapShell() {
   }, [walletBalances?.alkanes]);
 
   const formatBalance = (id?: string): string => {
-    if (isBalancesLoading) return 'Loading...';
-    if (!id) return 'Balance: 0';
+    if (isBalancesLoading) return t('swap.loadingBalance');
+    if (!id) return `${t('swap.balanceColon')} 0`;
 
     // BTC balance (btcBalanceSats now uses walletBalances.bitcoin.total)
     if (id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
       const btc = sats / 1e8;
-      return `Balance: ${btc.toFixed(8)}`;
+      return `${t('swap.balanceColon')} ${btc.toFixed(8)}`;
     }
 
     // Alkane token balance (frBTC, DIESEL, etc.)
@@ -522,7 +525,7 @@ export default function SwapShell() {
     }
 
     if (!balance) {
-      return 'Balance: 0';
+      return `${t('swap.balanceColon')} 0`;
     }
 
     // Alkane balances use 8 decimal places (like satoshis)
@@ -544,15 +547,15 @@ export default function SwapShell() {
       const trimmedRemainder = truncatedRemainder.replace(/0+$/, '') || '0';
 
       if (trimmedRemainder === '0' && whole > 0) {
-        return `Balance: ${wholeStr}`;
+        return `${t('swap.balanceColon')} ${wholeStr}`;
       }
 
-      return `Balance: ${wholeStr}.${trimmedRemainder}`;
+      return `${t('swap.balanceColon')} ${wholeStr}.${trimmedRemainder}`;
     } catch {
       // Fallback for non-BigInt compatible values
       const rawBalance = Number(balance);
       const displayBalance = rawBalance / 1e8;
-      return `Balance: ${displayBalance.toFixed(4)}`;
+      return `${t('swap.balanceColon')} ${displayBalance.toFixed(4)}`;
     }
   };
 
@@ -1491,7 +1494,7 @@ export default function SwapShell() {
               <path d="M3 3v18h18" />
               <path d="m19 9-5 5-4-4-3 3" />
             </svg>
-            {showMobileChart ? 'Hide Chart' : 'Show Chart'}
+            {showMobileChart ? t('swap.hideChart') : t('swap.showChart')}
           </button>
 
           {/* Mobile-only Chart - below swap form */}
@@ -1609,10 +1612,10 @@ export default function SwapShell() {
         }
         title={
           tokenSelectorMode === 'from'
-            ? 'Select token to swap'
+            ? t('tokenSelector.selectToSwap')
             : tokenSelectorMode === 'to'
-            ? 'Select token to receive'
-            : 'Select token to pool'
+            ? t('tokenSelector.selectToReceive')
+            : t('tokenSelector.selectToPool')
         }
         network={network}
         mode={tokenSelectorMode}

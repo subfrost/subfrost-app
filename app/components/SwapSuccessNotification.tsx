@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Minus, Send } from "lucide-react";
 import Link from "next/link";
+import { useTranslation } from '@/hooks/useTranslation';
 
 export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity';
 
@@ -12,18 +13,19 @@ type Props = {
   operationType?: OperationType;
 };
 
-const OPERATION_LABELS: Record<OperationType, string> = {
-  swap: 'Swap',
-  wrap: 'Wrap',
-  unwrap: 'Unwrap',
-  addLiquidity: 'Add Liquidity',
-  removeLiquidity: 'Remove Liquidity',
-};
-
 export default function SwapSuccessNotification({ txId, onClose, operationType = 'swap' }: Props) {
+  const { t } = useTranslation();
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+
+  const OPERATION_LABELS: Record<OperationType, string> = {
+    swap: t('success.swap'),
+    wrap: t('success.wrap'),
+    unwrap: t('success.unwrap'),
+    addLiquidity: t('success.addLiquidity'),
+    removeLiquidity: t('success.removeLiquidity'),
+  };
 
   const operationLabel = OPERATION_LABELS[operationType];
 
@@ -98,9 +100,9 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
 
           {/* Content */}
           <div className="ml-8 pr-16">
-            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">{operationLabel} Submitted</h3>
+            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">{t('success.submitted', { operation: operationLabel })}</h3>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
-              Transaction ID:{" "}
+              {t('success.transactionId')}{" "}
               <Link
                 href={`https://espo.sh/tx/${txId}`}
                 target="_blank"

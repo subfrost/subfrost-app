@@ -5,12 +5,16 @@ type Props = {
   onTabChange: (tab: 'yve-diesel' | 'gauge') => void;
 };
 
+import { useTranslation } from '@/hooks/useTranslation';
+
 export default function VaultHeaderTabs({ activeTab, onTabChange }: Props) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex w-full flex-col gap-4">
       {/* Title */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-[color:var(--sf-text)]">Vaults</h1>
+        <h1 className="text-3xl font-bold text-[color:var(--sf-text)]">{t('vaultTabs.vaults')}</h1>
       </div>
 
       {/* Tabs */}
@@ -23,7 +27,7 @@ export default function VaultHeaderTabs({ activeTab, onTabChange }: Props) {
               : 'text-[color:var(--sf-text)] hover:bg-black/5'
           }`}
         >
-          yveDIESEL Vault
+          {t('vaultTabs.yveDieselVault')}
         </button>
         <button
           onClick={() => onTabChange('gauge')}
@@ -33,7 +37,7 @@ export default function VaultHeaderTabs({ activeTab, onTabChange }: Props) {
               : 'text-[color:var(--sf-text)] hover:bg-black/5'
           }`}
         >
-          Gauge Staking
+          {t('vaultTabs.gaugeStaking')}
         </button>
       </div>
     </div>

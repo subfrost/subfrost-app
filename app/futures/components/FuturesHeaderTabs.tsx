@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from '@/hooks/useTranslation';
+
 type TabKey = "markets" | "positions";
 
 type Props = {
@@ -8,6 +10,7 @@ type Props = {
 };
 
 export default function FuturesHeaderTabs({ activeTab, onTabChange }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="relative inline-flex items-center gap-1 sm:gap-2 p-1 rounded-lg">
       <button
@@ -19,7 +22,7 @@ export default function FuturesHeaderTabs({ activeTab, onTabChange }: Props) {
         }`}
         onClick={() => onTabChange("markets")}
       >
-        MARKETS
+        {t('futuresTabs.markets')}
       </button>
       <button
         type="button"
@@ -30,7 +33,7 @@ export default function FuturesHeaderTabs({ activeTab, onTabChange }: Props) {
         }`}
         onClick={() => onTabChange("positions")}
       >
-        POSITIONS
+        {t('futuresTabs.positions')}
       </button>
     </div>
   );

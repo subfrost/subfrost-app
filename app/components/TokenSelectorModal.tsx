@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import TokenIcon from './TokenIcon';
 import { Search, X } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Import Network type from constants
 import type { Network } from '@/utils/constants';
@@ -87,13 +88,14 @@ export default function TokenSelectorModal({
   tokens,
   onSelectToken,
   selectedTokenId,
-  title = 'Select a token',
+  title,
   network = 'mainnet',
   excludedTokenIds = [],
   mode,
   onBridgeTokenSelect,
   selectedBridgeTokenFromOther,
 }: Props) {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showAlreadySelected, setShowAlreadySelected] = useState(false);
@@ -131,7 +133,7 @@ export default function TokenSelectorModal({
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
-              {title}
+              {title || t('tokenSelector.selectToken')}
             </h2>
             <button
               onClick={onClose}
@@ -142,7 +144,7 @@ export default function TokenSelectorModal({
             </button>
           </div>
           <p className="text-xs font-medium text-[color:var(--sf-text)]/60">
-            We only support trades of high-volume assets.
+            {t('tokenSelector.highVolumeOnly')}
           </p>
         </div>
 
@@ -152,16 +154,16 @@ export default function TokenSelectorModal({
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-                  Cross-chain Swap:
+                  {t('tokenSelector.crossChainSwap')}
                 </span>
                 {showComingSoon && (
                   <span className="text-xs font-bold text-[color:var(--sf-primary)] animate-pulse">
-                    Coming soon!
+                    {t('tokenSelector.comingSoon')}
                   </span>
                 )}
                 {showAlreadySelected && (
                   <span className="text-xs font-bold text-[color:var(--sf-primary)] animate-pulse">
-                    Token already selected!
+                    {t('tokenSelector.alreadySelected')}
                   </span>
                 )}
               </div>
@@ -234,7 +236,7 @@ export default function TokenSelectorModal({
             />
             <input
               type="text"
-              placeholder="Search bitcoin-native assets..."
+              placeholder={t('tokenSelector.searchAssets')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] py-3 pl-10 pr-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
@@ -247,7 +249,7 @@ export default function TokenSelectorModal({
           {filteredTokens.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm font-medium text-[color:var(--sf-text)]/50">
-                No tokens found
+                {t('tokenSelector.noTokens')}
               </p>
             </div>
           ) : (
@@ -319,7 +321,7 @@ export default function TokenSelectorModal({
                         )}
                         {!isAvailable && mode === 'from' && (
                           <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                            Not available
+                            {t('tokenSelector.notAvailable')}
                           </span>
                         )}
                       </div>

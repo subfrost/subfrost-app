@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Copy, Check, X } from 'lucide-react';
 import QRCode from '@/app/components/QRCode';
 import { useWallet } from '@/context/WalletContext';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ReceiveModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface ReceiveModalProps {
 }
 
 export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
+  const { t } = useTranslation();
   const { address } = useWallet() as any;
   const [copied, setCopied] = useState(false);
   const qrSize = 225; // 75% of original 300
@@ -35,7 +37,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Receive Bitcoin</h2>
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{t('receive.title')}</h2>
             <button
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
@@ -57,7 +59,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
 
           {/* Address */}
           <div className="space-y-2">
-            <label className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">Your Bitcoin Address</label>
+            <label className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">{t('receive.yourAddress')}</label>
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
               <span className="flex-1 text-sm break-all text-[color:var(--sf-text)]">
                 {address}
@@ -65,7 +67,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
               <button
                 onClick={copyAddress}
                 className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0"
-                title="Copy address"
+                title={t('receive.copyAddress')}
               >
                 {copied ? (
                   <Check size={14} className="text-green-500" />
@@ -79,12 +81,12 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           {/* Warning */}
           <div className="p-4 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <div className="text-sm text-[color:var(--sf-info-yellow-text)] space-y-2">
-              <div className="font-bold text-[color:var(--sf-info-yellow-title)]">Important:</div>
+              <div className="font-bold text-[color:var(--sf-info-yellow-title)]">{t('receive.important')}</div>
               <ul className="list-disc list-inside space-y-1 text-xs">
-                <li>Only send Bitcoin to this address</li>
-                <li>Sending other cryptocurrencies may result in permanent loss</li>
-                <li>Always verify the address before sending</li>
-                <li>This address can be used multiple times</li>
+                <li>{t('receive.onlySendBtc')}</li>
+                <li>{t('receive.otherCrypto')}</li>
+                <li>{t('receive.verifyAddress')}</li>
+                <li>{t('receive.reuseAddress')}</li>
               </ul>
             </div>
           </div>

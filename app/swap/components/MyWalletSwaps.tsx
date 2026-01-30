@@ -6,6 +6,7 @@ import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
 import { useWallet } from '@/context/WalletContext';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { Network } from '@/utils/constants';
 
 type AmmRow =
@@ -59,6 +60,7 @@ function PairIcon({
 }
 
 export default function MyWalletSwaps() {
+  const { t } = useTranslation();
   const { address, network } = useWallet();
   
   const {
@@ -137,12 +139,12 @@ export default function MyWalletSwaps() {
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col">
       <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
-        <h3 className="text-base font-bold text-[color:var(--sf-text)]">My Wallet Activity</h3>
+        <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('myActivity.title')}</h3>
       </div>
 
       {!address ? (
         <div className="px-6 py-4 text-center text-sm text-[color:var(--sf-text)]/60 flex items-center justify-center min-h-[72px]">
-          Connect your wallet to view your activity
+          {t('myActivity.connectWallet')}
         </div>
       ) : (
         <>
@@ -155,15 +157,15 @@ export default function MyWalletSwaps() {
           >
         {/* Header */}
         <div className="grid grid-cols-[220px_1fr_minmax(100px,150px)] gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)] sticky top-0">
-          <div>Pair</div>
-          <div className="text-right">Amounts</div>
-          <div className="text-right">Time</div>
+          <div>{t('myActivity.pair')}</div>
+          <div className="text-right">{t('myActivity.amounts')}</div>
+          <div className="text-right">{t('myActivity.time')}</div>
         </div>
 
         {/* Rows */}
         {items.length === 0 && !isLoading ? (
           <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
-            No activity found for your wallet
+            {t('myActivity.noActivity')}
           </div>
         ) : (
           <>
@@ -177,11 +179,11 @@ export default function MyWalletSwaps() {
               }).format(time);
 
               const typeLabel =
-                row.type === 'swap' ? 'Swap' :
-                row.type === 'mint' ? 'Supply' :
-                row.type === 'burn' ? 'Withdraw' :
-                row.type === 'creation' ? 'Create' :
-                row.type === 'wrap' ? 'Wrap' : 'Unwrap';
+                row.type === 'swap' ? t('myActivity.swap') :
+                row.type === 'mint' ? t('myActivity.supply') :
+                row.type === 'burn' ? t('myActivity.withdraw') :
+                row.type === 'creation' ? t('myActivity.create') :
+                row.type === 'wrap' ? t('myActivity.wrap') : t('myActivity.unwrap');
 
               const pairNames = (() => {
                 if (row.type === 'swap') {

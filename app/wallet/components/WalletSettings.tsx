@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'oylnet' | 'custom';
 
@@ -40,6 +41,7 @@ function detectNetworkFromAddress(address: string): { network: NetworkType | nul
 export default function WalletSettings() {
   const { network: currentNetwork, account, wallet, walletType, browserWallet } = useWallet() as any;
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   // Determine if using browser extension wallet
   const isBrowserWallet = walletType === 'browser' && browserWallet;
@@ -211,17 +213,17 @@ export default function WalletSettings() {
   }, [segwitChangeDropdownOpen]);
 
   const CHANGE_OPTIONS = [
-    { value: 0, label: 'External (0)' },
-    { value: 1, label: 'Change (1)' },
+    { value: 0, label: t('settings.external') },
+    { value: 1, label: t('settings.changeAddr') },
   ];
 
   const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
-    { value: 'mainnet', label: 'Mainnet' },
-    { value: 'signet', label: 'Signet' },
-    { value: 'subfrost-regtest', label: 'Subfrost Regtest (regtest.subfrost.io)' },
-    { value: 'regtest-local', label: 'Local Docker (localhost:18888)' },
-    { value: 'regtest', label: 'Local Regtest (legacy)' },
-    { value: 'custom', label: 'Custom' },
+    { value: 'mainnet', label: t('settings.mainnet') },
+    { value: 'signet', label: t('settings.signet') },
+    { value: 'subfrost-regtest', label: t('settings.subfrostRegtest') + ' (regtest.subfrost.io)' },
+    { value: 'regtest-local', label: t('settings.localRegtest') + ' (localhost:18888)' },
+    { value: 'regtest', label: t('settings.localRegtest') + ' (legacy)' },
+    { value: 'custom', label: t('settings.customNetwork') },
   ];
 
   const handleSave = () => {
@@ -284,7 +286,7 @@ export default function WalletSettings() {
 
   const revealSeed = async () => {
     if (!wallet || !password) {
-      setSecurityError('Password is required');
+      setSecurityError(t('settings.passwordRequired'));
       return;
     }
 
@@ -294,7 +296,7 @@ export default function WalletSettings() {
       // Get the keystore from localStorage
       const keystoreData = localStorage.getItem('subfrost_encrypted_keystore');
       if (!keystoreData) {
-        setSecurityError('No keystore found');
+        setSecurityError(t('settings.noKeystore'));
         return;
       }
 
@@ -303,7 +305,7 @@ export default function WalletSettings() {
       
       setRevealedSeed(keystore.mnemonic);
     } catch (error: any) {
-      setSecurityError('Invalid password or decryption failed');
+      setSecurityError(t('settings.invalidPassword'));
       console.error('Seed reveal failed:', error);
     }
   };
@@ -379,7 +381,7 @@ export default function WalletSettings() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <Key size={24} className="text-yellow-400" />
-              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">HD Wallet Derivation</h3>
+              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.hdDerivation')}</h3>
             </div>
           </div>
 
@@ -391,12 +393,12 @@ export default function WalletSettings() {
             <div className="space-y-4">
               {/* Current Addresses Display */}
               <div className="rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-3">Current Active Addresses:</div>
+                <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-3">{t('settings.currentAddresses')}</div>
                 <div className="space-y-3">
                   {account?.taproot && (
                     <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
                       <div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Taproot (P2TR)</div>
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.taprootP2tr')}</div>
                         <div className="text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
                         <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.taproot.hdPath}</div>
                       </div>
@@ -405,7 +407,7 @@ export default function WalletSettings() {
                   {account?.nativeSegwit && (
                     <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
                       <div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Native SegWit (P2WPKH)</div>
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.segwitP2wpkh')}</div>
                         <div className="text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
                         <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.nativeSegwit.hdPath}</div>
                       </div>
@@ -416,7 +418,7 @@ export default function WalletSettings() {
 
               {/* Tip - shown above Configure Derivation button */}
               <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-4 text-sm text-[color:var(--sf-primary)]">
-                💡 Use account indices to manage multiple wallets from the same seed phrase. <strong>Only configure this if you know what you are doing.</strong>
+                {t('settings.accountTip')}
               </div>
 
               {/* Configure Derivation Toggle Button */}
@@ -425,7 +427,7 @@ export default function WalletSettings() {
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
               >
                 {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                <span>Adv. Configuration</span>
+                <span>{t('settings.advConfig')}</span>
               </button>
 
               {/* Collapsible Derivation Configuration */}
@@ -435,13 +437,13 @@ export default function WalletSettings() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                        Taproot (BIP-86) - {taprootPath}
+                        {t('settings.taprootBip86')} - {taprootPath}
                       </label>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Account</label>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
                         <input
                           type="number"
                           min="0"
@@ -452,7 +454,7 @@ export default function WalletSettings() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
                         <div className="relative" ref={taprootChangeDropdownRef}>
                           <button
                             type="button"
@@ -486,7 +488,7 @@ export default function WalletSettings() {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Address Index</label>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
                         <input
                           type="number"
                           min="0"
@@ -501,7 +503,7 @@ export default function WalletSettings() {
                     {previewAddresses.taproot && (
                       <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
                         <div className="flex-1 mr-2">
-                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
+                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
                           <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
                         </div>
                         <button
@@ -523,13 +525,13 @@ export default function WalletSettings() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                        Native SegWit (BIP-84) - {segwitPath}
+                        {t('settings.segwitBip84')} - {segwitPath}
                       </label>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Account</label>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
                         <input
                           type="number"
                           min="0"
@@ -540,7 +542,7 @@ export default function WalletSettings() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Change</label>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
                         <div className="relative" ref={segwitChangeDropdownRef}>
                           <button
                             type="button"
@@ -574,7 +576,7 @@ export default function WalletSettings() {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">Address Index</label>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
                         <input
                           type="number"
                           min="0"
@@ -589,7 +591,7 @@ export default function WalletSettings() {
                     {previewAddresses.segwit && (
                       <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
                         <div className="flex-1 mr-2">
-                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">Preview Address:</div>
+                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
                           <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
                         </div>
                         <button
@@ -613,7 +615,7 @@ export default function WalletSettings() {
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
                   >
                     <Save size={20} />
-                    {saved ? 'Settings Saved!' : 'Save Settings'}
+                    {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
                   </button>
                 </div>
               )}
@@ -625,13 +627,13 @@ export default function WalletSettings() {
         <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6 order-1 md:order-2">
             <div className="flex items-center gap-3 mb-4">
               <Network size={24} className="text-[color:var(--sf-primary)]" />
-              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Network Configuration</h3>
+              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.networkConfig')}</h3>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
-                  Select Network
+                  {t('wallet.selectNetwork')}
                 </label>
                 {isBrowserWallet ? (
                   // Browser wallet - show detected network (read-only)
@@ -656,7 +658,7 @@ export default function WalletSettings() {
                       onClick={() => setNetworkDropdownOpen((v) => !v)}
                       className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
                     >
-                      <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? 'Select Network'}</span>
+                      <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? t('wallet.selectNetwork')}</span>
                       <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {networkDropdownOpen && (
@@ -728,7 +730,7 @@ export default function WalletSettings() {
                   className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
                 >
                   <Save size={20} />
-                  {saved ? 'Settings Saved!' : 'Save Settings'}
+                  {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
                 </button>
               )}
             </div>
@@ -739,12 +741,12 @@ export default function WalletSettings() {
           <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 order-2 md:order-3">
               <div className="flex items-center gap-3 mb-4">
                 <Shield size={24} className="text-red-400" />
-                <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Security & Backup</h3>
+                <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.securityBackup')}</h3>
               </div>
 
               <div className="space-y-3">
                 <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-                  ⚠️ <strong>Warning:</strong> Never share your seed phrase or private keys with anyone. Subfrost will never ask for this information.
+                  {t('settings.securityWarning')}
                 </div>
 
                 <div className="flex flex-col gap-3">
@@ -753,7 +755,7 @@ export default function WalletSettings() {
                     className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
                   >
                     <Download size={18} />
-                    <span>Export Keystore</span>
+                    <span>{t('settings.exportKeystore')}</span>
                   </button>
 
                   <button
@@ -761,7 +763,7 @@ export default function WalletSettings() {
                     className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
                   >
                     <Eye size={18} />
-                    <span>Reveal Seed Phrase</span>
+                    <span>{t('settings.revealSeedPhrase')}</span>
                   </button>
 
                   <button
@@ -794,7 +796,7 @@ export default function WalletSettings() {
                       ) : (
                         <>
                           <Cloud size={18} />
-                          <span>Backup to Google Drive</span>
+                          <span>{t('settings.backupToGoogle')}</span>
                         </>
                       )}
                     </span>
@@ -818,7 +820,7 @@ export default function WalletSettings() {
             {/* Header */}
             <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">Reveal Seed Phrase</h2>
+                <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{t('settings.revealSeedPhrase')}</h2>
                 <button
                   onClick={closeSeedModal}
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
@@ -835,7 +837,7 @@ export default function WalletSettings() {
                 <>
                   <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                     <Lock size={20} className="inline mr-2" />
-                    Enter your password to decrypt and reveal your seed phrase.
+                    {t('settings.enterPassword')}
                   </div>
 
                   <div>
@@ -862,20 +864,20 @@ export default function WalletSettings() {
                       onClick={revealSeed}
                       className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
                     >
-                      Reveal
+                      {t('settings.revealSeedPhrase')}
                     </button>
                     <button
                       onClick={closeSeedModal}
                       className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="rounded-xl bg-green-500/10 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-                    <div className="text-sm text-green-600 dark:text-green-200 mb-2">Your Seed Phrase:</div>
+                    <div className="text-sm text-green-600 dark:text-green-200 mb-2">{t('settings.yourSeedPhrase')}</div>
                     <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-text)] break-all select-all">
                       {revealedSeed}
                     </div>
@@ -887,13 +889,13 @@ export default function WalletSettings() {
                       className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide flex items-center justify-center gap-2"
                     >
                       <Copy size={18} />
-                      Copy to Clipboard
+                      {t('settings.copyToClipboard')}
                     </button>
                     <button
                       onClick={closeSeedModal}
                       className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
                     >
-                      Close
+                      {t('common.close')}
                     </button>
                   </div>
                 </>

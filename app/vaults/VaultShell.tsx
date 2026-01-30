@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useWallet } from "@/context/WalletContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { AVAILABLE_VAULTS, VaultConfig } from "./constants";
 import VaultListItem from "./components/VaultListItem";
 import VaultDetail from "./components/VaultDetail";
@@ -16,6 +17,7 @@ const MAINS_VAULT_IDS = ['dx-btc', 've-usd', 've-eth'];
 const ALTS_VAULT_IDS = ['ve-diesel', 've-ordi'];
 
 export default function VaultShell() {
+  const { t } = useTranslation();
   const { network } = useWallet();
   const searchParams = useSearchParams();
   const [selectedVault, setSelectedVault] = useState<VaultConfig | null>(null);
@@ -123,7 +125,7 @@ export default function VaultShell() {
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          <span className="text-sm font-semibold">Back to Vaults Overview</span>
+          <span className="text-sm font-semibold">{t('vaults.backToOverview')}</span>
         </button>
 
         {/* Vault Detail with integrated boost */}
@@ -146,7 +148,7 @@ export default function VaultShell() {
                   : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
-              All
+              {t('vaults.all')}
             </button>
             <button
               onClick={() => setVaultFilter('mains')}
@@ -156,7 +158,7 @@ export default function VaultShell() {
                   : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
-              Mains
+              {t('vaults.mains')}
             </button>
             <button
               onClick={() => setVaultFilter('alts')}
@@ -166,7 +168,7 @@ export default function VaultShell() {
                   : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
               }`}
             >
-              Alts
+              {t('vaults.alts')}
             </button>
           </div>
 
@@ -182,7 +184,7 @@ export default function VaultShell() {
                     : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
-                All
+                {t('vaults.all')}
               </button>
               <button
                 onClick={() => setVaultFilter('mains')}
@@ -192,7 +194,7 @@ export default function VaultShell() {
                     : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
-                Mains
+                {t('vaults.mains')}
               </button>
               <button
                 onClick={() => setVaultFilter('alts')}
@@ -202,7 +204,7 @@ export default function VaultShell() {
                     : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
               >
-                Alts
+                {t('vaults.alts')}
               </button>
             </div>
 
@@ -220,7 +222,7 @@ export default function VaultShell() {
 
           {filteredVaults.length === 0 && (
             <div className="text-center py-12 text-[color:var(--sf-text)]/60">
-              No vaults available yet
+              {t('vaults.noVaults')}
             </div>
           )}
         </div>

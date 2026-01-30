@@ -8,16 +8,7 @@ import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
-
-const TX_FILTER_OPTIONS: { value: AmmTransactionType | 'all'; label: string }[] = [
-  { value: 'all', label: 'All Types' },
-  { value: 'swap', label: 'Swaps' },
-  { value: 'mint', label: 'Supply' },
-  { value: 'burn', label: 'Withdraw' },
-  { value: 'creation', label: 'Create Pool' },
-  { value: 'wrap', label: 'Wrap' },
-  { value: 'unwrap', label: 'Unwrap' },
-];
+import { useTranslation } from '@/hooks/useTranslation';
 
 type AmmRow =
   | ({ type: 'swap'; soldAmount: string; boughtAmount: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; soldTokenBlockId: string; soldTokenTxId: string; boughtTokenBlockId: string; boughtTokenTxId: string; address?: string; sellerAddress?: string })
@@ -87,7 +78,19 @@ const MAINNET_WHITELISTED_POOL_IDS = new Set([
 ]);
 
 export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { isFullPage?: boolean; maxHeightClass?: string }) {
+  const { t } = useTranslation();
   const { network } = useWallet();
+
+  const TX_FILTER_OPTIONS: { value: AmmTransactionType | 'all'; label: string }[] = [
+    { value: 'all', label: t('activity.allTypes') },
+    { value: 'swap', label: t('activity.swaps') },
+    { value: 'mint', label: t('activity.supply') },
+    { value: 'burn', label: t('activity.withdraw') },
+    { value: 'creation', label: t('activity.createPool') },
+    { value: 'wrap', label: t('activity.wrap') },
+    { value: 'unwrap', label: t('activity.unwrap') },
+  ];
+
   const [txFilter, setTxFilter] = useState<AmmTransactionType | 'all'>('all');
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
@@ -186,14 +189,14 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
       <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-[color:var(--sf-text)]">Global Activity</h3>
+            <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('activity.globalActivity')}</h3>
             <div className="relative" ref={filterDropdownRef}>
               <button
                 type="button"
                 onClick={() => setFilterDropdownOpen((v) => !v)}
                 className="flex items-center gap-1 rounded-md bg-transparent px-2 py-1 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
               >
-                {TX_FILTER_OPTIONS.find((o) => o.value === txFilter)?.label ?? 'All Types'}
+                {TX_FILTER_OPTIONS.find((o) => o.value === txFilter)?.label ?? t('activity.allTypes')}
                 <ChevronDown size={14} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${filterDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
               {filterDropdownOpen && (
@@ -221,11 +224,11 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
           </div>
           {!isFullPage ? (
             <Link href="/activity" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-              View all
+              {t('activity.viewAll')}
             </Link>
           ) : (
             <Link href="/" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-              Back
+              {t('activity.back')}
             </Link>
           )}
         </div>
@@ -234,17 +237,17 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
       {/* Column Headers */}
       {/* Mobile header (xs only) - 3 columns */}
       <div className="sm:hidden grid grid-cols-[auto_1fr_auto] gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
-        <div>Txn</div>
-        <div>Pair</div>
-        <div className="text-right">Amounts</div>
+        <div>{t('activity.txn')}</div>
+        <div>{t('activity.pair')}</div>
+        <div className="text-right">{t('activity.amounts')}</div>
       </div>
       {/* Desktop header (sm+) - 5 columns */}
       <div className="hidden sm:grid sm:grid-cols-[minmax(60px,0.8fr)_minmax(120px,1.2fr)_minmax(100px,1.2fr)_minmax(80px,1fr)_minmax(70px,0.8fr)] lg:grid-cols-[minmax(80px,1fr)_minmax(160px,1.5fr)_minmax(120px,1.2fr)_minmax(90px,1fr)_minmax(80px,1fr)] xl:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] gap-2 lg:gap-3 xl:gap-4 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
-        <div>Txn</div>
-        <div>Pair</div>
-        <div className="text-right">Amounts</div>
-        <div className="text-right">Address</div>
-        <div className="text-right">Time</div>
+        <div>{t('activity.txn')}</div>
+        <div>{t('activity.pair')}</div>
+        <div className="text-right">{t('activity.amounts')}</div>
+        <div className="text-right">{t('activity.address')}</div>
+        <div className="text-right">{t('activity.time')}</div>
       </div>
 
       <div className={`no-scrollbar overflow-auto ${isFullPage ? 'max-h-[calc(100vh-200px)]' : (maxHeightClass ?? 'max-h-[70vh]')}`}>
@@ -276,11 +279,11 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
             '';
 
           const typeLabel =
-            row.type === 'swap' ? 'Swap' :
-            row.type === 'mint' ? 'Supply' :
-            row.type === 'burn' ? 'Withdraw' :
-            row.type === 'creation' ? 'Create' :
-            row.type === 'wrap' ? 'Wrap' : 'Unwrap';
+            row.type === 'swap' ? t('myActivity.swap') :
+            row.type === 'mint' ? t('myActivity.supply') :
+            row.type === 'burn' ? t('myActivity.withdraw') :
+            row.type === 'creation' ? t('myActivity.create') :
+            row.type === 'wrap' ? t('myActivity.wrap') : t('myActivity.unwrap');
 
           const pairNames = (() => {
             if (row.type === 'swap') {
@@ -452,7 +455,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
           );
         })}
           {(isLoading || isFetchingNextPage) && (
-            <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">Loading…</div>
+            <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">{t('activity.loading')}</div>
           )}
           <div ref={loadingRef} className="h-6" />
         </div>

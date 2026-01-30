@@ -3,6 +3,7 @@ import type { PoolSummary } from "../types";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type SortField = 'pair' | 'tvl' | 'volume' | 'apr';
 type SortOrder = 'asc' | 'desc';
@@ -21,6 +22,7 @@ type Props = {
 export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange }: Props) {
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
+  const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>('tvl');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
@@ -174,14 +176,14 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
           <div className="relative w-full max-w-xs">
             <input
               type="text"
-              placeholder="Search..."
+              placeholder={t('pool.search')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="hidden md:block lg:hidden h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none "
             />
             <input
               type="text"
-              placeholder="Search pools..."
+              placeholder={t('pool.searchPools')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="md:hidden lg:block h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none "

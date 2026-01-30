@@ -1,6 +1,7 @@
 "use client";
 
 import { useTheme } from "@/context/ThemeContext";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type ApySparklineProps = {
   data: number[]; // Array of APY values (30 days)
@@ -11,6 +12,7 @@ type ApySparklineProps = {
 
 export default function ApySparkline({ data, currentApy, showLabel = true, fillHeight = false }: ApySparklineProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   // Grid line color matching CandleChart styling
   const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(40, 67, 114, 0.1)';
@@ -50,7 +52,7 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
   return (
     <div className={`flex flex-col items-end w-full ${fillHeight ? 'h-full' : ''}`}>
       <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-        30-day APY
+        {t('apy.thirtyDayApy')}
       </div>
       <div className={`relative w-full ${fillHeight ? 'flex-1' : 'h-12'}`}>
         {/* Chart line - stretches to fill available width */}

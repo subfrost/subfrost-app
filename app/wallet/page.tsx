@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 import AddressAvatar from '@/app/components/AddressAvatar';
 import BalancesPanel from './components/BalancesPanel';
 import UTXOManagement from './components/UTXOManagement';
@@ -17,6 +18,7 @@ type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
   const { connected, isConnected, address, paymentAddress } = useWallet() as any;
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as TabView | null;
@@ -58,9 +60,9 @@ export default function WalletDashboardPage() {
 
   // Settings tab is rendered separately for responsive control
   const tabs = [
-    { id: 'balances' as TabView, label: 'Balances', shortLabel: 'Balances', icon: Wallet, disabled: false },
-    { id: 'transactions' as TabView, label: 'Transaction History', shortLabel: 'History', icon: Activity, disabled: false },
-    { id: 'utxos' as TabView, label: 'UTXO Management', shortLabel: 'UTXOs', icon: BarChart2, disabled: true },
+    { id: 'balances' as TabView, label: t('walletDash.balances'), shortLabel: t('walletDash.balances'), icon: Wallet, disabled: false },
+    { id: 'transactions' as TabView, label: t('walletDash.transactionHistory'), shortLabel: t('walletDash.history'), icon: Activity, disabled: false },
+    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), icon: BarChart2, disabled: true },
   ];
 
   return (
@@ -69,21 +71,21 @@ export default function WalletDashboardPage() {
           {/* Header */}
           <div className="mb-8">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
-              <h1 className="text-2xl md:text-3xl font-bold text-[color:var(--sf-text)] mb-4 md:mb-0">Wallet Dashboard</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-[color:var(--sf-text)] mb-4 md:mb-0">{t('walletDash.title')}</h1>
               <div className="flex gap-2 items-center">
                 <button
                   onClick={() => setShowSendModal(true)}
                   className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-primary)] text-white text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
                 >
                   <Send size={16} />
-                  Send
+                  {t('walletDash.send')}
                 </button>
                 <button
                   onClick={() => setShowReceiveModal(true)}
                   className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
                 >
                   <QrCode size={16} />
-                  Receive
+                  {t('walletDash.receive')}
                 </button>
               </div>
             </div>
@@ -92,7 +94,7 @@ export default function WalletDashboardPage() {
               {paymentAddress && (
                 <div className="flex items-center gap-3">
                   <AddressAvatar address={paymentAddress} size={24} className="shrink-0" />
-                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Native SegWit:</span>
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">{t('walletDash.nativeSegwit')}</span>
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{paymentAddress}</span>
                   <button
                     onClick={() => copyToClipboard(paymentAddress, 'segwit')}
@@ -111,7 +113,7 @@ export default function WalletDashboardPage() {
               {address && (
                 <div className="flex items-center gap-3">
                   <AddressAvatar address={address} size={24} className="shrink-0" />
-                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">Taproot:</span>
+                  <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">{t('walletDash.taproot')}</span>
                   <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{address}</span>
                   <button
                     onClick={() => copyToClipboard(address, 'taproot')}
@@ -153,7 +155,7 @@ export default function WalletDashboardPage() {
                     {/* Coming Soon tooltip - appears directly above UTXO tab */}
                     {tab.disabled && showComingSoon && (
                       <div className="absolute left-[calc(50%+28px)] -translate-x-1/2 -top-8 px-3 py-1.5 rounded-lg bg-transparent text-[color:var(--sf-text)]/60 text-xs font-normal whitespace-nowrap z-50 pointer-events-none animate-fade-in-out">
-                        Coming Soon!
+                        {t('walletDash.comingSoon')}
                       </div>
                     )}
                   </div>
@@ -169,7 +171,7 @@ export default function WalletDashboardPage() {
                     ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
                     : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
                 }`}
-                title="Settings"
+                title={t('header.settings')}
               >
                 <Settings size={16} className="md:w-[18px] md:h-[18px]" />
               </button>

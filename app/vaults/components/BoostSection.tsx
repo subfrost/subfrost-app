@@ -7,6 +7,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useWallet } from "@/context/WalletContext";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   vault: VaultConfig;
@@ -19,6 +20,7 @@ export default function BoostSection({ vault }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { theme } = useTheme();
   const { network } = useWallet();
+  const { t } = useTranslation();
 
   // Mock data - replace with real data
   const userVeTokenBalance = "1250.50";
@@ -38,7 +40,7 @@ export default function BoostSection({ vault }: Props) {
         <div className="flex items-center gap-3 text-[color:var(--sf-text)]/60">
           <AlertCircle size={20} />
           <p className="text-sm font-medium">
-            This vault does not support yield boosting.
+            {t('boost.noBoost')}
           </p>
         </div>
       </div>
@@ -58,10 +60,10 @@ export default function BoostSection({ vault }: Props) {
           </div>
           <div>
             <h3 className="text-lg font-bold text-[color:var(--sf-text)]">
-              BOOST Your Yield
+              {t('boost.boostYourYield')}
             </h3>
             <p className="text-xs text-[color:var(--sf-text)]/60">
-              Stake {vault.boostTokenSymbol} to increase your APY
+              {t('boost.stakeToIncrease', { token: vault.boostTokenSymbol || '' })}
             </p>
           </div>
         </div>
@@ -79,10 +81,10 @@ export default function BoostSection({ vault }: Props) {
         <div className="rounded-xl border-2 border-amber-500/30 bg-[color:var(--sf-coming-soon-bg)] p-4 md:col-span-2 md:row-start-2">
           <div className="flex items-center gap-2 text-[color:var(--sf-coming-soon-title)]">
             <Lock size={18} />
-            <span className="text-sm font-semibold">Coming Soon</span>
+            <span className="text-sm font-semibold">{t('boost.comingSoon')}</span>
           </div>
           <p className="mt-1 text-xs text-[color:var(--sf-coming-soon-text)]">
-            FUEL token features are not yet available. We will make announcements when TGE plans are finalized.
+            {t('boost.fuelNotAvailable')}
           </p>
         </div>
       )}
@@ -91,7 +93,7 @@ export default function BoostSection({ vault }: Props) {
       <div className="grid grid-cols-2 gap-4 md:contents">
         <div className={`rounded-xl bg-[color:var(--sf-surface)]/60 p-4 md:col-start-1 border-t border-[color:var(--sf-top-highlight)] ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
           <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
-            Est. Base APY
+            {t('boost.estBaseApy')}
           </p>
           <p className="text-2xl font-bold text-[color:var(--sf-text)]">
             {baseApy}%
@@ -102,7 +104,7 @@ export default function BoostSection({ vault }: Props) {
           style={{ background: `linear-gradient(to bottom right, var(--sf-boost-bg-from), var(--sf-boost-bg-to))` }}
         >
           <p className="text-xs font-medium text-[color:var(--sf-boost-label)] mb-1">
-            Boosted APY
+            {t('boost.boostedApy')}
           </p>
           <p className="text-2xl font-bold text-[color:var(--sf-boost-value)]">
             {boostedApy}%
@@ -115,7 +117,7 @@ export default function BoostSection({ vault }: Props) {
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
-              Your {vault.outputAsset} Balance
+              {t('boost.yourBalance', { token: vault.outputAsset })}
             </p>
             <p className="text-lg font-bold text-[color:var(--sf-text)]">
               {userVeTokenBalanceFormatted}
@@ -123,7 +125,7 @@ export default function BoostSection({ vault }: Props) {
           </div>
           <div>
             <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
-              Total {vault.boostTokenSymbol} Staked
+              {t('boost.totalStaked', { token: vault.boostTokenSymbol || '' })}
             </p>
             <p className="text-lg font-bold text-[color:var(--sf-text)]">
               {totalVxTokenStaked}
@@ -141,7 +143,7 @@ export default function BoostSection({ vault }: Props) {
                 : "text-[color:var(--sf-text)]/60"
             }`}
           >
-            Stake
+            {t('boost.stakeTab')}
             {activeTab === "stake" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--sf-primary)]" />
             )}
@@ -154,7 +156,7 @@ export default function BoostSection({ vault }: Props) {
                 : "text-[color:var(--sf-text)]/60"
             }`}
           >
-            Unstake
+            {t('boost.unstakeTab')}
             {activeTab === "unstake" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--sf-primary)]" />
             )}
@@ -188,7 +190,7 @@ export default function BoostSection({ vault }: Props) {
             <div className="flex flex-col gap-1">
               {/* Label */}
               <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">
-                {activeTab === "stake" ? "Stake Amount" : "Unstake Amount"}
+                {activeTab === "stake" ? t('boost.stakeAmount') : t('boost.unstakeAmount')}
               </span>
 
               {/* Input - full width */}
@@ -207,7 +209,7 @@ export default function BoostSection({ vault }: Props) {
               {/* Balance + Percentage Buttons stacked */}
               <div className="flex flex-col items-end gap-1">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  Balance {userVeTokenBalanceFormatted}
+                  {t('boost.balance', { amount: userVeTokenBalanceFormatted })}
                 </div>
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
@@ -236,7 +238,7 @@ export default function BoostSection({ vault }: Props) {
                     onClick={() => setStakeAmount(userVeTokenBalance)}
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
                   >
-                    Max
+                    {t('boost.max')}
                   </button>
                 </div>
               </div>
@@ -248,7 +250,7 @@ export default function BoostSection({ vault }: Props) {
             className="group relative w-full overflow-hidden rounded-xl px-6 py-3 font-bold text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: `linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
           >
-            <span className="relative z-10">{activeTab === "stake" ? "Stake to Boost" : "Unstake"}</span>
+            <span className="relative z-10">{activeTab === "stake" ? t('boost.stakeToBoost') : t('boost.unstakeTab')}</span>
             <div className="absolute inset-0 animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-purple-300/40 to-transparent group-disabled:animate-none" />
           </button>
         </div>
@@ -259,10 +261,10 @@ export default function BoostSection({ vault }: Props) {
         <div className="rounded-2xl bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4 border-t border-[color:var(--sf-top-highlight)]">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-bold text-[color:var(--sf-text)]">
-              Your Boosted Positions
+              {t('boost.yourBoostedPositions')}
             </h4>
             <button className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)]">
-              Consolidate All
+              {t('boost.consolidateAll')}
             </button>
           </div>
 
@@ -270,21 +272,21 @@ export default function BoostSection({ vault }: Props) {
           <div className="space-y-2">
             <div className="flex items-center justify-between rounded-lg bg-[color:var(--sf-surface)]/60 p-3">
               <div>
-                <p className="text-xs text-[color:var(--sf-text)]/60">Position #1</p>
+                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.position', { num: '1' })}</p>
                 <p className="text-sm font-bold text-[color:var(--sf-text)]">250.50 {vault.outputAsset}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-[color:var(--sf-text)]/60">Boost</p>
+                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.boost')}</p>
                 <p className="text-sm font-bold text-purple-600">200 {vault.boostTokenSymbol}</p>
               </div>
             </div>
             <div className="flex items-center justify-between rounded-lg bg-[color:var(--sf-surface)]/60 p-3">
               <div>
-                <p className="text-xs text-[color:var(--sf-text)]/60">Position #2</p>
+                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.position', { num: '2' })}</p>
                 <p className="text-sm font-bold text-[color:var(--sf-text)]">1,000.00 {vault.outputAsset}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-[color:var(--sf-text)]/60">Boost</p>
+                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.boost')}</p>
                 <p className="text-sm font-bold text-purple-600">650 {vault.boostTokenSymbol}</p>
               </div>
             </div>

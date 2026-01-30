@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionHistory } from '@/hooks/useTransactionHistory';
 import { Clock, CheckCircle, Code, RefreshCw, Zap } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function TransactionHistory() {
   const { account } = useWallet() as any;
+  const { t } = useTranslation();
 
   // Get transaction history for both addresses
   const p2wpkhAddress = account?.nativeSegwit?.address;
@@ -47,7 +49,7 @@ export default function TransactionHistory() {
     return (
       <div className="flex items-center justify-center py-12">
         <RefreshCw className="animate-spin text-[color:var(--sf-text)]/60 mr-2" size={20} />
-        <div className="text-[color:var(--sf-text)]/60">Loading transactions...</div>
+        <div className="text-[color:var(--sf-text)]/60">{t('txHistory.loading')}</div>
       </div>
     );
   }
@@ -55,7 +57,7 @@ export default function TransactionHistory() {
   if (error) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-red-400">Error: {error}</div>
+        <div className="text-red-400">{t('txHistory.error')} {error}</div>
       </div>
     );
   }
@@ -73,7 +75,7 @@ export default function TransactionHistory() {
                 : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
             }`}
           >
-            Visual
+            {t('txHistory.visual')}
           </button>
           <button
             onClick={() => setViewMode('raw')}
@@ -83,14 +85,14 @@ export default function TransactionHistory() {
                 : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
             }`}
           >
-            Raw JSON
+            {t('txHistory.rawJson')}
           </button>
         </div>
         <button
           onClick={handleRefresh}
           disabled={loading || isRefreshing}
           className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
-          title="Refresh transactions"
+          title={t('txHistory.refresh')}
         >
           <RefreshCw size={20} className={loading || isRefreshing ? 'animate-spin' : ''} />
         </button>
@@ -122,7 +124,7 @@ export default function TransactionHistory() {
                     {tx.hasProtostones && (
                       <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
                         <Zap size={12} />
-                        Alkanes
+                        {t('txHistory.alkanes')}
                       </span>
                     )}
                   </div>
@@ -134,16 +136,16 @@ export default function TransactionHistory() {
                       : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
                   }`}
                 >
-                  {tx.confirmed ? 'Confirmed' : 'Pending'}
+                  {tx.confirmed ? t('txHistory.confirmed') : t('txHistory.pending')}
                 </span>
               </div>
               <div className="text-xs text-[color:var(--sf-text)]/60 mt-2 ml-8">
-                {tx.blockTime ? formatDate(tx.blockTime) : 'Pending'}
+                {tx.blockTime ? formatDate(tx.blockTime) : t('txHistory.pending')}
                 {tx.blockHeight && (
-                  <span className="ml-2">• Block {tx.blockHeight}</span>
+                  <span className="ml-2">• {t('txHistory.block')} {tx.blockHeight}</span>
                 )}
                 {tx.fee && (
-                  <span className="ml-2">• Fee: {tx.fee.toLocaleString()} sats</span>
+                  <span className="ml-2">• {t('txHistory.fee')} {tx.fee.toLocaleString()} {t('txHistory.sats')}</span>
                 )}
               </div>
 
@@ -162,9 +164,9 @@ export default function TransactionHistory() {
           ))
         ) : (
           <div className="text-center py-12 text-[color:var(--sf-text)]/60">
-            <div className="mb-2">No transactions found</div>
+            <div className="mb-2">{t('txHistory.noTransactions')}</div>
             <div className="text-sm text-[color:var(--sf-text)]/40">
-              Transactions will appear here once your wallet has activity
+              {t('txHistory.noActivity')}
             </div>
           </div>
         )}

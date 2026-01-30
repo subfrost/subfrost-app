@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from '@/hooks/useTranslation';
+
 type TabKey = "swap" | "lp";
 
 type Props = {
@@ -8,6 +10,7 @@ type Props = {
 };
 
 export default function SwapHeaderTabs({ selectedTab, onTabChange }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="relative inline-flex items-center gap-2 p-1 rounded-lg">
       {/* Buttons */}
@@ -20,7 +23,7 @@ export default function SwapHeaderTabs({ selectedTab, onTabChange }: Props) {
         }`}
         onClick={() => onTabChange("swap")}
       >
-        <span>SWAP</span>
+        <span>{t('swap.swapTab')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 5l-4 4 4 4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M4 9h12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
@@ -37,7 +40,7 @@ export default function SwapHeaderTabs({ selectedTab, onTabChange }: Props) {
         }`}
         onClick={() => onTabChange("lp")}
       >
-        LIQUIDITY
+        {t('swap.liquidityTab')}
       </button>
     </div>
   );

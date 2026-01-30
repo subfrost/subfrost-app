@@ -5,6 +5,7 @@ import type { PoolSummary } from "../types";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
 import CandleChart from "./CandleChart";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   pool?: PoolSummary;
@@ -80,6 +81,7 @@ function generateMockCandles(timeframe: CandleTimeframe) {
 
 export default function PoolDetailsCard({ pool }: Props) {
   const { network } = useWallet();
+  const { t } = useTranslation();
   const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
 
   // Generate mock data directly
@@ -91,7 +93,7 @@ export default function PoolDetailsCard({ pool }: Props) {
       {/* Timeframe selector */}
       <div className="mb-4 flex items-center justify-between">
         <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 uppercase tracking-wider">
-          Price Chart
+          {t('pool.priceChart')}
         </div>
         <div className="flex gap-1">
           {TIMEFRAME_OPTIONS.map((opt) => (
@@ -137,19 +139,19 @@ export default function PoolDetailsCard({ pool }: Props) {
             {/* Stats columns: TVL | 24h Volume | 30d Volume */}
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">TVL</div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">{t('pool.tvl')}</div>
                 <div className="text-lg font-bold text-[color:var(--sf-primary)]">
                   {formatUsd(pool.tvlUsd)}
                 </div>
               </div>
               <div>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">24h Volume</div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">{t('pool.volume24h')}</div>
                 <div className="text-lg font-bold text-[color:var(--sf-text)]">
                   {formatUsd(pool.vol24hUsd)}
                 </div>
               </div>
               <div>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">30d Volume</div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">{t('pool.volume30d')}</div>
                 <div className="text-lg font-bold text-[color:var(--sf-text)]">
                   {formatUsd(pool.vol30dUsd)}
                 </div>
@@ -158,7 +160,7 @@ export default function PoolDetailsCard({ pool }: Props) {
           </>
         ) : (
           <p className="mt-4 text-center text-xs text-[color:var(--sf-text)]/50">
-            Select a market below to view pool details
+            {t('pool.selectMarket')}
           </p>
         )}
       </div>
