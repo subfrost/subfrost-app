@@ -298,6 +298,47 @@ export function usePools(params: UsePoolsParams = {}) {
 
       console.log('[usePools] Processed', items.length, 'valid pools');
 
+      // Resolve names for unknown tokens via alkanesReflect
+      const tokensToReflect = new Map<string, { symbol: string; name?: string }>();
+      for (const item of items) {
+        for (const token of [item.token0, item.token1]) {
+          if (!KNOWN_TOKENS[token.id] && !tokensToReflect.has(token.id) && /^\d+$/.test(token.symbol)) {
+            tokensToReflect.set(token.id, token);
+          }
+        }
+      }
+
+      if (tokensToReflect.size > 0 && provider) {
+        console.log('[usePools] Resolving names for', tokensToReflect.size, 'unknown tokens via alkanesReflect');
+        await Promise.allSettled(
+          Array.from(tokensToReflect.entries()).map(async ([id]) => {
+            try {
+              const reflection = await provider.alkanesReflect(id) as { name?: string; symbol?: string } | null;
+              if (reflection?.name || reflection?.symbol) {
+                tokensToReflect.set(id, {
+                  symbol: reflection.symbol || reflection.name || id,
+                  name: reflection.name || reflection.symbol || id,
+                });
+              }
+            } catch (e) {
+              console.log(`[usePools] alkanesReflect failed for ${id}:`, e);
+            }
+          })
+        );
+
+        // Apply resolved names back to all pool items
+        for (const item of items) {
+          for (const token of [item.token0, item.token1]) {
+            const resolved = tokensToReflect.get(token.id);
+            if (resolved && resolved.symbol !== token.symbol) {
+              token.symbol = resolved.symbol;
+              token.name = resolved.name;
+            }
+          }
+          item.pairLabel = `${item.token0.symbol} / ${item.token1.symbol} LP`;
+        }
+      }
+
       // Apply search filter, sorting, and pagination
       return applyFiltersAndPagination(items, params);
     },
