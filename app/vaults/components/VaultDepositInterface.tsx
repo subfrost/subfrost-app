@@ -29,7 +29,7 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
   const tokenToVaultMap: Record<string, string> = {
     'btc': 'dx-btc',       // BTC -> dxBTC
     '32:0': 'dx-btc',      // frBTC -> dxBTC (prioritize dxBTC over yvfrBTC)
-    '2:0': 've-diesel',    // DIESEL -> veDIESEL
+    '2:0': 've-diesel',    // DIESEL -> FIRE
     'usd': 've-usd',       // bUSD -> veUSD
     'frUSD': 've-usd',     // frUSD -> veUSD
     'ordi': 've-ordi',     // ORDI -> veORDI
@@ -58,7 +58,7 @@ const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol:
   // Map of output asset to default input token
   const defaultInputMap: Record<string, { id: string; symbol: string }> = {
     'dxBTC': { id: 'btc', symbol: 'BTC' },
-    'veDIESEL': { id: '2:0', symbol: 'DIESEL' },
+    'FIRE': { id: '2:0', symbol: 'DIESEL' },
     'veUSD': { id: 'usd', symbol: 'bUSD' },
     'yvfrBTC': { id: '32:0', symbol: 'frBTC' },
     'veORDI': { id: 'ordi', symbol: 'ORDI' },

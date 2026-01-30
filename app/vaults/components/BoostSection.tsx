@@ -174,7 +174,7 @@ export default function BoostSection({ vault }: Props) {
               <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                 <TokenIcon
                   key={`boost-${vault.boostTokenSymbol}`}
-                  symbol={vault.boostTokenSymbol || 'vxDIESEL'}
+                  symbol={vault.boostTokenSymbol || 'vxFIRE'}
                   id={vault.boostTokenId || vault.tokenId}
                   iconUrl={vault.boostIconPath}
                   size="sm"

@@ -300,7 +300,7 @@ const en: Record<string, string> = {
   'vault.yvfrbtc': 'yvfrBTC Vault',
   'vault.yvfrbtcDesc': 'Earn yield on frBTC',
   'vault.btcYield': 'BTC Yield',
-  'vault.veDiesel': 'veDIESEL Vault',
+  'vault.veDiesel': 'FIRE Vault',
   'vault.veDieselDesc': 'Stake DIESEL for boosted yield',
   'vault.stakedDiesel': 'Staked DIESEL Gauge',
   'vault.veOrdi': 'veORDI Vault',
@@ -595,7 +595,7 @@ const en: Record<string, string> = {
 
   // Vault Header Tabs
   'vaultTabs.vaults': 'Vaults',
-  'vaultTabs.yveDieselVault': 'yveDIESEL Vault',
+  'vaultTabs.yveDieselVault': 'yFIRE Vault',
   'vaultTabs.gaugeStaking': 'Gauge Staking',
 
   // Boost Section
@@ -622,24 +622,24 @@ const en: Record<string, string> = {
 
   // Gauge Vault
   'gauge.title': 'DIESEL/frBTC Gauge',
-  'gauge.description': 'Stake LP tokens to earn boosted DIESEL rewards. Boost multiplier based on veDIESEL holdings.',
+  'gauge.description': 'Stake LP tokens to earn boosted DIESEL rewards. Boost multiplier based on FIRE holdings.',
   'gauge.tvl': 'TVL',
   'gauge.baseApr': 'Base APR',
   'gauge.yourBoost': 'Your Boost',
   'gauge.boostedApr': 'Boosted APR',
   'gauge.manageStake': 'Manage Stake',
-  'gauge.aboutDesc': 'Stake LP tokens to earn boosted DIESEL rewards. Your boost multiplier depends on your veDIESEL holdings.',
+  'gauge.aboutDesc': 'Stake LP tokens to earn boosted DIESEL rewards. Your boost multiplier depends on your FIRE holdings.',
   'gauge.feature1': 'Earn DIESEL rewards from gauge emissions',
-  'gauge.feature2': 'Up to 2.5x boost with veDIESEL holdings',
+  'gauge.feature2': 'Up to 2.5x boost with FIRE holdings',
   'gauge.feature3': 'No withdrawal penalties or timelock',
   'gauge.feature4': 'Rewards accrue per-block in real-time',
   'gauge.feature5': 'Claim anytime to receive accumulated rewards',
   'gauge.boostMechanics': 'Boost Mechanics',
   'gauge.boostFormula': 'Boost Formula',
   'gauge.exampleCalculation': 'Example Calculation',
-  'gauge.exampleText': 'User: 100 LP staked, 50 veDIESEL held\nPool: 1000 LP total, 200 veDIESEL total\n\nboost = min(1 + (50 × 1000) / (100 × 200), 2.5)\n= min(1 + 50000 / 20000, 2.5)\n= min(1 + 2.5, 2.5)\n= 2.5x maximum boost!',
+  'gauge.exampleText': 'User: 100 LP staked, 50 FIRE held\nPool: 1000 LP total, 200 FIRE total\n\nboost = min(1 + (50 × 1000) / (100 × 200), 2.5)\n= min(1 + 50000 / 20000, 2.5)\n= min(1 + 2.5, 2.5)\n= 2.5x maximum boost!',
   'gauge.howToMaximize': 'How to Maximize Boost',
-  'gauge.maximizeText': '1. Lock more DIESEL in yveDIESEL vault\n2. Maintain high veDIESEL / LP ratio\n3. Monitor boost multiplier regularly',
+  'gauge.maximizeText': '1. Lock more DIESEL in yFIRE vault\n2. Maintain high FIRE / LP ratio\n3. Monitor boost multiplier regularly',
   'gauge.contractType': 'Contract Type',
   'gauge.gaugeStaking': 'Gauge Staking',
   'gauge.inputAsset': 'Input Asset',
@@ -655,7 +655,7 @@ const en: Record<string, string> = {
   'gauge.smartContractRisk': 'Smart Contract Risk',
   'gauge.smartContractDesc': 'Contracts are immutable. Recommend external audit before mainnet.',
   'gauge.boostCompetition': 'Boost Competition',
-  'gauge.boostCompetitionDesc': 'More veDIESEL in circulation dilutes individual boost multipliers. Boost can decrease over time.',
+  'gauge.boostCompetitionDesc': 'More FIRE in circulation dilutes individual boost multipliers. Boost can decrease over time.',
   'gauge.rewardVariability': 'Reward Variability',
   'gauge.rewardVariabilityDesc': 'Gauge rewards depend on strategist deposits. APR may fluctuate based on reward rate.',
 

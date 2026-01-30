@@ -72,7 +72,7 @@ export const POOL_OPCODES = {
   PoolDetails: '999',
 };
 
-// Vault opcodes for UnitVault operations (yveDIESEL, yvfrBTC, etc.)
+// Vault opcodes for UnitVault operations (yFIRE, yvfrBTC, etc.)
 export const VAULT_OPCODES = {
   Initialize: '0',
   Purchase: '1',           // Deposit tokens, receive vault units

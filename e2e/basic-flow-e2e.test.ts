@@ -273,7 +273,7 @@ async function runTestSuite(): Promise<void> {
         const bodyText = document.body.textContent || '';
         const hasVaultTokens =
           bodyText.includes('dxBTC') ||
-          bodyText.includes('veDIESEL') ||
+          bodyText.includes('FIRE') ||
           bodyText.includes('yvfrBTC') ||
           bodyText.includes('frBTC');
 

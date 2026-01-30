@@ -17,7 +17,7 @@ export interface VaultConfig {
   riskLevel?: 'low' | 'medium' | 'high' | 'very-high';
   // Boost configuration
   hasBoost: boolean;
-  boostTokenSymbol?: string; // e.g., "vxDIESEL"
+  boostTokenSymbol?: string; // e.g., "vxFIRE"
   boostTokenName?: string;
   boostTokenId?: string; // Alkane ID for boost token icon
   boostIconPath?: string; // Direct path to boost token icon
@@ -45,7 +45,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   },
   {
     id: 've-diesel',
-    name: 'veDIESEL Vault',
+    name: 'FIRE Vault',
     description: 'Stake DIESEL for boosted yield',
     tokenId: '2:0',
     tokenSymbol: 'DIESEL',
@@ -54,12 +54,12 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     badge: 'Coming Soon',
     type: 'unit-vault',
     inputAsset: 'DIESEL',
-    outputAsset: 'veDIESEL',
+    outputAsset: 'FIRE',
     estimatedApy: '21',
     apyHistory: [17, 18, 19, 19, 18, 19, 20, 21, 20, 20, 21, 21, 22, 21, 20, 21, 22, 22, 21, 22, 23, 22, 22, 23, 23, 22, 23, 22, 23, 22],
     riskLevel: 'very-high',
     hasBoost: true,
-    boostTokenSymbol: 'vxDIESEL',
+    boostTokenSymbol: 'vxFIRE',
     boostTokenName: 'Staked DIESEL Gauge',
     boostTokenId: '2:0', // Uses DIESEL icon from Oyl CDN
     boostMultiplier: 1.5,

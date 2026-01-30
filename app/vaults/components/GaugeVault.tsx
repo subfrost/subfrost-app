@@ -112,14 +112,14 @@ export default function GaugeVault() {
                 <div className="rounded-lg bg-purple-50 border border-purple-200 p-3">
                   <div className="font-semibold text-sm text-purple-900 mb-2">{t('gauge.boostFormula')}</div>
                   <span className="text-xs text-purple-800 bg-[color:var(--sf-surface)] px-2 py-1 rounded block">
-                    boost = min(1 + (veDIESEL × total_stake) / (stake × total_veDIESEL), 2.5)
+                    boost = min(1 + (FIRE × total_stake) / (stake × total_FIRE), 2.5)
                   </span>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
                   <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">{t('gauge.exampleCalculation')}</div>
                   <div className="text-xs text-[color:var(--sf-text)]">
-                    User: 100 LP staked, 50 veDIESEL held<br/>
-                    Pool: 1000 LP total, 200 veDIESEL total<br/><br/>
+                    User: 100 LP staked, 50 FIRE held<br/>
+                    Pool: 1000 LP total, 200 FIRE total<br/><br/>
                     boost = min(1 + (50 × 1000) / (100 × 200), 2.5)<br/>
                     = min(1 + 50000 / 20000, 2.5)<br/>
                     = min(1 + 2.5, 2.5)<br/>
@@ -129,8 +129,8 @@ export default function GaugeVault() {
                 <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
                   <div className="font-semibold text-sm text-blue-900 mb-1">{t('gauge.howToMaximize')}</div>
                   <div className="text-xs text-blue-800">
-                    1. Lock more DIESEL in yveDIESEL vault<br/>
-                    2. Maintain high veDIESEL / LP ratio<br/>
+                    1. Lock more DIESEL in yFIRE vault<br/>
+                    2. Maintain high FIRE / LP ratio<br/>
                     3. Monitor boost multiplier regularly
                   </div>
                 </div>

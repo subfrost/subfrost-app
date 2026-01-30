@@ -6,7 +6,7 @@ import { VAULT_OPCODES } from '@/constants';
 
 export type VaultWithdrawData = {
   vaultContractId: string; // e.g., "2:123" for vault contract
-  vaultUnitId: string; // e.g., "2:124" for veDIESEL unit token
+  vaultUnitId: string; // e.g., "2:124" for FIRE unit token
   amount: string; // Amount of vault units to burn (usually 1)
   feeRate: number; // sats/vB
 };

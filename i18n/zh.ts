@@ -300,7 +300,7 @@ const zh: Record<string, string> = {
   'vault.yvfrbtc': 'yvfrBTC \u91d1\u5e93',
   'vault.yvfrbtcDesc': '\u901a\u8fc7 frBTC \u8d5a\u53d6\u6536\u76ca',
   'vault.btcYield': 'BTC \u6536\u76ca',
-  'vault.veDiesel': 'veDIESEL \u91d1\u5e93',
+  'vault.veDiesel': 'FIRE \u91d1\u5e93',
   'vault.veDieselDesc': '\u8d28\u62bc DIESEL \u83b7\u53d6\u52a0\u901f\u6536\u76ca',
   'vault.stakedDiesel': 'DIESEL \u8d28\u62bc\u8ba1\u91cf\u5668',
   'vault.veOrdi': 'veORDI \u91d1\u5e93',
@@ -595,7 +595,7 @@ const zh: Record<string, string> = {
 
   // Vault Header Tabs
   'vaultTabs.vaults': '金库',
-  'vaultTabs.yveDieselVault': 'yveDIESEL 金库',
+  'vaultTabs.yveDieselVault': 'yFIRE 金库',
   'vaultTabs.gaugeStaking': '计量器质押',
 
   // Boost Section
@@ -622,24 +622,24 @@ const zh: Record<string, string> = {
 
   // Gauge Vault
   'gauge.title': 'DIESEL/frBTC 计量器',
-  'gauge.description': '质押 LP 代币以赚取加速的 DIESEL 奖励。加速倍率基于 veDIESEL 持有量。',
+  'gauge.description': '质押 LP 代币以赚取加速的 DIESEL 奖励。加速倍率基于 FIRE 持有量。',
   'gauge.tvl': 'TVL',
   'gauge.baseApr': '基础 APR',
   'gauge.yourBoost': '您的加速',
   'gauge.boostedApr': '加速 APR',
   'gauge.manageStake': '管理质押',
-  'gauge.aboutDesc': '质押 LP 代币以赚取加速的 DIESEL 奖励。您的加速倍率取决于您的 veDIESEL 持有量。',
+  'gauge.aboutDesc': '质押 LP 代币以赚取加速的 DIESEL 奖励。您的加速倍率取决于您的 FIRE 持有量。',
   'gauge.feature1': '从计量器排放中赚取 DIESEL 奖励',
-  'gauge.feature2': '持有 veDIESEL 可获得最高 2.5 倍加速',
+  'gauge.feature2': '持有 FIRE 可获得最高 2.5 倍加速',
   'gauge.feature3': '无取款罚金或时间锁',
   'gauge.feature4': '奖励按区块实时累积',
   'gauge.feature5': '随时领取已累积的奖励',
   'gauge.boostMechanics': '加速机制',
   'gauge.boostFormula': '加速公式',
   'gauge.exampleCalculation': '计算示例',
-  'gauge.exampleText': '用户：质押 100 LP，持有 50 veDIESEL\n池子：总共 1000 LP，总共 200 veDIESEL\n\nboost = min(1 + (50 × 1000) / (100 × 200), 2.5)\n= min(1 + 50000 / 20000, 2.5)\n= min(1 + 2.5, 2.5)\n= 2.5 倍最大加速！',
+  'gauge.exampleText': '用户：质押 100 LP，持有 50 FIRE\n池子：总共 1000 LP，总共 200 FIRE\n\nboost = min(1 + (50 × 1000) / (100 × 200), 2.5)\n= min(1 + 50000 / 20000, 2.5)\n= min(1 + 2.5, 2.5)\n= 2.5 倍最大加速！',
   'gauge.howToMaximize': '如何最大化加速',
-  'gauge.maximizeText': '1. 在 yveDIESEL 金库中锁定更多 DIESEL\n2. 保持较高的 veDIESEL / LP 比率\n3. 定期监控加速倍率',
+  'gauge.maximizeText': '1. 在 yFIRE 金库中锁定更多 DIESEL\n2. 保持较高的 FIRE / LP 比率\n3. 定期监控加速倍率',
   'gauge.contractType': '合约类型',
   'gauge.gaugeStaking': '计量器质押',
   'gauge.inputAsset': '输入资产',
@@ -655,7 +655,7 @@ const zh: Record<string, string> = {
   'gauge.smartContractRisk': '智能合约风险',
   'gauge.smartContractDesc': '合约一旦部署即不可更改。建议在主网上线前进行外部审计。',
   'gauge.boostCompetition': '加速竞争',
-  'gauge.boostCompetitionDesc': '流通中的 veDIESEL 越多，个人加速倍率就越被稀释。加速可能随时间降低。',
+  'gauge.boostCompetitionDesc': '流通中的 FIRE 越多，个人加速倍率就越被稀释。加速可能随时间降低。',
   'gauge.rewardVariability': '奖励波动性',
   'gauge.rewardVariabilityDesc': '计量器奖励取决于策略师存入。APR 可能根据奖励率波动。',
 

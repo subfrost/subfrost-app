@@ -185,8 +185,8 @@ async function runTestSuite() {
     // ==========================================
     // Test 4: Select Vault
     // ==========================================
-    await runTest('Select yveDIESEL vault', async () => {
-      // Find and click on yveDIESEL vault
+    await runTest('Select yFIRE vault', async () => {
+      // Find and click on yFIRE vault
       const vaultFound = await page.evaluate(() => {
         const elements = Array.from(document.querySelectorAll('*'));
         for (const el of elements) {
@@ -201,7 +201,7 @@ async function runTestSuite() {
       });
       
       if (!vaultFound) {
-        throw new Error('yveDIESEL vault not found in list');
+        throw new Error('yFIRE vault not found in list');
       }
       
       // Wait for vault detail page to load

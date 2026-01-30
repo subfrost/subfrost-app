@@ -149,27 +149,22 @@ import { useTranslation } from "@/hooks/useTranslation";
     <>
       {/* Mobile Fixed Header - Logo and connect wallet button */}
       <header className="fixed top-0 left-0 right-0 z-50 md:hidden bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.05)]">
-        <div className="relative flex h-[58px] w-full items-center justify-between px-4">
+        <div className="relative flex h-[58px] w-full items-center justify-between px-5">
           {/* Brand */}
-          <a href="https://subfrost.io" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">
-            <Image
-              src="/brand/snowflake_2025.svg"
-              alt="Subfrost snowflake logo"
-              width={24}
-              height={24}
-              priority
-              className="w-6 h-6"
-            />
+          <a href="https://subfrost.io" className="flex items-center select-none" aria-label="Subfrost Home">
             <Image
               src="/brand/subfrost-wordmark.svg"
               alt="SUBFROST wordmark"
               width={180}
               height={24}
               priority
-              className="hover:opacity-80 h-6 w-auto sf-wordmark"
+              className="hover:opacity-80 h-8 w-auto sf-wordmark"
             />
           </a>
 
+          <div className="ml-auto flex items-center gap-4">
+          <LanguageToggle />
+          <ThemeToggle />
           {walletConnected ? (
             <div className="relative" ref={mobileWalletRef}>
               <button
@@ -263,6 +258,7 @@ import { useTranslation } from "@/hooks/useTranslation";
               </div>
             </button>
           )}
+          </div>
         </div>
       </header>
       {/* Spacer for mobile fixed header */}
@@ -270,24 +266,16 @@ import { useTranslation } from "@/hooks/useTranslation";
 
       {/* Desktop Header */}
       <header className="relative z-50 w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.05)] hidden md:block">
-        <div className="relative flex h-[58px] w-full items-center px-6">
+        <div className="relative flex h-[58px] w-full items-center px-5">
           {/* Brand */}
-          <a href="https://subfrost.io" className="flex items-center gap-2 select-none" aria-label="Subfrost Home">
-            <Image
-              src="/brand/snowflake_2025.svg"
-              alt="Subfrost snowflake logo"
-              width={24}
-              height={24}
-              priority
-              className="w-6 h-6"
-            />
+          <a href="https://subfrost.io" className="flex items-center select-none" aria-label="Subfrost Home">
             <Image
               src="/brand/subfrost-wordmark.svg"
               alt="SUBFROST wordmark"
               width={180}
               height={24}
               priority
-              className=" hover:opacity-80 h-6 w-auto sf-wordmark"
+              className=" hover:opacity-80 h-8 w-auto sf-wordmark"
             />
           </a>
 

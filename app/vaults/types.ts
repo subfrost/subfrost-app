@@ -4,7 +4,7 @@ export type VaultStats = {
   tvl: string; // Total value locked
   apy: string; // Annual percentage yield
   userBalance: string; // User's deposited amount
-  userShares: string; // User's vault shares (veDIESEL or gauge tokens)
+  userShares: string; // User's vault shares (FIRE or gauge tokens)
   pendingRewards: string; // Claimable rewards
   boost?: string; // Boost multiplier (for gauges)
 };
