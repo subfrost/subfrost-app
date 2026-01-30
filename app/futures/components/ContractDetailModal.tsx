@@ -94,10 +94,10 @@ export default function ContractDetailModal({
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
       <div
         ref={modalRef}
-        className="relative w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        className="relative w-full max-w-6xl max-h-[90vh] flex flex-col rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
+        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{contractId}</h2>
             <p className="text-xs sm:text-sm font-medium text-[color:var(--sf-text)]/60 mt-1">
@@ -123,7 +123,7 @@ export default function ContractDetailModal({
           </button>
         </div>
 
-        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Chart Section */}
           <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <h3 className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)] mb-4">
