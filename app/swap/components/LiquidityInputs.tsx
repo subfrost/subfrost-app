@@ -497,28 +497,22 @@ export default function LiquidityInputs({
                 <div className="mt-1 flex flex-col items-end gap-1">
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
                   {onPercentToken0 && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
                       {[
                         { label: '25%', value: 0.25 },
                         { label: '50%', value: 0.5 },
                         { label: '75%', value: 0.75 },
+                        { label: 'Max', value: 1 },
                       ].map(({ label, value }) => (
                         <button
                           key={label}
                           type="button"
                           onClick={() => onPercentToken0(value)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                          className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
                         >
                           {label}
                         </button>
                       ))}
-                      <button
-                        type="button"
-                        onClick={() => onPercentToken0(1)}
-                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
-                      >
-                        Max
-                      </button>
                     </div>
                   )}
                 </div>
@@ -542,28 +536,22 @@ export default function LiquidityInputs({
                 <div className="mt-1 flex flex-col items-end gap-1">
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
                   {onPercentToken1 && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
                       {[
                         { label: '25%', value: 0.25 },
                         { label: '50%', value: 0.5 },
                         { label: '75%', value: 0.75 },
+                        { label: 'Max', value: 1 },
                       ].map(({ label, value }) => (
                         <button
                           key={label}
                           type="button"
                           onClick={() => onPercentToken1(value)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                          className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
                         >
                           {label}
                         </button>
                       ))}
-                      <button
-                        type="button"
-                        onClick={() => onPercentToken1(1)}
-                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
-                      >
-                        Max
-                      </button>
                     </div>
                   )}
                 </div>

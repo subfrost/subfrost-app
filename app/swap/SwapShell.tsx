@@ -60,18 +60,6 @@ const MarketsSkeleton = () => (
   </div>
 );
 
-// Whitelisted token symbols (mainnet only)
-// On non-mainnet networks, all tokens are allowed
-const MAINNET_WHITELISTED_TOKEN_SYMBOLS = new Set([
-  'BTC',
-  'frBTC',
-  'bUSD',
-  'DIESEL',
-  'ALKAMIST',
-  'GOLD DUST',
-  'METHANE',
-]);
-
 export default function SwapShell() {
   const { t } = useTranslation();
 
@@ -257,8 +245,6 @@ export default function SwapShell() {
   }, [poolToken1, selectedTab]);
 
   // Allow all tokens - no filtering
-  const whitelistedTokenIds = null as Set<string> | null;
-
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
   // Alt tokens (including DIESEL) can only swap to/from these base tokens, not to other alts
   // DIESEL is always 2:0, so we exclude it from base tokens even if BUSD_ALKANE_ID points to it
@@ -281,9 +267,6 @@ export default function SwapShell() {
     // Helper to check if a token should be shown (by ID and symbol)
     const shouldShowToken = (tokenId: string, symbol: string): boolean => {
       if (tokenId === toId) return false; // Can't swap from self
-      if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
-      // On mainnet, only show whitelisted tokens by symbol
-      if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
       return true;
     };
 
@@ -353,7 +336,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network, toToken, baseTokenIds]);
+  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network, toToken, baseTokenIds]);
 
   // Build TO options - show all tokens with pools (no alt-to-alt restriction)
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -387,9 +370,6 @@ export default function SwapShell() {
     // Helper to check if a token should be shown (by ID and symbol)
     const shouldShowToken = (tokenId: string, symbol: string): boolean => {
       if (tokenId === fromId) return false; // Can't swap to self
-      if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
-      // On mainnet, only show whitelisted tokens by symbol
-      if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
       // For BTC/frBTC wrapping, always allow
       if (fromId === 'btc' && tokenId === FRBTC_ALKANE_ID) return true;
       if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
@@ -466,7 +446,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets, network]);
+  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets, network]);
 
   // Balances - use useEnrichedWalletData for all balances (BTC and alkanes)
   // This is the same data source used by the Header for consistency
@@ -1079,7 +1059,7 @@ export default function SwapShell() {
     const seen = new Set(['btc']); // BTC already added above
 
     // Always add frBTC as a base token (available before pools load)
-    if (FRBTC_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(FRBTC_ALKANE_ID)) && !seen.has(FRBTC_ALKANE_ID)) {
+    if (FRBTC_ALKANE_ID && !seen.has(FRBTC_ALKANE_ID)) {
       seen.add(FRBTC_ALKANE_ID);
       const frbtcCurrency = idToUserCurrency.get(FRBTC_ALKANE_ID);
       let frbtcIsAvailable = true;
@@ -1102,7 +1082,7 @@ export default function SwapShell() {
     }
 
     // Always add BUSD/DIESEL as a base token (available before pools load)
-    if (BUSD_ALKANE_ID && (whitelistedTokenIds === null || whitelistedTokenIds.has(BUSD_ALKANE_ID)) && !seen.has(BUSD_ALKANE_ID)) {
+    if (BUSD_ALKANE_ID && !seen.has(BUSD_ALKANE_ID)) {
       seen.add(BUSD_ALKANE_ID);
       const busdCurrency = idToUserCurrency.get(BUSD_ALKANE_ID);
       const busdToken = poolTokenMap.get(BUSD_ALKANE_ID);
@@ -1122,11 +1102,7 @@ export default function SwapShell() {
       });
     }
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
-      // Check ID whitelist and symbol whitelist (mainnet only)
-      const passesIdWhitelist = whitelistedTokenIds === null || whitelistedTokenIds.has(poolToken.id);
-      const passesSymbolWhitelist = network !== 'mainnet' || MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(poolToken.symbol);
-
-      if (passesIdWhitelist && passesSymbolWhitelist && !seen.has(poolToken.id)) {
+      if (!seen.has(poolToken.id)) {
         seen.add(poolToken.id);
         const currency = idToUserCurrency.get(poolToken.id);
 
@@ -1157,11 +1133,8 @@ export default function SwapShell() {
     // This allows users to add liquidity for new token pairs
     userCurrencies.forEach((currency: any) => {
       const symbol = currency.symbol || currency.name || currency.id;
-      // Check ID whitelist and symbol whitelist (mainnet only)
-      const passesIdWhitelist = whitelistedTokenIds === null || whitelistedTokenIds.has(currency.id);
-      const passesSymbolWhitelist = network !== 'mainnet' || MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol);
 
-      if (!seen.has(currency.id) && passesIdWhitelist && passesSymbolWhitelist) {
+      if (!seen.has(currency.id)) {
         seen.add(currency.id);
 
         // Check if this token can pair with the counterpart token (if selected)
@@ -1193,7 +1166,7 @@ export default function SwapShell() {
     console.log('[poolTokenOptions] opts:', opts.map(o => ({ id: o.id, symbol: o.symbol })));
 
     return sortTokenOptions(opts);
-  }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, whitelistedTokenIds, whitelistedPoolIds, network]);
+  }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, network]);
 
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {

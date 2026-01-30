@@ -23,7 +23,6 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const { t } = useTranslation();
-  const [showAll, setShowAll] = useState(false);
   const [sortField, setSortField] = useState<SortField>('tvl');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
@@ -102,8 +101,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
     );
   }, [sortedPools, searchQuery]);
 
-  const displayedPools = showAll ? filteredPools : filteredPools.slice(0, 12);
-  const hasMore = filteredPools.length > 12;
+  const displayedPools = filteredPools;
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -261,7 +259,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             </div>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[540px]">
           <table className="w-full table-fixed">
             <colgroup>
               <col className="w-[35%]" />
@@ -269,7 +267,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
               <col className="w-[22%]" />
               <col className="w-[21%]" />
             </colgroup>
-            <thead>
+            <thead className="sticky top-0 z-10 bg-[color:var(--sf-glass-bg)]">
               <tr className="border-b border-[color:var(--sf-row-border)]">
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
                 <th className="px-2 py-3 text-right">
@@ -365,7 +363,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
 
       {/* Mobile/Tablet Card View */}
       {filteredPools.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 md:hidden">
+        <div className="grid grid-cols-1 gap-3 md:hidden overflow-y-auto max-h-[660px]">
         {displayedPools.map((pool) => (
           <button
             key={pool.id}
@@ -405,16 +403,6 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         </div>
       )}
 
-      {hasMore && !showAll && filteredPools.length > 0 && (
-        <div className="mt-6 flex justify-center">
-          <button
-            onClick={() => setShowAll(true)}
-            className="rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] px-8 py-3 font-bold text-[color:var(--sf-text)] uppercase tracking-wide backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/15 hover:shadow-lg hover:border-[color:var(--sf-primary)]/40 focus:outline-none"
-          >
-            Show All Pools ({filteredPools.length - displayedPools.length} more)
-          </button>
-        </div>
-      )}
     </div>
   );
 }
