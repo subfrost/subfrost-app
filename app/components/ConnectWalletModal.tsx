@@ -649,7 +649,7 @@ export default function ConnectWalletModal() {
               ) : (
                 <button
                   onClick={() => setView('invite-code')}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-700 dark:text-amber-400 shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-amber-500/20 hover:border-amber-400/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-2.5 text-sm font-bold text-yellow-700 dark:text-yellow-400 shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-yellow-500/20 hover:border-yellow-500/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
                 >
                   <Ticket size={16} />
                   <span>{t('wallet.invited')}</span>
