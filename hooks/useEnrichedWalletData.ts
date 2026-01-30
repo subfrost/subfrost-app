@@ -494,34 +494,6 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
-      // Resolve names for unknown tokens via alkanesReflect
-      const unknownTokens = Array.from(alkaneMap.entries()).filter(
-        ([id, asset]) => !KNOWN_TOKENS[id] && asset.name.startsWith('Token ')
-      );
-      if (unknownTokens.length > 0) {
-        console.log('[BALANCE] Resolving names for', unknownTokens.length, 'unknown tokens via alkanesReflect');
-        const reflectResults = await Promise.allSettled(
-          unknownTokens.map(async ([id, asset]) => {
-            try {
-              const reflection = await withTimeout(
-                provider.alkanesReflect(id),
-                10000,
-                null
-              );
-              if (reflection) {
-                const r = reflection as { name?: string; symbol?: string; decimals?: number };
-                if (r.name) asset.name = r.name;
-                if (r.symbol) asset.symbol = r.symbol;
-                if (r.decimals != null) asset.decimals = r.decimals;
-              }
-            } catch (e) {
-              console.log(`[BALANCE] alkanesReflect failed for ${id}:`, e);
-            }
-          })
-        );
-        console.log('[BALANCE] Reflect resolved:', reflectResults.filter(r => r.status === 'fulfilled').length, '/', unknownTokens.length);
-      }
-
       // Log final frBTC balance for debugging wrap issue
       // frBTC is always 32:0 on all networks
       const frbtcAsset = alkaneMap.get('32:0');
