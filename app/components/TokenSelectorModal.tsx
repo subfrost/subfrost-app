@@ -143,9 +143,6 @@ export default function TokenSelectorModal({
               <X size={18} />
             </button>
           </div>
-          <p className="text-xs font-medium text-[color:var(--sf-text)]/60">
-            {t('tokenSelector.highVolumeOnly')}
-          </p>
         </div>
 
         {/* Bridge Section - Shown in FROM and TO modes */}
