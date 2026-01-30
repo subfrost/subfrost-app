@@ -13,6 +13,13 @@ function getHistoricalApy(apyHistory?: number[]): string {
 
 export default function VaultTiles() {
   const { t } = useTranslation();
+  const VAULT_NAME_KEYS: Record<string, string> = {
+    'yv-frbtc': 'vault.yvfrbtc',
+    've-diesel': 'vault.veDiesel',
+    've-ordi': 'vault.veOrdi',
+    've-usd': 'vault.veUsd',
+    'dx-btc': 'vault.dxBtc',
+  };
   const filteredVaults = AVAILABLE_VAULTS
     .filter(vault => vault.id !== 'yv-frbtc')
     .sort((a, b) => {
@@ -32,36 +39,45 @@ export default function VaultTiles() {
       </div>
       <div className="p-4">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {featured.map((v) => (
-            <Link
-              key={v.id}
-              href={`/vaults?vault=${v.id}`}
-              className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
-            >
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6">
-                    <TokenIcon id={v.tokenId} symbol={v.tokenSymbol} size="sm" />
+          {featured.map((v) => {
+            const isDxBtc = v.id === 'dx-btc';
+            const tileClasses = `rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isDxBtc ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10' : 'opacity-40 grayscale cursor-default'} focus:outline-none`;
+            const content = (
+              <>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6">
+                      <TokenIcon id={v.tokenId} symbol={v.tokenSymbol} size="sm" />
+                    </div>
+                    <span className="text-sm font-bold text-[color:var(--sf-text)]">{VAULT_NAME_KEYS[v.id] ? t(VAULT_NAME_KEYS[v.id]) : v.name}</span>
                   </div>
-                  <span className="text-sm font-bold text-[color:var(--sf-text)]">{v.name}</span>
                 </div>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaults.deposits')}</div>
+                    <div className="font-bold text-[color:var(--sf-text)]">-</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaults.histApy')}</div>
+                    <div className="font-bold text-[color:var(--sf-text)]">{getHistoricalApy(v.apyHistory)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaults.estApy')}</div>
+                    <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2.5 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">{v.estimatedApy ? `${v.estimatedApy}%` : '-'}</div>
+                  </div>
+                </div>
+              </>
+            );
+            return isDxBtc ? (
+              <Link key={v.id} href={`/vaults?vault=${v.id}`} className={tileClasses}>
+                {content}
+              </Link>
+            ) : (
+              <div key={v.id} className={tileClasses}>
+                {content}
               </div>
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaults.deposits')}</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">-</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaults.histApy')}</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{getHistoricalApy(v.apyHistory)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaults.estApy')}</div>
-                  <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2.5 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">{v.estimatedApy ? `${v.estimatedApy}%` : '-'}</div>
-                </div>
-              </div>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

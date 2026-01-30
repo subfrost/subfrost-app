@@ -47,6 +47,8 @@ export default function ContractDetailModal({
   const { t } = useTranslation();
   const [amount, setAmount] = useState('1.00');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
+  const [showSellComingSoon, setShowSellComingSoon] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const { data: btcPrice } = useBtcPrice();
 
@@ -55,7 +57,7 @@ export default function ContractDetailModal({
   const exercisePrice = calculateExercisePrice(blocksLeft);
   
   // Mock calculations
-  const timeLeft = `${blocksLeft} blocks`;
+  const timeLeft = t('futures.nBlocks', { count: blocksLeft });
   const exerciseValue = `${exercisePrice.toFixed(3)} BTC`;
   const marketPrice = '0.948 BTC';
   const estimatedCost = (parseFloat(amount) * 0.948).toFixed(3);
@@ -92,10 +94,10 @@ export default function ContractDetailModal({
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
       <div
         ref={modalRef}
-        className="relative w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        className="relative w-full max-w-6xl max-h-[90vh] flex flex-col rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
+        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{contractId}</h2>
             <p className="text-xs sm:text-sm font-medium text-[color:var(--sf-text)]/60 mt-1">
@@ -121,14 +123,14 @@ export default function ContractDetailModal({
           </button>
         </div>
 
-        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Chart Section */}
           <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <h3 className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)] mb-4">
               {t('contractModal.unlockValueOverTime')}
             </h3>
             {/* Simple chart visualization */}
-            <div className="h-48 flex items-end justify-between gap-2">
+            <div className="h-36 flex items-end justify-between gap-2">
               {chartData.map((point, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-2">
                   <div
@@ -203,15 +205,35 @@ export default function ContractDetailModal({
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <button
                   type="button"
-                  className="px-4 sm:px-6 py-3 rounded-xl bg-[color:var(--sf-primary)] text-white font-bold text-sm sm:text-base tracking-[0.08em] uppercase shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)] hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  onClick={() => {
+                    if (!showBuyComingSoon) {
+                      setShowBuyComingSoon(true);
+                      setTimeout(() => setShowBuyComingSoon(false), 1000);
+                    }
+                  }}
+                  className="px-4 sm:px-6 py-3 rounded-xl bg-[color:var(--sf-primary)] text-white font-bold text-sm sm:text-base tracking-[0.08em] uppercase shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)] hover:scale-[1.02] active:scale-[0.98] opacity-50 grayscale cursor-not-allowed"
                 >
-                  {t('contractModal.buyFtrBtc')}
+                  {showBuyComingSoon ? (
+                    <span className="animate-pulse">{t('badge.comingSoon')}</span>
+                  ) : (
+                    t('contractModal.buyFtrBtc')
+                  )}
                 </button>
                 <button
                   type="button"
-                  className="px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                  onClick={() => {
+                    if (!showSellComingSoon) {
+                      setShowSellComingSoon(true);
+                      setTimeout(() => setShowSellComingSoon(false), 1000);
+                    }
+                  }}
+                  className="px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:scale-[1.02] active:scale-[0.98] opacity-50 grayscale cursor-not-allowed"
                 >
-                  {t('contractModal.sellFtrBtc')}
+                  {showSellComingSoon ? (
+                    <span className="animate-pulse">{t('badge.comingSoon')}</span>
+                  ) : (
+                    t('contractModal.sellFtrBtc')
+                  )}
                 </button>
               </div>
             </div>
@@ -277,7 +299,7 @@ export default function ContractDetailModal({
                 </div>
                 <div>
                   <span className="text-[color:var(--sf-text)]/70">{t('contractModal.created')}</span>
-                  <div className="font-medium text-[color:var(--sf-text)]">{data.created}</div>
+                  <div className="font-medium text-[color:var(--sf-text)]">{t('futures.blocksAgo', { count: parseInt(data.created) || data.created })}</div>
                 </div>
               </div>
             </div>

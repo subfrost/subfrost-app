@@ -70,7 +70,7 @@ export default function YveDieselVault() {
         {infoTab === 'about' && (
           <div className="space-y-4">
             <p className="text-sm text-[color:var(--sf-text)]">
-              Lock DIESEL to earn yield from LP trading fees and external subsidies. Your FIRE provides boost to gauge stakers.
+              Lock DIESEL to earn yield from LP trading fees and external subsidies.
             </p>
             <div className="space-y-2">
               {[
@@ -93,7 +93,7 @@ export default function YveDieselVault() {
         
         {infoTab === 'strategies' && (
           <div className="space-y-3">
-            <h4 className="font-semibold text-[color:var(--sf-text)]">Active Strategies</h4>
+            <h4 className="font-semibold text-[color:var(--sf-text)]">Active Strategies (Example)</h4>
             <div className="space-y-2">
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">LP Fee Harvesting</div>
@@ -136,11 +136,11 @@ export default function YveDieselVault() {
               </div>
               <div>
                 <div className="text-[color:var(--sf-text)]/60 mb-1">Output Units</div>
-                <div className="font-semibold text-[color:var(--sf-text)]">FIRE (non-transferable)</div>
+                <div className="font-semibold text-[color:var(--sf-text)]">FIRE token</div>
               </div>
               <div>
                 <div className="text-[color:var(--sf-text)]/60 mb-1">Management Fee</div>
-                <div className="font-semibold text-[color:var(--sf-text)]">0%</div>
+                <div className="font-semibold text-[color:var(--sf-text)]">0.5%</div>
               </div>
               <div>
                 <div className="text-[color:var(--sf-text)]/60 mb-1">Performance Fee</div>
@@ -169,7 +169,7 @@ export default function YveDieselVault() {
               <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-3">
                 <div className="font-semibold text-sm text-yellow-900 mb-1">Smart Contract Risk</div>
                 <div className="text-xs text-yellow-800">
-                  Contracts are immutable once deployed. Recommend external audit before mainnet. Test thoroughly on testnet first.
+                  Contracts are immutable once deployed, but protocol risk exists in theory.
                 </div>
               </div>
               <div className="rounded-lg bg-orange-50 border border-orange-200 p-3">

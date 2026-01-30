@@ -305,7 +305,7 @@ const zh: Record<string, string> = {
   'vault.yvfrbtcDesc': '\u901a\u8fc7 frBTC \u8d5a\u53d6\u6536\u76ca',
   'vault.btcYield': 'BTC \u6536\u76ca',
   'vault.veDiesel': 'FIRE \u91d1\u5e93',
-  'vault.veDieselDesc': '\u8d28\u62bc DIESEL \u83b7\u53d6\u52a0\u901f\u6536\u76ca',
+  'vault.veDieselDesc': '比特币上首创的 DeFi 金库',
   'vault.stakedDiesel': 'DIESEL \u8d28\u62bc\u8ba1\u91cf\u5668',
   'vault.veOrdi': 'veORDI \u91d1\u5e93',
   'vault.veOrdiDesc': '\u8d28\u62bc ORDI \u83b7\u53d6\u52a0\u901f\u6536\u76ca',
@@ -314,7 +314,7 @@ const zh: Record<string, string> = {
   'vault.veUsdDesc': '\u8d28\u62bc USD \u83b7\u53d6\u52a0\u901f\u6536\u76ca',
   'vault.stakedUsd': 'USD \u8d28\u62bc\u8ba1\u91cf\u5668',
   'vault.dxBtc': 'dxBTC \u4ee3\u5e01',
-  'vault.dxBtcDesc': '\u8d28\u62bc BTC \u6216 frBTC \u83b7\u53d6\u7eaf BTC \u6536\u76ca',
+  'vault.dxBtcDesc': '质押 BTC 获取纯 BTC 收益',
   'vault.stakedFuel': '已质押 FUEL',
   'vault.escrowNft': '托管 NFT',
   // Vault Badges
@@ -372,6 +372,9 @@ const zh: Record<string, string> = {
   'markets.created': '\u521b\u5efa\uff1a',
   'markets.underlyingYield': '\u5e95\u5c42\u6536\u76ca\uff1a',
   'markets.inQueue': '\u5728\u961f\u5217\u4e2d',
+  'futures.autoCompounding': '自动复利',
+  'futures.blocksAgo': '{count} 个区块前',
+  'futures.nBlocks': '{count} 个区块',
 
   // Futures - Open Position Form
   'openPosition.investmentAmount': '\u6295\u8d44\u91d1\u989d',

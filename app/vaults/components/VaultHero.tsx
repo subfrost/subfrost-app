@@ -115,7 +115,7 @@ export default function VaultHero({
       {/* APY Sparkline - Full Width Row */}
       {apyHistory.length > 0 && (
         <div className="w-full h-60 mb-6 relative z-10">
-          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} showLabel={false} fillHeight={true} />
+          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} fillHeight={true} />
         </div>
       )}
 

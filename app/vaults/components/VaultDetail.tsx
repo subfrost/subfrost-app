@@ -238,7 +238,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
               </div>
               <div>
                 <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.managementFee')}</div>
-                <div className="font-semibold text-[color:var(--sf-text)]">0%</div>
+                <div className="font-semibold text-[color:var(--sf-text)]">0.5%</div>
               </div>
               <div>
                 <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.performanceFee')}</div>
@@ -377,7 +377,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                 </div>
                 <div>
                   <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.managementFee')}</div>
-                  <div className="font-semibold text-[color:var(--sf-text)]">0%</div>
+                  <div className="font-semibold text-[color:var(--sf-text)]">0.5%</div>
                 </div>
                 <div>
                   <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.performanceFee')}</div>

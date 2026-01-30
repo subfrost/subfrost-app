@@ -6,11 +6,10 @@ import { useTranslation } from '@/hooks/useTranslation';
 type ApySparklineProps = {
   data: number[]; // Array of APY values (30 days)
   currentApy: number; // Current/latest APY to display
-  showLabel?: boolean; // Whether to show the APY label (default: true)
   fillHeight?: boolean; // Whether to fill parent height (default: false)
 };
 
-export default function ApySparkline({ data, currentApy, showLabel = true, fillHeight = false }: ApySparklineProps) {
+export default function ApySparkline({ data, currentApy, fillHeight = false }: ApySparklineProps) {
   const { theme } = useTheme();
   const { t } = useTranslation();
 
@@ -118,12 +117,6 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
           {currentApy.toFixed(1)}%
         </div>
 
-        {/* APY label - right-aligned, positioned at bottom */}
-        {showLabel && (
-          <div className="absolute right-0 bottom-0 text-xs font-bold text-[color:var(--sf-text)]/60 whitespace-nowrap">
-            {currentApy.toFixed(1)}%
-          </div>
-        )}
       </div>
     </div>
   );
