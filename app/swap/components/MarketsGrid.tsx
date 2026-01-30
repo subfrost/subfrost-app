@@ -36,27 +36,9 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   const volumePeriod = externalVolumePeriod ?? internalVolumePeriod;
   const setVolumePeriod = onVolumePeriodChange ?? setInternalVolumePeriod;
 
-  // Whitelisted pool IDs (mainnet-specific)
-  // On non-mainnet networks, allow all pools
-  const whitelistedPoolIds = useMemo(() => {
-    if (network !== 'mainnet') {
-      return null; // Allow all pools on non-mainnet
-    }
-    return new Set([
-      '2:77222',
-      '2:77087',
-      '2:77221',
-      '2:77228',
-      '2:77237',
-      '2:68441',
-      '2:68433',
-    ]);
-  }, [network]);
-
   const sortedPools = useMemo(() => {
-    let filtered = whitelistedPoolIds === null
-      ? pools
-      : pools.filter(pool => whitelistedPoolIds.has(pool.id));
+    // Allow all alkane pools on every network
+    let filtered = [...pools];
     
     // Apply market filter
     if (marketFilter === 'btc') {
@@ -104,7 +86,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
       return sortOrder === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
     });
     return sorted;
-  }, [pools, sortField, sortOrder, whitelistedPoolIds, marketFilter, volumePeriod]);
+  }, [pools, sortField, sortOrder, marketFilter, volumePeriod]);
 
   // Filter pools based on search query
   const filteredPools = useMemo(() => {

@@ -5,20 +5,9 @@ import Link from 'next/link';
 import { usePools } from '@/hooks/usePools';
 import { useAllPoolCandleVolumes } from '@/hooks/usePoolCandleVolumes';
 import { useAllPoolStats } from '@/hooks/usePoolData';
-import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 
-// Whitelisted pool IDs (mainnet only)
-const MAINNET_WHITELISTED_POOL_IDS = new Set([
-  '2:77222',
-  '2:77087',
-  '2:77221',
-  '2:77228',
-  '2:77237',
-  '2:68441',
-  '2:68433',
-]);
 
 function PairBadge({ a, b }: { a: { id: string; symbol: string }, b: { id: string; symbol: string } }) {
   return (
@@ -45,7 +34,6 @@ function formatUsd(n?: number, showZeroAsDash = false) {
 
 export default function TrendingPairs() {
   const { t } = useTranslation();
-  const { network } = useWallet();
   const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
 
   // Enhanced pool stats from our local API (TVL, Volume, APR)
@@ -61,11 +49,8 @@ export default function TrendingPairs() {
   const { data: candleVolumes } = useAllPoolCandleVolumes(poolsForVolume);
 
   const pairs = useMemo(() => {
-    // Filter to whitelisted pools on mainnet, allow all on other networks
-    const allPools = data?.items ?? [];
-    const filtered = network === 'mainnet'
-      ? allPools.filter(p => MAINNET_WHITELISTED_POOL_IDS.has(p.id))
-      : allPools;
+    // Show all alkane pools on every network
+    const filtered = data?.items ?? [];
 
     // Create stats lookup map
     const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
@@ -104,7 +89,7 @@ export default function TrendingPairs() {
         return (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0);
       })
       .slice(0, 1);
-  }, [data?.items, network, poolStats, candleVolumes]);
+  }, [data?.items, poolStats, candleVolumes]);
 
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
