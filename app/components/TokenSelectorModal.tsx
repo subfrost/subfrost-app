@@ -76,7 +76,7 @@ type Props = {
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'USDT', enabled: true },
+  { symbol: 'USDT', name: 'USDT', enabled: false },
   { symbol: 'ETH', name: 'ETH', enabled: false },
   { symbol: 'SOL', name: 'SOL', enabled: false },
   { symbol: 'ZEC', name: 'ZEC', enabled: false },
