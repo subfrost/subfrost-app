@@ -76,7 +76,7 @@ type Props = {
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'USDT', enabled: true },
+  { symbol: 'USDT', name: 'USDT', enabled: false },
   { symbol: 'ETH', name: 'ETH', enabled: false },
   { symbol: 'SOL', name: 'SOL', enabled: false },
   { symbol: 'ZEC', name: 'ZEC', enabled: false },
@@ -143,9 +143,6 @@ export default function TokenSelectorModal({
               <X size={18} />
             </button>
           </div>
-          <p className="text-xs font-medium text-[color:var(--sf-text)]/60">
-            {t('tokenSelector.highVolumeOnly')}
-          </p>
         </div>
 
         {/* Bridge Section - Shown in FROM and TO modes */}

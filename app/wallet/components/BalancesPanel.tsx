@@ -5,6 +5,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { Bitcoin, Coins, RefreshCw, ExternalLink, Flame, Lock } from 'lucide-react';
+import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 
 export default function BalancesPanel() {
@@ -249,9 +250,7 @@ export default function BalancesPanel() {
                 >
                   <div className="flex items-center gap-3">
                     {/* Token Logo */}
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                      {alkane.symbol?.slice(0, 2).toUpperCase() || '??'}
-                    </div>
+                    <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="lg" />
                     <div>
                       <div className="font-medium text-[color:var(--sf-text)]">{alkane.name}</div>
                       <div className="text-xs text-[color:var(--sf-text)]/40">{alkane.symbol} · {alkane.alkaneId}</div>
