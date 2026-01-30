@@ -2,6 +2,7 @@
 
 import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageContent from '@/app/components/PageContent';
+import ComingSoonOverlay from '@/app/components/ComingSoonOverlay';
 import PageHeader from '@/app/components/PageHeader';
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -94,6 +95,7 @@ export default function FuturesPage() {
 
   return (
     <PageContent>
+      <ComingSoonOverlay>
       <AlkanesMainWrapper header={
         <PageHeader
           title={<>{t('futures.title')}<span className="block text-lg font-semibold text-[color:var(--sf-text)]/60">{t('futures.comingSoon')}</span></>}
@@ -216,6 +218,7 @@ export default function FuturesPage() {
           <PositionsSection />
         )}
       </AlkanesMainWrapper>
+      </ComingSoonOverlay>
     </PageContent>
   );
 }

@@ -21,6 +21,10 @@ const en: Record<string, string> = {
   'demo.description': 'Do not perform transactions until we officially release it. Anything you see here is subject to change.',
   'demo.understand': 'I Understand',
 
+  // Coming Soon Overlay
+  'comingSoon.title': 'Coming Soon',
+  'comingSoon.description': 'These features are not yet ready, but please look around to see what we will be launching in the future.',
+
   // Footer
   'footer.copyright': '\u00a9 2025 Subzero Research Inc. All rights reserved.',
   'footer.terms': 'Terms of Service',
