@@ -374,6 +374,7 @@ const en: Record<string, string> = {
   'markets.inQueue': 'in queue',
   'futures.autoCompounding': 'auto-compounding',
   'futures.blocksAgo': '{count} blocks ago',
+  'futures.nBlocks': '{count} blocks',
 
   // Futures - Open Position Form
   'openPosition.investmentAmount': 'Investment Amount',

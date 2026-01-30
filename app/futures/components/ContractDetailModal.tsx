@@ -57,7 +57,7 @@ export default function ContractDetailModal({
   const exercisePrice = calculateExercisePrice(blocksLeft);
   
   // Mock calculations
-  const timeLeft = `${blocksLeft} blocks`;
+  const timeLeft = t('futures.nBlocks', { count: blocksLeft });
   const exerciseValue = `${exercisePrice.toFixed(3)} BTC`;
   const marketPrice = '0.948 BTC';
   const estimatedCost = (parseFloat(amount) * 0.948).toFixed(3);

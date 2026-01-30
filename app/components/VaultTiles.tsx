@@ -13,6 +13,13 @@ function getHistoricalApy(apyHistory?: number[]): string {
 
 export default function VaultTiles() {
   const { t } = useTranslation();
+  const VAULT_NAME_KEYS: Record<string, string> = {
+    'yv-frbtc': 'vault.yvfrbtc',
+    've-diesel': 'vault.veDiesel',
+    've-ordi': 'vault.veOrdi',
+    've-usd': 'vault.veUsd',
+    'dx-btc': 'vault.dxBtc',
+  };
   const filteredVaults = AVAILABLE_VAULTS
     .filter(vault => vault.id !== 'yv-frbtc')
     .sort((a, b) => {
@@ -42,7 +49,7 @@ export default function VaultTiles() {
                     <div className="h-6 w-6">
                       <TokenIcon id={v.tokenId} symbol={v.tokenSymbol} size="sm" />
                     </div>
-                    <span className="text-sm font-bold text-[color:var(--sf-text)]">{v.name}</span>
+                    <span className="text-sm font-bold text-[color:var(--sf-text)]">{VAULT_NAME_KEYS[v.id] ? t(VAULT_NAME_KEYS[v.id]) : v.name}</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-sm">
