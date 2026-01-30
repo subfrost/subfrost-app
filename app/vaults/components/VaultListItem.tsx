@@ -12,6 +12,7 @@ type Props = {
   isSelected: boolean;
   onClick: () => void;
   interactive?: boolean;
+  disabled?: boolean;
 };
 
 function formatApyBadge(apy: string | undefined): string {
@@ -20,7 +21,7 @@ function formatApyBadge(apy: string | undefined): string {
   return `~${rounded}%`;
 }
 
-export default function VaultListItem({ vault, isSelected, onClick, interactive = true }: Props) {
+export default function VaultListItem({ vault, isSelected, onClick, interactive = true, disabled = false }: Props) {
   const { network } = useWallet();
   const { t } = useTranslation();
 
@@ -88,6 +89,8 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         isSelected
           ? 'bg-[color:var(--sf-primary)]/10'
           : 'bg-[color:var(--sf-glass-bg)]'
+      } ${
+        disabled ? 'opacity-40 grayscale' : ''
       }`}
     >
       {/* Card layout for small/medium screens */}

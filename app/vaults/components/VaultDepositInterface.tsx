@@ -19,7 +19,6 @@ const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
   { id: 'btc', symbol: 'BTC' },
   { id: '32:0', symbol: 'frBTC' },
   { id: 'usd', symbol: 'bUSD' },
-  { id: '2:0', symbol: 'DIESEL' },
   { id: 'frUSD', symbol: 'frUSD' },
   { id: 'ordi', symbol: 'ORDI' },
 ];
@@ -100,6 +99,7 @@ export default function VaultDepositInterface({
   const [inputFocused, setInputFocused] = useState(false);
   // Collapsible details (all screen sizes)
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [showDepositComingSoon, setShowDepositComingSoon] = useState(false);
   const { t } = useTranslation();
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
@@ -230,15 +230,18 @@ export default function VaultDepositInterface({
                 <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
                   {ALL_VAULT_TOKENS.map((token) => {
                     const tokenVault = getVaultForInputToken(token.id);
+                    const isDxBtcToken = tokenVault?.id === 'dx-btc';
                     return (
                       <button
                         key={token.id}
                         type="button"
-                        onClick={() => handleInputTokenSelect(token)}
+                        onClick={() => isDxBtcToken ? handleInputTokenSelect(token) : undefined}
                         className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[400ms] first:rounded-t-xl last:rounded-b-xl ${
-                          selectedInputToken.id === token.id
-                            ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                            : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+                          !isDxBtcToken
+                            ? 'opacity-40 grayscale cursor-default'
+                            : selectedInputToken.id === token.id
+                              ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                              : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -515,16 +518,18 @@ export default function VaultDepositInterface({
           {/* Deposit Button */}
           <button
             onClick={() => {
-              if (!isConnected) {
-                onConnectModalOpenChange(true);
-                return;
+              if (!showDepositComingSoon) {
+                setShowDepositComingSoon(true);
+                setTimeout(() => setShowDepositComingSoon(false), 1000);
               }
-              onExecute(amount);
             }}
-            disabled={!canExecute}
-            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none opacity-50 grayscale cursor-not-allowed"
           >
-            {isConnected ? t('vaultDeposit.depositBtn') : t('vaultDeposit.connectWallet')}
+            {showDepositComingSoon ? (
+              <span className="animate-pulse">{t('badge.comingSoon')}</span>
+            ) : (
+              isConnected ? t('vaultDeposit.depositBtn') : t('vaultDeposit.connectWallet')
+            )}
           </button>
         </div>
       ) : (

@@ -197,11 +197,11 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                       </div>
                       <div>
                         <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.created')}</span>
-                        <div className="font-medium">{contract.created}</div>
+                        <div className="font-medium">{t('futures.blocksAgo', { count: parseInt(contract.created) || contract.created })}</div>
                       </div>
                       <div className="col-span-2">
                         <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.underlyingYield')}</span>
-                        <div className="font-medium">{contract.underlyingYield}</div>
+                        <div className="font-medium">{t('futures.autoCompounding')}</div>
                       </div>
                     </div>
                   </div>
@@ -393,13 +393,13 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
                                   {t('markets.created')}
                                 </span>
-                                <div className="font-medium">{contract.created}</div>
+                                <div className="font-medium">{t('futures.blocksAgo', { count: parseInt(contract.created) || contract.created })}</div>
                               </div>
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
                                   {t('markets.underlyingYield')}
                                 </span>
-                                <div className="font-medium">{contract.underlyingYield}</div>
+                                <div className="font-medium">{t('futures.autoCompounding')}</div>
                               </div>
                             </div>
                           </div>

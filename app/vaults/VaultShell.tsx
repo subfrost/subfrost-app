@@ -22,10 +22,10 @@ export default function VaultShell() {
   const searchParams = useSearchParams();
   const [selectedVault, setSelectedVault] = useState<VaultConfig | null>(null);
 
-  // Check for vault ID in URL params on mount
+  // Check for vault ID in URL params on mount (only dxBTC is accessible)
   useEffect(() => {
     const vaultId = searchParams.get('vault');
-    if (vaultId) {
+    if (vaultId && vaultId === 'dx-btc') {
       const vault = AVAILABLE_VAULTS.find(v => v.id === vaultId);
       if (vault) {
         setSelectedVault(vault);
@@ -216,7 +216,8 @@ export default function VaultShell() {
               key={vault.id}
               vault={vault}
               isSelected={false}
-              onClick={() => setSelectedVault(vault)}
+              onClick={() => vault.id === 'dx-btc' ? setSelectedVault(vault) : undefined}
+              disabled={vault.id !== 'dx-btc'}
             />
           ))}
 

@@ -30,6 +30,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   const [investmentAmount, setInvestmentAmount] = useState<string>('1.0');
   const [inputFocused, setInputFocused] = useState(false);
   const [lockPeriodFocused, setLockPeriodFocused] = useState(false);
+  const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Get wallet connection state
@@ -438,11 +439,19 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
           {/* Buy Button */}
           <button
             type="button"
-            onClick={handleBuy}
-            disabled={isConnected && !canBuy}
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-base uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            onClick={() => {
+              if (!showBuyComingSoon) {
+                setShowBuyComingSoon(true);
+                setTimeout(() => setShowBuyComingSoon(false), 1000);
+              }
+            }}
+            className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-base uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none opacity-50 grayscale cursor-not-allowed"
           >
-            {isConnected ? t('openPosition.buyFtrBtc') : t('openPosition.connectWallet')}
+            {showBuyComingSoon ? (
+              <span className="animate-pulse">{t('badge.comingSoon')}</span>
+            ) : (
+              isConnected ? t('openPosition.buyFtrBtc') : t('openPosition.connectWallet')
+            )}
           </button>
         </div>
 

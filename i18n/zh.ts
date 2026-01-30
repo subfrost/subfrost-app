@@ -372,6 +372,8 @@ const zh: Record<string, string> = {
   'markets.created': '\u521b\u5efa\uff1a',
   'markets.underlyingYield': '\u5e95\u5c42\u6536\u76ca\uff1a',
   'markets.inQueue': '\u5728\u961f\u5217\u4e2d',
+  'futures.autoCompounding': '自动复利',
+  'futures.blocksAgo': '{count} 个区块前',
 
   // Futures - Open Position Form
   'openPosition.investmentAmount': '\u6295\u8d44\u91d1\u989d',

@@ -46,7 +46,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 've-diesel',
     name: 'FIRE Vault',
-    description: 'Stake DIESEL for boosted yield',
+    description: 'First of its kind DeFi vault on Bitcoin',
     tokenId: '2:0',
     tokenSymbol: 'DIESEL',
     iconPath: 'https://asset.oyl.gg/alkanes/mainnet/2-0.png',
@@ -109,11 +109,11 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 'dx-btc',
     name: 'dxBTC Token',
-    description: 'Stake BTC or frBTC for pure BTC yield',
+    description: 'Stake BTC for pure BTC yield',
     tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     iconPath: '/tokens/btc_snowflake.svg',
-    contractAddress: '4:7936', // dxBTC at [4, 0x1f00] = [4, 7936]
+    contractAddress: '4:xxxx',
     badge: 'Coming Soon',
     type: 'unit-vault',
     inputAsset: 'BTC',
