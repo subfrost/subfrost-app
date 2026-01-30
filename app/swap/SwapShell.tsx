@@ -891,51 +891,24 @@ export default function SwapShell() {
     });
   };
 
-  // Allow all pools - no filtering
-  const whitelistedPoolIds = null as Set<string> | null;
-
-  // Helper function to check if a pair is in the allowed list
+  // Helper function to check if a viable pool exists for a token pair
   const isAllowedPair = useMemo(() => (token1Id: string, token2Id: string): boolean => {
-    // On non-mainnet networks (whitelistedPoolIds === null), allow all pairs
-    // This enables LP token selection on regtest/signet where pools may not be loaded yet
-    if (whitelistedPoolIds === null) {
-      return true;
-    }
-
     // Special case: BTC <-> frBTC wrap/unwrap is always allowed
     if ((token1Id === 'btc' && token2Id === FRBTC_ALKANE_ID) ||
         (token1Id === FRBTC_ALKANE_ID && token2Id === 'btc')) {
       return true;
     }
 
-    // Special case: BTC <-> token (multi-hop via frBTC)
-    // BTC wraps to frBTC, then frBTC swaps to token
-    if (token1Id === 'btc' || token2Id === 'btc') {
-      const otherToken = token1Id === 'btc' ? token2Id : token1Id;
-      // Check if there's a whitelisted pool between frBTC and the other token
-      const hasWhitelistedPoolWithFrbtc = markets.some(p =>
-        (whitelistedPoolIds === null || whitelistedPoolIds.has(p.id)) &&
-        ((p.token0.id === FRBTC_ALKANE_ID && p.token1.id === otherToken) ||
-        (p.token0.id === otherToken && p.token1.id === FRBTC_ALKANE_ID))
-      );
-      if (hasWhitelistedPoolWithFrbtc) {
-        return true;
-      }
-    }
-
-    // Map BTC to frBTC for pool checking
+    // Map BTC to frBTC for pool checking (BTC multi-hops via frBTC)
     const id1 = token1Id === 'btc' ? FRBTC_ALKANE_ID : token1Id;
     const id2 = token2Id === 'btc' ? FRBTC_ALKANE_ID : token2Id;
 
-    // Find the pool in markets with these token IDs
-    const pool = markets.find(p =>
+    // Check if there's an actual pool with these two tokens
+    return markets.some(p =>
       (p.token0.id === id1 && p.token1.id === id2) ||
       (p.token0.id === id2 && p.token1.id === id1)
     );
-
-    // Check if the pool is in our whitelisted pool IDs (null = allow all)
-    return pool ? (whitelistedPoolIds === null || whitelistedPoolIds.has(pool.id)) : false;
-  }, [markets, FRBTC_ALKANE_ID, whitelistedPoolIds]);
+  }, [markets, FRBTC_ALKANE_ID]);
 
   // Custom sort function for token options: BTC, DIESEL/bUSD, frBTC, then alphabetical
   const sortTokenOptions = (options: TokenOption[]): TokenOption[] => {
@@ -1010,17 +983,14 @@ export default function SwapShell() {
     return sortTokenOptions(options);
   }, [toOptions, idToUserCurrency, btcBalanceSats, fromToken, isAllowedPair]);
 
-  // Pool token options - filtered to only show tokens that are in the whitelisted pools
+  // Pool token options - show all tokens that appear in any pool
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
     const poolTokenIds = new Set<string>();
 
-    // Collect token IDs only from whitelisted pools (null = allow all)
-    markets
-      .filter(pool => whitelistedPoolIds === null || whitelistedPoolIds.has(pool.id))
-      .forEach(pool => {
-        poolTokenIds.add(pool.token0.id);
-        poolTokenIds.add(pool.token1.id);
-      });
+    markets.forEach(pool => {
+      poolTokenIds.add(pool.token0.id);
+      poolTokenIds.add(pool.token1.id);
+    });
     
     // Also add BTC since it can be wrapped to frBTC
     if (poolTokenIds.has(FRBTC_ALKANE_ID)) {
