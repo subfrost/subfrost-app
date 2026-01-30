@@ -86,7 +86,7 @@ export default function BalancesPanel() {
 
   // Mock FUEL allocation data - replace with API call when ready
   const fuelAllocation = {
-    amount: 950,
+    amount: 0,
     isClaimed: false,
     claimableAt: null as Date | null, // null means claimable now (when TGE happens)
   };

@@ -272,14 +272,11 @@ export default function SwapShell() {
     return new Set(ids.filter(Boolean));
   }, [FRBTC_ALKANE_ID, BUSD_ALKANE_ID]);
 
-  // Build FROM options based on TO token type:
-  // - If TO is an alt token: only show base tokens (no alt-to-alt swaps)
-  // - If TO is a base token or not set: show all tokens
+  // Build FROM options - show all tokens with pools (no alt-to-alt restriction)
   const fromOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
     const toId = toToken?.id;
-    const isToAltToken = toId ? !baseTokenIds.has(toId) : false;
 
     // Helper to check if a token should be shown (by ID and symbol)
     const shouldShowToken = (tokenId: string, symbol: string): boolean => {
@@ -287,8 +284,6 @@ export default function SwapShell() {
       if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
       // On mainnet, only show whitelisted tokens by symbol
       if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
-      // If TO is an alt token, only allow base tokens in FROM
-      if (isToAltToken && !baseTokenIds.has(tokenId)) return false;
       return true;
     };
 
@@ -360,14 +355,11 @@ export default function SwapShell() {
     return opts;
   }, [poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network, toToken, baseTokenIds]);
 
-  // Build TO options based on FROM token type:
-  // - If FROM is a base token (BTC, frBTC, bUSD): show all tokens with pools
-  // - If FROM is an alt token: only show base tokens (no alt-to-alt swaps)
+  // Build TO options - show all tokens with pools (no alt-to-alt restriction)
   const toOptions: TokenMeta[] = useMemo(() => {
     const opts: TokenMeta[] = [];
     const seen = new Set<string>();
     const fromId = fromToken?.id;
-    const isFromBaseToken = fromId ? baseTokenIds.has(fromId) : true;
 
     // For BTC, also treat it as frBTC for pool lookups (BTC swaps go through frBTC)
     const fromIdForPoolLookup = fromId === 'btc' ? FRBTC_ALKANE_ID : fromId;
@@ -398,22 +390,14 @@ export default function SwapShell() {
       if (whitelistedTokenIds !== null && !whitelistedTokenIds.has(tokenId)) return false;
       // On mainnet, only show whitelisted tokens by symbol
       if (network === 'mainnet' && !MAINNET_WHITELISTED_TOKEN_SYMBOLS.has(symbol)) return false;
-
-      if (isFromBaseToken) {
-        // From base token: show tokens that have pools with it
-        // For BTC/frBTC wrapping, always allow
-        if (fromId === 'btc' && tokenId === FRBTC_ALKANE_ID) return true;
-        if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
-        // Always allow other base tokens (BTC, frBTC, bUSD) to swap between each other
-        // This ensures they show even before pools have loaded
-        if (baseTokenIds.has(tokenId)) return true;
-        // Check if there's a pool for this pair (for non-base tokens)
-        const tokenIdForLookup = tokenId === 'btc' ? FRBTC_ALKANE_ID : tokenId;
-        return tokensWithPoolsForFrom.has(tokenIdForLookup) || tokensWithPoolsForFrom.has(tokenId);
-      } else {
-        // From alt token: only show base tokens
-        return baseTokenIds.has(tokenId);
-      }
+      // For BTC/frBTC wrapping, always allow
+      if (fromId === 'btc' && tokenId === FRBTC_ALKANE_ID) return true;
+      if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
+      // Always allow base tokens (BTC, frBTC, bUSD) - they show before pools load
+      if (baseTokenIds.has(tokenId)) return true;
+      // Show any token that has a pool with the FROM token
+      const tokenIdForLookup = tokenId === 'btc' ? FRBTC_ALKANE_ID : tokenId;
+      return tokensWithPoolsForFrom.has(tokenIdForLookup) || tokensWithPoolsForFrom.has(tokenId);
     };
 
     // Add BTC first (if allowed)
@@ -455,33 +439,31 @@ export default function SwapShell() {
       }
     }
 
-    // Add remaining tokens from pool data (only if from base token)
-    if (isFromBaseToken) {
-      Array.from(poolTokenMap.values()).forEach((poolToken) => {
-        if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
-          opts.push({
-            ...poolToken,
-            isAvailable: true
-          });
-          seen.add(poolToken.id);
-        }
-      });
+    // Add remaining tokens from pool data
+    Array.from(poolTokenMap.values()).forEach((poolToken) => {
+      if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
+        opts.push({
+          ...poolToken,
+          isAvailable: true
+        });
+        seen.add(poolToken.id);
+      }
+    });
 
-      // Also add tokens from user's wallet that have pools with FROM token
-      userCurrencies.forEach((currency: any) => {
-        const symbol = currency.symbol || currency.name || currency.id;
-        if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
-          seen.add(currency.id);
-          opts.push({
-            id: currency.id,
-            symbol,
-            name: currency.name || currency.symbol || currency.id,
-            iconUrl: currency.iconUrl,
-            isAvailable: true,
-          });
-        }
-      });
-    }
+    // Also add tokens from user's wallet that have pools with FROM token
+    userCurrencies.forEach((currency: any) => {
+      const symbol = currency.symbol || currency.name || currency.id;
+      if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
+        seen.add(currency.id);
+        opts.push({
+          id: currency.id,
+          symbol,
+          name: currency.name || currency.symbol || currency.id,
+          iconUrl: currency.iconUrl,
+          isAvailable: true,
+        });
+      }
+    });
 
     return opts;
   }, [fromToken, poolTokenMap, whitelistedTokenIds, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets, network]);
