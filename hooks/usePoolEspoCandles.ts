@@ -160,5 +160,7 @@ export function usePoolEspoCandles({
     gcTime: 5 * 60_000,
     refetchInterval: 60_000,
     retry: 2,
+    // Keep previous timeframe's data visible while new timeframe loads
+    placeholderData: (prev) => prev,
   });
 }

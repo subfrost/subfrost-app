@@ -24,7 +24,7 @@ export default function PoolDetailsCard({ pool }: Props) {
   const { t } = useTranslation();
   const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
 
-  const { data: candles, isLoading } = usePoolEspoCandles({
+  const { data: candles, isLoading, isFetching } = usePoolEspoCandles({
     poolId: pool?.id,
     timeframe,
     enabled: !!pool,
@@ -64,7 +64,7 @@ export default function PoolDetailsCard({ pool }: Props) {
           <CandleChart
             data={candles ?? []}
             height={300}
-            loading={isLoading}
+            loading={isLoading || (isFetching && !candles?.length)}
             pairLabel={pairLabel}
           />
 

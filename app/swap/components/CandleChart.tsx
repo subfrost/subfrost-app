@@ -174,46 +174,51 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
     }
   }, [chartData]);
 
-  if (loading) {
-    return (
-      <div
-        className="flex items-center justify-center rounded-xl bg-[color:var(--sf-primary)]/5"
-        style={{ height }}
-      >
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[color:var(--sf-primary)] border-t-transparent" />
-          <span className="text-xs text-[color:var(--sf-text)]/50">Loading chart data...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center rounded-xl bg-[color:var(--sf-primary)]/5"
-        style={{ height }}
-      >
-        <div className="flex flex-col items-center gap-2 text-center">
-          <svg className="h-10 w-10 text-[color:var(--sf-text)]/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-          </svg>
-          <span className="text-xs text-[color:var(--sf-text)]/40">
-            {pairLabel ? `No chart data for ${pairLabel}` : 'No chart data available'}
-          </span>
-        </div>
-      </div>
-    );
-  }
+  const showEmpty = !loading && (!data || data.length === 0);
 
   return (
     <div className="relative" style={{ height }}>
-      {pairLabel && (
+      {/* Chart container — always mounted so the chart instance persists across loading states */}
+      <div
+        ref={chartContainerRef}
+        className="w-full rounded-xl"
+        style={{ height, visibility: (loading || showEmpty) ? 'hidden' : 'visible' }}
+      />
+
+      {/* Loading overlay */}
+      {loading && (
+        <div
+          className="absolute inset-0 flex items-center justify-center rounded-xl bg-[color:var(--sf-primary)]/5"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[color:var(--sf-primary)] border-t-transparent" />
+            <span className="text-xs text-[color:var(--sf-text)]/50">Loading chart data...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state overlay */}
+      {showEmpty && (
+        <div
+          className="absolute inset-0 flex items-center justify-center rounded-xl bg-[color:var(--sf-primary)]/5"
+        >
+          <div className="flex flex-col items-center gap-2 text-center">
+            <svg className="h-10 w-10 text-[color:var(--sf-text)]/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+            </svg>
+            <span className="text-xs text-[color:var(--sf-text)]/40">
+              {pairLabel ? `No chart data for ${pairLabel}` : 'No chart data available'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Pair label */}
+      {pairLabel && !loading && !showEmpty && (
         <div className="absolute left-3 top-3 z-10 rounded-md bg-[color:var(--sf-primary)]/10 px-2.5 py-1 text-xs font-semibold text-[color:var(--sf-text)]/60">
           {pairLabel}
         </div>
       )}
-      <div ref={chartContainerRef} className="w-full rounded-xl" style={{ height }} />
     </div>
   );
 }
