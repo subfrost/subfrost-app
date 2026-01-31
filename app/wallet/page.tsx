@@ -133,7 +133,7 @@ export default function WalletDashboardPage() {
 
           {/* Tab Navigation */}
           <div className="border-b border-[color:var(--sf-outline)] mb-6 relative">
-            <div className="flex items-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide pt-10">
+            <div className="flex items-center gap-1 md:gap-2 overflow-x-auto scrollbar-hide">
               {tabs.map((tab, index) => {
                 const Icon = tab.icon;
                 return (

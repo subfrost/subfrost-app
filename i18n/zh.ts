@@ -160,8 +160,10 @@ const zh: Record<string, string> = {
 
   // Receive Modal
   'receive.title': '\u63a5\u6536\u6bd4\u7279\u5e01',
+  'receive.titleAssets': '接收比特币资产',
   'receive.yourAddress': '\u60a8\u7684\u6bd4\u7279\u5e01\u5730\u5740',
   'receive.onlySendBtc': '\u4ec5\u5411\u6b64\u5730\u5740\u53d1\u9001\u6bd4\u7279\u5e01',
+  'receive.onlySendAssets': '仅向此地址发送 BTC、Alkanes、Runes 和 BRC20',
   'receive.otherCrypto': '\u53d1\u9001\u5176\u4ed6\u52a0\u5bc6\u8d27\u5e01\u53ef\u80fd\u5bfc\u81f4\u6c38\u4e45\u4e22\u5931',
   'receive.verifyAddress': '\u53d1\u9001\u524d\u8bf7\u59cb\u7ec8\u9a8c\u8bc1\u5730\u5740',
   'receive.reuseAddress': '\u6b64\u5730\u5740\u53ef\u4ee5\u591a\u6b21\u4f7f\u7528',
@@ -172,7 +174,7 @@ const zh: Record<string, string> = {
   'walletDash.title': '\u94b1\u5305\u4eea\u8868\u76d8',
   'walletDash.balances': '\u4f59\u989d',
   'walletDash.transactionHistory': '\u4ea4\u6613\u5386\u53f2',
-  'walletDash.utxos': 'UTXOs',
+  'walletDash.utxos': 'UTXO Management',
   'walletDash.history': '\u5386\u53f2',
   'walletDash.send': '\u53d1\u9001',
   'walletDash.receive': '\u63a5\u6536',
@@ -228,7 +230,7 @@ const zh: Record<string, string> = {
   'send.title': '\u53d1\u9001\u6bd4\u7279\u5e01',
   'send.recipientAddress': '\u6536\u4ef6\u4eba\u5730\u5740',
   'send.amountBtc': '\u91d1\u989d (BTC)',
-  'send.feeRate': '\u8d39\u7387',
+  'send.feeRate': '矿工费率 (sats/vB)',
   'send.slow': '\u6162\u901f',
   'send.medium': '\u4e2d\u901f',
   'send.fast': '\u5feb\u901f',
@@ -763,6 +765,11 @@ const zh: Record<string, string> = {
   'wallet.selectNetwork': '选择网络',
 
   // Send Modal (additional)
+  'send.titleAlkanes': '发送 Alkanes',
+  'send.selectAlkanes': '选择 Alkanes',
+  'send.amountAlkanes': '数量',
+  'send.btcTab': 'BTC',
+  'send.alkanesTab': 'Alkanes',
   'send.available': '可用：',
   'send.selected': '已选择：',
   'send.totalSelected': '已选总额：',

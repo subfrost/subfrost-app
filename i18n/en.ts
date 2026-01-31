@@ -160,11 +160,12 @@ const en: Record<string, string> = {
 
   // Receive Modal
   'receive.title': 'Receive Bitcoin',
+  'receive.titleAssets': 'Receive Bitcoin Assets',
   'receive.yourAddress': 'Your Bitcoin Address',
-  'receive.onlySendBtc': 'Only send Bitcoin to this address',
+  'receive.onlySendBtc': 'Only send BTC to this address',
+  'receive.onlySendAssets': 'Only send BTC, Alkanes, Runes and BRC20s to this address',
   'receive.otherCrypto': 'Sending other cryptocurrencies may result in permanent loss',
   'receive.verifyAddress': 'Always verify the address before sending',
-  'receive.reuseAddress': 'This address can be used multiple times',
   'receive.close': 'Close',
   'receive.copyAddress': 'Copy address',
 
@@ -172,7 +173,7 @@ const en: Record<string, string> = {
   'walletDash.title': 'Wallet Dashboard',
   'walletDash.balances': 'Balances',
   'walletDash.transactionHistory': 'Transaction History',
-  'walletDash.utxos': 'UTXOs',
+  'walletDash.utxos': 'UTXO Management',
   'walletDash.history': 'History',
   'walletDash.send': 'Send',
   'walletDash.receive': 'Receive',
@@ -228,7 +229,7 @@ const en: Record<string, string> = {
   'send.title': 'Send Bitcoin',
   'send.recipientAddress': 'Recipient Address',
   'send.amountBtc': 'Amount (BTC)',
-  'send.feeRate': 'Fee Rate',
+  'send.feeRate': 'Miner Fee Rate (sats/vB)',
   'send.slow': 'slow',
   'send.medium': 'medium',
   'send.fast': 'fast',
@@ -763,6 +764,11 @@ const en: Record<string, string> = {
   'wallet.selectNetwork': 'Select Network',
 
   // Send Modal (additional)
+  'send.titleAlkanes': 'Send Alkanes',
+  'send.selectAlkanes': 'Select Alkanes',
+  'send.amountAlkanes': 'Amount',
+  'send.btcTab': 'BTC',
+  'send.alkanesTab': 'Alkanes',
   'send.available': 'Available:',
   'send.selected': 'Selected:',
   'send.totalSelected': 'Total Selected:',

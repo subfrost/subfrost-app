@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Send, AlertCircle, CheckCircle, Loader2, Lock } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
@@ -34,10 +34,10 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
-  const [step, setStep] = useState<'input' | 'utxo-selection' | 'confirm' | 'broadcasting' | 'success'>('input');
+  const [step, setStep] = useState<'input' | 'confirm' | 'broadcasting' | 'success'>('input');
   const [error, setError] = useState('');
   const [txid, setTxid] = useState('');
-  const [autoSelectUtxos, setAutoSelectUtxos] = useState(true);
+  const [sendMode, setSendMode] = useState<'btc' | 'alkanes'>('btc');
   const [showFrozenUtxos, setShowFrozenUtxos] = useState(false);
   const [showFeeWarning, setShowFeeWarning] = useState(false);
   const [estimatedFee, setEstimatedFee] = useState(0);
@@ -98,7 +98,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       setSelectedUtxos(new Set());
       setError('');
       setTxid('');
-      setAutoSelectUtxos(true);
+      setSendMode('btc');
     }
   }, [isOpen]);
 
@@ -143,71 +143,60 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       }
       const feeRateNum = feeRate;
 
-      if (autoSelectUtxos) {
-        // Auto-select UTXOs using smart algorithm
-        // Strategy: Use largest UTXOs first, but limit total count to keep tx size reasonable
-        const sorted = [...availableUtxos].sort((a, b) => b.value - a.value);
-        let total = 0;
-        const selected = new Set<string>();
-        
-        // Estimate fee based on number of inputs
-        // Each input is ~180 vbytes, output is ~34 vbytes
-        const estimateFee = (numInputs: number) => {
-          const size = numInputs * 180 + 2 * 34 + 10; // 2 outputs (recipient + change)
-          return size * feeRateNum;
-        };
-        
-        const MAX_UTXOS = 100; // Hard limit to keep transaction size reasonable
-        
-        for (const utxo of sorted) {
-          const potentialFee = estimateFee(selected.size + 1);
-          const needed = amountSats + potentialFee;
-          
-          selected.add(`${utxo.txid}:${utxo.vout}`);
-          total += utxo.value;
-          
-          // Stop if we have enough + fee buffer
-          if (total >= needed + 10000) break; // 10k sats buffer
-          
-          // Hard limit: Don't select more than MAX_UTXOS
-          if (selected.size >= MAX_UTXOS) {
-            console.warn(`[SendModal] Hit ${MAX_UTXOS} UTXO limit, checking if sufficient...`);
-            break;
-          }
+      // Auto-select UTXOs using smart algorithm
+      // Strategy: Use largest UTXOs first, but limit total count to keep tx size reasonable
+      const sorted = [...availableUtxos].sort((a, b) => b.value - a.value);
+      let total = 0;
+      const selected = new Set<string>();
+
+      // Estimate fee based on number of inputs
+      // Each input is ~180 vbytes, output is ~34 vbytes
+      const estimateFee = (numInputs: number) => {
+        const size = numInputs * 180 + 2 * 34 + 10; // 2 outputs (recipient + change)
+        return size * feeRateNum;
+      };
+
+      const MAX_UTXOS = 100; // Hard limit to keep transaction size reasonable
+
+      for (const utxo of sorted) {
+        const potentialFee = estimateFee(selected.size + 1);
+        const needed = amountSats + potentialFee;
+
+        selected.add(`${utxo.txid}:${utxo.vout}`);
+        total += utxo.value;
+
+        // Stop if we have enough + fee buffer
+        if (total >= needed + 10000) break; // 10k sats buffer
+
+        // Hard limit: Don't select more than MAX_UTXOS
+        if (selected.size >= MAX_UTXOS) {
+          console.warn(`[SendModal] Hit ${MAX_UTXOS} UTXO limit, checking if sufficient...`);
+          break;
         }
-
-        const finalFee = estimateFee(selected.size);
-        const required = amountSats + finalFee;
-
-        if (total < required) {
-          // Check if we have enough total balance
-          const totalAvailable = availableUtxos.reduce((sum, u) => sum + u.value, 0);
-          if (totalAvailable >= required) {
-            setError(
-              `Cannot send this amount using auto-select (hit ${MAX_UTXOS} UTXO limit). ` +
-              `Need ${(required / 100000000).toFixed(8)} BTC, but can only use ${(total / 100000000).toFixed(8)} BTC with ${MAX_UTXOS} UTXOs. ` +
-              `Total available: ${(totalAvailable / 100000000).toFixed(8)} BTC. ` +
-              `Try manual UTXO selection or send a smaller amount.`
-            );
-          } else {
-            setError(`Insufficient funds. Need ${(required / 100000000).toFixed(8)} BTC, have ${(totalAvailable / 100000000).toFixed(8)} BTC`);
-          }
-          return;
-        }
-
-        console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, estimated fee: ${(finalFee / 100000000).toFixed(8)} BTC`);
-
-        setSelectedUtxos(selected);
-        setStep('confirm');
-      } else {
-        setStep('utxo-selection');
       }
-    } else if (step === 'utxo-selection') {
-      const amountSats = Math.floor(parseFloat(amount) * 100000000);
-      if (totalSelectedValue < amountSats) {
-        setError('Selected UTXOs do not cover the amount');
+
+      const finalFee = estimateFee(selected.size);
+      const required = amountSats + finalFee;
+
+      if (total < required) {
+        // Check if we have enough total balance
+        const totalAvailable = availableUtxos.reduce((sum, u) => sum + u.value, 0);
+        if (totalAvailable >= required) {
+          setError(
+            `Cannot send this amount (hit ${MAX_UTXOS} UTXO limit). ` +
+            `Need ${(required / 100000000).toFixed(8)} BTC, but can only use ${(total / 100000000).toFixed(8)} BTC with ${MAX_UTXOS} UTXOs. ` +
+            `Total available: ${(totalAvailable / 100000000).toFixed(8)} BTC. ` +
+            `Try sending a smaller amount.`
+          );
+        } else {
+          setError(`Insufficient funds. Need ${(required / 100000000).toFixed(8)} BTC, have ${(totalAvailable / 100000000).toFixed(8)} BTC`);
+        }
         return;
       }
+
+      console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, estimated fee: ${(finalFee / 100000000).toFixed(8)} BTC`);
+
+      setSelectedUtxos(selected);
       setStep('confirm');
     } else if (step === 'confirm') {
       // Check if fee looks suspicious before broadcasting
@@ -319,19 +308,6 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     }
   };
 
-  const toggleUtxo = (txid: string, vout: number) => {
-    const key = `${txid}:${vout}`;
-    const newSelected = new Set(selectedUtxos);
-    
-    if (newSelected.has(key)) {
-      newSelected.delete(key);
-    } else {
-      newSelected.add(key);
-    }
-    
-    setSelectedUtxos(newSelected);
-  };
-
   const renderInput = () => (
     <>
       <div className="space-y-4">
@@ -343,7 +319,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
             type="text"
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
-            placeholder="bc1q... or 1... or 3..."
+            placeholder="bc1q.. or bc1p.."
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
@@ -365,37 +341,12 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
+        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
             {t('send.feeRate')}
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            {(['slow', 'medium', 'fast'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setFeeSelection(s)}
-                className={`rounded-xl px-4 py-2 text-sm font-bold capitalize shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                  feeSelection === s
-                    ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
-                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
-                }`}
-              >
-                {t(`send.${s}`)} ({presets[s]} sat/vB)
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setFeeSelection('custom')}
-              className={`rounded-xl px-4 py-2 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                feeSelection === 'custom'
-                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
-                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
-              }`}
-            >
-              {t('send.custom')}
-            </button>
-            {feeSelection === 'custom' && (
+          </span>
+          <div className="flex items-center gap-2">
+            {feeSelection === 'custom' ? (
               <div className="relative">
                 <input
                   aria-label="Custom fee rate"
@@ -405,29 +356,27 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                   step={1}
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
-                  placeholder="10"
-                  className="h-10 w-36 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-3 pr-20 text-base font-semibold text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  onBlur={() => {
+                    if (!customFeeRate) {
+                      setCustomFeeRate(String(presets.medium));
+                    }
+                  }}
+                  placeholder="0"
+                  style={{ outline: 'none', border: 'none' }}
+                  className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
                 />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">sat/vB</span>
               </div>
+            ) : (
+              <span className="font-semibold text-[color:var(--sf-text)]">
+                {Math.round(feeRate)}
+              </span>
             )}
-          </div>
-          <div className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[color:var(--sf-primary)]/10 px-3 py-1.5 text-sm shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
-            <span className="font-semibold text-[color:var(--sf-text)]/70">{t('send.selected')}</span>
-            <span className="font-bold text-[color:var(--sf-primary)]">{feeRate} sat/vB</span>
-          </div>
-        </div>
-
-        <div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoSelectUtxos}
-              onChange={(e) => setAutoSelectUtxos(e.target.checked)}
-              className="rounded"
+            <SendMinerFeeButton
+              selection={feeSelection}
+              setSelection={setFeeSelection}
+              presets={presets}
             />
-            <span className="text-sm text-[color:var(--sf-text)]/80">{t('send.autoSelectUtxos')}</span>
-          </label>
+          </div>
         </div>
 
         {error && (
@@ -443,7 +392,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           onClick={handleNext}
           className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
         >
-          {autoSelectUtxos ? t('send.reviewAndSend') : t('send.selectUtxosBtn')}
+          {t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
@@ -455,94 +404,98 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     </>
   );
 
-  const renderUtxoSelection = () => (
+  const renderAlkanesInput = () => (
     <>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-[color:var(--sf-text)]/80">
-            {t('send.selectUtxos', { count: selectedUtxos.size })}
-          </div>
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showFrozenUtxos}
-              onChange={(e) => setShowFrozenUtxos(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-[color:var(--sf-text)]/60">{t('send.showFrozen')}</span>
+        <div>
+          <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
+            {t('send.recipientAddress')}
           </label>
+          <input
+            type="text"
+            value={recipientAddress}
+            onChange={(e) => setRecipientAddress(e.target.value)}
+            placeholder="bc1q.. or bc1p.."
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+          />
         </div>
 
-        <div className="max-h-96 overflow-y-auto space-y-2 rounded-xl p-3 bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-          {availableUtxos.map((utxo) => {
-            const key = `${utxo.txid}:${utxo.vout}`;
-            const isSelected = selectedUtxos.has(key);
-            const isFrozen = frozenUtxos.has(key);
-
-            return (
-              <button
-                key={key}
-                onClick={() => !isFrozen && toggleUtxo(utxo.txid, utxo.vout)}
-                disabled={isFrozen}
-                className={`w-full p-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
-                  isSelected
-                    ? 'bg-[color:var(--sf-primary)]/20 shadow-[0_4px_12px_rgba(0,0,0,0.15)]'
-                    : isFrozen
-                    ? 'bg-[color:var(--sf-input-bg)] opacity-50 cursor-not-allowed'
-                    : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="text-xs text-[color:var(--sf-text)]/80">
-                      {utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}
-                    </div>
-                    <div className="text-sm text-[color:var(--sf-text)] font-medium">
-                      {(utxo.value / 100000000).toFixed(8)} BTC
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isFrozen && <Lock size={16} className="text-yellow-400" />}
-                    {isSelected && <CheckCircle size={20} className="text-[color:var(--sf-primary)]" />}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="p-3 rounded-xl bg-[color:var(--sf-primary)]/10 shadow-[0_2px_8px_rgba(0,0,0,0.1)] text-sm">
-          <div className="flex justify-between text-[color:var(--sf-text)]/80">
-            <span>{t('send.totalSelected')}</span>
-            <span className="font-medium">{(totalSelectedValue / 100000000).toFixed(8)} BTC</span>
-          </div>
-          <div className="flex justify-between text-[color:var(--sf-text)]/80 mt-1">
-            <span>{t('send.amountToSend')}</span>
-            <span className="font-medium">{parseFloat(amount).toFixed(8)} BTC</span>
+        {/* Select Alkanes placeholder */}
+        <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-6 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
+          <div className="flex flex-col items-center justify-center gap-3 py-4">
+            <Coins size={32} className="text-blue-400/60" />
+            <span className="text-sm font-semibold text-[color:var(--sf-text)]/60">{t('send.selectAlkanes')}</span>
+            <span className="text-xs text-[color:var(--sf-text)]/40">{t('common.comingSoon')}</span>
           </div>
         </div>
 
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-red-400 text-sm">
-            <AlertCircle size={16} />
-            {error}
+        <div>
+          <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
+            {t('send.amountAlkanes')}
+          </label>
+          <input
+            type="number"
+            step="1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            disabled
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+            {t('send.feeRate')}
+          </span>
+          <div className="flex items-center gap-2">
+            {feeSelection === 'custom' ? (
+              <div className="relative">
+                <input
+                  aria-label="Custom fee rate"
+                  type="number"
+                  min={1}
+                  max={999}
+                  step={1}
+                  value={customFeeRate}
+                  onChange={(e) => setCustomFeeRate(e.target.value)}
+                  onBlur={() => {
+                    if (!customFeeRate) {
+                      setCustomFeeRate(String(presets.medium));
+                    }
+                  }}
+                  placeholder="0"
+                  style={{ outline: 'none', border: 'none' }}
+                  className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                />
+              </div>
+            ) : (
+              <span className="font-semibold text-[color:var(--sf-text)]">
+                {Math.round(feeRate)}
+              </span>
+            )}
+            <SendMinerFeeButton
+              selection={feeSelection}
+              setSelection={setFeeSelection}
+              presets={presets}
+            />
           </div>
-        )}
+        </div>
       </div>
 
       <div className="flex gap-3">
         <button
-          onClick={() => setStep('input')}
-          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
-        >
-          {t('send.back')}
-        </button>
-        <button
           onClick={handleNext}
-          disabled={selectedUtxos.size === 0}
+          disabled
           className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('send.reviewAndSend')}
+        </button>
+        <button
+          onClick={onClose}
+          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+        >
+          {t('send.cancel')}
         </button>
       </div>
     </>
@@ -595,7 +548,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
         <div className="flex gap-3">
           <button
-            onClick={() => setStep(autoSelectUtxos ? 'input' : 'utxo-selection')}
+            onClick={() => setStep('input')}
             className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
           >
             {t('send.back')}
@@ -652,11 +605,11 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{t('send.title')}</h2>
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{sendMode === 'btc' ? t('send.title') : t('send.titleAlkanes')}</h2>
             <button
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
@@ -669,11 +622,42 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {step === 'input' && renderInput()}
-          {step === 'utxo-selection' && renderUtxoSelection()}
-          {step === 'confirm' && renderConfirm()}
-          {step === 'broadcasting' && renderBroadcasting()}
-          {step === 'success' && renderSuccess()}
+          {/* BTC / Alkanes toggle */}
+          {(step === 'input') && (
+            <div className="flex gap-4">
+              {(['btc', 'alkanes'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => {
+                    if (tab !== sendMode) {
+                      setSendMode(tab);
+                      setRecipientAddress('');
+                      setAmount('');
+                      setError('');
+                      setSelectedUtxos(new Set());
+                    }
+                  }}
+                  className={`pb-1 px-1 text-sm font-semibold ${
+                    sendMode === tab
+                      ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                      : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+                  }`}
+                >
+                  {tab === 'btc' ? t('send.btcTab') : t('send.alkanesTab')}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {sendMode === 'btc' && (
+            <>
+              {step === 'input' && renderInput()}
+              {step === 'confirm' && renderConfirm()}
+              {step === 'broadcasting' && renderBroadcasting()}
+              {step === 'success' && renderSuccess()}
+            </>
+          )}
+          {sendMode === 'alkanes' && step === 'input' && renderAlkanesInput()}
         </div>
       </div>
 
@@ -730,7 +714,6 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                     {estimatedFee > 0.01 * 100000000 && (
                       <li>{t('send.smallerAmount')}</li>
                     )}
-                    <li>Manually select fewer UTXOs instead of using auto-select</li>
                   </ul>
                 </div>
               </div>
@@ -751,6 +734,79 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SendMinerFeeButton({ selection, setSelection, presets }: { selection: FeeSelection; setSelection: (s: FeeSelection) => void; presets: { slow: number; medium: number; fast: number } }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleSelect = (s: FeeSelection) => {
+    setSelection(s);
+    setIsOpen(false);
+  };
+
+  const feeDisplayMap: Record<string, string> = {
+    slow: t('send.slow'),
+    medium: t('send.medium'),
+    fast: t('send.fast'),
+    custom: t('send.custom'),
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+      >
+        <span>{feeDisplayMap[selection] || selection}</span>
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{feeDisplayMap[option] || option}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {presets[option as keyof typeof presets]}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
         </div>
       )}
     </div>
