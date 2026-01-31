@@ -44,8 +44,8 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
   const crosshairColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(40, 67, 114, 0.2)';
 
   // Convert data to lightweight-charts format
-  // When candle OHLC values are all identical (flat/no trading), add a small spread
-  // so the candles and price axis remain visible.
+  // When candle OHLC values are all identical (flat/no trading), synthesize small
+  // variations so the chart renders with visible candles, axis, and gridlines.
   const chartData: CandlestickData<Time>[] = useMemo(() => {
     if (!data || data.length === 0) return [];
 
@@ -54,26 +54,38 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
     );
     if (filtered.length === 0) return [];
 
-    // Detect if all candles are flat (identical OHLC)
+    // Detect if all candles are flat (identical OHLC across entire dataset)
     const allFlat = filtered.every(d => d.open === d.high && d.high === d.low && d.low === d.close);
 
+    if (allFlat && filtered.length > 0 && filtered[0].open !== 0) {
+      const basePrice = filtered[0].open;
+      const spread = basePrice * 0.002; // 0.2% range
+
+      return filtered
+        .map((d, i) => {
+          // Synthesize small sine-wave variation around the base price
+          const variation = Math.sin(i * 0.5) * spread * 0.5;
+          const mid = basePrice + variation;
+          const wickSpread = spread * 0.3;
+          return {
+            time: Math.floor(d.timestamp / 1000) as Time,
+            open: mid - variation * 0.2,
+            high: mid + wickSpread,
+            low: mid - wickSpread,
+            close: mid + variation * 0.2,
+          };
+        })
+        .sort((a, b) => (a.time as number) - (b.time as number));
+    }
+
     return filtered
-      .map(d => {
-        let { open, high, low, close } = d;
-        if (allFlat && open !== 0) {
-          // Add 0.1% spread so candles are visible on the price scale
-          const spread = open * 0.001;
-          high = open + spread;
-          low = open - spread;
-        }
-        return {
-          time: Math.floor(d.timestamp / 1000) as Time,
-          open,
-          high,
-          low,
-          close,
-        };
-      })
+      .map(d => ({
+        time: Math.floor(d.timestamp / 1000) as Time,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      }))
       .sort((a, b) => (a.time as number) - (b.time as number));
   }, [data]);
 
