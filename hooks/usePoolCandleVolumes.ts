@@ -43,7 +43,7 @@ export interface PoolCandleVolume {
 // Network Configuration
 // ============================================================================
 
-const NETWORK_ESPO_URLS: Record<string, string> = {
+export const NETWORK_ESPO_URLS: Record<string, string> = {
   mainnet: 'https://mainnet.subfrost.io/v4/subfrost/espo',
   testnet: 'https://testnet.subfrost.io/v4/subfrost/espo',
   signet: 'https://signet.subfrost.io/v4/subfrost/espo',
@@ -63,7 +63,7 @@ const BTC_TOKENS = new Set(['32:0']); // frBTC
 /**
  * Fetch candles from the espo API using ammdata.get_candles
  */
-async function fetchCandles(
+export async function fetchCandles(
   espoUrl: string,
   poolId: string,
   timeframe: 'd1' | 'M1' | 'h1' | '10m' | 'w1',

@@ -44,18 +44,36 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
   const crosshairColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(40, 67, 114, 0.2)';
 
   // Convert data to lightweight-charts format
+  // When candle OHLC values are all identical (flat/no trading), add a small spread
+  // so the candles and price axis remain visible.
   const chartData: CandlestickData<Time>[] = useMemo(() => {
     if (!data || data.length === 0) return [];
 
-    return data
-      .filter(d => d.timestamp && d.open != null && d.high != null && d.low != null && d.close != null)
-      .map(d => ({
-        time: Math.floor(d.timestamp / 1000) as Time,
-        open: d.open,
-        high: d.high,
-        low: d.low,
-        close: d.close,
-      }))
+    const filtered = data.filter(
+      d => d.timestamp && d.open != null && d.high != null && d.low != null && d.close != null
+    );
+    if (filtered.length === 0) return [];
+
+    // Detect if all candles are flat (identical OHLC)
+    const allFlat = filtered.every(d => d.open === d.high && d.high === d.low && d.low === d.close);
+
+    return filtered
+      .map(d => {
+        let { open, high, low, close } = d;
+        if (allFlat && open !== 0) {
+          // Add 0.1% spread so candles are visible on the price scale
+          const spread = open * 0.001;
+          high = open + spread;
+          low = open - spread;
+        }
+        return {
+          time: Math.floor(d.timestamp / 1000) as Time,
+          open,
+          high,
+          low,
+          close,
+        };
+      })
       .sort((a, b) => (a.time as number) - (b.time as number));
   }, [data]);
 
