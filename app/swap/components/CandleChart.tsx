@@ -140,9 +140,25 @@ export default function CandleChart({ data, height = 300, loading = false, pairL
     };
   }, [height, textColor, gridColor, borderColor, crosshairColor]);
 
-  // Update data when it changes
+  // Update data and adjust y-axis precision for small values (e.g. frBTC-paired pools)
   useEffect(() => {
     if (seriesRef.current && chartData.length > 0) {
+      const maxPrice = Math.max(...chartData.map(d => d.high));
+      let precision = 2;
+      let minMove = 0.01;
+      if (maxPrice > 0 && maxPrice < 0.01) {
+        precision = 8;
+        minMove = 0.00000001;
+      } else if (maxPrice < 1) {
+        precision = 6;
+        minMove = 0.000001;
+      } else if (maxPrice < 100) {
+        precision = 4;
+        minMove = 0.0001;
+      }
+      seriesRef.current.applyOptions({
+        priceFormat: { type: 'price', precision, minMove },
+      });
       seriesRef.current.setData(chartData);
       chartRef.current?.timeScale().fitContent();
     }

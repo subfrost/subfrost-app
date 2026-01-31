@@ -147,7 +147,12 @@ export function usePoolEspoCandles({
         return [];
       }
 
-      let points = rawCandles.map(toCandleDataPoint);
+      // Filter out zero-volume candles — the Espo API generates synthetic
+      // carry-forward entries for periods with no trades (same OHLC, volume 0).
+      // These create long flat lines that misrepresent actual trading activity.
+      const tradedCandles = rawCandles.filter(c => c.volume > 0);
+
+      let points = (tradedCandles.length > 0 ? tradedCandles : rawCandles).map(toCandleDataPoint);
 
       if (timeframe === '4h') {
         points = aggregateTo4h(points);
