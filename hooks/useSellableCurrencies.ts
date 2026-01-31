@@ -1,23 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, fetchAlkaneBalances } from '@/utils/getConfig';
 import { useWallet } from '@/context/WalletContext';
-
-// Helper to recursively convert Map to plain object (serde_wasm_bindgen returns Maps)
-function mapToObject(value: any): any {
-  if (value instanceof Map) {
-    const obj: Record<string, any> = {};
-    for (const [k, v] of value.entries()) {
-      obj[k] = mapToObject(v);
-    }
-    return obj;
-  }
-  if (Array.isArray(value)) {
-    return value.map(mapToObject);
-  }
-  return value;
-}
 
 /**
  * Fallback token metadata.
@@ -25,16 +10,14 @@ function mapToObject(value: any): any {
  */
 const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
   '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
-  '32:0': { symbol: 'frBTC', name: 'Fractional BTC', decimals: 8 },
+  '32:0': { symbol: 'frBTC', name: 'frBTC', decimals: 8 },
 };
 
 /**
  * Fetches sellable currencies (alkane tokens) for a wallet address.
  *
- * IMPORTANT: This hook now uses the same data source as useEnrichedWalletData
- * (alkanesByAddress RPC) to ensure consistent balance display across the app.
- *
- * Previously used /get-address-balances API which returned different values.
+ * Uses the OYL Alkanode REST API (/get-alkanes-by-address) for alkane balance queries.
+ * This replaced the old alkanes_protorunesbyaddress RPC which returned 0x on regtest.
  */
 export const useSellableCurrencies = (
   walletAddress?: string,
@@ -69,204 +52,57 @@ export const useSellableCurrencies = (
 
         console.log('[useSellableCurrencies] Fetching for addresses:', addresses);
 
-        // Fetch alkane balances using alkanesByAddress RPC (same as useEnrichedWalletData)
-        // This ensures consistent balance data across the app
+        // Fetch alkane balances via OYL Alkanode REST API
         for (const address of addresses) {
           try {
-            const rawResult = await provider.alkanesByAddress(address, 'latest', 1);
-            const result = mapToObject(rawResult);
+            const alkaneBalances = await fetchAlkaneBalances(address, config.OYL_ALKANODE_URL);
 
-            console.log('[useSellableCurrencies] alkanesByAddress result for', address, ':', JSON.stringify(result, null, 2)?.slice(0, 500));
+            console.log('[useSellableCurrencies] OYL API result for', address, ':', alkaneBalances.length, 'tokens');
 
-            if (!result) continue;
+            for (const entry of alkaneBalances) {
+              const alkaneIdStr = `${entry.alkaneId.block}:${entry.alkaneId.tx}`;
+              const balance = String(entry.balance || '0');
 
-            // Parse outpoints array - this is the primary data structure from alkanes_protorunesbyaddress
-            const outpoints = result.outpoints || [];
-            for (const outpoint of outpoints) {
-              const runes = outpoint.runes || [];
-              for (const runeEntry of runes) {
-                const rune = runeEntry.rune;
-                if (!rune?.id) continue;
+              // Get token info from known tokens or use API response values
+              const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+                symbol: entry.symbol || `${entry.alkaneId.tx}`,
+                name: entry.name || `Token ${alkaneIdStr}`,
+                decimals: 8,
+              };
 
-                // Build alkane ID from block:tx (hex values like "0x20")
-                const blockStr = rune.id?.block || '0';
-                const txStr = rune.id?.tx || '0';
-                const block = typeof blockStr === 'string' && blockStr.startsWith('0x')
-                  ? parseInt(blockStr)
-                  : parseInt(String(blockStr), 16);
-                const tx = typeof txStr === 'string' && txStr.startsWith('0x')
-                  ? parseInt(txStr)
-                  : parseInt(String(txStr), 16);
-
-                if (isNaN(block) || isNaN(tx)) continue;
-
-                const alkaneIdStr = `${block}:${tx}`;
-
-                // Extract balance (can be string, number, or object)
-                let balance = '0';
-                if (typeof runeEntry.balance === 'string') {
-                  balance = runeEntry.balance;
-                } else if (typeof runeEntry.balance === 'number') {
-                  balance = runeEntry.balance.toString();
-                } else if (runeEntry.balance?.value) {
-                  balance = String(runeEntry.balance.value);
-                }
-
-                // Get token info from known tokens or use defaults
-                const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-                  symbol: rune.name || `${tx}`,
-                  name: rune.name || `Token ${alkaneIdStr}`,
-                  decimals: 8,
-                };
-
-                // Check if token is in the allowed pools list (if filter provided)
-                if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneIdStr)) {
-                  continue;
-                }
-
-                // Aggregate balance if we've seen this token before
-                if (!alkaneMap.has(alkaneIdStr)) {
-                  alkaneMap.set(alkaneIdStr, {
-                    id: alkaneIdStr,
-                    address: walletAddress,
-                    name: tokenInfo.name,
-                    symbol: tokenInfo.symbol,
-                    balance: balance,
-                    priceInfo: {
-                      price: 0,
-                      idClubMarketplace: false,
-                    },
-                  });
-                } else {
-                  // Aggregate balance from multiple UTXOs/addresses
-                  const existing = alkaneMap.get(alkaneIdStr)!;
-                  try {
-                    const currentBalance = BigInt(existing.balance || '0');
-                    const additionalBalance = BigInt(balance);
-                    existing.balance = (currentBalance + additionalBalance).toString();
-                  } catch {
-                    // If BigInt fails, use number addition
-                    existing.balance = String(
-                      Number(existing.balance || 0) + Number(balance)
-                    );
-                  }
-                }
+              // Check if token is in the allowed pools list (if filter provided)
+              if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneIdStr)) {
+                continue;
               }
-            }
 
-            // Also check balance_sheet format (fallback for some SDK versions)
-            const balances = result.balances || [];
-            for (const entry of balances) {
-              const tokenBalances = entry.balance_sheet?.cached?.balances || {};
-              for (const [alkaneIdStr, amount] of Object.entries(tokenBalances)) {
-                const amountStr = String(amount);
-
-                // Check if token is in the allowed pools list
-                if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneIdStr)) {
-                  continue;
-                }
-
-                const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-                  symbol: alkaneIdStr.split(':')[1] || 'ALK',
-                  name: `Token ${alkaneIdStr}`,
-                  decimals: 8,
-                };
-
-                if (!alkaneMap.has(alkaneIdStr)) {
-                  alkaneMap.set(alkaneIdStr, {
-                    id: alkaneIdStr,
-                    address: walletAddress,
-                    name: tokenInfo.name,
-                    symbol: tokenInfo.symbol,
-                    balance: amountStr,
-                    priceInfo: {
-                      price: 0,
-                      idClubMarketplace: false,
-                    },
-                  });
-                } else {
-                  const existing = alkaneMap.get(alkaneIdStr)!;
-                  try {
-                    const currentBalance = BigInt(existing.balance || '0');
-                    const additionalBalance = BigInt(amountStr);
-                    existing.balance = (currentBalance + additionalBalance).toString();
-                  } catch {
-                    existing.balance = String(
-                      Number(existing.balance || 0) + Number(amountStr)
-                    );
-                  }
+              // Aggregate balance if we've seen this token before (multiple addresses)
+              if (!alkaneMap.has(alkaneIdStr)) {
+                alkaneMap.set(alkaneIdStr, {
+                  id: alkaneIdStr,
+                  address: walletAddress,
+                  name: tokenInfo.name,
+                  symbol: tokenInfo.symbol,
+                  balance: balance,
+                  priceInfo: {
+                    price: Number(entry.priceUsd || 0),
+                    idClubMarketplace: entry.idClubMarketplace || false,
+                  },
+                });
+              } else {
+                const existing = alkaneMap.get(alkaneIdStr)!;
+                try {
+                  const currentBalance = BigInt(existing.balance || '0');
+                  const additionalBalance = BigInt(balance);
+                  existing.balance = (currentBalance + additionalBalance).toString();
+                } catch {
+                  existing.balance = String(
+                    Number(existing.balance || 0) + Number(balance)
+                  );
                 }
               }
             }
           } catch (error) {
-            console.error(`[useSellableCurrencies] Failed to fetch for ${address}:`, error);
-          }
-        }
-
-        // NOTE: We skip alkanesReflect() for token metadata because the indexer can return
-        // stale/incorrect data. Instead, we rely on KNOWN_TOKENS which has verified values.
-        // Remember: 2:0 is ALWAYS DIESEL on all networks. bUSD is 2:56801 on mainnet only.
-
-        // Fallback: If alkanesByAddress didn't return data, try alkanesBalance (simpler aggregated format)
-        // alkanesBalance returns: [{ alkane_id: { block, tx }, balance: "amount" }, ...]
-        if (alkaneMap.size === 0) {
-          console.log('[useSellableCurrencies] No data from alkanesByAddress, trying alkanesBalance fallback');
-          for (const address of addresses) {
-            try {
-              const rawResult = await provider.alkanesBalance(address);
-              const result = mapToObject(rawResult);
-
-              console.log('[useSellableCurrencies] alkanesBalance result for', address, ':', result);
-
-              if (!result || !Array.isArray(result)) continue;
-
-              for (const entry of result) {
-                // Handle both alkane_id and id field names
-                const alkaneId = entry.alkane_id || entry.id;
-                if (!alkaneId) continue;
-
-                const alkaneIdStr = `${alkaneId.block}:${alkaneId.tx}`;
-                const amountStr = String(entry.balance || entry.amount || '0');
-
-                // Check if token is in the allowed pools list (if filter provided)
-                if (tokensWithPools && !tokensWithPools.some((p) => p.id === alkaneIdStr)) {
-                  continue;
-                }
-
-                const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-                  symbol: entry.symbol || `${alkaneId.tx}`,
-                  name: entry.name || `Token ${alkaneIdStr}`,
-                  decimals: entry.decimals || 8,
-                };
-
-                if (!alkaneMap.has(alkaneIdStr)) {
-                  alkaneMap.set(alkaneIdStr, {
-                    id: alkaneIdStr,
-                    address: walletAddress,
-                    name: tokenInfo.name,
-                    symbol: tokenInfo.symbol,
-                    balance: amountStr,
-                    priceInfo: {
-                      price: 0,
-                      idClubMarketplace: false,
-                    },
-                  });
-                } else {
-                  const existing = alkaneMap.get(alkaneIdStr)!;
-                  try {
-                    const currentBalance = BigInt(existing.balance || '0');
-                    const additionalBalance = BigInt(amountStr);
-                    existing.balance = (currentBalance + additionalBalance).toString();
-                  } catch {
-                    existing.balance = String(
-                      Number(existing.balance || 0) + Number(amountStr)
-                    );
-                  }
-                }
-              }
-            } catch (error) {
-              console.error(`[useSellableCurrencies] alkanesBalance failed for ${address}:`, error);
-            }
+            console.error(`[useSellableCurrencies] OYL API failed for ${address}:`, error);
           }
         }
 

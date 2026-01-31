@@ -257,7 +257,7 @@ async function findPoolId(
 /**
  * Discover alkane-bearing UTXOs at the given taproot address.
  *
- * Workaround for broken alkanes_protorunesbyaddress (returns 0x on regtest).
+ * Workaround: SDK UTXO selection doesn't find alkane UTXOs automatically.
  * Uses esplora_address::utxo to find dust UTXOs, then checks each via
  * alkanes_protorunesbyoutpoint (which works correctly).
  */
@@ -331,9 +331,9 @@ async function discoverAlkaneUtxos(
 /**
  * Inject alkane-bearing UTXOs into a PSBT that's missing them.
  *
- * The SDK builds PSBTs without alkane UTXOs because alkanes_protorunesbyaddress
- * is broken on regtest (returns 0x). This function adds the missing alkane inputs
- * so the protostone edicts can transfer tokens correctly.
+ * The SDK builds PSBTs without alkane UTXOs because its UTXO selection doesn't
+ * find them automatically. This function adds the missing alkane inputs so the
+ * protostone edicts can transfer tokens correctly.
  *
  * Returns the modified PSBT as base64.
  */

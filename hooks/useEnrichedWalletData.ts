@@ -1,40 +1,28 @@
 /**
  * useEnrichedWalletData - Fetches enriched wallet data including UTXOs and alkane balances
  *
- * This hook uses the WASM SDK provider to fetch balance data via lua scripts
- * (balances.lua via lua_evalscript). This is the production-aligned flow that works
- * identically across all networks (mainnet, regtest, regtest-local).
- *
  * Flow:
- * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + assets + protorunes
- *    (protorune data extracted inline from utxo.runes, no separate alkanesByAddress call)
- * 2. provider.alkanesBalance(address) - Lazy fallback only if Lua script returns no alkane data
+ * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + inscriptions + runes
+ * 2. fetchAlkaneBalances(address) - OYL Alkanode REST API for alkane token balances
+ *    (replaces old alkanes_protorunesbyaddress RPC which returned 0x on regtest)
+ *
+ * JOURNAL ENTRY (2026-01-30):
+ * Replaced alkanes_protorunesbyaddress with OYL Alkanode REST API (/get-alkanes-by-address)
+ * for alkane balance fetching. The Lua script no longer includes protorune data; alkane
+ * balances are fetched directly from the OYL API which is more reliable.
  *
  * JOURNAL ENTRY (2026-01-28):
  * RESTORED esplora fallback for BTC balance fetching. The `enrichedbalances` lua view
  * function is not deployed on the regtest indexer, causing getEnrichedBalances() to fail
  * and BTC balances to show as 0. The fallback uses `esplora_address::utxo` RPC which
  * works reliably on all environments.
- *
- * Additionally, CORS issues on regtest.subfrost.io block direct browser fetches from
- * localhost. The fallback now uses `/api/rpc` proxy route (app/api/rpc/route.ts) to
- * bypass CORS restrictions.
- *
- * TODO: Deploy balances.lua to regtest-alkanes namespace indexer (metashrew) so the
- * primary lua-based flow works. Once deployed, this fallback becomes a safety net
- * rather than the primary path for regtest.
- *
- * TODO: Fix CORS headers on regtest.subfrost.io nginx/ingress config to allow
- * localhost origins, so the WASM SDK can make direct calls without proxy.
- *
- * Related: The fallback was removed in commit aeaf835 (2026-01-18) to "ensure production
- * parity" but this broke regtest where the lua script wasn't deployed.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { getConfig, fetchAlkaneBalances } from '@/utils/getConfig';
 
 // Helper to recursively convert Map to plain object (serde_wasm_bindgen returns Maps)
 function mapToObject(value: any): any {
@@ -129,7 +117,7 @@ export interface EnrichedWalletData {
  * This combines Bitcoin UTXOs with alkanes/runes/inscriptions data
  */
 export function useEnrichedWalletData(): EnrichedWalletData {
-  const { account, isConnected } = useWallet() as any;
+  const { account, isConnected, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
 
   const [data, setData] = useState<Omit<EnrichedWalletData, 'refresh'>>({
@@ -299,61 +287,9 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           const vout = parseInt(voutStr || '0', 10);
 
           // balances.lua returns:
-          // - utxo.runes: protorunes from alkanes_protorunesbyaddress (extracted inline below)
           // - utxo.ord_runes: regular Runes from ord_outputs (this is what the UI expects as "runes")
           // - utxo.inscriptions: inscriptions from ord_outputs
-
-          // Extract alkane data from Lua script's protorune data (utxo.runes)
-          const utxoAlkanes: Record<string, { value: string; name: string; symbol: string; decimals?: number }> = {};
-          if (utxo.runes && Array.isArray(utxo.runes)) {
-            for (const runeEntry of utxo.runes) {
-              const rune = runeEntry.rune;
-              if (!rune) continue;
-
-              const blockStr = String(rune.id?.block || '0');
-              const txStr = String(rune.id?.tx || '0');
-              const block = blockStr.startsWith('0x') ? parseInt(blockStr) : parseInt(blockStr, 16);
-              const tx = txStr.startsWith('0x') ? parseInt(txStr) : parseInt(txStr, 16);
-              const alkaneIdStr = `${block}:${tx}`;
-
-              let balance = '0';
-              if (typeof runeEntry.balance === 'string') {
-                balance = runeEntry.balance;
-              } else if (typeof runeEntry.balance === 'number') {
-                balance = runeEntry.balance.toString();
-              } else if (runeEntry.balance?.value) {
-                balance = String(runeEntry.balance.value);
-              }
-
-              const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-                symbol: rune.name || alkaneIdStr.split(':')[1] || 'ALK',
-                name: rune.name || `Token ${alkaneIdStr}`,
-                decimals: 8,
-              };
-
-              utxoAlkanes[alkaneIdStr] = {
-                value: balance,
-                name: tokenInfo.name,
-                symbol: tokenInfo.symbol,
-                decimals: tokenInfo.decimals,
-              };
-
-              if (!alkaneMap.has(alkaneIdStr)) {
-                alkaneMap.set(alkaneIdStr, {
-                  alkaneId: alkaneIdStr,
-                  name: tokenInfo.name,
-                  symbol: tokenInfo.symbol,
-                  balance: balance,
-                  decimals: tokenInfo.decimals,
-                });
-              } else {
-                const existing = alkaneMap.get(alkaneIdStr)!;
-                const currentBalance = BigInt(existing.balance);
-                const additionalBalance = BigInt(balance);
-                existing.balance = (currentBalance + additionalBalance).toString();
-              }
-            }
-          }
+          // Alkane balances are fetched separately via OYL Alkanode API (not per-UTXO)
 
           const enrichedUtxo: EnrichedUTXO = {
             txid,
@@ -364,9 +300,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
               confirmed: isConfirmed,
               block_height: utxo.height,
             },
-            alkanes: Object.keys(utxoAlkanes).length > 0 ? utxoAlkanes : undefined,
             inscriptions: utxo.inscriptions,
-            // Use ord_runes for regular Runes (not utxo.runes which is protorunes)
             runes: utxo.ord_runes,
           };
 
@@ -445,52 +379,43 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         }
       }
 
-      // Alkane data was already extracted inline from Lua script's utxo.runes in processUtxo.
-      // Lazy fallback: only fetch alkanesBalance if the Lua script returned no alkane data.
-      if (alkaneMap.size === 0) {
-        console.log('[BALANCE] No alkanes from Lua script, trying alkanesBalance fallback');
-        for (const address of addresses) {
-          try {
-            const rawResult = await withTimeout(
-              provider.alkanesBalance(address),
-              20000,
-              null
-            );
-            if (!rawResult) continue;
-            const fallbackData = mapToObject(rawResult);
-            if (!Array.isArray(fallbackData)) continue;
+      // Fetch alkane balances via OYL Alkanode REST API (/get-alkanes-by-address)
+      const config = getConfig(network || 'mainnet');
+      for (const address of addresses) {
+        try {
+          const alkaneBalances = await withTimeout(
+            fetchAlkaneBalances(address, config.OYL_ALKANODE_URL),
+            15000,
+            []
+          );
 
-            for (const entry of fallbackData) {
-              const alkaneId = entry.alkane_id || entry.id;
-              if (!alkaneId) continue;
+          for (const entry of alkaneBalances) {
+            const alkaneIdStr = `${entry.alkaneId.block}:${entry.alkaneId.tx}`;
+            const amountStr = String(entry.balance || '0');
 
-              const alkaneIdStr = `${alkaneId.block}:${alkaneId.tx}`;
-              const amountStr = String(entry.balance || entry.amount || '0');
+            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
+              symbol: entry.symbol || `${entry.alkaneId.tx}`,
+              name: entry.name || `Token ${alkaneIdStr}`,
+              decimals: 8,
+            };
 
-              const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-                symbol: entry.symbol || `${alkaneId.tx}`,
-                name: entry.name || `Token ${alkaneIdStr}`,
-                decimals: entry.decimals || 8,
-              };
-
-              if (!alkaneMap.has(alkaneIdStr)) {
-                alkaneMap.set(alkaneIdStr, {
-                  alkaneId: alkaneIdStr,
-                  name: tokenInfo.name,
-                  symbol: tokenInfo.symbol,
-                  balance: amountStr,
-                  decimals: tokenInfo.decimals,
-                });
-              } else {
-                const existing = alkaneMap.get(alkaneIdStr)!;
-                const currentBalance = BigInt(existing.balance);
-                const additionalBalance = BigInt(amountStr);
-                existing.balance = (currentBalance + additionalBalance).toString();
-              }
+            if (!alkaneMap.has(alkaneIdStr)) {
+              alkaneMap.set(alkaneIdStr, {
+                alkaneId: alkaneIdStr,
+                name: tokenInfo.name,
+                symbol: tokenInfo.symbol,
+                balance: amountStr,
+                decimals: tokenInfo.decimals,
+              });
+            } else {
+              const existing = alkaneMap.get(alkaneIdStr)!;
+              const currentBalance = BigInt(existing.balance);
+              const additionalBalance = BigInt(amountStr);
+              existing.balance = (currentBalance + additionalBalance).toString();
             }
-          } catch (error) {
-            console.error(`[BALANCE] alkanesBalance fallback failed for ${address}:`, error);
           }
+        } catch (error) {
+          console.error(`[BALANCE] OYL Alkanode API failed for ${address}:`, error);
         }
       }
 
@@ -535,7 +460,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         error: error instanceof Error ? error.message : 'Failed to fetch wallet data',
       }));
     }
-  }, [provider, isInitialized, account, isConnected]);
+  }, [provider, isInitialized, account, isConnected, network]);
 
   // Initial fetch
   useEffect(() => {

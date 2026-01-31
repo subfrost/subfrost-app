@@ -16,6 +16,8 @@ export default function BalancesPanel() {
   const { balances, isLoading, error, refresh } = useEnrichedWalletData();
   const fuelAllocation = useFuelAllocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
+  const [inscriptionFilter, setInscriptionFilter] = useState<'brc20' | 'ordinals'>('brc20');
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -39,11 +41,22 @@ export default function BalancesPanel() {
     return (btc * bitcoinPrice.usd).toFixed(2);
   };
 
-  const formatAlkaneBalance = (balance: string, decimals: number = 8): string => {
+  // Classify an alkane as LP position, staked position, NFT, or regular token
+  const isLpToken = (alkane: { symbol: string; name: string }) =>
+    /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name);
+  const isStakedPosition = (alkane: { symbol: string; name: string }) =>
+    alkane.symbol.startsWith('POS-') || alkane.name.startsWith('POS-');
+  const isPosition = (alkane: { symbol: string; name: string }) =>
+    isLpToken(alkane) || isStakedPosition(alkane);
+  const isNft = (balance: string) => BigInt(balance) === BigInt(1);
+
+  const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string }): string => {
     const value = BigInt(balance);
 
-    // Check for NFT: exactly 1 unit (0.00000001 with 8 decimals)
+    // Exactly 1 raw unit: show contextual label
     if (value === BigInt(1)) {
+      if (alkane && isStakedPosition(alkane)) return '1 Position';
+      if (alkane && isLpToken(alkane)) return '1 Position';
       return '1 NFT';
     }
 
@@ -53,9 +66,19 @@ export default function BalancesPanel() {
     const wholeStr = whole.toString();
     const remainderStr = remainder.toString().padStart(decimals, '0');
 
-    // Determine decimal places based on whole number digits
-    // 3+ digits (100+): show 2 decimal places
-    // 2 or fewer digits: show 4 decimal places
+    // frBTC: always show full 8 decimal places
+    const isFrbtc = alkane && (alkane.symbol === 'frBTC' || alkane.name === 'frBTC');
+    if (isFrbtc) {
+      return `${wholeStr}.${remainderStr.slice(0, 8)}`;
+    }
+
+    // 10,000+ units: no decimals
+    if (whole >= BigInt(10000)) {
+      return wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    // 100-9,999: 2 decimal places
+    // Under 100: 4 decimal places
     const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
     const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
 
@@ -231,47 +254,78 @@ export default function BalancesPanel() {
             <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('balances.protoruneAssets')}</h3>
           </div>
 
-          {balances.alkanes.length > 0 ? (
-            <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-              {balances.alkanes.map((alkane) => (
-                <div
-                  key={alkane.alkaneId}
-                  className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Token Logo */}
-                    <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="lg" />
-                    <div>
-                      <div className="font-medium text-[color:var(--sf-text)]">{alkane.name}</div>
-                      <div className="text-xs text-[color:var(--sf-text)]/40">{alkane.symbol} · {alkane.alkaneId}</div>
+          {/* Tokens / NFTs / Positions tabs */}
+          <div className="flex gap-4 mb-4">
+            {(['tokens', 'nfts', 'positions'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setAlkaneFilter(tab)}
+                className={`pb-3 px-1 text-sm font-semibold ${
+                  alkaneFilter === tab
+                    ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                    : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+                }`}
+              >
+                {tab === 'tokens' ? t('balances.tabTokens') : tab === 'nfts' ? t('balances.tabNfts') : t('balances.tabPositions')}
+              </button>
+            ))}
+          </div>
+
+          {(() => {
+            const filtered = balances.alkanes.filter((a) => {
+              if (alkaneFilter === 'positions') return isPosition(a);
+              if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
+              // tokens: not an NFT and not a position
+              return !isNft(a.balance) && !isPosition(a);
+            });
+
+            const emptyLabels: Record<string, { title: string; hint: string }> = {
+              tokens: { title: t('balances.noProtorune'), hint: t('balances.protoruneHint') },
+              nfts: { title: t('balances.noNfts'), hint: t('balances.nftsHint') },
+              positions: { title: t('balances.noPositions'), hint: t('balances.positionsHint') },
+            };
+
+            return filtered.length > 0 ? (
+              <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                {filtered.map((alkane) => (
+                  <div
+                    key={alkane.alkaneId}
+                    className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="lg" />
+                      <div>
+                        <div className="font-medium text-[color:var(--sf-text)]">{alkane.name}</div>
+                        <div className="text-xs text-[color:var(--sf-text)]/40">{alkane.symbol} · {alkane.alkaneId}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-[color:var(--sf-text)]">
+                        {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals, alkane))}
+                      </div>
+                      {!isLoadingData && <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-bold text-[color:var(--sf-text)]">
-                      {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals))}
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-[color:var(--sf-text)]/60">
+                {isLoadingData ? (
+                  <span>{t('balances.loading')}</span>
+                ) : (
+                  <>
+                    {emptyLabels[alkaneFilter].title}
+                    <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
+                      {emptyLabels[alkaneFilter].hint}
                     </div>
-                    {!isLoadingData && <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-              {isLoadingData ? (
-                <span>{t('balances.loading')}</span>
-              ) : (
-                <>
-                  {t('balances.noProtorune')}
-                  <div className="text-xs text-[color:var(--sf-text)]/40 mt-2">
-                    {t('balances.protoruneHint')}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
-        {/* Inscription & BRC20 Balances */}
+        {/* Inscription Balances */}
         <div className="rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-6 flex flex-col" style={{ maxHeight: '540px' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
@@ -280,12 +334,25 @@ export default function BalancesPanel() {
             <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('balances.inscriptionAssets')}</h3>
           </div>
 
+          {/* BRC20 Tokens / Ordinals tabs */}
+          <div className="flex gap-4 mb-4">
+            {(['brc20', 'ordinals'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setInscriptionFilter(tab)}
+                className={`pb-3 px-1 text-sm font-semibold ${
+                  inscriptionFilter === tab
+                    ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                    : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+                }`}
+              >
+                {tab === 'brc20' ? t('balances.tabBrc20') : t('balances.tabOrdinals')}
+              </button>
+            ))}
+          </div>
+
           <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-            {isLoadingData ? (
-              <span>{t('balances.loading')}</span>
-            ) : (
-              <span className="text-lg font-medium">{t('balances.noInscription')}</span>
-            )}
+            <span className="text-lg font-medium">{t('balances.comingSoon')}</span>
           </div>
         </div>
       </div>

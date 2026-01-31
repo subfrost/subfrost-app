@@ -351,20 +351,19 @@ The `subfrost-consensus` repo contains hex-encoded AMM WASMs in test files (e.g.
 
 ## UTXO and Token Discovery
 
-### The `alkanes_protorunesbyaddress` Returns `0x` Problem
+### Alkane Balance Fetching via OYL Alkanode API
 
-The RPC method `alkanes_protorunesbyaddress` returns `0x` (empty) for addresses that DO have tokens. This is a known indexer issue. Workaround:
+Alkane token balances are fetched via the OYL Alkanode REST API (`https://oyl.alkanode.com`):
+- **Endpoint:** `POST /get-alkanes-by-address` with body `{ address: string }`
+- **Response:** `{ statusCode: number, data: AlkaneBalance[] }` where each entry has `name`, `symbol`, `balance`, `alkaneId: { block, tx }`, price data, etc.
+- **Config:** `OYL_ALKANODE_URL` in `utils/getConfig.ts` (overridable via `NEXT_PUBLIC_OYL_ALKANODE_URL` env var)
+- **Helper:** `fetchAlkaneBalances()` in `utils/getConfig.ts`
 
-```bash
-# Use CLI's protorunes command instead (uses metashrew_view internally)
-alkanes-cli -p subfrost-regtest protorunes by-address <address>
-```
-
-The frontend works around this in `useAddLiquidityMutation.ts` with a custom `discoverAlkaneUtxos()` function that fetches UTXOs via esplora and matches them against known alkane balances.
+This replaced the old `alkanes_protorunesbyaddress` RPC method which returned `0x` (empty) on regtest.
 
 ### SDK UTXO Selection Limitation
 
-The `@alkanes/ts-sdk` UTXO selection does NOT automatically find alkane token UTXOs because `alkanes_protorunesbyaddress` returns empty. The frontend must:
+The `@alkanes/ts-sdk` UTXO selection does NOT automatically find alkane token UTXOs. The frontend must:
 1. Discover alkane UTXOs manually (via esplora address UTXO endpoint)
 2. Inject them into the PSBT inputs before signing
 3. Handle change outputs for excess alkane amounts

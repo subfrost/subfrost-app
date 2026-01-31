@@ -207,7 +207,7 @@ export function getNetworkConfig(networkName?: string): NetworkConfig {
 export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decimals: number }> = {
   // DIESEL is always 2:0 on all networks
   '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
-  '32:0': { symbol: 'frBTC', name: 'Fractional BTC', decimals: 8 },
+  '32:0': { symbol: 'frBTC', name: 'frBTC', decimals: 8 },
   '2:56801': { symbol: 'bUSD', name: 'Bitcoin USD', decimals: 8 },
   '2:16': { symbol: 'METHANE', name: 'METHANE', decimals: 8 },
   '2:68441': { symbol: 'DIESEL/bUSD LP', name: 'DIESEL/bUSD LP Token', decimals: 8 },
