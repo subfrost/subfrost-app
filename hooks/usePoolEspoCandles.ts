@@ -101,7 +101,7 @@ export function usePoolEspoCandles({
       // For 4h, fetch 4x the candles in h1 to have enough data after aggregation
       const limit = timeframe === '4h' ? CANDLE_LIMIT * 4 : CANDLE_LIMIT;
 
-      const response = await fetchCandles(espoUrl, poolId, espoTimeframe, 'quote', limit);
+      const response = await fetchCandles(espoUrl, poolId, espoTimeframe, 'base', limit);
 
       if (!response?.candles || response.candles.length === 0) {
         return [];
