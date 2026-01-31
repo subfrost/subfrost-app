@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePools } from '@/hooks/usePools';
-import { useAllPoolCandleVolumes } from '@/hooks/usePoolCandleVolumes';
 import { useAllPoolStats } from '@/hooks/usePoolData';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -39,20 +38,10 @@ export default function TrendingPairs() {
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats } = useAllPoolStats();
 
-  // Build pool list for candle volume fetching
-  const poolsForVolume = useMemo(() => {
-    const pools = data?.items ?? [];
-    return pools.map(p => ({ id: p.id, token1Id: p.token1.id }));
-  }, [data?.items]);
-
-  // Fetch volume data using ammdata.get_candles (24h and 30d volumes)
-  const { data: candleVolumes } = useAllPoolCandleVolumes(poolsForVolume);
-
   const pairs = useMemo(() => {
-    // Show all alkane pools on every network
     const filtered = data?.items ?? [];
 
-    // Create stats lookup map
+    // Create stats lookup map (fallback)
     const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
     if (poolStats) {
       for (const [, stats] of Object.entries(poolStats)) {
@@ -60,15 +49,14 @@ export default function TrendingPairs() {
       }
     }
 
-    // Merge stats and volume data with pools
+    // Merge stats with pools (usePools already provides TVL/volume from OYL Alkanode)
     const enrichedPools = filtered.map(p => {
       const stats = statsMap.get(p.id);
-      const candleVolume = candleVolumes?.[p.id];
       return {
         ...p,
-        tvlUsd: stats?.tvlUsd ?? p.tvlUsd,
-        vol24hUsd: candleVolume?.volume24hUsd ?? p.vol24hUsd,
-        vol30dUsd: candleVolume?.volume30dUsd ?? p.vol30dUsd,
+        tvlUsd: p.tvlUsd || stats?.tvlUsd || 0,
+        vol24hUsd: p.vol24hUsd || stats?.volume24hUsd || 0,
+        vol30dUsd: p.vol30dUsd || stats?.volume30dUsd || 0,
       };
     });
 
@@ -89,7 +77,7 @@ export default function TrendingPairs() {
         return (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0);
       })
       .slice(0, 1);
-  }, [data?.items, poolStats, candleVolumes]);
+  }, [data?.items, poolStats]);
 
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
@@ -134,5 +122,3 @@ export default function TrendingPairs() {
     </div>
   );
 }
-
-

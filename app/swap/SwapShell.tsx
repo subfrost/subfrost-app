@@ -19,7 +19,6 @@ import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { usePools } from "@/hooks/usePools";
 import { useAllPoolStats } from "@/hooks/usePoolData";
-import { useAllPoolCandleVolumes } from "@/hooks/usePoolCandleVolumes";
 import { useModalStore } from "@/stores/modals";
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
@@ -69,62 +68,32 @@ export default function SwapShell() {
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats } = useAllPoolStats();
 
-  // Build pool list for candle volume fetching
-  const poolsForVolume = useMemo(() => {
-    const pools = poolsData?.items ?? [];
-    return pools.map(p => ({ id: p.id, token1Id: p.token1.id }));
-  }, [poolsData?.items]);
-
-  // Fetch volume data using ammdata.get_candles (24h and 30d volumes)
-  const { data: candleVolumes } = useAllPoolCandleVolumes(poolsForVolume);
-
-  // Merge external pool data with our enhanced stats and volume data
+  // Merge pool data with stats from /api/pools/stats (fallback for any missing data)
   const markets = useMemo<PoolSummary[]>(() => {
     const basePools = poolsData?.items ?? [];
 
-    // Create maps for quick lookup
+    // If poolStats available, use as fallback overlay
     const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
-
     if (poolStats) {
       for (const [, stats] of Object.entries(poolStats)) {
         statsMap.set(stats.poolId, stats);
       }
     }
 
-    // Enhance each pool with stats and volume data
     return basePools.map(pool => {
       const stats = statsMap.get(pool.id);
-      const candleVolume = candleVolumes?.[pool.id];
-
-      // Calculate token TVL percentages from reserves
-      const totalTvl = stats?.tvlUsd || pool.tvlUsd || 0;
-      const token0Tvl = totalTvl / 2;
-      const token1Tvl = totalTvl / 2;
-
-      // Get volume from candle API (ammdata.get_candles), fall back to stats, then to pool data
-      const vol24hUsd = candleVolume?.volume24hUsd ?? stats?.volume24hUsd ?? pool.vol24hUsd;
-      const vol30dUsd = candleVolume?.volume30dUsd ?? stats?.volume30dUsd ?? pool.vol30dUsd;
-
-      // Calculate APR: (daily_volume * fee_rate * 365) / TVL * 100
-      // Fee rate is 0.8% for LPs (8/1000)
-      let apr = stats?.apr ?? pool.apr;
-      if (!apr && vol24hUsd && totalTvl > 0) {
-        const lpFeeRate = 0.008; // 0.8%
-        const dailyFees = (vol24hUsd || 0) * lpFeeRate;
-        apr = ((dailyFees * 365) / totalTvl) * 100;
-      }
 
       return {
         ...pool,
-        tvlUsd: stats?.tvlUsd ?? pool.tvlUsd,
-        token0TvlUsd: stats?.tvlToken0 ?? token0Tvl,
-        token1TvlUsd: stats?.tvlToken1 ?? token1Tvl,
-        vol24hUsd,
-        vol30dUsd,
-        apr,
+        tvlUsd: pool.tvlUsd || stats?.tvlUsd || 0,
+        token0TvlUsd: pool.token0TvlUsd || stats?.tvlToken0 || (pool.tvlUsd || 0) / 2,
+        token1TvlUsd: pool.token1TvlUsd || stats?.tvlToken1 || (pool.tvlUsd || 0) / 2,
+        vol24hUsd: pool.vol24hUsd || stats?.volume24hUsd || 0,
+        vol30dUsd: pool.vol30dUsd || stats?.volume30dUsd || 0,
+        apr: pool.apr || stats?.apr || 0,
       } as PoolSummary;
     });
-  }, [poolsData?.items, poolStats, candleVolumes]);
+  }, [poolsData?.items, poolStats]);
 
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
