@@ -1,127 +1,27 @@
 /**
- * Browser wallet configuration based on alkanes-web-sys BrowserWalletProvider
- * Supports 10+ Bitcoin wallets for browser extension connection
+ * Browser wallet configuration with custom ordering.
+ * Uses SDK wallet data (including base64 icons) with our preferred display order.
+ * Wallets not in the SDK (tokeo, keplr) use local definitions.
  */
 
-export interface BrowserWalletInfo {
-  id: string;
-  name: string;
-  icon: string;
-  website: string;
-  injectionKey: string;
-  supportsPsbt: boolean;
-  supportsTaproot: boolean;
-  supportsOrdinals: boolean;
-  mobileSupport: boolean;
-  deepLinkScheme?: string;
-}
+import {
+  BROWSER_WALLETS as SDK_WALLETS,
+  type BrowserWalletInfo,
+} from '@alkanes/ts-sdk';
 
-/**
- * List of supported browser extension wallets
- * Icons are located in /public/assets/wallets/
- */
-export const BROWSER_WALLETS: BrowserWalletInfo[] = [
-  {
-    id: 'okx',
-    name: 'OKX Wallet',
-    icon: '/assets/wallets/okx.svg',
-    website: 'https://chromewebstore.google.com/detail/okx-wallet/mcohilncbfahbmgdjkbpemcciiolgcge',
-    injectionKey: 'okxwallet',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: true,
-    deepLinkScheme: 'okx://',
-  },
-  {
-    id: 'unisat',
-    name: 'Unisat Wallet',
-    icon: '/assets/wallets/unisat.svg',
-    website: 'https://unisat.io/download',
-    injectionKey: 'unisat',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: false,
-  },
-  {
-    id: 'xverse',
-    name: 'Xverse Wallet',
-    icon: '/assets/wallets/xverse.svg',
-    website: 'https://www.xverse.app/download',
-    injectionKey: 'XverseProviders',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: true,
-    deepLinkScheme: 'xverse://',
-  },
-  {
-    id: 'phantom',
-    name: 'Phantom Wallet',
-    icon: '/assets/wallets/phantom.svg',
-    website: 'https://phantom.app/download',
-    injectionKey: 'phantom',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: false,
-    mobileSupport: true,
-    deepLinkScheme: 'phantom://',
-  },
-  {
-    id: 'leather',
-    name: 'Leather Wallet',
-    icon: '/assets/wallets/leather.svg',
-    website: 'https://leather.io/install-extension',
-    injectionKey: 'LeatherProvider',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: false,
-  },
+export type { BrowserWalletInfo };
+
+// Wallets not included in the SDK — local definitions with placeholder icons
+const LOCAL_WALLETS: BrowserWalletInfo[] = [
   {
     id: 'tokeo',
     name: 'Tokeo Wallet',
-    icon: '/assets/wallets/tokeo.svg',
+    icon: '/assets/wallets/tokeo.png',
     website: 'https://tokeo.io/',
     injectionKey: 'tokeo',
     supportsPsbt: false,
     supportsTaproot: false,
     supportsOrdinals: false,
-    mobileSupport: false,
-  },
-  {
-    id: 'magic-eden',
-    name: 'Magic Eden Wallet',
-    icon: '/assets/wallets/magiceden.svg',
-    website: 'https://wallet.magiceden.io/',
-    injectionKey: 'magicEden',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: true,
-    deepLinkScheme: 'magiceden://',
-  },
-  {
-    id: 'orange',
-    name: 'Orange Wallet',
-    icon: '/assets/wallets/orange.svg',
-    website: 'https://www.orangewallet.com/',
-    injectionKey: 'orange',
-    supportsPsbt: false,
-    supportsTaproot: false,
-    supportsOrdinals: false,
-    mobileSupport: false,
-  },
-  {
-    id: 'wizz',
-    name: 'Wizz Wallet',
-    icon: '/assets/wallets/wizz.svg',
-    website: 'https://wizzwallet.io/#extension',
-    injectionKey: 'wizz',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
     mobileSupport: false,
   },
   {
@@ -138,12 +38,38 @@ export const BROWSER_WALLETS: BrowserWalletInfo[] = [
   },
 ];
 
+// Desired display order (by wallet id)
+const WALLET_ORDER = [
+  'okx',
+  'unisat',
+  'xverse',
+  'phantom',
+  'leather',
+  'tokeo',
+  'magic-eden',
+  'orange',
+  'wizz',
+  'keplr',
+];
+
+// Build lookup from SDK + local wallets
+const allWallets = [...SDK_WALLETS, ...LOCAL_WALLETS];
+const walletMap = new Map(allWallets.map(w => [w.id, w]));
+
+/**
+ * Ordered list of supported browser extension wallets.
+ * SDK wallets retain their embedded base64 icons.
+ */
+export const BROWSER_WALLETS: BrowserWalletInfo[] = WALLET_ORDER
+  .map(id => walletMap.get(id))
+  .filter((w): w is BrowserWalletInfo => w !== undefined);
+
 /**
  * Detect if a wallet is installed in the browser
  */
 export function isWalletInstalled(wallet: BrowserWalletInfo): boolean {
   if (typeof window === 'undefined') return false;
-  
+
   try {
     const walletObj = (window as any)[wallet.injectionKey];
     return walletObj !== undefined && walletObj !== null;
