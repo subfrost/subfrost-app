@@ -22,17 +22,6 @@ export interface BrowserWalletInfo {
  */
 export const BROWSER_WALLETS: BrowserWalletInfo[] = [
   {
-    id: 'oyl',
-    name: 'Oyl',
-    icon: '/assets/wallets/oyl.png',
-    website: 'https://oyl.gg/',
-    injectionKey: 'oyl',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: false,
-  },
-  {
     id: 'okx',
     name: 'OKX Wallet',
     icon: '/assets/wallets/okx.svg',
