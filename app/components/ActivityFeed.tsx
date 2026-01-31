@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { useInfiniteAmmTxHistory, AmmTransactionType } from '@/hooks/useAmmHistory';
@@ -8,6 +8,7 @@ import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useWallet } from '@/context/WalletContext';
 
 type AmmRow =
   | ({ type: 'swap'; soldAmount: string; boughtAmount: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; soldTokenBlockId: string; soldTokenTxId: string; boughtTokenBlockId: string; boughtTokenTxId: string; address?: string; sellerAddress?: string })
@@ -68,6 +69,7 @@ function PairIcon({
 
 export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { isFullPage?: boolean; maxHeightClass?: string }) {
   const { t } = useTranslation();
+  const { isConnected, account, onConnectModalOpenChange } = useWallet();
 
   const TX_FILTER_OPTIONS: { value: AmmTransactionType | 'all'; label: string }[] = [
     { value: 'all', label: t('activity.allTypes') },
@@ -81,14 +83,26 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
 
   const [txFilter, setTxFilter] = useState<AmmTransactionType | 'all'>('all');
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const [myWalletOnly, setMyWalletOnly] = useState(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
+
+  const walletAddress = isConnected ? (account.taproot?.address || account.nativeSegwit?.address) : undefined;
+
+  const handleMyWalletToggle = useCallback(() => {
+    if (isConnected) {
+      setMyWalletOnly((v) => !v);
+    } else {
+      onConnectModalOpenChange(true);
+    }
+  }, [isConnected, onConnectModalOpenChange]);
+
   const {
     data,
     isFetchingNextPage,
     fetchNextPage,
     hasNextPage,
     isLoading,
-  } = useInfiniteAmmTxHistory({ count: 50, enabled: true, transactionType: txFilter === 'all' ? undefined : txFilter });
+  } = useInfiniteAmmTxHistory({ address: myWalletOnly ? walletAddress : undefined, count: 50, enabled: true, transactionType: txFilter === 'all' ? undefined : txFilter });
 
   // Filter items to only show transactions from whitelisted pools (mainnet only)
   const allItems: AmmRow[] = (data?.pages ?? []).flatMap((p) => (p.items as AmmRow[]));
@@ -196,6 +210,28 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 </div>
               )}
             </div>
+            <div className="relative flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleMyWalletToggle}
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group"
+              >
+                <span className="text-sm text-[color:var(--sf-text)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+                  {t('activity.myWallet')}
+                </span>
+                <div className={`h-4 w-4 rounded border flex items-center justify-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  myWalletOnly
+                    ? 'bg-[color:var(--sf-primary)] border-[color:var(--sf-primary)]'
+                    : 'border-[color:var(--sf-text)]/30 group-hover:border-[color:var(--sf-primary)]/60'
+                }`}>
+                  {myWalletOnly && (
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none" className="text-white">
+                      <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </button>
+            </div>
           </div>
           {!isFullPage ? (
             <Link href="/activity" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
@@ -211,7 +247,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
 
       {/* Column Headers */}
       {/* Mobile header (xs only) - 3 columns */}
-      <div className="sm:hidden grid grid-cols-[auto_1fr_auto] gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+      <div className="sm:hidden grid grid-cols-[0.6fr_1fr_auto] gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
         <div>{t('activity.txn')}</div>
         <div>{t('activity.pair')}</div>
         <div className="text-right">{t('activity.amounts')}</div>
@@ -298,7 +334,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
               {/* Mobile layout (xs only) - 2 rows */}
               <div className="sm:hidden">
                 {/* Row 1: Txn, Pair, Amounts */}
-                <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+                <div className="grid grid-cols-[0.6fr_1fr_auto] items-center gap-2">
                   <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
 
                   <div className="flex flex-col gap-1">
@@ -355,7 +391,7 @@ export default function ActivityFeed({ isFullPage = false, maxHeightClass }: { i
                 </div>
 
                 {/* Row 2: Address (left) and Date (right) */}
-                <div className="flex justify-between items-center mt-2 pt-2 border-t border-[color:var(--sf-row-border)]/50">
+                <div className="flex justify-between items-center mt-1">
                   <div className="text-xs text-[color:var(--sf-text)]/50">{truncateAddress(address || '', 6, 4)}</div>
                   <div className="text-xs text-[color:var(--sf-text)]/50">{timeLabel}</div>
                 </div>

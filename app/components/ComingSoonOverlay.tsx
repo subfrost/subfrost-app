@@ -20,24 +20,30 @@ export default function ComingSoonOverlay({ children }: { children: ReactNode })
 
       {/* Centered notice */}
       <div className="absolute inset-0 z-10 flex items-start justify-center pt-24 pointer-events-none">
-        <div className="pointer-events-auto relative rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-xl border border-[color:var(--sf-glass-border)] shadow-[0_8px_32px_rgba(0,0,0,0.25)] px-8 py-6 max-w-md text-center">
-          <button
-            type="button"
-            onClick={() => setDismissed(true)}
-            className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-            aria-label="Close"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-          <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">
-            {t('comingSoon.title')}
-          </h3>
-          <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/60">
-            {t('comingSoon.description')}
-          </p>
+        <div className="pointer-events-auto w-[480px] max-w-[92vw] overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+          {/* Header */}
+          {/* Header */}
+          <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+            <h3 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
+              {t('comingSoon.title')}
+            </h3>
+          </div>
+          {/* Content */}
+          <div className="px-6 py-4">
+            <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/60">
+              {t('comingSoon.description')}
+            </p>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setDismissed(true)}
+                className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 text-sm font-bold uppercase tracking-wide text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+              >
+                {t('demo.understand')}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

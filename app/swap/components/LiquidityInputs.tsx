@@ -131,10 +131,13 @@ export default function LiquidityInputs({
   const activePercentToken0 = getActivePercent(token0Amount, token0BalanceText);
   const activePercentToken1 = getActivePercent(token1Amount, token1BalanceText);
 
+  // Collapsible details (all screen sizes)
+  const [detailsOpen, setDetailsOpen] = useState(false);
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
   // Local deadline state to allow empty field while typing
   const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
+  const [showLiquidityComingSoon, setShowLiquidityComingSoon] = useState(false);
 
   const canAddLiquidity = isConnected &&
     !!token0Amount && !!token1Amount &&
@@ -152,9 +155,9 @@ export default function LiquidityInputs({
   const getCtaText = () => {
     if (!isConnected) return t('liquidity.connectWallet');
     if (liquidityMode === 'remove') {
-      return isRemoveLoading ? t('liquidity.removingLiquidity') : t('liquidity.removeLiquidity');
+      return t('liquidity.removeLiquidity');
     }
-    return isLoading ? t('liquidity.addingLiquidity') : t('liquidity.addLiquidity');
+    return t('liquidity.addLiquidity');
   };
 
   const ctaText = getCtaText();
@@ -164,10 +167,9 @@ export default function LiquidityInputs({
       onConnectModalOpenChange(true);
       return;
     }
-    if (liquidityMode === 'remove' && onRemoveLiquidity) {
-      onRemoveLiquidity();
-    } else {
-      onAddLiquidity();
+    if (!showLiquidityComingSoon) {
+      setShowLiquidityComingSoon(true);
+      setTimeout(() => setShowLiquidityComingSoon(false), 1000);
     }
   };
 
@@ -268,9 +270,24 @@ export default function LiquidityInputs({
                 </div>
               </div>
 
-              {/* Transaction Details - Same style as SwapSummary */}
-              <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-                <div className="flex flex-col gap-2.5">
+              {/* Transaction Details - collapsible panel */}
+              <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+                {/* Toggle button */}
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen(!detailsOpen)}
+                  className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+                >
+                  <span>{t('vaultDeposit.transactionDetails')}</span>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {/* Collapsible details content */}
+                <div className={`transition-all duration-300 ease-in-out ${detailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
+                <div className="flex flex-col gap-2.5 px-4 text-sm">
                   {/* Minimum Received row */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
@@ -406,6 +423,7 @@ export default function LiquidityInputs({
                       />
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
             </>
@@ -559,9 +577,24 @@ export default function LiquidityInputs({
             </div>
           </div>
 
-          {/* Transaction Details - Same style as SwapSummary */}
-          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 text-sm shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-            <div className="flex flex-col gap-2.5">
+          {/* Transaction Details - collapsible panel */}
+          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+            {/* Toggle button */}
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(!detailsOpen)}
+              className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+            >
+              <span>{t('vaultDeposit.transactionDetails')}</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {/* Collapsible details content */}
+            <div className={`transition-all duration-300 ease-in-out ${detailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
+            <div className="flex flex-col gap-2.5 px-4 text-sm">
               {/* Minimum Received row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
@@ -698,6 +731,7 @@ export default function LiquidityInputs({
                 </div>
               </div>
             </div>
+            </div>
           </div>
 
               {/* Summary */}
@@ -715,14 +749,13 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          disabled={
-            (liquidityMode === 'remove'
-              ? (!canRemoveLiquidity && isConnected) || isRemoveLoading
-              : (!canAddLiquidity && isConnected) || isLoading)
-          }
-          className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+          className={`mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none ${isConnected ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
         >
-          {ctaText}
+          {showLiquidityComingSoon ? (
+            <span className="animate-pulse">{t('badge.comingSoon')}</span>
+          ) : (
+            ctaText
+          )}
         </button>
       </div>
     </>

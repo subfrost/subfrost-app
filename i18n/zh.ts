@@ -460,14 +460,16 @@ const zh: Record<string, string> = {
   'activity.amounts': '\u91d1\u989d',
   'activity.address': '\u5730\u5740',
   'activity.time': '\u65f6\u95f4',
+  'activity.myWallet': '我的钱包',
+  'activity.pleaseConnectWallet': '请连接钱包',
   'activity.loading': '\u52a0\u8f7d\u4e2d\u2026',
 
   // Trending Pairs
   'trending.trendingPair': '\u70ed\u95e8\u4ea4\u6613\u5bf9',
   'trending.viewAll': '\u67e5\u770b\u5168\u90e8',
   'trending.tvl': 'TVL',
-  'trending.volume24h': '24\u5c0f\u65f6\u4ea4\u6613\u91cf',
-  'trending.volume30d': '30\u5929\u4ea4\u6613\u91cf',
+  'trending.volume24h': '24卷',
+  'trending.volume30d': '30卷',
   'trending.noPairs': '\u6682\u65e0\u53ef\u7528\u4ea4\u6613\u5bf9\u3002',
 
   // Wallet List Picker

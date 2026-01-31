@@ -376,9 +376,93 @@ export function usePools(params: UsePoolsParams = {}) {
         throw new Error('Failed to fetch pools from any source');
       }
 
+      // Remove known scam/impersonator pools
+      const beforeCount = items.length;
+      items = items.filter(p => !isBlacklistedPool(p));
+      if (items.length < beforeCount) {
+        console.log(`[usePools] Filtered out ${beforeCount - items.length} blacklisted pool(s)`);
+      }
+
+      // Remove dust/dead pools with negligible TVL
+      const MIN_TVL_USD = 5;
+      items = items.filter(p => (p.tvlUsd ?? 0) >= MIN_TVL_USD);
+
       return applyFiltersAndPagination(items, params);
     },
   });
+}
+
+// ============================================================================
+// Scam pool blacklist
+// ============================================================================
+
+// Blacklisted pool IDs: known scam pools that impersonate legitimate tokens.
+const BLACKLISTED_POOL_IDS = new Set([
+  '2:25473',  // fake METHANE pool
+  '2:25512',  // fake DIESEL pool
+  '2:70054',  // bUSD / frBTC (scam duplicate; legit is 2:77222)
+  '2:70060',  // scam pool
+  '2:70100',  // btc / bUSD (fake btc token)
+  '2:77260',  // btc / frBTC (fake btc token)
+]);
+
+// Blacklisted token IDs: scam tokens impersonating BTC or bUSD.
+// Real BTC in pools is frBTC (32:0). Real bUSD is 2:56801.
+const BLACKLISTED_TOKEN_IDS = new Set([
+  '2:119',    // fake USD
+  '2:120',    // fake BTC
+  '2:135',    // fake METHANE
+  '2:148',    // fake USD
+  '2:150',    // fake USD
+  '2:153',    // fake ETH
+  '2:154',    // fake BTC
+  '2:164',    // fake USD
+  '2:166',    // fake USD
+  '2:177',    // fake USD
+  '2:182',    // fake USD
+  '2:185',    // fake BTC
+  '2:192',    // fake SOL
+  '2:220',    // fake USD
+  '2:235',    // fake BTC
+  '2:236',    // fake ETH
+  '2:238',    // fake ETH
+  '2:405',    // fake METHANE
+  '2:406',    // fake DIESEL
+  '2:493',    // fake ETH
+  '2:21681',  // fake BTC
+  '2:21700',  // fake BTC
+  '2:25982',  // fake USD
+  '2:30971',  // fake USD
+  '2:50006',  // fake METHANE
+  '2:50119',  // fake METHANE
+  '2:62279',  // fake USD
+  '2:68427',  // fake USD
+  '2:70798',  // fake USD
+  '2:77434',  // fake METHANE
+]);
+
+/**
+ * Returns true if the pool should be hidden.
+ * Criteria:
+ *  1. Pool ID is explicitly blacklisted.
+ *  2. Pool contains a blacklisted scam token ID.
+ *  3. Pool contains a token with symbol "btc" (case-insensitive) — real BTC
+ *     is represented as frBTC (32:0) inside AMM pools.
+ */
+function isBlacklistedPool(pool: PoolsListItem): boolean {
+  if (BLACKLISTED_POOL_IDS.has(pool.id)) return true;
+
+  if (BLACKLISTED_TOKEN_IDS.has(pool.token0.id) || BLACKLISTED_TOKEN_IDS.has(pool.token1.id)) {
+    return true;
+  }
+
+  // Any pool whose token symbol is exactly "btc" (case-insensitive) is a
+  // scam impersonating native BTC.
+  if (pool.token0.symbol.toLowerCase() === 'btc' || pool.token1.symbol.toLowerCase() === 'btc') {
+    return true;
+  }
+
+  return false;
 }
 
 // ============================================================================

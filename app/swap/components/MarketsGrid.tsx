@@ -23,7 +23,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const { t } = useTranslation();
-  const [sortField, setSortField] = useState<SortField>('tvl');
+  const [sortField, setSortField] = useState<SortField>('volume');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -213,7 +213,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
 
       {/* Desktop Table View */}
       {filteredPools.length > 0 && (
-        <div className="hidden md:block rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
         <div className="px-4 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">Markets</h3>
@@ -259,7 +259,63 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             </div>
           </div>
         </div>
-        <div className="overflow-x-auto overflow-y-auto max-h-[540px]">
+        <table className="w-full table-fixed">
+          <colgroup>
+            <col className="w-[35%]" />
+            <col className="w-[22%]" />
+            <col className="w-[22%]" />
+            <col className="w-[21%]" />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-[color:var(--sf-row-border)]">
+              <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
+              <th className="px-2 py-3 text-right">
+                <button
+                  onClick={() => handleSort('tvl')}
+                  className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                    sortField === 'tvl' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
+                  }`}
+                >
+                  <span>TVL</span>
+                  <span className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] ${sortField === 'tvl' ? 'opacity-100' : 'opacity-30'}`}>
+                    {sortField === 'tvl' && sortOrder === 'desc' ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </span>
+                </button>
+              </th>
+              <th className="px-2 py-3 text-right">
+                <button
+                  onClick={() => handleSort('volume')}
+                  className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                    sortField === 'volume' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
+                  }`}
+                >
+                  <span>VOL</span>
+                  <span className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] ${sortField === 'volume' ? 'opacity-100' : 'opacity-30'}`}>
+                    {sortField === 'volume' && sortOrder === 'desc' ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </span>
+                </button>
+              </th>
+              <SortableHeader label="APY" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
+            </tr>
+          </thead>
+        </table>
+        <div className="no-scrollbar overflow-y-auto max-h-[540px]">
           <table className="w-full table-fixed">
             <colgroup>
               <col className="w-[35%]" />
@@ -267,54 +323,6 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
               <col className="w-[22%]" />
               <col className="w-[21%]" />
             </colgroup>
-            <thead className="sticky top-0 z-10 bg-[color:var(--sf-glass-bg)]">
-              <tr className="border-b border-[color:var(--sf-row-border)]">
-                <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
-                <th className="px-2 py-3 text-right">
-                  <button
-                    onClick={() => handleSort('tvl')}
-                    className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                      sortField === 'tvl' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
-                    }`}
-                  >
-                    <span>TVL</span>
-                    <span className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] ${sortField === 'tvl' ? 'opacity-100' : 'opacity-30'}`}>
-                      {sortField === 'tvl' && sortOrder === 'desc' ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </span>
-                  </button>
-                </th>
-                <th className="px-2 py-3 text-right">
-                  <button
-                    onClick={() => handleSort('volume')}
-                    className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider text-xs transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                      sortField === 'volume' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)]'
-                    }`}
-                  >
-                    <span>VOL</span>
-                    <span className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] ${sortField === 'volume' ? 'opacity-100' : 'opacity-30'}`}>
-                      {sortField === 'volume' && sortOrder === 'desc' ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </span>
-                  </button>
-                </th>
-                <SortableHeader label="APY" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
-              </tr>
-            </thead>
             <tbody>
               {displayedPools.map((pool) => (
                 <tr
@@ -324,8 +332,8 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                   }`}
                   onClick={() => handleSelectPool(pool)}
                 >
-                  <td className="px-3 py-3">
-                    <div className="flex flex-col items-center gap-2">
+                  <td className="px-6 py-3">
+                    <div className="flex flex-col items-start gap-1">
                       <div className="flex -space-x-2">
                         <div className="relative">
                           <TokenIcon symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="xl" network={network} />
@@ -334,7 +342,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                           <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="xl" network={network} />
                         </div>
                       </div>
-                      <span className="text-xs font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">
+                      <span className="text-xs font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap overflow-hidden text-ellipsis w-full text-left">
                         {pool.pairLabel.replace(/ LP$/, '')}
                       </span>
                     </div>
@@ -361,47 +369,6 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         </div>
       )}
 
-      {/* Mobile/Tablet Card View */}
-      {filteredPools.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 md:hidden overflow-y-auto max-h-[660px]">
-        {displayedPools.map((pool) => (
-          <button
-            key={pool.id}
-            onClick={() => handleSelectPool(pool)}
-            className={`text-left rounded-2xl bg-[color:var(--sf-glass-bg)] p-5 backdrop-blur-md transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none border-t border-[color:var(--sf-top-highlight)] ${
-              selectedPoolId === pool.id ? 'bg-[color:var(--sf-primary)]/10' : ''
-            }`}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  <TokenIcon symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="lg" network={network} />
-                  <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="lg" network={network} />
-                </div>
-                <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel.replace(/ LP$/, '')}</span>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2.5 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
-                {formatPercent(pool.apr)}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">TVL</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">24h Vol</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">30d Vol</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice, true)}</div>
-              </div>
-            </div>
-          </button>
-        ))}
-        </div>
-      )}
 
     </div>
   );
@@ -471,7 +438,8 @@ function formatCurrency(v?: number, currency: CurrencyDisplay = 'usd', btcPrice?
 
 function formatPercent(v?: number) {
   if (v == null) return "-";
-  return `${v.toFixed(2)}%`;
+  const decimals = v > 99.99 ? 0 : v > 9.99 ? 1 : 2;
+  return `${v.toFixed(decimals)}%`;
 }
 
 function getToken0Percentage(pool: PoolSummary): number {

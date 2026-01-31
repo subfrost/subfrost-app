@@ -17,7 +17,7 @@ const en: Record<string, string> = {
   'header.settings': 'Settings',
 
   // Demo Banner
-  'demo.warning': 'The SUBFROST App is unreleased.',
+  'demo.warning': 'SUBFROST App is unreleased',
   'demo.description': 'Do not perform transactions until we officially release it. Anything you see here is subject to change.',
   'demo.understand': 'I Understand',
 
@@ -460,6 +460,8 @@ const en: Record<string, string> = {
   'activity.amounts': 'Amounts',
   'activity.address': 'Address',
   'activity.time': 'Time',
+  'activity.myWallet': 'My Wallet',
+  'activity.pleaseConnectWallet': 'Please Connect Wallet',
   'activity.loading': 'Loading\u2026',
 
   // Trending Pairs
