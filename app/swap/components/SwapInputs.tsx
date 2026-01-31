@@ -79,6 +79,7 @@ export default function SwapInputs({
   const [ethAddressFocused, setEthAddressFocused] = useState(false);
 
   // Bridge state
+  const [showSwapComingSoon, setShowSwapComingSoon] = useState(false);
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState<BridgeStep>(1);
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
@@ -467,11 +468,23 @@ export default function SwapInputs({
       >
         <button
           type="button"
-          onClick={onCtaClick}
-          disabled={!isButtonEnabled && isConnected}
-          className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+          onClick={() => {
+            if (!isConnected) {
+              onConnectModalOpenChange(true);
+              return;
+            }
+            if (!showSwapComingSoon) {
+              setShowSwapComingSoon(true);
+              setTimeout(() => setShowSwapComingSoon(false), 1000);
+            }
+          }}
+          className={`h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none ${isConnected ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
         >
-          {ctaText}
+          {showSwapComingSoon ? (
+            <span className="animate-pulse">{t('badge.comingSoon')}</span>
+          ) : (
+            isConnected ? t('swap.confirmSwap') : t('swap.connectWallet')
+          )}
         </button>
       </div>
     </div>
