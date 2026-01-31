@@ -45,12 +45,12 @@ export interface PoolCandleVolume {
 
 // Temporary: using api.alkanode.com until subfrost espo resyncs
 export const NETWORK_ESPO_URLS: Record<string, string> = {
-  mainnet: 'https://api.alkanode.com/rpc-staging',
-  testnet: 'https://api.alkanode.com/rpc-staging',
-  signet: 'https://api.alkanode.com/rpc-staging',
-  regtest: 'https://api.alkanode.com/rpc-staging',
-  oylnet: 'https://api.alkanode.com/rpc-staging',
-  'subfrost-regtest': 'https://api.alkanode.com/rpc-staging',
+  mainnet: 'https://api.alkanode.com/rpc',
+  testnet: 'https://api.alkanode.com/rpc',
+  signet: 'https://api.alkanode.com/rpc',
+  regtest: 'https://api.alkanode.com/rpc',
+  oylnet: 'https://api.alkanode.com/rpc',
+  'subfrost-regtest': 'https://api.alkanode.com/rpc',
 };
 
 // Known quote tokens with USD values
