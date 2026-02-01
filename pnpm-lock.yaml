@@ -73,8 +73,8 @@ importers:
         version: 2.0.0
     devDependencies:
       '@alkanes/ts-sdk':
-        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-16f07a0
-        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-16f07a0(@oyl/sdk@1.17.0(@swc/core@1.15.8)(@swc/wasm@1.15.8)(@types/node@20.19.27)(typescript@5.9.3))(@types/node@20.19.27)
+        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-b6a5a42
+        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-b6a5a42(@oyl/sdk@1.17.0(@swc/core@1.15.8)(@swc/wasm@1.15.8)(@types/node@20.19.27)(typescript@5.9.3))(@types/node@20.19.27)
       '@noble/curves':
         specifier: ^2.0.1
         version: 2.0.1
@@ -165,9 +165,9 @@ packages:
   '@adraffy/ens-normalize@1.10.1':
     resolution: {integrity: sha512-96Z2IP3mYmF1Xg2cDm8f1gWGf/HUVedQ3FMifV4kG/PQ4yEP51xDtRAEfhVNt5f/uzpNkZHwWQuUcu6D6K+Ekw==}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-16f07a0':
-    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-16f07a0}
-    version: 0.1.4-16f07a0
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-b6a5a42':
+    resolution: {integrity: sha512-IYdBG9sb2RWItsxXZSXR4tHMQoEdhjR+tqBK4sxj28dtKC4AdvpK47b2b5ErJb6fy4oia5l/V+f44Oczr65dmA==, tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-b6a5a42}
+    version: 0.1.4-b6a5a42
     hasBin: true
     peerDependencies:
       '@oyl/sdk': '*'
@@ -5494,7 +5494,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.10.1': {}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-16f07a0(@oyl/sdk@1.17.0(@swc/core@1.15.8)(@swc/wasm@1.15.8)(@types/node@20.19.27)(typescript@5.9.3))(@types/node@20.19.27)':
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-b6a5a42(@oyl/sdk@1.17.0(@swc/core@1.15.8)(@swc/wasm@1.15.8)(@types/node@20.19.27)(typescript@5.9.3))(@types/node@20.19.27)':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       bip32: 4.0.0

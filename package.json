@@ -15,7 +15,7 @@
     "test:utils": "vitest run utils/__tests__ lib/**/__tests__ app/**/__tests__",
     "test:hooks": "vitest run hooks/__tests__",
     "test:sdk": "vitest run __tests__/sdk",
-    "test:integration": "vitest run --include='**/*.integration.test.ts'",
+    "test:integration": "INTEGRATION=true vitest run __tests__/sdk",
     "test:legacy": "npm run test:math && npm run test:calldata && npm run test:utxo",
     "test:math": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts && npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
     "test:calldata": "npx tsx hooks/__tests__/vaultCalldata.test.ts",
@@ -49,7 +49,7 @@
     "varuint-bitcoin": "^2.0.0"
   },
   "devDependencies": {
-    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-16f07a0",
+    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-b6a5a42",
     "@noble/curves": "^2.0.1",
     "@playwright/experimental-ct-react": "^1.56.1",
     "@playwright/test": "^1.56.1",
