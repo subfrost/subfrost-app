@@ -373,9 +373,9 @@ export function useEnrichedWalletData(): EnrichedWalletData {
           processUtxo(utxo, true, false);
         }
 
-        // Process pending UTXOs (unconfirmed) - treat as spendable for now
+        // Process pending UTXOs (unconfirmed) - treat as unspendable until confirmed
         for (const utxo of toArray(data.pending)) {
-          processUtxo(utxo, false, true);
+          processUtxo(utxo, false, false);
         }
       }
 
