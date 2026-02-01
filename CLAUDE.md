@@ -405,6 +405,14 @@ See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidity
 **Cause:** Stale hardcoded signer address. The frBTC contract only mints when BTC arrives at the address derived from its GET_SIGNER opcode (103). A wrong address means BTC goes to an unrelated output and the contract sees zero incoming BTC.
 **Fix:** Update `SIGNER_ADDRESSES` in `useWrapMutation.ts` and `useWrapSwapMutation.ts`. Get the correct address by running: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and checking which address receives BTC at output 0.
 
+### "insufficient output" / swap quote wildly inflated on regtest
+**Cause:** Espo `ammdata.get_pools` (`api.alkanode.com/rpc`) returns **mainnet** pool data. Mainnet and regtest share genesis token IDs (`2:0` DIESEL, `32:0` frBTC), so the frontend uses mainnet reserves for regtest swap quotes. Mainnet pool `2:77087` has DIESEL reserve ~347B and frBTC reserve ~10.7M, while regtest pool `2:6` has DIESEL ~35.7B and frBTC ~2.17B — completely different ratios. The resulting `amount_out_min` is ~191x too large for regtest, causing the factory to revert.
+**Fix:** Skip Espo on regtest in `useAlkanesTokenPairs.ts` and `usePools.ts`. The RPC simulation fallback (factory opcode 3 + pool opcode 999) queries actual regtest on-chain reserves.
+
+### "EXPIRED deadline" on regtest
+**Cause:** Regtest blocks are mined manually, so a deadline of current_block + 3 can easily expire before the swap tx is mined.
+**Fix:** On regtest, all mutation hooks override `deadlineBlocks` to 1000 regardless of user setting.
+
 ---
 
 ## File Locations
@@ -572,6 +580,53 @@ alkanes: [{id: {block: sell_block, tx: sell_tx}, value: amount_in}]
 - Protostone changed from `[32,0,77]:v0:v0` to `[32,0,77]:v1:v1`, inputRequirements from `B:<sats>` to `B:<sats>:v0`
 - Same stale address was present in `useWrapSwapMutation.ts` and was fixed there too
 - **Lesson:** When wrap transactions silently fail (BTC sent, no tokens minted), check the signer address first. Run the CLI wrap-btc command to see the correct address.
+
+### 2026-02-01: BTC→DIESEL Swap — Three Bugs in Sequence
+
+**Symptom:** BTC→DIESEL swaps via the UI would broadcast and confirm, but the swap never executed. frBTC was minted to an output but never consumed by the factory. Pool reserves unchanged.
+
+**Investigation:** Traced transaction `cd3cc73c79b9aa70e7d70aa571ab2adf256bf0d9d5d2ffbc7d18ec8700314943` through on-chain data, decoded OP_RETURN protostones, and simulated factory execution.
+
+**Bug 1: Double-edict shifting protostone indices**
+- The swap mutation hooks (useSwapMutation, useSwapUnwrapMutation) manually constructed an edict protostone (p0) to transfer tokens to the cellpack protostone (p1).
+- The SDK's `alkanesExecuteWithStrings` ALSO auto-generates an edict from `inputRequirements`, inserting it at position 0 and shifting all protostone references via `adjust_protostone_references`.
+- Result: two edict protostones (SDK auto-edict at p0, manual edict at p1), the cellpack shifted to p2, but edict targets pointed to wrong indices. The factory received zero `incomingAlkanes`.
+- **Fix:** Removed manual edict protostones. The SDK's auto-edict from `inputRequirements` is sufficient.
+
+**Bug 2: Stale UTXO — wrap tx not confirmed before swap**
+- The BTC→Token two-step flow (wrap BTC→frBTC, then swap frBTC→Token) triggered the swap immediately after broadcasting the wrap tx without waiting for confirmation.
+- The swap tx referenced the frBTC UTXO from the wrap, but since the wrap wasn't mined yet, the UTXO didn't exist in the indexer's view.
+- **Fix:** Added esplora polling loop in SwapShell.tsx that mines a block and waits for the wrap tx to appear as confirmed before initiating the swap.
+
+**Bug 3: Espo returning mainnet reserves for regtest swap quotes (root cause of 191x inflation)**
+- `useAlkanesTokenPairs` fetches pool data with Espo (`api.alkanode.com/rpc`) as priority 1. Espo returns **mainnet** pool data.
+- Mainnet pool `2:77087` has the same token IDs as regtest (`2:0` DIESEL, `32:0` frBTC) but completely different reserves: DIESEL ~347B/frBTC ~10.7M (mainnet) vs DIESEL ~35.7B/frBTC ~2.17B (regtest).
+- With mainnet reserves, the swap quote calculated `amount_out_min = 297,373,476,140` for 99.9M frBTC input. The regtest factory correctly computed ~1.56B DIESEL output and reverted with "insufficient output" because 1.56B < 297B.
+- **Fix:** Skip Espo on regtest networks in both `useAlkanesTokenPairs.ts` and `usePools.ts`. The RPC simulation fallback queries actual regtest on-chain reserves via factory opcode 3 (GetAllPools) + pool opcode 999 (PoolDetails).
+
+**Additional fix: Regtest deadline override**
+- The failed tx also had deadline=1691 at block 1689 (only +2 blocks). Since regtest blocks are mined manually, tight deadlines easily expire.
+- All mutation hooks (useSwapMutation, useSwapUnwrapMutation, useWrapSwapMutation, useRemoveLiquidityMutation) now use `deadlineBlocks=1000` on regtest, making deadline expiration impossible.
+
+**Key architectural insight — Protorune auto-allocation:**
+- All input alkanes automatically go to the FIRST protostone with matching `protocol_tag` (see `protorune/src/lib.rs:903-913`). No explicit edict is needed for single-cellpack transactions.
+- The SDK's auto-edict generation only triggers when `alkanes_excess` is non-empty (wallet has more of a token than needed). It splits: needed amount to the cellpack protostone, excess to change output.
+- For exact-match amounts, no auto-edict is generated — the protorune runtime handles allocation automatically.
+
+**Files changed:**
+- `hooks/useSwapMutation.ts` — Removed manual edict, added regtest deadline override
+- `hooks/useSwapUnwrapMutation.ts` — Removed manual edict, added regtest deadline override
+- `hooks/useWrapSwapMutation.ts` — Added regtest deadline override
+- `hooks/useRemoveLiquidityMutation.ts` — Added regtest deadline override
+- `hooks/useAlkanesTokenPairs.ts` — Added RPC simulation fallback with opcode 999 parsing, skip Espo on regtest
+- `hooks/usePools.ts` — Added RPC simulation fallback, skip Espo on regtest
+- `app/swap/SwapShell.tsx` — Two-step BTC→Token flow with esplora polling between wrap and swap
+
+**Lessons:**
+- Genesis alkane IDs (2:0, 32:0) are identical across mainnet and regtest. Any data source that returns mainnet data will silently poison regtest quotes with wrong reserves.
+- Always verify which data source is actually being used by checking browser console logs (`[useAlkanesTokenPairs] Espo returned N pools` vs `RPC simulation returned N pools`).
+- When swap quotes seem unreasonable, compare the quote's reserves against `alkanes_simulate` opcode 97 (GetReserves) on the actual pool.
+- The SDK's auto-edict from `inputRequirements` handles token delivery — do NOT also construct manual edict protostones.
 
 ### 2026-01-18: WASM Alias Bug
 - `next.config.mjs` aliases `@alkanes/ts-sdk/wasm` to `lib/oyl/alkanes/`

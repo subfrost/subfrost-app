@@ -20,10 +20,13 @@ import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { usePools } from "@/hooks/usePools";
 import { useAllPoolStats } from "@/hooks/usePoolData";
 import { useModalStore } from "@/stores/modals";
+import BigNumber from 'bignumber.js';
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
 import { useWrapSwapMutation } from "@/hooks/useWrapSwapMutation";
 import { useSwapUnwrapMutation } from "@/hooks/useSwapUnwrapMutation";
+import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
+import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
@@ -159,6 +162,7 @@ export default function SwapShell() {
   const swapUnwrapMutation = useSwapUnwrapMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
   const removeLiquidityMutation = useRemoveLiquidityMutation();
+  const { data: premiumData } = useFrbtcPremium();
 
   // Wallet/config
   const { address, network } = useWallet();
@@ -620,9 +624,17 @@ export default function SwapShell() {
       return;
     }
 
-    // BTC → Token swap: One-click wrap + swap in a single transaction
+    // BTC → Token swap: Two-step wrap (BTC→frBTC) then swap (frBTC→Token)
+    //
+    // NOTE: This was previously a single-tx atomic wrap+swap using useWrapSwapMutation.
+    // That approach failed because the protostone `pointer` field only supports output
+    // indices (v0, v1), not protostone indices (p1, p2). The wrap cellpack's pointer=p1
+    // didn't deliver frBTC to the swap cellpack's incomingAlkanes. The factory received
+    // zero tokens and reverted with "balance underflow". See useWrapSwapMutation.ts header
+    // for full investigation details.
+    //
+    // The two-step approach: wrap first, mine a block (regtest), then swap the frBTC.
     if (isBtcToTokenSwap) {
-      // We need a quote with poolId for the swap portion
       if (!quote || !quote.poolId) {
         console.error('[SWAP] BTC → Token swap requires quote with poolId');
         window.alert('Unable to find pool for this swap. Please try again.');
@@ -630,23 +642,91 @@ export default function SwapShell() {
       }
 
       try {
-        console.log('[SWAP] Executing one-click BTC →', toToken.symbol, 'swap');
+        console.log('[SWAP] BTC →', toToken.symbol, ': Step 1/2 — Wrapping BTC to frBTC');
         const btcAmount = direction === 'sell' ? fromAmount : toAmount;
 
-        const res = await wrapSwapMutation.mutateAsync({
-          btcAmount,
-          buyAmount: quote.buyAmount,
+        // Step 1: Wrap BTC → frBTC
+        const wrapRes = await wrapMutation.mutateAsync({
+          amount: btcAmount,
+          feeRate: fee.feeRate,
+        });
+
+        if (!wrapRes?.success || !wrapRes.transactionId) {
+          throw new Error('Wrap step failed — no transaction ID returned');
+        }
+        console.log('[SWAP] Step 1 complete — wrap txid:', wrapRes.transactionId);
+
+        // Mine a block and wait for esplora to index it (regtest only).
+        // The swap step needs fresh UTXO data — if we proceed too early,
+        // the SDK will try to spend UTXOs that the wrap tx already consumed,
+        // causing "bad-txns-inputs-missingorspent" on broadcast.
+        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
+        if (isRegtest && address) {
+          console.log('[SWAP] Mining block to confirm wrap transaction...');
+          try {
+            await fetch('/api/regtest/mine', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blocks: 1, address }),
+            });
+            // Poll esplora until the wrap tx is confirmed (indexer lag can be 3-15s)
+            const wrapTxId = wrapRes.transactionId;
+            const maxPollAttempts = 20;
+            for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 1500));
+              try {
+                const txResp = await fetch('/api/rpc', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'esplora_tx',
+                    params: [wrapTxId],
+                    id: 1,
+                  }),
+                });
+                const txData = await txResp.json();
+                if (txData?.result?.status?.confirmed) {
+                  console.log(`[SWAP] Wrap tx confirmed after ${(attempt + 1) * 1.5}s`);
+                  // Extra wait for esplora UTXO index to update after tx confirmation
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  break;
+                }
+                console.log(`[SWAP] Polling wrap tx... attempt ${attempt + 1}/${maxPollAttempts}`);
+              } catch {
+                // Polling error — keep retrying
+              }
+            }
+          } catch (mineErr) {
+            console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
+          }
+        }
+
+        // Step 2: Swap frBTC → Target token
+        console.log('[SWAP] Step 2/2 — Swapping frBTC →', toToken.symbol);
+
+        // Calculate frBTC amount after wrap fee (same logic as useWrapSwapMutation)
+        const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
+        const btcSats = new BigNumber(btcAmount).multipliedBy(1e8).integerValue(BigNumber.ROUND_FLOOR);
+        const frbtcAmount = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
+          .integerValue(BigNumber.ROUND_FLOOR).toString();
+
+        const swapRes = await swapMutation.mutateAsync({
+          sellCurrency: FRBTC_ALKANE_ID,
           buyCurrency: toToken.id,
+          direction: 'sell',
+          sellAmount: frbtcAmount,
+          buyAmount: quote.buyAmount,
           maxSlippage,
           feeRate: fee.feeRate,
           poolId: quote.poolId,
           deadlineBlocks,
         });
 
-        if (res?.success && res.transactionId) {
-          console.log('[SWAP] One-click BTC → Token swap success:', res.transactionId);
+        if (swapRes?.success && swapRes.transactionId) {
+          console.log('[SWAP] Step 2 complete — swap txid:', swapRes.transactionId);
           setSuccessOperationType('swap');
-          setSuccessTxId(res.transactionId);
+          setSuccessTxId(swapRes.transactionId);
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {

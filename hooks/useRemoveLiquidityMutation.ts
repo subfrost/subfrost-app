@@ -241,9 +241,10 @@ export function useRemoveLiquidityMutation() {
 
       console.log('[RemoveLiquidity] Amounts in alks:', { lpAmountAlks, minAmount0Alks, minAmount1Alks });
 
-      // Get block height for deadline
+      // Get block height for deadline (regtest uses large offset so deadline never expires)
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
       const deadline = await getFutureBlockHeight(
-        data.deadlineBlocks || 3,
+        isRegtest ? 1000 : (data.deadlineBlocks || 3),
         provider as any
       );
 

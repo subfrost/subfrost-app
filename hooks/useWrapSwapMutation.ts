@@ -1,42 +1,50 @@
 /**
  * useWrapSwapMutation - One-click BTC to DIESEL (or any token) via atomic wrap + swap
  *
- * ## How It Works
+ * ## ⚠️ DEPRECATED — Single-tx atomic wrap+swap does NOT work
  *
- * This hook combines wrap (BTC → frBTC) and swap (frBTC → DIESEL) into a single
- * Bitcoin transaction using two protostones chained together:
+ * This hook is retained for reference but is NO LONGER USED by SwapShell.
+ * BTC→Token swaps now use a two-step flow: wrapMutation → mine → swapMutation.
+ * See SwapShell.tsx handleSwap() for the working implementation.
  *
- * 1. **p0 (Wrap)**: Calls frBTC contract with opcode 77
- *    - Input: BTC directed to signer address (v1)
- *    - Output: frBTC directed to p1 (next protostone) via pointer=p1
+ * ### Journal: 2026-02-01 — Protostone pointer=pN doesn't work for cellpacks
  *
- * 2. **p1 (Swap)**: Calls factory contract with opcode 13 (SwapExactTokensForTokens)
- *    - Input: frBTC from p0 arrives as `incomingAlkanes`
- *    - Output: DIESEL (or target token) to user address (v0)
+ * PROBLEM: BTC→DIESEL swaps broadcast and confirm, but only the wrap executes.
+ * The user receives frBTC instead of DIESEL. Pool reserves unchanged.
  *
- * Note: We route through the factory (opcode 13) instead of calling the pool
- * directly because the deployed pool logic is missing the Swap opcode (3).
+ * INVESTIGATION:
+ *   1. Traced txids be0b988f... and 94eb6608... on regtest.
+ *   2. Both show: vout 0 = 99,900,000 frBTC (user taproot), vout 1 = 1 BTC (signer).
+ *      No DIESEL received. Pool reserves unchanged.
+ *   3. Simulated factory opcode 13 WITHOUT alkanes → "balance underflow,
+ *      transferring(frBTC 99900000), from(factory 4:65498), balance(0)".
+ *      The factory received ZERO frBTC — the pointer=p1 chain didn't deliver tokens.
+ *   4. Simulated factory opcode 13 WITH alkanes → works perfectly (returns DIESEL).
+ *   5. Root cause: the protostone `pointer` field only supports OUTPUT INDICES (v0, v1),
+ *      NOT protostone indices (p0, p1). The SDK type definitions confirm this:
+ *      `pointer?: number` and `refundPointer?: number` — plain output indices.
+ *      The `pN` syntax is only valid in EDICT targets ([block:tx:amount:p1]),
+ *      not in the pointer field after the cellpack ([cellpack]:pointer:refund).
+ *   6. When the SDK encounters `p1` in the pointer position, it either falls back to
+ *      v0 (default) or v1. Either way, frBTC goes to an output, not to the next
+ *      protostone. The swap protostone receives zero incomingAlkanes.
  *
- * ## Transaction Output Ordering
+ * FIX: SwapShell now uses two separate transactions:
+ *   Step 1: wrapMutation (BTC → frBTC)
+ *   Step 2: mine block + swapMutation (frBTC → DIESEL via edict two-protostone pattern)
+ *   The edict pattern [32:0:amount:p1] correctly delivers frBTC to the swap cellpack.
  *
- * - Output 0 (v0): User taproot address (receives final DIESEL)
- * - Output 1 (v1): Signer address (receives BTC for wrap)
- * - Output 2+: Change, OP_RETURN
+ * NOTE: The same issue likely affects useSwapUnwrapMutation (Token→BTC) which uses
+ * pointer=p2 on the swap cellpack to chain into the unwrap cellpack.
  *
- * ### Journal: 2026-01-28 — Factory router fix applied
+ * ## Original Design (non-functional)
  *
- * Previously p1 called the pool directly with opcode 3 (Swap). The deployed pool
- * WASM at [4:65496] is missing opcode 3 — an older build. Swaps silently failed
- * on-chain (no alkane state changes, no revert visible to user).
+ * Two protostones chained:
+ * - p0: Wrap cellpack [32,0,77]:p1:v0 — frBTC should go to p1 (but doesn't)
+ * - p1: Swap cellpack [4,65498,13,...]:v0:v0 — should receive frBTC (but gets nothing)
  *
- * FIX: p1 now calls the factory [4:65498] with opcode 13 (SwapExactTokensForTokens).
- * The factory has working router logic that executes swaps through pools internally.
- * Cellpack format: [factory_block, factory_tx, 13, path_len, ...path, amount_in, min_out, deadline]
- *
- * See useSwapMutation.ts journal entry for full investigation details.
- *
- * @see useWrapMutation.ts - Standalone wrap logic
- * @see useSwapMutation.ts - Standalone swap logic with factory-routed pattern
+ * @see useWrapMutation.ts - Standalone wrap logic (works)
+ * @see useSwapMutation.ts - Standalone swap logic with edict pattern (works)
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
@@ -226,8 +234,9 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Expected output:', data.buyAmount);
       console.log('[WrapSwap] Min output (after slippage):', minAmountOut);
 
-      // Get deadline block height
-      const deadlineBlocks = data.deadlineBlocks || 3;
+      // Get deadline block height (regtest uses large offset so deadline never expires)
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 

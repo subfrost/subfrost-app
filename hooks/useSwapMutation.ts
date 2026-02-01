@@ -19,15 +19,17 @@
  * Factory opcode 13 format:
  *   [factory_block, factory_tx, 13, path_len, ...path_tokens, amount_in, amount_out_min, deadline]
  *
- * ### The Two-Protostone Pattern
+ * ### SDK Auto-Edict Pattern
  *
  * For the swap to work, input tokens must appear in the factory's `incomingAlkanes`.
- * We use TWO protostones:
- *   - p0: Edict [sell_block:sell_tx:amount:p1] - transfers sell tokens to p1
- *   - p1: Cellpack [factory_block,factory_tx,13,...] - calls factory with swap opcode
+ * The SDK auto-generates the edict from `inputRequirements`:
+ *   - p0: SDK auto-edict (from inputRequirements) - transfers sell tokens to p1
+ *   - p1: Our cellpack [factory_block,factory_tx,13,...] - calls factory with swap opcode
  *
- * The edict in p0 sends sell tokens TO p1, making them available as incomingAlkanes
- * for the factory call. The factory routes the swap through the correct pool.
+ * IMPORTANT: Do NOT add manual edicts to the protostones string. The SDK's
+ * `alkanesExecuteWithStrings` auto-generates edicts from `inputRequirements`.
+ * Adding manual edicts causes a double-edict bug where protostone indices shift
+ * and the factory receives zero tokens (see buildSwapProtostone journal entry).
  *
  * ### Journal: 2026-01-28 — Swap token loss investigation & factory router fix
  *
@@ -114,16 +116,31 @@ export type SwapTransactionBaseData = {
 /**
  * Build protostone string for AMM swap operations
  *
- * This calls the FACTORY with opcode 13 (SwapExactTokensForTokens).
- * We use a two-protostone pattern:
- * 1. First protostone (p0): Transfer sell tokens to p1 (the factory call)
- * 2. Second protostone (p1): Call factory with swap opcode 13
+ * Returns ONLY the factory cellpack protostone (no manual edict).
+ * The edict that delivers sell tokens to this cellpack is auto-generated
+ * by the SDK from the `inputRequirements` parameter passed to
+ * `alkanesExecuteWithStrings`. The SDK creates p0 (edict → p1) and
+ * this cellpack becomes p1.
+ *
+ * ### Journal: 2026-02-01 — Double-edict bug fix
+ *
+ * PROBLEM: frBTC→DIESEL swaps broadcast but frBTC ends up at vout 0 instead
+ * of being consumed by the factory. Tx be4466de... confirmed this.
+ *
+ * ROOT CAUSE: `alkanesExecuteWithStrings` auto-generates an edict protostone
+ * (p0) from `inputRequirements` that transfers alkane tokens to p1. Our code
+ * was ALSO providing a manual edict in the protostones string, creating:
+ *   p0: SDK auto-edict [32:0:amount:p1] → sends frBTC to p1
+ *   p1: Our manual edict [32:0:amount:p1] → NOT the factory!
+ *   p2: Our factory cellpack → receives nothing
+ * The factory at p2 got zero incomingAlkanes and the swap silently failed.
+ *
+ * FIX: Remove the manual edict. Let inputRequirements handle it:
+ *   p0: SDK auto-edict [32:0:amount:p1] → sends frBTC to p1
+ *   p1: Factory cellpack → receives frBTC as incomingAlkanes ✓
  *
  * Factory opcode 13 format:
  *   [factory_block,factory_tx,13,path_len,sell_block,sell_tx,buy_block,buy_tx,amount_in,amount_out_min,deadline]
- *
- * The edict in p0 sends sell tokens TO p1, making them available as incomingAlkanes
- * for the factory call. The factory routes the swap through the correct pool.
  */
 function buildSwapProtostone(params: {
   factoryId: string; // e.g., "4:65498"
@@ -150,13 +167,9 @@ function buildSwapProtostone(params: {
   const [buyBlock, buyTx] = buyTokenId.split(':');
   const [factoryBlock, factoryTx] = factoryId.split(':');
 
-  // First protostone: Transfer sell tokens to p1 (the factory call)
-  // Edict format: [block:tx:amount:target]
-  const edict = `[${sellBlock}:${sellTx}:${sellAmount}:p1]`;
-  const p0 = `${edict}:${pointer}:${refund}`;
-
-  // Second protostone: Call factory with SwapExactTokensForTokens (opcode 13)
-  // Format: [factory_block,factory_tx,13,path_len,sell_block,sell_tx,buy_block,buy_tx,amount_in,amount_out_min,deadline]
+  // Single cellpack protostone: Call factory with SwapExactTokensForTokens (opcode 13)
+  // The SDK auto-generates p0 (edict) from inputRequirements, making this p1.
+  // Sell tokens arrive as incomingAlkanes via the auto-generated edict.
   const cellpack = [
     factoryBlock,
     factoryTx,
@@ -170,10 +183,8 @@ function buildSwapProtostone(params: {
     minOutput,
     deadline,
   ].join(',');
-  const p1 = `[${cellpack}]:${pointer}:${refund}`;
 
-  // Combine both protostones
-  return `${p0},${p1}`;
+  return `[${cellpack}]:${pointer}:${refund}`;
 }
 
 /**
@@ -288,16 +299,17 @@ export function useSwapMutation() {
       console.log('[useSwapMutation]   maxSlippage:', swapData.maxSlippage);
       console.log('[useSwapMutation]   minAmountOut:', minAmountOut);
 
-      // Get deadline block height
-      const deadlineBlocks = swapData.deadlineBlocks || 3;
+      // Get deadline block height (regtest uses large offset so deadline never expires)
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const deadlineBlocks = isRegtest ? 1000 : (swapData.deadlineBlocks || 3);
       console.log('[useSwapMutation] Fetching deadline block height...');
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[useSwapMutation] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       console.log('[useSwapMutation] Factory ID:', ALKANE_FACTORY_ID);
       console.log('[useSwapMutation] Using factory opcode 13 (SwapExactTokensForTokens):');
-      console.log('[useSwapMutation]   p0: Edict to transfer sell tokens to p1');
-      console.log('[useSwapMutation]   p1: Call factory with opcode 13');
+      console.log('[useSwapMutation]   p0: SDK auto-edict (from inputRequirements) → sends sell tokens to p1');
+      console.log('[useSwapMutation]   p1: Factory cellpack (our protostone)');
 
       // Build protostone for the swap using factory-routed two-protostone pattern
       const protostoneParams = {
@@ -372,11 +384,14 @@ export function useSwapMutation() {
         // - changeAddress: segwit address for BTC change
         // - alkanesChangeAddress: taproot address for alkane change
         // - toAddresses: taproot address for outputs
+        // autoConfirm must be false — no wallet mnemonic is loaded into the WASM
+        // provider (app uses external wallet signing). With autoConfirm: true the SDK
+        // attempts to sign internally and throws when no wallet is present.
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: swapData.feeRate,
-          autoConfirm: true,
+          autoConfirm: false,
           fromAddresses,
           toAddresses: [taprootAddress], // Swapped tokens go to taproot
           changeAddress: segwitAddress || taprootAddress, // BTC change to segwit

@@ -223,6 +223,194 @@ async function fetchPoolsFromAlkanode(
 }
 
 // ============================================================================
+// Espo ammdata.get_pools (primary for mainnet)
+// ============================================================================
+
+const ESPO_RPC_URL = process.env.NEXT_PUBLIC_ESPO_RPC_URL || 'https://api.alkanode.com/rpc';
+
+async function fetchPoolsFromEspo(
+  network: string,
+  btcPrice: number | undefined,
+  busdTokenId: string,
+): Promise<PoolsListItem[]> {
+  const response = await fetch(ESPO_RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'ammdata.get_pools',
+      params: {},
+      id: 1,
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Espo HTTP error: ${response.status}`);
+  const json = await response.json();
+  const result = json.result;
+  if (!result?.ok || !result.pools) throw new Error(result?.error || 'espo returned no pools');
+
+  const items: PoolsListItem[] = [];
+  for (const [poolId, pool] of Object.entries(result.pools) as [string, any][]) {
+    const baseId = pool.base;
+    const quoteId = pool.quote;
+    if (!baseId || !quoteId) continue;
+
+    const token0Symbol = getTokenSymbol(baseId);
+    const token1Symbol = getTokenSymbol(quoteId);
+
+    const tvlCalc = calculateTvlFromReserves(baseId, quoteId, pool.base_reserve || '0', pool.quote_reserve || '0', btcPrice, busdTokenId);
+
+    items.push({
+      id: poolId,
+      pairLabel: `${token0Symbol} / ${token1Symbol} LP`,
+      token0: { id: baseId, symbol: token0Symbol, name: token0Symbol, iconUrl: getTokenIconUrl(baseId, network) },
+      token1: { id: quoteId, symbol: token1Symbol, name: token1Symbol, iconUrl: getTokenIconUrl(quoteId, network) },
+      tvlUsd: tvlCalc.tvlUsd,
+      token0TvlUsd: tvlCalc.token0TvlUsd,
+      token1TvlUsd: tvlCalc.token1TvlUsd,
+      vol24hUsd: 0,
+      vol7dUsd: 0,
+      vol30dUsd: 0,
+      apr: 0,
+    });
+  }
+
+  return items;
+}
+
+// ============================================================================
+// Direct RPC simulation fallback (regtest — factory opcode 3 + pool opcode 999)
+// ============================================================================
+
+function readU128LE(hex: string, byteOffset: number): bigint {
+  const start = byteOffset * 2;
+  const bytes = hex.slice(start, start + 32);
+  if (bytes.length < 32) return 0n;
+  let val = 0n;
+  for (let i = 0; i < 16; i++) {
+    const byte = parseInt(bytes.slice(i * 2, i * 2 + 2), 16);
+    val += BigInt(byte) << BigInt(i * 8);
+  }
+  return val;
+}
+
+async function fetchPoolsViaRpcSimulation(
+  factoryId: string,
+  network: string,
+  btcPrice: number | undefined,
+  busdTokenId: string,
+): Promise<PoolsListItem[]> {
+  const rpcUrl = typeof window !== 'undefined' ? '/api/rpc' : (
+    process.env.REGTEST_RPC_URL || 'https://regtest.subfrost.io/v4/subfrost'
+  );
+
+  // Step 1: Get all pool IDs from factory (opcode 3)
+  const resp = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'alkanes_simulate',
+      params: [{
+        target: factoryId,
+        inputs: ['3'],
+        alkanes: [],
+        transaction: '0x',
+        block: '0x',
+        height: '999999',
+        txindex: 0,
+        vout: 0,
+      }],
+      id: 1,
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`RPC error: ${resp.status}`);
+  const json = await resp.json();
+  const exec = json.result?.execution;
+  if (exec?.error || !exec?.data) throw new Error(exec?.error || 'no data');
+
+  const data = exec.data.startsWith('0x') ? exec.data.slice(2) : exec.data;
+  if (data.length < 32) return [];
+
+  const poolCount = Number(readU128LE(data, 0));
+  const poolIds: { block: string; tx: string }[] = [];
+  for (let i = 0; i < poolCount; i++) {
+    poolIds.push({
+      block: readU128LE(data, 16 + i * 32).toString(),
+      tx: readU128LE(data, 16 + i * 32 + 16).toString(),
+    });
+  }
+
+  if (poolIds.length === 0) return [];
+
+  // Step 2: Query pool details (opcode 999) individually
+  // NOTE: Individual requests instead of batch because /api/rpc proxy routes
+  // batch arrays to /v4/jsonrpc which may not support alkanes_simulate.
+  const items: PoolsListItem[] = [];
+  for (let i = 0; i < poolIds.length; i++) {
+    const pool = poolIds[i];
+
+    try {
+      const detailResp = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'alkanes_simulate',
+          params: [{
+            target: `${pool.block}:${pool.tx}`,
+            inputs: ['999'],
+            alkanes: [],
+            transaction: '0x',
+            block: '0x',
+            height: '999999',
+            txindex: 0,
+            vout: 0,
+          }],
+          id: 1,
+        }),
+      });
+
+      if (!detailResp.ok) continue;
+      const detailJson = await detailResp.json();
+      const result = detailJson.result?.execution;
+      if (!result?.data || result.error) continue;
+
+      const d = result.data.startsWith('0x') ? result.data.slice(2) : result.data;
+      if (d.length < 192) continue;
+
+      const token0Id = `${readU128LE(d, 0)}:${readU128LE(d, 16)}`;
+      const token1Id = `${readU128LE(d, 32)}:${readU128LE(d, 48)}`;
+      const reserve0 = readU128LE(d, 64).toString();
+      const reserve1 = readU128LE(d, 80).toString();
+
+      const token0Symbol = getTokenSymbol(token0Id);
+      const token1Symbol = getTokenSymbol(token1Id);
+      const tvlCalc = calculateTvlFromReserves(token0Id, token1Id, reserve0, reserve1, btcPrice, busdTokenId);
+
+      items.push({
+        id: `${pool.block}:${pool.tx}`,
+        pairLabel: `${token0Symbol} / ${token1Symbol} LP`,
+        token0: { id: token0Id, symbol: token0Symbol, name: token0Symbol, iconUrl: getTokenIconUrl(token0Id, network) },
+        token1: { id: token1Id, symbol: token1Symbol, name: token1Symbol, iconUrl: getTokenIconUrl(token1Id, network) },
+        tvlUsd: tvlCalc.tvlUsd,
+        token0TvlUsd: tvlCalc.token0TvlUsd,
+        token1TvlUsd: tvlCalc.token1TvlUsd,
+        vol24hUsd: 0,
+        vol7dUsd: 0,
+        vol30dUsd: 0,
+        apr: 0,
+      });
+    } catch (e) {
+      console.warn(`[fetchPoolsViaRpc] Failed to fetch details for pool ${pool.block}:${pool.tx}:`, e);
+    }
+  }
+
+  return items;
+}
+
+// ============================================================================
 // SDK fallback fetch
 // ============================================================================
 
@@ -355,19 +543,41 @@ export function usePools(params: UsePoolsParams = {}) {
       console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID);
 
       let items: PoolsListItem[] = [];
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
 
-      // Primary: OYL Alkanode API (returns all pools with TVL/volume/APR)
-      try {
-        console.log('[usePools] Trying OYL Alkanode...');
-        items = await fetchPoolsFromAlkanode(OYL_ALKANODE_URL, ALKANE_FACTORY_ID, network);
-        console.log('[usePools] OYL Alkanode returned', items.length, 'pools');
-      } catch (e) {
-        console.warn('[usePools] OYL Alkanode failed:', e);
+      // Priority 1: Espo ammdata.get_pools (mainnet only — Espo returns mainnet data,
+      // so using it on regtest would give wrong pool reserves for matching token IDs like 2:0/32:0)
+      if (!isRegtest) {
+        try {
+          items = await fetchPoolsFromEspo(network, btcPrice, BUSD_ALKANE_ID);
+          console.log('[usePools] Espo returned', items.length, 'pools');
+        } catch (e) {
+          console.warn('[usePools] Espo failed:', e);
+        }
       }
 
-      // Fallback: ts-sdk
+      // Priority 2: OYL Alkanode API (returns all pools with TVL/volume/APR)
+      if (items.length === 0) {
+        try {
+          items = await fetchPoolsFromAlkanode(OYL_ALKANODE_URL, ALKANE_FACTORY_ID, network);
+          console.log('[usePools] OYL Alkanode returned', items.length, 'pools');
+        } catch (e) {
+          console.warn('[usePools] OYL Alkanode failed:', e);
+        }
+      }
+
+      // Priority 3: Direct RPC simulation (regtest/universal fallback)
+      if (items.length === 0) {
+        try {
+          items = await fetchPoolsViaRpcSimulation(ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
+          console.log('[usePools] RPC simulation returned', items.length, 'pools');
+        } catch (e) {
+          console.warn('[usePools] RPC simulation failed:', e);
+        }
+      }
+
+      // Priority 4: ts-sdk
       if (items.length === 0 && provider) {
-        console.log('[usePools] Falling back to ts-sdk...');
         items = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
         console.log('[usePools] SDK returned', items.length, 'pools');
       }
@@ -383,9 +593,11 @@ export function usePools(params: UsePoolsParams = {}) {
         console.log(`[usePools] Filtered out ${beforeCount - items.length} blacklisted pool(s)`);
       }
 
-      // Remove dust/dead pools with negligible TVL
-      const MIN_TVL_USD = 5;
-      items = items.filter(p => (p.tvlUsd ?? 0) >= MIN_TVL_USD);
+      // Remove dust/dead pools with negligible TVL (skip on regtest where pricing is unavailable)
+      if (!network?.includes('regtest')) {
+        const MIN_TVL_USD = 5;
+        items = items.filter(p => (p.tvlUsd ?? 0) >= MIN_TVL_USD);
+      }
 
       return applyFiltersAndPagination(items, params);
     },
