@@ -357,7 +357,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                     {volumePeriod === '30d' && formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice, true)}
                   </td>
                   <td className="px-2 py-3 text-center">
-                    <span className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
+                    <span className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
                       {formatPercent(pool.apr)}
                     </span>
                   </td>
@@ -455,5 +455,4 @@ function getToken1Percentage(pool: PoolSummary): number {
   if (total === 0) return 50;
   return (pool.token1TvlUsd / total) * 100;
 }
-
 

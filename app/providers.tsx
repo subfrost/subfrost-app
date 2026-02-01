@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ProgressProvider } from '@bprogress/next/app';
 
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
@@ -101,22 +102,29 @@ export default function Providers({ children }: { children: ReactNode }) {
   if (!mounted) return null;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GlobalStore>
-        <ModalStore>
-          <ThemeProvider>
-            <LanguageProvider>
-              <AlkanesSDKProvider network={network}>
-                <WalletProvider network={network}>
-                  <ExchangeProvider>
-                    {children}
-                  </ExchangeProvider>
-                </WalletProvider>
-              </AlkanesSDKProvider>
-            </LanguageProvider>
-          </ThemeProvider>
-        </ModalStore>
-      </GlobalStore>
-    </QueryClientProvider>
+    <ProgressProvider
+      height="1px"
+      color="#00E5FF"
+      options={{ showSpinner: false }}
+      shallowRouting
+    >
+      <QueryClientProvider client={queryClient}>
+        <GlobalStore>
+          <ModalStore>
+            <ThemeProvider>
+              <LanguageProvider>
+                <AlkanesSDKProvider network={network}>
+                  <WalletProvider network={network}>
+                    <ExchangeProvider>
+                      {children}
+                    </ExchangeProvider>
+                  </WalletProvider>
+                </AlkanesSDKProvider>
+              </LanguageProvider>
+            </ThemeProvider>
+          </ModalStore>
+        </GlobalStore>
+      </QueryClientProvider>
+    </ProgressProvider>
   );
 }
