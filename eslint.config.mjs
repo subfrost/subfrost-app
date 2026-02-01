@@ -18,14 +18,13 @@ const eslintConfig = defineConfig([
     "scripts/**",
   ]),
   {
+    extends: [...nextVitals, ...nextTs],
     rules: {
       // Disable rules causing build failures - can be re-enabled incrementally
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": "warn",
       "react/no-unescaped-entities": "warn",
       "react-hooks/exhaustive-deps": "warn",
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/immutability": "warn",
       "@next/next/no-img-element": "warn",
       "prefer-const": "warn",
     },

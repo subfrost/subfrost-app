@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PoolSummary } from "../types";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
@@ -26,19 +26,15 @@ export default function PoolDetailsCard({ pool }: Props) {
   const [isTimeframeLoading, setIsTimeframeLoading] = useState(false);
 
   const {
-    candles,
-    hasMore,
+    data: candles = [],
     isLoading,
     isFetching,
-    isFetchingNextPage,
-    fetchNextPage,
   } = usePoolEspoCandles({
     poolId: pool?.id,
     timeframe,
     enabled: !!pool,
   });
 
-  const canLoadMore = hasMore && !isFetchingNextPage && !isTimeframeLoading;
   const isInitialLoading = isLoading && candles.length === 0;
 
   useEffect(() => {
@@ -46,11 +42,6 @@ export default function PoolDetailsCard({ pool }: Props) {
       setIsTimeframeLoading(false);
     }
   }, [isTimeframeLoading, isFetching]);
-
-  const handleLoadMore = useCallback(() => {
-    if (!canLoadMore) return;
-    fetchNextPage();
-  }, [canLoadMore, fetchNextPage]);
 
   const pairLabel = pool
     ? `${pool.token0.symbol}/${pool.token1.symbol}`
@@ -93,8 +84,8 @@ export default function PoolDetailsCard({ pool }: Props) {
             loading={isInitialLoading}
             overlayLoading={isTimeframeLoading}
             pairLabel={pairLabel}
-            onLoadMore={handleLoadMore}
-            canLoadMore={canLoadMore}
+            onLoadMore={undefined}
+            canLoadMore={false}
             resetKey={`${pool?.id ?? 'no-pool'}-${timeframe}`}
           />
 
