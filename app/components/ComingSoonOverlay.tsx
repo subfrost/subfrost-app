@@ -1,11 +1,26 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 
 export default function ComingSoonOverlay({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
+  const STORAGE_KEY = 'subfrost_coming_soon_ack';
   const [dismissed, setDismissed] = useState(false);
+
+  // Load persisted dismissal once on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const seen = localStorage.getItem(STORAGE_KEY) === 'true';
+    if (seen) setDismissed(true);
+  }, []);
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, 'true');
+    }
+  };
 
   if (dismissed) {
     return <>{children}</>;
@@ -37,7 +52,7 @@ export default function ComingSoonOverlay({ children }: { children: ReactNode })
             <div className="mt-4">
               <button
                 type="button"
-                onClick={() => setDismissed(true)}
+                onClick={handleDismiss}
                 className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 text-sm font-bold uppercase tracking-wide text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
               >
                 {t('demo.understand')}

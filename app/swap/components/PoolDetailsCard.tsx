@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { PoolSummary } from "../types";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
@@ -23,12 +23,34 @@ export default function PoolDetailsCard({ pool }: Props) {
   const { network } = useWallet();
   const { t } = useTranslation();
   const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
+  const [isTimeframeLoading, setIsTimeframeLoading] = useState(false);
 
-  const { data: candles, isLoading, isFetching } = usePoolEspoCandles({
+  const {
+    candles,
+    hasMore,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = usePoolEspoCandles({
     poolId: pool?.id,
     timeframe,
     enabled: !!pool,
   });
+
+  const canLoadMore = hasMore && !isFetchingNextPage && !isTimeframeLoading;
+  const isInitialLoading = isLoading && candles.length === 0;
+
+  useEffect(() => {
+    if (isTimeframeLoading && !isFetching) {
+      setIsTimeframeLoading(false);
+    }
+  }, [isTimeframeLoading, isFetching]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!canLoadMore) return;
+    fetchNextPage();
+  }, [canLoadMore, fetchNextPage]);
 
   const pairLabel = pool
     ? `${pool.token0.symbol}/${pool.token1.symbol}`
@@ -47,7 +69,11 @@ export default function PoolDetailsCard({ pool }: Props) {
               {TIMEFRAME_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => setTimeframe(opt.value)}
+                  onClick={() => {
+                    if (timeframe === opt.value) return;
+                    setIsTimeframeLoading(true);
+                    setTimeframe(opt.value);
+                  }}
                   className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
                     timeframe === opt.value
                       ? 'bg-[color:var(--sf-primary)] text-white'
@@ -62,10 +88,14 @@ export default function PoolDetailsCard({ pool }: Props) {
 
           {/* Candle Chart */}
           <CandleChart
-            data={candles ?? []}
+            data={candles}
             height={300}
-            loading={isLoading || (isFetching && !candles?.length)}
+            loading={isInitialLoading}
+            overlayLoading={isTimeframeLoading}
             pairLabel={pairLabel}
+            onLoadMore={handleLoadMore}
+            canLoadMore={canLoadMore}
+            resetKey={`${pool?.id ?? 'no-pool'}-${timeframe}`}
           />
 
           {/* Pool details - hidden on mobile */}
@@ -77,7 +107,7 @@ export default function PoolDetailsCard({ pool }: Props) {
                 <TokenIcon key={pool.token1.id} symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="lg" network={network} />
               </div>
               <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
-              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
+              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
                 {formatPercent(pool.apr)}
               </div>
             </div>

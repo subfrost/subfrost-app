@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@bitcoinerlab/secp256k1": "^1.2.0",
+    "@bprogress/next": "^3.2.12",
     "@jest/globals": "^30.2.0",
     "@noble/hashes": "^2.0.1",
     "@omnisat/lasereyes-core": "^0.0.82",

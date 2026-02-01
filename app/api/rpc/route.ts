@@ -26,6 +26,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // RPC endpoints by network
+// Note: batch JSON-RPC requests are more reliably handled by the explicit
+// /jsonrpc path on subfrost. ESPO calls bypass these and use ESPO_RPC_URL.
 const RPC_ENDPOINTS: Record<string, string> = {
   mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/subfrost',
@@ -36,11 +38,41 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
 };
 
+const BATCH_RPC_ENDPOINTS: Record<string, string> = {
+  mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
+  testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
+  signet: 'https://signet.subfrost.io/v4/jsonrpc',
+  regtest: 'https://regtest.subfrost.io/v4/jsonrpc',
+  'regtest-local': 'http://localhost:18888',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/jsonrpc',
+  oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
+};
+
+const ESPO_RPC_URL = (process.env.NEXT_PUBLIC_ESPO_RPC_URL || process.env.ESPO_RPC_URL || 'https://api.alkanode.com/rpc').replace(/\/$/, '');
+
+function isEspoMethod(method?: string): boolean {
+  if (!method) return false;
+  return method.startsWith('essentials.');
+}
+
+function pickEndpoint(body: any, network: string) {
+  const isBatch = Array.isArray(body);
+  const firstMethod = isBatch ? body[0]?.method : body?.method;
+
+  // Essentials calls must go to ESPO
+  if (isEspoMethod(firstMethod)) return ESPO_RPC_URL;
+
+  // Otherwise choose subfrost endpoints
+  const single = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
+  const batch = BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
+  return isBatch ? batch : single;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const network = process.env.NEXT_PUBLIC_NETWORK || 'regtest';
-    const rpcUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
+    const rpcUrl = pickEndpoint(body, network);
 
     const response = await fetch(rpcUrl, {
       method: 'POST',

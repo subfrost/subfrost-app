@@ -116,6 +116,7 @@ export default function PriceChartCard({ pool }: Props) {
         height={300}
         loading={false}
         pairLabel="BTC/USDT"
+        resetKey={timeframe}
       />
 
       {/* Token Pair Icons and Label */}
