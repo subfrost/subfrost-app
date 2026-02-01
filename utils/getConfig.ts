@@ -110,24 +110,160 @@ export interface OylAlkaneBalance {
   idClubMarketplace?: boolean;
 }
 
+// Espo RPC URL — essentials.get_address_balances lives here.
+// oyl.alkanode.com/get-alkanes-by-address also runs on espo (oylapi module).
+const ESPO_RPC_URL = process.env.NEXT_PUBLIC_ESPO_RPC_URL || 'https://api.alkanode.com/rpc';
+
 /**
- * Fetch alkane token balances for an address via OYL Alkanode REST API.
- * Uses POST /get-alkanes-by-address endpoint.
+ * Fetch alkane token balances for an address.
+ *
+ * Strategy (ordered by priority):
+ *   1. Espo essentials.get_address_balances (api.alkanode.com/rpc) — fast, clean format.
+ *      Returns { balances: { "2:0": "amount", ... } }. Currently mainnet-only;
+ *      rejects bcrt1 addresses with { ok: false, error: "invalid_address_format" }.
+ *      When regtest espo is available, this will work for bcrt1 too.
+ *   2. OYL Alkanode REST (oyl.alkanode.com/get-alkanes-by-address) — richer metadata
+ *      (name, symbol, price). Also runs on espo (oylapi module). Mainnet-only.
+ *   3. alkanes_protorunesbyaddress RPC — direct indexer query via /api/rpc proxy.
+ *      Route chain: Browser → /api/rpc → regtest.subfrost.io → jsonrpc → metashrew
+ *      Works for regtest (bcrt1). Universal fallback.
  */
 export async function fetchAlkaneBalances(
   address: string,
   alkanodeUrl: string = OYL_ALKANODE_URL,
 ): Promise<OylAlkaneBalance[]> {
-  const response = await fetch(`${alkanodeUrl}/get-alkanes-by-address`, {
+  // --- Priority 1: Espo essentials.get_address_balances ---
+  try {
+    const espoResult = await fetchAlkaneBalancesViaEspo(address);
+    if (espoResult.length > 0) return espoResult;
+  } catch {
+    // Fall through to OYL Alkanode
+  }
+
+  // --- Priority 2: OYL Alkanode REST (oylapi on espo) ---
+  try {
+    const response = await fetch(`${alkanodeUrl}/get-alkanes-by-address`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address }),
+    });
+    if (response.ok) {
+      const json = await response.json();
+      const data = json.data ?? [];
+      if (data.length > 0) return data;
+    }
+  } catch {
+    // Fall through to RPC
+  }
+
+  // --- Priority 3: alkanes_protorunesbyaddress RPC (regtest/universal fallback) ---
+  return fetchAlkaneBalancesViaRpc(address);
+}
+
+/**
+ * Fetch alkane balances via espo essentials.get_address_balances.
+ * Returns aggregated balances per alkane ID (no per-outpoint detail).
+ *
+ * Response format: { ok: true, address, balances: { "2:0": "30950001348973", ... } }
+ * Error format:    { ok: false, error: "invalid_address_format" }
+ */
+async function fetchAlkaneBalancesViaEspo(address: string): Promise<OylAlkaneBalance[]> {
+  const response = await fetch(ESPO_RPC_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ address }),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'essentials.get_address_balances',
+      params: { address },
+      id: 1,
+    }),
   });
+
   if (!response.ok) {
-    throw new Error(`OYL Alkanode API error: ${response.status} ${response.statusText}`);
+    throw new Error(`Espo HTTP error: ${response.status}`);
   }
+
   const json = await response.json();
-  return json.data ?? [];
+  const result = json.result;
+
+  // Espo returns { ok: false, error: "..." } for invalid/unsupported addresses
+  if (!result?.ok || !result.balances) {
+    throw new Error(result?.error || 'espo returned no balances');
+  }
+
+  const entries: OylAlkaneBalance[] = [];
+  for (const [alkaneId, amount] of Object.entries(result.balances)) {
+    const [block, tx] = alkaneId.split(':');
+    entries.push({
+      name: '',
+      symbol: '',
+      balance: String(amount),
+      alkaneId: { block, tx },
+    });
+  }
+
+  return entries;
+}
+
+/**
+ * Fetch alkane balances via alkanes_protorunesbyaddress RPC.
+ * Aggregates balances across all outpoints returned by the indexer.
+ *
+ * Route chain (browser):
+ *   Browser → /api/rpc Next.js proxy → regtest.subfrost.io/v4/subfrost
+ *     → jsonrpc pod (18888) → metashrew-0 indexer (8080)
+ *
+ * Route chain (server-side):
+ *   Next.js server → regtest.subfrost.io/v4/subfrost directly
+ */
+async function fetchAlkaneBalancesViaRpc(address: string): Promise<OylAlkaneBalance[]> {
+  const rpcUrl = typeof window !== 'undefined' ? '/api/rpc' : (
+    process.env.REGTEST_RPC_URL || 'https://regtest.subfrost.io/v4/subfrost'
+  );
+
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'alkanes_protorunesbyaddress',
+      params: [{ address }],
+      id: 1,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`RPC error: ${response.status} ${response.statusText}`);
+  }
+
+  const json = await response.json();
+  const result = json.result;
+  if (!result?.outpoints) return [];
+
+  // Aggregate balances across all outpoints
+  const balanceMap = new Map<string, bigint>();
+  for (const outpoint of result.outpoints) {
+    const balances = outpoint?.balance_sheet?.cached?.balances ?? [];
+    for (const bal of balances) {
+      const key = `${bal.block}:${bal.tx}`;
+      const prev = balanceMap.get(key) ?? 0n;
+      balanceMap.set(key, prev + BigInt(bal.amount));
+    }
+  }
+
+  // Convert to OylAlkaneBalance format
+  const entries: OylAlkaneBalance[] = [];
+  for (const [alkaneId, amount] of balanceMap) {
+    const [block, tx] = alkaneId.split(':');
+    entries.push({
+      name: '',
+      symbol: '',
+      balance: amount.toString(),
+      alkaneId: { block, tx },
+    });
+  }
+
+  return entries;
 }
 
 
