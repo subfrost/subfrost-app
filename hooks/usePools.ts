@@ -557,6 +557,7 @@ export function usePools(params: UsePoolsParams = {}) {
       console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID);
 
       let items: PoolsListItem[] = [];
+      let sourceIsAlkanode = false;
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
 
       // Priority 1: Espo ammdata.get_pools (mainnet only — Espo returns mainnet data,
@@ -574,9 +575,46 @@ export function usePools(params: UsePoolsParams = {}) {
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromAlkanode(OYL_ALKANODE_URL, ALKANE_FACTORY_ID, network);
+          sourceIsAlkanode = true;
           console.log('[usePools] OYL Alkanode returned', items.length, 'pools');
         } catch (e) {
           console.warn('[usePools] OYL Alkanode failed:', e);
+        }
+      }
+
+      // Enrich non-Alkanode results with OYL Alkanode token names when available.
+      // Espo and RPC fallbacks only use KNOWN_TOKENS for symbols — OYL Alkanode has
+      // authoritative display names (same source the wallet dashboard uses).
+      if (items.length > 0 && !sourceIsAlkanode) {
+        try {
+          const alkanodeItems = await fetchPoolsFromAlkanode(OYL_ALKANODE_URL, ALKANE_FACTORY_ID, network);
+          if (alkanodeItems.length > 0) {
+            const tokenMeta = new Map<string, { symbol: string; name?: string; iconUrl?: string }>();
+            for (const ap of alkanodeItems) {
+              tokenMeta.set(ap.token0.id, ap.token0);
+              tokenMeta.set(ap.token1.id, ap.token1);
+            }
+            for (const item of items) {
+              const meta0 = tokenMeta.get(item.token0.id);
+              const meta1 = tokenMeta.get(item.token1.id);
+              if (meta0) {
+                item.token0.symbol = meta0.symbol;
+                item.token0.name = meta0.name;
+                if (meta0.iconUrl) item.token0.iconUrl = meta0.iconUrl;
+              }
+              if (meta1) {
+                item.token1.symbol = meta1.symbol;
+                item.token1.name = meta1.name;
+                if (meta1.iconUrl) item.token1.iconUrl = meta1.iconUrl;
+              }
+              if (meta0 || meta1) {
+                item.pairLabel = `${item.token0.symbol} / ${item.token1.symbol} LP`;
+              }
+            }
+            console.log('[usePools] Enriched token names from OYL Alkanode');
+          }
+        } catch (e) {
+          console.warn('[usePools] OYL Alkanode enrichment failed (non-fatal):', e);
         }
       }
 

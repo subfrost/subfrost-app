@@ -47,6 +47,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [showFeeWarning, setShowFeeWarning] = useState(false);
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Load frozen UTXOs from localStorage
   const getFrozenUtxos = (): Set<string> => {
@@ -345,7 +346,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             type="text"
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
-            placeholder="bc1q.. or bc1p.."
+            placeholder="bc1q..."
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
@@ -367,7 +368,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           </div>
         </div>
 
-        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
+        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
             {t('send.feeRate')}
           </span>
@@ -382,14 +383,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   step={1}
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
+                  onFocus={() => setFocusedField('fee')}
                   onBlur={() => {
+                    setFocusedField(null);
                     if (!customFeeRate) {
                       setCustomFeeRate(String(presets.medium));
                     }
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -441,7 +444,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             type="text"
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
-            placeholder="bc1q.. or bc1p.."
+            placeholder="bc1p..."
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
@@ -472,7 +475,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                     <div className="flex items-center gap-2.5">
                       <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
                       <div>
-                        <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol}</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol || alkane.name}</div>
                         <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
                       </div>
                     </div>
@@ -518,7 +521,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           );
         })()}
 
-        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
+        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
             {t('send.feeRate')}
           </span>
@@ -533,14 +536,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   step={1}
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
+                  onFocus={() => setFocusedField('fee')}
                   onBlur={() => {
+                    setFocusedField(null);
                     if (!customFeeRate) {
                       setCustomFeeRate(String(presets.medium));
                     }
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -856,7 +861,7 @@ function SendMinerFeeButton({ selection, setSelection, presets }: { selection: F
         className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
       >
         <span>{feeDisplayMap[selection] || selection}</span>
-        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (

@@ -209,7 +209,7 @@ export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decima
   '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
   '32:0': { symbol: 'frBTC', name: 'frBTC', decimals: 8 },
   '2:56801': { symbol: 'bUSD', name: 'Bitcoin USD', decimals: 8 },
-  '2:16': { symbol: 'METHANE', name: 'METHANE', decimals: 8 },
+  '2:16': { symbol: 'CH4', name: 'METHANE', decimals: 8 },
   '2:68441': { symbol: 'DIESEL/bUSD LP', name: 'DIESEL/bUSD LP Token', decimals: 8 },
   '2:77087': { symbol: 'DIESEL/frBTC LP', name: 'DIESEL/frBTC LP Token', decimals: 8 },
   '2:68433': { symbol: 'METHANE/bUSD LP', name: 'METHANE/bUSD LP Token', decimals: 8 },

@@ -213,8 +213,8 @@ export default function SwapInputs({
     const isDark = theme === "dark";
     if (balanceUsage === 0) return isDark ? "bg-gray-700" : "bg-gray-200";
     if (balanceUsage < 50) return isDark ? "bg-green-700" : "bg-green-500";
-    if (balanceUsage < 80) return isDark ? "bg-yellow-700" : "bg-yellow-500";
-    if (balanceUsage < 100) return isDark ? "bg-orange-700" : "bg-orange-500";
+    if (balanceUsage < 75) return isDark ? "bg-yellow-700" : "bg-yellow-500";
+    if (balanceUsage < 95) return isDark ? "bg-orange-700" : "bg-orange-500";
     return isDark ? "bg-red-700" : "bg-red-500";
   };
 
@@ -316,35 +316,31 @@ export default function SwapInputs({
                 </div>
               </div>
 
-              {/* Balance + Percentage Buttons stacked (hidden for bridge tokens) */}
+              {/* Balance + Percentage Buttons (hidden for bridge tokens) */}
               {!isFromBridgeToken && (
                 <div className="flex flex-col items-end gap-1">
-                  <div className="flex items-center gap-2">
-                    {balanceUsage > 0 && (
-                      <div
-                        className={`w-16 h-1 ${
-                          theme === "dark" ? "bg-gray-700" : "bg-gray-200"
-                        } rounded-full overflow-hidden`}
-                      >
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                    {resolvedFromBalanceText}
+                  </div>
+                  <div
+                    className="flex items-center justify-between w-full"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div
+                      className={`max-w-[45%] flex-1 mr-3 h-1 rounded-full overflow-hidden ${
+                        balanceUsage > 0
+                          ? theme === "dark" ? "bg-gray-700" : "bg-gray-200"
+                          : ""
+                      }`}
+                    >
+                      {balanceUsage > 0 && (
                         <div
                           className={`h-full ${getBalanceColor()} transition-all duration-[400ms]`}
                           style={{ width: `${balanceUsage}%` }}
                         />
-                      </div>
-                    )}
-                    <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                      {resolvedFromBalanceText}
-                      {balanceUsage > 0 && (
-                        <span className="ml-1.5">
-                          ({balanceUsage.toFixed(1)}%)
-                        </span>
                       )}
                     </div>
-                  </div>
-                  <div
-                    className="flex items-center gap-1.5"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                    <div className="flex items-center gap-1.5">
                     {onPercentFrom && (
                       <>
                         <button
@@ -397,11 +393,9 @@ export default function SwapInputs({
                     <button
                       type="button"
                       onClick={onMaxFrom}
-                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] active:bg-[color:var(--sf-primary)]/20 outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
                         onMaxFrom
-                          ? activePercent === 1
-                            ? "bg-[color:var(--sf-primary)]/20"
-                            : `${
+                          ? `${
                                 theme === "dark"
                                   ? "bg-white/[0.03]"
                                   : "bg-[color:var(--sf-surface)]"
@@ -412,6 +406,7 @@ export default function SwapInputs({
                     >
                       {t("swap.max")}
                     </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -423,7 +418,7 @@ export default function SwapInputs({
             <button
               type="button"
               onClick={onInvert}
-              className="pointer-events-auto group flex h-11 w-11 items-center justify-center rounded-lg border-4 border-[var(--sf-glass-opaque)] bg-[color:var(--sf-panel-opaque)] text-[color: #fff]  transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:brightness-110 hover:scale-105 active:scale-95 outline-none"
+              className="pointer-events-auto group flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--sf-primary)] text-white  transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-105 active:scale-95 outline-none"
               aria-label="Invert swap direction"
             >
               <svg

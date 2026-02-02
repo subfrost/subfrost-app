@@ -1359,9 +1359,9 @@ export default function SwapShell() {
         )}
       </Suspense>
 
-      <div className="flex flex-col md:grid md:grid-cols-2 gap-6 flex-1 min-h-0">
+      <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
         {/* Left Column: Swap/LP Module */}
-        <div className="flex flex-col min-h-0 md:min-h-0">
+        <div className="flex flex-col min-h-0">
           {/* Swap/Liquidity Tabs */}
           <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
@@ -1482,7 +1482,7 @@ export default function SwapShell() {
           <button
             type="button"
             onClick={() => setShowMobileChart(!showMobileChart)}
-            className="md:hidden mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/80 hover:text-[color:var(--sf-text)]"
+            className="lg:hidden mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/80 hover:text-[color:var(--sf-text)]"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 3v18h18" />
@@ -1493,7 +1493,7 @@ export default function SwapShell() {
 
           {/* Mobile-only Chart - below swap form */}
           {showMobileChart && (
-            <div className="md:hidden mt-4">
+            <div className="lg:hidden mt-4">
               <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
                 <PoolDetailsCard
                   pool={selectedTab === 'lp' && poolToken0 && poolToken1
@@ -1522,7 +1522,7 @@ export default function SwapShell() {
           )}
 
           {/* My Wallet Swaps - desktop only, under swap modal */}
-          <div className="hidden md:block mt-8">
+          <div className="hidden lg:block mt-8">
             <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
               <MyWalletSwaps />
             </Suspense>
@@ -1533,7 +1533,7 @@ export default function SwapShell() {
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
           {/* Desktop-only Chart - hidden on mobile where it appears above swap form */}
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
           <PoolDetailsCard
             pool={selectedTab === 'lp' && poolToken0 && poolToken1
               ? markets.find(p => {
@@ -1568,7 +1568,7 @@ export default function SwapShell() {
       </div>
 
       {/* My Wallet Swaps - mobile only, at the bottom under market cards */}
-      <div className="md:hidden mt-6">
+      <div className="lg:hidden mt-6">
         <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
           <MyWalletSwaps />
         </Suspense>

@@ -329,7 +329,7 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
                   return (
                     <div
                       key={alkane.alkaneId}
-                      className={`rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer ${isExpanded ? 'ring-1 ring-[color:var(--sf-primary)]/30' : ''}`}
+                      className={`rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer`}
                       onClick={() => setExpandedAlkaneId(isExpanded ? null : alkane.alkaneId)}
                     >
                       <div className="flex items-center justify-between p-4">
@@ -359,7 +359,7 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
                                 return alkane.name;
                               })()}
                             </div>
-                            <div className="text-xs text-[color:var(--sf-text)]/40">{alkane.symbol} · {alkane.alkaneId}</div>
+                            <div className="text-xs text-[color:var(--sf-text)]/40">{alkane.symbol ? `${alkane.symbol} · ` : ''}{alkane.alkaneId}</div>
                           </div>
                         </div>
                         <div className="text-right">

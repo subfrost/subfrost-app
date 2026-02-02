@@ -96,6 +96,8 @@ const en: Record<string, string> = {
   'liquidity.slow': 'Slow',
   'liquidity.medium': 'Medium',
   'liquidity.fast': 'Fast',
+  'liquidity.low': 'Low',
+  'liquidity.high': 'High',
 
   // Pool Details
   'pool.priceChart': 'Price Chart',
@@ -231,9 +233,9 @@ const en: Record<string, string> = {
   'send.recipientAddress': 'Recipient Address',
   'send.amountBtc': 'Amount (BTC)',
   'send.feeRate': 'Miner Fee Rate (sats/vB)',
-  'send.slow': 'slow',
-  'send.medium': 'medium',
-  'send.fast': 'fast',
+  'send.slow': 'Slow',
+  'send.medium': 'Medium',
+  'send.fast': 'Fast',
   'send.custom': 'Custom',
   'send.autoSelectUtxos': 'Automatically select UTXOs',
   'send.selectUtxos': 'Select UTXOs to spend ({count} selected)',

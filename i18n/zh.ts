@@ -96,6 +96,8 @@ const zh: Record<string, string> = {
   'liquidity.slow': '\u6162\u901f',
   'liquidity.medium': '\u4e2d\u901f',
   'liquidity.fast': '\u5feb\u901f',
+  'liquidity.low': '\u4f4e',
+  'liquidity.high': '\u9ad8',
 
   // Pool Details
   'pool.priceChart': '\u4ef7\u683c\u56fe\u8868',

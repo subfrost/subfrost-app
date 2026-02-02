@@ -396,7 +396,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
             const amountStr = String(entry.balance || '0');
 
             const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-              symbol: entry.symbol || `${entry.alkaneId.tx}`,
+              symbol: entry.symbol || '',
               name: entry.name || `Token ${alkaneIdStr}`,
               decimals: 8,
             };

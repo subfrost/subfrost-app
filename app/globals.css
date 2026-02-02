@@ -121,7 +121,7 @@ body {
   --sf-primary-pressed: #1f3a66;
   --sf-outline: #d5def0; /* borders/focus */
   --sf-panel-opaque: #fff;
-  --sf-glass-opaque: rgba(240, 247, 255);
+  --sf-glass-opaque: #f0f7ff;
   /* Glass variables (soft white/blue tint) */
   --sf-glass-bg: rgba(240, 247, 255, 0.82);
   --sf-glass-border: rgba(255, 255, 255, 0.55);
