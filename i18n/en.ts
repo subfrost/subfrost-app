@@ -179,6 +179,7 @@ const en: Record<string, string> = {
   'walletDash.history': 'History',
   'walletDash.send': 'Send',
   'walletDash.swap': 'Swap',
+  'walletDash.withdraw': 'Withdraw',
   'walletDash.receive': 'Receive',
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',

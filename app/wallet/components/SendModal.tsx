@@ -10,6 +10,8 @@ import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
 
+import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
+
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 
 interface SendModalProps {
@@ -53,6 +55,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const selectedAlkaneRef = useRef<HTMLButtonElement>(null);
 
   const { data: poolsData } = usePools();
+  const { data: positionMeta } = usePositionMetadata(balances.alkanes);
   const poolMap = useMemo(() => {
     const map = new Map<string, any>();
     if (poolsData?.items) {
@@ -151,11 +154,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   // Scroll the pre-selected alkane into view within the list
   useEffect(() => {
     if (isOpen && selectedAlkaneId && selectedAlkaneRef.current) {
-      const container = selectedAlkaneRef.current.parentElement;
-      if (container) {
-        const offset = selectedAlkaneRef.current.offsetTop - container.offsetTop - 4;
-        container.scrollTo({ top: offset, behavior: 'smooth' });
-      }
+      selectedAlkaneRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
   }, [isOpen, selectedAlkaneId, alkaneFilter]);
 
@@ -365,10 +364,31 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     }
   };
 
-  const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string }): string => {
+  const formatDepositAmount = (amount: string, decs: number, symbol: string): string => {
+    const val = BigInt(amount);
+    const divisor = BigInt(10 ** decs);
+    const whole = val / divisor;
+    const remainder = val % divisor;
+    const wholeStr = whole.toString();
+    const remainderStr = remainder.toString().padStart(decs, '0');
+    let formatted: string;
+    if (whole >= BigInt(10000)) {
+      formatted = wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    } else {
+      const dp = wholeStr.length >= 3 ? 2 : 4;
+      formatted = `${wholeStr}.${remainderStr.slice(0, dp)}`;
+    }
+    return symbol ? `${formatted} ${symbol}` : formatted;
+  };
+
+  const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string; alkaneId?: string }): string => {
     const value = BigInt(balance);
 
     if (value === BigInt(1)) {
+      if (alkane && alkane.alkaneId && isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId]) {
+        const meta = positionMeta[alkane.alkaneId];
+        return formatDepositAmount(meta.depositAmount, meta.depositTokenDecimals, meta.depositTokenSymbol);
+      }
       if (alkane && isStakedPosition(alkane)) return '1 Position';
       if (alkane && isLpToken(alkane)) return '1 Position';
       return '1 NFT';
@@ -519,7 +539,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
               </span>
             </label>
             <div className="flex gap-4 mb-2">
-              {(['tokens', 'nfts', 'positions'] as const).map((tab) => (
+              {(['tokens', 'positions', 'nfts'] as const).map((tab) => (
                 <button
                   key={tab}
                   type="button"
@@ -535,12 +555,39 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
               ))}
             </div>
             {(() => {
-              const filtered = balances.alkanes.filter((a) => {
+              let filtered = balances.alkanes.filter((a) => {
                 if (alkaneFilter === 'positions') return isPosition(a);
                 if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
                 return !isNft(a.balance) && !isPosition(a);
               });
+              // Sort positions: LP tokens first, then staked positions
+              if (alkaneFilter === 'positions') {
+                filtered = [...filtered].sort((a, b) => {
+                  const aIsLp = isLpToken(a) ? 0 : 1;
+                  const bIsLp = isLpToken(b) ? 0 : 1;
+                  return aIsLp - bIsLp;
+                });
+              }
               return filtered.length > 0 ? (
+                alkaneFilter === 'nfts' ? (
+                <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2">
+                  <div className="grid grid-cols-4 gap-2">
+                    {filtered.map((alkane) => {
+                      const isSelected = selectedAlkaneId === alkane.alkaneId;
+                      return (
+                        <SendNftCard
+                          key={alkane.alkaneId}
+                          alkane={alkane}
+                          isSelected={isSelected}
+                          ref={isSelected ? selectedAlkaneRef : undefined}
+                          onSelect={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
+                          network={network}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                ) : (
                 <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2 space-y-1">
                   {filtered.map((alkane) => {
                     const isSelected = selectedAlkaneId === alkane.alkaneId;
@@ -557,9 +604,32 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
+                          {(() => {
+                            const pool = poolMap.get(alkane.alkaneId);
+                            if (pool) {
+                              return (
+                                <div className="flex -space-x-1.5">
+                                  <div className="relative z-10">
+                                    <TokenIcon symbol={pool.token0?.symbol} id={pool.token0?.id} size="sm" network={network} />
+                                  </div>
+                                  <div className="relative">
+                                    <TokenIcon symbol={pool.token1?.symbol} id={pool.token1?.id} size="sm" network={network} />
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" network={network} />;
+                          })()}
                           <div>
-                            <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol || alkane.name}</div>
+                            <div className="text-sm font-medium text-[color:var(--sf-text)]">
+                              {(() => {
+                                const pool = poolMap.get(alkane.alkaneId);
+                                if (pool) return `${pool.token0?.symbol} / ${pool.token1?.symbol} LP`;
+                                if (isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId])
+                                  return `${positionMeta[alkane.alkaneId].depositTokenName} ${alkane.name}`;
+                                return alkane.symbol || alkane.name;
+                              })()}
+                            </div>
                             <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
                           </div>
                         </div>
@@ -570,6 +640,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                     );
                   })}
                 </div>
+                )
               ) : (
                 <div className="rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-4">
                   <div className="flex flex-col items-center justify-center gap-2 py-2">
@@ -914,6 +985,90 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     </div>
   );
 }
+
+// --- NFT card helpers for SendModal ---
+
+const SEND_NFT_GRADIENTS = [
+  'from-blue-400 to-blue-600',
+  'from-purple-400 to-purple-600',
+  'from-green-400 to-green-600',
+  'from-orange-400 to-orange-600',
+  'from-pink-400 to-pink-600',
+  'from-indigo-400 to-indigo-600',
+  'from-teal-400 to-teal-600',
+  'from-red-400 to-red-600',
+];
+
+function getSendNftImagePaths(symbol: string, id: string, network: string): string[] {
+  const paths: string[] = [];
+  const symbolLower = symbol?.toLowerCase() || '';
+  if (symbolLower === 'frbtc' || id === '32:0') { paths.push('/tokens/frbtc.svg'); return paths; }
+  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png'); return paths; }
+  if (id && /^\d+:\d+/.test(id)) {
+    const [block, tx] = id.split(':');
+    paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
+    const urlSafeId = id.replace(/:/g, '-');
+    paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+  }
+  return paths;
+}
+
+import { forwardRef } from 'react';
+
+const SendNftCard = forwardRef<HTMLButtonElement, {
+  alkane: AlkaneAsset;
+  isSelected: boolean;
+  onSelect: () => void;
+  network: string;
+}>(function SendNftCard({ alkane, isSelected, onSelect, network }, ref) {
+  const [imgError, setImgError] = useState(false);
+  const [pathIndex, setPathIndex] = useState(0);
+  const paths = useMemo(() => getSendNftImagePaths(alkane.symbol, alkane.alkaneId, network), [alkane.symbol, alkane.alkaneId, network]);
+  const currentSrc = paths[pathIndex];
+  const hash = (alkane.symbol || alkane.alkaneId || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const gradient = SEND_NFT_GRADIENTS[hash % SEND_NFT_GRADIENTS.length];
+
+  useEffect(() => { setPathIndex(0); setImgError(false); }, [alkane.alkaneId]);
+
+  const handleImgError = () => {
+    if (pathIndex < paths.length - 1) setPathIndex(pathIndex + 1);
+    else setImgError(true);
+  };
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onSelect}
+      className={`rounded-lg overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+        isSelected
+          ? 'ring-2 ring-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/15'
+          : 'hover:bg-[color:var(--sf-primary)]/5'
+      }`}
+    >
+      <div className="aspect-square relative overflow-hidden">
+        {!imgError && currentSrc ? (
+          <img
+            src={currentSrc}
+            alt={alkane.name}
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={handleImgError}
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            <span className="text-white text-sm font-bold opacity-60">
+              {(alkane.symbol || alkane.alkaneId || '??').slice(0, 2).toUpperCase()}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="p-1 text-left">
+        <div className="text-[10px] font-medium text-[color:var(--sf-text)] truncate">{alkane.name}</div>
+        <div className="text-[8px] text-[color:var(--sf-text)]/40 truncate">{alkane.alkaneId}</div>
+      </div>
+    </button>
+  );
+});
 
 function SendMinerFeeButton({ selection, setSelection, presets }: { selection: FeeSelection; setSelection: (s: FeeSelection) => void; presets: { slow: number; medium: number; fast: number } }) {
   const [isOpen, setIsOpen] = useState(false);

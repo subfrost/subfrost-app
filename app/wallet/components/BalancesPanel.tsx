@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
-import { Bitcoin, Coins, RefreshCw, ExternalLink, Flame, Lock, Send, ArrowLeftRight } from 'lucide-react';
+import { Bitcoin, Coins, RefreshCw, ExternalLink, Flame, Lock, Send, ArrowLeftRight, ArrowUpFromLine } from 'lucide-react';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useFuelAllocation } from '@/hooks/useFuelAllocation';
+import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
 
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
+import type { PositionMeta } from '@/hooks/usePositionMetadata';
 
 const FRBTC_ID = '32:0';
 
@@ -25,6 +27,7 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
   const { balances, isLoading, error, refresh } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const fuelAllocation = useFuelAllocation();
+  const { data: positionMeta } = usePositionMetadata(balances.alkanes);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedAlkaneId, setExpandedAlkaneId] = useState<string | null>(null);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
@@ -103,11 +106,33 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
     isLpToken(alkane) || isStakedPosition(alkane);
   const isNft = (balance: string) => BigInt(balance) === BigInt(1);
 
-  const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string }): string => {
+  const formatDepositAmount = (amount: string, decimals: number, symbol: string): string => {
+    const val = BigInt(amount);
+    const divisor = BigInt(10 ** decimals);
+    const whole = val / divisor;
+    const remainder = val % divisor;
+    const wholeStr = whole.toString();
+    const remainderStr = remainder.toString().padStart(decimals, '0');
+    let formatted: string;
+    if (whole >= BigInt(10000)) {
+      formatted = wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    } else {
+      const dp = wholeStr.length >= 3 ? 2 : 4;
+      formatted = `${wholeStr}.${remainderStr.slice(0, dp)}`;
+    }
+    return symbol ? `${formatted} ${symbol}` : formatted;
+  };
+
+  const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string; alkaneId?: string }): string => {
     const value = BigInt(balance);
 
     // Exactly 1 raw unit: show contextual label
     if (value === BigInt(1)) {
+      // For enrichable positions, show the deposit amount instead of "1 Position"
+      if (alkane && alkane.alkaneId && isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId]) {
+        const meta = positionMeta[alkane.alkaneId];
+        return formatDepositAmount(meta.depositAmount, meta.depositTokenDecimals, meta.depositTokenSymbol);
+      }
       if (alkane && isStakedPosition(alkane)) return '1 Position';
       if (alkane && isLpToken(alkane)) return '1 Position';
       return '1 NFT';
@@ -256,34 +281,10 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
         </div>
       </div>
 
-      {/* FUEL Allocation - only visible to wallets on the allocation list */}
-      {fuelAllocation.isEligible && (
-        <div className="rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-6 border border-amber-500/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30">
-                <Flame size={28} className="text-amber-400" />
-              </div>
-              <div>
-                <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)]">
-                  {fuelAllocation.amount.toLocaleString()} FUEL
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-amber-500/20">
-            <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
-              {t('balances.fuelNote')}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Token Assets - 60/40 grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
         {/* Alkanes Balances */}
-        <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-6 flex flex-col" style={{ maxHeight: '540px' }}>
+        <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-6 flex flex-col" style={{ maxHeight: alkaneFilter === 'nfts' ? '720px' : '540px' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
               <Coins size={24} className="text-blue-400" />
@@ -293,7 +294,7 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
 
           {/* Tokens / NFTs / Positions tabs */}
           <div className="flex gap-4 mb-4">
-            {(['tokens', 'nfts', 'positions'] as const).map((tab) => (
+            {(['tokens', 'positions', 'nfts'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setAlkaneFilter(tab)}
@@ -309,12 +310,20 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
           </div>
 
           {(() => {
-            const filtered = balances.alkanes.filter((a) => {
+            let filtered = balances.alkanes.filter((a) => {
               if (alkaneFilter === 'positions') return isPosition(a);
               if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
               // tokens: not an NFT and not a position
               return !isNft(a.balance) && !isPosition(a);
             });
+            // Sort positions: LP tokens first, then staked positions
+            if (alkaneFilter === 'positions') {
+              filtered = [...filtered].sort((a, b) => {
+                const aIsLp = isLpToken(a) ? 0 : 1;
+                const bIsLp = isLpToken(b) ? 0 : 1;
+                return aIsLp - bIsLp;
+              });
+            }
 
             const emptyLabels: Record<string, { title: string; hint: string }> = {
               tokens: { title: t('balances.noProtorune'), hint: t('balances.protoruneHint') },
@@ -323,6 +332,24 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
             };
 
             return filtered.length > 0 ? (
+              alkaneFilter === 'nfts' ? (
+              <div className="grid grid-cols-4 gap-3 overflow-y-auto flex-1 pr-1">
+                {filtered.map((alkane) => {
+                  const isExpanded = expandedAlkaneId === alkane.alkaneId;
+                  return (
+                    <NftCard
+                      key={alkane.alkaneId}
+                      alkane={alkane}
+                      isExpanded={isExpanded}
+                      network={network}
+                      onToggle={() => setExpandedAlkaneId(isExpanded ? null : alkane.alkaneId)}
+                      onSend={() => onSendAlkane?.(alkane)}
+                      t={t}
+                    />
+                  );
+                })}
+              </div>
+              ) : (
               <div className="space-y-3 overflow-y-auto flex-1 pr-1">
                 {filtered.map((alkane) => {
                   const isExpanded = expandedAlkaneId === alkane.alkaneId;
@@ -356,6 +383,11 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
                               {(() => {
                                 const pool = poolMap.get(alkane.alkaneId);
                                 if (pool) return `${pool.token0Symbol} / ${pool.token1Symbol} LP`;
+                                // Enrich position name with deposit token name
+                                if (isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId]) {
+                                  const meta = positionMeta[alkane.alkaneId];
+                                  return `${meta.depositTokenName} ${alkane.name}`;
+                                }
                                 return alkane.name;
                               })()}
                             </div>
@@ -417,29 +449,46 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
                       </div>
                       {isExpanded && (
                         <div className="flex gap-2 px-4 pb-3">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSendAlkane?.(alkane);
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                          >
-                            <Send size={12} />
-                            {t('walletDash.send')}
-                          </button>
-                          <button
-                            disabled
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
-                          >
-                            <ArrowLeftRight size={12} />
-                            {t('walletDash.swap')}
-                          </button>
+                          {isLpToken(alkane) ? (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSendAlkane?.(alkane);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                              >
+                                <Send size={12} />
+                                {t('walletDash.send')}
+                              </button>
+                              <button
+                                disabled
+                                // TODO: Navigate to /swap with remove-liquidity mode for this LP position
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
+                              >
+                                <ArrowUpFromLine size={12} />
+                                {t('walletDash.withdraw')}
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSendAlkane?.(alkane);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                            >
+                              <Send size={12} />
+                              {t('walletDash.send')}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   );
                 })}
               </div>
+              )
             ) : (
               <div className="text-center py-8 text-[color:var(--sf-text)]/60">
                 {isLoadingData ? (
@@ -487,6 +536,148 @@ export default function BalancesPanel({ onSendAlkane }: BalancesPanelProps = {})
             <span className="text-lg font-medium">{network?.includes('regtest') ? t('balances.tabBrc20') : t('balances.comingSoon')}</span>
           </div>
         </div>
+      </div>
+
+      {/* FUEL Allocation - only visible to wallets on the allocation list */}
+      {fuelAllocation.isEligible && (
+        <div className="rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-6 border border-amber-500/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30">
+                <Flame size={28} className="text-amber-400" />
+              </div>
+              <div>
+                <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold text-[color:var(--sf-text)]">
+                  {fuelAllocation.amount.toLocaleString()} FUEL
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-amber-500/20">
+            <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
+              {t('balances.fuelNote')}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- NFT Card helpers ---
+
+const NFT_GRADIENTS = [
+  'from-blue-400 to-blue-600',
+  'from-purple-400 to-purple-600',
+  'from-green-400 to-green-600',
+  'from-orange-400 to-orange-600',
+  'from-pink-400 to-pink-600',
+  'from-indigo-400 to-indigo-600',
+  'from-teal-400 to-teal-600',
+  'from-red-400 to-red-600',
+];
+
+function getNftGradient(sym: string) {
+  const hash = sym.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return NFT_GRADIENTS[hash % NFT_GRADIENTS.length];
+}
+
+function getNftImagePaths(symbol: string, id: string, network: string): string[] {
+  const paths: string[] = [];
+  const symbolLower = symbol?.toLowerCase() || '';
+
+  if (symbolLower === 'frbtc' || id === '32:0') {
+    paths.push('/tokens/frbtc.svg');
+    return paths;
+  }
+  if (id === '2:0' || symbolLower === 'diesel') {
+    paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png');
+    return paths;
+  }
+
+  // Ordiscan CDN
+  if (id && /^\d+:\d+/.test(id)) {
+    const [block, tx] = id.split(':');
+    paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
+  }
+  // Oyl CDN
+  if (id && /^\d+:\d+/.test(id)) {
+    const urlSafeId = id.replace(/:/g, '-');
+    paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+  }
+  return paths;
+}
+
+function NftCard({ alkane, isExpanded, network, onToggle, onSend, t }: {
+  alkane: AlkaneAsset;
+  isExpanded: boolean;
+  network: string;
+  onToggle: () => void;
+  onSend: () => void;
+  t: (key: string) => string;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const [pathIndex, setPathIndex] = useState(0);
+  const paths = useMemo(() => getNftImagePaths(alkane.symbol, alkane.alkaneId, network), [alkane.symbol, alkane.alkaneId, network]);
+  const currentSrc = paths[pathIndex];
+  const gradient = getNftGradient(alkane.symbol || alkane.alkaneId || '');
+
+  useEffect(() => {
+    setPathIndex(0);
+    setImgError(false);
+  }, [alkane.alkaneId]);
+
+  const handleImgError = () => {
+    if (pathIndex < paths.length - 1) {
+      setPathIndex(pathIndex + 1);
+    } else {
+      setImgError(true);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+      onClick={onToggle}
+    >
+      {/* Image area */}
+      <div className="aspect-square relative overflow-hidden rounded-t-xl">
+        {!imgError && currentSrc ? (
+          <img
+            src={currentSrc}
+            alt={alkane.name}
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={handleImgError}
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            <span className="text-white text-2xl font-bold opacity-60">
+              {(alkane.symbol || alkane.alkaneId || '??').slice(0, 2).toUpperCase()}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom area — 1/3 of card */}
+      <div className="p-2">
+        {isExpanded ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onSend();
+            }}
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+          >
+            <Send size={12} />
+            {t('walletDash.send')}
+          </button>
+        ) : (
+          <>
+            <div className="font-medium text-[color:var(--sf-text)] text-xs truncate">{alkane.name}</div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">{alkane.alkaneId}</div>
+          </>
+        )}
       </div>
     </div>
   );
