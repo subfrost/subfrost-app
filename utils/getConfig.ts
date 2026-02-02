@@ -133,9 +133,49 @@ export async function fetchAlkaneBalances(
   alkanodeUrl: string = OYL_ALKANODE_URL,
 ): Promise<OylAlkaneBalance[]> {
   // --- Priority 1: Espo essentials.get_address_balances ---
+  // Espo returns balances quickly but with no token metadata (name, symbol, price).
+  // When Espo succeeds, we enrich with OYL Alkanode metadata in the background.
   try {
     const espoResult = await fetchAlkaneBalancesViaEspo(address);
-    if (espoResult.length > 0) return espoResult;
+    if (espoResult.length > 0) {
+      // Espo has no names — try to enrich from OYL Alkanode
+      try {
+        const response = await fetch(`${alkanodeUrl}/get-alkanes-by-address`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address }),
+        });
+        if (response.ok) {
+          const json = await response.json();
+          const alkanodeData: OylAlkaneBalance[] = json.data ?? [];
+          if (alkanodeData.length > 0) {
+            // Build lookup: "block:tx" → metadata
+            const metaMap = new Map<string, OylAlkaneBalance>();
+            for (const item of alkanodeData) {
+              metaMap.set(`${item.alkaneId.block}:${item.alkaneId.tx}`, item);
+            }
+            // Merge metadata into Espo results (Espo balances are authoritative)
+            for (const entry of espoResult) {
+              const key = `${entry.alkaneId.block}:${entry.alkaneId.tx}`;
+              const meta = metaMap.get(key);
+              if (meta) {
+                entry.name = meta.name || entry.name;
+                entry.symbol = meta.symbol || entry.symbol;
+                entry.priceUsd = meta.priceUsd;
+                entry.priceInSatoshi = meta.priceInSatoshi;
+                entry.tokenImage = meta.tokenImage;
+                entry.floorPrice = meta.floorPrice;
+                entry.frbtcPoolPriceInSats = meta.frbtcPoolPriceInSats;
+                entry.busdPoolPriceInUsd = meta.busdPoolPriceInUsd;
+              }
+            }
+          }
+        }
+      } catch {
+        // Enrichment failed — return Espo results with no metadata
+      }
+      return espoResult;
+    }
   } catch {
     // Fall through to OYL Alkanode
   }
