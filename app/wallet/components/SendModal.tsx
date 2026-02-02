@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
+import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
 
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
@@ -48,6 +49,27 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
+  const selectedAlkaneRef = useRef<HTMLButtonElement>(null);
+
+  const { data: poolsData } = usePools();
+  const poolMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (poolsData?.items) {
+      for (const pool of poolsData.items) {
+        map.set(pool.id, pool);
+      }
+    }
+    return map;
+  }, [poolsData]);
+
+  const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
+    /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);
+  const isStakedPosition = (alkane: { symbol: string; name: string }) =>
+    alkane.symbol.startsWith('POS-') || alkane.name.startsWith('POS-');
+  const isPosition = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
+    isLpToken(alkane) || isStakedPosition(alkane);
+  const isNft = (balance: string) => BigInt(balance) === BigInt(1);
 
   // Load frozen UTXOs from localStorage
   const getFrozenUtxos = (): Set<string> => {
@@ -106,6 +128,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       setTxid('');
       setSendMode('btc');
       setSelectedAlkaneId(null);
+      setAlkaneFilter('tokens');
     }
   }, [isOpen]);
 
@@ -114,8 +137,27 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     if (isOpen && initialAlkane) {
       setSendMode('alkanes');
       setSelectedAlkaneId(initialAlkane.alkaneId);
+      // Switch to the correct filter tab for this alkane
+      if (isPosition(initialAlkane)) {
+        setAlkaneFilter('positions');
+      } else if (isNft(initialAlkane.balance)) {
+        setAlkaneFilter('nfts');
+      } else {
+        setAlkaneFilter('tokens');
+      }
     }
   }, [isOpen, initialAlkane]);
+
+  // Scroll the pre-selected alkane into view within the list
+  useEffect(() => {
+    if (isOpen && selectedAlkaneId && selectedAlkaneRef.current) {
+      const container = selectedAlkaneRef.current.parentElement;
+      if (container) {
+        const offset = selectedAlkaneRef.current.offsetTop - container.offsetTop - 4;
+        container.scrollTo({ top: offset, behavior: 'smooth' });
+      }
+    }
+  }, [isOpen, selectedAlkaneId, alkaneFilter]);
 
   if (!isOpen) return null;
 
@@ -323,16 +365,34 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     }
   };
 
-  const formatAlkaneBalance = (balance: string, decimals: number = 8): string => {
+  const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string }): string => {
     const value = BigInt(balance);
-    if (value === BigInt(1)) return '1 NFT';
+
+    if (value === BigInt(1)) {
+      if (alkane && isStakedPosition(alkane)) return '1 Position';
+      if (alkane && isLpToken(alkane)) return '1 Position';
+      return '1 NFT';
+    }
+
     const divisor = BigInt(10 ** decimals);
     const whole = value / divisor;
     const remainder = value % divisor;
     const wholeStr = whole.toString();
     const remainderStr = remainder.toString().padStart(decimals, '0');
+
+    const isFrbtc = alkane && (alkane.symbol === 'frBTC' || alkane.name === 'frBTC');
+    if (isFrbtc) {
+      return `${wholeStr}.${remainderStr.slice(0, 8)}`;
+    }
+
+    if (whole >= BigInt(10000)) {
+      return wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
     const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
-    return `${wholeStr}.${remainderStr.slice(0, decimalPlaces)}`;
+    const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
+
+    return `${wholeStr}.${truncatedRemainder}`;
   };
 
   const renderInput = () => (
@@ -458,34 +518,69 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 {t('send.selectAlkanes')}
               </span>
             </label>
-            <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2 space-y-1">
-              {balances.alkanes.map((alkane) => {
-                const isSelected = selectedAlkaneId === alkane.alkaneId;
-                return (
-                  <button
-                    key={alkane.alkaneId}
-                    type="button"
-                    onClick={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
-                      isSelected
-                        ? 'bg-[color:var(--sf-primary)]/15 ring-1 ring-[color:var(--sf-primary)]/40'
-                        : 'hover:bg-[color:var(--sf-primary)]/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
-                      <div>
-                        <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol || alkane.name}</div>
-                        <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
-                      </div>
-                    </div>
-                    <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                      {formatAlkaneBalance(alkane.balance, alkane.decimals)}
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="flex gap-4 mb-2">
+              {(['tokens', 'nfts', 'positions'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setAlkaneFilter(tab)}
+                  className={`pb-2 px-1 text-xs font-semibold ${
+                    alkaneFilter === tab
+                      ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                      : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+                  }`}
+                >
+                  {tab === 'tokens' ? t('balances.tabTokens') : tab === 'nfts' ? t('balances.tabNfts') : t('balances.tabPositions')}
+                </button>
+              ))}
             </div>
+            {(() => {
+              const filtered = balances.alkanes.filter((a) => {
+                if (alkaneFilter === 'positions') return isPosition(a);
+                if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
+                return !isNft(a.balance) && !isPosition(a);
+              });
+              return filtered.length > 0 ? (
+                <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2 space-y-1">
+                  {filtered.map((alkane) => {
+                    const isSelected = selectedAlkaneId === alkane.alkaneId;
+                    return (
+                      <button
+                        key={alkane.alkaneId}
+                        ref={isSelected ? selectedAlkaneRef : undefined}
+                        type="button"
+                        onClick={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
+                          isSelected
+                            ? 'bg-[color:var(--sf-primary)]/15'
+                            : 'hover:bg-[color:var(--sf-primary)]/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
+                          <div>
+                            <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol || alkane.name}</div>
+                            <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
+                          </div>
+                        </div>
+                        <div className="text-sm font-bold text-[color:var(--sf-text)]">
+                          {formatAlkaneBalance(alkane.balance, alkane.decimals, alkane)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-4">
+                  <div className="flex flex-col items-center justify-center gap-2 py-2">
+                    <Coins size={24} className="text-blue-400/40" />
+                    <span className="text-xs text-[color:var(--sf-text)]/40">
+                      {alkaneFilter === 'tokens' ? t('balances.noProtorune') : alkaneFilter === 'nfts' ? t('balances.noNfts') : t('balances.noPositions')}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-6 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
@@ -514,7 +609,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
               />
               {selected && (
                 <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals)} {selected.symbol}
+                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.symbol}
                 </div>
               )}
             </div>
