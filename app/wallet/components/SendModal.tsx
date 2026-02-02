@@ -493,20 +493,30 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           </div>
         )}
 
-        <div>
-          <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-            {t('send.amountAlkanes')}
-          </label>
-          <input
-            type="number"
-            step="1"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
-            disabled
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
+        {(() => {
+          const selected = selectedAlkaneId ? balances.alkanes.find(a => a.alkaneId === selectedAlkaneId) : null;
+          return (
+            <div>
+              <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
+                {t('send.amountAlkanes')}
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0"
+                disabled={!selected}
+                className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              {selected && (
+                <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
+                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals)} {selected.symbol}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
@@ -550,7 +560,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       <div className="flex gap-3">
         <button
           onClick={handleNext}
-          disabled
+          disabled={!selectedAlkaneId || !amount}
           className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('send.reviewAndSend')}
