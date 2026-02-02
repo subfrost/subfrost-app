@@ -9,9 +9,12 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { useTranslation } from '@/hooks/useTranslation';
 
+import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
+
 interface SendModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialAlkane?: AlkaneAsset | null;
 }
 
 interface UTXO {
@@ -25,7 +28,7 @@ interface UTXO {
   frozen?: boolean;
 }
 
-export default function SendModal({ isOpen, onClose }: SendModalProps) {
+export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
   const { address, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const { t } = useTranslation();
@@ -39,6 +42,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const [error, setError] = useState('');
   const [txid, setTxid] = useState('');
   const [sendMode, setSendMode] = useState<'btc' | 'alkanes'>('btc');
+  const [selectedAlkaneId, setSelectedAlkaneId] = useState<string | null>(null);
   const [showFrozenUtxos, setShowFrozenUtxos] = useState(false);
   const [showFeeWarning, setShowFeeWarning] = useState(false);
   const [estimatedFee, setEstimatedFee] = useState(0);
@@ -100,8 +104,17 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
       setError('');
       setTxid('');
       setSendMode('btc');
+      setSelectedAlkaneId(null);
     }
   }, [isOpen]);
+
+  // Switch to alkanes tab and pre-select when an initial alkane is provided
+  useEffect(() => {
+    if (isOpen && initialAlkane) {
+      setSendMode('alkanes');
+      setSelectedAlkaneId(initialAlkane.alkaneId);
+    }
+  }, [isOpen, initialAlkane]);
 
   if (!isOpen) return null;
 
@@ -443,23 +456,32 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
               </span>
             </label>
             <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2 space-y-1">
-              {balances.alkanes.map((alkane) => (
-                <div
-                  key={alkane.alkaneId}
-                  className="flex items-center justify-between p-2.5 rounded-lg hover:bg-[color:var(--sf-primary)]/5 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
-                    <div>
-                      <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol}</div>
-                      <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
+              {balances.alkanes.map((alkane) => {
+                const isSelected = selectedAlkaneId === alkane.alkaneId;
+                return (
+                  <button
+                    key={alkane.alkaneId}
+                    type="button"
+                    onClick={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
+                      isSelected
+                        ? 'bg-[color:var(--sf-primary)]/15 ring-1 ring-[color:var(--sf-primary)]/40'
+                        : 'hover:bg-[color:var(--sf-primary)]/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
+                      <div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol}</div>
+                        <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                    {formatAlkaneBalance(alkane.balance, alkane.decimals)}
-                  </div>
-                </div>
-              ))}
+                    <div className="text-sm font-bold text-[color:var(--sf-text)]">
+                      {formatAlkaneBalance(alkane.balance, alkane.decimals)}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -677,6 +699,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
                       setAmount('');
                       setError('');
                       setSelectedUtxos(new Set());
+                      setSelectedAlkaneId(null);
                     }
                   }}
                   className={`pb-1 px-1 text-sm font-semibold ${

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check } from 'lucide-react';
@@ -33,6 +34,7 @@ export default function WalletDashboardPage() {
   }, [tabParam]);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [sendAlkane, setSendAlkane] = useState<AlkaneAsset | null>(null);
   const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
 
@@ -181,7 +183,7 @@ export default function WalletDashboardPage() {
 
           {/* Tab Content */}
           <div className="animate-fadeIn">
-            {activeTab === 'balances' && <BalancesPanel />}
+            {activeTab === 'balances' && <BalancesPanel onSendAlkane={(alkane) => { setSendAlkane(alkane); setShowSendModal(true); }} />}
             {activeTab === 'utxos' && <UTXOManagement />}
             {activeTab === 'transactions' && <TransactionHistory />}
             {activeTab === 'settings' && <WalletSettings />}
@@ -194,7 +196,8 @@ export default function WalletDashboardPage() {
       {/* Modals */}
       <SendModal
         isOpen={showSendModal}
-        onClose={() => setShowSendModal(false)}
+        onClose={() => { setShowSendModal(false); setSendAlkane(null); }}
+        initialAlkane={sendAlkane}
       />
       <ReceiveModal
         isOpen={showReceiveModal}

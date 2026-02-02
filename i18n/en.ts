@@ -176,6 +176,7 @@ const en: Record<string, string> = {
   'walletDash.utxos': 'UTXO Management',
   'walletDash.history': 'History',
   'walletDash.send': 'Send',
+  'walletDash.swap': 'Swap',
   'walletDash.receive': 'Receive',
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',

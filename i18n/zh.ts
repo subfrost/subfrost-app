@@ -177,6 +177,7 @@ const zh: Record<string, string> = {
   'walletDash.utxos': 'UTXO Management',
   'walletDash.history': '\u5386\u53f2',
   'walletDash.send': '\u53d1\u9001',
+  'walletDash.swap': '\u5151\u6362',
   'walletDash.receive': '\u63a5\u6536',
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',
