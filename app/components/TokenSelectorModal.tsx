@@ -178,7 +178,7 @@ export default function TokenSelectorModal({
                             setShowAlreadySelected(true);
                             setTimeout(() => setShowAlreadySelected(false), 1000);
                           }
-                        } else if (token.enabled) {
+                        } else if (token.enabled || network?.includes('regtest')) {
                           onBridgeTokenSelect?.(token.symbol);
                         } else {
                           if (!showComingSoon) {
@@ -190,7 +190,7 @@ export default function TokenSelectorModal({
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
                         isSelectedInOther
                           ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
-                          : token.enabled
+                          : (token.enabled || network?.includes('regtest'))
                           ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
                           : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
                       }`}

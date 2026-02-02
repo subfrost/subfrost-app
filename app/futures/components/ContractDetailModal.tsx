@@ -5,6 +5,7 @@ import NumberField from '@/app/components/NumberField';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useWallet } from '@/context/WalletContext';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)
@@ -45,6 +46,8 @@ export default function ContractDetailModal({
   onClose,
 }: ContractDetailModalProps) {
   const { t } = useTranslation();
+  const { network } = useWallet();
+  const isRegtest = network?.includes('regtest');
   const [amount, setAmount] = useState('1.00');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
@@ -206,12 +209,16 @@ export default function ContractDetailModal({
                 <button
                   type="button"
                   onClick={() => {
+                    if (isRegtest) {
+                      // TODO: wire up actual buy action for regtest
+                      return;
+                    }
                     if (!showBuyComingSoon) {
                       setShowBuyComingSoon(true);
                       setTimeout(() => setShowBuyComingSoon(false), 1000);
                     }
                   }}
-                  className="px-4 sm:px-6 py-3 rounded-xl bg-[color:var(--sf-primary)] text-white font-bold text-sm sm:text-base tracking-[0.08em] uppercase shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)] hover:scale-[1.02] active:scale-[0.98] opacity-50 grayscale cursor-not-allowed"
+                  className={`px-4 sm:px-6 py-3 rounded-xl bg-[color:var(--sf-primary)] text-white font-bold text-sm sm:text-base tracking-[0.08em] uppercase shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)] hover:scale-[1.02] active:scale-[0.98] ${!isRegtest ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                 >
                   {showBuyComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -222,12 +229,16 @@ export default function ContractDetailModal({
                 <button
                   type="button"
                   onClick={() => {
+                    if (isRegtest) {
+                      // TODO: wire up actual sell action for regtest
+                      return;
+                    }
                     if (!showSellComingSoon) {
                       setShowSellComingSoon(true);
                       setTimeout(() => setShowSellComingSoon(false), 1000);
                     }
                   }}
-                  className="px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:scale-[1.02] active:scale-[0.98] opacity-50 grayscale cursor-not-allowed"
+                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:scale-[1.02] active:scale-[0.98] ${!isRegtest ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                 >
                   {showSellComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>

@@ -46,6 +46,8 @@ export interface AlkaneAsset {
   balance: string;
   decimals: number;
   logo?: string; // URL to token logo if available
+  priceUsd?: number; // Per-unit price in USD (from OYL Alkanode)
+  priceInSatoshi?: number; // Per-unit price in satoshis (from OYL Alkanode)
 }
 
 export interface EnrichedUTXO {
@@ -406,6 +408,8 @@ export function useEnrichedWalletData(): EnrichedWalletData {
                 symbol: tokenInfo.symbol,
                 balance: amountStr,
                 decimals: tokenInfo.decimals,
+                priceUsd: entry.priceUsd ? Number(entry.priceUsd) : undefined,
+                priceInSatoshi: entry.priceInSatoshi ? Number(entry.priceInSatoshi) : undefined,
               });
             } else {
               const existing = alkaneMap.get(alkaneIdStr)!;

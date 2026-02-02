@@ -34,7 +34,8 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Get wallet connection state
-  const { isConnected, onConnectModalOpenChange } = useWallet();
+  const { isConnected, onConnectModalOpenChange, network } = useWallet();
+  const isRegtest = network?.includes('regtest');
   const { theme } = useTheme();
 
   // Get BTC balance
@@ -444,12 +445,16 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 onConnectModalOpenChange(true);
                 return;
               }
+              if (isRegtest) {
+                // TODO: wire up actual buy action for regtest
+                return;
+              }
               if (!showBuyComingSoon) {
                 setShowBuyComingSoon(true);
                 setTimeout(() => setShowBuyComingSoon(false), 1000);
               }
             }}
-            className={`h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-base uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none ${isConnected ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+            className={`h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-base uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none ${isConnected && !isRegtest ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
           >
             {showBuyComingSoon ? (
               <span className="animate-pulse">{t('badge.comingSoon')}</span>

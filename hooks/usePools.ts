@@ -32,6 +32,9 @@ export type PoolsListItem = {
   vol7dUsd?: number;
   vol30dUsd?: number;
   apr?: number;
+  token0Amount?: string; // Raw reserve amount (sub-units)
+  token1Amount?: string; // Raw reserve amount (sub-units)
+  lpTotalSupply?: string; // Total LP token supply (sub-units)
 };
 
 // Token IDs for TVL calculation (used by SDK fallback)
@@ -216,6 +219,9 @@ async function fetchPoolsFromAlkanode(
       vol7dUsd: toNum(p.poolVolume7dInUsd),
       vol30dUsd: toNum(p.poolVolume30dInUsd),
       apr: toNum(p.poolApr),
+      token0Amount: p.token0Amount,
+      token1Amount: p.token1Amount,
+      lpTotalSupply: p.tokenSupply,
     });
   }
 
@@ -272,6 +278,8 @@ async function fetchPoolsFromEspo(
       vol7dUsd: 0,
       vol30dUsd: 0,
       apr: 0,
+      token0Amount: pool.base_reserve || '0',
+      token1Amount: pool.quote_reserve || '0',
     });
   }
 
@@ -384,6 +392,7 @@ async function fetchPoolsViaRpcSimulation(
       const token1Id = `${readU128LE(d, 32)}:${readU128LE(d, 48)}`;
       const reserve0 = readU128LE(d, 64).toString();
       const reserve1 = readU128LE(d, 80).toString();
+      const totalSupply = d.length >= 224 ? readU128LE(d, 96).toString() : '0';
 
       const token0Symbol = getTokenSymbol(token0Id);
       const token1Symbol = getTokenSymbol(token1Id);
@@ -401,6 +410,9 @@ async function fetchPoolsViaRpcSimulation(
         vol7dUsd: 0,
         vol30dUsd: 0,
         apr: 0,
+        token0Amount: reserve0,
+        token1Amount: reserve1,
+        lpTotalSupply: totalSupply,
       });
     } catch (e) {
       console.warn(`[fetchPoolsViaRpc] Failed to fetch details for pool ${pool.block}:${pool.tx}:`, e);
@@ -508,6 +520,8 @@ async function fetchPoolsFromSDK(
       vol7dUsd: 0,
       vol30dUsd: 0,
       apr: 0,
+      token0Amount: reserve0,
+      token1Amount: reserve1,
     });
   }
 

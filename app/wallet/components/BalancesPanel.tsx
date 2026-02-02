@@ -1,23 +1,69 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { usePools } from '@/hooks/usePools';
 import { Bitcoin, Coins, RefreshCw, ExternalLink, Flame, Lock } from 'lucide-react';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useFuelAllocation } from '@/hooks/useFuelAllocation';
 
+const FRBTC_ID = '32:0';
+
 export default function BalancesPanel() {
-  const { account } = useWallet() as any;
+  const { account, network } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
   const { balances, isLoading, error, refresh } = useEnrichedWalletData();
+  const { data: poolsData } = usePools();
   const fuelAllocation = useFuelAllocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
   const [inscriptionFilter, setInscriptionFilter] = useState<'brc20' | 'ordinals'>('brc20');
+
+  // Build pool map: poolId → pool data (for LP token identification + token pricing)
+  const poolMap = useMemo(() => {
+    const map = new Map<string, { token0Symbol: string; token1Symbol: string; token0Id: string; token1Id: string; token0Amount: string; token1Amount: string; lpTotalSupply: string }>();
+    if (poolsData?.items) {
+      for (const pool of poolsData.items) {
+        map.set(pool.id, {
+          token0Symbol: pool.token0.symbol,
+          token1Symbol: pool.token1.symbol,
+          token0Id: pool.token0.id,
+          token1Id: pool.token1.id,
+          token0Amount: pool.token0Amount || '0',
+          token1Amount: pool.token1Amount || '0',
+          lpTotalSupply: pool.lpTotalSupply || '0',
+        });
+      }
+    }
+    return map;
+  }, [poolsData]);
+
+  // Derive token prices from pool reserves: tokenId → priceUsd
+  const derivedPrices = useMemo(() => {
+    const prices = new Map<string, number>();
+    if (!bitcoinPrice?.usd || !poolsData?.items) return prices;
+    // frBTC is always 1:1 with BTC
+    prices.set(FRBTC_ID, bitcoinPrice.usd);
+    for (const pool of poolsData.items) {
+      const r0 = Number(pool.token0Amount || '0');
+      const r1 = Number(pool.token1Amount || '0');
+      if (r0 <= 0 || r1 <= 0) continue;
+      const t0 = pool.token0.id;
+      const t1 = pool.token1.id;
+      // If one side's price is known, derive the other
+      if (prices.has(t1) && !prices.has(t0)) {
+        // price(t0) = (r1/r0) * price(t1)
+        prices.set(t0, (r1 / r0) * prices.get(t1)!);
+      } else if (prices.has(t0) && !prices.has(t1)) {
+        prices.set(t1, (r0 / r1) * prices.get(t0)!);
+      }
+    }
+    return prices;
+  }, [poolsData, bitcoinPrice]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -42,11 +88,11 @@ export default function BalancesPanel() {
   };
 
   // Classify an alkane as LP position, staked position, NFT, or regular token
-  const isLpToken = (alkane: { symbol: string; name: string }) =>
-    /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name);
+  const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
+    /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);
   const isStakedPosition = (alkane: { symbol: string; name: string }) =>
     alkane.symbol.startsWith('POS-') || alkane.name.startsWith('POS-');
-  const isPosition = (alkane: { symbol: string; name: string }) =>
+  const isPosition = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     isLpToken(alkane) || isStakedPosition(alkane);
   const isNft = (balance: string) => BigInt(balance) === BigInt(1);
 
@@ -141,53 +187,37 @@ export default function BalancesPanel() {
           </button>
         </div>
 
-        {/* Balance Breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[color:var(--sf-outline)]">
-          <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
-            <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('balances.spendableBtc')}</div>
-            <div className="text-sm text-[color:var(--sf-info-green-text)]">
-              {showValue(`${formatBTC(balances.bitcoin.spendable)} BTC ${!isLoadingData && formatUSD(balances.bitcoin.spendable) ? `($${formatUSD(balances.bitcoin.spendable)})` : ''}`)}
-            </div>
-          </div>
-          <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
-            <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">{t('balances.unspendable')}</div>
-            <div className="text-sm text-[color:var(--sf-info-yellow-text)]">
-              {showValue(`${formatBTC(balances.bitcoin.withAssets)} BTC ${!isLoadingData && formatUSD(balances.bitcoin.withAssets) ? `($${formatUSD(balances.bitcoin.withAssets)})` : ''}`)}
-            </div>
-          </div>
-        </div>
-
         {/* Address Breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-outline)] mt-4">
-          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('balances.nativeSegwit')}</div>
-            <div className="text-sm text-[color:var(--sf-text)]">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[color:var(--sf-outline)]">
+          <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
+            <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Native SegWit (Spendable)</div>
+            <div className="text-sm text-[color:var(--sf-info-green-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2wpkh)} BTC`)}
             </div>
             <a
               href={account?.nativeSegwit?.address ? `https://mempool.space/address/${account.nativeSegwit.address}` : '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
+              className="text-xs text-[color:var(--sf-info-green-text)]/60 mt-1 hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
               title={account?.nativeSegwit?.address ? `View ${account.nativeSegwit.address} on mempool.space` : 'No address'}
             >
-              <span className="truncate">{account?.nativeSegwit?.address ? `${account.nativeSegwit.address.slice(0, 6)}...${account.nativeSegwit.address.slice(-4)}` : 'Not Found'}</span>
+              <span className="truncate">{account?.nativeSegwit?.address ? `${account.nativeSegwit.address.slice(0, 4)}...${account.nativeSegwit.address.slice(-3)}` : 'Not Found'}</span>
               <ExternalLink size={10} className="shrink-0" />
             </a>
           </div>
-          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-3">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('balances.taproot')}</div>
-            <div className="text-sm text-[color:var(--sf-text)]">
+          <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
+            <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">{t('balances.taproot')}</div>
+            <div className="text-sm text-[color:var(--sf-info-yellow-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2tr)} BTC`)}
             </div>
             <a
               href={account?.taproot?.address ? `https://mempool.space/address/${account.taproot.address}` : '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-[color:var(--sf-text)]/40 mt-1 hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
+              className="text-xs text-[color:var(--sf-info-yellow-text)]/60 mt-1 hover:text-[#5b9cff] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center gap-1"
               title={account?.taproot?.address ? `View ${account.taproot.address} on mempool.space` : 'No address'}
             >
-              <span className="truncate">{account?.taproot?.address ? `${account.taproot.address.slice(0, 6)}...${account.taproot.address.slice(-4)}` : 'Not Found'}</span>
+              <span className="truncate">{account?.taproot?.address ? `${account.taproot.address.slice(0, 4)}...${account.taproot.address.slice(-3)}` : 'Not Found'}</span>
               <ExternalLink size={10} className="shrink-0" />
             </a>
           </div>
@@ -293,9 +323,31 @@ export default function BalancesPanel() {
                     className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                   >
                     <div className="flex items-center gap-3">
-                      <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="lg" />
+                      {(() => {
+                        // Check if this alkane is an LP token by matching its ID to a pool
+                        const pool = poolMap.get(alkane.alkaneId);
+                        if (pool) {
+                          return (
+                            <div className="flex -space-x-2">
+                              <div className="relative z-10">
+                                <TokenIcon symbol={pool.token0Symbol} id={pool.token0Id} size="lg" network={network} />
+                              </div>
+                              <div className="relative">
+                                <TokenIcon symbol={pool.token1Symbol} id={pool.token1Id} size="lg" network={network} />
+                              </div>
+                            </div>
+                          );
+                        }
+                        return <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="lg" network={network} />;
+                      })()}
                       <div>
-                        <div className="font-medium text-[color:var(--sf-text)]">{alkane.name}</div>
+                        <div className="font-medium text-[color:var(--sf-text)]">
+                          {(() => {
+                            const pool = poolMap.get(alkane.alkaneId);
+                            if (pool) return `${pool.token0Symbol} / ${pool.token1Symbol} LP`;
+                            return alkane.name;
+                          })()}
+                        </div>
                         <div className="text-xs text-[color:var(--sf-text)]/40">{alkane.symbol} · {alkane.alkaneId}</div>
                       </div>
                     </div>
@@ -303,7 +355,53 @@ export default function BalancesPanel() {
                       <div className="font-bold text-[color:var(--sf-text)]">
                         {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals, alkane))}
                       </div>
-                      {!isLoadingData && <div className="text-xs text-[color:var(--sf-text)]/60">$X.XX</div>}
+                      {!isLoadingData && (() => {
+                        const decimals = alkane.decimals || 8;
+                        const balanceFloat = Number(BigInt(alkane.balance)) / Math.pow(10, decimals);
+                        const formatUsdValue = (usd: number) => (
+                          <div className="text-xs text-[color:var(--sf-text)]/60">
+                            ${usd < 0.01 ? '<0.01' : usd > 999.99
+                              ? Math.round(usd).toLocaleString()
+                              : usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        );
+                        // Try per-token USD price from API
+                        if (alkane.priceUsd && alkane.priceUsd > 0) {
+                          return formatUsdValue(balanceFloat * alkane.priceUsd);
+                        }
+                        // frBTC: 1:1 with BTC
+                        if ((alkane.symbol === 'frBTC' || alkane.alkaneId === '32:0') && bitcoinPrice?.usd) {
+                          return formatUsdValue(balanceFloat * bitcoinPrice.usd);
+                        }
+                        // Satoshi price fallback with BTC price
+                        if (alkane.priceInSatoshi && alkane.priceInSatoshi > 0 && bitcoinPrice?.usd) {
+                          const pricePerUnitBtc = alkane.priceInSatoshi / 1e8;
+                          return formatUsdValue(balanceFloat * pricePerUnitBtc * bitcoinPrice.usd);
+                        }
+                        // Derive price from pool reserves
+                        const derived = derivedPrices.get(alkane.alkaneId);
+                        if (derived && derived > 0) {
+                          return formatUsdValue(balanceFloat * derived);
+                        }
+                        // LP token: user's share of pool TVL
+                        const pool = poolMap.get(alkane.alkaneId);
+                        if (pool) {
+                          const p0 = derivedPrices.get(pool.token0Id);
+                          const p1 = derivedPrices.get(pool.token1Id);
+                          const totalSupply = Number(pool.lpTotalSupply);
+                          if (p0 && p1 && totalSupply > 0) {
+                            const r0 = Number(pool.token0Amount) / 1e8;
+                            const r1 = Number(pool.token1Amount) / 1e8;
+                            const poolTvl = r0 * p0 + r1 * p1;
+                            const userShare = Number(BigInt(alkane.balance)) / totalSupply;
+                            const userValue = userShare * poolTvl;
+                            if (userValue > 0) {
+                              return formatUsdValue(userValue);
+                            }
+                          }
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -352,7 +450,7 @@ export default function BalancesPanel() {
           </div>
 
           <div className="text-center py-8 text-[color:var(--sf-text)]/60">
-            <span className="text-lg font-medium">{t('balances.comingSoon')}</span>
+            <span className="text-lg font-medium">{network?.includes('regtest') ? t('balances.tabBrc20') : t('balances.comingSoon')}</span>
           </div>
         </div>
       </div>

@@ -17,7 +17,8 @@ import SendModal from './components/SendModal';
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected, address, paymentAddress } = useWallet() as any;
+  const { connected, isConnected, address, paymentAddress, network } = useWallet() as any;
+  const isRegtest = network?.includes('regtest');
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,7 +63,7 @@ export default function WalletDashboardPage() {
   const tabs = [
     { id: 'balances' as TabView, label: t('walletDash.balances'), shortLabel: t('walletDash.balances'), icon: Wallet, disabled: false },
     { id: 'transactions' as TabView, label: t('walletDash.transactionHistory'), shortLabel: t('walletDash.history'), icon: Activity, disabled: false },
-    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), icon: BarChart2, disabled: true },
+    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), icon: BarChart2, disabled: !isRegtest },
   ];
 
   return (

@@ -32,7 +32,8 @@ export default function BoostSection({ vault }: Props) {
   const boostMultiplier = `${multiplier}x`;
 
   // Check if this is the special dxBTC vault with FUEL
-  const isComingSoon = vault.isBoostComingSoon;
+  // On regtest, bypass coming soon so all features are testable
+  const isComingSoon = network?.includes('regtest') ? false : vault.isBoostComingSoon;
 
   if (!vault.hasBoost) {
     return (

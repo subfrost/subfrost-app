@@ -58,7 +58,13 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths;
     }
 
-    // Priority 3: Special handling for bUSD (check by token ID)
+    // Priority 3: Special handling for DIESEL (2:0) — always use mainnet CDN icon
+    if (id === '2:0' || symbolLower === 'diesel') {
+      paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png');
+      return paths;
+    }
+
+    // Priority 4: Special handling for bUSD (check by token ID)
     if (id === '2:56801' || symbolLower === 'busd') {
       paths.push('/tokens/busd.png');
       return paths;

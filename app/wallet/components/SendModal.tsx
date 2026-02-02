@@ -425,7 +425,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           <div className="flex flex-col items-center justify-center gap-3 py-4">
             <Coins size={32} className="text-blue-400/60" />
             <span className="text-sm font-semibold text-[color:var(--sf-text)]/60">{t('send.selectAlkanes')}</span>
-            <span className="text-xs text-[color:var(--sf-text)]/40">{t('common.comingSoon')}</span>
+            {!network?.includes('regtest') && <span className="text-xs text-[color:var(--sf-text)]/40">{t('common.comingSoon')}</span>}
           </div>
         </div>
 
