@@ -5,6 +5,7 @@ import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins } from '
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -28,7 +29,7 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
   const { address, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const { t } = useTranslation();
-  const { utxos, refresh } = useEnrichedWalletData();
+  const { utxos, balances, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
   const [recipientAddress, setRecipientAddress] = useState('');
@@ -308,6 +309,18 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
     }
   };
 
+  const formatAlkaneBalance = (balance: string, decimals: number = 8): string => {
+    const value = BigInt(balance);
+    if (value === BigInt(1)) return '1 NFT';
+    const divisor = BigInt(10 ** decimals);
+    const whole = value / divisor;
+    const remainder = value % divisor;
+    const wholeStr = whole.toString();
+    const remainderStr = remainder.toString().padStart(decimals, '0');
+    const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
+    return `${wholeStr}.${remainderStr.slice(0, decimalPlaces)}`;
+  };
+
   const renderInput = () => (
     <>
       <div className="space-y-4">
@@ -420,14 +433,43 @@ export default function SendModal({ isOpen, onClose }: SendModalProps) {
           />
         </div>
 
-        {/* Select Alkanes placeholder */}
-        <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-6 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
-          <div className="flex flex-col items-center justify-center gap-3 py-4">
-            <Coins size={32} className="text-blue-400/60" />
-            <span className="text-sm font-semibold text-[color:var(--sf-text)]/60">{t('send.selectAlkanes')}</span>
-            {!network?.includes('regtest') && <span className="text-xs text-[color:var(--sf-text)]/40">{t('common.comingSoon')}</span>}
+        {/* Alkane Balances */}
+        {balances.alkanes.length > 0 ? (
+          <div>
+            <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
+              <span className="flex items-center gap-1.5">
+                <Coins size={14} />
+                {t('send.selectAlkanes')}
+              </span>
+            </label>
+            <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2 space-y-1">
+              {balances.alkanes.map((alkane) => (
+                <div
+                  key={alkane.alkaneId}
+                  className="flex items-center justify-between p-2.5 rounded-lg hover:bg-[color:var(--sf-primary)]/5 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
+                    <div>
+                      <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol}</div>
+                      <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold text-[color:var(--sf-text)]">
+                    {formatAlkaneBalance(alkane.balance, alkane.decimals)}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-6 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
+            <div className="flex flex-col items-center justify-center gap-3 py-4">
+              <Coins size={32} className="text-blue-400/60" />
+              <span className="text-sm font-semibold text-[color:var(--sf-text)]/60">{t('send.noAlkanes')}</span>
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
