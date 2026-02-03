@@ -4,11 +4,22 @@ This document describes how to manage invite codes for the Subfrost app.
 
 ## Overview
 
-Invite codes are optional codes users can enter during wallet creation. When redeemed, the code is associated with the user's wallet address in the database for tracking purposes.
+Invite codes are optional codes users can enter during wallet creation. **Users are only added to the database if they use an invite code.** This allows tracking of invited users while keeping non-invited users completely client-side.
+
+When a code is redeemed:
+1. A `User` record is created with the wallet addresses
+2. An `InviteCodeRedemption` record links the user to the code they used
 
 ## Database Schema
 
 ```
+User (only created when invite code is used)
+├── id (cuid)
+├── taprootAddress (unique)
+├── segwitAddress (optional)
+├── createdAt
+└── updatedAt
+
 InviteCode
 ├── id (cuid)
 ├── code (unique, uppercase)
@@ -142,12 +153,49 @@ JOIN invite_codes ic ON ic.id = icr.code_id
 WHERE icr.taproot_address = 'bc1p...';
 ```
 
+## Viewing Users
+
+Users are only in the database if they used an invite code.
+
+### All users with their invite codes
+
+```sql
+SELECT
+  u.id,
+  u.taproot_address,
+  u.created_at,
+  ic.code as invite_code
+FROM users u
+JOIN invite_code_redemptions icr ON icr.taproot_address = u.taproot_address
+JOIN invite_codes ic ON ic.id = icr.code_id
+ORDER BY u.created_at DESC;
+```
+
+### User count
+
+```sql
+SELECT COUNT(*) as total_users FROM users;
+```
+
+### Users by invite code
+
+```sql
+SELECT
+  ic.code,
+  COUNT(u.id) as user_count
+FROM invite_codes ic
+LEFT JOIN invite_code_redemptions icr ON icr.code_id = ic.id
+LEFT JOIN users u ON u.taproot_address = icr.taproot_address
+GROUP BY ic.code
+ORDER BY user_count DESC;
+```
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/invite-codes/validate` | POST | Check if a code is valid |
-| `/api/invite-codes/redeem` | POST | Record a wallet's use of a code |
+| `/api/invite-codes/redeem` | POST | Create user and record code redemption |
 
 ### Validate Request
 
@@ -186,6 +234,17 @@ POST /api/invite-codes/redeem
   "taprootPubkey": "02..."
 }
 ```
+
+### Redeem Response
+
+```json
+{
+  "success": true,
+  "userId": "clxx..."
+}
+```
+
+The `userId` is the database ID of the newly created (or existing) user.
 
 ## Code Naming Conventions
 

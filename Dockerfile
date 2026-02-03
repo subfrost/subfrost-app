@@ -65,6 +65,21 @@ RUN mkdir -p ./.next/server/static/wasm && \
     find ./tmp-server -name "*.wasm" -exec cp {} ./.next/server/static/wasm/ \; 2>/dev/null || true && \
     rm -rf ./tmp-server
 
+# Copy Prisma schema and generated client for migrations
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
+# Create entrypoint script for migrations
+RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
+    echo 'set -e' >> /app/entrypoint.sh && \
+    echo 'echo "Running database migrations..."' >> /app/entrypoint.sh && \
+    echo 'npx prisma migrate deploy --schema=./prisma/schema.prisma || echo "Migration skipped (may already be up to date)"' >> /app/entrypoint.sh && \
+    echo 'echo "Starting application..."' >> /app/entrypoint.sh && \
+    echo 'exec node server.js' >> /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
+
 # Set ownership
 RUN chown -R nextjs:nodejs /app
 
@@ -78,4 +93,4 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-CMD ["node", "server.js"]
+CMD ["/app/entrypoint.sh"]

@@ -78,7 +78,12 @@ jobs:
             --timeout 60 \
             --set-env-vars "NODE_ENV=production" \
             --set-env-vars "NEXT_PUBLIC_NETWORK=mainnet" \
-            --set-env-vars "STAGING=true"
+            --set-env-vars "STAGING=true" \
+            --set-env-vars "REDIS_HOST=${{ secrets.REDIS_HOST }}" \
+            --set-env-vars "REDIS_PORT=${{ secrets.REDIS_PORT }}" \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
+            --vpc-connector "subfrost-connector" \
+            --vpc-egress "private-ranges-only"
 
       - name: Get Service URL
         id: service

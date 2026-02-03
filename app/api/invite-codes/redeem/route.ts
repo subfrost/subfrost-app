@@ -4,6 +4,9 @@
  * POST /api/invite-codes/redeem
  *
  * Records which wallet address used which invite code.
+ * Also creates a User record - users are only added to the database
+ * if they use an invite code.
+ *
  * Called after successful wallet creation.
  */
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,6 +23,7 @@ interface RedeemRequest {
 interface RedeemResponse {
   success: boolean;
   error?: string;
+  userId?: string;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<RedeemResponse>> {
@@ -51,9 +55,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<RedeemRes
       return NextResponse.json({ success: false, error: 'This invite code is no longer active' });
     }
 
-    // Create redemption record (upsert to handle duplicates gracefully)
-    try {
-      await prisma.inviteCodeRedemption.upsert({
+    // Use a transaction to create both User and InviteCodeRedemption
+    const result = await prisma.$transaction(async (tx) => {
+      // Create or update the User record
+      const user = await tx.user.upsert({
+        where: { taprootAddress },
+        update: {
+          // Update segwit address if provided
+          segwitAddress: segwitAddress || undefined,
+        },
+        create: {
+          taprootAddress,
+          segwitAddress,
+        },
+      });
+
+      // Create redemption record (upsert to handle duplicates gracefully)
+      await tx.inviteCodeRedemption.upsert({
         where: {
           codeId_taprootAddress: {
             codeId: inviteCode.id,
@@ -61,7 +79,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<RedeemRes
           },
         },
         update: {
-          // Update with any new info if re-redeeming
           segwitAddress: segwitAddress || undefined,
           taprootPubkey: taprootPubkey || undefined,
         },
@@ -72,21 +89,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<RedeemRes
           taprootPubkey,
         },
       });
-    } catch (err) {
-      // If unique constraint fails, that's okay - wallet already redeemed this code
-      if ((err as { code?: string }).code === 'P2002') {
-        console.log(`[API /invite-codes/redeem] Wallet ${taprootAddress} already redeemed ${code}`);
-        return NextResponse.json({ success: true }); // Still return success
-      }
-      throw err;
-    }
+
+      return { userId: user.id };
+    });
 
     // Invalidate cache for this code
     await cache.del(`invite:valid:${code}`);
 
-    console.log(`[API /invite-codes/redeem] Recorded: ${code} -> ${taprootAddress}`);
+    console.log(`[API /invite-codes/redeem] Recorded: ${code} -> ${taprootAddress} (user: ${result.userId})`);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, userId: result.userId });
   } catch (error) {
     console.error('[API /invite-codes/redeem] Error:', error);
     return NextResponse.json(
