@@ -14,11 +14,10 @@ RUN corepack enable && corepack prepare pnpm@9 --activate
 # Copy package files and .npmrc for hoisting config
 COPY package.json pnpm-lock.yaml* .npmrc* ./
 
-# Install dependencies with retries for network resilience
-# Note: @alkanes/ts-sdk is from a tarball URL that may need fresh fetch
-RUN pnpm install --prefer-offline=false || \
-    (sleep 5 && pnpm install --prefer-offline=false) || \
-    (sleep 10 && pnpm install --prefer-offline=false)
+# Install dependencies
+# --no-frozen-lockfile: allow lockfile updates for tarball URL packages
+# --prefer-offline=false: force fresh fetch for @alkanes/ts-sdk
+RUN pnpm install --no-frozen-lockfile --prefer-offline=false
 
 # ============================================
 # Stage 2: Builder
