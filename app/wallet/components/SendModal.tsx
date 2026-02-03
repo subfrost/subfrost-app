@@ -33,9 +33,9 @@ interface UTXO {
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
-  const { address, paymentAddress, network, walletType } = useWallet() as any;
-  // Use SegWit (payment) address for BTC sends - Taproot is for ordinals/inscriptions
-  const btcSendAddress = paymentAddress || address;
+  const { paymentAddress, network, walletType } = useWallet() as any;
+  // BTC sends ONLY use SegWit address - no Taproot support for sends
+  const btcSendAddress = paymentAddress;
   const { provider, isInitialized } = useAlkanesSDK();
   const { requestConfirmation } = useTransactionConfirm();
   const { t } = useTranslation();
