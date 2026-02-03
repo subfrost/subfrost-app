@@ -74,7 +74,6 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
 
   return useQuery({
     queryKey: ['poolsMetadata', network, poolIds.sort().join(',')],
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     enabled: !!network && poolIds.length > 0,
     queryFn: async (): Promise<Record<string, PoolMetadata>> => {
       const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
@@ -210,8 +209,6 @@ export function useInfiniteAmmTxHistory({
     getNextPageParam: (lastPage) => lastPage.nextPage as number | undefined,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    // Refetch every 30 seconds to keep the activity feed fresh
-    refetchInterval: 30000,
   });
 
   // Extract unique pool IDs from mint/burn/creation transactions that need enrichment

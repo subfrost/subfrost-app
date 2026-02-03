@@ -203,8 +203,6 @@ export function usePoolCandleVolume(
       if (!poolId || !token1Id) return null;
       return fetchPoolVolume(espoUrl, poolId, token1Id, btcPrice);
     },
-    staleTime: 5 * 60_000, // 5 minutes
-    refetchInterval: 5 * 60_000,
     enabled: !!poolId && !!token1Id && !!network,
   });
 }
@@ -239,8 +237,6 @@ export function useAllPoolCandleVolumes(
 
       return results;
     },
-    staleTime: 5 * 60_000, // 5 minutes
-    refetchInterval: 5 * 60_000,
     enabled: !!pools && pools.length > 0 && !!network,
   });
 }

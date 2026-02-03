@@ -11,6 +11,7 @@ import { getConfig } from '@/utils/getConfig';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { queryKeys } from '@/queries/keys';
 
 export type UsePoolsParams = {
   search?: string;
@@ -538,18 +539,10 @@ export function usePools(params: UsePoolsParams = {}) {
   const { data: btcPrice } = useBtcPrice();
   const { provider } = useAlkanesSDK();
 
+  const paramsKey = `${params.search ?? ''}|${params.limit ?? 100}|${params.offset ?? 0}|${params.sortBy ?? 'tvl'}|${params.order ?? 'desc'}`;
+
   return useQuery<{ items: PoolsListItem[]; total: number }>({
-    queryKey: [
-      'pools',
-      network,
-      params.search ?? '',
-      params.limit ?? 100,
-      params.offset ?? 0,
-      params.sortBy ?? 'tvl',
-      params.order ?? 'desc',
-      btcPrice ?? 0,
-    ],
-    staleTime: 120_000,
+    queryKey: queryKeys.pools.list(network, paramsKey, btcPrice ?? 0),
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!network && !!ALKANE_FACTORY_ID,

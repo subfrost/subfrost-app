@@ -12,6 +12,7 @@ import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
 import { ExchangeProvider } from '@/context/ExchangeContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { HeightPoller } from '@/queries/height';
 
 // Define Network type locally
 import type { Network } from '@/utils/constants';
@@ -49,14 +50,19 @@ export default function Providers({ children }: { children: ReactNode }) {
   const [network, setNetwork] = useState<Network>('subfrost-regtest');
 
   // Memoize QueryClient to prevent recreation on re-renders
+  // All queries use staleTime: Infinity and never self-refresh.
+  // The HeightPoller component is the SINGLE source of invalidation.
   const queryClient = useMemo(
     () =>
       new QueryClient({
         defaultOptions: {
           queries: {
+            staleTime: Infinity,
+            refetchInterval: false,
             refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+            refetchOnMount: false,
             retry: 2,
-            staleTime: 30000, // 30 seconds - prevents immediate refetch on navigation
             gcTime: 5 * 60 * 1000, // 5 minutes cache time
           },
         },
@@ -109,6 +115,7 @@ export default function Providers({ children }: { children: ReactNode }) {
       shallowRouting
     >
       <QueryClientProvider client={queryClient}>
+        <HeightPoller network={network} />
         <GlobalStore>
           <ModalStore>
             <ThemeProvider>

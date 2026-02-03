@@ -161,9 +161,7 @@ export function usePoolEspoCandles({
       return points.sort((a, b) => a.timestamp - b.timestamp);
     },
     enabled: enabled && !!poolId,
-    staleTime: 60_000,
     gcTime: 5 * 60_000,
-    refetchInterval: 60_000,
     retry: 2,
     // Keep previous timeframe's data visible while new timeframe loads
     placeholderData: (prev) => prev,

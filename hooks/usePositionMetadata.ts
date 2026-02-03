@@ -130,7 +130,6 @@ export function usePositionMetadata(alkanes: Array<{ alkaneId: string; name: str
   return useQuery<Record<string, PositionMeta>>({
     queryKey: ['position-metadata', positionIds.sort().join(',')],
     enabled: positionIds.length > 0,
-    staleTime: 60_000,
     queryFn: async () => {
       const meta: Record<string, PositionMeta> = {};
 

@@ -203,13 +203,13 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     initProvider();
   }, [network]);
 
-  // Poll Bitcoin price every 30 seconds
-  // Uses API route to avoid CORS issues with direct WASM calls
+  // BTC price and fee estimates are now managed by TanStack Query (queries/market.ts)
+  // and invalidated by the central HeightPoller. These context methods are kept for
+  // backward compatibility but simply fetch once on init.
   const refreshBitcoinPrice = async () => {
     try {
       const response = await fetch('/api/btc-price');
       const data = await response.json();
-
       if (data?.usd && data.usd > 0) {
         setBitcoinPrice({
           usd: data.usd,
@@ -221,13 +221,10 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     }
   };
 
-  // Poll fee estimates every 30 seconds
-  // Uses API route to avoid CORS issues with direct WASM calls
   const refreshFeeEstimates = async () => {
     try {
       const response = await fetch('/api/fees');
       const data = await response.json();
-
       if (data) {
         setFeeEstimates({
           fast: Math.max(1, data.fast || 25),
@@ -238,33 +235,17 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       }
     } catch (error) {
       console.error('Failed to fetch fee estimates:', error);
-      // Set fallback values if fetch fails
       if (!feeEstimates) {
-        setFeeEstimates({
-          fast: 25,
-          medium: 10,
-          slow: 2,
-          lastUpdated: Date.now(),
-        });
+        setFeeEstimates({ fast: 25, medium: 10, slow: 2, lastUpdated: Date.now() });
       }
     }
   };
 
+  // Fetch once on init — ongoing refresh is handled by HeightPoller + TanStack Query
   useEffect(() => {
     if (!isInitialized || !provider) return;
-
-    // Initial fetch
     refreshBitcoinPrice();
     refreshFeeEstimates();
-
-    // Poll every 30 seconds
-    const priceInterval = setInterval(refreshBitcoinPrice, 30000);
-    const feeInterval = setInterval(refreshFeeEstimates, 30000);
-
-    return () => {
-      clearInterval(priceInterval);
-      clearInterval(feeInterval);
-    };
   }, [isInitialized, provider]);
 
   const value: AlkanesSDKContextType = {

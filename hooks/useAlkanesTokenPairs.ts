@@ -12,6 +12,7 @@ import { getConfig } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useWallet } from '@/context/WalletContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { queryKeys } from '@/queries/keys';
 
 export type AlkanesTokenPair = {
   token0: { id: string; token0Amount?: string; alkaneId?: { block: number | string; tx: number | string } };
@@ -464,11 +465,11 @@ export function useAlkanesTokenPairs(
   const { network } = useWallet();
   const { ALKANE_FACTORY_ID, OYL_ALKANODE_URL } = getConfig(network);
 
+  const paramsKey = `${limit ?? ''}|${offset ?? ''}|${sortBy ?? ''}|${searchQuery ?? ''}`;
+
   return useQuery({
     enabled: !!normalizedId && !!network && !!ALKANE_FACTORY_ID,
-    queryKey: ['alkanesTokenPairs', normalizedId, limit, offset, sortBy, searchQuery, network],
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    queryKey: queryKeys.pools.tokenPairs(network, normalizedId, paramsKey),
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     queryFn: async () => {
