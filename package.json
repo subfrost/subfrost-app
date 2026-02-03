@@ -5,7 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "dev:turbo": "next dev --turbopack",
-    "build": "next build",
+    "build": "prisma generate && next build",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:studio": "prisma studio",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -44,7 +50,8 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "redis": "^5.10.0",
+    "ioredis": "^5.6.1",
+    "@prisma/client": "^6.6.0",
     "tiny-secp256k1": "^2.2.4",
     "use-debounce": "^10.0.6",
     "varuint-bitcoin": "^2.0.0"
@@ -78,6 +85,8 @@
     "typescript": "^5",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.15",
+    "prisma": "^6.6.0",
+    "@types/ioredis": "^5.0.0"
   }
 }

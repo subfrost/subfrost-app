@@ -1,0 +1,115 @@
+// Prisma schema for Subfrost App
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User wallet addresses and preferences
+model User {
+  id              String    @id @default(cuid())
+  taprootAddress  String    @unique @map("taproot_address")
+  segwitAddress   String?   @map("segwit_address")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  sessions        Session[]
+  preferences     UserPreference?
+
+  @@map("users")
+}
+
+// User sessions for optional authentication
+model Session {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  token        String   @unique
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// User preferences (theme, locale, etc.)
+model UserPreference {
+  id           String   @id @default(cuid())
+  userId       String   @unique @map("user_id")
+  theme        String   @default("dark")
+  locale       String   @default("en")
+  feePreset    String   @default("medium") @map("fee_preset")
+  customData   Json?    @map("custom_data")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// Pool metadata cache (supplements on-chain data)
+model PoolMetadata {
+  id              String    @id @default(cuid())
+  poolId          String    @unique @map("pool_id") // e.g., "2:3"
+  factoryId       String    @map("factory_id")
+  token0Id        String    @map("token0_id")
+  token1Id        String    @map("token1_id")
+  token0Symbol    String    @map("token0_symbol")
+  token1Symbol    String    @map("token1_symbol")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Cached stats (updated periodically)
+  tvlUsd          Float?    @map("tvl_usd")
+  volume24hUsd    Float?    @map("volume_24h_usd")
+  volume7dUsd     Float?    @map("volume_7d_usd")
+  apr             Float?
+
+  @@index([factoryId])
+  @@index([token0Id])
+  @@index([token1Id])
+  @@map("pool_metadata")
+}
+
+// Token metadata cache
+model TokenMetadata {
+  id              String    @id @default(cuid())
+  tokenId         String    @unique @map("token_id") // e.g., "32:0"
+  name            String
+  symbol          String
+  decimals        Int       @default(8)
+  logoUrl         String?   @map("logo_url")
+  priceUsd        Float?    @map("price_usd")
+  priceBtc        Float?    @map("price_btc")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([symbol])
+  @@map("token_metadata")
+}
+
+// Transaction history (optional - for faster queries than indexer)
+model TransactionLog {
+  id              String    @id @default(cuid())
+  txid            String    @unique
+  userAddress     String    @map("user_address")
+  type            String    // "swap", "add_liquidity", "remove_liquidity", "wrap", "unwrap"
+  status          String    @default("pending") // "pending", "confirmed", "failed"
+  blockHeight     Int?      @map("block_height")
+  metadata        Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  confirmedAt     DateTime? @map("confirmed_at")
+
+  @@index([userAddress])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transaction_logs")
+}

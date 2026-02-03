@@ -415,6 +415,42 @@ See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidity
 
 ---
 
+## Backend Infrastructure (Cloud SQL + Redis)
+
+The app has optional backend services for caching and persistence:
+
+### GCP Resources
+- **Cloud SQL (PostgreSQL 15):** `subfrost-db` at `10.11.192.3:5432`
+- **Memorystore (Redis 7.0):** `subfrost-cache` at `10.11.193.4:6379`
+- **VPC Connector:** `subfrost-connector` (10.8.0.0/28) — connects Cloud Run to private services
+
+### Database/Cache Usage
+```typescript
+import { prisma, cache, redis } from '@/lib/db';
+
+// Prisma for PostgreSQL
+const user = await prisma.user.findUnique({ where: { taprootAddress } });
+
+// Redis cache with TTL
+const data = await cache.getOrSet('key', () => fetchData(), 300);
+```
+
+### Key Files
+- `lib/db/prisma.ts` — Prisma singleton client
+- `lib/db/redis.ts` — ioredis client with cache helpers
+- `prisma/schema.prisma` — Database schema
+- `app/api/health/route.ts` — Health check endpoint
+- `app/api/example/route.ts` — Usage examples for new developers
+- `docs/BACKEND_SETUP.md` — Full infrastructure documentation
+
+### Local Development
+```bash
+docker-compose up -d  # Start PostgreSQL + Redis
+pnpm db:push          # Apply schema
+```
+
+---
+
 ## File Locations
 
 | Purpose | Path |
