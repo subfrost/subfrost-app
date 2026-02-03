@@ -325,6 +325,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                       {isLpToken(alkane) ? (
                         <>
                           <button
+                            data-testid="send-button"
                             onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
@@ -341,6 +342,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                         </>
                       ) : (
                         <button
+                          data-testid="send-button"
                           onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                         >

@@ -879,6 +879,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             {t('send.recipientAddress')}
           </label>
           <input
+            data-testid="recipient-input"
             type="text"
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
@@ -892,6 +893,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             {t('send.amountBtc')}
           </label>
           <input
+            data-testid="amount-input"
             type="number"
             step="0.00000001"
             value={amount}
@@ -954,6 +956,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       <div className="flex gap-3">
         <button
+          data-testid="send-submit"
           onClick={handleNext}
           className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
         >
@@ -1282,7 +1285,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         <div className="w-full p-4 rounded-xl bg-green-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="text-sm text-green-600 dark:text-green-200 mb-2">{t('send.transactionIdLabel')}</div>
-          <div className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
+          <div data-testid="txid" className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
         </div>
 
         <a
@@ -1306,7 +1309,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+      <div data-testid="send-modal" className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">

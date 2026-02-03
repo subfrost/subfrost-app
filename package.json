@@ -24,6 +24,8 @@
     "test:hooks": "vitest run hooks/__tests__",
     "test:sdk": "vitest run __tests__/sdk",
     "test:integration": "INTEGRATION=true vitest run __tests__/sdk",
+    "test:integration:no-puppeteer": "INTEGRATION=true SKIP_PUPPETEER=true vitest run __tests__/sdk",
+    "test:integration:btc": "INTEGRATION=true vitest run __tests__/sdk/btc-send.integration.test.ts",
     "test:legacy": "npm run test:math && npm run test:calldata && npm run test:utxo",
     "test:math": "npx tsx hooks/__tests__/useFrbtcPremium.test.ts && npx tsx hooks/__tests__/useSwapQuotes.integration.test.ts",
     "test:calldata": "npx tsx hooks/__tests__/vaultCalldata.test.ts",
