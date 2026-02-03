@@ -83,6 +83,7 @@ export default function WalletDashboardPage() {
             </h1>
             <div className="flex shrink-0 items-center gap-2">
               <button
+                data-testid="header-send-button"
                 onClick={() => setShowSendModal(true)}
                 className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-primary)] text-white text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
               >

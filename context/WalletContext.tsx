@@ -20,10 +20,8 @@ import {
   WalletConnector,
   ConnectedWallet,
   BrowserWalletInfo,
-  getInstalledWallets,
-  isWalletInstalled,
 } from '@alkanes/ts-sdk';
-import { BROWSER_WALLETS } from '@/constants/wallets';
+import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/constants/wallets';
 
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
@@ -870,6 +868,33 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           publicKey: pubKeyHex,
           addressType: isTaproot ? 'p2tr' : 'p2wpkh',
         });
+      } else if (walletId === 'oyl') {
+        // OYL wallet exposes window.oyl with getAddresses(), signPsbt(), signMessage()
+        const oylProvider = (window as any).oyl;
+        if (!oylProvider) throw new Error('OYL wallet not available');
+
+        // getAddresses returns all address types in one call
+        const addresses = await oylProvider.getAddresses();
+        if (!addresses?.nativeSegwit || !addresses?.taproot) {
+          throw new Error('No addresses returned from OYL');
+        }
+
+        // Store both address types
+        additionalAddresses.taproot = {
+          address: addresses.taproot.address,
+          publicKey: addresses.taproot.publicKey,
+        };
+        additionalAddresses.nativeSegwit = {
+          address: addresses.nativeSegwit.address,
+          publicKey: addresses.nativeSegwit.publicKey,
+        };
+
+        // Use taproot as primary address
+        connected = new (ConnectedWallet as any)(walletInfo, oylProvider, {
+          address: addresses.taproot.address,
+          publicKey: addresses.taproot.publicKey,
+          addressType: 'p2tr',
+        });
       } else {
         // For other wallets (Unisat, OKX, Phantom, etc.), use the standard connector
         const connector = getWalletConnector();
@@ -918,9 +943,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const signPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
     // For browser wallets
     if (browserWallet && walletType === 'browser') {
-      // Browser wallets typically expect hex, convert base64 to hex
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
+
+      // OYL has a different signPsbt API: { psbt, finalize?, broadcast? } => { psbt, txid? }
+      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
+      if (connectedWalletId === 'oyl') {
+        const oylProvider = (window as any).oyl;
+        if (!oylProvider) throw new Error('OYL wallet not available');
+        const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
+        const signedBuffer = Buffer.from(result.psbt, 'hex');
+        return signedBuffer.toString('base64');
+      }
+
+      // Standard browser wallets expect hex, convert base64 to hex
       const signedHex = await browserWallet.signPsbt(psbtHex);
       // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
@@ -939,9 +975,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const signTaprootPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
     // For browser wallets, they handle taproot signing internally
     if (browserWallet && walletType === 'browser') {
-      // Browser wallets typically expect hex, convert base64 to hex
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
+
+      // OYL has a different signPsbt API: { psbt, finalize?, broadcast? } => { psbt, txid? }
+      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
+      if (connectedWalletId === 'oyl') {
+        const oylProvider = (window as any).oyl;
+        if (!oylProvider) throw new Error('OYL wallet not available');
+        const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
+        const signedBuffer = Buffer.from(result.psbt, 'hex');
+        return signedBuffer.toString('base64');
+      }
+
+      // Standard browser wallets expect hex
       const signedHex = await browserWallet.signPsbt(psbtHex);
       // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
@@ -1040,6 +1087,17 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     if (browserWallet && walletType === 'browser') {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
+
+      // OYL has a different signPsbt API
+      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
+      if (connectedWalletId === 'oyl') {
+        const oylProvider = (window as any).oyl;
+        if (!oylProvider) throw new Error('OYL wallet not available');
+        const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
+        const signedBuffer = Buffer.from(result.psbt, 'hex');
+        return signedBuffer.toString('base64');
+      }
+
       const signedHex = await browserWallet.signPsbt(psbtHex);
       const signedBuffer = Buffer.from(signedHex, 'hex');
       return signedBuffer.toString('base64');
@@ -1150,6 +1208,17 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const signMessage = useCallback(async (message: string): Promise<string> => {
     // For browser wallets
     if (browserWallet && walletType === 'browser') {
+      // OYL has a different signMessage API: { address, message, protocol? } => { address, signature }
+      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
+      if (connectedWalletId === 'oyl') {
+        const oylProvider = (window as any).oyl;
+        if (!oylProvider) throw new Error('OYL wallet not available');
+        const result = await oylProvider.signMessage({
+          address: browserWallet.address,
+          message,
+        });
+        return result.signature;
+      }
       return browserWallet.signMessage(message);
     }
 
@@ -1372,6 +1441,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       address: addresses.taproot.address || addresses.nativeSegwit.address,
       paymentAddress: addresses.nativeSegwit.address,
       publicKey: addresses.nativeSegwit.pubkey,
+      addresses,
       account,
       network,
       wallet,

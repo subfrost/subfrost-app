@@ -8,17 +8,17 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+# Install pnpm (use latest 9.x for lockfile v9.0 compatibility)
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
+# Copy package files, .npmrc, and prisma schema (needed for postinstall)
+COPY package.json pnpm-lock.yaml* .npmrc* ./
+COPY prisma ./prisma/
 
 # Install dependencies
-# Note: Using --no-frozen-lockfile because @alkanes/ts-sdk is from a tarball URL
-# that may be republished with same version but different content.
-# Force fresh download by disabling offline mode.
-RUN pnpm install --prefer-offline=false
+# --no-frozen-lockfile: allow lockfile updates for tarball URL packages
+# --prefer-offline=false: force fresh fetch for @alkanes/ts-sdk
+RUN pnpm install --no-frozen-lockfile --prefer-offline=false
 
 # ============================================
 # Stage 2: Builder
@@ -26,8 +26,8 @@ RUN pnpm install --prefer-offline=false
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+# Install pnpm (use latest 9.x for lockfile v9.0 compatibility)
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # Copy dependencies
 COPY --from=deps /app/node_modules ./node_modules

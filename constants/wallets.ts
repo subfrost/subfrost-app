@@ -1,7 +1,7 @@
 /**
  * Browser wallet configuration with custom ordering.
  * Uses SDK wallet data (including base64 icons) with our preferred display order.
- * Wallets not in the SDK (tokeo, keplr) use local definitions.
+ * Wallets not in the SDK (oyl, tokeo, keplr) use local definitions.
  */
 
 import {
@@ -11,8 +11,19 @@ import {
 
 export type { BrowserWalletInfo };
 
-// Wallets not included in the SDK — local definitions with placeholder icons
+// Wallets not included in the SDK — local definitions with icons
 const LOCAL_WALLETS: BrowserWalletInfo[] = [
+  {
+    id: 'oyl',
+    name: 'Oyl',
+    icon: '/assets/wallets/oyl.png',
+    website: 'https://chromewebstore.google.com/detail/oyl-wallet-bitcoin-ordina/ilolmnhjbbggkmopnemiphomhaojndmb',
+    injectionKey: 'oyl',
+    supportsPsbt: true,
+    supportsTaproot: true,
+    supportsOrdinals: true,
+    mobileSupport: false,
+  },
   {
     id: 'tokeo',
     name: 'Tokeo Wallet',
@@ -40,6 +51,7 @@ const LOCAL_WALLETS: BrowserWalletInfo[] = [
 
 // Desired display order (by wallet id)
 const WALLET_ORDER = [
+  'oyl',
   'okx',
   'unisat',
   'xverse',
