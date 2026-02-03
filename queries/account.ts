@@ -41,8 +41,6 @@ interface EnrichedWalletDeps {
   account: any;
   isConnected: boolean;
   network: string;
-  fetchAlkaneBalances: (address: string, url: string) => Promise<any[]>;
-  alkanodeUrl: string;
 }
 
 export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
@@ -200,16 +198,17 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         for (const utxo of toArray(data.pending)) processUtxo(utxo, false, false);
       }
 
-      // Fetch alkane balances via OYL Alkanode
+      // Fetch alkane balances via SDK dataApiGetAlkanesByAddress
       for (const address of addresses) {
         try {
           const alkaneBalances = await withTimeout(
-            deps.fetchAlkaneBalances(address, deps.alkanodeUrl),
+            provider.dataApiGetAlkanesByAddress(address),
             15000,
-            [],
+            { alkanes: [] },
           );
-          for (const entry of alkaneBalances) {
-            const alkaneIdStr = `${entry.alkaneId.block}:${entry.alkaneId.tx}`;
+          const alkanes = alkaneBalances?.alkanes || [];
+          for (const entry of alkanes) {
+            const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
             const amountStr = String(entry.balance || '0');
             const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
               symbol: entry.symbol || '',
@@ -232,7 +231,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
             }
           }
         } catch (error) {
-          console.error(`[BALANCE] OYL Alkanode API failed for ${address}:`, error);
+          console.error(`[BALANCE] SDK dataApi failed for ${address}:`, error);
         }
       }
 
@@ -290,8 +289,6 @@ interface SellableCurrenciesDeps {
   walletAddress?: string;
   account: any;
   tokensWithPools?: { id: string; name?: string }[];
-  fetchAlkaneBalances: (address: string, url: string) => Promise<any[]>;
-  alkanodeUrl: string;
 }
 
 export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
@@ -318,13 +315,14 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
         for (const address of addresses) {
           try {
-            const alkaneBalances = await deps.fetchAlkaneBalances(address, deps.alkanodeUrl);
+            const result = await deps.provider!.dataApiGetAlkanesByAddress(address);
+            const alkaneBalances = result?.alkanes || [];
 
             for (const entry of alkaneBalances) {
-              const alkaneIdStr = `${entry.alkaneId.block}:${entry.alkaneId.tx}`;
+              const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
               const balance = String(entry.balance || '0');
               const tokenInfo = KNOWN_TOKENS_SELL[alkaneIdStr] || {
-                symbol: entry.symbol || `${entry.alkaneId.tx}`,
+                symbol: entry.symbol || alkaneIdStr.split(':')[1] || '',
                 name: entry.name || `Token ${alkaneIdStr}`,
                 decimals: 8,
               };
@@ -355,7 +353,7 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
               }
             }
           } catch (error) {
-            console.error(`[sellableCurrencies] OYL API failed for ${address}:`, error);
+            console.error(`[sellableCurrencies] SDK dataApi failed for ${address}:`, error);
           }
         }
 

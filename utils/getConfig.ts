@@ -1,8 +1,39 @@
-// OYL Alkanode API base URL for alkane balance queries
-const OYL_ALKANODE_URL = process.env.NEXT_PUBLIC_OYL_ALKANODE_URL ?? 'https://oyl.alkanode.com';
+/**
+ * Network configuration for Subfrost app
+ *
+ * All API calls should go through @alkanes/ts-sdk which is configured
+ * with the correct URLs in AlkanesSDKContext. This config file only
+ * contains static configuration values like contract IDs and block explorer URLs.
+ */
+
+// Subfrost API base URLs per network
+export const SUBFROST_API_URLS: Record<string, string> = {
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+  testnet: 'https://testnet.subfrost.io/v4/subfrost',
+  signet: 'https://signet.subfrost.io/v4/subfrost',
+  regtest: 'https://regtest.subfrost.io/v4/subfrost',
+  'regtest-local': 'http://localhost:18888',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+};
+
+// Block explorer URLs per network
+export const BLOCK_EXPLORER_URLS: Record<string, string> = {
+  mainnet: 'https://espo.subfrost.io/mainnet',
+  testnet: 'https://espo.subfrost.io/testnet',
+  signet: 'https://espo.subfrost.io/signet',
+  regtest: 'https://espo.subfrost.io/regtest',
+  'regtest-local': 'http://localhost:50010',
+  'subfrost-regtest': 'https://espo.subfrost.io/regtest',
+  oylnet: 'https://espo.subfrost.io/mainnet',
+};
 
 export function getConfig(network: string) {
   const host = typeof window !== 'undefined' ? window.location.host : '';
+
+  // Get API URL for network (defaults to mainnet)
+  const apiUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+  const blockExplorerUrl = BLOCK_EXPLORER_URLS[network] || BLOCK_EXPLORER_URLS.mainnet;
 
   switch (network) {
     case 'oylnet':
@@ -11,10 +42,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:8',
         FRBTC_ALKANE_ID: '32:0',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:2082',
-        OYL_API_URL:
-          process.env.NEXT_PUBLIC_OYL_API_URL ?? 'https://ladder-chain-sieve.sandshrew.io',
-        OYL_ALKANODE_URL,
-        BLOCK_EXPLORER_URL_BTC: 'https://ordiscan.com',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: 'https://etherscan.io',
       };
     case 'signet':
@@ -23,9 +52,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:571',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:2088',
         FRBTC_ALKANE_ID: '32:0',
-        OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'https://signet-api.oyl.gg',
-        OYL_ALKANODE_URL,
-        BLOCK_EXPLORER_URL_BTC: 'https://mempool.space/signet',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: 'https://sepolia.etherscan.io',
         BOUND_API_URL: 'https://signet.bound.money/api/v1',
       } as const;
@@ -36,10 +64,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0', // frBTC (hardcoded in indexer)
-        OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'http://localhost:18888',
-        OYL_ALKANODE_URL,
-        API_URL: 'https://regtest.subfrost.io/v4/subfrost',
-        BLOCK_EXPLORER_URL_BTC: 'http://localhost:50010',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: '',
       } as const;
     case 'regtest-local':
@@ -48,10 +74,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0', // frBTC (hardcoded in indexer)
-        OYL_API_URL: 'http://localhost:18888',
-        OYL_ALKANODE_URL,
-        API_URL: 'http://localhost:4000',
-        BLOCK_EXPLORER_URL_BTC: 'http://localhost:50010',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: '',
       } as const;
     case 'mainnet':
@@ -62,9 +86,8 @@ export function getConfig(network: string) {
           BUSD_ALKANE_ID: '2:56801',
           FRBTC_ALKANE_ID: '32:0',
           DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:70003',
-          OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'https://staging-api.oyl.gg',
-          OYL_ALKANODE_URL,
-          BLOCK_EXPLORER_URL_BTC: 'https://ordiscan.com',
+          API_URL: apiUrl,
+          BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
           BLOCK_EXPLORER_URL_ETH: 'https://etherscan.io',
           BOUND_API_URL: 'https://api.bound.money/api/v1',
         } as const;
@@ -75,9 +98,8 @@ export function getConfig(network: string) {
         BUSD_SPLITTER_ID: '4:76',
         FRBTC_ALKANE_ID: '32:0',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:70003',
-        OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'https://mainnet-api.oyl.gg',
-        OYL_ALKANODE_URL,
-        BLOCK_EXPLORER_URL_BTC: 'https://ordiscan.com',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: 'https://etherscan.io',
         BOUND_API_URL: 'https://api.bound.money/api/v1',
       } as const;
@@ -87,16 +109,17 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:25982',
         FRBTC_ALKANE_ID: '',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:69997',
-        OYL_API_URL: process.env.NEXT_PUBLIC_OYL_API_URL ?? 'https://mainnet-api.oyl.gg',
-        OYL_ALKANODE_URL,
-        BLOCK_EXPLORER_URL_BTC: 'https://ordiscan.com',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: 'https://etherscan.io',
       } as const;
   }
 }
 
-// OYL Alkanode API types
-export interface OylAlkaneBalance {
+/**
+ * Alkane balance type (returned by SDK's dataApi.getAlkanesByAddress)
+ */
+export interface AlkaneBalance {
   name: string;
   symbol: string;
   balance: string;
@@ -110,153 +133,19 @@ export interface OylAlkaneBalance {
   idClubMarketplace?: boolean;
 }
 
-// Espo RPC URL — essentials.get_address_balances lives here.
-// oyl.alkanode.com/get-alkanes-by-address also runs on espo (oylapi module).
-const ESPO_RPC_URL = process.env.NEXT_PUBLIC_ESPO_RPC_URL || 'https://api.alkanode.com/rpc';
-
 /**
- * Fetch alkane token balances for an address.
- *
- * Strategy (ordered by priority):
- *   1. Espo essentials.get_address_balances (api.alkanode.com/rpc) — fast, clean format.
- *      Returns { balances: { "2:0": "amount", ... } }. Currently mainnet-only;
- *      rejects bcrt1 addresses with { ok: false, error: "invalid_address_format" }.
- *      When regtest espo is available, this will work for bcrt1 too.
- *   2. OYL Alkanode REST (oyl.alkanode.com/get-alkanes-by-address) — richer metadata
- *      (name, symbol, price). Also runs on espo (oylapi module). Mainnet-only.
- *   3. alkanes_protorunesbyaddress RPC — direct indexer query via /api/rpc proxy.
- *      Route chain: Browser → /api/rpc → regtest.subfrost.io → jsonrpc → metashrew
- *      Works for regtest (bcrt1). Universal fallback.
+ * @deprecated Use provider.dataApi.getAlkanesByAddress() from @alkanes/ts-sdk instead
+ * This function is kept for backward compatibility but will be removed.
  */
 export async function fetchAlkaneBalances(
   address: string,
-  alkanodeUrl: string = OYL_ALKANODE_URL,
-): Promise<OylAlkaneBalance[]> {
-  // --- Priority 1: Espo essentials.get_address_balances ---
-  // Espo returns balances quickly but with no token metadata (name, symbol, price).
-  // When Espo succeeds, we enrich with OYL Alkanode metadata in the background.
-  try {
-    const espoResult = await fetchAlkaneBalancesViaEspo(address);
-    if (espoResult.length > 0) {
-      // Espo has no names — try to enrich from OYL Alkanode
-      try {
-        const response = await fetch(`${alkanodeUrl}/get-alkanes-by-address`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address }),
-        });
-        if (response.ok) {
-          const json = await response.json();
-          const alkanodeData: OylAlkaneBalance[] = json.data ?? [];
-          if (alkanodeData.length > 0) {
-            // Build lookup: "block:tx" → metadata
-            const metaMap = new Map<string, OylAlkaneBalance>();
-            for (const item of alkanodeData) {
-              metaMap.set(`${item.alkaneId.block}:${item.alkaneId.tx}`, item);
-            }
-            // Merge metadata into Espo results (Espo balances are authoritative)
-            for (const entry of espoResult) {
-              const key = `${entry.alkaneId.block}:${entry.alkaneId.tx}`;
-              const meta = metaMap.get(key);
-              if (meta) {
-                entry.name = meta.name || entry.name;
-                entry.symbol = meta.symbol || entry.symbol;
-                entry.priceUsd = meta.priceUsd;
-                entry.priceInSatoshi = meta.priceInSatoshi;
-                entry.tokenImage = meta.tokenImage;
-                entry.floorPrice = meta.floorPrice;
-                entry.frbtcPoolPriceInSats = meta.frbtcPoolPriceInSats;
-                entry.busdPoolPriceInUsd = meta.busdPoolPriceInUsd;
-              }
-            }
-          }
-        }
-      } catch {
-        // Enrichment failed — return Espo results with no metadata
-      }
-      return espoResult;
-    }
-  } catch {
-    // Fall through to OYL Alkanode
-  }
+  _alkanodeUrl?: string,
+): Promise<AlkaneBalance[]> {
+  console.warn(
+    'fetchAlkaneBalances is deprecated. Use provider.dataApi.getAlkanesByAddress() from @alkanes/ts-sdk instead.'
+  );
 
-  // --- Priority 2: OYL Alkanode REST (oylapi on espo) ---
-  try {
-    const response = await fetch(`${alkanodeUrl}/get-alkanes-by-address`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address }),
-    });
-    if (response.ok) {
-      const json = await response.json();
-      const data = json.data ?? [];
-      if (data.length > 0) return data;
-    }
-  } catch {
-    // Fall through to RPC
-  }
-
-  // --- Priority 3: alkanes_protorunesbyaddress RPC (regtest/universal fallback) ---
-  return fetchAlkaneBalancesViaRpc(address);
-}
-
-/**
- * Fetch alkane balances via espo essentials.get_address_balances.
- * Returns aggregated balances per alkane ID (no per-outpoint detail).
- *
- * Response format: { ok: true, address, balances: { "2:0": "30950001348973", ... } }
- * Error format:    { ok: false, error: "invalid_address_format" }
- */
-async function fetchAlkaneBalancesViaEspo(address: string): Promise<OylAlkaneBalance[]> {
-  const response = await fetch(ESPO_RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'essentials.get_address_balances',
-      params: { address },
-      id: 1,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Espo HTTP error: ${response.status}`);
-  }
-
-  const json = await response.json();
-  const result = json.result;
-
-  // Espo returns { ok: false, error: "..." } for invalid/unsupported addresses
-  if (!result?.ok || !result.balances) {
-    throw new Error(result?.error || 'espo returned no balances');
-  }
-
-  const entries: OylAlkaneBalance[] = [];
-  for (const [alkaneId, amount] of Object.entries(result.balances)) {
-    const [block, tx] = alkaneId.split(':');
-    entries.push({
-      name: '',
-      symbol: '',
-      balance: String(amount),
-      alkaneId: { block, tx },
-    });
-  }
-
-  return entries;
-}
-
-/**
- * Fetch alkane balances via alkanes_protorunesbyaddress RPC.
- * Aggregates balances across all outpoints returned by the indexer.
- *
- * Route chain (browser):
- *   Browser → /api/rpc Next.js proxy → regtest.subfrost.io/v4/subfrost
- *     → jsonrpc pod (18888) → metashrew-0 indexer (8080)
- *
- * Route chain (server-side):
- *   Next.js server → regtest.subfrost.io/v4/subfrost directly
- */
-async function fetchAlkaneBalancesViaRpc(address: string): Promise<OylAlkaneBalance[]> {
+  // Fallback to RPC if called directly (shouldn't happen in normal usage)
   const rpcUrl = typeof window !== 'undefined' ? '/api/rpc' : (
     process.env.REGTEST_RPC_URL || 'https://regtest.subfrost.io/v4/subfrost'
   );
@@ -291,8 +180,8 @@ async function fetchAlkaneBalancesViaRpc(address: string): Promise<OylAlkaneBala
     }
   }
 
-  // Convert to OylAlkaneBalance format
-  const entries: OylAlkaneBalance[] = [];
+  // Convert to AlkaneBalance format
+  const entries: AlkaneBalance[] = [];
   for (const [alkaneId, amount] of balanceMap) {
     const [block, tx] = alkaneId.split(':');
     entries.push({
@@ -305,5 +194,3 @@ async function fetchAlkaneBalancesViaRpc(address: string): Promise<OylAlkaneBala
 
   return entries;
 }
-
-

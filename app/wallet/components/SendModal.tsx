@@ -1471,8 +1471,6 @@ function getSendNftImagePaths(symbol: string, id: string, network: string): stri
   if (symbolLower === 'frbtc' || id === '32:0') { paths.push('/tokens/frbtc.svg'); return paths; }
   if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png'); return paths; }
   if (id && /^\d+:\d+/.test(id)) {
-    const [block, tx] = id.split(':');
-    paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
     const urlSafeId = id.replace(/:/g, '-');
     paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
   }

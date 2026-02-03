@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, SUBFROST_API_URLS } from '@/utils/getConfig';
 
 export const dynamic = 'force-dynamic';
 
 // ============================================================================
-// OYL Alkanode Types (subset of PoolDetailsResult)
+// Types
 // ============================================================================
 
-interface AlkaneId {
-  block: string;
-  tx: string;
-}
-
-interface OylPoolDetails {
-  poolId?: AlkaneId;
+interface PoolDetails {
+  poolId?: { block: string; tx: string };
   poolName: string;
-  token0: AlkaneId;
-  token1: AlkaneId;
+  token0: { block: string; tx: string };
+  token1: { block: string; tx: string };
   token0Amount: string;
   token1Amount: string;
   tokenSupply: string;
@@ -28,24 +23,9 @@ interface OylPoolDetails {
   poolApr?: number | string;
 }
 
-interface OylAllPoolsResponse {
-  statusCode: number;
-  data: {
-    count: number;
-    pools: OylPoolDetails[];
-    total: number;
-    totalTvl: number | string;
-  };
-}
-
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function parseFactoryId(factoryIdStr: string): AlkaneId {
-  const [block, tx] = factoryIdStr.split(':');
-  return { block, tx };
-}
 
 function toNum(v: number | string | undefined | null): number {
   if (v == null) return 0;
@@ -67,7 +47,7 @@ function extractSymbols(name: string): [string, string] {
   return [parts[0] || 'TOKEN0', parts[1] || 'TOKEN1'];
 }
 
-function mapPoolDetails(pool: OylPoolDetails): {
+function mapPoolDetails(pool: PoolDetails): {
   key: string;
   stats: Record<string, unknown>;
 } {
@@ -124,7 +104,7 @@ function mapPoolDetails(pool: OylPoolDetails): {
  *   - dashboard: if 'true', returns full dashboard stats
  *   - network: network name (e.g., 'mainnet', 'regtest')
  *
- * Fetches pool data from OYL Alkanode API (/get-all-pools-details).
+ * Fetches pool data from Subfrost OylAPI (same REST pattern as @alkanes/ts-sdk OylApiClient).
  */
 export async function GET(request: NextRequest) {
   try {
@@ -134,27 +114,30 @@ export async function GET(request: NextRequest) {
     const network = searchParams.get('network') || 'mainnet';
 
     const config = getConfig(network);
-    const alkanodeUrl = config.OYL_ALKANODE_URL;
-    const factoryId = parseFactoryId(config.ALKANE_FACTORY_ID);
+    const apiUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+    const [factoryBlock, factoryTx] = config.ALKANE_FACTORY_ID.split(':');
 
-    // Fetch all pools from OYL Alkanode
-    const response = await fetch(`${alkanodeUrl}/get-all-pools-details`, {
+    // Fetch all pools via OylAPI REST endpoint (same pattern as @alkanes/ts-sdk OylApiClient)
+    const response = await fetch(`${apiUrl}/get-all-pools-details`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ factoryId }),
+      body: JSON.stringify({
+        factoryId: { block: factoryBlock, tx: factoryTx },
+      }),
     });
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
-      console.error(`[API /pools/stats] OYL Alkanode error: ${response.status}`, text);
+      console.error(`[API /pools/stats] Subfrost API error: ${response.status}`, text);
       return NextResponse.json(
-        { success: false, error: `OYL Alkanode API error: ${response.status}` },
+        { success: false, error: `Subfrost API error: ${response.status}` },
         { status: 502 },
       );
     }
 
-    const json: OylAllPoolsResponse = await response.json();
-    const pools = json?.data?.pools ?? [];
+    const result = await response.json();
+    const pools: PoolDetails[] = result?.data?.pools ?? result?.pools ?? [];
+    const totalTvl = toNum(result?.data?.totalTvl ?? result?.totalTvl);
 
     // Map to PoolStats keyed by pool name
     const allStats: Record<string, Record<string, unknown>> = {};
@@ -165,8 +148,6 @@ export async function GET(request: NextRequest) {
 
     // Dashboard stats
     if (dashboardParam === 'true') {
-      const totalTvlUsd = toNum(json?.data?.totalTvl);
-
       return NextResponse.json({
         success: true,
         data: {
@@ -180,7 +161,7 @@ export async function GET(request: NextRequest) {
           },
           tvlStats: {
             pools: allStats,
-            totalTvlUsd,
+            totalTvlUsd: totalTvl,
             timestamp: Date.now(),
           },
           btcPrice: { usd: 0, timestamp: Date.now() },

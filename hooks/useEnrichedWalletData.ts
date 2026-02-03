@@ -3,27 +3,20 @@
  *
  * Flow:
  * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + inscriptions + runes
- * 2. fetchAlkaneBalances(address) - OYL Alkanode REST API for alkane token balances
- *    (replaces old alkanes_protorunesbyaddress RPC which returned 0x on regtest)
+ * 2. provider.dataApi.getAlkanesByAddress(address) - SDK dataApi for alkane token balances
+ *
+ * JOURNAL ENTRY (2026-02-03):
+ * Migrated from deprecated fetchAlkaneBalances to SDK's dataApi.getAlkanesByAddress.
  *
  * JOURNAL ENTRY (2026-02-02):
  * Converted from useEffect+useState to useQuery. The query is invalidated by the
- * central HeightPoller when block height changes. Return shape preserved for
- * backward compatibility via the adapter below.
- *
- * JOURNAL ENTRY (2026-01-30):
- * Replaced alkanes_protorunesbyaddress with OYL Alkanode REST API (/get-alkanes-by-address)
- * for alkane balance fetching.
- *
- * JOURNAL ENTRY (2026-01-28):
- * RESTORED esplora fallback for BTC balance fetching.
+ * central HeightPoller when block height changes.
  */
 
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { getConfig, fetchAlkaneBalances } from '@/utils/getConfig';
 import { enrichedWalletQueryOptions } from '@/queries/account';
 
 export interface AlkaneAsset {
@@ -94,7 +87,6 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   const { account, isConnected, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const queryClient = useQueryClient();
-  const config = getConfig(network || 'mainnet');
 
   const opts = enrichedWalletQueryOptions({
     provider,
@@ -102,8 +94,6 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     account,
     isConnected,
     network: network || 'mainnet',
-    fetchAlkaneBalances,
-    alkanodeUrl: config.OYL_ALKANODE_URL,
   });
 
   const { data, isLoading, error, refetch } = useQuery(opts);

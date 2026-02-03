@@ -406,10 +406,6 @@ function getNftImagePaths(symbol: string, id: string, network: string): string[]
     return paths;
   }
   if (id && /^\d+:\d+/.test(id)) {
-    const [block, tx] = id.split(':');
-    paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
-  }
-  if (id && /^\d+:\d+/.test(id)) {
     const urlSafeId = id.replace(/:/g, '-');
     paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
   }

@@ -1,8 +1,9 @@
 /**
- * usePools - Fetch pool data from OYL Alkanode API
+ * usePools - Fetch pool data from Subfrost API via @alkanes/ts-sdk
  *
- * Primary: OYL Alkanode /get-all-pools-details (returns all pools with TVL, volume, APR)
- * Fallback: ts-sdk dataApiGetPools / alkanesGetAllPoolsWithDetails
+ * Primary: Espo ammdata.get_pools (mainnet)
+ * Secondary: ts-sdk dataApi.getPools
+ * Fallback: RPC simulation for regtest
  */
 import { useQuery } from '@tanstack/react-query';
 
@@ -40,38 +41,6 @@ export type PoolsListItem = {
 
 // Token IDs for TVL calculation (used by SDK fallback)
 const FRBTC_TOKEN_ID = '32:0';
-
-// ============================================================================
-// OYL Alkanode types
-// ============================================================================
-
-interface AlkaneId {
-  block: string;
-  tx: string;
-}
-
-interface OylPoolDetails {
-  poolId?: AlkaneId;
-  poolName: string;
-  token0: AlkaneId;
-  token1: AlkaneId;
-  token0Amount: string;
-  token1Amount: string;
-  tokenSupply: string;
-  poolTvlInUsd?: number | string;
-  token0TvlInUsd?: number | string;
-  token1TvlInUsd?: number | string;
-  poolVolume1dInUsd?: number | string;
-  poolVolume7dInUsd?: number | string;
-  poolVolume30dInUsd?: number | string;
-  poolApr?: number | string;
-}
-
-function toNum(v: number | string | undefined | null): number {
-  if (v == null) return 0;
-  const n = Number(v);
-  return isNaN(n) ? 0 : n;
-}
 
 // ============================================================================
 // Helpers
@@ -155,78 +124,6 @@ function extractPoolsArray(response: any): any[] {
   if (response.data?.pools && Array.isArray(response.data.pools)) return response.data.pools;
   if (response.data && Array.isArray(response.data)) return response.data;
   return [];
-}
-
-// ============================================================================
-// OYL Alkanode fetch
-// ============================================================================
-
-async function fetchPoolsFromAlkanode(
-  alkanodeUrl: string,
-  factoryId: string,
-  network: string,
-): Promise<PoolsListItem[]> {
-  const [block, tx] = factoryId.split(':');
-
-  const response = await fetch(`${alkanodeUrl}/get-all-pools-details`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ factoryId: { block, tx } }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`OYL Alkanode error: ${response.status}`);
-  }
-
-  const json = await response.json();
-  const pools: OylPoolDetails[] = json?.data?.pools ?? [];
-
-  const items: PoolsListItem[] = [];
-
-  for (const p of pools) {
-    const poolId = p.poolId
-      ? `${p.poolId.block}:${p.poolId.tx}`
-      : `${p.token0.block}:${p.token0.tx}`;
-
-    const token0Id = `${p.token0.block}:${p.token0.tx}`;
-    const token1Id = `${p.token1.block}:${p.token1.tx}`;
-
-    // Extract symbols from poolName ("DIESEL / bUSD" → ["DIESEL", "bUSD"])
-    const nameParts = p.poolName.split('/').map(s => s.trim());
-    const token0Symbol = nameParts[0] || getTokenSymbol(token0Id);
-    const token1Symbol = nameParts[1] || getTokenSymbol(token1Id);
-
-    if (!poolId || !token0Id || !token1Id) continue;
-
-    items.push({
-      id: poolId,
-      pairLabel: `${token0Symbol} / ${token1Symbol} LP`,
-      token0: {
-        id: token0Id,
-        symbol: token0Symbol,
-        name: token0Symbol,
-        iconUrl: getTokenIconUrl(token0Id, network),
-      },
-      token1: {
-        id: token1Id,
-        symbol: token1Symbol,
-        name: token1Symbol,
-        iconUrl: getTokenIconUrl(token1Id, network),
-      },
-      tvlUsd: toNum(p.poolTvlInUsd),
-      token0TvlUsd: toNum(p.token0TvlInUsd),
-      token1TvlUsd: toNum(p.token1TvlInUsd),
-      vol24hUsd: toNum(p.poolVolume1dInUsd),
-      vol7dUsd: toNum(p.poolVolume7dInUsd),
-      vol30dUsd: toNum(p.poolVolume30dInUsd),
-      apr: toNum(p.poolApr),
-      token0Amount: p.token0Amount,
-      token1Amount: p.token1Amount,
-      lpTotalSupply: p.tokenSupply,
-    });
-  }
-
-  return items;
 }
 
 // ============================================================================
@@ -535,7 +432,7 @@ async function fetchPoolsFromSDK(
 
 export function usePools(params: UsePoolsParams = {}) {
   const { network } = useWallet();
-  const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID, OYL_ALKANODE_URL } = getConfig(network);
+  const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID } = getConfig(network);
   const { data: btcPrice } = useBtcPrice();
   const { provider } = useAlkanesSDK();
 
@@ -550,7 +447,6 @@ export function usePools(params: UsePoolsParams = {}) {
       console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID);
 
       let items: PoolsListItem[] = [];
-      let sourceIsAlkanode = false;
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
 
       // Priority 1: Espo ammdata.get_pools (mainnet only — Espo returns mainnet data,
@@ -564,50 +460,13 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
 
-      // Priority 2: OYL Alkanode API (returns all pools with TVL/volume/APR)
-      if (items.length === 0) {
+      // Priority 2: ts-sdk dataApi.getPools
+      if (items.length === 0 && provider) {
         try {
-          items = await fetchPoolsFromAlkanode(OYL_ALKANODE_URL, ALKANE_FACTORY_ID, network);
-          sourceIsAlkanode = true;
-          console.log('[usePools] OYL Alkanode returned', items.length, 'pools');
+          items = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
+          console.log('[usePools] SDK dataApi returned', items.length, 'pools');
         } catch (e) {
-          console.warn('[usePools] OYL Alkanode failed:', e);
-        }
-      }
-
-      // Enrich non-Alkanode results with OYL Alkanode token names when available.
-      // Espo and RPC fallbacks only use KNOWN_TOKENS for symbols — OYL Alkanode has
-      // authoritative display names (same source the wallet dashboard uses).
-      if (items.length > 0 && !sourceIsAlkanode) {
-        try {
-          const alkanodeItems = await fetchPoolsFromAlkanode(OYL_ALKANODE_URL, ALKANE_FACTORY_ID, network);
-          if (alkanodeItems.length > 0) {
-            const tokenMeta = new Map<string, { symbol: string; name?: string; iconUrl?: string }>();
-            for (const ap of alkanodeItems) {
-              tokenMeta.set(ap.token0.id, ap.token0);
-              tokenMeta.set(ap.token1.id, ap.token1);
-            }
-            for (const item of items) {
-              const meta0 = tokenMeta.get(item.token0.id);
-              const meta1 = tokenMeta.get(item.token1.id);
-              if (meta0) {
-                item.token0.symbol = meta0.symbol;
-                item.token0.name = meta0.name;
-                if (meta0.iconUrl) item.token0.iconUrl = meta0.iconUrl;
-              }
-              if (meta1) {
-                item.token1.symbol = meta1.symbol;
-                item.token1.name = meta1.name;
-                if (meta1.iconUrl) item.token1.iconUrl = meta1.iconUrl;
-              }
-              if (meta0 || meta1) {
-                item.pairLabel = `${item.token0.symbol} / ${item.token1.symbol} LP`;
-              }
-            }
-            console.log('[usePools] Enriched token names from OYL Alkanode');
-          }
-        } catch (e) {
-          console.warn('[usePools] OYL Alkanode enrichment failed (non-fatal):', e);
+          console.warn('[usePools] SDK dataApi failed:', e);
         }
       }
 
@@ -619,12 +478,6 @@ export function usePools(params: UsePoolsParams = {}) {
         } catch (e) {
           console.warn('[usePools] RPC simulation failed:', e);
         }
-      }
-
-      // Priority 4: ts-sdk
-      if (items.length === 0 && provider) {
-        items = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
-        console.log('[usePools] SDK returned', items.length, 'pools');
       }
 
       if (items.length === 0) {

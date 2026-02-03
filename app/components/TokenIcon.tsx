@@ -93,12 +93,6 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       paths.push(`/tokens/${symbolLower}.png`);
     }
 
-    // Priority 8: Ordiscan CDN for alkane tokens (may return inscription art, not icons)
-    if (id && /^\d+:\d+/.test(id)) {
-      const [block, tx] = id.split(':');
-      paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
-    }
-
     return paths;
   }, [symbol, id, iconUrl, network]);
 
