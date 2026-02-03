@@ -946,24 +946,24 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   {t('send.highFeeDescription')}
                 </p>
 
-                <div className="bg-red-500/10 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
-                    <span className="text-red-400">
+                    <span className="text-red-300/80">{t('send.estimatedFee')}</span>
+                    <span className="text-red-200 font-medium">
                       {(estimatedFee / 100000000).toFixed(8)} BTC
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">{t('send.feeRateLabel')}</span>
-                    <span className="text-red-400">{feeRate} sat/vB</span>
+                    <span className="text-red-300/80">{t('send.feeRateLabel')}</span>
+                    <span className="text-red-200 font-medium">{feeRate} sat/vB</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">Number of Inputs:</span>
-                    <span className="text-red-400">{selectedUtxos.size}</span>
+                    <span className="text-red-300/80">Number of Inputs:</span>
+                    <span className="text-red-200 font-medium">{selectedUtxos.size}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">Fee Percentage:</span>
-                    <span className="text-red-400">
+                    <span className="text-red-300/80">Fee Percentage:</span>
+                    <span className="text-red-200 font-medium">
                       {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
                     </span>
                   </div>
@@ -996,7 +996,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 </button>
                 <button
                   onClick={proceedWithHighFee}
-                  className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-[0_2px_8px_rgba(239,68,68,0.3)] hover:shadow-[0_4px_12px_rgba(239,68,68,0.4)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
                 >
                   {t('send.proceedAnyway')}
                 </button>
