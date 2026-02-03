@@ -49,8 +49,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
@@ -90,6 +92,7 @@ export type WrapSwapTransactionData = {
   btcAmount: string;        // BTC amount in display units (e.g., "0.5")
   buyAmount: string;        // Expected output amount in alks
   buyCurrency: string;      // Target token alkane id (e.g., "2:0" for DIESEL)
+  buySymbol?: string;       // Symbol for confirmation display (e.g., "DIESEL")
   maxSlippage: string;      // Percent string, e.g., '0.5'
   feeRate: number;          // sats/vB
   poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
@@ -150,9 +153,10 @@ function buildWrapSwapProtostone(params: {
 }
 
 export function useWrapSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
@@ -313,6 +317,28 @@ export function useWrapSwapMutation() {
             psbtBase64 = uint8ArrayToBase64(bytes);
           } else {
             throw new Error('Unexpected PSBT format');
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          if (walletType === 'keystore') {
+            console.log('[WrapSwap] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'swap',
+              title: 'Confirm BTC Swap',
+              description: 'Wrap BTC to frBTC, then swap',
+              fromAmount: data.btcAmount,
+              fromSymbol: 'BTC',
+              toAmount: (parseFloat(data.buyAmount) / 1e8).toString(),
+              toSymbol: getTokenSymbol(data.buyCurrency, data.buySymbol),
+              toId: data.buyCurrency,
+              feeRate: data.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[WrapSwap] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[WrapSwap] User approved transaction');
           }
 
           // Sign with both keys

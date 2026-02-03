@@ -449,9 +449,9 @@ export default function LiquidityInputs({
             </span>
             
             {/* Side-by-side token selectors */}
-            <div className="flex flex-row md:flex-col lg:flex-row items-center md:items-start lg:items-center gap-3">
+            <div className="flex flex-row items-center gap-3">
               {/* Token 0 selector + divider row */}
-              <div className="contents md:flex md:items-center md:gap-3 lg:contents">
+              <div className="contents">
                 <button
                   type="button"
                   onClick={() => openTokenSelector('pool0')}
@@ -473,18 +473,16 @@ export default function LiquidityInputs({
                   <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
                 </button>
 
-                {/* Divider - visible only on medium screens (with token0) */}
-                <span className="hidden md:block lg:hidden text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
               </div>
 
-              {/* Divider - visible on small and large screens (between selectors) */}
-              <span className="md:hidden lg:block text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
+              {/* Divider between selectors */}
+              <span className="text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
 
               {/* Token 1 selector */}
               <button
                 type="button"
                 onClick={() => openTokenSelector('pool1')}
-                className="flex-1 md:flex-none lg:flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
               >
                 {token1 && (
                   <TokenIcon 
@@ -759,7 +757,7 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          className={`mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none ${isConnected && !isRegtest ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+          className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && !isRegtest ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
         >
           {showLiquidityComingSoon ? (
             <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -901,9 +899,9 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
   };
 
   const slippageDisplayMap: Record<string, string> = {
-    low: t('liquidity.slow'),
+    low: t('liquidity.low'),
     medium: t('liquidity.medium'),
-    high: t('liquidity.fast'),
+    high: t('liquidity.high'),
     custom: t('liquidity.custom'),
   };
 

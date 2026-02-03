@@ -446,7 +446,7 @@ export default function ConnectWalletModal() {
                 {hasExistingKeystore && (
                   <button
                     onClick={() => setView('unlock')}
-                    className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 mb-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                    className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 mb-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <div className="flex items-center gap-3">
                       <Lock size={24} className="text-blue-400" />
@@ -461,7 +461,7 @@ export default function ConnectWalletModal() {
 
                 <button
                   onClick={() => setView('create')}
-                  className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 mb-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                  className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 mb-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
                     <Plus size={24} className="text-green-400" />
@@ -475,7 +475,7 @@ export default function ConnectWalletModal() {
 
                 <button
                   onClick={() => setView('restore-options')}
-                  className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                  className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
                     <RotateCcw size={24} className="text-yellow-400" />
@@ -493,7 +493,7 @@ export default function ConnectWalletModal() {
                 <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.browserExtension')}</div>
                 <button
                   onClick={() => setView('browser-extension')}
-                  className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                  className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
                     <Download size={24} className="text-purple-400" />
@@ -539,7 +539,7 @@ export default function ConnectWalletModal() {
 
                   <button
                     onClick={() => setView('create')}
-                    className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white"
+                    className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] text-white"
                   >
                     {t('wallet.continueToCreate')}
                   </button>
@@ -547,9 +547,6 @@ export default function ConnectWalletModal() {
               ) : (
                 <>
                   <div className="flex flex-col items-center gap-3 py-2">
-                    <div className="p-4 rounded-full bg-amber-500/20 border border-amber-500/30">
-                      <Ticket size={32} className="text-amber-400" />
-                    </div>
                     <p className="text-sm text-[color:var(--sf-text)]/60 text-center">
                       {t('wallet.enterInviteCodePrompt')}
                     </p>
@@ -580,7 +577,7 @@ export default function ConnectWalletModal() {
                     <button
                       onClick={validateInviteCode}
                       disabled={!inviteCode.trim()}
-                      className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                      className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
                     >
                       {t('wallet.verifyCode')}
                     </button>
@@ -600,7 +597,7 @@ export default function ConnectWalletModal() {
               <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={() => setView('restore-mnemonic')}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl bg-[color:var(--sf-input-bg)] p-4 aspect-square shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl bg-[color:var(--sf-input-bg)] p-4 aspect-square shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Key size={32} className="text-yellow-400" />
                   <div className="text-center">
@@ -610,7 +607,7 @@ export default function ConnectWalletModal() {
 
                 <button
                   onClick={() => setView('restore-json')}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl bg-[color:var(--sf-input-bg)] p-4 aspect-square shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl bg-[color:var(--sf-input-bg)] p-4 aspect-square shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Upload size={32} className="text-orange-400" />
                   <div className="text-center">
@@ -620,7 +617,7 @@ export default function ConnectWalletModal() {
 
                 <button
                   onClick={() => setView('restore-drive-picker')}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl bg-[color:var(--sf-input-bg)] p-4 aspect-square shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl bg-[color:var(--sf-input-bg)] p-4 aspect-square shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Cloud size={32} className="text-blue-400" />
                   <div className="text-center">
@@ -649,7 +646,7 @@ export default function ConnectWalletModal() {
               ) : (
                 <button
                   onClick={() => setView('invite-code')}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-2.5 text-sm font-bold text-yellow-700 dark:text-yellow-400 shadow-[0_2px_8px_rgba(0,0,0,0.1)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-yellow-500/20 hover:border-yellow-500/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-4 py-2.5 text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Ticket size={16} />
                   <span>{t('wallet.invited')}</span>
@@ -716,7 +713,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleCreateWallet}
                   disabled={isLoading}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
                 >
                   {isLoading ? t('wallet.creating') : t('wallet.createWallet')}
                 </button>
@@ -774,8 +771,8 @@ export default function ConnectWalletModal() {
                       disabled={isLoading}
                       className={`w-full rounded-xl py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center justify-center gap-2 text-white overflow-hidden relative ${
                         backupSuccess
-                          ? 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700'
-                          : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50'
+                          ? 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 hover:scale-[1.02] active:scale-[0.98]'
+                          : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50'
                       }`}
                     >
                       {/* Progress bar background */}
@@ -821,7 +818,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleConfirmMnemonic}
                   disabled={!mnemonicConfirmed}
-                  className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                  className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
                 >
                   {t('wallet.continueToWallet')}
                 </button>
@@ -873,7 +870,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleRestoreFromMnemonic}
                   disabled={isLoading}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
                 >
                   {isLoading ? t('wallet.restoring') : t('wallet.restoreWallet')}
                 </button>
@@ -952,7 +949,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleRestoreFromJson}
                   disabled={isLoading || !uploadedKeystore}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
                 >
                   {isLoading ? t('wallet.restoring') : t('wallet.restoreWallet')}
                 </button>
@@ -962,7 +959,7 @@ export default function ConnectWalletModal() {
 
           {view === 'browser-extension' && (
             <div className="flex flex-col gap-3">
-              <div className="max-h-96 overflow-y-auto space-y-4">
+              <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Installed Wallets Section */}
                 {installedWallets.length > 0 ? (
                   <div>
@@ -985,7 +982,7 @@ export default function ConnectWalletModal() {
                             }
                           }}
                           disabled={isLoading}
-                          className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50"
+                          className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                         >
                           <div className="flex items-center gap-3">
                             <img src={wallet.icon} alt={wallet.name} className="w-8 h-8" />
@@ -1019,7 +1016,7 @@ export default function ConnectWalletModal() {
                             href={wallet.website}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                            className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                           >
                             <img src={wallet.icon} alt={wallet.name} className="w-6 h-6" />
                             <span className="flex-1 text-left text-sm font-bold">{wallet.name}</span>
@@ -1096,7 +1093,7 @@ export default function ConnectWalletModal() {
               <button
                 onClick={handleRestoreFromDrive}
                 disabled={isLoading || !password}
-                className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:cursor-not-allowed disabled:opacity-50 text-white"
+                className="w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 text-white"
               >
                 {isLoading ? t('wallet.unlocking') : t('wallet.unlockWallet')}
               </button>
@@ -1145,7 +1142,7 @@ export default function ConnectWalletModal() {
                 <button
                   onClick={handleUnlockKeystore}
                   disabled={isLoading}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50 text-white"
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
                 >
                   {isLoading ? t('wallet.unlocking') : t('wallet.unlock')}
                 </button>

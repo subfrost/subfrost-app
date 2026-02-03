@@ -197,9 +197,7 @@ export function usePoolCandles({
       return candles;
     },
     enabled: enabled && !!resolvedPoolKey,
-    staleTime: 60_000, // 1 minute
-    gcTime: 5 * 60_000, // 5 minutes (formerly cacheTime)
-    refetchInterval: 60_000, // Refetch every minute
+    gcTime: 5 * 60_000,
     retry: 2,
   });
 }
@@ -263,9 +261,7 @@ export function useBtcUsdtCandles({
       return data.candles;
     },
     enabled,
-    staleTime: 60_000, // 1 minute
-    gcTime: 5 * 60_000, // 5 minutes
-    refetchInterval: 60_000, // Refetch every minute
+    gcTime: 5 * 60_000,
     retry: 2,
   });
 }

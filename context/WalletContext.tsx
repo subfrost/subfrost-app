@@ -28,6 +28,36 @@ import { BROWSER_WALLETS } from '@/constants/wallets';
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
 
+// Network storage key — must match the key in providers.tsx
+const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
+
+// Detect network from a Bitcoin address prefix
+function detectNetworkFromAddress(address: string): Network | null {
+  if (address.startsWith('bc1p') || address.startsWith('bc1q') || address.startsWith('1') || address.startsWith('3')) {
+    return 'mainnet';
+  }
+  if (address.startsWith('tb1p') || address.startsWith('tb1q')) {
+    return 'signet';
+  }
+  if (address.startsWith('bcrt1p') || address.startsWith('bcrt1q')) {
+    return 'subfrost-regtest';
+  }
+  return null;
+}
+
+// Switch the app's global network to match a browser wallet's address.
+// Updates localStorage and dispatches a CustomEvent that providers.tsx listens for.
+function switchNetworkToMatch(detectedNetwork: Network) {
+  if (typeof window === 'undefined') return;
+
+  const currentNetwork = localStorage.getItem(NETWORK_STORAGE_KEY);
+  if (currentNetwork === detectedNetwork) return;
+
+  console.log(`[WalletContext] Switching app network from "${currentNetwork}" to "${detectedNetwork}" to match browser wallet`);
+  localStorage.setItem(NETWORK_STORAGE_KEY, detectedNetwork);
+  window.dispatchEvent(new CustomEvent('network-changed', { detail: detectedNetwork }));
+}
+
 // Wallet type - keystore (mnemonic-based) or browser extension
 export type WalletType = 'keystore' | 'browser';
 
@@ -266,8 +296,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const storedBrowserWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
       if (storedBrowserWalletId && storedWalletType === 'browser') {
         // Restore cached addresses from localStorage to avoid re-prompting
+        let cachedAddrs: string | null = null;
         try {
-          const cachedAddrs = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
+          cachedAddrs = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
           if (cachedAddrs) {
             setBrowserWalletAddresses(JSON.parse(cachedAddrs));
           }
@@ -287,6 +318,19 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
             // Use cached addresses from localStorage instead of re-prompting
             // The addresses were cached during the initial connectBrowserWallet call
+
+            // Auto-detect network from cached/connected addresses and switch if needed
+            let cachedParsed: any = null;
+            try { cachedParsed = cachedAddrs ? JSON.parse(cachedAddrs) : null; } catch {}
+            const addrToCheck = cachedParsed?.taproot?.address
+              || cachedParsed?.nativeSegwit?.address
+              || connected.address;
+            if (addrToCheck) {
+              const detectedNetwork = detectNetworkFromAddress(addrToCheck);
+              if (detectedNetwork) {
+                switchNetworkToMatch(detectedNetwork);
+              }
+            }
           }
         } catch (error) {
           // Auto-reconnect failed, clear stored ID
@@ -847,6 +891,17 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       console.log('[WalletContext] Connected to browser wallet:', walletInfo.name);
       console.log('[WalletContext] Primary address:', connected.address);
       console.log('[WalletContext] Additional addresses:', additionalAddresses);
+
+      // Auto-detect network from the wallet's addresses and switch if needed
+      const addrToCheck = additionalAddresses.taproot?.address
+        || additionalAddresses.nativeSegwit?.address
+        || connected.address;
+      if (addrToCheck) {
+        const detectedNetwork = detectNetworkFromAddress(addrToCheck);
+        if (detectedNetwork) {
+          switchNetworkToMatch(detectedNetwork);
+        }
+      }
     } catch (error) {
       console.error('[WalletContext] Failed to connect browser wallet:', error);
       throw error;

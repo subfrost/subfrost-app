@@ -96,6 +96,8 @@ const zh: Record<string, string> = {
   'liquidity.slow': '\u6162\u901f',
   'liquidity.medium': '\u4e2d\u901f',
   'liquidity.fast': '\u5feb\u901f',
+  'liquidity.low': '\u4f4e',
+  'liquidity.high': '\u9ad8',
 
   // Pool Details
   'pool.priceChart': '\u4ef7\u683c\u56fe\u8868',
@@ -157,6 +159,7 @@ const zh: Record<string, string> = {
   'tokenSelector.searchAssets': '\u641c\u7d22\u6bd4\u7279\u5e01\u539f\u751f\u8d44\u4ea7...',
   'tokenSelector.noTokens': '\u672a\u627e\u5230\u4ee3\u5e01',
   'tokenSelector.notAvailable': '\u4e0d\u53ef\u7528',
+  'tokenSelector.selectAmount': '选择数量',
 
   // Receive Modal
   'receive.title': '\u63a5\u6536\u6bd4\u7279\u5e01',
@@ -178,6 +181,7 @@ const zh: Record<string, string> = {
   'walletDash.history': '\u5386\u53f2',
   'walletDash.send': '\u53d1\u9001',
   'walletDash.swap': '\u5151\u6362',
+  'walletDash.withdraw': '\u63d0\u53d6',
   'walletDash.receive': '\u63a5\u6536',
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',
@@ -768,6 +772,9 @@ const zh: Record<string, string> = {
   // Send Modal (additional)
   'send.titleAlkanes': '发送 Alkanes',
   'send.selectAlkanes': '选择 Alkanes',
+  'send.selectAlkane': '请选择要发送的 Alkane',
+  'send.insufficientBalance': '余额不足',
+  'send.noAlkanes': '没有可发送的 Alkanes',
   'send.amountAlkanes': '数量',
   'send.btcTab': 'BTC',
   'send.alkanesTab': 'Alkanes',

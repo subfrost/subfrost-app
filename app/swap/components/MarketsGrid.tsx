@@ -159,14 +159,14 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
               placeholder={t('pool.search')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="hidden md:block lg:hidden h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none "
+              className="hidden lg:block xl:hidden h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none "
             />
             <input
               type="text"
               placeholder={t('pool.searchPools')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="md:hidden lg:block h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none "
+              className="lg:hidden xl:block h-10 w-full rounded-lg bg-[color:var(--sf-panel-bg)] pl-10 pr-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none "
             />
             <svg 
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[color:var(--sf-text)]/40"
@@ -315,7 +315,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             </tr>
           </thead>
         </table>
-        <div className="no-scrollbar overflow-y-auto max-h-[540px]">
+        <div className="no-scrollbar overflow-y-auto max-h-[450px]">
           <table className="w-full table-fixed">
             <colgroup>
               <col className="w-[35%]" />

@@ -39,8 +39,6 @@ export function useFuturesMarkets(params: UseFuturesMarketsParams = {}) {
 
   return useQuery<FuturesMarket[]>({
     queryKey: ['futures-markets', network, params.type, params.baseAsset],
-    staleTime: 30_000,
-    refetchInterval: 30_000,
     enabled: isInitialized && !!provider,
     queryFn: async () => {
       if (!provider) {
@@ -104,8 +102,6 @@ export function useFuturesMarket(marketId: string) {
 
   return useQuery<FuturesMarket | null>({
     queryKey: ['futures-market', network, marketId],
-    staleTime: 10_000,
-    refetchInterval: 10_000,
     enabled: !!marketId && isInitialized && !!provider,
     queryFn: async () => {
       if (!provider) {

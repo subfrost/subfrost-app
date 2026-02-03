@@ -89,8 +89,8 @@ export default function PoolDetailsCard({ pool }: Props) {
             resetKey={`${pool?.id ?? 'no-pool'}-${timeframe}`}
           />
 
-          {/* Pool details - hidden on mobile */}
-          <div className="hidden md:block">
+          {/* Pool details - hidden on mobile/tablet */}
+          <div className="hidden lg:block">
             {/* Token pair and stats row */}
             <div className="mt-5 flex items-center gap-3 mb-4">
               <div className="flex -space-x-2">

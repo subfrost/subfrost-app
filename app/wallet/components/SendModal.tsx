@@ -1,13 +1,23 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
+import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
+import { getConfig } from '@/utils/getConfig';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
+
+import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
 
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 
@@ -28,9 +38,44 @@ interface UTXO {
   frozen?: boolean;
 }
 
+// Helper to convert Uint8Array to base64
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Build protostone for alkane transfer using factory Forward opcode (50)
+ * The Forward opcode simply passes incoming alkanes to the specified output
+ */
+function buildTransferProtostone(params: {
+  factoryId: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { factoryId, pointer = 'v0', refund = 'v0' } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+
+  // Factory opcode 50 = Forward (passes incoming alkanes to output)
+  const cellpack = [factoryBlock, factoryTx, 50].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
-  const { address, network } = useWallet() as any;
+  const { address: taprootAddress, paymentAddress, network, walletType, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
+  // Address strategy:
+  // - BTC sends: SegWit only (paymentAddress) for both send and change
+  // - Alkane sends: Taproot (address) for token send/change, SegWit (paymentAddress) for BTC fees/change
+  const btcSendAddress = paymentAddress;
+  const alkaneSendAddress = taprootAddress;
   const { provider, isInitialized } = useAlkanesSDK();
+  const alkaneProvider = useSandshrewProvider();
+  const { requestConfirmation } = useTransactionConfirm();
+  const { ALKANE_FACTORY_ID } = getConfig(network);
   const { t } = useTranslation();
   const { utxos, balances, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
@@ -47,6 +92,29 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [showFeeWarning, setShowFeeWarning] = useState(false);
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
+  const selectedAlkaneRef = useRef<HTMLButtonElement>(null);
+
+  const { data: poolsData } = usePools();
+  const { data: positionMeta } = usePositionMetadata(balances.alkanes);
+  const poolMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (poolsData?.items) {
+      for (const pool of poolsData.items) {
+        map.set(pool.id, pool);
+      }
+    }
+    return map;
+  }, [poolsData]);
+
+  const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
+    /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);
+  const isStakedPosition = (alkane: { symbol: string; name: string }) =>
+    alkane.symbol.startsWith('POS-') || alkane.name.startsWith('POS-');
+  const isPosition = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
+    isLpToken(alkane) || isStakedPosition(alkane);
+  const isNft = (balance: string) => BigInt(balance) === BigInt(1);
 
   // Load frozen UTXOs from localStorage
   const getFrozenUtxos = (): Set<string> => {
@@ -63,11 +131,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const frozenUtxos = getFrozenUtxos();
 
-  // Filter available UTXOs (only from current address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
+  // Filter available UTXOs (only from SegWit address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
-    // Only include UTXOs from the current address
-    if (utxo.address !== address) return false;
-    
+    // Only include UTXOs from the SegWit (payment) address for BTC sends
+    if (utxo.address !== btcSendAddress) return false;
+
     const utxoKey = `${utxo.txid}:${utxo.vout}`;
     if (frozenUtxos.has(utxoKey)) return showFrozenUtxos;
     if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
@@ -77,13 +145,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   });
 
   // Debug: Log UTXO distribution
-  console.log('[SendModal] Current address:', address);
+  console.log('[SendModal] BTC send address (SegWit):', btcSendAddress);
   console.log('[SendModal] Total UTXOs:', utxos.all.length);
   console.log('[SendModal] UTXOs by address:', {
-    currentAddress: utxos.all.filter(u => u.address === address).length,
-    otherAddresses: utxos.all.filter(u => u.address !== address).length,
+    segwitAddress: utxos.all.filter(u => u.address === btcSendAddress).length,
+    otherAddresses: utxos.all.filter(u => u.address !== btcSendAddress).length,
   });
-  console.log('[SendModal] Available UTXOs for current address:', availableUtxos.length);
+  console.log('[SendModal] Available UTXOs for SegWit address:', availableUtxos.length);
   console.log('[SendModal] Total value available:', (availableUtxos.reduce((sum, u) => sum + u.value, 0) / 1e8).toFixed(8), 'BTC');
 
   const totalSelectedValue = Array.from(selectedUtxos)
@@ -105,6 +173,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       setTxid('');
       setSendMode('btc');
       setSelectedAlkaneId(null);
+      setAlkaneFilter('tokens');
     }
   }, [isOpen]);
 
@@ -113,8 +182,23 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     if (isOpen && initialAlkane) {
       setSendMode('alkanes');
       setSelectedAlkaneId(initialAlkane.alkaneId);
+      // Switch to the correct filter tab for this alkane
+      if (isPosition(initialAlkane)) {
+        setAlkaneFilter('positions');
+      } else if (isNft(initialAlkane.balance)) {
+        setAlkaneFilter('nfts');
+      } else {
+        setAlkaneFilter('tokens');
+      }
     }
   }, [isOpen, initialAlkane]);
+
+  // Scroll the pre-selected alkane into view within the list
+  useEffect(() => {
+    if (isOpen && selectedAlkaneId && selectedAlkaneRef.current) {
+      selectedAlkaneRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [isOpen, selectedAlkaneId, alkaneFilter]);
 
   if (!isOpen) return null;
 
@@ -138,6 +222,55 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const handleNext = () => {
     setError('');
 
+    // Handle alkane sends
+    if (sendMode === 'alkanes') {
+      if (step === 'input') {
+        // Validate alkane send inputs
+        if (!validateAddress(recipientAddress)) {
+          setError(t('send.invalidAddress'));
+          return;
+        }
+
+        if (!selectedAlkaneId) {
+          setError(t('send.selectAlkane') || 'Please select an alkane to send');
+          return;
+        }
+
+        const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
+        if (!selectedAlkane) {
+          setError('Selected alkane not found');
+          return;
+        }
+
+        const amountFloat = parseFloat(amount);
+        if (isNaN(amountFloat) || amountFloat <= 0) {
+          setError(t('send.invalidAmount'));
+          return;
+        }
+
+        // Convert to base units and check balance
+        const decimals = selectedAlkane.decimals || 8;
+        const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
+        const balanceBaseUnits = BigInt(selectedAlkane.balance);
+
+        if (amountBaseUnits > balanceBaseUnits) {
+          setError(t('send.insufficientBalance') || 'Insufficient balance');
+          return;
+        }
+
+        if (feeRate < 1) {
+          setError(t('send.invalidFeeRate'));
+          return;
+        }
+
+        // For alkane sends, go directly to broadcasting (no confirm step for now)
+        // The confirmation happens via requestConfirmation modal for keystore wallets
+        handleAlkaneBroadcast();
+      }
+      return;
+    }
+
+    // Handle BTC sends
     if (step === 'input') {
       // Validate inputs
       if (!validateAddress(recipientAddress)) {
@@ -258,10 +391,135 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   };
 
   const handleBroadcast = async () => {
-    setStep('broadcasting');
     setError('');
 
     try {
+      const amountSats = Math.floor(parseFloat(amount) * 100000000);
+
+      // For browser wallets, build and sign PSBT manually
+      if (walletType === 'browser') {
+        console.log('[SendModal] Browser wallet - building PSBT...');
+        console.log('[SendModal] Recipient:', recipientAddress);
+        console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
+        console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
+        console.log('[SendModal] From address (SegWit):', btcSendAddress);
+
+        setStep('broadcasting');
+
+        // Determine Bitcoin network
+        let btcNetwork: bitcoin.Network;
+        switch (network) {
+          case 'mainnet':
+            btcNetwork = bitcoin.networks.bitcoin;
+            break;
+          case 'testnet':
+          case 'signet':
+            btcNetwork = bitcoin.networks.testnet;
+            break;
+          case 'regtest':
+          case 'regtest-local':
+          case 'subfrost-regtest':
+          case 'oylnet':
+          default:
+            btcNetwork = bitcoin.networks.regtest;
+            break;
+        }
+
+        // Create PSBT
+        const psbt = new bitcoin.Psbt({ network: btcNetwork });
+
+        // Calculate total needed (amount + estimated fee)
+        const estimatedFeeForCalculation = selectedUtxos.size * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate;
+        const totalNeeded = amountSats + estimatedFeeForCalculation;
+
+        // Add inputs from selected UTXOs
+        let totalInputValue = 0;
+        for (const utxoKey of Array.from(selectedUtxos)) {
+          const [txid, voutStr] = utxoKey.split(':');
+          const vout = parseInt(voutStr);
+          const utxo = availableUtxos.find(u => u.txid === txid && u.vout === vout);
+
+          if (!utxo) {
+            throw new Error(`UTXO not found: ${utxoKey}`);
+          }
+
+          // Fetch transaction hex for witness UTXO via Esplora API
+          const blockExplorerUrl = getConfig(network).BLOCK_EXPLORER_URL_BTC;
+          const txHexUrl = `${blockExplorerUrl}/api/tx/${txid}/hex`;
+          console.log('[SendModal] Fetching tx hex from:', txHexUrl);
+
+          const txHexResponse = await fetch(txHexUrl);
+          if (!txHexResponse.ok) {
+            throw new Error(`Failed to fetch transaction ${txid}: ${txHexResponse.statusText}`);
+          }
+          const txHex = await txHexResponse.text();
+          const tx = bitcoin.Transaction.fromHex(txHex);
+
+          psbt.addInput({
+            hash: txid,
+            index: vout,
+            witnessUtxo: {
+              script: tx.outs[vout].script,
+              value: utxo.value,
+            },
+          });
+
+          totalInputValue += utxo.value;
+        }
+
+        // Add recipient output
+        psbt.addOutput({
+          address: recipientAddress,
+          value: amountSats,
+        });
+
+        // Add change output if needed
+        const actualFee = Math.ceil(psbt.txInputs.length * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate);
+        const change = totalInputValue - amountSats - actualFee;
+
+        if (change > 546) { // Dust threshold
+          psbt.addOutput({
+            address: btcSendAddress,
+            value: change,
+          });
+        }
+
+        // Convert PSBT to base64 for signing
+        const psbtBase64 = psbt.toBase64();
+        console.log('[SendModal] PSBT created, signing with browser wallet...');
+
+        // Sign with browser wallet (SegWit)
+        const signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+
+        // Finalize and extract transaction
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+        const tx = signedPsbt.extractTransaction();
+        const txHex = tx.toHex();
+        const computedTxid = tx.getId();
+
+        console.log('[SendModal] Transaction signed, txid:', computedTxid);
+        console.log('[SendModal] Broadcasting...');
+
+        // Broadcast using provider
+        if (!alkaneProvider) {
+          throw new Error('Provider not initialized');
+        }
+
+        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
+
+        setTxid(broadcastTxid || computedTxid);
+        setStep('success');
+
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // For keystore wallets, use WASM provider
       if (!provider || !isInitialized) {
         throw new Error('Provider not initialized. Please wait and try again.');
       }
@@ -271,28 +529,40 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         throw new Error('Wallet not loaded. Please reconnect your wallet.');
       }
 
-      const amountSats = Math.floor(parseFloat(amount) * 100000000);
+      // Request user confirmation before broadcasting
+      console.log('[SendModal] Keystore wallet - requesting user confirmation...');
+      const approved = await requestConfirmation({
+        type: 'send',
+        title: 'Confirm Send',
+        fromAmount: amount,
+        fromSymbol: 'BTC',
+        recipient: recipientAddress,
+        feeRate: feeRate,
+      });
+
+      if (!approved) {
+        console.log('[SendModal] User rejected transaction');
+        setError('Transaction rejected by user');
+        return;
+      }
+      console.log('[SendModal] User approved transaction');
+
+      setStep('broadcasting');
 
       console.log('[SendModal] Sending via WASM provider...');
       console.log('[SendModal] Recipient:', recipientAddress);
       console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
       console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-      console.log('[SendModal] From address:', address);
+      console.log('[SendModal] From address (SegWit):', btcSendAddress);
 
       // Use WASM provider's walletSend method
-      // Field names must match alkanes-web-sys SendParams struct:
-      // - address (recipient)
-      // - amount (in satoshis)
-      // - fee_rate (optional)
-      // - from (optional array of addresses to spend from)
-      // - lock_alkanes (protect UTXOs with alkane assets)
       const sendParams = {
-        address: recipientAddress,  // Recipient address
-        amount: amountSats,         // Amount in satoshis
-        fee_rate: feeRate,          // Fee rate in sat/vB
-        from: [address],            // Spend from this address
-        lock_alkanes: true,         // Protect alkane UTXOs
-        auto_confirm: true,         // Skip confirmation prompt
+        address: recipientAddress,
+        amount: amountSats,
+        fee_rate: feeRate,
+        from: [btcSendAddress],
+        lock_alkanes: true,
+        auto_confirm: true,
       };
 
       const result = await provider.walletSend(JSON.stringify(sendParams));
@@ -322,16 +592,283 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     }
   };
 
-  const formatAlkaneBalance = (balance: string, decimals: number = 8): string => {
+  /**
+   * Handle alkane token transfer
+   * Uses factory Forward opcode (50) to transfer alkanes to recipient
+   * Address strategy: Taproot for tokens, SegWit for BTC fees/change
+   */
+  const handleAlkaneBroadcast = async () => {
+    setError('');
+
+    try {
+      if (!alkaneProvider) {
+        throw new Error('Provider not initialized. Please wait and try again.');
+      }
+
+      if (!selectedAlkaneId) {
+        throw new Error('No alkane selected');
+      }
+
+      const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
+      if (!selectedAlkane) {
+        throw new Error('Selected alkane not found in balances');
+      }
+
+      // Validate recipient address (should be Taproot for alkane receives)
+      if (!validateAddress(recipientAddress)) {
+        throw new Error('Invalid recipient address');
+      }
+
+      // Convert amount to base units (respecting decimals)
+      const decimals = selectedAlkane.decimals || 8;
+      const amountFloat = parseFloat(amount);
+      if (isNaN(amountFloat) || amountFloat <= 0) {
+        throw new Error('Invalid amount');
+      }
+
+      const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
+      const balanceBaseUnits = BigInt(selectedAlkane.balance);
+
+      if (amountBaseUnits > balanceBaseUnits) {
+        throw new Error(`Insufficient balance. Have ${selectedAlkane.balance}, need ${amountBaseUnits.toString()}`);
+      }
+
+      console.log('[SendModal] Starting alkane transfer...');
+      console.log('[SendModal] Alkane:', selectedAlkaneId, selectedAlkane.symbol);
+      console.log('[SendModal] Amount:', amountBaseUnits.toString(), 'base units');
+      console.log('[SendModal] Recipient:', recipientAddress);
+      console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
+
+      // For keystore wallets, request user confirmation before signing
+      if (walletType === 'keystore') {
+        console.log('[SendModal] Keystore wallet - requesting user confirmation...');
+        const approved = await requestConfirmation({
+          type: 'send',
+          title: 'Confirm Alkane Send',
+          fromAmount: amount,
+          fromSymbol: selectedAlkane.symbol || 'ALKANE',
+          recipient: recipientAddress,
+          feeRate: feeRate,
+        });
+
+        if (!approved) {
+          console.log('[SendModal] User rejected transaction');
+          setError('Transaction rejected by user');
+          return;
+        }
+        console.log('[SendModal] User approved transaction');
+      }
+
+      setStep('broadcasting');
+
+      // Build the protostone for alkane transfer using factory Forward opcode
+      const protostone = buildTransferProtostone({
+        factoryId: ALKANE_FACTORY_ID,
+        pointer: 'v0', // Output to recipient
+        refund: 'v0',  // Refund to recipient (or we could use a separate change address)
+      });
+
+      // Build input requirements: alkaneId:amount
+      const [alkaneBlock, alkaneTx] = selectedAlkaneId.split(':');
+      const inputRequirements = `${alkaneBlock}:${alkaneTx}:${amountBaseUnits.toString()}`;
+
+      console.log('[SendModal] Protostone:', protostone);
+      console.log('[SendModal] Input requirements:', inputRequirements);
+
+      // Determine Bitcoin network for PSBT operations
+      let btcNetwork: bitcoin.Network;
+      switch (network) {
+        case 'mainnet':
+          btcNetwork = bitcoin.networks.bitcoin;
+          break;
+        case 'testnet':
+        case 'signet':
+          btcNetwork = bitcoin.networks.testnet;
+          break;
+        case 'regtest':
+        case 'regtest-local':
+        case 'subfrost-regtest':
+        case 'oylnet':
+        default:
+          btcNetwork = bitcoin.networks.regtest;
+          break;
+      }
+
+      // Build from addresses array - use both Taproot (for alkanes) and SegWit (for fees)
+      const fromAddresses: string[] = [];
+      if (btcSendAddress) fromAddresses.push(btcSendAddress); // SegWit for fees
+      if (alkaneSendAddress) fromAddresses.push(alkaneSendAddress); // Taproot for alkanes
+
+      console.log('[SendModal] From addresses:', fromAddresses);
+      console.log('[SendModal] Recipient (toAddresses[0]):', recipientAddress);
+
+      // Execute the alkane transfer
+      const result = await alkaneProvider.alkanesExecuteTyped({
+        inputRequirements,
+        protostones: protostone,
+        feeRate,
+        autoConfirm: false, // We handle signing manually
+        fromAddresses,
+        toAddresses: [recipientAddress], // Alkanes go to recipient
+        changeAddress: btcSendAddress, // BTC change to SegWit
+        alkanesChangeAddress: alkaneSendAddress, // Alkane change to Taproot
+      });
+
+      console.log('[SendModal] Execute result:', JSON.stringify(result, null, 2));
+
+      // Check if we got a readyToSign state (need to sign PSBT manually)
+      if (result?.readyToSign) {
+        console.log('[SendModal] Got readyToSign state, signing transaction...');
+        const readyToSign = result.readyToSign;
+
+        // Convert PSBT to base64
+        let psbtBase64: string;
+        if (readyToSign.psbt instanceof Uint8Array) {
+          psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
+        } else if (typeof readyToSign.psbt === 'string') {
+          psbtBase64 = readyToSign.psbt;
+        } else if (typeof readyToSign.psbt === 'object') {
+          // PSBT came back as object with numeric keys
+          const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
+          const bytes = new Uint8Array(keys.length);
+          for (let i = 0; i < keys.length; i++) {
+            bytes[i] = readyToSign.psbt[keys[i]];
+          }
+          psbtBase64 = uint8ArrayToBase64(bytes);
+        } else {
+          throw new Error('Unexpected PSBT format: ' + typeof readyToSign.psbt);
+        }
+
+        console.log('[SendModal] PSBT base64 length:', psbtBase64.length);
+
+        // Sign the PSBT with both keys (SegWit for fees, Taproot for alkanes)
+        console.log('[SendModal] Signing PSBT with SegWit key first, then Taproot key...');
+        let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+        console.log('[SendModal] PSBT signed with both keys');
+
+        // Parse the signed PSBT, finalize, and extract the raw transaction
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+
+        // Finalize all inputs
+        console.log('[SendModal] Finalizing PSBT...');
+        signedPsbt.finalizeAllInputs();
+
+        // Extract the raw transaction
+        const tx = signedPsbt.extractTransaction();
+        const txHex = tx.toHex();
+        const computedTxid = tx.getId();
+
+        console.log('[SendModal] Transaction ID:', computedTxid);
+        console.log('[SendModal] Transaction hex length:', txHex.length);
+
+        // Broadcast the transaction
+        console.log('[SendModal] Broadcasting transaction...');
+        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        console.log('[SendModal] Transaction broadcast successful');
+        console.log('[SendModal] Broadcast returned txid:', broadcastTxid);
+
+        setTxid(broadcastTxid || computedTxid);
+        setStep('success');
+
+        // Refresh wallet data
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // Check if SDK auto-completed the transaction
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        console.log('[SendModal] Transaction auto-completed, txid:', txId);
+        setTxid(txId);
+        setStep('success');
+
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // Check if execution completed directly
+      if (result?.complete) {
+        const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+        console.log('[SendModal] Execution complete, txid:', txId);
+        setTxid(txId);
+        setStep('success');
+
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // No txid found
+      console.error('[SendModal] No txid found in result:', result);
+      throw new Error('Alkane transfer did not return a transaction ID');
+
+    } catch (err: any) {
+      console.error('[SendModal] Alkane transfer failed:', err);
+
+      let errorMessage = err.message || 'Failed to send alkanes';
+      setError(errorMessage);
+      setStep('input');
+    }
+  };
+
+  const formatDepositAmount = (amount: string, decs: number, symbol: string): string => {
+    const val = BigInt(amount);
+    const divisor = BigInt(10 ** decs);
+    const whole = val / divisor;
+    const remainder = val % divisor;
+    const wholeStr = whole.toString();
+    const remainderStr = remainder.toString().padStart(decs, '0');
+    let formatted: string;
+    if (whole >= BigInt(10000)) {
+      formatted = wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    } else {
+      const dp = wholeStr.length >= 3 ? 2 : 4;
+      formatted = `${wholeStr}.${remainderStr.slice(0, dp)}`;
+    }
+    return symbol ? `${formatted} ${symbol}` : formatted;
+  };
+
+  const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string; alkaneId?: string }): string => {
     const value = BigInt(balance);
-    if (value === BigInt(1)) return '1 NFT';
+
+    if (value === BigInt(1)) {
+      if (alkane && alkane.alkaneId && isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId]) {
+        const meta = positionMeta[alkane.alkaneId];
+        return formatDepositAmount(meta.depositAmount, meta.depositTokenDecimals, meta.depositTokenSymbol);
+      }
+      if (alkane && isStakedPosition(alkane)) return '1 Position';
+      if (alkane && isLpToken(alkane)) return '1 Position';
+      return '1 NFT';
+    }
+
     const divisor = BigInt(10 ** decimals);
     const whole = value / divisor;
     const remainder = value % divisor;
     const wholeStr = whole.toString();
     const remainderStr = remainder.toString().padStart(decimals, '0');
+
+    const isFrbtc = alkane && (alkane.symbol === 'frBTC' || alkane.name === 'frBTC');
+    if (isFrbtc) {
+      return `${wholeStr}.${remainderStr.slice(0, 8)}`;
+    }
+
+    if (whole >= BigInt(10000)) {
+      return wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
     const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
-    return `${wholeStr}.${remainderStr.slice(0, decimalPlaces)}`;
+    const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
+
+    return `${wholeStr}.${truncatedRemainder}`;
   };
 
   const renderInput = () => (
@@ -345,7 +882,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             type="text"
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
-            placeholder="bc1q.. or bc1p.."
+            placeholder="bc1q..."
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
@@ -367,7 +904,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           </div>
         </div>
 
-        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
+        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
             {t('send.feeRate')}
           </span>
@@ -382,14 +919,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   step={1}
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
+                  onFocus={() => setFocusedField('fee')}
                   onBlur={() => {
+                    setFocusedField(null);
                     if (!customFeeRate) {
                       setCustomFeeRate(String(presets.medium));
                     }
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -441,7 +980,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             type="text"
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
-            placeholder="bc1q.. or bc1p.."
+            placeholder="bc1p..."
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
@@ -455,34 +994,120 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 {t('send.selectAlkanes')}
               </span>
             </label>
-            <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2 space-y-1">
-              {balances.alkanes.map((alkane) => {
-                const isSelected = selectedAlkaneId === alkane.alkaneId;
-                return (
-                  <button
-                    key={alkane.alkaneId}
-                    type="button"
-                    onClick={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
-                      isSelected
-                        ? 'bg-[color:var(--sf-primary)]/15 ring-1 ring-[color:var(--sf-primary)]/40'
-                        : 'hover:bg-[color:var(--sf-primary)]/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" />
-                      <div>
-                        <div className="text-sm font-medium text-[color:var(--sf-text)]">{alkane.symbol}</div>
-                        <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
-                      </div>
-                    </div>
-                    <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                      {formatAlkaneBalance(alkane.balance, alkane.decimals)}
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="flex gap-4 mb-2">
+              {(['tokens', 'positions', 'nfts'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setAlkaneFilter(tab)}
+                  className={`pb-2 px-1 text-xs font-semibold ${
+                    alkaneFilter === tab
+                      ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                      : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+                  }`}
+                >
+                  {tab === 'tokens' ? t('balances.tabTokens') : tab === 'nfts' ? t('balances.tabNfts') : t('balances.tabPositions')}
+                </button>
+              ))}
             </div>
+            {(() => {
+              let filtered = balances.alkanes.filter((a) => {
+                if (alkaneFilter === 'positions') return isPosition(a);
+                if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
+                return !isNft(a.balance) && !isPosition(a);
+              });
+              // Sort positions: LP tokens first, then staked positions
+              if (alkaneFilter === 'positions') {
+                filtered = [...filtered].sort((a, b) => {
+                  const aIsLp = isLpToken(a) ? 0 : 1;
+                  const bIsLp = isLpToken(b) ? 0 : 1;
+                  return aIsLp - bIsLp;
+                });
+              }
+              return filtered.length > 0 ? (
+                alkaneFilter === 'nfts' ? (
+                <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2">
+                  <div className="grid grid-cols-4 gap-2">
+                    {filtered.map((alkane) => {
+                      const isSelected = selectedAlkaneId === alkane.alkaneId;
+                      return (
+                        <SendNftCard
+                          key={alkane.alkaneId}
+                          alkane={alkane}
+                          isSelected={isSelected}
+                          ref={isSelected ? selectedAlkaneRef : undefined}
+                          onSelect={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
+                          network={network}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                ) : (
+                <div className="overflow-y-auto max-h-[180px] rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-2 space-y-1">
+                  {filtered.map((alkane) => {
+                    const isSelected = selectedAlkaneId === alkane.alkaneId;
+                    return (
+                      <button
+                        key={alkane.alkaneId}
+                        ref={isSelected ? selectedAlkaneRef : undefined}
+                        type="button"
+                        onClick={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
+                          isSelected
+                            ? 'bg-[color:var(--sf-primary)]/15'
+                            : 'hover:bg-[color:var(--sf-primary)]/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          {(() => {
+                            const pool = poolMap.get(alkane.alkaneId);
+                            if (pool) {
+                              return (
+                                <div className="flex -space-x-1.5">
+                                  <div className="relative z-10">
+                                    <TokenIcon symbol={pool.token0?.symbol} id={pool.token0?.id} size="sm" network={network} />
+                                  </div>
+                                  <div className="relative">
+                                    <TokenIcon symbol={pool.token1?.symbol} id={pool.token1?.id} size="sm" network={network} />
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="sm" network={network} />;
+                          })()}
+                          <div>
+                            <div className="text-sm font-medium text-[color:var(--sf-text)]">
+                              {(() => {
+                                const pool = poolMap.get(alkane.alkaneId);
+                                if (pool) return `${pool.token0?.symbol} / ${pool.token1?.symbol} LP`;
+                                if (isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId])
+                                  return `${positionMeta[alkane.alkaneId].depositTokenName} ${alkane.name}`;
+                                return alkane.symbol || alkane.name;
+                              })()}
+                            </div>
+                            <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
+                          </div>
+                        </div>
+                        <div className="text-sm font-bold text-[color:var(--sf-text)]">
+                          {formatAlkaneBalance(alkane.balance, alkane.decimals, alkane)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                )
+              ) : (
+                <div className="rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] p-4">
+                  <div className="flex flex-col items-center justify-center gap-2 py-2">
+                    <Coins size={24} className="text-blue-400/40" />
+                    <span className="text-xs text-[color:var(--sf-text)]/40">
+                      {alkaneFilter === 'tokens' ? t('balances.noProtorune') : alkaneFilter === 'nfts' ? t('balances.noNfts') : t('balances.noPositions')}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-6 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
@@ -511,14 +1136,14 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
               />
               {selected && (
                 <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals)} {selected.symbol}
+                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.symbol}
                 </div>
               )}
             </div>
           );
         })()}
 
-        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
+        <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
           <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
             {t('send.feeRate')}
           </span>
@@ -533,14 +1158,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   step={1}
                   value={customFeeRate}
                   onChange={(e) => setCustomFeeRate(e.target.value)}
+                  onFocus={() => setFocusedField('fee')}
                   onBlur={() => {
+                    setFocusedField(null);
                     if (!customFeeRate) {
                       setCustomFeeRate(String(presets.medium));
                     }
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className="h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -752,24 +1379,24 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   {t('send.highFeeDescription')}
                 </p>
 
-                <div className="bg-red-500/10 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <div className="bg-red-100 dark:bg-red-500/20 border border-red-300 dark:border-red-500/30 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
-                    <span className="text-red-400">
+                    <span className="text-red-700 dark:text-red-300/80">{t('send.estimatedFee')}</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">
                       {(estimatedFee / 100000000).toFixed(8)} BTC
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">{t('send.feeRateLabel')}</span>
-                    <span className="text-red-400">{feeRate} sat/vB</span>
+                    <span className="text-red-700 dark:text-red-300/80">{t('send.feeRateLabel')}</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">{feeRate} sat/vB</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">Number of Inputs:</span>
-                    <span className="text-red-400">{selectedUtxos.size}</span>
+                    <span className="text-red-700 dark:text-red-300/80">Number of Inputs:</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">{selectedUtxos.size}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-[color:var(--sf-text)]/60">Fee Percentage:</span>
-                    <span className="text-red-400">
+                    <span className="text-red-700 dark:text-red-300/80">Fee Percentage:</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">
                       {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
                     </span>
                   </div>
@@ -802,7 +1429,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 </button>
                 <button
                   onClick={proceedWithHighFee}
-                  className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-[0_2px_8px_rgba(239,68,68,0.3)] hover:shadow-[0_4px_12px_rgba(239,68,68,0.4)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
                 >
                   {t('send.proceedAnyway')}
                 </button>
@@ -814,6 +1441,90 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     </div>
   );
 }
+
+// --- NFT card helpers for SendModal ---
+
+const SEND_NFT_GRADIENTS = [
+  'from-blue-400 to-blue-600',
+  'from-purple-400 to-purple-600',
+  'from-green-400 to-green-600',
+  'from-orange-400 to-orange-600',
+  'from-pink-400 to-pink-600',
+  'from-indigo-400 to-indigo-600',
+  'from-teal-400 to-teal-600',
+  'from-red-400 to-red-600',
+];
+
+function getSendNftImagePaths(symbol: string, id: string, network: string): string[] {
+  const paths: string[] = [];
+  const symbolLower = symbol?.toLowerCase() || '';
+  if (symbolLower === 'frbtc' || id === '32:0') { paths.push('/tokens/frbtc.svg'); return paths; }
+  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png'); return paths; }
+  if (id && /^\d+:\d+/.test(id)) {
+    const [block, tx] = id.split(':');
+    paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
+    const urlSafeId = id.replace(/:/g, '-');
+    paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+  }
+  return paths;
+}
+
+import { forwardRef } from 'react';
+
+const SendNftCard = forwardRef<HTMLButtonElement, {
+  alkane: AlkaneAsset;
+  isSelected: boolean;
+  onSelect: () => void;
+  network: string;
+}>(function SendNftCard({ alkane, isSelected, onSelect, network }, ref) {
+  const [imgError, setImgError] = useState(false);
+  const [pathIndex, setPathIndex] = useState(0);
+  const paths = useMemo(() => getSendNftImagePaths(alkane.symbol, alkane.alkaneId, network), [alkane.symbol, alkane.alkaneId, network]);
+  const currentSrc = paths[pathIndex];
+  const hash = (alkane.symbol || alkane.alkaneId || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const gradient = SEND_NFT_GRADIENTS[hash % SEND_NFT_GRADIENTS.length];
+
+  useEffect(() => { setPathIndex(0); setImgError(false); }, [alkane.alkaneId]);
+
+  const handleImgError = () => {
+    if (pathIndex < paths.length - 1) setPathIndex(pathIndex + 1);
+    else setImgError(true);
+  };
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onSelect}
+      className={`rounded-lg overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+        isSelected
+          ? 'ring-2 ring-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/15'
+          : 'hover:bg-[color:var(--sf-primary)]/5'
+      }`}
+    >
+      <div className="aspect-square relative overflow-hidden">
+        {!imgError && currentSrc ? (
+          <img
+            src={currentSrc}
+            alt={alkane.name}
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={handleImgError}
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            <span className="text-white text-sm font-bold opacity-60">
+              {(alkane.symbol || alkane.alkaneId || '??').slice(0, 2).toUpperCase()}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="p-1 text-left">
+        <div className="text-[10px] font-medium text-[color:var(--sf-text)] truncate">{alkane.name}</div>
+        <div className="text-[8px] text-[color:var(--sf-text)]/40 truncate">{alkane.alkaneId}</div>
+      </div>
+    </button>
+  );
+});
 
 function SendMinerFeeButton({ selection, setSelection, presets }: { selection: FeeSelection; setSelection: (s: FeeSelection) => void; presets: { slow: number; medium: number; fast: number } }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -856,7 +1567,7 @@ function SendMinerFeeButton({ selection, setSelection, presets }: { selection: F
         className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
       >
         <span>{feeDisplayMap[selection] || selection}</span>
-        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (

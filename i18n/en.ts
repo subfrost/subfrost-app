@@ -96,6 +96,8 @@ const en: Record<string, string> = {
   'liquidity.slow': 'Slow',
   'liquidity.medium': 'Medium',
   'liquidity.fast': 'Fast',
+  'liquidity.low': 'Low',
+  'liquidity.high': 'High',
 
   // Pool Details
   'pool.priceChart': 'Price Chart',
@@ -157,6 +159,7 @@ const en: Record<string, string> = {
   'tokenSelector.searchAssets': 'Search bitcoin-native assets...',
   'tokenSelector.noTokens': 'No tokens found',
   'tokenSelector.notAvailable': 'Not available',
+  'tokenSelector.selectAmount': 'Select Amount',
 
   // Receive Modal
   'receive.title': 'Receive Bitcoin',
@@ -177,6 +180,7 @@ const en: Record<string, string> = {
   'walletDash.history': 'History',
   'walletDash.send': 'Send',
   'walletDash.swap': 'Swap',
+  'walletDash.withdraw': 'Withdraw',
   'walletDash.receive': 'Receive',
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',
@@ -231,9 +235,9 @@ const en: Record<string, string> = {
   'send.recipientAddress': 'Recipient Address',
   'send.amountBtc': 'Amount (BTC)',
   'send.feeRate': 'Miner Fee Rate (sats/vB)',
-  'send.slow': 'slow',
-  'send.medium': 'medium',
-  'send.fast': 'fast',
+  'send.slow': 'Slow',
+  'send.medium': 'Medium',
+  'send.fast': 'Fast',
   'send.custom': 'Custom',
   'send.autoSelectUtxos': 'Automatically select UTXOs',
   'send.selectUtxos': 'Select UTXOs to spend ({count} selected)',
@@ -767,6 +771,9 @@ const en: Record<string, string> = {
   // Send Modal (additional)
   'send.titleAlkanes': 'Send Alkanes',
   'send.selectAlkanes': 'Select Alkanes',
+  'send.selectAlkane': 'Please select an alkane to send',
+  'send.insufficientBalance': 'Insufficient balance',
+  'send.noAlkanes': 'No alkanes available to send',
   'send.amountAlkanes': 'Amount',
   'send.btcTab': 'BTC',
   'send.alkanesTab': 'Alkanes',

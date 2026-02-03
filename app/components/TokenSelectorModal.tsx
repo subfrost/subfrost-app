@@ -72,6 +72,9 @@ type Props = {
   mode?: 'from' | 'to' | 'pool0' | 'pool1' | null;
   onBridgeTokenSelect?: (token: string) => void;
   selectedBridgeTokenFromOther?: string; // Bridge token selected in the opposite selector
+  // Percentage selection (shown in 'from' mode)
+  onPercentFrom?: (percent: number) => void;
+  activePercent?: number | null;
 };
 
 // Bridge token definitions
@@ -94,6 +97,8 @@ export default function TokenSelectorModal({
   mode,
   onBridgeTokenSelect,
   selectedBridgeTokenFromOther,
+  onPercentFrom,
+  activePercent,
 }: Props) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');

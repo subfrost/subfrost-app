@@ -122,20 +122,22 @@ function PairIcon({
   rightId,
   leftSymbol,
   rightSymbol,
+  network,
 }: {
   leftId?: string;
   rightId?: string;
   leftSymbol?: string;
   rightSymbol?: string;
+  network?: string;
 }) {
   return (
     <div className="relative h-8 w-12">
       <div className="absolute left-0 top-0 h-8 w-8 rounded-full bg-transparent flex items-center justify-center overflow-hidden">
-        {/* TokenIcon expects network via WalletContext, handled app-wide */}
         <TokenIcon
           id={leftId}
           symbol={leftSymbol || (leftId ?? "")}
           size="md"
+          network={network as any}
         />
       </div>
       <div className="absolute right-0 top-0 h-8 w-8 rounded-full bg-transparent flex items-center justify-center overflow-hidden">
@@ -143,6 +145,7 @@ function PairIcon({
           id={rightId}
           symbol={rightSymbol || (rightId ?? "")}
           size="md"
+          network={network as any}
         />
       </div>
     </div>
@@ -165,7 +168,7 @@ export default function ActivityFeed({
   maxHeightClass?: string;
 }) {
   const { t } = useTranslation();
-  const { isConnected, account, onConnectModalOpenChange } = useWallet();
+  const { isConnected, account, onConnectModalOpenChange, network } = useWallet();
 
   const TX_FILTER_OPTIONS: {
     value: AmmTransactionType | "all";
@@ -520,6 +523,7 @@ export default function ActivityFeed({
                         rightId={pairNames.rightId}
                         leftSymbol={pairNames.leftName}
                         rightSymbol={pairNames.rightName}
+                        network={network}
                       />
                       <div className="min-w-0">
                         {pairLoaded ? (
@@ -666,6 +670,7 @@ export default function ActivityFeed({
                       rightId={pairNames.rightId}
                       leftSymbol={pairNames.leftName}
                       rightSymbol={pairNames.rightName}
+                      network={network}
                     />
                     <div className="min-w-0">
                       {pairLoaded ? (

@@ -194,15 +194,23 @@ export default function SwapShell() {
     return map;
   }, [markets]);
 
-  // Find the pool with the highest 30d volume for defaults
+  // Find the trending pool for defaults: 24H Vol > 30D Vol > TVL
   const topVolumePool = useMemo(() => {
     if (markets.length === 0) return undefined;
-    return markets.reduce((best, pool) =>
-      (pool.vol30dUsd ?? 0) > (best.vol30dUsd ?? 0) ? pool : best
-    , markets[0]);
+    return markets.reduce((best, pool) => {
+      const pVol24 = pool.vol24hUsd ?? 0;
+      const bVol24 = best.vol24hUsd ?? 0;
+      if (pVol24 !== bVol24) return pVol24 > bVol24 ? pool : best;
+      const pVol30 = pool.vol30dUsd ?? 0;
+      const bVol30 = best.vol30dUsd ?? 0;
+      if (pVol30 !== bVol30) return pVol30 > bVol30 ? pool : best;
+      const pTvl = pool.tvlUsd ?? 0;
+      const bTvl = best.tvlUsd ?? 0;
+      return pTvl > bTvl ? pool : best;
+    }, markets[0]);
   }, [markets]);
 
-  // Default from/to tokens: highest 30d volume pair (fallback to BTC → BUSD)
+  // Default from/to tokens: trending pool pair (fallback to BTC → BUSD)
   useEffect(() => {
     if (!fromToken) {
       if (topVolumePool) {
@@ -1303,6 +1311,34 @@ export default function SwapShell() {
     }
   };
 
+  // Calculate active percent for TokenSelectorModal
+  const getActivePercentFrom = (): number | null => {
+    if (!fromAmount || !fromToken) return null;
+
+    let balance = 0;
+    if (fromToken.id === 'btc') {
+      balance = Number(btcBalanceSats || 0) / 1e8;
+    } else {
+      const cur = idToUserCurrency.get(fromToken.id);
+      if (cur?.balance) {
+        balance = Number(cur.balance) / 1e8;
+      }
+    }
+
+    if (!balance || balance === 0) return null;
+
+    const amount = parseFloat(fromAmount);
+    if (!amount) return null;
+
+    const tolerance = 0.0001;
+    if (Math.abs(amount - balance * 0.25) < tolerance) return 0.25;
+    if (Math.abs(amount - balance * 0.5) < tolerance) return 0.5;
+    if (Math.abs(amount - balance * 0.75) < tolerance) return 0.75;
+    if (Math.abs(amount - balance) < tolerance) return 1;
+
+    return null;
+  };
+
   // Handle percentage of balance click for LP token 0
   const handlePercentToken0 = (percent: number) => {
     if (!poolToken0) return;
@@ -1359,9 +1395,9 @@ export default function SwapShell() {
         )}
       </Suspense>
 
-      <div className="flex flex-col md:grid md:grid-cols-2 gap-6 flex-1 min-h-0">
+      <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
         {/* Left Column: Swap/LP Module */}
-        <div className="flex flex-col min-h-0 md:min-h-0">
+        <div className="flex flex-col min-h-0">
           {/* Swap/Liquidity Tabs */}
           <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
@@ -1482,7 +1518,7 @@ export default function SwapShell() {
           <button
             type="button"
             onClick={() => setShowMobileChart(!showMobileChart)}
-            className="md:hidden mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/80 hover:text-[color:var(--sf-text)]"
+            className="lg:hidden mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/80 hover:text-[color:var(--sf-text)]"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 3v18h18" />
@@ -1493,7 +1529,7 @@ export default function SwapShell() {
 
           {/* Mobile-only Chart - below swap form */}
           {showMobileChart && (
-            <div className="md:hidden mt-4">
+            <div className="lg:hidden mt-4">
               <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
                 <PoolDetailsCard
                   pool={selectedTab === 'lp' && poolToken0 && poolToken1
@@ -1522,7 +1558,7 @@ export default function SwapShell() {
           )}
 
           {/* My Wallet Swaps - desktop only, under swap modal */}
-          <div className="hidden md:block mt-8">
+          <div className="hidden lg:block mt-8">
             <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
               <MyWalletSwaps />
             </Suspense>
@@ -1533,7 +1569,7 @@ export default function SwapShell() {
         <Suspense fallback={<MarketsSkeleton />}>
         <div className="flex flex-col gap-4">
           {/* Desktop-only Chart - hidden on mobile where it appears above swap form */}
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
           <PoolDetailsCard
             pool={selectedTab === 'lp' && poolToken0 && poolToken1
               ? markets.find(p => {
@@ -1568,7 +1604,7 @@ export default function SwapShell() {
       </div>
 
       {/* My Wallet Swaps - mobile only, at the bottom under market cards */}
-      <div className="md:hidden mt-6">
+      <div className="lg:hidden mt-6">
         <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
           <MyWalletSwaps />
         </Suspense>
@@ -1621,6 +1657,8 @@ export default function SwapShell() {
             ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
             : undefined
         }
+        onPercentFrom={tokenSelectorMode === 'from' && fromToken ? handlePercentFrom : undefined}
+        activePercent={tokenSelectorMode === 'from' ? getActivePercentFrom() : null}
         onBridgeTokenSelect={(tokenSymbol) => {
           const bridgeTokenMap: Record<string, { name: string }> = {
             USDT: { name: 'USDT' },
