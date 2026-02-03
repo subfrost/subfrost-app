@@ -8,15 +8,19 @@ export interface TransactionDetails {
   description?: string;
   fromAmount?: string;
   fromSymbol?: string;
+  fromId?: string; // Alkane ID (e.g., "32:0" for frBTC)
   toAmount?: string;
   toSymbol?: string;
+  toId?: string; // Alkane ID
   feeRate?: number;
   estimatedFee?: string;
   // For liquidity operations
   token0Amount?: string;
   token0Symbol?: string;
+  token0Id?: string;
   token1Amount?: string;
   token1Symbol?: string;
+  token1Id?: string;
   lpAmount?: string;
   poolName?: string;
   // For send

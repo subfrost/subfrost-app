@@ -349,15 +349,28 @@ export function useRemoveLiquidityMutation() {
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[RemoveLiquidity] Keystore wallet - requesting user confirmation...');
+            // Get proper symbols for display
+            const getSymbol = (id: string | undefined, providedSymbol?: string) => {
+              if (providedSymbol) return providedSymbol;
+              if (!id) return '?';
+              if (id === '32:0') return 'frBTC';
+              if (id === '2:0') return 'DIESEL';
+              return id;
+            };
+            const token0Sym = getSymbol(data.token0Id, data.token0Symbol);
+            const token1Sym = getSymbol(data.token1Id, data.token1Symbol);
+
             const approved = await requestConfirmation({
               type: 'removeLiquidity',
               title: 'Confirm Remove Liquidity',
               lpAmount: (parseFloat(data.lpAmount) / 1e8).toString(),
-              poolName: data.poolName || `${data.token0Symbol || data.token0Id} / ${data.token1Symbol || data.token1Id}`,
+              poolName: data.poolName || `${token0Sym} / ${token1Sym}`,
               token0Amount: data.minToken0Amount ? (parseFloat(data.minToken0Amount) / 1e8).toString() : undefined,
-              token0Symbol: data.token0Symbol || data.token0Id,
+              token0Symbol: token0Sym,
+              token0Id: data.token0Id,
               token1Amount: data.minToken1Amount ? (parseFloat(data.minToken1Amount) / 1e8).toString() : undefined,
-              token1Symbol: data.token1Symbol || data.token1Id,
+              token1Symbol: token1Sym,
+              token1Id: data.token1Id,
               feeRate: data.feeRate,
             });
 

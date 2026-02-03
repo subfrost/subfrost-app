@@ -310,12 +310,18 @@ export function useSwapUnwrapMutation() {
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[SwapUnwrap] Keystore wallet - requesting user confirmation...');
+            // Get proper symbol for display
+            const sellSymbol = data.sellSymbol ||
+              (data.sellCurrency === '2:0' ? 'DIESEL' :
+               data.sellCurrency === FRBTC_ALKANE_ID ? 'frBTC' : data.sellCurrency);
+
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm Swap to BTC',
               description: 'Swap to frBTC, then unwrap to BTC',
               fromAmount: (parseFloat(data.sellAmount) / 1e8).toString(),
-              fromSymbol: data.sellSymbol || data.sellCurrency,
+              fromSymbol: sellSymbol,
+              fromId: data.sellCurrency, // Alkane ID for icon resolution
               toAmount: data.btcAmount,
               toSymbol: 'BTC',
               feeRate: data.feeRate,

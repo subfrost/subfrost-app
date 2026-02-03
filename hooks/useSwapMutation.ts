@@ -461,15 +461,26 @@ export function useSwapMutation() {
           // Browser wallets handle confirmation via their own popup
           if (walletType === 'keystore' && !swapData.skipConfirmation) {
             console.log('[useSwapMutation] Keystore wallet - requesting user confirmation...');
-            const sellSymbol = swapData.sellSymbol || (swapData.sellCurrency === 'btc' ? 'BTC' : swapData.sellCurrency);
-            const buySymbol = swapData.buySymbol || (swapData.buyCurrency === 'btc' ? 'BTC' : swapData.buyCurrency);
+            // Get proper symbols for display (fallback to known token names)
+            const sellSymbol = swapData.sellSymbol || (swapData.sellCurrency === 'btc' ? 'BTC' :
+              swapData.sellCurrency === FRBTC_ALKANE_ID ? 'frBTC' :
+              swapData.sellCurrency === '2:0' ? 'DIESEL' : swapData.sellCurrency);
+            const buySymbol = swapData.buySymbol || (swapData.buyCurrency === 'btc' ? 'BTC' :
+              swapData.buyCurrency === FRBTC_ALKANE_ID ? 'frBTC' :
+              swapData.buyCurrency === '2:0' ? 'DIESEL' : swapData.buyCurrency);
+            // Get alkane IDs for icon resolution
+            const sellId = swapData.sellCurrency === 'btc' ? undefined : swapData.sellCurrency;
+            const buyId = swapData.buyCurrency === 'btc' ? undefined : swapData.buyCurrency;
+
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm Swap',
               fromAmount: (parseFloat(swapData.sellAmount) / 1e8).toString(),
               fromSymbol: sellSymbol,
+              fromId: sellId,
               toAmount: (parseFloat(swapData.buyAmount) / 1e8).toString(),
               toSymbol: buySymbol,
+              toId: buyId,
               feeRate: swapData.feeRate,
             });
 

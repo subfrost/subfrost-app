@@ -76,7 +76,7 @@ function SwapDetails({ details }: { details: TransactionDetails }) {
       {/* From */}
       <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-surface)]">
         <div className="flex items-center gap-3">
-          <TokenIcon symbol={details.fromSymbol || ''} size="lg" />
+          <TokenIcon symbol={details.fromSymbol || ''} id={details.fromId} size="lg" />
           <div>
             <div className="text-xs text-[color:var(--sf-text)]/60">You pay</div>
             <div className="text-lg font-bold text-[color:var(--sf-text)]">
@@ -96,7 +96,7 @@ function SwapDetails({ details }: { details: TransactionDetails }) {
       {/* To */}
       <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-surface)]">
         <div className="flex items-center gap-3">
-          <TokenIcon symbol={details.toSymbol || ''} size="lg" />
+          <TokenIcon symbol={details.toSymbol || ''} id={details.toId} size="lg" />
           <div>
             <div className="text-xs text-[color:var(--sf-text)]/60">You receive</div>
             <div className="text-lg font-bold text-[color:var(--sf-text)]">
@@ -121,7 +121,7 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
             <div className="text-xs text-[color:var(--sf-text)]/60">You deposit</div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TokenIcon symbol={details.token0Symbol || ''} size="md" />
+                <TokenIcon symbol={details.token0Symbol || ''} id={details.token0Id} size="md" />
                 <span className="font-medium text-[color:var(--sf-text)]">{details.token0Symbol}</span>
               </div>
               <span className="font-bold text-[color:var(--sf-text)]">
@@ -130,7 +130,7 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TokenIcon symbol={details.token1Symbol || ''} size="md" />
+                <TokenIcon symbol={details.token1Symbol || ''} id={details.token1Id} size="md" />
                 <span className="font-medium text-[color:var(--sf-text)]">{details.token1Symbol}</span>
               </div>
               <span className="font-bold text-[color:var(--sf-text)]">
@@ -165,7 +165,7 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
             <div className="text-xs text-green-400/80">You receive</div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TokenIcon symbol={details.token0Symbol || ''} size="md" />
+                <TokenIcon symbol={details.token0Symbol || ''} id={details.token0Id} size="md" />
                 <span className="font-medium text-green-400">{details.token0Symbol}</span>
               </div>
               <span className="font-bold text-green-400">
@@ -174,7 +174,7 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TokenIcon symbol={details.token1Symbol || ''} size="md" />
+                <TokenIcon symbol={details.token1Symbol || ''} id={details.token1Id} size="md" />
                 <span className="font-medium text-green-400">{details.token1Symbol}</span>
               </div>
               <span className="font-bold text-green-400">
@@ -194,7 +194,7 @@ function SendDetails({ details }: { details: TransactionDetails }) {
       <div className="p-3 rounded-lg bg-[color:var(--sf-surface)]">
         <div className="text-xs text-[color:var(--sf-text)]/60">Amount</div>
         <div className="flex items-center gap-3 mt-1">
-          <TokenIcon symbol={details.fromSymbol || ''} size="lg" />
+          <TokenIcon symbol={details.fromSymbol || ''} id={details.fromId} size="lg" />
           <div className="text-lg font-bold text-[color:var(--sf-text)]">
             {formatAmount(details.fromAmount, details.fromSymbol)} {details.fromSymbol}
           </div>
