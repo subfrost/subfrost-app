@@ -71,7 +71,9 @@ function pickEndpoint(body: any, network: string) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const network = process.env.NEXT_PUBLIC_NETWORK || 'regtest';
+    // Read network from query parameter (set by AlkanesSDKContext proxy URL),
+    // fall back to env var, then default to regtest
+    const network = request.nextUrl.searchParams.get('network') || process.env.NEXT_PUBLIC_NETWORK || 'regtest';
     const rpcUrl = pickEndpoint(body, network);
 
     const response = await fetch(rpcUrl, {

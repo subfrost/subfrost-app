@@ -111,7 +111,7 @@ export default function ApySparkline({ data, currentApy, fillHeight = false }: A
 
         {/* Hist APY label - positioned below the pulsating dot */}
         <div
-          className="absolute z-10 rounded-md bg-[color:var(--sf-info-green-title)] px-1.5 py-0.5 text-[10px] font-semibold text-white whitespace-nowrap -translate-x-1/2"
+          className="absolute z-10 rounded-md bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-1.5 py-0.5 text-[10px] font-bold text-[color:var(--sf-info-green-title)] whitespace-nowrap -translate-x-1/2"
           style={{ left: `${lastPointXPercent}%`, top: `calc(${lastPointYPercent}% + 8px)` }}
         >
           {currentApy.toFixed(1)}%

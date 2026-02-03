@@ -137,8 +137,9 @@ const getNetworkConfig = (network: Network): Record<string, string> | undefined 
   const directConfig = DIRECT_NETWORK_CONFIG[network];
 
   // If we're in browser localhost and this network needs proxy, use proxy URL
+  // Include network as a query parameter so the proxy knows which backend to target
   if (isBrowserLocalhost() && NETWORKS_NEEDING_PROXY.includes(network)) {
-    const proxyUrl = getProxyUrl();
+    const proxyUrl = `${getProxyUrl()}?network=${encodeURIComponent(network)}`;
     console.log(`[AlkanesSDK] Using proxy URL for ${network}:`, proxyUrl);
     return {
       jsonrpc_url: proxyUrl,

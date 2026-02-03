@@ -194,15 +194,23 @@ export default function SwapShell() {
     return map;
   }, [markets]);
 
-  // Find the pool with the highest 30d volume for defaults
+  // Find the trending pool for defaults: 24H Vol > 30D Vol > TVL
   const topVolumePool = useMemo(() => {
     if (markets.length === 0) return undefined;
-    return markets.reduce((best, pool) =>
-      (pool.vol30dUsd ?? 0) > (best.vol30dUsd ?? 0) ? pool : best
-    , markets[0]);
+    return markets.reduce((best, pool) => {
+      const pVol24 = pool.vol24hUsd ?? 0;
+      const bVol24 = best.vol24hUsd ?? 0;
+      if (pVol24 !== bVol24) return pVol24 > bVol24 ? pool : best;
+      const pVol30 = pool.vol30dUsd ?? 0;
+      const bVol30 = best.vol30dUsd ?? 0;
+      if (pVol30 !== bVol30) return pVol30 > bVol30 ? pool : best;
+      const pTvl = pool.tvlUsd ?? 0;
+      const bTvl = best.tvlUsd ?? 0;
+      return pTvl > bTvl ? pool : best;
+    }, markets[0]);
   }, [markets]);
 
-  // Default from/to tokens: highest 30d volume pair (fallback to BTC → BUSD)
+  // Default from/to tokens: trending pool pair (fallback to BTC → BUSD)
   useEffect(() => {
     if (!fromToken) {
       if (topVolumePool) {

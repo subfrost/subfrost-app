@@ -81,10 +81,10 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       paths.push(iconUrl);
     }
 
-    // Priority 6: Ordiscan CDN for alkane tokens
-    if (id && /^\d+:\d+/.test(id)) {
-      const [block, tx] = id.split(':');
-      paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
+    // Priority 6: Oyl CDN for Alkanes tokens (proper token icons)
+    if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
+      const urlSafeId = id.replace(/:/g, '-');
+      paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
     }
 
     // Priority 7: Try local token assets by symbol (only if we know the icon exists)
@@ -93,10 +93,10 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       paths.push(`/tokens/${symbolLower}.png`);
     }
 
-    // Priority 8: Fallback to Oyl CDN for Alkanes tokens (skip local attempts)
-    if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
-      const urlSafeId = id.replace(/:/g, '-');
-      paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+    // Priority 8: Ordiscan CDN for alkane tokens (may return inscription art, not icons)
+    if (id && /^\d+:\d+/.test(id)) {
+      const [block, tx] = id.split(':');
+      paths.push(`https://cdn.ordiscan.com/alkanes/${block}_${tx}`);
     }
 
     return paths;

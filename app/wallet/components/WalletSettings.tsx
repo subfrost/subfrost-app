@@ -373,258 +373,9 @@ export default function WalletSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Grid layout: HD Wallet on left, Network + Security on right (md+) */}
-      {/* Mobile order: Network (1), Security (2), HD Wallet (3) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* HD Wallet Derivation - Last on mobile, left column on desktop */}
-        <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6 order-3 md:order-1 md:row-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Key size={24} className="text-yellow-400" />
-              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.hdDerivation')}</h3>
-            </div>
-          </div>
-
-          {!wallet ? (
-            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-              Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Current Addresses Display */}
-              <div className="rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-3">{t('settings.currentAddresses')}</div>
-                <div className="space-y-3">
-                  {account?.taproot && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
-                      <div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.taprootP2tr')}</div>
-                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
-                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.taproot.hdPath}</div>
-                      </div>
-                    </div>
-                  )}
-                  {account?.nativeSegwit && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
-                      <div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.segwitP2wpkh')}</div>
-                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
-                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.nativeSegwit.hdPath}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tip - shown above Configure Derivation button */}
-              <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-4 text-sm text-[color:var(--sf-primary)]">
-                {t('settings.accountTip')}
-              </div>
-
-              {/* Configure Derivation Toggle Button */}
-              <button
-                onClick={() => setShowDerivationConfig(!showDerivationConfig)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
-              >
-                {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                <span>{t('settings.advConfig')}</span>
-              </button>
-
-              {/* Collapsible Derivation Configuration */}
-              {showDerivationConfig && (
-                <div className="space-y-6 pt-2">
-                  {/* Taproot Path Configuration */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                        {t('settings.taprootBip86')} - {taprootPath}
-                      </label>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={taprootConfig.accountIndex}
-                          onChange={(e) => setTaprootConfig({ ...taprootConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
-                        <div className="relative" ref={taprootChangeDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setTaprootChangeDropdownOpen((v) => !v)}
-                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                          >
-                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === taprootConfig.changeIndex)?.label ?? 'External (0)'}</span>
-                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${taprootChangeDropdownOpen ? 'rotate-180' : ''}`} />
-                          </button>
-                          {taprootChangeDropdownOpen && (
-                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                              {CHANGE_OPTIONS.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    setTaprootConfig({ ...taprootConfig, changeIndex: option.value });
-                                    setTaprootChangeDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                                    taprootConfig.changeIndex === option.value
-                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={taprootConfig.addressIndex}
-                          onChange={(e) => setTaprootConfig({ ...taprootConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                    </div>
-
-                    {previewAddresses.taproot && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
-                        <div className="flex-1 mr-2">
-                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
-                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
-                        </div>
-                        <button
-                          onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
-                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                          title="Copy address"
-                        >
-                          {copiedAddress === 'taproot' ? (
-                            <Check size={16} className="text-green-400" />
-                          ) : (
-                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* SegWit Path Configuration */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                        {t('settings.segwitBip84')} - {segwitPath}
-                      </label>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={segwitConfig.accountIndex}
-                          onChange={(e) => setSegwitConfig({ ...segwitConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
-                        <div className="relative" ref={segwitChangeDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setSegwitChangeDropdownOpen((v) => !v)}
-                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                          >
-                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === segwitConfig.changeIndex)?.label ?? 'External (0)'}</span>
-                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${segwitChangeDropdownOpen ? 'rotate-180' : ''}`} />
-                          </button>
-                          {segwitChangeDropdownOpen && (
-                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                              {CHANGE_OPTIONS.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    setSegwitConfig({ ...segwitConfig, changeIndex: option.value });
-                                    setSegwitChangeDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                                    segwitConfig.changeIndex === option.value
-                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={segwitConfig.addressIndex}
-                          onChange={(e) => setSegwitConfig({ ...segwitConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                    </div>
-
-                    {previewAddresses.segwit && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
-                        <div className="flex-1 mr-2">
-                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
-                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
-                        </div>
-                        <button
-                          onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
-                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                          title="Copy address"
-                        >
-                          {copiedAddress === 'segwit' ? (
-                            <Check size={16} className="text-green-400" />
-                          ) : (
-                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Save Button - inside collapsible section */}
-                  <button
-                    onClick={handleSave}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
-                  >
-                    <Save size={20} />
-                    {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Network Configuration - First on mobile, right column row 1 on desktop */}
-        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6 order-1 md:order-2">
+      <div className="flex flex-col gap-6">
+        {/* Network Configuration */}
+        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
             <div className="flex items-center gap-3 mb-4">
               <Network size={24} className="text-[color:var(--sf-primary)]" />
               <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.networkConfig')}</h3>
@@ -736,9 +487,9 @@ export default function WalletSettings() {
             </div>
           </div>
 
-        {/* Security & Backup - Second on mobile, right column row 2 on desktop */}
+        {/* Security & Backup */}
         {wallet && (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 order-2 md:order-3">
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
               <div className="flex items-center gap-3 mb-4">
                 <Shield size={24} className="text-red-400" />
                 <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.securityBackup')}</h3>
@@ -811,6 +562,243 @@ export default function WalletSettings() {
             </div>
           </div>
         )}
+
+        {/* HD Wallet Derivation */}
+        <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Key size={24} className="text-yellow-400" />
+              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.hdDerivation')}</h3>
+            </div>
+          </div>
+
+          {!wallet ? (
+            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
+              Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Current Addresses Display */}
+              <div className="rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4">
+                <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-3">{t('settings.currentAddresses')}</div>
+                <div className="space-y-3">
+                  {account?.taproot && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
+                      <div>
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.taprootP2tr')}</div>
+                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
+                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.taproot.hdPath}</div>
+                      </div>
+                    </div>
+                  )}
+                  {account?.nativeSegwit && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
+                      <div>
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.segwitP2wpkh')}</div>
+                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
+                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.nativeSegwit.hdPath}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-4 text-sm text-[color:var(--sf-primary)]">
+                {t('settings.accountTip')}
+              </div>
+
+              <button
+                onClick={() => setShowDerivationConfig(!showDerivationConfig)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
+              >
+                {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                <span>{t('settings.advConfig')}</span>
+              </button>
+
+              {showDerivationConfig && (
+                <div className="space-y-6 pt-2">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
+                        {t('settings.taprootBip86')} - {taprootPath}
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={taprootConfig.accountIndex}
+                          onChange={(e) => setTaprootConfig({ ...taprootConfig, accountIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
+                        <div className="relative" ref={taprootChangeDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setTaprootChangeDropdownOpen((v) => !v)}
+                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                          >
+                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === taprootConfig.changeIndex)?.label ?? 'External (0)'}</span>
+                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${taprootChangeDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                          {taprootChangeDropdownOpen && (
+                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                              {CHANGE_OPTIONS.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setTaprootConfig({ ...taprootConfig, changeIndex: option.value });
+                                    setTaprootChangeDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                                    taprootConfig.changeIndex === option.value
+                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={taprootConfig.addressIndex}
+                          onChange={(e) => setTaprootConfig({ ...taprootConfig, addressIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                    </div>
+                    {previewAddresses.taproot && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
+                        <div className="flex-1 mr-2">
+                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
+                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
+                        </div>
+                        <button
+                          onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
+                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          title="Copy address"
+                        >
+                          {copiedAddress === 'taproot' ? (
+                            <Check size={16} className="text-green-400" />
+                          ) : (
+                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
+                        {t('settings.segwitBip84')} - {segwitPath}
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={segwitConfig.accountIndex}
+                          onChange={(e) => setSegwitConfig({ ...segwitConfig, accountIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
+                        <div className="relative" ref={segwitChangeDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setSegwitChangeDropdownOpen((v) => !v)}
+                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                          >
+                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === segwitConfig.changeIndex)?.label ?? 'External (0)'}</span>
+                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${segwitChangeDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                          {segwitChangeDropdownOpen && (
+                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                              {CHANGE_OPTIONS.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setSegwitConfig({ ...segwitConfig, changeIndex: option.value });
+                                    setSegwitChangeDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                                    segwitConfig.changeIndex === option.value
+                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="2147483647"
+                          value={segwitConfig.addressIndex}
+                          onChange={(e) => setSegwitConfig({ ...segwitConfig, addressIndex: parseInt(e.target.value) || 0 })}
+                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+                        />
+                      </div>
+                    </div>
+                    {previewAddresses.segwit && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
+                        <div className="flex-1 mr-2">
+                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
+                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
+                        </div>
+                        <button
+                          onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
+                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          title="Copy address"
+                        >
+                          {copiedAddress === 'segwit' ? (
+                            <Check size={16} className="text-green-400" />
+                          ) : (
+                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleSave}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
+                  >
+                    <Save size={20} />
+                    {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Seed Phrase Modal */}
