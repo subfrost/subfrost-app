@@ -727,6 +727,7 @@ const en: Record<string, string> = {
   'wallet.enterInviteCodePrompt': 'Enter your invite code if you were referred by someone.',
   'wallet.enterYourInviteCode': 'Enter your invite code',
   'wallet.verifyCode': 'Verify Code',
+  'wallet.verifying': 'Verifying...',
   'wallet.inviteCodeVerifiedLabel': 'Invite code verified:',
   'wallet.invited': 'Invited?',
   'wallet.enterPassword': 'Enter password',

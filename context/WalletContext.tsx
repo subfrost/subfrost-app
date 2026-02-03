@@ -129,6 +129,11 @@ function extractEnrichedData(rawResult: any): { spendable: any[]; assets: any[];
   };
 }
 
+type WalletAddresses = {
+  nativeSegwit: { address: string; pubkey: string; hdPath: string };
+  taproot: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
+};
+
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
   nativeSegwit?: { address: string; pubkey: string; hdPath: string };
@@ -173,6 +178,7 @@ type WalletContextType = {
   address: string;
   paymentAddress: string;
   publicKey: string;
+  addresses: WalletAddresses;
   account: Account;
   network: Network;
   wallet: AlkanesWallet | null;

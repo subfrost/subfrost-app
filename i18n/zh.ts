@@ -728,6 +728,7 @@ const zh: Record<string, string> = {
   'wallet.enterInviteCodePrompt': '如果您是被推荐的，请输入邀请码。',
   'wallet.enterYourInviteCode': '输入您的邀请码',
   'wallet.verifyCode': '验证码',
+  'wallet.verifying': '验证中...',
   'wallet.inviteCodeVerifiedLabel': '邀请码已验证：',
   'wallet.invited': '受邀？',
   'wallet.enterPassword': '输入密码',

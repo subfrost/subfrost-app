@@ -113,3 +113,35 @@ model TransactionLog {
   @@index([createdAt])
   @@map("transaction_logs")
 }
+
+// Invite codes for gated/tracked access
+model InviteCode {
+  id          String    @id @default(cuid())
+  code        String    @unique              // Uppercase code string
+  description String?                        // Admin note (e.g., "Twitter giveaway Jan 2026")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  redemptions InviteCodeRedemption[]
+
+  @@index([code])
+  @@index([isActive])
+  @@map("invite_codes")
+}
+
+// Tracks which wallet redeemed which invite code
+model InviteCodeRedemption {
+  id              String    @id @default(cuid())
+  codeId          String    @map("code_id")
+  taprootAddress  String    @map("taproot_address")
+  segwitAddress   String?   @map("segwit_address")
+  taprootPubkey   String?   @map("taproot_pubkey")
+  redeemedAt      DateTime  @default(now()) @map("redeemed_at")
+
+  inviteCode      InviteCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+
+  @@unique([codeId, taprootAddress])
+  @@index([taprootAddress])
+  @@index([redeemedAt])
+  @@map("invite_code_redemptions")
+}

@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",
+    "db:seed:invite-codes": "npx tsx prisma/seed-invite-codes.ts",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

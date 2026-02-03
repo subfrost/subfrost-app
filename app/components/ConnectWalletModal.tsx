@@ -11,55 +11,6 @@ import { useTranslation } from '@/hooks/useTranslation';
 
 type WalletView = 'select' | 'invite-code' | 'create' | 'restore-options' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
 
-// Valid invite codes - add codes here
-const VALID_INVITE_CODES = new Set([
-  'SUBFROST2024',
-  'EARLYACCESS',
-  'FROSTBETA',
-  'BITCOIN4EVER',
-  // Add more codes as needed
-]);
-
-// Invite code usage tracking
-interface InviteCodeUsage {
-  code: string;
-  timestamp: string;
-  walletAddress?: string;
-}
-
-const INVITE_CODE_STORAGE_KEY = 'subfrost_invite_code_usage';
-
-function getInviteCodeUsage(): InviteCodeUsage[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(INVITE_CODE_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function trackInviteCodeUsage(code: string, walletAddress?: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const usage = getInviteCodeUsage();
-    usage.push({
-      code: code.toUpperCase(),
-      timestamp: new Date().toISOString(),
-      walletAddress,
-    });
-    localStorage.setItem(INVITE_CODE_STORAGE_KEY, JSON.stringify(usage));
-    console.log('[InviteCode] Tracked usage:', { code, walletAddress, totalUsages: usage.length });
-  } catch (err) {
-    console.error('[InviteCode] Failed to track usage:', err);
-  }
-}
-
-// Export for debugging - access via browser console: window.getInviteCodeUsage()
-if (typeof window !== 'undefined') {
-  (window as any).getInviteCodeUsage = getInviteCodeUsage;
-}
-
 export default function ConnectWalletModal() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -76,6 +27,8 @@ export default function ConnectWalletModal() {
     availableBrowserWallets,
     installedBrowserWallets: installedWalletsFromContext,
     connectBrowserWallet: connectBrowserWalletFromContext,
+    // Addresses for invite code redemption
+    addresses,
   } = useWallet();
 
   const [view, setView] = useState<WalletView>('select');
@@ -100,6 +53,8 @@ export default function ConnectWalletModal() {
   const [uploadedKeystore, setUploadedKeystore] = useState<string | null>(null);
   const [backupSuccess, setBackupSuccess] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
+  const [pendingInviteCodeRedemption, setPendingInviteCodeRedemption] = useState<string | null>(null);
+  const [isValidatingCode, setIsValidatingCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wasModalOpenRef = useRef(false);
 
@@ -133,21 +88,76 @@ export default function ConnectWalletModal() {
     setUploadedKeystore(null);
     setBackupSuccess(false);
     setBackupProgress(0);
+    setPendingInviteCodeRedemption(null);
+    setIsValidatingCode(false);
   };
 
-  const validateInviteCode = () => {
+  // Redeem invite code when wallet addresses become available after creation
+  useEffect(() => {
+    if (!pendingInviteCodeRedemption) return;
+    if (!addresses?.taproot?.address) return;
+
+    const redeemCode = async () => {
+      try {
+        const response = await fetch('/api/invite-codes/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: pendingInviteCodeRedemption,
+            taprootAddress: addresses.taproot.address,
+            segwitAddress: addresses.nativeSegwit?.address,
+            taprootPubkey: addresses.taproot.pubkey,
+          }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          console.log('[InviteCode] Redeemed:', pendingInviteCodeRedemption, '->', addresses.taproot.address);
+        } else {
+          console.warn('[InviteCode] Redemption failed:', data.error);
+        }
+      } catch (err) {
+        console.error('[InviteCode] Redemption error:', err);
+      } finally {
+        setPendingInviteCodeRedemption(null);
+      }
+    };
+
+    redeemCode();
+  }, [pendingInviteCodeRedemption, addresses?.taproot?.address, addresses?.nativeSegwit?.address, addresses?.taproot?.pubkey]);
+
+  const validateInviteCode = async () => {
     const code = inviteCode.trim().toUpperCase();
     if (!code) {
       setError('Please enter an invite code');
       return;
     }
-    if (!VALID_INVITE_CODES.has(code)) {
-      setError(t('wallet.invalidInviteCode'));
-      return;
-    }
-    setInviteCodeValidated(true);
+
+    setIsValidatingCode(true);
     setError(null);
-    // Stay on invite-code view to show success state
+
+    try {
+      const response = await fetch('/api/invite-codes/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+
+      const data = await response.json();
+
+      if (!data.valid) {
+        setError(data.error || t('wallet.invalidInviteCode'));
+        return;
+      }
+
+      setInviteCodeValidated(true);
+      setError(null);
+      // Stay on invite-code view to show success state
+    } catch (err) {
+      console.error('[InviteCode] Validation error:', err);
+      setError('Unable to validate code. Please check your connection.');
+    } finally {
+      setIsValidatingCode(false);
+    }
   };
 
   const handleClose = () => {
@@ -179,9 +189,9 @@ export default function ConnectWalletModal() {
       const result = await createWalletFromContext(password);
       setGeneratedMnemonic(result.mnemonic);
 
-      // Track invite code usage
+      // Set pending redemption - will be redeemed when addresses are available
       if (inviteCodeValidated && inviteCode) {
-        trackInviteCodeUsage(inviteCode);
+        setPendingInviteCodeRedemption(inviteCode.trim().toUpperCase());
       }
 
       setView('show-mnemonic');
@@ -576,10 +586,10 @@ export default function ConnectWalletModal() {
                     </button>
                     <button
                       onClick={validateInviteCode}
-                      disabled={!inviteCode.trim()}
+                      disabled={!inviteCode.trim() || isValidatingCode}
                       className="flex-1 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
                     >
-                      {t('wallet.verifyCode')}
+                      {isValidatingCode ? t('wallet.verifying') || 'Verifying...' : t('wallet.verifyCode')}
                     </button>
                   </div>
                 </>
