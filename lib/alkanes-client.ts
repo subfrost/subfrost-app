@@ -218,6 +218,21 @@ export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decima
 };
 
 /**
+ * Get the display symbol for an alkane ID.
+ * Uses KNOWN_TOKENS lookup, falls back to the ID itself if unknown.
+ *
+ * @param alkaneId - The alkane ID (e.g., "2:0", "32:0")
+ * @param providedSymbol - Optional pre-provided symbol to use instead
+ * @returns The symbol string for display
+ */
+export function getTokenSymbol(alkaneId: string | undefined, providedSymbol?: string): string {
+  if (providedSymbol) return providedSymbol;
+  if (!alkaneId) return '?';
+  if (alkaneId === 'btc') return 'BTC';
+  return KNOWN_TOKENS[alkaneId]?.symbol || alkaneId;
+}
+
+/**
  * Encode a number as a protobuf varint (little-endian variable-length integer)
  */
 function encodeVarint(n: number): string {

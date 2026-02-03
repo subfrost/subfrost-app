@@ -40,6 +40,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FACTORY_OPCODES } from '@/constants';
 
 import * as bitcoin from 'bitcoinjs-lib';
@@ -596,22 +597,14 @@ export function useAddLiquidityMutation() {
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
-            // Get proper symbols for display
-            const getSymbol = (id: string, providedSymbol?: string) => {
-              if (providedSymbol) return providedSymbol;
-              if (id === config.FRBTC_ALKANE_ID) return 'frBTC';
-              if (id === '2:0') return 'DIESEL';
-              return id;
-            };
-
             const approved = await requestConfirmation({
               type: 'addLiquidity',
               title: 'Confirm Add Liquidity',
               token0Amount: (parseFloat(data.token0Amount) / 1e8).toString(),
-              token0Symbol: getSymbol(data.token0Id, data.token0Symbol),
+              token0Symbol: getTokenSymbol(data.token0Id, data.token0Symbol),
               token0Id: data.token0Id,
               token1Amount: (parseFloat(data.token1Amount) / 1e8).toString(),
-              token1Symbol: getSymbol(data.token1Id, data.token1Symbol),
+              token1Symbol: getTokenSymbol(data.token1Id, data.token1Symbol),
               token1Id: data.token1Id,
               feeRate: data.feeRate,
             });

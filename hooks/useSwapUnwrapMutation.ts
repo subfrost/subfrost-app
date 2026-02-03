@@ -48,6 +48,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
@@ -310,18 +311,13 @@ export function useSwapUnwrapMutation() {
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[SwapUnwrap] Keystore wallet - requesting user confirmation...');
-            // Get proper symbol for display
-            const sellSymbol = data.sellSymbol ||
-              (data.sellCurrency === '2:0' ? 'DIESEL' :
-               data.sellCurrency === FRBTC_ALKANE_ID ? 'frBTC' : data.sellCurrency);
-
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm Swap to BTC',
               description: 'Swap to frBTC, then unwrap to BTC',
               fromAmount: (parseFloat(data.sellAmount) / 1e8).toString(),
-              fromSymbol: sellSymbol,
-              fromId: data.sellCurrency, // Alkane ID for icon resolution
+              fromSymbol: getTokenSymbol(data.sellCurrency, data.sellSymbol),
+              fromId: data.sellCurrency,
               toAmount: data.btcAmount,
               toSymbol: 'BTC',
               feeRate: data.feeRate,

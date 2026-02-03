@@ -74,6 +74,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
@@ -461,26 +462,15 @@ export function useSwapMutation() {
           // Browser wallets handle confirmation via their own popup
           if (walletType === 'keystore' && !swapData.skipConfirmation) {
             console.log('[useSwapMutation] Keystore wallet - requesting user confirmation...');
-            // Get proper symbols for display (fallback to known token names)
-            const sellSymbol = swapData.sellSymbol || (swapData.sellCurrency === 'btc' ? 'BTC' :
-              swapData.sellCurrency === FRBTC_ALKANE_ID ? 'frBTC' :
-              swapData.sellCurrency === '2:0' ? 'DIESEL' : swapData.sellCurrency);
-            const buySymbol = swapData.buySymbol || (swapData.buyCurrency === 'btc' ? 'BTC' :
-              swapData.buyCurrency === FRBTC_ALKANE_ID ? 'frBTC' :
-              swapData.buyCurrency === '2:0' ? 'DIESEL' : swapData.buyCurrency);
-            // Get alkane IDs for icon resolution
-            const sellId = swapData.sellCurrency === 'btc' ? undefined : swapData.sellCurrency;
-            const buyId = swapData.buyCurrency === 'btc' ? undefined : swapData.buyCurrency;
-
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm Swap',
               fromAmount: (parseFloat(swapData.sellAmount) / 1e8).toString(),
-              fromSymbol: sellSymbol,
-              fromId: sellId,
+              fromSymbol: getTokenSymbol(swapData.sellCurrency, swapData.sellSymbol),
+              fromId: swapData.sellCurrency === 'btc' ? undefined : swapData.sellCurrency,
               toAmount: (parseFloat(swapData.buyAmount) / 1e8).toString(),
-              toSymbol: buySymbol,
-              toId: buyId,
+              toSymbol: getTokenSymbol(swapData.buyCurrency, swapData.buySymbol),
+              toId: swapData.buyCurrency === 'btc' ? undefined : swapData.buyCurrency,
               feeRate: swapData.feeRate,
             });
 

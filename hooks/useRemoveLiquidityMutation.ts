@@ -70,6 +70,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
@@ -349,16 +350,8 @@ export function useRemoveLiquidityMutation() {
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[RemoveLiquidity] Keystore wallet - requesting user confirmation...');
-            // Get proper symbols for display
-            const getSymbol = (id: string | undefined, providedSymbol?: string) => {
-              if (providedSymbol) return providedSymbol;
-              if (!id) return '?';
-              if (id === '32:0') return 'frBTC';
-              if (id === '2:0') return 'DIESEL';
-              return id;
-            };
-            const token0Sym = getSymbol(data.token0Id, data.token0Symbol);
-            const token1Sym = getSymbol(data.token1Id, data.token1Symbol);
+            const token0Sym = getTokenSymbol(data.token0Id, data.token0Symbol);
+            const token1Sym = getTokenSymbol(data.token1Id, data.token1Symbol);
 
             const approved = await requestConfirmation({
               type: 'removeLiquidity',
