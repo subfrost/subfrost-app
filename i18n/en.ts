@@ -771,6 +771,9 @@ const en: Record<string, string> = {
   // Send Modal (additional)
   'send.titleAlkanes': 'Send Alkanes',
   'send.selectAlkanes': 'Select Alkanes',
+  'send.selectAlkane': 'Please select an alkane to send',
+  'send.insufficientBalance': 'Insufficient balance',
+  'send.noAlkanes': 'No alkanes available to send',
   'send.amountAlkanes': 'Amount',
   'send.btcTab': 'BTC',
   'send.alkanesTab': 'Alkanes',

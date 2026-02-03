@@ -6,10 +6,16 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
+import { getConfig } from '@/utils/getConfig';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
 
 import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
 
@@ -32,15 +38,44 @@ interface UTXO {
   frozen?: boolean;
 }
 
+// Helper to convert Uint8Array to base64
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Build protostone for alkane transfer using factory Forward opcode (50)
+ * The Forward opcode simply passes incoming alkanes to the specified output
+ */
+function buildTransferProtostone(params: {
+  factoryId: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { factoryId, pointer = 'v0', refund = 'v0' } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+
+  // Factory opcode 50 = Forward (passes incoming alkanes to output)
+  const cellpack = [factoryBlock, factoryTx, 50].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
-  const { address: taprootAddress, paymentAddress, network, walletType } = useWallet() as any;
+  const { address: taprootAddress, paymentAddress, network, walletType, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
   // Address strategy:
   // - BTC sends: SegWit only (paymentAddress) for both send and change
   // - Alkane sends: Taproot (address) for token send/change, SegWit (paymentAddress) for BTC fees/change
   const btcSendAddress = paymentAddress;
   const alkaneSendAddress = taprootAddress;
   const { provider, isInitialized } = useAlkanesSDK();
+  const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
+  const { ALKANE_FACTORY_ID } = getConfig(network);
   const { t } = useTranslation();
   const { utxos, balances, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
@@ -187,6 +222,55 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const handleNext = () => {
     setError('');
 
+    // Handle alkane sends
+    if (sendMode === 'alkanes') {
+      if (step === 'input') {
+        // Validate alkane send inputs
+        if (!validateAddress(recipientAddress)) {
+          setError(t('send.invalidAddress'));
+          return;
+        }
+
+        if (!selectedAlkaneId) {
+          setError(t('send.selectAlkane') || 'Please select an alkane to send');
+          return;
+        }
+
+        const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
+        if (!selectedAlkane) {
+          setError('Selected alkane not found');
+          return;
+        }
+
+        const amountFloat = parseFloat(amount);
+        if (isNaN(amountFloat) || amountFloat <= 0) {
+          setError(t('send.invalidAmount'));
+          return;
+        }
+
+        // Convert to base units and check balance
+        const decimals = selectedAlkane.decimals || 8;
+        const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
+        const balanceBaseUnits = BigInt(selectedAlkane.balance);
+
+        if (amountBaseUnits > balanceBaseUnits) {
+          setError(t('send.insufficientBalance') || 'Insufficient balance');
+          return;
+        }
+
+        if (feeRate < 1) {
+          setError(t('send.invalidFeeRate'));
+          return;
+        }
+
+        // For alkane sends, go directly to broadcasting (no confirm step for now)
+        // The confirmation happens via requestConfirmation modal for keystore wallets
+        handleAlkaneBroadcast();
+      }
+      return;
+    }
+
+    // Handle BTC sends
     if (step === 'input') {
       // Validate inputs
       if (!validateAddress(recipientAddress)) {
@@ -389,6 +473,234 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       setError(errorMessage);
       setStep('confirm');
+    }
+  };
+
+  /**
+   * Handle alkane token transfer
+   * Uses factory Forward opcode (50) to transfer alkanes to recipient
+   * Address strategy: Taproot for tokens, SegWit for BTC fees/change
+   */
+  const handleAlkaneBroadcast = async () => {
+    setError('');
+
+    try {
+      if (!alkaneProvider) {
+        throw new Error('Provider not initialized. Please wait and try again.');
+      }
+
+      if (!selectedAlkaneId) {
+        throw new Error('No alkane selected');
+      }
+
+      const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
+      if (!selectedAlkane) {
+        throw new Error('Selected alkane not found in balances');
+      }
+
+      // Validate recipient address (should be Taproot for alkane receives)
+      if (!validateAddress(recipientAddress)) {
+        throw new Error('Invalid recipient address');
+      }
+
+      // Convert amount to base units (respecting decimals)
+      const decimals = selectedAlkane.decimals || 8;
+      const amountFloat = parseFloat(amount);
+      if (isNaN(amountFloat) || amountFloat <= 0) {
+        throw new Error('Invalid amount');
+      }
+
+      const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
+      const balanceBaseUnits = BigInt(selectedAlkane.balance);
+
+      if (amountBaseUnits > balanceBaseUnits) {
+        throw new Error(`Insufficient balance. Have ${selectedAlkane.balance}, need ${amountBaseUnits.toString()}`);
+      }
+
+      console.log('[SendModal] Starting alkane transfer...');
+      console.log('[SendModal] Alkane:', selectedAlkaneId, selectedAlkane.symbol);
+      console.log('[SendModal] Amount:', amountBaseUnits.toString(), 'base units');
+      console.log('[SendModal] Recipient:', recipientAddress);
+      console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
+
+      // For keystore wallets, request user confirmation before signing
+      if (walletType === 'keystore') {
+        console.log('[SendModal] Keystore wallet - requesting user confirmation...');
+        const approved = await requestConfirmation({
+          type: 'send',
+          title: 'Confirm Alkane Send',
+          fromAmount: amount,
+          fromSymbol: selectedAlkane.symbol || 'ALKANE',
+          recipient: recipientAddress,
+          feeRate: feeRate,
+        });
+
+        if (!approved) {
+          console.log('[SendModal] User rejected transaction');
+          setError('Transaction rejected by user');
+          return;
+        }
+        console.log('[SendModal] User approved transaction');
+      }
+
+      setStep('broadcasting');
+
+      // Build the protostone for alkane transfer using factory Forward opcode
+      const protostone = buildTransferProtostone({
+        factoryId: ALKANE_FACTORY_ID,
+        pointer: 'v0', // Output to recipient
+        refund: 'v0',  // Refund to recipient (or we could use a separate change address)
+      });
+
+      // Build input requirements: alkaneId:amount
+      const [alkaneBlock, alkaneTx] = selectedAlkaneId.split(':');
+      const inputRequirements = `${alkaneBlock}:${alkaneTx}:${amountBaseUnits.toString()}`;
+
+      console.log('[SendModal] Protostone:', protostone);
+      console.log('[SendModal] Input requirements:', inputRequirements);
+
+      // Determine Bitcoin network for PSBT operations
+      let btcNetwork: bitcoin.Network;
+      switch (network) {
+        case 'mainnet':
+          btcNetwork = bitcoin.networks.bitcoin;
+          break;
+        case 'testnet':
+        case 'signet':
+          btcNetwork = bitcoin.networks.testnet;
+          break;
+        case 'regtest':
+        case 'regtest-local':
+        case 'subfrost-regtest':
+        case 'oylnet':
+        default:
+          btcNetwork = bitcoin.networks.regtest;
+          break;
+      }
+
+      // Build from addresses array - use both Taproot (for alkanes) and SegWit (for fees)
+      const fromAddresses: string[] = [];
+      if (btcSendAddress) fromAddresses.push(btcSendAddress); // SegWit for fees
+      if (alkaneSendAddress) fromAddresses.push(alkaneSendAddress); // Taproot for alkanes
+
+      console.log('[SendModal] From addresses:', fromAddresses);
+      console.log('[SendModal] Recipient (toAddresses[0]):', recipientAddress);
+
+      // Execute the alkane transfer
+      const result = await alkaneProvider.alkanesExecuteTyped({
+        inputRequirements,
+        protostones: protostone,
+        feeRate,
+        autoConfirm: false, // We handle signing manually
+        fromAddresses,
+        toAddresses: [recipientAddress], // Alkanes go to recipient
+        changeAddress: btcSendAddress, // BTC change to SegWit
+        alkanesChangeAddress: alkaneSendAddress, // Alkane change to Taproot
+      });
+
+      console.log('[SendModal] Execute result:', JSON.stringify(result, null, 2));
+
+      // Check if we got a readyToSign state (need to sign PSBT manually)
+      if (result?.readyToSign) {
+        console.log('[SendModal] Got readyToSign state, signing transaction...');
+        const readyToSign = result.readyToSign;
+
+        // Convert PSBT to base64
+        let psbtBase64: string;
+        if (readyToSign.psbt instanceof Uint8Array) {
+          psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
+        } else if (typeof readyToSign.psbt === 'string') {
+          psbtBase64 = readyToSign.psbt;
+        } else if (typeof readyToSign.psbt === 'object') {
+          // PSBT came back as object with numeric keys
+          const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
+          const bytes = new Uint8Array(keys.length);
+          for (let i = 0; i < keys.length; i++) {
+            bytes[i] = readyToSign.psbt[keys[i]];
+          }
+          psbtBase64 = uint8ArrayToBase64(bytes);
+        } else {
+          throw new Error('Unexpected PSBT format: ' + typeof readyToSign.psbt);
+        }
+
+        console.log('[SendModal] PSBT base64 length:', psbtBase64.length);
+
+        // Sign the PSBT with both keys (SegWit for fees, Taproot for alkanes)
+        console.log('[SendModal] Signing PSBT with SegWit key first, then Taproot key...');
+        let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+        console.log('[SendModal] PSBT signed with both keys');
+
+        // Parse the signed PSBT, finalize, and extract the raw transaction
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+
+        // Finalize all inputs
+        console.log('[SendModal] Finalizing PSBT...');
+        signedPsbt.finalizeAllInputs();
+
+        // Extract the raw transaction
+        const tx = signedPsbt.extractTransaction();
+        const txHex = tx.toHex();
+        const computedTxid = tx.getId();
+
+        console.log('[SendModal] Transaction ID:', computedTxid);
+        console.log('[SendModal] Transaction hex length:', txHex.length);
+
+        // Broadcast the transaction
+        console.log('[SendModal] Broadcasting transaction...');
+        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        console.log('[SendModal] Transaction broadcast successful');
+        console.log('[SendModal] Broadcast returned txid:', broadcastTxid);
+
+        setTxid(broadcastTxid || computedTxid);
+        setStep('success');
+
+        // Refresh wallet data
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // Check if SDK auto-completed the transaction
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        console.log('[SendModal] Transaction auto-completed, txid:', txId);
+        setTxid(txId);
+        setStep('success');
+
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // Check if execution completed directly
+      if (result?.complete) {
+        const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+        console.log('[SendModal] Execution complete, txid:', txId);
+        setTxid(txId);
+        setStep('success');
+
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // No txid found
+      console.error('[SendModal] No txid found in result:', result);
+      throw new Error('Alkane transfer did not return a transaction ID');
+
+    } catch (err: any) {
+      console.error('[SendModal] Alkane transfer failed:', err);
+
+      let errorMessage = err.message || 'Failed to send alkanes';
+      setError(errorMessage);
+      setStep('input');
     }
   };
 

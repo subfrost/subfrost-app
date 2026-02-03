@@ -772,6 +772,9 @@ const zh: Record<string, string> = {
   // Send Modal (additional)
   'send.titleAlkanes': '发送 Alkanes',
   'send.selectAlkanes': '选择 Alkanes',
+  'send.selectAlkane': '请选择要发送的 Alkane',
+  'send.insufficientBalance': '余额不足',
+  'send.noAlkanes': '没有可发送的 Alkanes',
   'send.amountAlkanes': '数量',
   'send.btcTab': 'BTC',
   'send.alkanesTab': 'Alkanes',
