@@ -81,6 +81,39 @@ function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
   }
 }
 
+// Helper to create SATS Connect unsecured JWT token
+// Used by Magic Eden and Orange wallets which follow the SATS Connect protocol
+function createSatsConnectToken(payload: any): string {
+  const header = { typ: 'JWT', alg: 'none' };
+  const encodeBase64 = (obj: any) => {
+    const json = JSON.stringify(obj);
+    // Use btoa for browser, handling unicode
+    const base64 = btoa(unescape(encodeURIComponent(json)));
+    // Convert to URL-safe base64
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+  return `${encodeBase64(header)}.${encodeBase64(payload)}.`;
+}
+
+// Convert app network to SATS Connect network type
+function toSatsConnectNetwork(network: Network): string {
+  switch (network) {
+    case 'mainnet':
+      return 'Mainnet';
+    case 'testnet':
+      return 'Testnet';
+    case 'signet':
+      return 'Signet';
+    case 'regtest':
+    case 'regtest-local':
+    case 'subfrost-regtest':
+    case 'oylnet':
+      return 'Regtest';
+    default:
+      return 'Mainnet';
+  }
+}
+
 // Helper to recursively convert Map to plain object (serde_wasm_bindgen returns Maps)
 function mapToObject(value: any): any {
   if (value instanceof Map) {
@@ -937,37 +970,24 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         });
       } else if (walletId === 'orange') {
         // Orange wallet uses window.OrangeBitcoinProvider or window.OrangeWalletProviders.OrangeBitcoinProvider
+        // It follows the SATS Connect protocol which requires a JWT token
         const win = window as any;
         const orangeProvider = win.OrangeBitcoinProvider ||
           win.OrangecryptoProviders?.BitcoinProvider ||
           win.OrangeWalletProviders?.OrangeBitcoinProvider;
         if (!orangeProvider) throw new Error('Orange wallet not available');
 
-        // Orange uses the SATS Connect pattern - connect() returns addresses via callback
-        // We need to use their request method with getAccounts
-        let addresses: any[] = [];
+        // Create SATS Connect JWT token for the connect request
+        const satsConnectPayload = {
+          purposes: ['ordinals', 'payment'],
+          message: 'Connect to Subfrost',
+          network: { type: toSatsConnectNetwork(network) },
+        };
+        const token = createSatsConnectToken(satsConnectPayload);
 
-        // Try using the standard Bitcoin wallet API first
-        if (typeof orangeProvider.requestAccounts === 'function') {
-          addresses = await orangeProvider.requestAccounts();
-        } else if (typeof orangeProvider.connect === 'function') {
-          // Fall back to SATS Connect pattern
-          await new Promise<void>((resolve, reject) => {
-            orangeProvider.connect({
-              payload: {
-                purposes: ['ordinals', 'payment'],
-                message: 'Connect to Subfrost',
-              },
-              onFinish: (response: any) => {
-                addresses = response.addresses || [];
-                resolve();
-              },
-              onCancel: () => reject(new Error('User cancelled connection')),
-            });
-          });
-        } else {
-          throw new Error('Orange wallet does not support connection');
-        }
+        // Orange uses connect(token) which returns a response with addresses
+        const response = await orangeProvider.connect(token);
+        const addresses = response?.addresses || [];
 
         if (!addresses.length) {
           throw new Error('No addresses returned from Orange wallet');
@@ -1006,33 +1026,21 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'magic-eden') {
-        // Magic Eden uses window.magicEden.bitcoin
+        // Magic Eden uses window.magicEden.bitcoin and follows SATS Connect protocol
         const magicEdenProvider = (window as any).magicEden?.bitcoin;
         if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
 
-        // Magic Eden uses the SATS Connect pattern
-        let addresses: any[] = [];
+        // Create SATS Connect JWT token for the connect request
+        const satsConnectPayload = {
+          purposes: ['ordinals', 'payment'],
+          message: 'Connect to Subfrost',
+          network: { type: toSatsConnectNetwork(network) },
+        };
+        const token = createSatsConnectToken(satsConnectPayload);
 
-        // Try standard Bitcoin wallet API first
-        if (typeof magicEdenProvider.requestAccounts === 'function') {
-          addresses = await magicEdenProvider.requestAccounts();
-        } else if (typeof magicEdenProvider.connect === 'function') {
-          await new Promise<void>((resolve, reject) => {
-            magicEdenProvider.connect({
-              payload: {
-                purposes: ['ordinals', 'payment'],
-                message: 'Connect to Subfrost',
-              },
-              onFinish: (response: any) => {
-                addresses = response.addresses || [];
-                resolve();
-              },
-              onCancel: () => reject(new Error('User cancelled connection')),
-            });
-          });
-        } else {
-          throw new Error('Magic Eden wallet does not support connection');
-        }
+        // Magic Eden uses connect(token) which returns a response with addresses
+        const response = await magicEdenProvider.connect(token);
+        const addresses = response?.addresses || [];
 
         if (!addresses.length) {
           throw new Error('No addresses returned from Magic Eden wallet');
