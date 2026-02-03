@@ -159,6 +159,7 @@ const en: Record<string, string> = {
   'tokenSelector.searchAssets': 'Search bitcoin-native assets...',
   'tokenSelector.noTokens': 'No tokens found',
   'tokenSelector.notAvailable': 'Not available',
+  'tokenSelector.selectAmount': 'Select Amount',
 
   // Receive Modal
   'receive.title': 'Receive Bitcoin',

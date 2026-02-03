@@ -72,6 +72,9 @@ type Props = {
   mode?: 'from' | 'to' | 'pool0' | 'pool1' | null;
   onBridgeTokenSelect?: (token: string) => void;
   selectedBridgeTokenFromOther?: string; // Bridge token selected in the opposite selector
+  // Percentage selection (shown in 'from' mode)
+  onPercentFrom?: (percent: number) => void;
+  activePercent?: number | null;
 };
 
 // Bridge token definitions
@@ -94,6 +97,8 @@ export default function TokenSelectorModal({
   mode,
   onBridgeTokenSelect,
   selectedBridgeTokenFromOther,
+  onPercentFrom,
+  activePercent,
 }: Props) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,6 +149,41 @@ export default function TokenSelectorModal({
             </button>
           </div>
         </div>
+
+        {/* Percentage Selection - Shown in FROM mode */}
+        {mode === 'from' && onPercentFrom && (
+          <div className="bg-[color:var(--sf-panel-bg)] mx-4 mt-4 rounded-2xl px-5 py-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
+                {t('tokenSelector.selectAmount')}
+              </span>
+              <div className="flex items-center gap-2">
+                {[
+                  { value: 0.25, label: '25%' },
+                  { value: 0.5, label: '50%' },
+                  { value: 0.75, label: '75%' },
+                  { value: 1, label: 'MAX' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      onPercentFrom(option.value);
+                      onClose();
+                    }}
+                    className={`flex-1 inline-flex items-center justify-center rounded-xl px-3 py-2.5 text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
+                      activePercent === option.value
+                        ? 'bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]'
+                        : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Bridge Section - Shown in FROM and TO modes */}
         {(mode === 'from' || mode === 'to') && (

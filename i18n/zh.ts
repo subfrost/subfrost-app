@@ -159,6 +159,7 @@ const zh: Record<string, string> = {
   'tokenSelector.searchAssets': '\u641c\u7d22\u6bd4\u7279\u5e01\u539f\u751f\u8d44\u4ea7...',
   'tokenSelector.noTokens': '\u672a\u627e\u5230\u4ee3\u5e01',
   'tokenSelector.notAvailable': '\u4e0d\u53ef\u7528',
+  'tokenSelector.selectAmount': '选择数量',
 
   // Receive Modal
   'receive.title': '\u63a5\u6536\u6bd4\u7279\u5e01',

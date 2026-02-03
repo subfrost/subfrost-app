@@ -1311,6 +1311,34 @@ export default function SwapShell() {
     }
   };
 
+  // Calculate active percent for TokenSelectorModal
+  const getActivePercentFrom = (): number | null => {
+    if (!fromAmount || !fromToken) return null;
+
+    let balance = 0;
+    if (fromToken.id === 'btc') {
+      balance = Number(btcBalanceSats || 0) / 1e8;
+    } else {
+      const cur = idToUserCurrency.get(fromToken.id);
+      if (cur?.balance) {
+        balance = Number(cur.balance) / 1e8;
+      }
+    }
+
+    if (!balance || balance === 0) return null;
+
+    const amount = parseFloat(fromAmount);
+    if (!amount) return null;
+
+    const tolerance = 0.0001;
+    if (Math.abs(amount - balance * 0.25) < tolerance) return 0.25;
+    if (Math.abs(amount - balance * 0.5) < tolerance) return 0.5;
+    if (Math.abs(amount - balance * 0.75) < tolerance) return 0.75;
+    if (Math.abs(amount - balance) < tolerance) return 1;
+
+    return null;
+  };
+
   // Handle percentage of balance click for LP token 0
   const handlePercentToken0 = (percent: number) => {
     if (!poolToken0) return;
@@ -1629,6 +1657,8 @@ export default function SwapShell() {
             ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
             : undefined
         }
+        onPercentFrom={tokenSelectorMode === 'from' && fromToken ? handlePercentFrom : undefined}
+        activePercent={tokenSelectorMode === 'from' ? getActivePercentFrom() : null}
         onBridgeTokenSelect={(tokenSymbol) => {
           const bridgeTokenMap: Record<string, { name: string }> = {
             USDT: { name: 'USDT' },
