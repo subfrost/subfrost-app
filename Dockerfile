@@ -11,8 +11,9 @@ WORKDIR /app
 # Install pnpm (use latest 9.x for lockfile v9.0 compatibility)
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
-# Copy package files and .npmrc for hoisting config
+# Copy package files, .npmrc, and prisma schema (needed for postinstall)
 COPY package.json pnpm-lock.yaml* .npmrc* ./
+COPY prisma ./prisma/
 
 # Install dependencies
 # --no-frozen-lockfile: allow lockfile updates for tarball URL packages
