@@ -20,10 +20,8 @@ import {
   WalletConnector,
   ConnectedWallet,
   BrowserWalletInfo,
-  getInstalledWallets,
-  isWalletInstalled,
 } from '@alkanes/ts-sdk';
-import { BROWSER_WALLETS } from '@/constants/wallets';
+import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/constants/wallets';
 
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';

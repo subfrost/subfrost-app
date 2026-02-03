@@ -17,7 +17,7 @@ const LOCAL_WALLETS: BrowserWalletInfo[] = [
     id: 'oyl',
     name: 'Oyl',
     icon: '/assets/wallets/oyl.png',
-    website: 'https://oyl.io/',
+    website: 'https://chromewebstore.google.com/detail/oyl-wallet-bitcoin-ordina/ilolmnhjbbggkmopnemiphomhaojndmb',
     injectionKey: 'oyl',
     supportsPsbt: true,
     supportsTaproot: true,
