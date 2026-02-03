@@ -959,7 +959,7 @@ export default function ConnectWalletModal() {
 
           {view === 'browser-extension' && (
             <div className="flex flex-col gap-3">
-              <div className="max-h-96 overflow-y-auto space-y-4">
+              <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Installed Wallets Section */}
                 {installedWallets.length > 0 ? (
                   <div>
