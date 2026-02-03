@@ -12,7 +12,9 @@ import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
 import { ExchangeProvider } from '@/context/ExchangeContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
 import { HeightPoller } from '@/queries/height';
+import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 
 // Define Network type locally
 import type { Network } from '@/utils/constants';
@@ -122,9 +124,12 @@ export default function Providers({ children }: { children: ReactNode }) {
               <LanguageProvider>
                 <AlkanesSDKProvider network={network}>
                   <WalletProvider network={network}>
-                    <ExchangeProvider>
-                      {children}
-                    </ExchangeProvider>
+                    <TransactionConfirmProvider>
+                      <ExchangeProvider>
+                        {children}
+                      </ExchangeProvider>
+                      <TransactionConfirmModal />
+                    </TransactionConfirmProvider>
                   </WalletProvider>
                 </AlkanesSDKProvider>
               </LanguageProvider>

@@ -72,6 +72,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { getConfig } from '@/utils/getConfig';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
@@ -111,6 +112,10 @@ export type SwapTransactionBaseData = {
   poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
   deadlineBlocks?: number; // default 3
   isDieselMint?: boolean;
+  // For confirmation modal display (optional)
+  sellSymbol?: string;
+  buySymbol?: string;
+  skipConfirmation?: boolean; // For browser wallets that handle their own confirmation
 };
 
 /**
@@ -212,9 +217,10 @@ function buildInputRequirements(params: {
 }
 
 export function useSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
@@ -449,6 +455,29 @@ export function useSwapMutation() {
             console.log('[useSwapMutation] PSBT has', debugPsbt.txOutputs.length, 'outputs');
           } catch (dbgErr) {
             console.log('[useSwapMutation] PSBT debug parse error:', dbgErr);
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          // Browser wallets handle confirmation via their own popup
+          if (walletType === 'keystore' && !swapData.skipConfirmation) {
+            console.log('[useSwapMutation] Keystore wallet - requesting user confirmation...');
+            const sellSymbol = swapData.sellSymbol || (swapData.sellCurrency === 'btc' ? 'BTC' : swapData.sellCurrency);
+            const buySymbol = swapData.buySymbol || (swapData.buyCurrency === 'btc' ? 'BTC' : swapData.buyCurrency);
+            const approved = await requestConfirmation({
+              type: 'swap',
+              title: 'Confirm Swap',
+              fromAmount: (parseFloat(swapData.sellAmount) / 1e8).toString(),
+              fromSymbol: sellSymbol,
+              toAmount: (parseFloat(swapData.buyAmount) / 1e8).toString(),
+              toSymbol: buySymbol,
+              feeRate: swapData.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[useSwapMutation] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[useSwapMutation] User approved transaction');
           }
 
           // Sign the PSBT with both keys (SegWit first, then Taproot)

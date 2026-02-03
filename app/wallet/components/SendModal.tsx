@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
@@ -32,8 +33,9 @@ interface UTXO {
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
-  const { address, network } = useWallet() as any;
+  const { address, network, walletType } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
+  const { requestConfirmation } = useTransactionConfirm();
   const { t } = useTranslation();
   const { utxos, balances, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
@@ -300,7 +302,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   };
 
   const handleBroadcast = async () => {
-    setStep('broadcasting');
     setError('');
 
     try {
@@ -312,6 +313,28 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded. Please reconnect your wallet.');
       }
+
+      // For keystore wallets, request user confirmation before broadcasting
+      if (walletType === 'keystore') {
+        console.log('[SendModal] Keystore wallet - requesting user confirmation...');
+        const approved = await requestConfirmation({
+          type: 'send',
+          title: 'Confirm Send',
+          fromAmount: amount,
+          fromSymbol: 'BTC',
+          recipient: recipientAddress,
+          feeRate: feeRate,
+        });
+
+        if (!approved) {
+          console.log('[SendModal] User rejected transaction');
+          setError('Transaction rejected by user');
+          return;
+        }
+        console.log('[SendModal] User approved transaction');
+      }
+
+      setStep('broadcasting');
 
       const amountSats = Math.floor(parseFloat(amount) * 100000000);
 

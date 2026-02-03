@@ -37,6 +37,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { FACTORY_OPCODES } from '@/constants';
@@ -75,6 +76,8 @@ export type AddLiquidityTransactionData = {
   token1Amount: string;  // display amount
   token0Decimals?: number; // default 8
   token1Decimals?: number; // default 8
+  token0Symbol?: string;   // for confirmation display
+  token1Symbol?: string;   // for confirmation display
   maxSlippage?: string;  // percent string, e.g. '0.5' (unused for now, minLP=0)
   feeRate: number;       // sats/vB
   deadlineBlocks?: number; // default 3
@@ -394,9 +397,10 @@ function injectAlkaneInputs(
 }
 
 export function useAddLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
   const config = getConfig(network);
   const ALKANE_FACTORY_ID = config.ALKANE_FACTORY_ID;
   const apiUrl = 'API_URL' in config ? (config as any).API_URL : undefined;
@@ -587,6 +591,26 @@ export function useAddLiquidityMutation() {
             );
           } else {
             console.warn('[AddLiquidity] No alkane UTXOs found - protostone edicts will have no tokens to transfer');
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          if (walletType === 'keystore') {
+            console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'addLiquidity',
+              title: 'Confirm Add Liquidity',
+              token0Amount: (parseFloat(data.token0Amount) / 1e8).toString(),
+              token0Symbol: data.token0Symbol || data.token0Id,
+              token1Amount: (parseFloat(data.token1Amount) / 1e8).toString(),
+              token1Symbol: data.token1Symbol || data.token1Id,
+              feeRate: data.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[AddLiquidity] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[AddLiquidity] User approved transaction');
           }
 
           // Sign the PSBT with both keys (SegWit first, then Taproot)

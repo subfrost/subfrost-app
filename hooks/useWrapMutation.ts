@@ -51,6 +51,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -107,9 +108,10 @@ function buildWrapProtostone(params: {
 }
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID } = getConfig(network);
 
   // Get bitcoin network for PSBT parsing
@@ -218,6 +220,26 @@ export function useWrapMutation() {
             psbtBase64 = readyToSign.psbt;
           } else {
             throw new Error('Unexpected PSBT format');
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          if (walletType === 'keystore') {
+            console.log('[WRAP] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'wrap',
+              title: 'Confirm Wrap',
+              fromAmount: wrapData.amount,
+              fromSymbol: 'BTC',
+              toAmount: wrapData.amount,
+              toSymbol: 'frBTC',
+              feeRate: wrapData.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[WRAP] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[WRAP] User approved transaction');
           }
 
           // Sign the PSBT with both SegWit and Taproot keys

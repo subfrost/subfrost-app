@@ -67,6 +67,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
@@ -90,8 +91,15 @@ export type RemoveLiquidityTransactionData = {
   lpDecimals?: number;     // LP token decimals (default 8)
   minAmount0?: string;     // minimum token0 to receive (display units, optional)
   minAmount1?: string;     // minimum token1 to receive (display units, optional)
+  minToken0Amount?: string; // alias for minAmount0 (for confirmation modal)
+  minToken1Amount?: string; // alias for minAmount1 (for confirmation modal)
+  token0Id?: string;       // token0 alkane id (for confirmation display)
+  token1Id?: string;       // token1 alkane id (for confirmation display)
+  token0Symbol?: string;   // for confirmation display
+  token1Symbol?: string;   // for confirmation display
   token0Decimals?: number; // token0 decimals (default 8)
   token1Decimals?: number; // token1 decimals (default 8)
+  poolName?: string;       // pool name for display (e.g., "DIESEL / frBTC")
   feeRate: number;         // sats/vB
   deadlineBlocks?: number; // blocks until deadline (default 3)
 };
@@ -190,9 +198,10 @@ function buildRemoveLiquidityInputRequirements(params: {
 }
 
 export function useRemoveLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
   const { ALKANE_FACTORY_ID } = getConfig(network);
 
   // Get bitcoin network for PSBT parsing
@@ -335,6 +344,28 @@ export function useRemoveLiquidityMutation() {
             psbtBase64 = uint8ArrayToBase64(bytes);
           } else {
             throw new Error('Unexpected PSBT format');
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          if (walletType === 'keystore') {
+            console.log('[RemoveLiquidity] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'removeLiquidity',
+              title: 'Confirm Remove Liquidity',
+              lpAmount: (parseFloat(data.lpAmount) / 1e8).toString(),
+              poolName: data.poolName || `${data.token0Symbol || data.token0Id} / ${data.token1Symbol || data.token1Id}`,
+              token0Amount: data.minToken0Amount ? (parseFloat(data.minToken0Amount) / 1e8).toString() : undefined,
+              token0Symbol: data.token0Symbol || data.token0Id,
+              token1Amount: data.minToken1Amount ? (parseFloat(data.minToken1Amount) / 1e8).toString() : undefined,
+              token1Symbol: data.token1Symbol || data.token1Id,
+              feeRate: data.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[RemoveLiquidity] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[RemoveLiquidity] User approved transaction');
           }
 
           // Sign the PSBT with both keys (SegWit first, then Taproot)

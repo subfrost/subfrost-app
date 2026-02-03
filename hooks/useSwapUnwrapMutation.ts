@@ -45,6 +45,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
@@ -83,6 +84,8 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 export type SwapUnwrapTransactionData = {
   sellCurrency: string;     // Token to sell (e.g., "2:0" for DIESEL)
   sellAmount: string;       // Amount in alks
+  sellSymbol?: string;      // Symbol for confirmation display (e.g., "DIESEL")
+  btcAmount?: string;       // BTC amount for confirmation display
   expectedBtcAmount: string; // Expected BTC output in alks (sats)
   maxSlippage: string;      // Percent string, e.g., '0.5'
   feeRate: number;          // sats/vB
@@ -151,9 +154,10 @@ function buildSwapUnwrapProtostone(params: {
 }
 
 export function useSwapUnwrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
@@ -301,6 +305,27 @@ export function useSwapUnwrapMutation() {
             psbtBase64 = uint8ArrayToBase64(bytes);
           } else {
             throw new Error('Unexpected PSBT format');
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          if (walletType === 'keystore') {
+            console.log('[SwapUnwrap] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'swap',
+              title: 'Confirm Swap to BTC',
+              description: 'Swap to frBTC, then unwrap to BTC',
+              fromAmount: (parseFloat(data.sellAmount) / 1e8).toString(),
+              fromSymbol: data.sellSymbol || data.sellCurrency,
+              toAmount: data.btcAmount,
+              toSymbol: 'BTC',
+              feeRate: data.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[SwapUnwrap] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[SwapUnwrap] User approved transaction');
           }
 
           // Sign with both keys
