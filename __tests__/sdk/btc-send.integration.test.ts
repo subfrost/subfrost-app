@@ -382,12 +382,64 @@ describe('BTC Send Integration Tests', () => {
       }
     });
 
-    it.skip('should send BTC using keystore wallet', async () => {
-      // TODO: Requires funded wallet with test mnemonic
-      // The test mnemonic needs to be funded on regtest first
-      // For now, focus on browser wallet integration test below
-      try {
+    it.skipIf(skipIfNoIntegration)(
+      'should send BTC using keystore wallet',
+      async () => {
+        // This test runs FULLY AUTONOMOUSLY - funds the wallet and broadcasts via SDK
+        console.log('[BtcSend] Setting up keystore wallet with test mnemonic...');
+
+        // Load the test mnemonic into the provider
         provider.walletLoadMnemonic(TEST_MNEMONIC, '');
+
+        // Derive the test wallet's SegWit address to fund it
+        const { createWalletFromMnemonic, AddressType } = await import('@alkanes/ts-sdk');
+
+        // ECC is already initialized at the top of this file with bitcoin.initEccLib(ecc)
+        const wallet = createWalletFromMnemonic(TEST_MNEMONIC, 'regtest');
+        const segwitInfo = wallet.deriveAddress(AddressType.P2WPKH, 0, 0);
+        const testWalletAddress = segwitInfo.address;
+
+        console.log('[BtcSend] Test wallet address:', testWalletAddress);
+        console.log('[BtcSend] Funding test wallet autonomously...');
+
+        // Fund the wallet autonomously
+        const { execSync } = await import('child_process');
+        const path = await import('path');
+
+        try {
+          const cliPaths = [
+            path.join(process.env.HOME || '', 'Documents/GitHub/alkanes-rs-dev/target/release/alkanes-cli'),
+            path.join(process.env.HOME || '', 'alkanes-rs-dev/target/release/alkanes-cli'),
+            'alkanes-cli',
+          ];
+
+          let mined = false;
+          for (const cliPath of cliPaths) {
+            try {
+              execSync(
+                `${cliPath} -p subfrost-regtest bitcoind generatetoaddress 101 ${testWalletAddress}`,
+                { encoding: 'utf8', stdio: 'pipe' }
+              );
+              console.log('[BtcSend] Mined 101 blocks to test wallet using:', cliPath);
+              mined = true;
+              break;
+            } catch (e) {
+              continue;
+            }
+          }
+
+          if (!mined) {
+            throw new Error('Could not find alkanes-cli');
+          }
+        } catch (e: any) {
+          console.error('[BtcSend] Mining failed:', e.message);
+          throw e;
+        }
+
+        // Wait for indexer to process blocks
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        console.log('[BtcSend] Sending BTC via SDK...');
 
         const sendParams = {
           address: TEST_RECIPIENT,
@@ -403,11 +455,11 @@ describe('BTC Send Integration Tests', () => {
         const txid = typeof result === 'string' ? result : result?.txid;
         expect(txid).toBeDefined();
         expect(txid.length).toBe(64); // Bitcoin txid is 64 hex chars
-      } catch (e: any) {
-        console.error('[BtcSend] Send failed:', e.message);
-        throw e;
-      }
-    }, 60000);
+
+        console.log('[BtcSend] Transaction broadcast successfully! Txid:', txid);
+      },
+      180000
+    );
 
     it.skipIf(skipIfNoIntegration || process.env.SKIP_PUPPETEER === 'true')(
       'should build and broadcast PSBT for browser wallet with Puppeteer',
