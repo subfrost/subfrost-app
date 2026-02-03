@@ -1362,7 +1362,14 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
               {step === 'success' && renderSuccess()}
             </>
           )}
-          {sendMode === 'alkanes' && step === 'input' && renderAlkanesInput()}
+          {sendMode === 'alkanes' && (
+            <>
+              {step === 'input' && renderAlkanesInput()}
+              {step === 'confirm' && renderConfirm()}
+              {step === 'broadcasting' && renderBroadcasting()}
+              {step === 'success' && renderSuccess()}
+            </>
+          )}
         </div>
       </div>
 
