@@ -108,12 +108,16 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
 
   const currentPath = iconPaths[currentPathIndex];
 
-  // Reset path index when icon paths change (props updated)
+  // Create a stable key from actual paths to avoid resetting when only symbol changes
+  // but the icon URL paths remain the same (e.g., when displayMap loads token names)
+  const iconPathsKey = iconPaths.join('|');
+
+  // Reset path index when actual icon paths change (not just function reference)
   useEffect(() => {
     setCurrentPathIndex(0);
     setHasError(false);
     setIsLoading(true);
-  }, [getIconPaths]);
+  }, [iconPathsKey]);
 
   // Handle cached images that load before onLoad handler is attached
   useEffect(() => {

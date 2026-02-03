@@ -197,14 +197,14 @@ export default function Header() {
                 <button
                   type="button"
                   onClick={() => setMenuOpen((v) => !v)}
-                  className="flex items-center gap-2 rounded-full bg-[color:var(--sf-panel-bg)] px-3 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
+                  className="flex items-center gap-1.5 rounded-full bg-[color:var(--sf-panel-bg)] px-2 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                 >
                   <AddressAvatar
                     address={address}
                     size={20}
                     className="shrink-0"
                   />
-                  <span className="text-sm font-semibold text-[color:var(--sf-text)]">
+                  <span className="text-sm font-semibold text-[color:var(--sf-text)] whitespace-nowrap">
                     {isBalanceLoading ? "..." : btcBalance} BTC
                   </span>
                 </button>

@@ -208,14 +208,14 @@ export default function SwapInputs({
 
   const balanceUsage = calculateBalanceUsage();
 
-  // Color based on usage
+  // Color based on usage - green gradient from light to full opacity
   const getBalanceColor = () => {
-    const isDark = theme === "dark";
-    if (balanceUsage === 0) return isDark ? "bg-gray-700" : "bg-gray-200";
-    if (balanceUsage < 50) return isDark ? "bg-green-700" : "bg-green-500";
-    if (balanceUsage < 75) return isDark ? "bg-yellow-700" : "bg-yellow-500";
-    if (balanceUsage < 95) return isDark ? "bg-orange-700" : "bg-orange-500";
-    return isDark ? "bg-red-700" : "bg-red-500";
+    if (balanceUsage === 0) return "bg-green-500/20";
+    if (balanceUsage < 25) return "bg-green-500/40";
+    if (balanceUsage < 50) return "bg-green-500/60";
+    if (balanceUsage < 75) return "bg-green-500/80";
+    if (balanceUsage < 95) return "bg-green-500/90";
+    return "bg-green-500";
   };
 
   // Check if current amount matches a specific percentage of balance
