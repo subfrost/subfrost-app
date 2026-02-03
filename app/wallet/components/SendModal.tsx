@@ -33,7 +33,9 @@ interface UTXO {
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
-  const { address, network, walletType } = useWallet() as any;
+  const { address, paymentAddress, network, walletType } = useWallet() as any;
+  // Use SegWit (payment) address for BTC sends - Taproot is for ordinals/inscriptions
+  const btcSendAddress = paymentAddress || address;
   const { provider, isInitialized } = useAlkanesSDK();
   const { requestConfirmation } = useTransactionConfirm();
   const { t } = useTranslation();
@@ -91,11 +93,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const frozenUtxos = getFrozenUtxos();
 
-  // Filter available UTXOs (only from current address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
+  // Filter available UTXOs (only from SegWit address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
-    // Only include UTXOs from the current address
-    if (utxo.address !== address) return false;
-    
+    // Only include UTXOs from the SegWit (payment) address for BTC sends
+    if (utxo.address !== btcSendAddress) return false;
+
     const utxoKey = `${utxo.txid}:${utxo.vout}`;
     if (frozenUtxos.has(utxoKey)) return showFrozenUtxos;
     if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
@@ -105,13 +107,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   });
 
   // Debug: Log UTXO distribution
-  console.log('[SendModal] Current address:', address);
+  console.log('[SendModal] BTC send address (SegWit):', btcSendAddress);
   console.log('[SendModal] Total UTXOs:', utxos.all.length);
   console.log('[SendModal] UTXOs by address:', {
-    currentAddress: utxos.all.filter(u => u.address === address).length,
-    otherAddresses: utxos.all.filter(u => u.address !== address).length,
+    segwitAddress: utxos.all.filter(u => u.address === btcSendAddress).length,
+    otherAddresses: utxos.all.filter(u => u.address !== btcSendAddress).length,
   });
-  console.log('[SendModal] Available UTXOs for current address:', availableUtxos.length);
+  console.log('[SendModal] Available UTXOs for SegWit address:', availableUtxos.length);
   console.log('[SendModal] Total value available:', (availableUtxos.reduce((sum, u) => sum + u.value, 0) / 1e8).toFixed(8), 'BTC');
 
   const totalSelectedValue = Array.from(selectedUtxos)
@@ -342,7 +344,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log('[SendModal] Recipient:', recipientAddress);
       console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
       console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-      console.log('[SendModal] From address:', address);
+      console.log('[SendModal] From address (SegWit):', btcSendAddress);
 
       // Use WASM provider's walletSend method
       // Field names must match alkanes-web-sys SendParams struct:
@@ -355,7 +357,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         address: recipientAddress,  // Recipient address
         amount: amountSats,         // Amount in satoshis
         fee_rate: feeRate,          // Fee rate in sat/vB
-        from: [address],            // Spend from this address
+        from: [btcSendAddress],     // Spend from SegWit address
         lock_alkanes: true,         // Protect alkane UTXOs
         auto_confirm: true,         // Skip confirmation prompt
       };
