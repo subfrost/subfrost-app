@@ -1372,6 +1372,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       address: addresses.taproot.address || addresses.nativeSegwit.address,
       paymentAddress: addresses.nativeSegwit.address,
       publicKey: addresses.nativeSegwit.pubkey,
+      addresses,
       account,
       network,
       wallet,

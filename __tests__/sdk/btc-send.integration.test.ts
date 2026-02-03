@@ -336,7 +336,7 @@ describe('BTC Send Integration Tests', () => {
         const psbt = new bitcoin.Psbt({ network: bitcoin.networks.regtest });
         psbt.addOutput({
           address: 'invalid_address',
-          value: 10000000,
+          value: BigInt(10000000),
         });
       }).toThrow();
     });
@@ -347,14 +347,14 @@ describe('BTC Send Integration Tests', () => {
       expect(() => {
         psbt.addOutput({
           address: TEST_RECIPIENT,
-          value: 0,
+          value: BigInt(0),
         });
       }).toThrow();
 
       expect(() => {
         psbt.addOutput({
           address: TEST_RECIPIENT,
-          value: -1000,
+          value: BigInt(-1000),
         });
       }).toThrow();
     });

@@ -460,7 +460,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             index: vout,
             witnessUtxo: {
               script: tx.outs[vout].script,
-              value: utxo.value,
+              value: BigInt(utxo.value),
             },
           });
 
@@ -470,7 +470,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         // Add recipient output
         psbt.addOutput({
           address: recipientAddress,
-          value: amountSats,
+          value: BigInt(amountSats),
         });
 
         // Add change output if needed
@@ -480,7 +480,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         if (change > 546) { // Dust threshold
           psbt.addOutput({
             address: btcSendAddress,
-            value: change,
+            value: BigInt(change),
           });
         }
 
