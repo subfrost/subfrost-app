@@ -254,7 +254,7 @@ export default function SwapInputs({
         {/* You Send - entire panel clickable to focus input */}
         <div className="relative">
           <div
-            className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
+            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
               fromFocused
                 ? "border border-[color:var(--sf-row-border)]"
                 : "border border-transparent"
@@ -340,7 +340,9 @@ export default function SwapInputs({
                         />
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${
+                      fromFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    }`}>
                     {onPercentFrom && (
                       <>
                         <button
@@ -588,8 +590,10 @@ export default function SwapInputs({
               setTimeout(() => setShowSwapComingSoon(false), 1000);
             }
           }}
-          className={`h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none ${
-            isConnected && !network?.includes('regtest') ? "opacity-50 grayscale cursor-not-allowed" : ""
+          className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
+            isConnected && !network?.includes('regtest')
+              ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
+              : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
           }`}
         >
           {showSwapComingSoon ? (
