@@ -78,14 +78,43 @@ export const BROWSER_WALLETS: BrowserWalletInfo[] = WALLET_ORDER
   .filter((w): w is BrowserWalletInfo => w !== undefined);
 
 /**
- * Detect if a wallet is installed in the browser
+ * Detect if a wallet is installed in the browser.
+ * Some wallets have nested providers (e.g., phantom.bitcoin, magicEden.bitcoin)
+ * or use non-standard injection keys (e.g., Orange uses OrangeBitcoinProvider).
  */
 export function isWalletInstalled(wallet: BrowserWalletInfo): boolean {
   if (typeof window === 'undefined') return false;
 
   try {
-    const walletObj = (window as any)[wallet.injectionKey];
-    return walletObj !== undefined && walletObj !== null;
+    const win = window as any;
+
+    // Special cases for wallets with non-standard injection patterns
+    switch (wallet.id) {
+      case 'phantom':
+        // Phantom injects at window.phantom.bitcoin for BTC
+        return win.phantom?.bitcoin !== undefined;
+
+      case 'magic-eden':
+        // Magic Eden injects at window.magicEden.bitcoin for BTC
+        return win.magicEden?.bitcoin !== undefined;
+
+      case 'orange':
+        // Orange uses multiple possible injection points
+        return (
+          win.OrangeBitcoinProvider !== undefined ||
+          win.OrangecryptoProviders?.BitcoinProvider !== undefined ||
+          win.OrangeWalletProviders?.OrangeBitcoinProvider !== undefined
+        );
+
+      case 'tokeo':
+        // Tokeo injects at window.tokeo.bitcoin
+        return win.tokeo?.bitcoin !== undefined;
+
+      default:
+        // Standard injection key check
+        const walletObj = win[wallet.injectionKey];
+        return walletObj !== undefined && walletObj !== null;
+    }
   } catch {
     return false;
   }

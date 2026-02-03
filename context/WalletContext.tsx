@@ -935,6 +935,141 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           publicKey: taprootAccount.publicKey,
           addressType: 'p2tr',
         });
+      } else if (walletId === 'orange') {
+        // Orange wallet uses window.OrangeBitcoinProvider or window.OrangeWalletProviders.OrangeBitcoinProvider
+        const win = window as any;
+        const orangeProvider = win.OrangeBitcoinProvider ||
+          win.OrangecryptoProviders?.BitcoinProvider ||
+          win.OrangeWalletProviders?.OrangeBitcoinProvider;
+        if (!orangeProvider) throw new Error('Orange wallet not available');
+
+        // Orange uses the SATS Connect pattern - connect() returns addresses via callback
+        // We need to use their request method with getAccounts
+        let addresses: any[] = [];
+
+        // Try using the standard Bitcoin wallet API first
+        if (typeof orangeProvider.requestAccounts === 'function') {
+          addresses = await orangeProvider.requestAccounts();
+        } else if (typeof orangeProvider.connect === 'function') {
+          // Fall back to SATS Connect pattern
+          await new Promise<void>((resolve, reject) => {
+            orangeProvider.connect({
+              payload: {
+                purposes: ['ordinals', 'payment'],
+                message: 'Connect to Subfrost',
+              },
+              onFinish: (response: any) => {
+                addresses = response.addresses || [];
+                resolve();
+              },
+              onCancel: () => reject(new Error('User cancelled connection')),
+            });
+          });
+        } else {
+          throw new Error('Orange wallet does not support connection');
+        }
+
+        if (!addresses.length) {
+          throw new Error('No addresses returned from Orange wallet');
+        }
+
+        // Find ordinals (taproot) and payment (segwit) addresses
+        const ordinalsAddr = addresses.find((a: any) =>
+          a.purpose === 'ordinals' || a.addressType === 'p2tr' ||
+          a.address?.startsWith('bc1p') || a.address?.startsWith('tb1p')
+        );
+        const paymentAddr = addresses.find((a: any) =>
+          a.purpose === 'payment' || a.addressType === 'p2wpkh' ||
+          a.address?.startsWith('bc1q') || a.address?.startsWith('tb1q')
+        );
+
+        const primaryAccount = ordinalsAddr || addresses[0];
+        const addr = typeof primaryAccount === 'string' ? primaryAccount : primaryAccount.address;
+        const pubKey = typeof primaryAccount === 'string' ? undefined : primaryAccount.publicKey;
+
+        if (ordinalsAddr) {
+          additionalAddresses.taproot = {
+            address: typeof ordinalsAddr === 'string' ? ordinalsAddr : ordinalsAddr.address,
+            publicKey: typeof ordinalsAddr === 'string' ? undefined : ordinalsAddr.publicKey,
+          };
+        }
+        if (paymentAddr) {
+          additionalAddresses.nativeSegwit = {
+            address: typeof paymentAddr === 'string' ? paymentAddr : paymentAddr.address,
+            publicKey: typeof paymentAddr === 'string' ? undefined : paymentAddr.publicKey,
+          };
+        }
+
+        connected = new (ConnectedWallet as any)(walletInfo, orangeProvider, {
+          address: addr,
+          publicKey: pubKey,
+          addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
+        });
+      } else if (walletId === 'magic-eden') {
+        // Magic Eden uses window.magicEden.bitcoin
+        const magicEdenProvider = (window as any).magicEden?.bitcoin;
+        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
+
+        // Magic Eden uses the SATS Connect pattern
+        let addresses: any[] = [];
+
+        // Try standard Bitcoin wallet API first
+        if (typeof magicEdenProvider.requestAccounts === 'function') {
+          addresses = await magicEdenProvider.requestAccounts();
+        } else if (typeof magicEdenProvider.connect === 'function') {
+          await new Promise<void>((resolve, reject) => {
+            magicEdenProvider.connect({
+              payload: {
+                purposes: ['ordinals', 'payment'],
+                message: 'Connect to Subfrost',
+              },
+              onFinish: (response: any) => {
+                addresses = response.addresses || [];
+                resolve();
+              },
+              onCancel: () => reject(new Error('User cancelled connection')),
+            });
+          });
+        } else {
+          throw new Error('Magic Eden wallet does not support connection');
+        }
+
+        if (!addresses.length) {
+          throw new Error('No addresses returned from Magic Eden wallet');
+        }
+
+        // Find ordinals (taproot) and payment (segwit) addresses
+        const ordinalsAddr = addresses.find((a: any) =>
+          a.purpose === 'ordinals' || a.addressType === 'p2tr' ||
+          a.address?.startsWith('bc1p') || a.address?.startsWith('tb1p')
+        );
+        const paymentAddr = addresses.find((a: any) =>
+          a.purpose === 'payment' || a.addressType === 'p2wpkh' ||
+          a.address?.startsWith('bc1q') || a.address?.startsWith('tb1q')
+        );
+
+        const primaryAccount = ordinalsAddr || addresses[0];
+        const addr = typeof primaryAccount === 'string' ? primaryAccount : primaryAccount.address;
+        const pubKey = typeof primaryAccount === 'string' ? undefined : primaryAccount.publicKey;
+
+        if (ordinalsAddr) {
+          additionalAddresses.taproot = {
+            address: typeof ordinalsAddr === 'string' ? ordinalsAddr : ordinalsAddr.address,
+            publicKey: typeof ordinalsAddr === 'string' ? undefined : ordinalsAddr.publicKey,
+          };
+        }
+        if (paymentAddr) {
+          additionalAddresses.nativeSegwit = {
+            address: typeof paymentAddr === 'string' ? paymentAddr : paymentAddr.address,
+            publicKey: typeof paymentAddr === 'string' ? undefined : paymentAddr.publicKey,
+          };
+        }
+
+        connected = new (ConnectedWallet as any)(walletInfo, magicEdenProvider, {
+          address: addr,
+          publicKey: pubKey,
+          addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
+        });
       } else {
         // For other wallets (Unisat, OKX, etc.), use the standard connector
         const connector = getWalletConnector();
@@ -1004,6 +1139,39 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         return signedBase64;
       }
 
+      // Orange wallet uses signPsbt with { psbtBase64, finalize?, broadcast? }
+      if (connectedWalletId === 'orange') {
+        const win = window as any;
+        const orangeProvider = win.OrangeBitcoinProvider ||
+          win.OrangecryptoProviders?.BitcoinProvider ||
+          win.OrangeWalletProviders?.OrangeBitcoinProvider;
+        if (!orangeProvider) throw new Error('Orange wallet not available');
+
+        // Orange may use signPsbt({ psbtBase64, ... }) or signPsbt(psbtHex, options)
+        if (typeof orangeProvider.signPsbt === 'function') {
+          const result = await orangeProvider.signPsbt({ psbtBase64, finalize: false, broadcast: false });
+          // Result may be { psbtBase64 } or { psbt } or just the signed psbt string
+          const signedPsbt = result?.psbtBase64 || result?.psbt || result;
+          if (typeof signedPsbt === 'string') {
+            // Check if it's hex or base64
+            if (/^[0-9a-fA-F]+$/.test(signedPsbt)) {
+              return Buffer.from(signedPsbt, 'hex').toString('base64');
+            }
+            return signedPsbt;
+          }
+        }
+        throw new Error('Orange wallet signPsbt failed');
+      }
+
+      // Magic Eden uses signPsbt with hex and returns hex
+      if (connectedWalletId === 'magic-eden') {
+        const magicEdenProvider = (window as any).magicEden?.bitcoin;
+        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
+        const signedHex = await magicEdenProvider.signPsbt(psbtHex, { finalize: false, broadcast: false });
+        const signedBuffer = Buffer.from(signedHex, 'hex');
+        return signedBuffer.toString('base64');
+      }
+
       // Standard browser wallets expect hex, convert base64 to hex
       const signedHex = await browserWallet.signPsbt(psbtHex);
       // Convert signed hex back to base64
@@ -1042,6 +1210,36 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         if (!tokeoProvider) throw new Error('Tokeo wallet not available');
         const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
         return signedBase64;
+      }
+
+      // Orange wallet
+      if (connectedWalletId === 'orange') {
+        const win = window as any;
+        const orangeProvider = win.OrangeBitcoinProvider ||
+          win.OrangecryptoProviders?.BitcoinProvider ||
+          win.OrangeWalletProviders?.OrangeBitcoinProvider;
+        if (!orangeProvider) throw new Error('Orange wallet not available');
+
+        if (typeof orangeProvider.signPsbt === 'function') {
+          const result = await orangeProvider.signPsbt({ psbtBase64, finalize: false, broadcast: false });
+          const signedPsbt = result?.psbtBase64 || result?.psbt || result;
+          if (typeof signedPsbt === 'string') {
+            if (/^[0-9a-fA-F]+$/.test(signedPsbt)) {
+              return Buffer.from(signedPsbt, 'hex').toString('base64');
+            }
+            return signedPsbt;
+          }
+        }
+        throw new Error('Orange wallet signPsbt failed');
+      }
+
+      // Magic Eden
+      if (connectedWalletId === 'magic-eden') {
+        const magicEdenProvider = (window as any).magicEden?.bitcoin;
+        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
+        const signedHex = await magicEdenProvider.signPsbt(psbtHex, { finalize: false, broadcast: false });
+        const signedBuffer = Buffer.from(signedHex, 'hex');
+        return signedBuffer.toString('base64');
       }
 
       // Standard browser wallets expect hex
@@ -1160,6 +1358,36 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         if (!tokeoProvider) throw new Error('Tokeo wallet not available');
         const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
         return signedBase64;
+      }
+
+      // Orange wallet
+      if (connectedWalletId === 'orange') {
+        const win = window as any;
+        const orangeProvider = win.OrangeBitcoinProvider ||
+          win.OrangecryptoProviders?.BitcoinProvider ||
+          win.OrangeWalletProviders?.OrangeBitcoinProvider;
+        if (!orangeProvider) throw new Error('Orange wallet not available');
+
+        if (typeof orangeProvider.signPsbt === 'function') {
+          const result = await orangeProvider.signPsbt({ psbtBase64, finalize: false, broadcast: false });
+          const signedPsbt = result?.psbtBase64 || result?.psbt || result;
+          if (typeof signedPsbt === 'string') {
+            if (/^[0-9a-fA-F]+$/.test(signedPsbt)) {
+              return Buffer.from(signedPsbt, 'hex').toString('base64');
+            }
+            return signedPsbt;
+          }
+        }
+        throw new Error('Orange wallet signPsbt failed');
+      }
+
+      // Magic Eden
+      if (connectedWalletId === 'magic-eden') {
+        const magicEdenProvider = (window as any).magicEden?.bitcoin;
+        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
+        const signedHex = await magicEdenProvider.signPsbt(psbtHex, { finalize: false, broadcast: false });
+        const signedBuffer = Buffer.from(signedHex, 'hex');
+        return signedBuffer.toString('base64');
       }
 
       const signedHex = await browserWallet.signPsbt(psbtHex);
@@ -1289,6 +1517,31 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const tokeoProvider = (window as any).tokeo?.bitcoin;
         if (!tokeoProvider) throw new Error('Tokeo wallet not available');
         return await tokeoProvider.signMessage(message);
+      }
+
+      // Orange wallet: signMessage({ address, message }) => { signature }
+      if (connectedWalletId === 'orange') {
+        const win = window as any;
+        const orangeProvider = win.OrangeBitcoinProvider ||
+          win.OrangecryptoProviders?.BitcoinProvider ||
+          win.OrangeWalletProviders?.OrangeBitcoinProvider;
+        if (!orangeProvider) throw new Error('Orange wallet not available');
+
+        if (typeof orangeProvider.signMessage === 'function') {
+          const result = await orangeProvider.signMessage({
+            address: browserWallet.address,
+            message,
+          });
+          return result?.signature || result;
+        }
+        throw new Error('Orange wallet signMessage not supported');
+      }
+
+      // Magic Eden: signMessage(message, address?) => signature
+      if (connectedWalletId === 'magic-eden') {
+        const magicEdenProvider = (window as any).magicEden?.bitcoin;
+        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
+        return await magicEdenProvider.signMessage(message, browserWallet.address);
       }
 
       return browserWallet.signMessage(message);
