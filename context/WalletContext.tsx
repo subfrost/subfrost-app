@@ -895,8 +895,48 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           publicKey: addresses.taproot.publicKey,
           addressType: 'p2tr',
         });
+      } else if (walletId === 'tokeo') {
+        // Tokeo exposes window.tokeo.bitcoin with requestAccounts(), getAccounts(), signPsbt()
+        const tokeoProvider = (window as any).tokeo?.bitcoin;
+        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
+
+        // Request connection
+        await tokeoProvider.requestAccounts();
+
+        // Get accounts - returns { accounts: [{ address, publicKey, type }] }
+        const result = await tokeoProvider.getAccounts();
+        if (!result?.accounts?.length) {
+          throw new Error('No accounts returned from Tokeo');
+        }
+
+        // Find taproot (p2tr) and native segwit (p2wpkh) accounts
+        const taprootAccount = result.accounts.find((a: any) => a.type === 'p2tr');
+        const segwitAccount = result.accounts.find((a: any) => a.type === 'p2wpkh');
+
+        if (!taprootAccount) {
+          throw new Error('No taproot address found in Tokeo');
+        }
+
+        // Store both address types
+        additionalAddresses.taproot = {
+          address: taprootAccount.address,
+          publicKey: taprootAccount.publicKey,
+        };
+        if (segwitAccount) {
+          additionalAddresses.nativeSegwit = {
+            address: segwitAccount.address,
+            publicKey: segwitAccount.publicKey,
+          };
+        }
+
+        // Use taproot as primary address
+        connected = new (ConnectedWallet as any)(walletInfo, tokeoProvider, {
+          address: taprootAccount.address,
+          publicKey: taprootAccount.publicKey,
+          addressType: 'p2tr',
+        });
       } else {
-        // For other wallets (Unisat, OKX, Phantom, etc.), use the standard connector
+        // For other wallets (Unisat, OKX, etc.), use the standard connector
         const connector = getWalletConnector();
         connected = await connector.connect(walletInfo);
       }
@@ -956,6 +996,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         return signedBuffer.toString('base64');
       }
 
+      // Tokeo uses base64 and returns base64: signPsbt(psbtBase64, options) => signedPsbtBase64
+      if (connectedWalletId === 'tokeo') {
+        const tokeoProvider = (window as any).tokeo?.bitcoin;
+        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
+        const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
+        return signedBase64;
+      }
+
       // Standard browser wallets expect hex, convert base64 to hex
       const signedHex = await browserWallet.signPsbt(psbtHex);
       // Convert signed hex back to base64
@@ -986,6 +1034,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
         const signedBuffer = Buffer.from(result.psbt, 'hex');
         return signedBuffer.toString('base64');
+      }
+
+      // Tokeo uses base64 and returns base64
+      if (connectedWalletId === 'tokeo') {
+        const tokeoProvider = (window as any).tokeo?.bitcoin;
+        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
+        const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
+        return signedBase64;
       }
 
       // Standard browser wallets expect hex
@@ -1096,6 +1152,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
         const signedBuffer = Buffer.from(result.psbt, 'hex');
         return signedBuffer.toString('base64');
+      }
+
+      // Tokeo uses base64 and returns base64
+      if (connectedWalletId === 'tokeo') {
+        const tokeoProvider = (window as any).tokeo?.bitcoin;
+        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
+        const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
+        return signedBase64;
       }
 
       const signedHex = await browserWallet.signPsbt(psbtHex);
@@ -1219,6 +1283,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         });
         return result.signature;
       }
+
+      // Tokeo: signMessage(message, protocol?) => signature
+      if (connectedWalletId === 'tokeo') {
+        const tokeoProvider = (window as any).tokeo?.bitcoin;
+        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
+        return await tokeoProvider.signMessage(message);
+      }
+
       return browserWallet.signMessage(message);
     }
 
