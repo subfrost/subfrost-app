@@ -394,6 +394,132 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     setError('');
 
     try {
+      const amountSats = Math.floor(parseFloat(amount) * 100000000);
+
+      // For browser wallets, build and sign PSBT manually
+      if (walletType === 'browser') {
+        console.log('[SendModal] Browser wallet - building PSBT...');
+        console.log('[SendModal] Recipient:', recipientAddress);
+        console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
+        console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
+        console.log('[SendModal] From address (SegWit):', btcSendAddress);
+
+        setStep('broadcasting');
+
+        // Determine Bitcoin network
+        let btcNetwork: bitcoin.Network;
+        switch (network) {
+          case 'mainnet':
+            btcNetwork = bitcoin.networks.bitcoin;
+            break;
+          case 'testnet':
+          case 'signet':
+            btcNetwork = bitcoin.networks.testnet;
+            break;
+          case 'regtest':
+          case 'regtest-local':
+          case 'subfrost-regtest':
+          case 'oylnet':
+          default:
+            btcNetwork = bitcoin.networks.regtest;
+            break;
+        }
+
+        // Create PSBT
+        const psbt = new bitcoin.Psbt({ network: btcNetwork });
+
+        // Calculate total needed (amount + estimated fee)
+        const estimatedFeeForCalculation = selectedUtxos.size * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate;
+        const totalNeeded = amountSats + estimatedFeeForCalculation;
+
+        // Add inputs from selected UTXOs
+        let totalInputValue = 0;
+        for (const utxoKey of Array.from(selectedUtxos)) {
+          const [txid, voutStr] = utxoKey.split(':');
+          const vout = parseInt(voutStr);
+          const utxo = availableUtxos.find(u => u.txid === txid && u.vout === vout);
+
+          if (!utxo) {
+            throw new Error(`UTXO not found: ${utxoKey}`);
+          }
+
+          // Fetch transaction hex for witness UTXO via Esplora API
+          const blockExplorerUrl = getConfig(network).BLOCK_EXPLORER_URL_BTC;
+          const txHexUrl = `${blockExplorerUrl}/api/tx/${txid}/hex`;
+          console.log('[SendModal] Fetching tx hex from:', txHexUrl);
+
+          const txHexResponse = await fetch(txHexUrl);
+          if (!txHexResponse.ok) {
+            throw new Error(`Failed to fetch transaction ${txid}: ${txHexResponse.statusText}`);
+          }
+          const txHex = await txHexResponse.text();
+          const tx = bitcoin.Transaction.fromHex(txHex);
+
+          psbt.addInput({
+            hash: txid,
+            index: vout,
+            witnessUtxo: {
+              script: tx.outs[vout].script,
+              value: utxo.value,
+            },
+          });
+
+          totalInputValue += utxo.value;
+        }
+
+        // Add recipient output
+        psbt.addOutput({
+          address: recipientAddress,
+          value: amountSats,
+        });
+
+        // Add change output if needed
+        const actualFee = Math.ceil(psbt.txInputs.length * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate);
+        const change = totalInputValue - amountSats - actualFee;
+
+        if (change > 546) { // Dust threshold
+          psbt.addOutput({
+            address: btcSendAddress,
+            value: change,
+          });
+        }
+
+        // Convert PSBT to base64 for signing
+        const psbtBase64 = psbt.toBase64();
+        console.log('[SendModal] PSBT created, signing with browser wallet...');
+
+        // Sign with browser wallet (SegWit)
+        const signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+
+        // Finalize and extract transaction
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+        const tx = signedPsbt.extractTransaction();
+        const txHex = tx.toHex();
+        const computedTxid = tx.getId();
+
+        console.log('[SendModal] Transaction signed, txid:', computedTxid);
+        console.log('[SendModal] Broadcasting...');
+
+        // Broadcast using provider
+        if (!alkaneProvider) {
+          throw new Error('Provider not initialized');
+        }
+
+        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
+
+        setTxid(broadcastTxid || computedTxid);
+        setStep('success');
+
+        setTimeout(() => {
+          refresh();
+        }, 1000);
+
+        return;
+      }
+
+      // For keystore wallets, use WASM provider
       if (!provider || !isInitialized) {
         throw new Error('Provider not initialized. Please wait and try again.');
       }
@@ -403,29 +529,25 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         throw new Error('Wallet not loaded. Please reconnect your wallet.');
       }
 
-      // For keystore wallets, request user confirmation before broadcasting
-      if (walletType === 'keystore') {
-        console.log('[SendModal] Keystore wallet - requesting user confirmation...');
-        const approved = await requestConfirmation({
-          type: 'send',
-          title: 'Confirm Send',
-          fromAmount: amount,
-          fromSymbol: 'BTC',
-          recipient: recipientAddress,
-          feeRate: feeRate,
-        });
+      // Request user confirmation before broadcasting
+      console.log('[SendModal] Keystore wallet - requesting user confirmation...');
+      const approved = await requestConfirmation({
+        type: 'send',
+        title: 'Confirm Send',
+        fromAmount: amount,
+        fromSymbol: 'BTC',
+        recipient: recipientAddress,
+        feeRate: feeRate,
+      });
 
-        if (!approved) {
-          console.log('[SendModal] User rejected transaction');
-          setError('Transaction rejected by user');
-          return;
-        }
-        console.log('[SendModal] User approved transaction');
+      if (!approved) {
+        console.log('[SendModal] User rejected transaction');
+        setError('Transaction rejected by user');
+        return;
       }
+      console.log('[SendModal] User approved transaction');
 
       setStep('broadcasting');
-
-      const amountSats = Math.floor(parseFloat(amount) * 100000000);
 
       console.log('[SendModal] Sending via WASM provider...');
       console.log('[SendModal] Recipient:', recipientAddress);
@@ -434,19 +556,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log('[SendModal] From address (SegWit):', btcSendAddress);
 
       // Use WASM provider's walletSend method
-      // Field names must match alkanes-web-sys SendParams struct:
-      // - address (recipient)
-      // - amount (in satoshis)
-      // - fee_rate (optional)
-      // - from (optional array of addresses to spend from)
-      // - lock_alkanes (protect UTXOs with alkane assets)
       const sendParams = {
-        address: recipientAddress,  // Recipient address
-        amount: amountSats,         // Amount in satoshis
-        fee_rate: feeRate,          // Fee rate in sat/vB
-        from: [btcSendAddress],     // Spend from SegWit address
-        lock_alkanes: true,         // Protect alkane UTXOs
-        auto_confirm: true,         // Skip confirmation prompt
+        address: recipientAddress,
+        amount: amountSats,
+        fee_rate: feeRate,
+        from: [btcSendAddress],
+        lock_alkanes: true,
+        auto_confirm: true,
       };
 
       const result = await provider.walletSend(JSON.stringify(sendParams));
@@ -1263,24 +1379,24 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   {t('send.highFeeDescription')}
                 </p>
 
-                <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <div className="bg-red-100 dark:bg-red-500/20 border border-red-300 dark:border-red-500/30 rounded-xl p-3 space-y-1 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                   <div className="flex justify-between text-sm">
-                    <span className="text-red-300/80">{t('send.estimatedFee')}</span>
-                    <span className="text-red-200 font-medium">
+                    <span className="text-red-700 dark:text-red-300/80">{t('send.estimatedFee')}</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">
                       {(estimatedFee / 100000000).toFixed(8)} BTC
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-red-300/80">{t('send.feeRateLabel')}</span>
-                    <span className="text-red-200 font-medium">{feeRate} sat/vB</span>
+                    <span className="text-red-700 dark:text-red-300/80">{t('send.feeRateLabel')}</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">{feeRate} sat/vB</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-red-300/80">Number of Inputs:</span>
-                    <span className="text-red-200 font-medium">{selectedUtxos.size}</span>
+                    <span className="text-red-700 dark:text-red-300/80">Number of Inputs:</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">{selectedUtxos.size}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-red-300/80">Fee Percentage:</span>
-                    <span className="text-red-200 font-medium">
+                    <span className="text-red-700 dark:text-red-300/80">Fee Percentage:</span>
+                    <span className="text-red-900 dark:text-red-200 font-medium">
                       {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
                     </span>
                   </div>
