@@ -201,6 +201,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     }
   }, [isOpen, selectedAlkaneId, alkaneFilter]);
 
+  // Countdown timer for fee warning
+  useEffect(() => {
+    if (feeWarningCountdown > 0) {
+      const timer = setTimeout(() => {
+        setFeeWarningCountdown(feeWarningCountdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [feeWarningCountdown]);
+
   if (!isOpen) return null;
 
   const validateAddress = (addr: string): boolean => {
@@ -386,16 +396,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       handleBroadcast();
     }
   };
-
-  // Countdown timer for fee warning
-  useEffect(() => {
-    if (feeWarningCountdown > 0) {
-      const timer = setTimeout(() => {
-        setFeeWarningCountdown(feeWarningCountdown - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [feeWarningCountdown]);
 
   const proceedWithHighFee = () => {
     if (feeWarningCountdown > 0) return; // Prevent clicking during countdown
