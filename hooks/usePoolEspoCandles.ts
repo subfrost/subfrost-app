@@ -15,19 +15,9 @@ const ESPO_TIMEFRAME_MAP: Record<CandleTimeframe, 'd1' | 'h1' | '10m' | 'w1' | '
   '1w': 'w1',
 };
 
-// Target number of candles to display on chart
-const TARGET_CANDLES = 200;
-
-// Per-page fetch limit
-const PAGE_LIMIT = 500;
-
-// Max pages to fetch per timeframe to avoid excessive requests
-const MAX_PAGES: Record<CandleTimeframe, number> = {
-  '1h': 10,  // Up to 1000 h1 candles (~41 days)
-  '4h': 20,  // Up to 2000 h1 candles (~83 days), aggregated to 500 4h candles
-  '1d': 5,   // Up to 500 daily candles (~1.4 years)
-  '1w': 3,   // Up to 300 weekly candles (~5.7 years)
-};
+// Number of candles to fetch in a single request
+// Using 500 to ensure users have enough data when scrolling the chart
+const CANDLE_LIMIT = 500;
 
 /**
  * Convert Espo CandleData to CandleDataPoint.
@@ -84,34 +74,22 @@ function aggregateTo4h(h1Candles: CandleDataPoint[]): CandleDataPoint[] {
 }
 
 /**
- * Fetch all available candle pages from Espo, up to maxPages.
- * The API returns newest-first, so we paginate until has_more is false
- * or we hit the page cap.
+ * Fetch candles from Espo API in a single request.
+ * Uses CANDLE_LIMIT (500) to ensure enough data for chart scrolling.
  */
-async function fetchAllCandles(
+async function fetchCandlesSimple(
   espoUrl: string,
   poolId: string,
   espoTimeframe: 'd1' | 'h1' | '10m' | 'w1' | 'M1',
-  side: 'base' | 'quote',
-  maxPages: number
+  side: 'base' | 'quote'
 ): Promise<CandleData[]> {
-  const allCandles: CandleData[] = [];
+  const response = await fetchCandles(espoUrl, poolId, espoTimeframe, side, CANDLE_LIMIT, 1);
 
-  for (let page = 1; page <= maxPages; page++) {
-    const response = await fetchCandles(espoUrl, poolId, espoTimeframe, side, PAGE_LIMIT, page);
-
-    if (!response?.candles || response.candles.length === 0) {
-      break;
-    }
-
-    allCandles.push(...response.candles);
-
-    if (!response.has_more) {
-      break;
-    }
+  if (!response?.candles || response.candles.length === 0) {
+    return [];
   }
 
-  return allCandles;
+  return response.candles;
 }
 
 interface UsePoolEspoCandlesOptions {
@@ -122,7 +100,7 @@ interface UsePoolEspoCandlesOptions {
 
 /**
  * Hook to fetch candlestick data for a pool from the Espo API (ammdata.get_candles).
- * Paginates through all available candle data to get full price history.
+ * Fetches up to 500 candles to ensure enough data for chart scrolling.
  * For 4h timeframe, fetches h1 candles and aggregates them client-side.
  */
 export function usePoolEspoCandles({
@@ -139,9 +117,8 @@ export function usePoolEspoCandles({
       if (!poolId) return [];
 
       const espoTimeframe = ESPO_TIMEFRAME_MAP[timeframe];
-      const maxPages = MAX_PAGES[timeframe];
 
-      const rawCandles = await fetchAllCandles(espoUrl, poolId, espoTimeframe, 'base', maxPages);
+      const rawCandles = await fetchCandlesSimple(espoUrl, poolId, espoTimeframe, 'base');
 
       if (rawCandles.length === 0) {
         return [];
