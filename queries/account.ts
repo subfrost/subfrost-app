@@ -6,9 +6,11 @@
  * - sellableCurrencies: alkane tokens the wallet holds
  *
  * JOURNAL ENTRY (2026-02-03):
- * Fixed alkanes not loading on wallet dashboard. The SDK's dataApiGetAlkanesByAddress
- * returns alkanes with an `amount` field, but the code was reading `balance` (the field
- * name from the old OYL Alkanode API). Changed to check `entry.amount || entry.balance`.
+ * Fixed alkanes not loading on wallet dashboard. The Subfrost API returns alkane
+ * balances in a different format than the SDK TypeScript types expect:
+ *   - API returns { data: [...], statusCode: 200 }, SDK expects { alkanes: [...] }
+ *   - API items have `balance` and `alkaneId: {block,tx}`, SDK expects `amount` and `id`
+ * Changed to check both: `result.alkanes || result.data` and `entry.amount || entry.balance`.
  */
 
 import { queryOptions } from '@tanstack/react-query';
@@ -211,7 +213,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
             15000,
             { alkanes: [] },
           );
-          const alkanes = alkaneBalances?.alkanes || [];
+          const alkanes = alkaneBalances?.alkanes || alkaneBalances?.data || [];
           for (const entry of alkanes) {
             const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
             const amountStr = String(entry.amount || entry.balance || '0');
@@ -321,7 +323,7 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
         for (const address of addresses) {
           try {
             const result = await deps.provider!.dataApiGetAlkanesByAddress(address);
-            const alkaneBalances = result?.alkanes || [];
+            const alkaneBalances = result?.alkanes || result?.data || [];
 
             for (const entry of alkaneBalances) {
               const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
