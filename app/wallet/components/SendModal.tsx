@@ -1221,7 +1221,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
     const localEstimatedFee = 150 * feeRate; // Rough estimate for display before warning
     const total = amountSats + (showFeeWarning ? estimatedFee : localEstimatedFee);
-    const feePercentage = showFeeWarning ? ((estimatedFee / amountSats) * 100).toFixed(2) : null;
 
     return (
       <>
@@ -1260,29 +1259,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           {/* Inline High Fee Warning */}
           {showFeeWarning && (
             <div className={`rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] ${feeWarningCountdown > 0 ? 'animate-pulse' : ''}`}>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-2">
                 <AlertCircle size={20} className="text-[color:var(--sf-info-red-title)]" />
                 <span className="font-bold text-[color:var(--sf-info-red-title)] uppercase tracking-wide">
                   {t('send.highFeeWarning')}
                 </span>
               </div>
-              <p className="text-sm text-[color:var(--sf-info-red-text)] mb-3">
+              <p className="text-sm text-[color:var(--sf-info-red-text)]">
                 {t('send.highFeeDescription')}
               </p>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[color:var(--sf-info-red-text)]">{t('send.estimatedFee')}</span>
-                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[color:var(--sf-info-red-text)]">Fee Percentage:</span>
-                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{feePercentage}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[color:var(--sf-info-red-text)]">Number of Inputs:</span>
-                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{selectedUtxos.size}</span>
-                </div>
-              </div>
             </div>
           )}
 
