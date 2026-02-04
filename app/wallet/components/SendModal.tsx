@@ -90,6 +90,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [selectedAlkaneId, setSelectedAlkaneId] = useState<string | null>(null);
   const [showFrozenUtxos, setShowFrozenUtxos] = useState(false);
   const [showFeeWarning, setShowFeeWarning] = useState(false);
+  const [feeWarningCountdown, setFeeWarningCountdown] = useState(0);
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -380,12 +381,24 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
     if (feeTooHigh || feeRateTooHigh || tooManyInputs || feePercentageTooHigh) {
       setShowFeeWarning(true);
+      setFeeWarningCountdown(3);
     } else {
       handleBroadcast();
     }
   };
 
+  // Countdown timer for fee warning
+  useEffect(() => {
+    if (feeWarningCountdown > 0) {
+      const timer = setTimeout(() => {
+        setFeeWarningCountdown(feeWarningCountdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [feeWarningCountdown]);
+
   const proceedWithHighFee = () => {
+    if (feeWarningCountdown > 0) return; // Prevent clicking during countdown
     setShowFeeWarning(false);
     handleBroadcast();
   };
@@ -1206,8 +1219,9 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const renderConfirm = () => {
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
-    const estimatedFee = 150 * feeRate; // Rough estimate
-    const total = amountSats + estimatedFee;
+    const localEstimatedFee = 150 * feeRate; // Rough estimate for display before warning
+    const total = amountSats + (showFeeWarning ? estimatedFee : localEstimatedFee);
+    const feePercentage = showFeeWarning ? ((estimatedFee / amountSats) * 100).toFixed(2) : null;
 
     return (
       <>
@@ -1229,7 +1243,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </div>
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
-              <span className="text-[color:var(--sf-text)]">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
+              <span className="text-[color:var(--sf-text)]">{((showFeeWarning ? estimatedFee : localEstimatedFee) / 100000000).toFixed(8)} BTC</span>
             </div>
             <div className="border-t border-[color:var(--sf-text)]/10 pt-2 flex justify-between">
               <span className="text-[color:var(--sf-text)]/80 font-medium">{t('send.total')}</span>
@@ -1237,9 +1251,40 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </div>
           </div>
 
-          <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
-            {t('send.verifyWarning')}
-          </div>
+          {!showFeeWarning && (
+            <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
+              {t('send.verifyWarning')}
+            </div>
+          )}
+
+          {/* Inline High Fee Warning */}
+          {showFeeWarning && (
+            <div className={`rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] ${feeWarningCountdown > 0 ? 'animate-pulse' : ''}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle size={20} className="text-[color:var(--sf-info-red-title)]" />
+                <span className="font-bold text-[color:var(--sf-info-red-title)] uppercase tracking-wide">
+                  {t('send.highFeeWarning')}
+                </span>
+              </div>
+              <p className="text-sm text-[color:var(--sf-info-red-text)] mb-3">
+                {t('send.highFeeDescription')}
+              </p>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-[color:var(--sf-info-red-text)]">{t('send.estimatedFee')}</span>
+                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[color:var(--sf-info-red-text)]">Fee Percentage:</span>
+                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{feePercentage}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[color:var(--sf-info-red-text)]">Number of Inputs:</span>
+                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{selectedUtxos.size}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
@@ -1251,18 +1296,33 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         <div className="flex gap-3">
           <button
-            onClick={() => setStep('input')}
+            onClick={() => { setStep('input'); setShowFeeWarning(false); }}
             className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
           >
             {t('send.back')}
           </button>
-          <button
-            onClick={handleNext}
-            className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide flex items-center justify-center gap-2"
-          >
-            <Send size={18} />
-            {t('send.sendTransaction')}
-          </button>
+          {showFeeWarning ? (
+            <button
+              onClick={proceedWithHighFee}
+              disabled={feeWarningCountdown > 0}
+              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${
+                feeWarningCountdown > 0
+                  ? 'bg-[color:var(--sf-info-red-bg)] text-[color:var(--sf-info-red-title)] cursor-not-allowed opacity-70'
+                  : 'bg-[color:var(--sf-fee-warning-proceed-bg)] text-[color:var(--sf-fee-warning-proceed-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:transition-none'
+              }`}
+            >
+              <Send size={18} />
+              {feeWarningCountdown > 0 ? `${t('send.proceedAnyway')} (${feeWarningCountdown})` : t('send.proceedAnyway')}
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide flex items-center justify-center gap-2"
+            >
+              <Send size={18} />
+              {t('send.sendTransaction')}
+            </button>
+          )}
         </div>
       </>
     );
@@ -1372,82 +1432,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         </div>
       </div>
 
-      {/* Fee Warning Modal */}
-      {showFeeWarning && (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-          <div className="flex w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
-            {/* Header */}
-            <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-[color:var(--sf-fee-warning-title)]">
-                    <span className="text-[color:var(--sf-fee-warning-title)] text-lg font-bold">!</span>
-                  </div>
-                  <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-fee-warning-title)]">
-                    {t('send.highFeeWarning')}
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setShowFeeWarning(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
-                  aria-label="Close"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 p-6 space-y-4">
-              {/* Description bar */}
-              <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-                <AlertCircle size={20} className="inline mr-2" />
-                {t('send.highFeeDescription')}
-              </div>
-
-              {/* Fee Details Card - styled like Reveal Seed Phrase warning */}
-              <div className="bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] rounded-xl p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-info-red-text)]">{t('send.estimatedFee')}</span>
-                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">
-                    {(estimatedFee / 100000000).toFixed(8)} BTC
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-info-red-text)]">{t('send.feeRateLabel')}</span>
-                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{feeRate} sat/vB</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-info-red-text)]">Number of Inputs:</span>
-                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{selectedUtxos.size}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-info-red-text)]">Fee Percentage:</span>
-                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">
-                    {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowFeeWarning(false)}
-                  className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-fee-warning-back-bg)] text-[color:var(--sf-fee-warning-back-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
-                >
-                  {t('send.back')}
-                </button>
-                <button
-                  onClick={proceedWithHighFee}
-                  className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-fee-warning-proceed-bg)] text-[color:var(--sf-fee-warning-proceed-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide"
-                >
-                  {t('send.proceedAnyway')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
