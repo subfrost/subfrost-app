@@ -395,6 +395,40 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
   }, [sdkInitialized, loadWallet]);
 
+  // Track previous network to detect changes
+  const prevNetworkRef = useRef<string | null>(null);
+
+  // Recreate keystore wallet when network changes (without page refresh)
+  useEffect(() => {
+    // Skip on initial mount
+    if (prevNetworkRef.current === null) {
+      prevNetworkRef.current = network;
+      return;
+    }
+
+    // Only handle network changes for keystore wallets
+    if (prevNetworkRef.current === network) return;
+    prevNetworkRef.current = network;
+
+    const sessionMnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
+    const storedWalletType = localStorage.getItem(STORAGE_KEYS.WALLET_TYPE);
+
+    if (sessionMnemonic && storedWalletType === 'keystore' && wallet) {
+      console.log('[WalletContext] Network changed to', network, '- recreating wallet with new network');
+      try {
+        const newWallet = createWalletFromMnemonic(sessionMnemonic, toSdkNetwork(network));
+        setWallet(newWallet);
+
+        // Also reload into SDK provider
+        if (sdkInitialized && loadWallet) {
+          loadWallet(sessionMnemonic);
+        }
+      } catch (error) {
+        console.error('[WalletContext] Failed to recreate wallet for new network:', error);
+      }
+    }
+  }, [network, sdkInitialized, loadWallet, wallet]);
+
   // Derive addresses from wallet (keystore or browser wallet)
   const addresses = useMemo(() => {
     // For browser wallets, use the connected wallet's address(es)
@@ -1245,14 +1279,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      // OYL has a different signPsbt API: { psbt, finalize?, broadcast? } => { psbt, txid? }
+      // OYL signs ALL inputs (taproot + segwit) in a single signPsbt call.
+      // signSegwitPsbt already called OYL and fully signed the PSBT.
+      // Calling OYL again causes "Can not add duplicate data to array".
       const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
       if (connectedWalletId === 'oyl') {
-        const oylProvider = (window as any).oyl;
-        if (!oylProvider) throw new Error('OYL wallet not available');
-        const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
-        const signedBuffer = Buffer.from(result.psbt, 'hex');
-        return signedBuffer.toString('base64');
+        return psbtBase64; // Already fully signed by signSegwitPsbt
       }
 
       // Tokeo uses base64 and returns base64
