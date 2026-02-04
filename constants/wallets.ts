@@ -15,7 +15,7 @@ export type { BrowserWalletInfo };
 const LOCAL_WALLETS: BrowserWalletInfo[] = [
   {
     id: 'oyl',
-    name: 'Oyl',
+    name: 'Oyl Wallet',
     icon: '/assets/wallets/oyl.png',
     website: 'https://chromewebstore.google.com/detail/oyl-wallet-bitcoin-ordina/ilolmnhjbbggkmopnemiphomhaojndmb',
     injectionKey: 'oyl',

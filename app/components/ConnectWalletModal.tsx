@@ -995,7 +995,7 @@ export default function ConnectWalletModal() {
                           className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                         >
                           <div className="flex items-center gap-3">
-                            <img src={wallet.icon} alt={wallet.name} className="w-8 h-8" />
+                            <img src={wallet.icon} alt={wallet.name} className={`w-8 h-8 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
                             <div className="text-left">
                               <div className="font-bold text-[color:var(--sf-text)]">{wallet.name}</div>
                             </div>
@@ -1028,7 +1028,7 @@ export default function ConnectWalletModal() {
                             rel="noopener noreferrer"
                             className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
                           >
-                            <img src={wallet.icon} alt={wallet.name} className="w-6 h-6" />
+                            <img src={wallet.icon} alt={wallet.name} className={`w-6 h-6 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
                             <span className="flex-1 text-left text-sm font-bold">{wallet.name}</span>
                             <Download size={16} className="text-[color:var(--sf-text)]/40" />
                           </a>
