@@ -44,10 +44,10 @@ export default function RegtestControls() {
   const mineBlocks = async (count: number) => {
     setMining(true);
     try {
-      // Get taproot address (p2tr:0)
-      const address = account?.taproot?.address;
+      // Get SegWit address (p2wpkh) for mining rewards
+      const address = account?.nativeSegwit?.address;
       if (!address) {
-        throw new Error('No taproot address available. Please connect wallet first.');
+        throw new Error('No SegWit address available. Please connect wallet first.');
       }
 
       // Use the API route which bypasses WASM issues
