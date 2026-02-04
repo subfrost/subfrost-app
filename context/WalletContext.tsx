@@ -1279,14 +1279,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      // OYL has a different signPsbt API: { psbt, finalize?, broadcast? } => { psbt, txid? }
+      // OYL signs ALL inputs (taproot + segwit) in a single signPsbt call.
+      // signSegwitPsbt already called OYL and fully signed the PSBT.
+      // Calling OYL again causes "Can not add duplicate data to array".
       const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
       if (connectedWalletId === 'oyl') {
-        const oylProvider = (window as any).oyl;
-        if (!oylProvider) throw new Error('OYL wallet not available');
-        const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
-        const signedBuffer = Buffer.from(result.psbt, 'hex');
-        return signedBuffer.toString('base64');
+        return psbtBase64; // Already fully signed by signSegwitPsbt
       }
 
       // Tokeo uses base64 and returns base64
