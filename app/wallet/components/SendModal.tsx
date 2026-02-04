@@ -1280,16 +1280,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
           <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
             <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-              {t('send.feeRateLabel')}
-            </span>
-            <span className="font-semibold text-[color:var(--sf-text)]">
-              {feeRate} sat/vB
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-              {t('send.estimatedFee')}
+              {t('send.estimatedFee')} ({feeRate} sat/vB)
             </span>
             <span className="font-semibold text-[color:var(--sf-text)]">
               {((showFeeWarning ? estimatedFee : localEstimatedFee) / 100000000).toFixed(8)} BTC
