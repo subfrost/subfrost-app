@@ -103,6 +103,19 @@ body {
 
   /* Percentage buttons - white in dark mode */
   --sf-percent-btn: #ffffff;
+
+  /* High Fee Warning Modal - dark theme */
+  --sf-fee-warning-bg: rgba(15, 23, 42, 0.95);
+  --sf-fee-warning-title: #ef4444;
+  --sf-fee-warning-desc: #94a3b8;
+  --sf-fee-warning-card-bg: rgba(254, 202, 202, 0.12);
+  --sf-fee-warning-card-border: rgba(254, 202, 202, 0.25);
+  --sf-fee-warning-label: #e2e8f0;
+  --sf-fee-warning-value: #fca5a5;
+  --sf-fee-warning-back-bg: #3f3f46;
+  --sf-fee-warning-back-text: #fafafa;
+  --sf-fee-warning-proceed-bg: #ef4444;
+  --sf-fee-warning-proceed-text: #ffffff;
 }
 
 /* Light Theme (gabes-branch-ui styles) */
@@ -186,6 +199,19 @@ body {
   /* Boost icons - light mode (solid) */
   --sf-boost-icon-from: #a855f7;
   --sf-boost-icon-to: #ec4899;
+
+  /* High Fee Warning Modal - light theme */
+  --sf-fee-warning-bg: rgba(255, 255, 255, 0.98);
+  --sf-fee-warning-title: #dc2626;
+  --sf-fee-warning-desc: #64748b;
+  --sf-fee-warning-card-bg: rgba(254, 226, 226, 0.6);
+  --sf-fee-warning-card-border: rgba(252, 165, 165, 0.5);
+  --sf-fee-warning-label: #374151;
+  --sf-fee-warning-value: #dc2626;
+  --sf-fee-warning-back-bg: #e5e7eb;
+  --sf-fee-warning-back-text: #1f2937;
+  --sf-fee-warning-proceed-bg: rgba(239, 68, 68, 0.15);
+  --sf-fee-warning-proceed-text: #dc2626;
 }
 
 /* Explicit Dark Theme */
@@ -260,6 +286,19 @@ body {
   /* Boost icons - dark mode (light purple to dark purple gradient) */
   --sf-boost-icon-from: #a855f7;
   --sf-boost-icon-to: #7c3aed;
+
+  /* High Fee Warning Modal - dark theme (explicit) */
+  --sf-fee-warning-bg: rgba(15, 23, 42, 0.95);
+  --sf-fee-warning-title: #ef4444;
+  --sf-fee-warning-desc: #94a3b8;
+  --sf-fee-warning-card-bg: rgba(254, 202, 202, 0.12);
+  --sf-fee-warning-card-border: rgba(254, 202, 202, 0.25);
+  --sf-fee-warning-label: #e2e8f0;
+  --sf-fee-warning-value: #fca5a5;
+  --sf-fee-warning-back-bg: #3f3f46;
+  --sf-fee-warning-back-text: #fafafa;
+  --sf-fee-warning-proceed-bg: #ef4444;
+  --sf-fee-warning-proceed-text: #ffffff;
 }
 
 /* Wordmark invert for dark mode */
