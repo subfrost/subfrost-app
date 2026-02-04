@@ -66,10 +66,10 @@ export default function SwapShell() {
   const { t } = useTranslation();
 
   // Markets from API: all pools sorted by TVL desc
-  const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
+  const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
 
   // Enhanced pool stats from our local API (TVL, Volume, APR)
-  const { data: poolStats } = useAllPoolStats();
+  const { data: poolStats, isLoading: isLoadingPoolStats } = useAllPoolStats();
 
   // Merge pool data with stats from /api/pools/stats (fallback for any missing data)
   const markets = useMemo<PoolSummary[]>(() => {
@@ -195,47 +195,68 @@ export default function SwapShell() {
   }, [markets]);
 
   // Find the trending pool for defaults: 24H Vol > 30D Vol > TVL
+  // This matches the algorithm used by TrendingPairs component
   const topVolumePool = useMemo(() => {
     if (markets.length === 0) return undefined;
-    return markets.reduce((best, pool) => {
-      const pVol24 = pool.vol24hUsd ?? 0;
-      const bVol24 = best.vol24hUsd ?? 0;
-      if (pVol24 !== bVol24) return pVol24 > bVol24 ? pool : best;
-      const pVol30 = pool.vol30dUsd ?? 0;
-      const bVol30 = best.vol30dUsd ?? 0;
-      if (pVol30 !== bVol30) return pVol30 > bVol30 ? pool : best;
-      const pTvl = pool.tvlUsd ?? 0;
-      const bTvl = best.tvlUsd ?? 0;
-      return pTvl > bTvl ? pool : best;
-    }, markets[0]);
+
+    const hasAny24hVolume = markets.some(p => (p.vol24hUsd ?? 0) > 0);
+    const hasAny30dVolume = markets.some(p => (p.vol30dUsd ?? 0) > 0);
+
+    // Sort a copy of markets by the appropriate metric
+    // Use pool ID as tiebreaker to ensure stable sorting
+    const sorted = [...markets].sort((a, b) => {
+      let diff = 0;
+      if (hasAny24hVolume) {
+        diff = (b.vol24hUsd ?? 0) - (a.vol24hUsd ?? 0);
+      } else if (hasAny30dVolume) {
+        diff = (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
+      } else {
+        // Final fallback to TVL
+        diff = (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0);
+      }
+      // Stable tiebreaker: sort by pool ID if values are equal
+      if (diff === 0) {
+        return a.id.localeCompare(b.id);
+      }
+      return diff;
+    });
+
+    return sorted[0];
   }, [markets]);
 
-  // Default from/to tokens: trending pool pair (fallback to BTC → BUSD)
+  // Check if we have meaningful volume data merged into markets
+  const hasVolumeDataMerged = useMemo(() => {
+    return markets.some(p => (p.vol24hUsd ?? 0) > 0 || (p.vol30dUsd ?? 0) > 0);
+  }, [markets]);
+
+  // Check if poolStats actually has data (not just loaded as empty object)
+  const poolStatsHasData = useMemo(() => {
+    return poolStats !== undefined && Object.keys(poolStats).length > 0;
+  }, [poolStats]);
+
+  // Initialize swap tokens and selected pool from trending pool when available.
+  // Wait for BOTH pools AND poolStats to finish loading for accurate trending calculation.
+  // Using a ref ensures we only do this once, even if topVolumePool reference changes.
+  const trendingPoolInitializedRef = useRef(false);
   useEffect(() => {
-    if (!fromToken) {
-      if (topVolumePool) {
-        setFromToken(topVolumePool.token0);
-      } else {
-        setFromToken({ id: 'btc', symbol: 'BTC', name: 'BTC' });
-      }
+    // Don't initialize until both queries have completed loading
+    // AND poolStats actually has data (not empty object)
+    // AND that data has been merged (markets has volume data)
+    const bothQueriesLoaded = !isLoadingPools && !isLoadingPoolStats;
+    const dataReady = bothQueriesLoaded && poolStatsHasData && hasVolumeDataMerged;
+
+    if (!trendingPoolInitializedRef.current && topVolumePool && dataReady) {
+      console.log('[SwapShell] Initializing trending pool:', topVolumePool.pairLabel, {
+        vol24h: topVolumePool.vol24hUsd,
+        vol30d: topVolumePool.vol30dUsd,
+        tvl: topVolumePool.tvlUsd,
+      });
+      setFromToken(topVolumePool.token0);
+      setToToken(topVolumePool.token1);
+      setSelectedPool(topVolumePool);
+      trendingPoolInitializedRef.current = true;
     }
-  }, [fromToken, topVolumePool]);
-  const toInitializedRef = useRef(false);
-  useEffect(() => {
-    if (!toInitializedRef.current && !toToken) {
-      if (topVolumePool) {
-        setToToken(topVolumePool.token1);
-        toInitializedRef.current = true;
-      } else if (BUSD_ALKANE_ID) {
-        // Fallback before pool data loads
-        const poolToken = poolTokenMap.get(BUSD_ALKANE_ID);
-        const symbol = poolToken?.symbol ?? 'DIESEL';
-        const name = poolToken?.name ?? 'DIESEL';
-        setToToken({ id: BUSD_ALKANE_ID, symbol, name });
-        toInitializedRef.current = true;
-      }
-    }
-  }, [toToken, BUSD_ALKANE_ID, poolTokenMap, topVolumePool]);
+  }, [topVolumePool, isLoadingPools, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged]);
 
   // Default LP tokens: Select Token / BTC
   useEffect(() => {
@@ -1598,6 +1619,7 @@ export default function SwapShell() {
             onSelect={handleSelectPool}
             volumePeriod={volumePeriod}
             onVolumePeriodChange={setVolumePeriod}
+            selectedPoolId={selectedPool?.id}
           />
         </div>
         </Suspense>

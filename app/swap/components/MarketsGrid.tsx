@@ -17,19 +17,23 @@ type Props = {
   onSelect: (pool: PoolSummary) => void;
   volumePeriod?: VolumePeriod;
   onVolumePeriodChange?: (period: VolumePeriod) => void;
+  selectedPoolId?: string | null;
 };
 
-export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange }: Props) {
+export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange, selectedPoolId: externalSelectedPoolId }: Props) {
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const { t } = useTranslation();
   const [sortField, setSortField] = useState<SortField>('volume');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
+  const [internalSelectedPoolId, setInternalSelectedPoolId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
   const [internalVolumePeriod, setInternalVolumePeriod] = useState<VolumePeriod>('30d');
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyDisplay>('usd');
+
+  // Use external selected pool ID if provided, otherwise use internal state
+  const selectedPoolId = externalSelectedPoolId ?? internalSelectedPoolId;
 
   // Use external volume period if provided, otherwise use internal state
   const volumePeriod = externalVolumePeriod ?? internalVolumePeriod;
@@ -113,7 +117,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   };
 
   const handleSelectPool = (pool: PoolSummary) => {
-    setSelectedPoolId(pool.id);
+    setInternalSelectedPoolId(pool.id);
     onSelect(pool);
   };
 

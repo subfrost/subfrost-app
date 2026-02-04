@@ -19,6 +19,14 @@ const TIMEFRAME_OPTIONS: { value: CandleTimeframe; label: string }[] = [
   { value: '1w', label: '1W' },
 ];
 
+// Number of bars to show initially for each timeframe (user can scroll/zoom to see more)
+const INITIAL_VISIBLE_BARS: Record<CandleTimeframe, number> = {
+  '1h': 720,   // Show last 720 hours (30 days)
+  '4h': 360,   // Show last 360 4H segments (60 days)
+  '1d': 90,    // Show last 90 days
+  '1w': 18,    // Show last 18 weeks
+};
+
 export default function PoolDetailsCard({ pool }: Props) {
   const { network } = useWallet();
   const { t } = useTranslation();
@@ -87,6 +95,7 @@ export default function PoolDetailsCard({ pool }: Props) {
             onLoadMore={undefined}
             canLoadMore={false}
             resetKey={`${pool?.id ?? 'no-pool'}-${timeframe}`}
+            initialVisibleBars={INITIAL_VISIBLE_BARS[timeframe]}
           />
 
           {/* Pool details - hidden on mobile/tablet */}

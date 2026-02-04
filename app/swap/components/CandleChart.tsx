@@ -30,6 +30,8 @@ type Props = {
   onLoadMore?: () => void;
   canLoadMore?: boolean;
   resetKey?: string;
+  /** Number of bars to show initially (from the right). If not set, shows all data. */
+  initialVisibleBars?: number;
 };
 
 const LOAD_MORE_THRESHOLD = 5;
@@ -43,6 +45,7 @@ export default function CandleChart({
   onLoadMore,
   canLoadMore = false,
   resetKey,
+  initialVisibleBars,
 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -212,11 +215,19 @@ export default function CandleChart({
       });
       seriesRef.current.setData(chartData);
       if (shouldFitRef.current && !overlayLoading) {
-        chartRef.current?.timeScale().fitContent();
+        // If initialVisibleBars is set and we have more data than that,
+        // show only the last N bars initially (user can scroll/zoom to see the rest)
+        if (initialVisibleBars && chartData.length > initialVisibleBars) {
+          const from = chartData.length - initialVisibleBars;
+          const to = chartData.length - 1;
+          chartRef.current?.timeScale().setVisibleLogicalRange({ from, to });
+        } else {
+          chartRef.current?.timeScale().fitContent();
+        }
         shouldFitRef.current = false;
       }
     }
-  }, [chartData, overlayLoading]);
+  }, [chartData, overlayLoading, initialVisibleBars]);
 
   useEffect(() => {
     if (!chartRef.current || !onLoadMore) return;
