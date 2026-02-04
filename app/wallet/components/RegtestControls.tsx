@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { Pickaxe, Clock, Zap, Fuel } from 'lucide-react';
 import * as bitcoin from 'bitcoinjs-lib';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -24,6 +25,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 export default function RegtestControls() {
   const { network, account, signTaprootPsbt } = useWallet();
   const { provider, isWalletLoaded } = useAlkanesSDK();
+  const extendedProvider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const [mining, setMining] = useState(false);
@@ -141,33 +143,21 @@ export default function RegtestControls() {
 
       console.log('[DIESEL] Protostone:', protostone);
 
-      // No input requirements for DIESEL mint (it's free)
-      const inputRequirements = '';
+      if (!extendedProvider) {
+        throw new Error('Extended provider not initialized');
+      }
 
-      // to_addresses: just the user's taproot address
-      const toAddresses = JSON.stringify([taprootAddress]);
-
-      // Options for the SDK
-      const options: Record<string, any> = {
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: false, // We'll handle signing ourselves
-        change_address: taprootAddress,
-        alkanes_change_address: taprootAddress,
-        from: [taprootAddress],
-        from_addresses: [taprootAddress],
-      };
-      const optionsJson = JSON.stringify(options);
-
-      // Execute the DIESEL mint
-      const result = await provider.alkanesExecuteWithStrings(
-        toAddresses,
-        inputRequirements,
-        protostone,
-        10, // fee rate
-        null, // envelope_hex
-        optionsJson
-      );
+      // Execute the DIESEL mint using alkanesExecuteTyped
+      const result = await extendedProvider.alkanesExecuteTyped({
+        inputRequirements: '',
+        protostones: protostone,
+        feeRate: 10,
+        toAddresses: [taprootAddress],
+        fromAddresses: [taprootAddress],
+        changeAddress: taprootAddress,
+        alkanesChangeAddress: taprootAddress,
+        autoConfirm: false, // We'll handle signing ourselves
+      });
 
       console.log('[DIESEL] Execution result:', result);
 

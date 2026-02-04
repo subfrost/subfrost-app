@@ -193,6 +193,21 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
         console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
 
+        // Pre-load a dummy wallet so walletIsLoaded() returns true.
+        // Extension wallets (Xverse, Oyl) never share their mnemonic, so
+        // walletLoadMnemonic is never called for them. Without this, the SDK's
+        // alkanesExecuteWithStrings rejects with "Wallet not loaded" before it
+        // even attempts UTXO discovery. The dummy wallet satisfies the check;
+        // real addresses are passed via fromAddresses/toAddresses options, and
+        // autoConfirm:false prevents internal signing.
+        // For keystore wallets, loadWallet(mnemonic) overwrites this immediately.
+        try {
+          providerInstance.walletCreate();
+          console.log('[AlkanesSDK] Dummy wallet loaded (for extension wallet compatibility)');
+        } catch (e) {
+          console.warn('[AlkanesSDK] walletCreate failed (non-fatal):', e);
+        }
+
         setProvider(providerInstance);
         setIsInitialized(true);
       } catch (error) {

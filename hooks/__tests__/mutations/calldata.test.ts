@@ -117,6 +117,7 @@ function buildUnwrapProtostone(params: {
 
 /**
  * Build protostone for vault deposit (Purchase opcode 1)
+ * NOTE: Default pointers are v1:v1 matching hooks/useVaultDeposit.ts
  */
 function buildVaultDepositProtostone(params: {
   vaultId: string;
@@ -124,7 +125,7 @@ function buildVaultDepositProtostone(params: {
   pointer?: string;
   refund?: string;
 }): string {
-  const { vaultId, amount, pointer = 'v0', refund = 'v0' } = params;
+  const { vaultId, amount, pointer = 'v1', refund = 'v1' } = params;
   const [vaultBlock, vaultTx] = vaultId.split(':');
 
   // Build cellpack: [vault_block, vault_tx, opcode(1), amount]
@@ -135,13 +136,14 @@ function buildVaultDepositProtostone(params: {
 
 /**
  * Build protostone for vault withdraw (Redeem opcode 2)
+ * NOTE: Default pointers are v1:v1 matching hooks/useVaultWithdraw.ts
  */
 function buildVaultWithdrawProtostone(params: {
   vaultId: string;
   pointer?: string;
   refund?: string;
 }): string {
-  const { vaultId, pointer = 'v0', refund = 'v0' } = params;
+  const { vaultId, pointer = 'v1', refund = 'v1' } = params;
   const [vaultBlock, vaultTx] = vaultId.split(':');
 
   // Build cellpack: [vault_block, vault_tx, opcode(2)]
@@ -439,7 +441,7 @@ describe('buildVaultDepositProtostone', () => {
       amount: '100000000',
     });
 
-    expect(protostone).toBe('[2,123,1,100000000]:v0:v0');
+    expect(protostone).toBe('[2,123,1,100000000]:v1:v1');
   });
 
   it('should use opcode 1 for deposit (Purchase)', () => {
@@ -484,7 +486,7 @@ describe('buildVaultWithdrawProtostone', () => {
       vaultId: VAULT_ID,
     });
 
-    expect(protostone).toBe('[2,123,2]:v0:v0');
+    expect(protostone).toBe('[2,123,2]:v1:v1');
   });
 
   it('should use opcode 2 for withdraw (Redeem)', () => {
@@ -637,7 +639,7 @@ describe('Integration: Transaction Building', () => {
         alkaneInputs: [{ alkaneId: FRBTC_ID, amount: DEPOSIT_AMOUNT }],
       });
 
-      expect(protostone).toBe('[2,123,1,100000000]:v0:v0');
+      expect(protostone).toBe('[2,123,1,100000000]:v1:v1');
       expect(inputRequirements).toBe('32:0:100000000');
     });
   });
@@ -658,7 +660,7 @@ describe('Integration: Transaction Building', () => {
         alkaneInputs: [{ alkaneId: UNIT_ID, amount: UNIT_AMOUNT }],
       });
 
-      expect(protostone).toBe('[2,123,2]:v0:v0');
+      expect(protostone).toBe('[2,123,2]:v1:v1');
       expect(inputRequirements).toBe('2:150:100000000');
     });
   });

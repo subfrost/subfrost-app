@@ -52,7 +52,7 @@ function buildVaultDepositInputRequirements(params: {
  * Uses opcode 1 (Purchase) to deposit tokens and receive vault units
  */
 export function useVaultDeposit() {
-  const { account, isConnected } = useWallet();
+  const { isConnected } = useWallet();
   const provider = useSandshrewProvider();
 
   return useMutation({
@@ -77,29 +77,15 @@ export function useVaultDeposit() {
         amount: new BigNumber(depositData.amount).toFixed(0),
       });
 
-      // Get recipient address (taproot for alkanes)
-      const recipientAddress = account?.taproot?.address || account?.nativeSegwit?.address;
-      if (!recipientAddress) throw new Error('No recipient address available');
-
-      const toAddresses = JSON.stringify([recipientAddress]);
-      // Use p2tr:0 for change address instead of the default p2wsh:0
-      // (p2wsh is not supported by single-sig wallets)
-      const options = JSON.stringify({
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: true,
-        change_address: 'p2tr:0',
-      });
-
-      // Execute using alkanesExecuteWithStrings
-      const result = await provider.alkanesExecuteWithStrings(
-        toAddresses,
+      // Execute using alkanesExecuteTyped (handles address defaults automatically)
+      const result = await provider.alkanesExecuteTyped({
         inputRequirements,
-        protostone,
-        depositData.feeRate,
-        undefined, // envelope_hex
-        options
-      );
+        protostones: protostone,
+        feeRate: depositData.feeRate,
+        autoConfirm: true,
+        changeAddress: 'p2tr:0',
+        alkanesChangeAddress: 'p2tr:0',
+      });
 
       // Parse result
       const txId = result?.txid || result?.reveal_txid;
