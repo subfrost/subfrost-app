@@ -1197,6 +1197,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             />
           </div>
         </div>
+
+        {error && (
+          <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+            <AlertCircle size={16} className="inline mr-2" />
+            {error}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3">
