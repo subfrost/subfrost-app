@@ -15,9 +15,14 @@ const ESPO_TIMEFRAME_MAP: Record<CandleTimeframe, 'd1' | 'h1' | '10m' | 'w1' | '
   '1w': 'w1',
 };
 
-// Number of candles to fetch in a single request
-// Using 500 to ensure users have enough data when scrolling the chart
-const CANDLE_LIMIT = 500;
+// Number of candles to fetch per timeframe
+// Each timeframe has different data density, so we fetch different amounts
+const CANDLE_LIMITS: Record<CandleTimeframe, number> = {
+  '1h': 2880,  // ~120 days of hourly data
+  '4h': 720,   // ~120 days of 4H data (fetches 720*4=2880 h1 candles, aggregates to 720)
+  '1d': 1456,  // ~4 years of daily data
+  '1w': 208,   // ~4 years of weekly data
+};
 
 /**
  * Convert Espo CandleData to CandleDataPoint.
@@ -75,15 +80,15 @@ function aggregateTo4h(h1Candles: CandleDataPoint[]): CandleDataPoint[] {
 
 /**
  * Fetch candles from Espo API in a single request.
- * Uses CANDLE_LIMIT (500) to ensure enough data for chart scrolling.
  */
 async function fetchCandlesSimple(
   espoUrl: string,
   poolId: string,
   espoTimeframe: 'd1' | 'h1' | '10m' | 'w1' | 'M1',
-  side: 'base' | 'quote'
+  side: 'base' | 'quote',
+  limit: number
 ): Promise<CandleData[]> {
-  const response = await fetchCandles(espoUrl, poolId, espoTimeframe, side, CANDLE_LIMIT, 1);
+  const response = await fetchCandles(espoUrl, poolId, espoTimeframe, side, limit, 1);
 
   if (!response?.candles || response.candles.length === 0) {
     return [];
@@ -100,7 +105,7 @@ interface UsePoolEspoCandlesOptions {
 
 /**
  * Hook to fetch candlestick data for a pool from the Espo API (ammdata.get_candles).
- * Fetches up to 500 candles to ensure enough data for chart scrolling.
+ * Each timeframe has a configured limit for historical data.
  * For 4h timeframe, fetches h1 candles and aggregates them client-side.
  */
 export function usePoolEspoCandles({
@@ -117,19 +122,18 @@ export function usePoolEspoCandles({
       if (!poolId) return [];
 
       const espoTimeframe = ESPO_TIMEFRAME_MAP[timeframe];
+      // For 4H, we fetch h1 candles and aggregate, so we need 4x the desired candle count
+      const limit = timeframe === '4h'
+        ? CANDLE_LIMITS['4h'] * 4
+        : CANDLE_LIMITS[timeframe];
 
-      const rawCandles = await fetchCandlesSimple(espoUrl, poolId, espoTimeframe, 'base');
+      const rawCandles = await fetchCandlesSimple(espoUrl, poolId, espoTimeframe, 'base', limit);
 
       if (rawCandles.length === 0) {
         return [];
       }
 
-      // Filter out zero-volume candles — the Espo API generates synthetic
-      // carry-forward entries for periods with no trades (same OHLC, volume 0).
-      // These create long flat lines that misrepresent actual trading activity.
-      const tradedCandles = rawCandles.filter(c => c.volume > 0);
-
-      let points = (tradedCandles.length > 0 ? tradedCandles : rawCandles).map(toCandleDataPoint);
+      let points = rawCandles.map(toCandleDataPoint);
 
       if (timeframe === '4h') {
         points = aggregateTo4h(points);
