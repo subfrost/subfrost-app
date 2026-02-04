@@ -67,9 +67,9 @@ export default function WalletDashboardPage() {
 
   // Settings tab is rendered separately for responsive control
   const tabs = [
-    { id: 'balances' as TabView, label: 'Other Balances', shortLabel: 'Other Balances', icon: Wallet, disabled: false },
+    { id: 'balances' as TabView, label: 'Other Balances', shortLabel: 'Other Balances', mobileLabel: 'Others', icon: Wallet, disabled: false },
     { id: 'transactions' as TabView, label: t('walletDash.transactionHistory'), shortLabel: t('walletDash.history'), icon: Activity, disabled: false },
-    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), icon: BarChart2, disabled: !isRegtest },
+    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), mobileLabel: 'UTXOs', icon: BarChart2, disabled: !isRegtest },
   ];
 
   return (
@@ -174,7 +174,14 @@ export default function WalletDashboardPage() {
                           }`}
                         >
                           <Icon size={14} />
-                          <span className="whitespace-nowrap">{tab.shortLabel}</span>
+                          {tab.mobileLabel ? (
+                            <>
+                              <span className="whitespace-nowrap sm:hidden">{tab.mobileLabel}</span>
+                              <span className="whitespace-nowrap hidden sm:inline">{tab.shortLabel}</span>
+                            </>
+                          ) : (
+                            <span className="whitespace-nowrap">{tab.shortLabel}</span>
+                          )}
                         </button>
                         {tab.disabled && showComingSoon && (
                           <div className="absolute left-[calc(50%+28px)] -translate-x-1/2 -top-8 px-3 py-1.5 rounded-lg bg-transparent text-[color:var(--sf-text)]/60 text-xs font-normal whitespace-nowrap z-50 pointer-events-none animate-fade-in-out">
