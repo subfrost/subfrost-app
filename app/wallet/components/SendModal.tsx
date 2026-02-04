@@ -48,6 +48,42 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 /**
+ * Detect address type from a Bitcoin address string.
+ * Returns the address type and the corresponding SDK address reference.
+ */
+type AddressTypeInfo = {
+  type: 'p2tr' | 'p2wpkh' | 'p2sh' | 'p2pkh' | 'unknown';
+  sdkRef: string; // e.g., 'p2tr:0', 'p2wpkh:0'
+  signingMethod: 'taproot' | 'segwit' | 'legacy';
+};
+
+function detectAddressType(address: string): AddressTypeInfo {
+  const lower = address.toLowerCase();
+
+  // Taproot (P2TR): bc1p, tb1p, bcrt1p
+  if (lower.startsWith('bc1p') || lower.startsWith('tb1p') || lower.startsWith('bcrt1p')) {
+    return { type: 'p2tr', sdkRef: 'p2tr:0', signingMethod: 'taproot' };
+  }
+
+  // Native SegWit (P2WPKH): bc1q, tb1q, bcrt1q
+  if (lower.startsWith('bc1q') || lower.startsWith('tb1q') || lower.startsWith('bcrt1q')) {
+    return { type: 'p2wpkh', sdkRef: 'p2wpkh:0', signingMethod: 'segwit' };
+  }
+
+  // Nested SegWit (P2SH-P2WPKH): starts with 3 (mainnet) or 2 (testnet/regtest)
+  if (address.startsWith('3') || address.startsWith('2')) {
+    return { type: 'p2sh', sdkRef: 'p2sh:0', signingMethod: 'segwit' };
+  }
+
+  // Legacy (P2PKH): starts with 1 (mainnet) or m/n (testnet/regtest)
+  if (address.startsWith('1') || address.startsWith('m') || address.startsWith('n')) {
+    return { type: 'p2pkh', sdkRef: 'p2pkh:0', signingMethod: 'legacy' };
+  }
+
+  return { type: 'unknown', sdkRef: 'p2tr:0', signingMethod: 'taproot' };
+}
+
+/**
  * Build protostone for alkane transfer using edict pattern.
  *
  * IMPORTANT: We use the edict pattern [block:tx:amount:v0]:v1:v1 instead of
@@ -61,7 +97,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
  *   - :v1 = Pointer: excess alkanes go to vout 1 (our change)
  *   - :v1 = Refund: refunds go to vout 1 (our change)
  *
- * toAddresses must be: [recipientAddress, 'p2tr:0'] or [recipientAddress, alkanesChangeAddress]
+ * toAddresses must be: [recipientAddress, changeAddress]
  */
 function buildTransferProtostone(params: {
   alkaneId: string; // e.g., "2:0" for DIESEL
@@ -733,26 +769,34 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           break;
       }
 
-      // Determine wallet mode: dual-address (SegWit + Taproot) or single-address (Taproot only)
-      // Single-address mode is used for OKX, Unisat, and other wallets that only expose Taproot
+      // Determine wallet mode based on available addresses
+      // - Dual-address: wallet provides both SegWit (paymentAddress) and Taproot (address)
+      // - Single-address: wallet only provides one address type (could be any type)
       const hasBothAddresses = !!btcSendAddress && !!alkaneSendAddress && btcSendAddress !== alkaneSendAddress;
       const isSingleAddressMode = !hasBothAddresses;
+
+      // Detect address types for proper SDK references and signing
+      const primaryAddress = alkaneSendAddress || btcSendAddress;
+      const primaryAddressType = detectAddressType(primaryAddress);
+      const secondaryAddressType = btcSendAddress ? detectAddressType(btcSendAddress) : null;
 
       // Build from addresses array based on wallet mode
       const fromAddresses: string[] = [];
       if (hasBothAddresses) {
-        // Dual-address mode: use SegWit for fees, Taproot for alkanes
-        fromAddresses.push(btcSendAddress); // SegWit for fees
-        fromAddresses.push(alkaneSendAddress); // Taproot for alkanes
+        // Dual-address mode: use both addresses
+        fromAddresses.push(btcSendAddress); // Usually SegWit for fees
+        fromAddresses.push(alkaneSendAddress); // Usually Taproot for alkanes
       } else {
-        // Single-address mode (OKX/Unisat): only use Taproot
-        fromAddresses.push(alkaneSendAddress);
+        // Single-address mode: only use the available address
+        fromAddresses.push(primaryAddress);
       }
 
       // Determine change address based on wallet mode
-      const btcChangeAddress = hasBothAddresses ? btcSendAddress : alkaneSendAddress;
+      const btcChangeAddress = hasBothAddresses ? btcSendAddress : primaryAddress;
 
-      console.log('[SendModal] Wallet mode:', isSingleAddressMode ? 'Single-address (Taproot only)' : 'Dual-address (SegWit + Taproot)');
+      console.log('[SendModal] Wallet mode:', isSingleAddressMode
+        ? `Single-address (${primaryAddressType.type})`
+        : `Dual-address (${secondaryAddressType?.type} + ${primaryAddressType.type})`);
       console.log('[SendModal] From addresses:', fromAddresses);
       console.log('[SendModal] BTC change address:', btcChangeAddress);
       console.log('[SendModal] Alkanes change address:', alkaneSendAddress);
@@ -800,19 +844,34 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         console.log('[SendModal] PSBT base64 length:', psbtBase64.length);
 
-        // Sign the PSBT based on wallet mode
+        // Sign the PSBT based on wallet mode and detected address types
         let signedPsbtBase64: string;
         if (isSingleAddressMode) {
-          // Single-address mode (OKX/Unisat): only sign with Taproot
-          console.log('[SendModal] Signing PSBT with Taproot key only (single-address mode)...');
-          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          console.log('[SendModal] PSBT signed with Taproot key');
+          // Single-address mode: sign with the appropriate key based on detected address type
+          console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
+          if (primaryAddressType.signingMethod === 'taproot') {
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            // SegWit, nested SegWit, or legacy - all use signSegwitPsbt
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          }
+          console.log(`[SendModal] PSBT signed with ${primaryAddressType.type} key`);
         } else {
-          // Dual-address mode: sign with both keys (SegWit for fees, Taproot for alkanes)
-          console.log('[SendModal] Signing PSBT with SegWit key first, then Taproot key...');
-          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          console.log('[SendModal] PSBT signed with both keys');
+          // Dual-address mode: sign with both keys based on their types
+          console.log('[SendModal] Signing PSBT with both keys...');
+          // Sign with secondary (usually SegWit for fees) first
+          if (secondaryAddressType?.signingMethod === 'taproot') {
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          }
+          // Then sign with primary (usually Taproot for alkanes)
+          if (primaryAddressType.signingMethod === 'taproot') {
+            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          } else {
+            signedPsbtBase64 = await signSegwitPsbt(signedPsbtBase64);
+          }
+          console.log(`[SendModal] PSBT signed with ${secondaryAddressType?.type} and ${primaryAddressType.type} keys`);
         }
 
         // Parse the signed PSBT, finalize, and extract the raw transaction

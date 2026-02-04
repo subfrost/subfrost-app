@@ -375,36 +375,53 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 3. Single-Address Mode (p2tr only) — for OKX/Unisat wallets
+  // 3. Single-Address Mode — for wallets that only expose one address type
   // -------------------------------------------------------------------------
-  describe('3. Single-Address Mode (Taproot only)', () => {
-    it('should build and execute transfer using only Taproot address (OKX/Unisat mode)', async () => {
-      // For wallets like OKX and Unisat that only expose Taproot addresses,
-      // we must use:
-      // - fromAddresses: [taprootAddress] only (no SegWit)
-      // - changeAddress: taprootAddress (can't use SegWit)
-      // - alkanesChangeAddress: taprootAddress
+  describe('3. Single-Address Mode (any address type)', () => {
+    it('should build and execute transfer using only one address type', async () => {
+      // For wallets like OKX, Unisat, and others that only expose ONE address type,
+      // we must detect the address type and use appropriate settings:
+      //
+      // Address Type Detection:
+      //   - p2tr (Taproot):  bc1p.../tb1p.../bcrt1p...
+      //   - p2wpkh (SegWit): bc1q.../tb1q.../bcrt1q...
+      //   - p2sh (Nested):   3.../2...
+      //   - p2pkh (Legacy):  1.../m.../n...
+      //
+      // The SDK reference must match the address type:
+      //   - Taproot:  p2tr:0
+      //   - SegWit:   p2wpkh:0
+      //   - Nested:   p2sh:0
+      //   - Legacy:   p2pkh:0
 
       await delay(3000); // Delay to avoid rate limiting
 
       const transferAmount = '500'; // Transfer 500 DIESEL
       const recipientAddress = 'bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648';
 
+      // Detect address type from wallet address
+      const addressType = walletAddress.startsWith('bcrt1p') ? 'p2tr' :
+                         walletAddress.startsWith('bcrt1q') ? 'p2wpkh' : 'p2tr';
+      const sdkRef = `${addressType}:0`;
+
       // Same edict pattern but single-address mode
       const protostone = `[2:0:${transferAmount}:v0]:v1:v1`;
       const inputRequirements = `2:0:${transferAmount}`;
-      const toAddresses = [recipientAddress, 'p2tr:0']; // v0 = recipient, v1 = our change
+      const toAddresses = [recipientAddress, sdkRef]; // v0 = recipient, v1 = our change
 
       console.log('[SingleAddress] ========================================');
-      console.log('[SingleAddress] SINGLE-ADDRESS MODE (OKX/Unisat compatible):');
+      console.log('[SingleAddress] SINGLE-ADDRESS MODE (any address type):');
+      console.log('[SingleAddress] Detected address type:', addressType);
+      console.log('[SingleAddress] SDK reference:', sdkRef);
       console.log('[SingleAddress] protostone:', protostone);
       console.log('[SingleAddress] inputRequirements:', inputRequirements);
       console.log('[SingleAddress] toAddresses:', JSON.stringify(toAddresses));
       console.log('[SingleAddress]');
-      console.log('[SingleAddress] Key differences from dual-address mode:');
-      console.log('[SingleAddress]   - fromAddresses: [taprootAddress] only (NO SegWit)');
-      console.log('[SingleAddress]   - changeAddress: taprootAddress (NOT p2wpkh)');
-      console.log('[SingleAddress]   - All BTC and alkane operations use Taproot');
+      console.log('[SingleAddress] Key points:');
+      console.log('[SingleAddress]   - Detect address type from connected address');
+      console.log('[SingleAddress]   - fromAddresses: [connectedAddress] only');
+      console.log('[SingleAddress]   - changeAddress: connectedAddress');
+      console.log('[SingleAddress]   - Use matching SDK ref (p2tr:0, p2wpkh:0, etc.)');
       console.log('[SingleAddress] ========================================');
 
       try {
@@ -413,10 +430,10 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
           protostones: protostone,
           feeRate: 10,
           toAddresses,
-          // SINGLE-ADDRESS MODE: Only use Taproot
-          fromAddresses: [walletAddress], // Only Taproot (no SegWit)
-          changeAddress: walletAddress, // BTC change to Taproot (NOT SegWit!)
-          alkanesChangeAddress: walletAddress, // Alkane change to Taproot
+          // SINGLE-ADDRESS MODE: Only use the connected address
+          fromAddresses: [walletAddress], // Only the connected address type
+          changeAddress: walletAddress, // BTC change to same address type
+          alkanesChangeAddress: walletAddress, // Alkane change to same address type
         });
 
         console.log('[SingleAddress] Execute result:', JSON.stringify(result).slice(0, 500));
@@ -440,11 +457,15 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
           }
           console.log('[SingleAddress]');
           console.log('[SingleAddress] The SINGLE-ADDRESS PATTERN IS CORRECT:');
-          console.log('[SingleAddress]   fromAddresses: [walletAddress]  // Taproot only');
-          console.log('[SingleAddress]   changeAddress: walletAddress    // Taproot for BTC change');
-          console.log('[SingleAddress]   alkanesChangeAddress: walletAddress');
+          console.log('[SingleAddress]   1. Detect address type from connected address');
+          console.log('[SingleAddress]   2. fromAddresses: [connectedAddress]');
+          console.log('[SingleAddress]   3. changeAddress: connectedAddress');
+          console.log('[SingleAddress]   4. Use matching SDK ref for toAddresses[1]');
           console.log('[SingleAddress]');
-          console.log('[SingleAddress] This mode works for OKX/Unisat wallets that only expose p2tr');
+          console.log('[SingleAddress] Works for any single-address wallet:');
+          console.log('[SingleAddress]   - Taproot (p2tr): OKX, Unisat, Phantom');
+          console.log('[SingleAddress]   - SegWit (p2wpkh): Some hardware wallets');
+          console.log('[SingleAddress]   - Legacy (p2pkh): Older wallets');
           console.log('[SingleAddress] ========================================');
           expect(true).toBe(true);
           return;
@@ -550,18 +571,25 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
       console.log('  - changeAddress: segwitAddress  // BTC change to SegWit');
       console.log('  - alkanesChangeAddress: taprootAddress');
       console.log('');
-      console.log('MODE 2: Single-Address (OKX, Unisat, Phantom)');
-      console.log('  - Only has access to one address type (usually Taproot)');
-      console.log('  - fromAddresses: [taprootAddress]  // NO SegWit!');
-      console.log('  - changeAddress: taprootAddress    // BTC change to Taproot');
-      console.log('  - alkanesChangeAddress: taprootAddress');
+      console.log('MODE 2: Single-Address (OKX, Unisat, Phantom, hardware wallets)');
+      console.log('  - Only has access to one address type (any type, not just Taproot)');
+      console.log('  - Detect type from address prefix:');
+      console.log('      bc1p/tb1p/bcrt1p -> p2tr (Taproot)');
+      console.log('      bc1q/tb1q/bcrt1q -> p2wpkh (Native SegWit)');
+      console.log('      3/2             -> p2sh (Nested SegWit)');
+      console.log('      1/m/n           -> p2pkh (Legacy)');
+      console.log('  - fromAddresses: [connectedAddress]');
+      console.log('  - changeAddress: connectedAddress');
+      console.log('  - toAddresses[1]: use matching SDK ref (p2tr:0, p2wpkh:0, etc.)');
       console.log('');
-      console.log('Detection in SendModal:');
-      console.log('  const hasBothAddresses = !!paymentAddress && !!taprootAddress;');
-      console.log('  const fromAddresses = hasBothAddresses');
-      console.log('    ? [paymentAddress, taprootAddress]');
-      console.log('    : [taprootAddress];');
-      console.log('  const btcChangeAddress = hasBothAddresses ? paymentAddress : taprootAddress;');
+      console.log('Address Type Detection:');
+      console.log('  function detectAddressType(address: string) {');
+      console.log('    if (address.startsWith("bc1p")) return { type: "p2tr", sdkRef: "p2tr:0" };');
+      console.log('    if (address.startsWith("bc1q")) return { type: "p2wpkh", sdkRef: "p2wpkh:0" };');
+      console.log('    if (address.startsWith("3")) return { type: "p2sh", sdkRef: "p2sh:0" };');
+      console.log('    if (address.startsWith("1")) return { type: "p2pkh", sdkRef: "p2pkh:0" };');
+      console.log('    // ... handle testnet/regtest prefixes similarly');
+      console.log('  }');
       console.log('');
       console.log('=======================================================================');
 
