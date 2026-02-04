@@ -97,6 +97,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
   const selectedAlkaneRef = useRef<HTMLButtonElement>(null);
 
+  // Normalize Bech32 addresses to lowercase (BIP-173: case-insensitive)
+  const normalizedRecipientAddress = useMemo(() => {
+    const addr = recipientAddress.trim();
+    const lower = addr.toLowerCase();
+    if (lower.startsWith('bc1') || lower.startsWith('tb1') || lower.startsWith('bcrt1')) {
+      return lower;
+    }
+    return addr; // Keep original case for legacy addresses
+  }, [recipientAddress]);
+
   const { data: poolsData } = usePools();
   const { data: positionMeta } = usePositionMetadata(balances.alkanes);
   const poolMap = useMemo(() => {
@@ -216,17 +226,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const validateAddress = (addr: string): boolean => {
     // Basic Bitcoin address validation
     if (!addr) return false;
-    
+
+    // Normalize to lowercase for Bech32 validation (BIP-173: case-insensitive)
+    const normalizedAddr = addr.toLowerCase();
+
     // Bech32 (native segwit)
-    if (addr.startsWith('bc1') || addr.startsWith('tb1') || addr.startsWith('bcrt1')) {
-      return addr.length >= 42 && addr.length <= 90;
+    if (normalizedAddr.startsWith('bc1') || normalizedAddr.startsWith('tb1') || normalizedAddr.startsWith('bcrt1')) {
+      return normalizedAddr.length >= 42 && normalizedAddr.length <= 90;
     }
-    
+
     // Legacy/P2SH
     if (addr.startsWith('1') || addr.startsWith('3') || addr.startsWith('m') || addr.startsWith('n') || addr.startsWith('2')) {
       return addr.length >= 26 && addr.length <= 35;
     }
-    
+
     return false;
   };
 
@@ -481,7 +494,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         // Add recipient output
         psbt.addOutput({
-          address: recipientAddress,
+          address: normalizedRecipientAddress,
           value: BigInt(amountSats),
         });
 
@@ -569,7 +582,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       // Use WASM provider's walletSend method
       const sendParams = {
-        address: recipientAddress,
+        address: normalizedRecipientAddress,
         amount: amountSats,
         fee_rate: feeRate,
         from: [btcSendAddress],
@@ -721,7 +734,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         feeRate,
         autoConfirm: false, // We handle signing manually
         fromAddresses,
-        toAddresses: [recipientAddress], // Alkanes go to recipient
+        toAddresses: [normalizedRecipientAddress], // Alkanes go to recipient
         changeAddress: btcSendAddress, // BTC change to SegWit
         alkanesChangeAddress: alkaneSendAddress, // Alkane change to Taproot
       });
