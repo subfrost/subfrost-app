@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
 import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
@@ -1460,8 +1460,6 @@ function getSendNftImagePaths(symbol: string, id: string, network: string): stri
   }
   return paths;
 }
-
-import { forwardRef } from 'react';
 
 const SendNftCard = forwardRef<HTMLButtonElement, {
   alkane: AlkaneAsset;
