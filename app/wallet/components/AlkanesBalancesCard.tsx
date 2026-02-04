@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
@@ -28,6 +28,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedAlkaneId, setExpandedAlkaneId] = useState<string | null>(null);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
+  const hasAutoRefreshed = useRef(false);
 
   const poolMap = useMemo(() => {
     const map = new Map<string, { token0Symbol: string; token1Symbol: string; token0Id: string; token1Id: string; token0Amount: string; token1Amount: string; lpTotalSupply: string }>();
@@ -79,6 +80,33 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   };
 
   const isLoadingData = isLoading || isRefreshing;
+
+  // Auto-refresh alkanes once after 15 seconds if no tokens found
+  const hasNoTokens = useMemo(() => {
+    const tokens = balances.alkanes.filter((a) => {
+      const isNftAsset = BigInt(a.balance) === BigInt(1);
+      const isPositionAsset = /\bLP\b/i.test(a.symbol) || /\bLP\b/i.test(a.name) || a.symbol.startsWith('POS-') || a.name.startsWith('POS-');
+      return !isNftAsset && !isPositionAsset;
+    });
+    return tokens.length === 0;
+  }, [balances.alkanes]);
+
+  useEffect(() => {
+    // Only auto-refresh once, when not loading, and when no tokens found
+    if (hasAutoRefreshed.current || isLoading || !hasNoTokens) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (!hasAutoRefreshed.current && hasNoTokens) {
+        console.log('[AlkanesBalancesCard] Auto-refreshing alkanes after 15s (no tokens found)');
+        hasAutoRefreshed.current = true;
+        handleRefresh();
+      }
+    }, 15000);
+
+    return () => clearTimeout(timer);
+  }, [hasNoTokens, isLoading]);
 
   const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);
