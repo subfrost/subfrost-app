@@ -1225,6 +1225,21 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     return (
       <>
         <div className="space-y-4">
+          {/* Inline High Fee Warning - shown above transaction details */}
+          {showFeeWarning && (
+            <div className={`rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] ${feeWarningCountdown > 0 ? 'animate-pulse' : ''}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle size={20} className="text-[color:var(--sf-info-red-title)]" />
+                <span className="font-bold text-[color:var(--sf-info-red-title)] uppercase tracking-wide">
+                  {t('send.highFeeWarning')}
+                </span>
+              </div>
+              <p className="text-sm text-[color:var(--sf-info-red-text)]">
+                {t('send.highFeeDescription')}
+              </p>
+            </div>
+          )}
+
           <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-3">
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.recipient')}</span>
@@ -1253,21 +1268,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           {!showFeeWarning && (
             <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
               {t('send.verifyWarning')}
-            </div>
-          )}
-
-          {/* Inline High Fee Warning */}
-          {showFeeWarning && (
-            <div className={`rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] ${feeWarningCountdown > 0 ? 'animate-pulse' : ''}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <AlertCircle size={20} className="text-[color:var(--sf-info-red-title)]" />
-                <span className="font-bold text-[color:var(--sf-info-red-title)] uppercase tracking-wide">
-                  {t('send.highFeeWarning')}
-                </span>
-              </div>
-              <p className="text-sm text-[color:var(--sf-info-red-text)]">
-                {t('send.highFeeDescription')}
-              </p>
             </div>
           )}
 
