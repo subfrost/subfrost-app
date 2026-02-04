@@ -1260,40 +1260,29 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-              {t('send.recipient')}
-            </label>
-            <div className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] text-base break-all">
-              {recipientAddress}
+          <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-3">
+            <div className="flex justify-between">
+              <span className="text-[color:var(--sf-text)]/60">{t('send.recipient')}</span>
+              <span className="text-sm text-[color:var(--sf-text)] break-all ml-4">
+                {recipientAddress}
+              </span>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-              {t('send.amount')}
-            </label>
-            <div className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] text-base font-medium">
-              {parseFloat(amount).toFixed(8)} BTC
+            <div className="flex justify-between">
+              <span className="text-[color:var(--sf-text)]/60">{t('send.amount')}</span>
+              <span className="font-medium text-[color:var(--sf-text)]">{parseFloat(amount).toFixed(8)} BTC</span>
             </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-              {t('send.estimatedFee')} ({feeRate} sat/vB)
-            </span>
-            <span className="font-semibold text-[color:var(--sf-text)]">
-              {((showFeeWarning ? estimatedFee : localEstimatedFee) / 100000000).toFixed(8)} BTC
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl bg-[color:var(--sf-primary)]/10 shadow-[0_2px_12px_rgba(0,0,0,0.08)] px-4 py-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/80">
-              {t('send.total')}
-            </span>
-            <span className="font-bold text-[color:var(--sf-text)]">
-              {(total / 100000000).toFixed(8)} BTC
-            </span>
+            <div className="flex justify-between">
+              <span className="text-[color:var(--sf-text)]/60">{t('send.feeRateLabel')}</span>
+              <span className="text-[color:var(--sf-text)]">{feeRate} sat/vB</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
+              <span className="text-[color:var(--sf-text)]">{((showFeeWarning ? estimatedFee : localEstimatedFee) / 100000000).toFixed(8)} BTC</span>
+            </div>
+            <div className="border-t border-[color:var(--sf-text)]/10 pt-2 flex justify-between">
+              <span className="text-[color:var(--sf-text)]/80 font-medium">{t('send.total')}</span>
+              <span className="text-[color:var(--sf-text)] font-medium">{(total / 100000000).toFixed(8)} BTC</span>
+            </div>
           </div>
 
           {!showFeeWarning && (

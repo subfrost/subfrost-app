@@ -279,7 +279,7 @@ export default function TransactionConfirmModal() {
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-[color:var(--sf-panel-bg)] shadow-2xl border border-[color:var(--sf-outline)] overflow-hidden">
+      <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-[#0f1c30] shadow-2xl border border-[color:var(--sf-outline)] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[color:var(--sf-outline)]">
           <div className="flex items-center gap-3">
