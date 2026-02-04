@@ -4,6 +4,11 @@
  * - enrichedWallet: BTC UTXOs + alkane balances (was useEffect, now useQuery)
  * - btcBalance: spendable BTC satoshis
  * - sellableCurrencies: alkane tokens the wallet holds
+ *
+ * JOURNAL ENTRY (2026-02-03):
+ * Fixed alkanes not loading on wallet dashboard. The SDK's dataApiGetAlkanesByAddress
+ * returns alkanes with an `amount` field, but the code was reading `balance` (the field
+ * name from the old OYL Alkanode API). Changed to check `entry.amount || entry.balance`.
  */
 
 import { queryOptions } from '@tanstack/react-query';
@@ -209,7 +214,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           const alkanes = alkaneBalances?.alkanes || [];
           for (const entry of alkanes) {
             const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
-            const amountStr = String(entry.balance || '0');
+            const amountStr = String(entry.amount || entry.balance || '0');
             const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
               symbol: entry.symbol || '',
               name: entry.name || `Token ${alkaneIdStr}`,
@@ -320,7 +325,7 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
             for (const entry of alkaneBalances) {
               const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
-              const balance = String(entry.balance || '0');
+              const balance = String(entry.amount || entry.balance || '0');
               const tokenInfo = KNOWN_TOKENS_SELL[alkaneIdStr] || {
                 symbol: entry.symbol || alkaneIdStr.split(':')[1] || '',
                 name: entry.name || `Token ${alkaneIdStr}`,

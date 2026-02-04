@@ -443,9 +443,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             throw new Error(`UTXO not found: ${utxoKey}`);
           }
 
-          // Fetch transaction hex for witness UTXO via Esplora API
-          const blockExplorerUrl = getConfig(network).BLOCK_EXPLORER_URL_BTC;
-          const txHexUrl = `${blockExplorerUrl}/api/tx/${txid}/hex`;
+          // Fetch transaction hex for witness UTXO via local API proxy (avoids CORS)
+          const txHexUrl = `/api/esplora/tx/${txid}/hex?network=${network}`;
           console.log('[SendModal] Fetching tx hex from:', txHexUrl);
 
           const txHexResponse = await fetch(txHexUrl);
@@ -947,8 +946,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-red-400 text-sm">
-            <AlertCircle size={16} />
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)] text-sm">
+            <AlertCircle size={16} className="shrink-0" />
             {error}
           </div>
         )}
@@ -1243,8 +1242,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-red-400 text-sm">
-              <AlertCircle size={16} />
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)] text-sm">
+              <AlertCircle size={16} className="shrink-0" />
               {error}
             </div>
           )}
@@ -1394,48 +1393,28 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 {t('send.highFeeDescription')}
               </p>
 
-              {/* Fee Details Card */}
-              <div className="bg-[color:var(--sf-fee-warning-card-bg)] border border-[color:var(--sf-fee-warning-card-border)] rounded-xl p-4 space-y-2">
+              {/* Fee Details Card - styled like Reveal Seed Phrase warning */}
+              <div className="bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] rounded-xl p-4 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-fee-warning-label)]">{t('send.estimatedFee')}</span>
-                  <span className="text-[color:var(--sf-fee-warning-value)] font-semibold">
+                  <span className="text-[color:var(--sf-info-red-text)]">{t('send.estimatedFee')}</span>
+                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">
                     {(estimatedFee / 100000000).toFixed(8)} BTC
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-fee-warning-label)]">{t('send.feeRateLabel')}</span>
-                  <span className="text-[color:var(--sf-fee-warning-value)] font-semibold">{feeRate} sat/vB</span>
+                  <span className="text-[color:var(--sf-info-red-text)]">{t('send.feeRateLabel')}</span>
+                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{feeRate} sat/vB</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-fee-warning-label)]">Number of Inputs:</span>
-                  <span className="text-[color:var(--sf-fee-warning-value)] font-semibold">{selectedUtxos.size}</span>
+                  <span className="text-[color:var(--sf-info-red-text)]">Number of Inputs:</span>
+                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">{selectedUtxos.size}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-[color:var(--sf-fee-warning-label)]">Fee Percentage:</span>
-                  <span className="text-[color:var(--sf-fee-warning-value)] font-semibold">
+                  <span className="text-[color:var(--sf-info-red-text)]">Fee Percentage:</span>
+                  <span className="text-[color:var(--sf-info-red-title)] font-semibold">
                     {((estimatedFee / (parseFloat(amount) * 100000000)) * 100).toFixed(2)}%
                   </span>
                 </div>
-              </div>
-
-              {/* Recommendations */}
-              <div className="bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] rounded-xl p-3">
-                <p className="text-sm font-semibold text-[color:var(--sf-info-yellow-title)] flex items-center gap-2">
-                  <span>⚠</span> Recommendations:
-                </p>
-                {(selectedUtxos.size > 100 || feeRate > 1000 || estimatedFee > 0.01 * 100000000) && (
-                  <ul className="text-xs text-[color:var(--sf-info-yellow-text)] mt-2 space-y-1 list-disc list-inside">
-                    {selectedUtxos.size > 100 && (
-                      <li>{t('send.reduceUtxos')} ({selectedUtxos.size})</li>
-                    )}
-                    {feeRate > 1000 && (
-                      <li>{t('send.lowerFeeRate')} ({feeRate} sat/vB)</li>
-                    )}
-                    {estimatedFee > 0.01 * 100000000 && (
-                      <li>{t('send.smallerAmount')}</li>
-                    )}
-                  </ul>
-                )}
               </div>
 
               {/* Action Buttons */}

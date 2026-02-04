@@ -18,8 +18,8 @@ const ESPO_TIMEFRAME_MAP: Record<CandleTimeframe, 'd1' | 'h1' | '10m' | 'w1' | '
 // Target number of candles to display on chart
 const TARGET_CANDLES = 200;
 
-// Per-page fetch limit (Espo API max)
-const PAGE_LIMIT = 100;
+// Per-page fetch limit
+const PAGE_LIMIT = 500;
 
 // Max pages to fetch per timeframe to avoid excessive requests
 const MAX_PAGES: Record<CandleTimeframe, number> = {
