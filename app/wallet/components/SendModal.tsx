@@ -48,21 +48,33 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Build protostone for alkane transfer using factory Forward opcode (50)
- * The Forward opcode simply passes incoming alkanes to the specified output
+ * Build protostone for alkane transfer using edict pattern.
+ *
+ * IMPORTANT: We use the edict pattern [block:tx:amount:v0]:v1:v1 instead of
+ * Factory Forward (50) because:
+ * - Edict sends EXACTLY the specified amount to recipient (v0)
+ * - Excess alkanes go to v1 (our change address)
+ * - Prevents accidentally sending all alkanes if UTXO has more than intended
+ *
+ * Pattern: [block:tx:amount:v0]:v1:v1
+ *   - [block:tx:amount:v0] = Edict: send exactly `amount` of alkane to vout 0
+ *   - :v1 = Pointer: excess alkanes go to vout 1 (our change)
+ *   - :v1 = Refund: refunds go to vout 1 (our change)
+ *
+ * toAddresses must be: [recipientAddress, 'p2tr:0'] or [recipientAddress, alkanesChangeAddress]
  */
 function buildTransferProtostone(params: {
-  factoryId: string;
-  pointer?: string;
-  refund?: string;
+  alkaneId: string; // e.g., "2:0" for DIESEL
+  amount: string;   // Amount to transfer (as string for BigInt compatibility)
 }): string {
-  const { factoryId, pointer = 'v0', refund = 'v0' } = params;
-  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const { alkaneId, amount } = params;
+  const [block, tx] = alkaneId.split(':');
 
-  // Factory opcode 50 = Forward (passes incoming alkanes to output)
-  const cellpack = [factoryBlock, factoryTx, 50].join(',');
-
-  return `[${cellpack}]:${pointer}:${refund}`;
+  // Edict format: [block:tx:amount:target]:pointer:refund
+  // - target v0 = recipient (first address in toAddresses)
+  // - pointer v1 = excess goes to sender change (second address in toAddresses)
+  // - refund v1 = refunds also go to sender change
+  return `[${block}:${tx}:${amount}:v0]:v1:v1`;
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
@@ -686,16 +698,18 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       setStep('broadcasting');
 
-      // Build the protostone for alkane transfer using factory Forward opcode
-      const protostone = buildTransferProtostone({
-        factoryId: ALKANE_FACTORY_ID,
-        pointer: 'v0', // Output to recipient
-        refund: 'v0',  // Refund to recipient (or we could use a separate change address)
-      });
-
       // Build input requirements: alkaneId:amount
-      const [alkaneBlock, alkaneTx] = selectedAlkaneId.split(':');
-      const inputRequirements = `${alkaneBlock}:${alkaneTx}:${amountBaseUnits.toString()}`;
+      const inputRequirements = `${selectedAlkaneId}:${amountBaseUnits.toString()}`;
+
+      // Build the protostone for alkane transfer using edict pattern
+      // Pattern: [block:tx:amount:v0]:v1:v1
+      // - Edict sends exactly `amount` to v0 (recipient)
+      // - Excess alkanes go to v1 (our change address)
+      // - This prevents accidentally sending all alkanes if UTXO has more than intended
+      const protostone = buildTransferProtostone({
+        alkaneId: selectedAlkaneId,
+        amount: amountBaseUnits.toString(),
+      });
 
       console.log('[SendModal] Protostone:', protostone);
       console.log('[SendModal] Input requirements:', inputRequirements);
@@ -719,23 +733,43 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           break;
       }
 
-      // Build from addresses array - use both Taproot (for alkanes) and SegWit (for fees)
-      const fromAddresses: string[] = [];
-      if (btcSendAddress) fromAddresses.push(btcSendAddress); // SegWit for fees
-      if (alkaneSendAddress) fromAddresses.push(alkaneSendAddress); // Taproot for alkanes
+      // Determine wallet mode: dual-address (SegWit + Taproot) or single-address (Taproot only)
+      // Single-address mode is used for OKX, Unisat, and other wallets that only expose Taproot
+      const hasBothAddresses = !!btcSendAddress && !!alkaneSendAddress && btcSendAddress !== alkaneSendAddress;
+      const isSingleAddressMode = !hasBothAddresses;
 
+      // Build from addresses array based on wallet mode
+      const fromAddresses: string[] = [];
+      if (hasBothAddresses) {
+        // Dual-address mode: use SegWit for fees, Taproot for alkanes
+        fromAddresses.push(btcSendAddress); // SegWit for fees
+        fromAddresses.push(alkaneSendAddress); // Taproot for alkanes
+      } else {
+        // Single-address mode (OKX/Unisat): only use Taproot
+        fromAddresses.push(alkaneSendAddress);
+      }
+
+      // Determine change address based on wallet mode
+      const btcChangeAddress = hasBothAddresses ? btcSendAddress : alkaneSendAddress;
+
+      console.log('[SendModal] Wallet mode:', isSingleAddressMode ? 'Single-address (Taproot only)' : 'Dual-address (SegWit + Taproot)');
       console.log('[SendModal] From addresses:', fromAddresses);
+      console.log('[SendModal] BTC change address:', btcChangeAddress);
+      console.log('[SendModal] Alkanes change address:', alkaneSendAddress);
       console.log('[SendModal] Recipient (toAddresses[0]):', recipientAddress);
 
       // Execute the alkane transfer
+      // toAddresses: [recipient, changeAddress] maps to v0 and v1 in the protostone
+      // - v0 = recipient gets exactly the specified amount (from edict)
+      // - v1 = sender gets excess alkanes back (from pointer/refund)
       const result = await alkaneProvider.alkanesExecuteTyped({
         inputRequirements,
         protostones: protostone,
         feeRate,
         autoConfirm: false, // We handle signing manually
         fromAddresses,
-        toAddresses: [normalizedRecipientAddress], // Alkanes go to recipient
-        changeAddress: btcSendAddress, // BTC change to SegWit
+        toAddresses: [normalizedRecipientAddress, alkaneSendAddress], // v0 = recipient, v1 = our change
+        changeAddress: btcChangeAddress, // BTC change (SegWit in dual mode, Taproot in single mode)
         alkanesChangeAddress: alkaneSendAddress, // Alkane change to Taproot
       });
 
@@ -766,11 +800,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         console.log('[SendModal] PSBT base64 length:', psbtBase64.length);
 
-        // Sign the PSBT with both keys (SegWit for fees, Taproot for alkanes)
-        console.log('[SendModal] Signing PSBT with SegWit key first, then Taproot key...');
-        let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        console.log('[SendModal] PSBT signed with both keys');
+        // Sign the PSBT based on wallet mode
+        let signedPsbtBase64: string;
+        if (isSingleAddressMode) {
+          // Single-address mode (OKX/Unisat): only sign with Taproot
+          console.log('[SendModal] Signing PSBT with Taproot key only (single-address mode)...');
+          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          console.log('[SendModal] PSBT signed with Taproot key');
+        } else {
+          // Dual-address mode: sign with both keys (SegWit for fees, Taproot for alkanes)
+          console.log('[SendModal] Signing PSBT with SegWit key first, then Taproot key...');
+          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          console.log('[SendModal] PSBT signed with both keys');
+        }
 
         // Parse the signed PSBT, finalize, and extract the raw transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
