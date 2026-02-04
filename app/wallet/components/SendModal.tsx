@@ -1347,9 +1347,9 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         <CheckCircle size={64} className="text-green-400" />
         <div className="text-xl font-bold text-[color:var(--sf-text)]">{t('send.transactionSent')}</div>
 
-        <div className="w-full p-4 rounded-xl bg-green-500/10 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-          <div className="text-sm text-green-600 dark:text-green-200 mb-2">{t('send.transactionIdLabel')}</div>
-          <div data-testid="txid" className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
+        <div className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
+          <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('send.transactionIdLabel')}</div>
+          <div data-testid="txid" className="text-sm text-[color:var(--sf-info-green-text)] break-all">{txid}</div>
         </div>
 
         <a
