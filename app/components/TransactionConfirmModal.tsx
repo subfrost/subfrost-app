@@ -190,22 +190,27 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
 
 function SendDetails({ details }: { details: TransactionDetails }) {
   return (
-    <div className="space-y-3">
-      <div className="p-3 rounded-lg bg-[color:var(--sf-surface)]">
-        <div className="text-xs text-[color:var(--sf-text)]/60">Amount</div>
-        <div className="flex items-center gap-3 mt-1">
-          <TokenIcon symbol={details.fromSymbol || ''} id={details.fromId} size="lg" />
-          <div className="text-lg font-bold text-[color:var(--sf-text)]">
-            {formatAmount(details.fromAmount, details.fromSymbol)} {details.fromSymbol}
-          </div>
-        </div>
-      </div>
+    <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-3">
       {details.recipient && (
-        <div className="p-3 rounded-lg bg-[color:var(--sf-surface)]">
-          <div className="text-xs text-[color:var(--sf-text)]/60">To</div>
-          <div className="text-sm font-mono text-[color:var(--sf-text)] mt-1 break-all">
-            {details.recipient}
-          </div>
+        <div className="flex justify-between">
+          <span className="text-[color:var(--sf-text)]/60">Recipient</span>
+          <span className="text-sm text-[color:var(--sf-text)] break-all ml-4 text-right">
+            {truncateAddress(details.recipient)}
+          </span>
+        </div>
+      )}
+      <div className="flex justify-between">
+        <span className="text-[color:var(--sf-text)]/60">Amount</span>
+        <span className="font-medium text-[color:var(--sf-text)]">
+          {formatAmount(details.fromAmount, details.fromSymbol)} {details.fromSymbol}
+        </span>
+      </div>
+      {(details.feeRate || details.estimatedFee) && (
+        <div className="flex justify-between">
+          <span className="text-[color:var(--sf-text)]/60">Network Fee</span>
+          <span className="text-[color:var(--sf-text)]">
+            {details.estimatedFee ? `~${details.estimatedFee} sats` : `${details.feeRate} sat/vB`}
+          </span>
         </div>
       )}
     </div>
@@ -283,7 +288,7 @@ export default function TransactionConfirmModal() {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[color:var(--sf-outline)]">
           <div className="flex items-center gap-3">
-            <TransactionTypeIcon type={details.type} />
+            {/* <TransactionTypeIcon type={details.type} /> */}
             <div>
               <h2 className="text-lg font-bold text-[color:var(--sf-text)]">
                 {details.title}
@@ -304,7 +309,7 @@ export default function TransactionConfirmModal() {
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           {/* Transaction details based on type */}
           {details.type === 'swap' && <SwapDetails details={details} />}
           {details.type === 'wrap' && <WrapUnwrapDetails details={details} />}
@@ -314,8 +319,8 @@ export default function TransactionConfirmModal() {
           )}
           {details.type === 'send' && <SendDetails details={details} />}
 
-          {/* Fee info */}
-          {(details.feeRate || details.estimatedFee) && (
+          {/* Fee info (not shown for 'send' type since it's included in SendDetails) */}
+          {details.type !== 'send' && (details.feeRate || details.estimatedFee) && (
             <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-surface)] text-sm">
               <span className="text-[color:var(--sf-text)]/60">Network fee</span>
               <span className="text-[color:var(--sf-text)]">
@@ -325,9 +330,9 @@ export default function TransactionConfirmModal() {
           )}
 
           {/* Warning */}
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-yellow-200/80">
+            <p className="text-sm text-[color:var(--sf-info-yellow-text)]">
               Review the transaction details carefully. This action cannot be undone once confirmed.
             </p>
           </div>
