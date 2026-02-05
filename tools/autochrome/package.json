@@ -1,0 +1,32 @@
+{
+  "name": "@subfrost/autochrome",
+  "version": "0.1.0",
+  "description": "Interactive Chrome automation for wallet testing and workflow discovery",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "autochrome": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "inquirer": "^9.3.2",
+    "ora": "^8.1.0",
+    "puppeteer": "^24.4.0",
+    "readline": "^1.3.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
