@@ -71,14 +71,11 @@ COPY --from=builder /app/prisma ./prisma
 # Install prisma CLI for migrations (standalone build already bundles the client)
 RUN npm install -g prisma@latest
 
-# Create entrypoint script for migrations
-RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
-    echo 'set -e' >> /app/entrypoint.sh && \
-    echo 'echo "Running database migrations..."' >> /app/entrypoint.sh && \
-    echo 'prisma migrate deploy --schema=./prisma/schema.prisma || echo "Migration skipped (may already be up to date)"' >> /app/entrypoint.sh && \
-    echo 'echo "Starting application..."' >> /app/entrypoint.sh && \
-    echo 'exec node server.js' >> /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
+# Copy entrypoint script for migrations
+# On first deploy with existing tables (from db:push), the baseline migration
+# must be marked as applied. The script detects this and resolves it automatically.
+COPY --from=builder /app/docker-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Set ownership
 RUN chown -R nextjs:nodejs /app
