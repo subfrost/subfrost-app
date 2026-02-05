@@ -516,7 +516,7 @@ export default function LiquidityInputs({
                   size="sm"
                   network={network}
                 />
-                <span className="text-xs font-bold text-white">{token0.symbol}</span>
+                <span className="text-xs font-bold text-[color:var(--sf-text)]">{token0.symbol}</span>
               </div>
               <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token0Amount} onChange={onChangeToken0Amount} />
@@ -555,7 +555,7 @@ export default function LiquidityInputs({
                   size="sm"
                   network={network}
                 />
-                <span className="text-xs font-bold text-white">{token1.symbol}</span>
+                <span className="text-xs font-bold text-[color:var(--sf-text)]">{token1.symbol}</span>
               </div>
               <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
                 <NumberField placeholder={"0.00"} align="left" value={token1Amount} onChange={onChangeToken1Amount} />
