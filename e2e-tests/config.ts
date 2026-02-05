@@ -26,6 +26,8 @@ export const CONFIG = {
     oyl: process.env.OYL_EXTENSION_PATH || `${process.env.HOME}/.autochrome/extensions/oyl`,
     unisat: process.env.UNISAT_EXTENSION_PATH || `${process.env.HOME}/.autochrome/extensions/unisat`,
     magiceden: process.env.MAGICEDEN_EXTENSION_PATH || `${process.env.HOME}/.autochrome/extensions/magiceden`,
+    phantom: process.env.PHANTOM_EXTENSION_PATH || `${process.env.HOME}/.autochrome/extensions/phantom`,
+    okx: process.env.OKX_EXTENSION_PATH || `${process.env.HOME}/.autochrome/extensions/okx`,
   },
 
   // Test data

@@ -17,11 +17,11 @@ These tests verify the full user flows for different Bitcoin wallet extensions:
 |--------|--------|-------|
 | Xverse | ✅ Ready | Dual-address (taproot + segwit) |
 | OYL | ✅ Ready | Native segwit |
-| Leather | 🚧 TODO | Dual-address |
-| UniSat | 🚧 TODO | Taproot |
-| Magic Eden | 🚧 TODO | Sats Connect |
-| Phantom | 🚧 TODO | Multi-chain |
-| OKX | 🚧 TODO | Multi-chain |
+| Leather | ✅ Ready | Dual-address (taproot + segwit) |
+| UniSat | ✅ Ready | Taproot-native |
+| Magic Eden | ✅ Ready | Sats Connect protocol |
+| Phantom | ✅ Ready | Multi-chain (BTC/SOL/ETH) |
+| OKX | ✅ Ready | Multi-chain with BRC-20 support |
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ These tests verify the full user flows for different Bitcoin wallet extensions:
 Download and extract wallet extensions to `~/.autochrome/extensions/`:
 
 ```bash
-mkdir -p ~/.autochrome/extensions/{xverse,oyl,leather,unisat,magiceden}
+mkdir -p ~/.autochrome/extensions/{xverse,oyl,leather,unisat,magiceden,phantom,okx}
 ```
 
 For each wallet:

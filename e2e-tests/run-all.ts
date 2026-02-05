@@ -19,15 +19,21 @@ import { CONFIG, WalletType } from './config.js';
 // Import wallet test classes
 import { XverseWalletTest } from './wallets/xverse.test.js';
 import { OYLWalletTest } from './wallets/oyl.test.js';
+import { LeatherWalletTest } from './wallets/leather.test.js';
+import { UnisatWalletTest } from './wallets/unisat.test.js';
+import { MagicEdenWalletTest } from './wallets/magiceden.test.js';
+import { PhantomWalletTest } from './wallets/phantom.test.js';
+import { OKXWalletTest } from './wallets/okx.test.js';
 
 // Registry of available wallet tests
 const WALLET_TESTS: Record<string, new () => any> = {
   xverse: XverseWalletTest,
   oyl: OYLWalletTest,
-  // Add more as implemented:
-  // leather: LeatherWalletTest,
-  // unisat: UnisatWalletTest,
-  // magiceden: MagicEdenWalletTest,
+  leather: LeatherWalletTest,
+  unisat: UnisatWalletTest,
+  magiceden: MagicEdenWalletTest,
+  phantom: PhantomWalletTest,
+  okx: OKXWalletTest,
 };
 
 interface TestResult {
