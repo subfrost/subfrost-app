@@ -68,8 +68,8 @@ RUN mkdir -p ./.next/server/static/wasm && \
 # Copy Prisma schema for migrations
 COPY --from=builder /app/prisma ./prisma
 
-# Install prisma CLI for migrations (standalone build already bundles the client)
-RUN npm install -g prisma@latest
+# Install prisma CLI for migrations — pinned to v6 to match project (v7 breaks schema format)
+RUN npm install -g prisma@6
 
 # Copy entrypoint script for migrations
 # On first deploy with existing tables (from db:push), the baseline migration
