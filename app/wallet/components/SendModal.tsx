@@ -480,6 +480,43 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         setStep('broadcasting');
 
+        // Fetch fresh UTXOs directly from esplora API to avoid stale cache issues
+        console.log('[SendModal] Fetching fresh UTXOs from esplora...');
+        const freshUtxosResponse = await fetch('/api/rpc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'esplora_address::utxo',
+            params: [btcSendAddress],
+            id: 1,
+          }),
+        });
+        const freshUtxosJson = await freshUtxosResponse.json();
+        const freshUtxos: Array<{ txid: string; vout: number; value: number; status: { confirmed: boolean } }> =
+          (freshUtxosJson.result || []).map((u: any) => ({
+            txid: u.txid,
+            vout: u.vout,
+            value: u.value,
+            status: u.status || { confirmed: true },
+          }));
+
+        console.log('[SendModal] Fresh UTXOs fetched:', freshUtxos.length);
+
+        // Verify selected UTXOs still exist in fresh data
+        const freshUtxoKeys = new Set(freshUtxos.map(u => `${u.txid}:${u.vout}`));
+        const missingUtxos = Array.from(selectedUtxos).filter(key => !freshUtxoKeys.has(key));
+
+        if (missingUtxos.length > 0) {
+          console.error('[SendModal] Selected UTXOs no longer exist:', missingUtxos);
+          // Invalidate cache and throw error so user can retry with fresh data
+          await refresh();
+          throw new Error(
+            `Some selected UTXOs are no longer available (already spent or not yet confirmed). ` +
+            `Please go back and try again with updated balance.`
+          );
+        }
+
         // Determine Bitcoin network
         let btcNetwork: bitcoin.Network;
         switch (network) {
@@ -506,15 +543,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         const estimatedFeeForCalculation = selectedUtxos.size * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate;
         const totalNeeded = amountSats + estimatedFeeForCalculation;
 
-        // Add inputs from selected UTXOs
+        // Add inputs from selected UTXOs (now verified to exist in fresh data)
         let totalInputValue = 0;
         for (const utxoKey of Array.from(selectedUtxos)) {
           const [txid, voutStr] = utxoKey.split(':');
           const vout = parseInt(voutStr);
-          const utxo = availableUtxos.find(u => u.txid === txid && u.vout === vout);
 
-          if (!utxo) {
-            throw new Error(`UTXO not found: ${utxoKey}`);
+          // Use fresh UTXO data
+          const freshUtxo = freshUtxos.find(u => u.txid === txid && u.vout === vout);
+          if (!freshUtxo) {
+            throw new Error(`UTXO not found in fresh data: ${utxoKey}`);
           }
 
           // Fetch transaction hex for witness UTXO via local API proxy (avoids CORS)
@@ -533,11 +571,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             index: vout,
             witnessUtxo: {
               script: tx.outs[vout].script,
-              value: BigInt(utxo.value),
+              value: BigInt(freshUtxo.value),
             },
           });
 
-          totalInputValue += utxo.value;
+          totalInputValue += freshUtxo.value;
         }
 
         // Add recipient output
