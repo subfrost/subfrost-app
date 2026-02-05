@@ -18,7 +18,7 @@ const zh: Record<string, string> = {
 
   // Demo Banner
   'demo.warning': 'SUBFROST \u5e94\u7528\u5c1a\u672a\u53d1\u5e03\u3002',
-  'demo.description': '\u60a8\u5728\u8fd9\u91cc\u770b\u5230\u7684\u4efb\u4f55\u5185\u5bb9\u90fd\u53ef\u80fd\u4f1a\u66f4\u6539\u3002',
+  'demo.description': '在此期间，我们邀请您使用提供的邀请码创建一个新钱包。\n\n您在此应用中看到的任何内容都可能会更改。',
   'demo.understand': '\u6211\u5df2\u4e86\u89e3',
 
   // Coming Soon Overlay

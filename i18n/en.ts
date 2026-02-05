@@ -18,7 +18,7 @@ const en: Record<string, string> = {
 
   // Demo Banner
   'demo.warning': 'SUBFROST App is unreleased',
-  'demo.description': 'Anything you see here is subject to change.',
+  'demo.description': 'In the meantime, we invite you to create a new wallet with your provided invitation code.\n\nAnything you see across this app is subject to change.',
   'demo.understand': 'I Understand',
 
   // Coming Soon Overlay

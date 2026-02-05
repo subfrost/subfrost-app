@@ -45,7 +45,7 @@ export default function DemoBanner() {
 
         {/* Content */}
         <div className="px-6 py-4">
-          <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/60">
+          <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/60 whitespace-pre-line">
             {t('demo.description')}
           </p>
 

@@ -234,6 +234,20 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
             return aIsLp - bIsLp;
           });
         }
+        if (alkaneFilter === 'nfts') {
+          filtered = [...filtered].sort((a, b) => {
+            const parseNftName = (name: string) => {
+              const match = name.match(/^(.*?)(\d+)\s*$/);
+              if (match) return { prefix: match[1].trim(), num: parseInt(match[2], 10) };
+              return { prefix: name.trim(), num: -1 };
+            };
+            const pa = parseNftName(a.name);
+            const pb = parseNftName(b.name);
+            const cmp = pa.prefix.localeCompare(pb.prefix);
+            if (cmp !== 0) return cmp;
+            return pa.num - pb.num;
+          });
+        }
 
         const emptyLabels: Record<string, { title: string; hint: string }> = {
           tokens: { title: t('balances.noProtorune'), hint: t('balances.protoruneHint') },
