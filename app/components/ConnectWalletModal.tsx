@@ -970,71 +970,117 @@ export default function ConnectWalletModal() {
           {view === 'browser-extension' && (
             <div className="flex flex-col gap-3">
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
-                {/* Installed Wallets Section */}
-                {installedWallets.length > 0 ? (
-                  <div>
-                    <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.installedWallets')}</div>
-                    <div className="space-y-2">
-                      {installedWallets.map((wallet) => (
-                        <button
-                          key={wallet.id}
-                          onClick={async () => {
-                            setIsLoading(true);
-                            setError(null);
-                            try {
-                              await connectBrowserWalletFromContext(wallet.id);
-                              console.log('Connected to browser wallet:', wallet.name);
-                              handleCloseAndNavigate();
-                            } catch (err) {
-                              setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-                            } finally {
-                              setIsLoading(false);
-                            }
-                          }}
-                          disabled={isLoading}
-                          className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                        >
-                          <div className="flex items-center gap-3">
-                            <img src={wallet.icon} alt={wallet.name} className={`w-8 h-8 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
-                            <div className="text-left">
-                              <div className="font-bold text-[color:var(--sf-text)]">{wallet.name}</div>
-                            </div>
-                          </div>
-                          <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <div className="text-sm font-medium text-[color:var(--sf-text)]/60">{t('wallet.noBrowserWallets')}</div>
-                  </div>
-                )}
-
-                {/* Available Wallets Section */}
+                {/* Enabled wallet IDs - only these wallets are fully supported */}
                 {(() => {
+                  const ENABLED_WALLET_IDS = new Set(['oyl', 'okx', 'unisat', 'xverse']);
                   const installedIds = new Set(installedWallets.map(w => w.id));
+
+                  // Separate installed wallets into enabled and coming soon
+                  const enabledInstalledWallets = installedWallets.filter(w => ENABLED_WALLET_IDS.has(w.id));
+                  const comingSoonInstalledWallets = installedWallets.filter(w => !ENABLED_WALLET_IDS.has(w.id));
+
+                  // Separate available (not installed) wallets into enabled and coming soon
                   const notInstalledWallets = availableBrowserWallets.filter(w => !installedIds.has(w.id));
-                  if (notInstalledWallets.length === 0) return null;
+                  const enabledNotInstalledWallets = notInstalledWallets.filter(w => ENABLED_WALLET_IDS.has(w.id));
+                  const comingSoonNotInstalledWallets = notInstalledWallets.filter(w => !ENABLED_WALLET_IDS.has(w.id));
+
                   return (
-                    <div>
-                      <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.availableWallets')}</div>
-                      <div className="space-y-2">
-                        {notInstalledWallets.map((wallet) => (
-                          <a
-                            key={wallet.id}
-                            href={wallet.website}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
-                          >
-                            <img src={wallet.icon} alt={wallet.name} className={`w-6 h-6 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
-                            <span className="flex-1 text-left text-sm font-bold">{wallet.name}</span>
-                            <Download size={16} className="text-[color:var(--sf-text)]/40" />
-                          </a>
-                        ))}
-                      </div>
-                    </div>
+                    <>
+                      {/* Installed Wallets Section */}
+                      {installedWallets.length > 0 ? (
+                        <div>
+                          <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.installedWallets')}</div>
+                          <div className="space-y-2">
+                            {/* Enabled installed wallets */}
+                            {enabledInstalledWallets.map((wallet) => (
+                              <button
+                                key={wallet.id}
+                                onClick={async () => {
+                                  setIsLoading(true);
+                                  setError(null);
+                                  try {
+                                    await connectBrowserWalletFromContext(wallet.id);
+                                    console.log('Connected to browser wallet:', wallet.name);
+                                    handleCloseAndNavigate();
+                                  } catch (err) {
+                                    setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+                                  } finally {
+                                    setIsLoading(false);
+                                  }
+                                }}
+                                disabled={isLoading}
+                                className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <img src={wallet.icon} alt={wallet.name} className={`w-8 h-8 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
+                                  <div className="text-left">
+                                    <div className="font-bold text-[color:var(--sf-text)]">{wallet.name}</div>
+                                  </div>
+                                </div>
+                                <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
+                              </button>
+                            ))}
+                            {/* Coming soon installed wallets */}
+                            {comingSoonInstalledWallets.map((wallet) => (
+                              <div
+                                key={wallet.id}
+                                className="w-full flex items-center justify-between rounded-xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <img src={wallet.icon} alt={wallet.name} className={`w-8 h-8 opacity-40 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
+                                  <div className="text-left">
+                                    <div className="font-bold text-[color:var(--sf-text)]/30">{wallet.name}</div>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/30 animate-pulse">
+                                  {t('badge.comingSoon')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-4">
+                          <div className="text-sm font-medium text-[color:var(--sf-text)]/60">{t('wallet.noBrowserWallets')}</div>
+                        </div>
+                      )}
+
+                      {/* Available Wallets Section */}
+                      {notInstalledWallets.length > 0 && (
+                        <div>
+                          <div className="mb-2 text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.availableWallets')}</div>
+                          <div className="space-y-2">
+                            {/* Enabled not-installed wallets */}
+                            {enabledNotInstalledWallets.map((wallet) => (
+                              <a
+                                key={wallet.id}
+                                href={wallet.website}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
+                              >
+                                <img src={wallet.icon} alt={wallet.name} className={`w-6 h-6 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
+                                <span className="flex-1 text-left text-sm font-bold">{wallet.name}</span>
+                                <Download size={16} className="text-[color:var(--sf-text)]/40" />
+                              </a>
+                            ))}
+                            {/* Coming soon not-installed wallets */}
+                            {comingSoonNotInstalledWallets.map((wallet) => (
+                              <div
+                                key={wallet.id}
+                                className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
+                              >
+                                <img src={wallet.icon} alt={wallet.name} className={`w-6 h-6 opacity-40 ${wallet.id === 'oyl' ? 'rounded-md' : ''}`} />
+                                <span className="flex-1 text-left text-sm font-bold text-[color:var(--sf-text)]/30">{wallet.name}</span>
+                                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/30 animate-pulse">
+                                  {t('badge.comingSoon')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   );
                 })()}
               </div>
