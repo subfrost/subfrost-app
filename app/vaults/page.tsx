@@ -1,5 +1,5 @@
 import PageContent from '@/app/components/PageContent';
-import ComingSoonOverlay from '@/app/components/ComingSoonOverlay';
+import MainnetFeatureNotice from '@/app/components/MainnetFeatureNotice';
 import VaultShell from './VaultShell';
 import VaultsPageHeader from './VaultsPageHeader';
 
@@ -8,11 +8,11 @@ export const metadata = { title: 'Vaults' };
 export default function VaultsPage() {
   return (
     <PageContent>
-      <ComingSoonOverlay>
+      <MainnetFeatureNotice feature="vaults">
         <VaultsPageHeader>
           <VaultShell />
         </VaultsPageHeader>
-      </ComingSoonOverlay>
+      </MainnetFeatureNotice>
     </PageContent>
   );
 }

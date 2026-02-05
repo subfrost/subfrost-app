@@ -25,6 +25,12 @@ const en: Record<string, string> = {
   'comingSoon.title': 'Coming Soon',
   'comingSoon.description': 'These features are not yet ready, but please look around to see what we will be launching in the future.',
 
+  // Feature Coming Soon Notice (mainnet)
+  'featureNotice.title': 'Coming Soon',
+  'featureNotice.swap': 'Swap is currently in development and will be released when ready. Please take a look around to see what we are building.',
+  'featureNotice.vaults': 'Vaults are currently in development and will be released when ready. Please take a look around to see what we are building.',
+  'featureNotice.futures': 'Futures are currently in development and will be released when ready. Please take a look around to see what we are building.',
+
   // Footer
   'footer.copyright': '\u00a9 2025 Subzero Research Inc. All rights reserved.',
   'footer.terms': 'Terms of Service',

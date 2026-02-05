@@ -2,7 +2,7 @@
 
 import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageContent from '@/app/components/PageContent';
-import ComingSoonOverlay from '@/app/components/ComingSoonOverlay';
+import MainnetFeatureNotice from '@/app/components/MainnetFeatureNotice';
 import PageHeader from '@/app/components/PageHeader';
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -15,19 +15,11 @@ import FuturesHeaderTabs from './components/FuturesHeaderTabs';
 import { mockContracts } from './data/mockContracts';
 import { useFutures } from '@/hooks/useFutures';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useWallet } from '@/context/WalletContext';
-
-/** Conditionally wraps children with ComingSoonOverlay */
-function MaybeComingSoon({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
-  return enabled ? <ComingSoonOverlay>{children}</ComingSoonOverlay> : <>{children}</>;
-}
 
 type TabKey = 'markets' | 'positions';
 
 export default function FuturesPage() {
   const { t } = useTranslation();
-  const { network } = useWallet();
-  const isRegtest = network?.includes('regtest');
   const [activeTab, setActiveTab] = useState<TabKey>('markets');
   const [selectedContract, setSelectedContract] = useState<{ id: string; blocksLeft: number } | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -103,10 +95,10 @@ export default function FuturesPage() {
 
   return (
     <PageContent>
-      <MaybeComingSoon enabled={!isRegtest}>
+      <MainnetFeatureNotice feature="futures">
       <AlkanesMainWrapper header={
         <PageHeader
-          title={<>{t('futures.title')}{!isRegtest && <span className="block text-lg font-semibold text-[color:var(--sf-text)]/60">{t('futures.comingSoon')}</span>}</>}
+          title={t('futures.title')}
           subtitle={
             <div className="flex flex-col gap-3">
               {/* Row 1: Block info, futures count, Generate Future button, Info button */}
@@ -226,7 +218,7 @@ export default function FuturesPage() {
           <PositionsSection />
         )}
       </AlkanesMainWrapper>
-      </MaybeComingSoon>
+      </MainnetFeatureNotice>
     </PageContent>
   );
 }
