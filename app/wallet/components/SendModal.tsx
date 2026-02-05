@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
-import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins } from 'lucide-react';
+import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins, ExternalLink } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
@@ -1347,18 +1347,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         <CheckCircle size={64} className="text-green-400" />
         <div className="text-xl font-bold text-[color:var(--sf-text)]">{t('send.transactionSent')}</div>
 
-        <div className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
-          <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('send.transactionIdLabel')}</div>
-          <div data-testid="txid" className="text-sm text-[color:var(--sf-info-green-text)] break-all">{txid}</div>
-        </div>
-
         <a
-          href={`https://mempool.space/tx/${txid}`}
+          href={`https://espo.sh/tx/${txid}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[color:var(--sf-primary)] hover:opacity-80 text-sm"
+          className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer relative"
         >
-          {t('send.viewOnExplorer')}
+          <ExternalLink size={12} className="absolute top-3 right-3 text-[color:var(--sf-info-green-text)]/60" />
+          <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('send.transactionIdLabel')}</div>
+          <div data-testid="txid" className="text-sm text-[color:var(--sf-info-green-text)] break-all pr-6">{txid}</div>
         </a>
       </div>
 
