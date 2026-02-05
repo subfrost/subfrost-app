@@ -1251,7 +1251,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                                 if (pool) return `${pool.token0?.symbol} / ${pool.token1?.symbol} LP`;
                                 if (isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId])
                                   return `${positionMeta[alkane.alkaneId].depositTokenName} ${alkane.name}`;
-                                return alkane.symbol || alkane.name;
+                                return alkane.name;
                               })()}
                             </div>
                             <div className="text-[10px] text-[color:var(--sf-text)]/40">{alkane.alkaneId}</div>
@@ -1304,7 +1304,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
               />
               {selected && (
                 <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.symbol}
+                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.name}
                 </div>
               )}
             </div>
