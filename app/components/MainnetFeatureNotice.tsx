@@ -64,7 +64,7 @@ export default function MainnetFeatureNotice({ children, feature }: MainnetFeatu
           </div>
           {/* Content */}
           <div className="px-5 py-3">
-            <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/60">
+            <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/60 whitespace-pre-line">
               {t(`featureNotice.${feature}`)}
             </p>
 

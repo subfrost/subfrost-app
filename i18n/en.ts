@@ -18,7 +18,7 @@ const en: Record<string, string> = {
 
   // Demo Banner
   'demo.warning': 'SUBFROST App is unreleased',
-  'demo.description': 'Do not perform transactions until we officially release it. Anything you see here is subject to change.',
+  'demo.description': 'Anything you see here is subject to change.',
   'demo.understand': 'I Understand',
 
   // Coming Soon Overlay
@@ -27,9 +27,9 @@ const en: Record<string, string> = {
 
   // Feature Coming Soon Notice (mainnet)
   'featureNotice.title': 'Coming Soon',
-  'featureNotice.swap': 'Swap is currently in development and will be released when ready. Please take a look around to see what we are building.',
-  'featureNotice.vaults': 'Vaults are currently in development and will be released when ready. Please take a look around to see what we are building.',
-  'featureNotice.futures': 'Futures are currently in development and will be released when ready. Please take a look around to see what we are building.',
+  'featureNotice.swap': 'Swap is currently in development and will be released when ready.\n\nPlease take a look around to see what we are building.',
+  'featureNotice.vaults': 'Vaults are currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
+  'featureNotice.futures': 'Futures are currently in development and will be released when ready.\n\nPlease take a look around to see what we are building.',
 
   // Footer
   'footer.copyright': '\u00a9 2025 Subzero Research Inc. All rights reserved.',
