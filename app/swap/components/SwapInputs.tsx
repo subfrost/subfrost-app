@@ -256,8 +256,8 @@ export default function SwapInputs({
           <div
             className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
               fromFocused
-                ? "border border-[color:var(--sf-row-border)]"
-                : "border border-transparent"
+                ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
+                : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
             }`}
             onClick={() => fromInputRef.current?.focus()}
           >
@@ -449,8 +449,8 @@ export default function SwapInputs({
         <div
           className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] px-4 pb-4 pt-6 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
             toFocused
-              ? "border border-[color:var(--sf-row-border)]"
-              : "border border-transparent"
+              ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
+              : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
           }`}
           onClick={() => toInputRef.current?.focus()}
         >
