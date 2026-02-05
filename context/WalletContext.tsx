@@ -20,6 +20,9 @@ import {
   WalletConnector,
   ConnectedWallet,
   BrowserWalletInfo,
+  // Wallet adapter for signing
+  createWalletAdapter,
+  JsWalletAdapter,
 } from '@alkanes/ts-sdk';
 import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/constants/wallets';
 
@@ -269,6 +272,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     nativeSegwit?: { address: string; publicKey?: string };
     taproot?: { address: string; publicKey?: string };
   } | null>(null);
+  // SDK wallet adapter for signing - handles all wallet-specific logic
+  const [walletAdapter, setWalletAdapter] = useState<JsWalletAdapter | null>(null);
 
   // WalletConnector instance (lazy initialized)
   const walletConnectorRef = useRef<WalletConnector | null>(null);
@@ -351,6 +356,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             const connected = await connector.connect(walletInfo);
             setBrowserWallet(connected);
             setWalletType('browser');
+            // Create SDK wallet adapter for signing
+            const adapter = createWalletAdapter(connected);
+            setWalletAdapter(adapter);
             console.log('[WalletContext] Reconnected to browser wallet:', walletInfo.name);
 
             // Use cached addresses from localStorage instead of re-prompting
@@ -553,6 +561,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Clear any browser wallet connection
     setBrowserWallet(null);
     setBrowserWalletAddresses(null);
+    setWalletAdapter(null); // Clear SDK wallet adapter
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
 
@@ -585,6 +594,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Clear any browser wallet connection
     setBrowserWallet(null);
     setBrowserWalletAddresses(null);
+    setWalletAdapter(null); // Clear SDK wallet adapter
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
 
@@ -628,6 +638,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Clear any browser wallet connection
     setBrowserWallet(null);
     setBrowserWalletAddresses(null);
+    setWalletAdapter(null); // Clear SDK wallet adapter
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
 
@@ -681,6 +692,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
     setBrowserWallet(null);
     setBrowserWalletAddresses(null);
+    setWalletAdapter(null); // Clear SDK wallet adapter
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
     localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
@@ -1131,6 +1143,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       setWalletType('browser');
       setIsConnectModalOpen(false);
 
+      // Create SDK wallet adapter for signing - handles all wallet-specific logic
+      const adapter = createWalletAdapter(connected);
+      setWalletAdapter(adapter);
+
       // Cache additional addresses so auto-reconnect doesn't need to re-prompt
       if (additionalAddresses.nativeSegwit || additionalAddresses.taproot) {
         localStorage.setItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES, JSON.stringify(additionalAddresses));
@@ -1139,6 +1155,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       console.log('[WalletContext] Connected to browser wallet:', walletInfo.name);
       console.log('[WalletContext] Primary address:', connected.address);
       console.log('[WalletContext] Additional addresses:', additionalAddresses);
+      console.log('[WalletContext] Created wallet adapter:', adapter.getInfo().name);
 
       // Auto-detect network from the wallet's addresses and switch if needed
       const addrToCheck = additionalAddresses.taproot?.address
@@ -1157,108 +1174,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   }, [getWalletConnector]);
 
   // Sign PSBT - supports both keystore and browser wallets
+  // Uses SDK wallet adapters for all browser wallet signing
   const signPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
-    // For browser wallets
-    if (browserWallet && walletType === 'browser') {
+    // For browser wallets - use the SDK adapter which handles all wallet-specific logic
+    if (walletAdapter && walletType === 'browser') {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      // OYL has a different signPsbt API: { psbt, finalize?, broadcast? } => { psbt, txid? }
-      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
-      if (connectedWalletId === 'oyl') {
-        const oylProvider = (window as any).oyl;
-        if (!oylProvider) throw new Error('OYL wallet not available');
-        const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
-        const signedBuffer = Buffer.from(result.psbt, 'hex');
-        return signedBuffer.toString('base64');
-      }
+      console.log('[WalletContext] Signing PSBT with SDK adapter');
+      const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
 
-      // Tokeo uses base64 and returns base64: signPsbt(psbtBase64, options) => signedPsbtBase64
-      if (connectedWalletId === 'tokeo') {
-        const tokeoProvider = (window as any).tokeo?.bitcoin;
-        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
-        const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
-        return signedBase64;
-      }
-
-      // Orange wallet uses signPsbt with { psbtBase64, finalize?, broadcast? }
-      if (connectedWalletId === 'orange') {
-        const win = window as any;
-        const orangeProvider = win.OrangeBitcoinProvider ||
-          win.OrangecryptoProviders?.BitcoinProvider ||
-          win.OrangeWalletProviders?.OrangeBitcoinProvider;
-        if (!orangeProvider) throw new Error('Orange wallet not available');
-
-        // Orange may use signPsbt({ psbtBase64, ... }) or signPsbt(psbtHex, options)
-        if (typeof orangeProvider.signPsbt === 'function') {
-          const result = await orangeProvider.signPsbt({ psbtBase64, finalize: false, broadcast: false });
-          // Result may be { psbtBase64 } or { psbt } or just the signed psbt string
-          const signedPsbt = result?.psbtBase64 || result?.psbt || result;
-          if (typeof signedPsbt === 'string') {
-            // Check if it's hex or base64
-            if (/^[0-9a-fA-F]+$/.test(signedPsbt)) {
-              return Buffer.from(signedPsbt, 'hex').toString('base64');
-            }
-            return signedPsbt;
-          }
-        }
-        throw new Error('Orange wallet signPsbt failed');
-      }
-
-      // Magic Eden uses signPsbt with hex and returns hex
-      if (connectedWalletId === 'magic-eden') {
-        const magicEdenProvider = (window as any).magicEden?.bitcoin;
-        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
-        const signedHex = await magicEdenProvider.signPsbt(psbtHex, { finalize: false, broadcast: false });
-        const signedBuffer = Buffer.from(signedHex, 'hex');
-        return signedBuffer.toString('base64');
-      }
-
-      // Xverse: Call Sats Connect API directly with both address types
-      if (connectedWalletId === 'xverse') {
-        const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
-        if (!xverseProvider) throw new Error('Xverse wallet not available');
-
-        const { Psbt } = await import('bitcoinjs-lib');
-        const psbt = Psbt.fromBase64(psbtBase64);
-        const signInputs: Record<string, number[]> = {};
-        const taprootAddr = browserWalletAddresses?.taproot?.address;
-        const segwitAddr = browserWalletAddresses?.nativeSegwit?.address;
-
-        for (let i = 0; i < psbt.inputCount; i++) {
-          const input = psbt.data.inputs[i];
-          if (input.witnessUtxo) {
-            const script = input.witnessUtxo.script;
-            if (script.length === 34 && script[0] === 0x51 && taprootAddr) {
-              if (!signInputs[taprootAddr]) signInputs[taprootAddr] = [];
-              signInputs[taprootAddr].push(i);
-            } else if (script.length === 22 && script[0] === 0x00 && segwitAddr) {
-              if (!signInputs[segwitAddr]) signInputs[segwitAddr] = [];
-              signInputs[segwitAddr].push(i);
-            }
-          } else if (input.tapInternalKey && taprootAddr) {
-            if (!signInputs[taprootAddr]) signInputs[taprootAddr] = [];
-            signInputs[taprootAddr].push(i);
-          }
-        }
-
-        if (Object.keys(signInputs).length === 0) return psbtBase64;
-
-        const response = await xverseProvider.request('signPsbt', {
-          psbt: psbtBase64,
-          signInputs,
-          broadcast: false,
-        });
-
-        if (response.status !== 'success' || !response.result?.psbt) {
-          throw new Error(response.error?.message || 'Xverse signing failed');
-        }
-
-        return response.result.psbt; // base64
-      }
-
-      // Standard browser wallets expect hex, convert base64 to hex
-      const signedHex = await browserWallet.signPsbt(psbtHex);
       // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
       return signedBuffer.toString('base64');
@@ -1269,107 +1194,19 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       throw new Error('Wallet not connected');
     }
     return wallet.signPsbt(psbtBase64);
-  }, [wallet, browserWallet, walletType, browserWalletAddresses]);
+  }, [wallet, walletAdapter, walletType]);
 
   // Sign PSBT with taproot inputs (BIP86 derivation)
-  // Uses dynamic import to avoid SSR issues with crypto libraries
+  // Uses SDK wallet adapters for browser wallets, BIP86 derivation for keystore
   const signTaprootPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
-    // For browser wallets, they handle taproot signing internally
-    if (browserWallet && walletType === 'browser') {
+    // For browser wallets - use the SDK adapter which handles all wallet-specific logic
+    if (walletAdapter && walletType === 'browser') {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      // OYL signs ALL inputs (taproot + segwit) in a single signPsbt call.
-      // signSegwitPsbt already called OYL and fully signed the PSBT.
-      // Calling OYL again causes "Can not add duplicate data to array".
-      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
-      if (connectedWalletId === 'oyl') {
-        return psbtBase64; // Already fully signed by signSegwitPsbt
-      }
+      console.log('[WalletContext] Signing taproot PSBT with SDK adapter');
+      const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
 
-      // Tokeo uses base64 and returns base64
-      if (connectedWalletId === 'tokeo') {
-        const tokeoProvider = (window as any).tokeo?.bitcoin;
-        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
-        const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
-        return signedBase64;
-      }
-
-      // Orange wallet
-      if (connectedWalletId === 'orange') {
-        const win = window as any;
-        const orangeProvider = win.OrangeBitcoinProvider ||
-          win.OrangecryptoProviders?.BitcoinProvider ||
-          win.OrangeWalletProviders?.OrangeBitcoinProvider;
-        if (!orangeProvider) throw new Error('Orange wallet not available');
-
-        if (typeof orangeProvider.signPsbt === 'function') {
-          const result = await orangeProvider.signPsbt({ psbtBase64, finalize: false, broadcast: false });
-          const signedPsbt = result?.psbtBase64 || result?.psbt || result;
-          if (typeof signedPsbt === 'string') {
-            if (/^[0-9a-fA-F]+$/.test(signedPsbt)) {
-              return Buffer.from(signedPsbt, 'hex').toString('base64');
-            }
-            return signedPsbt;
-          }
-        }
-        throw new Error('Orange wallet signPsbt failed');
-      }
-
-      // Magic Eden
-      if (connectedWalletId === 'magic-eden') {
-        const magicEdenProvider = (window as any).magicEden?.bitcoin;
-        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
-        const signedHex = await magicEdenProvider.signPsbt(psbtHex, { finalize: false, broadcast: false });
-        const signedBuffer = Buffer.from(signedHex, 'hex');
-        return signedBuffer.toString('base64');
-      }
-
-      // Xverse: Call Sats Connect API directly with proper signInputs mapping.
-      // The SDK's ConnectedWallet.signPsbt has bugs for Xverse:
-      // 1. Passes signInputs: undefined (no input-to-address mapping)
-      // 2. Sends hex when Xverse expects base64
-      // 3. Maps all inputs to one address instead of separating taproot/segwit
-      if (connectedWalletId === 'xverse') {
-        const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
-        if (!xverseProvider) throw new Error('Xverse wallet not available');
-
-        const taprootAddr = browserWalletAddresses?.taproot?.address;
-        if (!taprootAddr) return psbtBase64; // No taproot address, nothing to sign
-
-        // Parse PSBT to find taproot input indices (P2TR: OP_1 + 32-byte push)
-        const { Psbt } = await import('bitcoinjs-lib');
-        const psbt = Psbt.fromBase64(psbtBase64);
-        const taprootIndices: number[] = [];
-        for (let i = 0; i < psbt.inputCount; i++) {
-          const input = psbt.data.inputs[i];
-          if (input.witnessUtxo) {
-            const script = input.witnessUtxo.script;
-            if (script.length === 34 && script[0] === 0x51) {
-              taprootIndices.push(i);
-            }
-          } else if (input.tapInternalKey) {
-            taprootIndices.push(i);
-          }
-        }
-
-        if (taprootIndices.length === 0) return psbtBase64;
-
-        const response = await xverseProvider.request('signPsbt', {
-          psbt: psbtBase64,
-          signInputs: { [taprootAddr]: taprootIndices },
-          broadcast: false,
-        });
-
-        if (response.status !== 'success' || !response.result?.psbt) {
-          throw new Error(response.error?.message || 'Xverse signing failed');
-        }
-
-        return response.result.psbt; // base64
-      }
-
-      // Standard browser wallets expect hex
-      const signedHex = await browserWallet.signPsbt(psbtHex);
       // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
       return signedBuffer.toString('base64');
@@ -1458,102 +1295,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return psbt.toBase64();
-  }, [wallet, network, browserWallet, walletType, browserWalletAddresses]);
+  }, [wallet, network, walletAdapter, walletType]);
 
   // Sign PSBT with segwit inputs (BIP84 derivation)
-  // Uses dynamic import to avoid SSR issues with crypto libraries
+  // Uses SDK wallet adapters for browser wallets, BIP84 derivation for keystore
   const signSegwitPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
-    // For browser wallets, they handle segwit signing internally
-    if (browserWallet && walletType === 'browser') {
+    // For browser wallets - use the SDK adapter which handles all wallet-specific logic
+    if (walletAdapter && walletType === 'browser') {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      // OYL has a different signPsbt API
-      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
-      if (connectedWalletId === 'oyl') {
-        const oylProvider = (window as any).oyl;
-        if (!oylProvider) throw new Error('OYL wallet not available');
-        const result = await oylProvider.signPsbt({ psbt: psbtHex, finalize: false, broadcast: false });
-        const signedBuffer = Buffer.from(result.psbt, 'hex');
-        return signedBuffer.toString('base64');
-      }
+      console.log('[WalletContext] Signing segwit PSBT with SDK adapter');
+      const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
 
-      // Tokeo uses base64 and returns base64
-      if (connectedWalletId === 'tokeo') {
-        const tokeoProvider = (window as any).tokeo?.bitcoin;
-        if (!tokeoProvider) throw new Error('Tokeo wallet not available');
-        const signedBase64 = await tokeoProvider.signPsbt(psbtBase64, { autoFinalize: false });
-        return signedBase64;
-      }
-
-      // Orange wallet
-      if (connectedWalletId === 'orange') {
-        const win = window as any;
-        const orangeProvider = win.OrangeBitcoinProvider ||
-          win.OrangecryptoProviders?.BitcoinProvider ||
-          win.OrangeWalletProviders?.OrangeBitcoinProvider;
-        if (!orangeProvider) throw new Error('Orange wallet not available');
-
-        if (typeof orangeProvider.signPsbt === 'function') {
-          const result = await orangeProvider.signPsbt({ psbtBase64, finalize: false, broadcast: false });
-          const signedPsbt = result?.psbtBase64 || result?.psbt || result;
-          if (typeof signedPsbt === 'string') {
-            if (/^[0-9a-fA-F]+$/.test(signedPsbt)) {
-              return Buffer.from(signedPsbt, 'hex').toString('base64');
-            }
-            return signedPsbt;
-          }
-        }
-        throw new Error('Orange wallet signPsbt failed');
-      }
-
-      // Magic Eden
-      if (connectedWalletId === 'magic-eden') {
-        const magicEdenProvider = (window as any).magicEden?.bitcoin;
-        if (!magicEdenProvider) throw new Error('Magic Eden wallet not available');
-        const signedHex = await magicEdenProvider.signPsbt(psbtHex, { finalize: false, broadcast: false });
-        const signedBuffer = Buffer.from(signedHex, 'hex');
-        return signedBuffer.toString('base64');
-      }
-
-      // Xverse: Call Sats Connect API directly (same reasons as signTaprootPsbt)
-      if (connectedWalletId === 'xverse') {
-        const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
-        if (!xverseProvider) throw new Error('Xverse wallet not available');
-
-        const segwitAddr = browserWalletAddresses?.nativeSegwit?.address;
-        if (!segwitAddr) return psbtBase64; // No segwit address, nothing to sign
-
-        // Parse PSBT to find segwit input indices (P2WPKH: OP_0 + 20-byte push)
-        const { Psbt } = await import('bitcoinjs-lib');
-        const psbt = Psbt.fromBase64(psbtBase64);
-        const segwitIndices: number[] = [];
-        for (let i = 0; i < psbt.inputCount; i++) {
-          const input = psbt.data.inputs[i];
-          if (input.witnessUtxo) {
-            const script = input.witnessUtxo.script;
-            if (script.length === 22 && script[0] === 0x00) {
-              segwitIndices.push(i);
-            }
-          }
-        }
-
-        if (segwitIndices.length === 0) return psbtBase64;
-
-        const response = await xverseProvider.request('signPsbt', {
-          psbt: psbtBase64,
-          signInputs: { [segwitAddr]: segwitIndices },
-          broadcast: false,
-        });
-
-        if (response.status !== 'success' || !response.result?.psbt) {
-          throw new Error(response.error?.message || 'Xverse signing failed');
-        }
-
-        return response.result.psbt; // base64
-      }
-
-      const signedHex = await browserWallet.signPsbt(psbtHex);
+      // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
       return signedBuffer.toString('base64');
     }
@@ -1633,70 +1388,19 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return psbt.toBase64();
-  }, [wallet, network, browserWallet, walletType, browserWalletAddresses]);
+  }, [wallet, network, walletAdapter, walletType]);
 
   // Sign multiple PSBTs - supports both keystore and browser wallets
+  // Uses SDK wallet adapters for all browser wallet signing
   const signPsbts = useCallback(async (params: { psbts: string[] }): Promise<{ signedPsbts: string[] }> => {
-    // For browser wallets
-    if (browserWallet && walletType === 'browser') {
-      const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
-
-      // Xverse: sign each PSBT via Sats Connect API with proper signInputs
-      if (connectedWalletId === 'xverse') {
-        const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
-        if (!xverseProvider) throw new Error('Xverse wallet not available');
-
-        const { Psbt } = await import('bitcoinjs-lib');
-        const taprootAddr = browserWalletAddresses?.taproot?.address;
-        const segwitAddr = browserWalletAddresses?.nativeSegwit?.address;
-
-        const signedPsbts: string[] = [];
-        for (const psbtBase64 of params.psbts) {
-          const psbt = Psbt.fromBase64(psbtBase64);
-          const signInputs: Record<string, number[]> = {};
-
-          for (let i = 0; i < psbt.inputCount; i++) {
-            const input = psbt.data.inputs[i];
-            if (input.witnessUtxo) {
-              const script = input.witnessUtxo.script;
-              if (script.length === 34 && script[0] === 0x51 && taprootAddr) {
-                if (!signInputs[taprootAddr]) signInputs[taprootAddr] = [];
-                signInputs[taprootAddr].push(i);
-              } else if (script.length === 22 && script[0] === 0x00 && segwitAddr) {
-                if (!signInputs[segwitAddr]) signInputs[segwitAddr] = [];
-                signInputs[segwitAddr].push(i);
-              }
-            } else if (input.tapInternalKey && taprootAddr) {
-              if (!signInputs[taprootAddr]) signInputs[taprootAddr] = [];
-              signInputs[taprootAddr].push(i);
-            }
-          }
-
-          if (Object.keys(signInputs).length === 0) {
-            signedPsbts.push(psbtBase64);
-            continue;
-          }
-
-          const response = await xverseProvider.request('signPsbt', {
-            psbt: psbtBase64,
-            signInputs,
-            broadcast: false,
-          });
-
-          if (response.status !== 'success' || !response.result?.psbt) {
-            throw new Error(response.error?.message || 'Xverse signing failed');
-          }
-
-          signedPsbts.push(response.result.psbt);
-        }
-        return { signedPsbts };
-      }
-
+    // For browser wallets - use the SDK adapter which handles all wallet-specific logic
+    if (walletAdapter && walletType === 'browser') {
+      console.log('[WalletContext] Signing multiple PSBTs with SDK adapter');
       const signedPsbts = await Promise.all(
         params.psbts.map(async (psbtBase64) => {
           const psbtBuffer = Buffer.from(psbtBase64, 'base64');
           const psbtHex = psbtBuffer.toString('hex');
-          const signedHex = await browserWallet.signPsbt(psbtHex);
+          const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
           const signedBuffer = Buffer.from(signedHex, 'hex');
           return signedBuffer.toString('base64');
         })
@@ -1710,7 +1414,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
     const signedPsbts = await Promise.all(params.psbts.map(psbt => wallet.signPsbt(psbt)));
     return { signedPsbts };
-  }, [wallet, browserWallet, walletType, browserWalletAddresses]);
+  }, [wallet, walletAdapter, walletType]);
 
   // Sign message - supports both keystore and browser wallets
   const signMessage = useCallback(async (message: string): Promise<string> => {
