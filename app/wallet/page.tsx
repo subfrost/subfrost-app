@@ -176,8 +176,8 @@ export default function WalletDashboardPage() {
                           <Icon size={14} />
                           {tab.mobileLabel ? (
                             <>
-                              <span className="whitespace-nowrap sm:hidden">{tab.mobileLabel}</span>
-                              <span className="whitespace-nowrap hidden sm:inline">{tab.shortLabel}</span>
+                              <span className="whitespace-nowrap sm:hidden lg:inline">{tab.mobileLabel}</span>
+                              <span className="whitespace-nowrap hidden sm:inline lg:hidden">{tab.shortLabel}</span>
                             </>
                           ) : (
                             <span className="whitespace-nowrap">{tab.shortLabel}</span>
