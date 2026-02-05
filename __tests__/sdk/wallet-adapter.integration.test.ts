@@ -839,8 +839,8 @@ describe('Wallet Adapter Integration Tests', () => {
         network: bitcoin.networks.regtest,
       }).output!;
 
-      expect(detectScriptType(segwitScript)).toBe('segwit');
-      expect(detectScriptType(taprootScript)).toBe('taproot');
+      expect(detectScriptType(Buffer.from(segwitScript))).toBe('segwit');
+      expect(detectScriptType(Buffer.from(taprootScript))).toBe('taproot');
     });
   });
 

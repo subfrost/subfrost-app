@@ -60,6 +60,8 @@ describe('POST /api/invite-codes/validate', () => {
       isActive: true,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     const request = createMockRequest({ code: 'testcode' });
@@ -104,6 +106,8 @@ describe('POST /api/invite-codes/validate', () => {
       isActive: false,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     const request = createMockRequest({ code: 'OLDCODE' });
@@ -132,6 +136,8 @@ describe('POST /api/invite-codes/validate', () => {
       isActive: true,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     const request = createMockRequest({ code: 'MixedCase' });
@@ -151,6 +157,8 @@ describe('POST /api/invite-codes/validate', () => {
       isActive: true,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     const request = createMockRequest({ code: 'NEWCODE' });
@@ -172,6 +180,8 @@ describe('POST /api/invite-codes/redeem', () => {
       isActive: true,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
@@ -246,6 +256,8 @@ describe('POST /api/invite-codes/redeem', () => {
       isActive: false,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     const request = createMockRequest({
@@ -267,6 +279,8 @@ describe('POST /api/invite-codes/redeem', () => {
       isActive: true,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
@@ -297,6 +311,8 @@ describe('POST /api/invite-codes/redeem', () => {
       isActive: true,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
@@ -338,6 +354,8 @@ describe('Invite Code Flow Integration', () => {
       isActive: true,
       description: null,
       createdAt: new Date(),
+      parentCodeId: null,
+      ownerTaprootAddress: null,
     });
 
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
