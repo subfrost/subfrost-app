@@ -122,10 +122,20 @@ model InviteCode {
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at")
 
+  // Hierarchy: link to parent code (null for top-level leader codes)
+  parentCodeId  String?   @map("parent_code_id")
+  parentCode    InviteCode?  @relation("CodeHierarchy", fields: [parentCodeId], references: [id])
+  childCodes    InviteCode[] @relation("CodeHierarchy")
+
+  // Owner of this code (the leader/sub-leader's taproot address)
+  ownerTaprootAddress  String?   @map("owner_taproot_address")
+
   redemptions InviteCodeRedemption[]
 
   @@index([code])
   @@index([isActive])
+  @@index([parentCodeId])
+  @@index([ownerTaprootAddress])
   @@map("invite_codes")
 }
 

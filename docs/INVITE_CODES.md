@@ -25,7 +25,9 @@ InviteCode
 ├── code (unique, uppercase)
 ├── description (optional admin note)
 ├── isActive (boolean, default true)
-└── createdAt
+├── createdAt
+├── parentCodeId (optional, for hierarchy)
+└── ownerTaprootAddress (optional, leader's address)
 
 InviteCodeRedemption
 ├── id (cuid)
@@ -34,6 +36,125 @@ InviteCodeRedemption
 ├── segwitAddress (optional)
 ├── taprootPubkey (optional)
 └── redeemedAt
+```
+
+## Code Hierarchy (Leader/Sub-Leader System)
+
+Invite codes support a hierarchical structure for tracking referral trees:
+
+- **Leader codes** - Top-level codes with no parent (e.g., `WEATHER`)
+- **Sub-leader codes** - Codes linked to a parent code (e.g., `WEATHER2` under `WEATHER`)
+
+### How It Works
+
+1. A **leader** is given a top-level code (e.g., `WEATHER`) with their taproot address as owner
+2. Users sign up with `WEATHER` → redemption is recorded
+3. A user becomes a **sub-leader** and gets their own code (e.g., `WEATHER2`) linked to `WEATHER`
+4. Users sign up with `WEATHER2` → redemption is recorded under `WEATHER2`
+5. All addresses can be aggregated up the tree to see total performance under `WEATHER`
+
+### Example Tree Structure
+
+```
+WEATHER (owner: bc1p_leader...) [5 redemptions]
+├── WEATHER2 (owner: bc1p_subleader1...) [3 redemptions]
+│   └── WEATHER2A (owner: bc1p_member...) [1 redemption]
+└── WEATHER3 (owner: bc1p_subleader2...) [2 redemptions]
+```
+
+### Hierarchy Helper Script
+
+Use `scripts/invite-code-hierarchy.ts` to manage and query the hierarchy:
+
+```bash
+# Show tree structure for a code
+npx tsx scripts/invite-code-hierarchy.ts tree WEATHER
+
+# Get all addresses under a code hierarchy (owners + redemptions)
+npx tsx scripts/invite-code-hierarchy.ts addresses WEATHER
+
+# Add a top-level leader code
+npx tsx scripts/invite-code-hierarchy.ts add-code WEATHER "" "bc1p_leader_address" "Leader description"
+
+# Add a sub-leader code under a parent
+npx tsx scripts/invite-code-hierarchy.ts add-code WEATHER2 WEATHER "bc1p_subleader_address" "Sub-leader"
+
+# Update owner address for existing code
+npx tsx scripts/invite-code-hierarchy.ts set-owner EARLYACCESS "bc1p..."
+
+# Set parent for existing code (create hierarchy)
+npx tsx scripts/invite-code-hierarchy.ts set-parent WEATHER2 WEATHER
+```
+
+### Aggregating Data
+
+The `addresses` command returns all taproot addresses in a hierarchy tree:
+
+```bash
+npx tsx scripts/invite-code-hierarchy.ts addresses WEATHER
+```
+
+Output:
+```
+Addresses under WEATHER hierarchy:
+==================================================
+
+Owner addresses (3):
+  bc1p_leader_address
+  bc1p_subleader1_address
+  bc1p_subleader2_address
+
+Redemption addresses (11):
+  bc1p_user1 (code: WEATHER)
+  bc1p_user2 (code: WEATHER2)
+  ...
+
+Total unique taproot addresses: 14
+```
+
+Use these addresses to query on-chain data (e.g., DIESEL/frBTC LP balances) for the entire group.
+
+### SQL Queries for Hierarchy
+
+**Get all codes in a hierarchy (recursive CTE):**
+
+```sql
+WITH RECURSIVE code_tree AS (
+  -- Base case: the root code
+  SELECT id, code, parent_code_id, owner_taproot_address, 0 as depth
+  FROM invite_codes
+  WHERE code = 'WEATHER'
+
+  UNION ALL
+
+  -- Recursive case: child codes
+  SELECT ic.id, ic.code, ic.parent_code_id, ic.owner_taproot_address, ct.depth + 1
+  FROM invite_codes ic
+  JOIN code_tree ct ON ic.parent_code_id = ct.id
+)
+SELECT * FROM code_tree ORDER BY depth, code;
+```
+
+**Get all addresses under a code tree:**
+
+```sql
+WITH RECURSIVE code_tree AS (
+  SELECT id FROM invite_codes WHERE code = 'WEATHER'
+  UNION ALL
+  SELECT ic.id FROM invite_codes ic JOIN code_tree ct ON ic.parent_code_id = ct.id
+)
+SELECT DISTINCT taproot_address
+FROM (
+  -- Owner addresses
+  SELECT owner_taproot_address as taproot_address
+  FROM invite_codes WHERE id IN (SELECT id FROM code_tree) AND owner_taproot_address IS NOT NULL
+
+  UNION
+
+  -- Redemption addresses
+  SELECT taproot_address
+  FROM invite_code_redemptions WHERE code_id IN (SELECT id FROM code_tree)
+) addresses;
 ```
 
 ## Adding New Invite Codes
