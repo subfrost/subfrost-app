@@ -313,8 +313,8 @@ async function processCommand(input: string): Promise<void> {
         state.session = session;
         spinner.succeed('Browser session started');
 
-        // Navigate to subfrost app by default
-        const defaultUrl = 'https://subfrost.io';
+        // Navigate to subfrost staging app by default
+        const defaultUrl = 'https://staging-app.subfrost.io';
         console.log(chalk.gray(`Navigating to ${defaultUrl}...`));
         await session.navigate(defaultUrl);
         state.currentUrl = defaultUrl;
