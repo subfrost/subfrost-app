@@ -58,9 +58,9 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths;
     }
 
-    // Priority 3: Special handling for DIESEL (2:0) — always use mainnet CDN icon
+    // Priority 3: Special handling for DIESEL (2:0) — always use Ordiscan CDN icon
     if (id === '2:0' || symbolLower === 'diesel') {
-      paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png');
+      paths.push('https://cdn.ordiscan.com/alkanes/2_0');
       return paths;
     }
 
@@ -81,10 +81,10 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       paths.push(iconUrl);
     }
 
-    // Priority 6: Oyl CDN for Alkanes tokens (proper token icons)
+    // Priority 6: Ordiscan CDN for Alkanes tokens (proper token icons)
     if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
-      const urlSafeId = id.replace(/:/g, '-');
-      paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+      const urlSafeId = id.replace(/:/g, '_');
+      paths.push(`https://cdn.ordiscan.com/alkanes/${urlSafeId}`);
     }
 
     // Priority 7: Try local token assets by symbol (only if we know the icon exists)

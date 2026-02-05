@@ -126,7 +126,7 @@ export default function MyWalletSwaps() {
   const getName = (id: string | undefined) => {
     if (!id) return '';
     const d = displayMap?.[id];
-    return d?.symbol || d?.name || KNOWN_TOKEN_NAMES[id] || id;
+    return d?.name || d?.symbol || KNOWN_TOKEN_NAMES[id] || '';
   };
 
   return (

@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import type { PoolSummary } from "../types";
-import TokenIcon from "@/app/components/TokenIcon";
-import { useWallet } from "@/context/WalletContext";
 import CandleChart from "./CandleChart";
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePoolEspoCandles, type CandleTimeframe } from '@/hooks/usePoolEspoCandles';
@@ -28,7 +26,6 @@ const INITIAL_VISIBLE_BARS: Record<CandleTimeframe, number> = {
 };
 
 export default function PoolDetailsCard({ pool }: Props) {
-  const { network } = useWallet();
   const { t } = useTranslation();
   const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
   const [isTimeframeLoading, setIsTimeframeLoading] = useState(false);
@@ -97,43 +94,6 @@ export default function PoolDetailsCard({ pool }: Props) {
             resetKey={`${pool?.id ?? 'no-pool'}-${timeframe}`}
             initialVisibleBars={INITIAL_VISIBLE_BARS[timeframe]}
           />
-
-          {/* Pool details - hidden on mobile/tablet */}
-          <div className="hidden lg:block">
-            {/* Token pair and stats row */}
-            <div className="mt-5 flex items-center gap-3 mb-4">
-              <div className="flex -space-x-2">
-                <TokenIcon key={pool.token0.id} symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="lg" network={network} />
-                <TokenIcon key={pool.token1.id} symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="lg" network={network} />
-              </div>
-              <span className="text-sm font-bold text-[color:var(--sf-text)]">{pool.pairLabel}</span>
-              <div className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
-                {formatPercent(pool.apr)}
-              </div>
-            </div>
-
-            {/* Stats columns: TVL | 24h Volume | 30d Volume */}
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">{t('pool.tvl')}</div>
-                <div className="text-lg font-bold text-[color:var(--sf-primary)]">
-                  {formatUsd(pool.tvlUsd)}
-                </div>
-              </div>
-              <div>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">{t('pool.volume24h')}</div>
-                <div className="text-lg font-bold text-[color:var(--sf-text)]">
-                  {formatUsd(pool.vol24hUsd)}
-                </div>
-              </div>
-              <div>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">{t('pool.volume30d')}</div>
-                <div className="text-lg font-bold text-[color:var(--sf-text)]">
-                  {formatUsd(pool.vol30dUsd)}
-                </div>
-              </div>
-            </div>
-          </div>
         </>
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -148,14 +108,4 @@ export default function PoolDetailsCard({ pool }: Props) {
       )}
     </div>
   );
-}
-
-function formatUsd(v?: number) {
-  if (v == null) return "-";
-  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
-}
-
-function formatPercent(v?: number) {
-  if (v == null) return "-";
-  return `${v.toFixed(1)}%`;
 }

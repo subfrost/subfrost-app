@@ -439,12 +439,12 @@ function getNftImagePaths(symbol: string, id: string, network: string): string[]
     return paths;
   }
   if (id === '2:0' || symbolLower === 'diesel') {
-    paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png');
+    paths.push('https://cdn.ordiscan.com/alkanes/2_0');
     return paths;
   }
   if (id && /^\d+:\d+/.test(id)) {
-    const urlSafeId = id.replace(/:/g, '-');
-    paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+    const urlSafeId = id.replace(/:/g, '_');
+    paths.push(`https://cdn.ordiscan.com/alkanes/${urlSafeId}`);
   }
   return paths;
 }

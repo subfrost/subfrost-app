@@ -1591,14 +1591,14 @@ const SEND_NFT_GRADIENTS = [
   'from-red-400 to-red-600',
 ];
 
-function getSendNftImagePaths(symbol: string, id: string, network: string): string[] {
+function getSendNftImagePaths(symbol: string, id: string, _network: string): string[] {
   const paths: string[] = [];
   const symbolLower = symbol?.toLowerCase() || '';
   if (symbolLower === 'frbtc' || id === '32:0') { paths.push('/tokens/frbtc.svg'); return paths; }
-  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://asset.oyl.gg/alkanes/mainnet/2-0.png'); return paths; }
+  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://cdn.ordiscan.com/alkanes/2_0'); return paths; }
   if (id && /^\d+:\d+/.test(id)) {
-    const urlSafeId = id.replace(/:/g, '-');
-    paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
+    const urlSafeId = id.replace(/:/g, '_');
+    paths.push(`https://cdn.ordiscan.com/alkanes/${urlSafeId}`);
   }
   return paths;
 }

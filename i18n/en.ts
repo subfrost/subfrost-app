@@ -27,9 +27,9 @@ const en: Record<string, string> = {
 
   // Feature Coming Soon Notice (mainnet)
   'featureNotice.title': 'Coming Soon',
-  'featureNotice.swap': 'Swap is currently in development and will be released when ready.\n\nPlease take a look around to see what we are building.',
+  'featureNotice.swap': 'Swap is currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
   'featureNotice.vaults': 'Vaults are currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
-  'featureNotice.futures': 'Futures are currently in development and will be released when ready.\n\nPlease take a look around to see what we are building.',
+  'featureNotice.futures': 'Futures are currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
 
   // Footer
   'footer.copyright': '\u00a9 2025 Subzero Research Inc. All rights reserved.',

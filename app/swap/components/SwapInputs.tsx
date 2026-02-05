@@ -281,7 +281,7 @@ export default function SwapInputs({
                 />
               )}
               <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                {from?.symbol ?? t("swap.select")}
+                {from?.name || from?.symbol || t("swap.select")}
               </span>
               <ChevronDown
                 size={16}
@@ -474,7 +474,7 @@ export default function SwapInputs({
               />
             )}
             <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {to?.symbol ?? t("swap.select")}
+              {to?.name || to?.symbol || t("swap.select")}
             </span>
             <ChevronDown
               size={16}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useWallet } from '@/context/WalletContext';
 import LanguageToggle from './LanguageToggle';
@@ -19,23 +19,12 @@ interface MainnetFeatureNoticeProps {
 export default function MainnetFeatureNotice({ children, feature }: MainnetFeatureNoticeProps) {
   const { t } = useTranslation();
   const { network } = useWallet();
-  const STORAGE_KEY = `subfrost_feature_notice_${feature}_ack`;
-  const [dismissed, setDismissed] = useState(true); // Start true to avoid flash
+  const [dismissed, setDismissed] = useState(false);
 
   const isMainnet = network === 'mainnet';
 
-  // Load persisted dismissal once on mount
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const seen = localStorage.getItem(STORAGE_KEY) === 'true';
-    setDismissed(seen);
-  }, [STORAGE_KEY]);
-
   const handleDismiss = () => {
     setDismissed(true);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, 'true');
-    }
   };
 
   // Only show on mainnet and when not dismissed

@@ -96,10 +96,12 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
     if (!searchQuery.trim()) return sortedPools;
     
     const query = searchQuery.toLowerCase();
-    return sortedPools.filter(pool => 
+    return sortedPools.filter(pool =>
       pool.pairLabel.toLowerCase().includes(query) ||
       pool.token0.symbol.toLowerCase().includes(query) ||
       pool.token1.symbol.toLowerCase().includes(query) ||
+      (pool.token0.name?.toLowerCase().includes(query)) ||
+      (pool.token1.name?.toLowerCase().includes(query)) ||
       pool.token0.id.toLowerCase().includes(query) ||
       pool.token1.id.toLowerCase().includes(query)
     );

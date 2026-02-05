@@ -88,10 +88,10 @@ function calculateTvlFromReserves(
 /**
  * Build icon URL for a token
  */
-function getTokenIconUrl(tokenId: string, network: string): string {
+function getTokenIconUrl(tokenId: string, _network: string): string {
   const [block, tx] = tokenId.split(':');
   if (block && tx) {
-    return `https://asset.oyl.gg/alkanes/${network}/${block}-${tx}.png`;
+    return `https://cdn.ordiscan.com/alkanes/${block}_${tx}`;
   }
   return '';
 }
@@ -108,6 +108,108 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
   }
 
   return tokenId.split(':')[1] || 'UNK';
+}
+
+/**
+ * Get token display name from known tokens (falls back to symbol)
+ * Used for pair labels in markets grid (e.g., "METHANE" instead of "CH4")
+ */
+function getTokenName(tokenId: string, rawName?: string): string {
+  const known = KNOWN_TOKENS[tokenId];
+  if (known) return known.name;
+
+  if (rawName) {
+    return rawName.replace('SUBFROST BTC', 'frBTC').trim();
+  }
+
+  return getTokenSymbol(tokenId, rawName);
+}
+
+/**
+ * Fetch token names for unknown tokens via essentials.get_alkane_info RPC.
+ * Returns a map of tokenId → { name, symbol }.
+ */
+async function fetchUnknownTokenNames(tokenIds: string[]): Promise<Record<string, { name: string; symbol: string }>> {
+  if (tokenIds.length === 0) return {};
+
+  const rpcUrl = typeof window !== 'undefined' ? '/api/rpc' : (
+    process.env.REGTEST_RPC_URL || 'https://regtest.subfrost.io/v4/subfrost'
+  );
+
+  const batch = tokenIds.map((id, i) => ({
+    jsonrpc: '2.0',
+    id: i,
+    method: 'essentials.get_alkane_info',
+    params: { alkane: id },
+  }));
+
+  try {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(batch),
+    });
+
+    if (!res.ok) return {};
+    const results: Array<{ id: number; result?: { name?: string; symbol?: string }; error?: any }> = await res.json();
+
+    const map: Record<string, { name: string; symbol: string }> = {};
+    for (const r of results) {
+      const tokenId = tokenIds[r.id];
+      if (!tokenId || !r.result) continue;
+      const name = (r.result.name || '').replace('SUBFROST BTC', 'frBTC').trim();
+      const symbol = (r.result.symbol || '').trim();
+      if (name || symbol) {
+        map[tokenId] = { name, symbol };
+      }
+    }
+    return map;
+  } catch (e) {
+    console.warn('[usePools] Failed to fetch token names:', e);
+    return {};
+  }
+}
+
+/**
+ * Enrich pool items with dynamically fetched token names for any tokens
+ * not in the hardcoded KNOWN_TOKENS map.
+ */
+async function enrichTokenNames(items: PoolsListItem[]): Promise<void> {
+  // Collect unknown token IDs
+  const unknownIds = new Set<string>();
+  for (const item of items) {
+    if (!KNOWN_TOKENS[item.token0.id]) unknownIds.add(item.token0.id);
+    if (!KNOWN_TOKENS[item.token1.id]) unknownIds.add(item.token1.id);
+  }
+
+  if (unknownIds.size === 0) return;
+
+  console.log('[usePools] Fetching names for', unknownIds.size, 'unknown tokens:', Array.from(unknownIds));
+  const nameMap = await fetchUnknownTokenNames(Array.from(unknownIds));
+
+  if (Object.keys(nameMap).length === 0) return;
+
+  // Apply fetched names to pool items
+  for (const item of items) {
+    const t0Info = nameMap[item.token0.id];
+    const t1Info = nameMap[item.token1.id];
+
+    if (t0Info) {
+      if (t0Info.name) item.token0.name = t0Info.name;
+      if (t0Info.symbol) item.token0.symbol = t0Info.symbol;
+    }
+    if (t1Info) {
+      if (t1Info.name) item.token1.name = t1Info.name;
+      if (t1Info.symbol) item.token1.symbol = t1Info.symbol;
+    }
+
+    // Rebuild pairLabel using names
+    const name0 = item.token0.name || item.token0.symbol;
+    const name1 = item.token1.name || item.token1.symbol;
+    item.pairLabel = `${name0} / ${name1} LP`;
+  }
+
+  console.log('[usePools] Enriched token names:', Object.keys(nameMap).length, 'tokens');
 }
 
 /**
@@ -161,14 +263,16 @@ async function fetchPoolsFromEspo(
 
     const token0Symbol = getTokenSymbol(baseId);
     const token1Symbol = getTokenSymbol(quoteId);
+    const token0Name = getTokenName(baseId);
+    const token1Name = getTokenName(quoteId);
 
     const tvlCalc = calculateTvlFromReserves(baseId, quoteId, pool.base_reserve || '0', pool.quote_reserve || '0', btcPrice, busdTokenId);
 
     items.push({
       id: poolId,
-      pairLabel: `${token0Symbol} / ${token1Symbol} LP`,
-      token0: { id: baseId, symbol: token0Symbol, name: token0Symbol, iconUrl: getTokenIconUrl(baseId, network) },
-      token1: { id: quoteId, symbol: token1Symbol, name: token1Symbol, iconUrl: getTokenIconUrl(quoteId, network) },
+      pairLabel: `${token0Name} / ${token1Name} LP`,
+      token0: { id: baseId, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(baseId, network) },
+      token1: { id: quoteId, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(quoteId, network) },
       tvlUsd: tvlCalc.tvlUsd,
       token0TvlUsd: tvlCalc.token0TvlUsd,
       token1TvlUsd: tvlCalc.token1TvlUsd,
@@ -294,13 +398,15 @@ async function fetchPoolsViaRpcSimulation(
 
       const token0Symbol = getTokenSymbol(token0Id);
       const token1Symbol = getTokenSymbol(token1Id);
+      const token0Name = getTokenName(token0Id);
+      const token1Name = getTokenName(token1Id);
       const tvlCalc = calculateTvlFromReserves(token0Id, token1Id, reserve0, reserve1, btcPrice, busdTokenId);
 
       items.push({
         id: `${pool.block}:${pool.tx}`,
-        pairLabel: `${token0Symbol} / ${token1Symbol} LP`,
-        token0: { id: token0Id, symbol: token0Symbol, name: token0Symbol, iconUrl: getTokenIconUrl(token0Id, network) },
-        token1: { id: token1Id, symbol: token1Symbol, name: token1Symbol, iconUrl: getTokenIconUrl(token1Id, network) },
+        pairLabel: `${token0Name} / ${token1Name} LP`,
+        token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
+        token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
         tvlUsd: tvlCalc.tvlUsd,
         token0TvlUsd: tvlCalc.token0TvlUsd,
         token1TvlUsd: tvlCalc.token1TvlUsd,
@@ -379,18 +485,21 @@ async function fetchPoolsFromSDK(
     const token1Id = p.token1_id || (p.token1_block_id != null && p.token1_tx_id != null
       ? `${p.token1_block_id}:${p.token1_tx_id}` : '');
 
-    let token0Name = getTokenSymbol(token0Id, p.token0_name);
-    let token1Name = getTokenSymbol(token1Id, p.token1_name);
+    let token0Symbol = getTokenSymbol(token0Id, p.token0_name);
+    let token1Symbol = getTokenSymbol(token1Id, p.token1_name);
 
-    if ((!token0Name || token0Name === 'UNK' || !token1Name || token1Name === 'UNK') && p.pool_name) {
+    if ((!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') && p.pool_name) {
       const match = p.pool_name.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
       if (match) {
-        if (!token0Name || token0Name === 'UNK') token0Name = match[1].trim().replace('SUBFROST BTC', 'frBTC');
-        if (!token1Name || token1Name === 'UNK') token1Name = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+        if (!token0Symbol || token0Symbol === 'UNK') token0Symbol = match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        if (!token1Symbol || token1Symbol === 'UNK') token1Symbol = match[2].trim().replace('SUBFROST BTC', 'frBTC');
       }
     }
 
-    if (!poolId || !token0Id || !token1Id || !token0Name || !token1Name) continue;
+    if (!poolId || !token0Id || !token1Id || !token0Symbol || !token1Symbol) continue;
+
+    const token0Name = getTokenName(token0Id, p.token0_name);
+    const token1Name = getTokenName(token1Id, p.token1_name);
 
     let tvlUsd = 0;
     let token0TvlUsd = 0;
@@ -409,8 +518,8 @@ async function fetchPoolsFromSDK(
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
-      token0: { id: token0Id, symbol: token0Name, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
-      token1: { id: token1Id, symbol: token1Name, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
+      token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
+      token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
       tvlUsd,
       token0TvlUsd,
       token1TvlUsd,
@@ -483,6 +592,9 @@ export function usePools(params: UsePoolsParams = {}) {
       if (items.length === 0) {
         throw new Error('Failed to fetch pools from any source');
       }
+
+      // Enrich tokens not in KNOWN_TOKENS with names from RPC
+      await enrichTokenNames(items);
 
       // Remove known scam/impersonator pools
       const beforeCount = items.length;
@@ -590,7 +702,9 @@ function applyFiltersAndPagination(
       (p) =>
         p.pairLabel.toLowerCase().includes(searchLower) ||
         p.token0.symbol.toLowerCase().includes(searchLower) ||
-        p.token1.symbol.toLowerCase().includes(searchLower)
+        p.token1.symbol.toLowerCase().includes(searchLower) ||
+        (p.token0.name?.toLowerCase().includes(searchLower)) ||
+        (p.token1.name?.toLowerCase().includes(searchLower))
     );
   }
 
