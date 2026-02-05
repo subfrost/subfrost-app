@@ -5,7 +5,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
-import { RefreshCw, Send, ArrowUpFromLine } from 'lucide-react';
+import { RefreshCw, Send, ArrowUpFromLine, ArrowLeftRight } from 'lucide-react';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
@@ -369,14 +369,23 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                           </button>
                         </>
                       ) : (
-                        <button
-                          data-testid="send-button"
-                          onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                        >
-                          <Send size={12} />
-                          {t('walletDash.send')}
-                        </button>
+                        <>
+                          <button
+                            data-testid="send-button"
+                            onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          >
+                            <Send size={12} />
+                            {t('walletDash.send')}
+                          </button>
+                          <button
+                            disabled
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
+                          >
+                            <ArrowLeftRight size={12} />
+                            {t('walletDash.swap')}
+                          </button>
+                        </>
                       )}
                     </div>
                   )}

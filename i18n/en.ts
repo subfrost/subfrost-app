@@ -208,7 +208,7 @@ const en: Record<string, string> = {
   'balances.tabBrc20': 'BRC20 Tokens',
   'balances.tabOrdinals': 'Ordinals',
   'balances.noNfts': 'No NFTs found',
-  'balances.nftsHint': 'NFTs are alkanes with a balance of exactly 1 unit',
+  'balances.nftsHint': 'Alkanes NFTs will appear here',
   'balances.noPositions': 'No positions found',
   'balances.positionsHint': 'LP tokens and staked positions will appear here',
   'balances.comingSoon': 'Coming soon',
