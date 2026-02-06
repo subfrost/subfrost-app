@@ -8,64 +8,73 @@
  *
  * ## CRITICAL IMPLEMENTATION NOTES (January 2026)
  *
- * ### Why We Call the Pool Directly (Not the Factory)
+ * ### Why We Call the Factory (Not the Pool Directly)
  *
- * The app's constants/index.ts defines FACTORY_OPCODES with swap opcodes (3, 4),
- * but these DO NOT execute swaps. The actual factory only has opcodes 0-3:
- *   - 0: InitPool
- *   - 1: CreateNewPool
- *   - 2: FindExistingPoolId
- *   - 3: GetAllPools
+ * The deployed pool logic WASM at [4:65496] is missing Swap (opcode 3) and
+ * SimulateSwap (opcode 4) — it's an older build. However, the factory contract
+ * at [4:65498] has router opcodes that execute swaps internally:
+ *   - 13: SwapExactTokensForTokens (verified working via simulate)
+ *   - 14: SwapTokensForExactTokens
  *
- * The POOL contract has the actual operation opcodes:
- *   - 0: Init
- *   - 1: AddLiquidity (mint LP tokens)
- *   - 2: RemoveLiquidity (burn LP tokens)
- *   - 3: Swap <-- WE USE THIS
- *   - 4: SimulateSwap
+ * Factory opcode 13 format:
+ *   [factory_block, factory_tx, 13, path_len, ...path_tokens, amount_in, amount_out_min, deadline]
  *
- * ### The Two-Protostone Pattern
+ * ### SDK Auto-Edict Pattern
  *
- * For Swap to work, input tokens must appear in the pool's `incomingAlkanes`.
- * This is how the indexer (poolswap.rs) detects swap events:
- *   1. Looks for delegatecall to pool with inputs[0] == 0x3 (opcode 3)
- *   2. Checks incomingAlkanes for one of the pool's tokens
- *   3. Looks for return event with the other pool token
+ * For the swap to work, input tokens must appear in the factory's `incomingAlkanes`.
+ * The SDK auto-generates the edict from `inputRequirements`:
+ *   - p0: SDK auto-edict (from inputRequirements) - transfers sell tokens to p1
+ *   - p1: Our cellpack [factory_block,factory_tx,13,...] - calls factory with swap opcode
  *
- * To achieve this, we use TWO protostones:
- *   - p0: Edict [sell_block:sell_tx:amount:p1] - transfers sell tokens to p1
- *   - p1: Cellpack [pool_block,pool_tx,3,minOutput,deadline] - calls pool with opcode 3
+ * IMPORTANT: Do NOT add manual edicts to the protostones string. The SDK's
+ * `alkanesExecuteWithStrings` auto-generates edicts from `inputRequirements`.
+ * Adding manual edicts causes a double-edict bug where protostone indices shift
+ * and the factory receives zero tokens (see buildSwapProtostone journal entry).
  *
- * The edict in p0 sends sell tokens TO p1, making them available as incomingAlkanes
- * for the pool call.
+ * ### Journal: 2026-01-28 — Swap token loss investigation & factory router fix
  *
- * ### Previous Broken Implementation
+ * PROBLEM: DIESEL → frBTC swaps broadcast and confirmed on Bitcoin, but no actual
+ * swap occurred. User DIESEL was not debited, no frBTC received. Pool reserves
+ * stable at 72.76 DIESEL / 6.99 frBTC.
  *
- * The old code tried to call factory with a swap opcode:
- *   Protostone: [factory_block,factory_tx,3,...]:v1:v1
+ * INVESTIGATION:
+ *   1. Traced tx on-chain — confirmed but alkanes_protorunesbyoutpoint returned empty
+ *      for all outputs, meaning no alkane state changes were recorded.
+ *   2. Simulated pool [2:6] opcode 3 (Swap) directly via alkanes_simulate:
+ *      → "Extcall failed: ALKANES: revert: Error: Unrecognized opcode"
+ *   3. Systematically tested all pool opcodes on [2:6]:
+ *      - Opcode 1 (AddLiquidity):    ✅ Works
+ *      - Opcode 2 (RemoveLiquidity): ✅ Works
+ *      - Opcode 3 (Swap):            ❌ "Unrecognized opcode"
+ *      - Opcode 4 (SimulateSwap):    ❌ "Unrecognized opcode"
+ *      - Opcode 97 (GetReserves):    ✅ Works
+ *      - Opcode 999 (PoolDetails):   ✅ Works
+ *   4. Ran `strings` on prod_wasms/pool.wasm — opcode 3 EXISTS in the binary file
+ *      but the DEPLOYED version at [4:65496] doesn't have it (older build).
+ *   5. Discovered factory [4:65498] has router opcodes 13/14 for swaps.
+ *   6. Verified factory opcode 13 via simulate:
+ *      inputs: ["13","2","2","0","32","0","10000000","0","999999999"]
+ *      alkanes: [{id:{block:2,tx:0},value:"10000000"}]
+ *      → SUCCESS: returned frBTC [32:0] = 950,148
  *
- * This transaction would broadcast and confirm, but NO SWAP occurred because
- * factory opcode 3 is GetAllPools, not Swap. The factory just returned pool data
- * and ignored the swap intent.
+ * FIX: Changed buildSwapProtostone from calling pool with opcode 3 to calling
+ * factory with opcode 13 (SwapExactTokensForTokens). Same two-protostone pattern,
+ * but p1 now targets the factory instead of the pool. Applied same fix to
+ * useWrapSwapMutation (BTC→token) and useSwapUnwrapMutation (token→BTC).
  *
- * ### Working Implementation
+ * VERIFIED: User-tested DIESEL → frBTC swap — correct frBTC amount received.
  *
- * Current code calls pool directly with two-protostone pattern:
- *   Protostone: [sell_block:sell_tx:amount:p1]:v0:v0,[pool_block,pool_tx,3,minOut,deadline]:v0:v0
- *
- * This ensures sell tokens flow into the pool call and get properly swapped.
- *
- * @see alkanes-rs-dev/crates/alkanes-cli-common/src/alkanes/amm.rs - Pool opcodes
- * @see alkanes-rs-dev/crates/alkanes-contract-indexer/src/helpers/poolswap.rs - Swap detection
+ * @see constants/index.ts - FACTORY_OPCODES documentation
  * @see useRemoveLiquidityMutation.ts - Same two-protostone pattern for burns
  * @see useAddLiquidityMutation.ts - Uses factory routing (different pattern)
- * @see constants/index.ts - FACTORY_OPCODES documentation with warnings
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
@@ -78,16 +87,10 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 /**
- * Pool operation codes (NOT factory opcodes!)
- * These are the opcodes for calling the pool contract directly
+ * Factory router opcodes for swap operations.
+ * The deployed pool logic is missing Swap (opcode 3), so we route through the factory.
  */
-const POOL_OPCODES = {
-  Init: 0,
-  AddLiquidity: 1, // mint
-  RemoveLiquidity: 2, // burn
-  Swap: 3,
-  SimulateSwap: 4,
-};
+const FACTORY_SWAP_OPCODE = 13; // SwapExactTokensForTokens
 
 // Helper to convert Uint8Array to base64
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -107,27 +110,48 @@ export type SwapTransactionBaseData = {
   maxSlippage: string; // percent string, e.g. '0.5'
   feeRate: number; // sats/vB
   tokenPath?: string[]; // optional explicit path
-  poolId?: { block: string | number; tx: string | number }; // Pool to swap through
+  poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
   deadlineBlocks?: number; // default 3
   isDieselMint?: boolean;
+  // For confirmation modal display (optional)
+  sellSymbol?: string;
+  buySymbol?: string;
+  skipConfirmation?: boolean; // For browser wallets that handle their own confirmation
 };
 
 /**
  * Build protostone string for AMM swap operations
  *
- * This calls the POOL directly with opcode 3 (Swap).
- * We use a two-protostone pattern:
- * 1. First protostone (p0): Transfer sell tokens to p1 (the pool call)
- * 2. Second protostone (p1): Call pool with Swap opcode 3
+ * Returns ONLY the factory cellpack protostone (no manual edict).
+ * The edict that delivers sell tokens to this cellpack is auto-generated
+ * by the SDK from the `inputRequirements` parameter passed to
+ * `alkanesExecuteWithStrings`. The SDK creates p0 (edict → p1) and
+ * this cellpack becomes p1.
  *
- * Format: [sell_block:sell_tx:sellAmount:p1]:v0:v0,[pool_block,pool_tx,3,minOutput,deadline]:v0:v0
+ * ### Journal: 2026-02-01 — Double-edict bug fix
  *
- * The edict [sell_block:sell_tx:sellAmount:p1] sends sell tokens to the pool call.
- * The pool call receives these tokens as incomingAlkanes and executes the swap.
+ * PROBLEM: frBTC→DIESEL swaps broadcast but frBTC ends up at vout 0 instead
+ * of being consumed by the factory. Tx be4466de... confirmed this.
+ *
+ * ROOT CAUSE: `alkanesExecuteWithStrings` auto-generates an edict protostone
+ * (p0) from `inputRequirements` that transfers alkane tokens to p1. Our code
+ * was ALSO providing a manual edict in the protostones string, creating:
+ *   p0: SDK auto-edict [32:0:amount:p1] → sends frBTC to p1
+ *   p1: Our manual edict [32:0:amount:p1] → NOT the factory!
+ *   p2: Our factory cellpack → receives nothing
+ * The factory at p2 got zero incomingAlkanes and the swap silently failed.
+ *
+ * FIX: Remove the manual edict. Let inputRequirements handle it:
+ *   p0: SDK auto-edict [32:0:amount:p1] → sends frBTC to p1
+ *   p1: Factory cellpack → receives frBTC as incomingAlkanes ✓
+ *
+ * Factory opcode 13 format:
+ *   [factory_block,factory_tx,13,path_len,sell_block,sell_tx,buy_block,buy_tx,amount_in,amount_out_min,deadline]
  */
 function buildSwapProtostone(params: {
-  poolId: { block: string | number; tx: string | number };
-  sellTokenId: string; // e.g., "32:0" for frBTC
+  factoryId: string; // e.g., "4:65498"
+  sellTokenId: string; // e.g., "2:0" for DIESEL
+  buyTokenId: string; // e.g., "32:0" for frBTC
   sellAmount: string;
   minOutput: string;
   deadline: string;
@@ -135,8 +159,9 @@ function buildSwapProtostone(params: {
   refund?: string;
 }): string {
   const {
-    poolId,
+    factoryId,
     sellTokenId,
+    buyTokenId,
     sellAmount,
     minOutput,
     deadline,
@@ -145,29 +170,27 @@ function buildSwapProtostone(params: {
   } = params;
 
   const [sellBlock, sellTx] = sellTokenId.split(':');
-  const poolBlock = poolId.block.toString();
-  const poolTx = poolId.tx.toString();
+  const [buyBlock, buyTx] = buyTokenId.split(':');
+  const [factoryBlock, factoryTx] = factoryId.split(':');
 
-  // First protostone: Transfer sell tokens to p1 (the pool call)
-  // Edict format: [block:tx:amount:target]
-  const edict = `[${sellBlock}:${sellTx}:${sellAmount}:p1]`;
-  // This protostone just transfers, pointer/refund go to v0 for output tokens
-  const p0 = `${edict}:${pointer}:${refund}`;
-
-  // Second protostone: Call pool with Swap opcode (3)
-  // The pool receives sell tokens from p0's edict as incomingAlkanes
-  // Pool swap calldata: [pool_block, pool_tx, opcode(3), minOutput, deadline]
+  // Single cellpack protostone: Call factory with SwapExactTokensForTokens (opcode 13)
+  // The SDK auto-generates p0 (edict) from inputRequirements, making this p1.
+  // Sell tokens arrive as incomingAlkanes via the auto-generated edict.
   const cellpack = [
-    poolBlock,
-    poolTx,
-    POOL_OPCODES.Swap, // 3
+    factoryBlock,
+    factoryTx,
+    FACTORY_SWAP_OPCODE, // 13
+    2, // path_len (always 2 for direct swap: sell → buy)
+    sellBlock,
+    sellTx,
+    buyBlock,
+    buyTx,
+    sellAmount,
     minOutput,
     deadline,
   ].join(',');
-  const p1 = `[${cellpack}]:${pointer}:${refund}`;
 
-  // Combine both protostones
-  return `${p0},${p1}`;
+  return `[${cellpack}]:${pointer}:${refund}`;
 }
 
 /**
@@ -195,10 +218,11 @@ function buildInputRequirements(params: {
 }
 
 export function useSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
-  const { FRBTC_ALKANE_ID } = getConfig(network);
+  const { requestConfirmation } = useTransactionConfirm();
+  const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -282,28 +306,23 @@ export function useSwapMutation() {
       console.log('[useSwapMutation]   maxSlippage:', swapData.maxSlippage);
       console.log('[useSwapMutation]   minAmountOut:', minAmountOut);
 
-      // Get deadline block height
-      const deadlineBlocks = swapData.deadlineBlocks || 3;
+      // Get deadline block height (regtest uses large offset so deadline never expires)
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const deadlineBlocks = isRegtest ? 1000 : (swapData.deadlineBlocks || 3);
       console.log('[useSwapMutation] Fetching deadline block height...');
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[useSwapMutation] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
-      // Validate poolId - required for the two-protostone pattern
-      if (!swapData.poolId) {
-        console.error('[useSwapMutation] ❌ poolId is required for swap!');
-        console.error('[useSwapMutation] The swap needs a pool ID to call the pool contract directly.');
-        throw new Error('Pool ID is required for swap. Make sure the quote includes the pool information.');
-      }
+      console.log('[useSwapMutation] Factory ID:', ALKANE_FACTORY_ID);
+      console.log('[useSwapMutation] Using factory opcode 13 (SwapExactTokensForTokens):');
+      console.log('[useSwapMutation]   p0: SDK auto-edict (from inputRequirements) → sends sell tokens to p1');
+      console.log('[useSwapMutation]   p1: Factory cellpack (our protostone)');
 
-      console.log('[useSwapMutation] Pool ID:', `${swapData.poolId.block}:${swapData.poolId.tx}`);
-      console.log('[useSwapMutation] Using two-protostone pattern (like RemoveLiquidity):');
-      console.log('[useSwapMutation]   p0: Edict to transfer sell tokens to p1');
-      console.log('[useSwapMutation]   p1: Call pool with opcode 3 (Swap)');
-
-      // Build protostone for the swap using two-protostone pattern
+      // Build protostone for the swap using factory-routed two-protostone pattern
       const protostoneParams = {
-        poolId: swapData.poolId,
+        factoryId: ALKANE_FACTORY_ID,
         sellTokenId: sellCurrency,
+        buyTokenId: buyCurrency,
         sellAmount: new BigNumber(ammSellAmount).toFixed(0),
         minOutput: new BigNumber(minAmountOut).toFixed(0),
         deadline: deadline.toString(),
@@ -312,7 +331,7 @@ export function useSwapMutation() {
       console.log('[useSwapMutation] Protostone params:', JSON.stringify(protostoneParams, null, 2));
 
       const protostone = buildSwapProtostone(protostoneParams);
-      console.log('[useSwapMutation] Built protostone (two-protostone pattern):', protostone);
+      console.log('[useSwapMutation] Built protostone (factory-routed):', protostone);
 
       // Build input requirements
       const isBtcSell = swapData.sellCurrency === 'btc';
@@ -372,11 +391,14 @@ export function useSwapMutation() {
         // - changeAddress: segwit address for BTC change
         // - alkanesChangeAddress: taproot address for alkane change
         // - toAddresses: taproot address for outputs
+        // autoConfirm must be false — no wallet mnemonic is loaded into the WASM
+        // provider (app uses external wallet signing). With autoConfirm: true the SDK
+        // attempts to sign internally and throws when no wallet is present.
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: swapData.feeRate,
-          autoConfirm: true,
+          autoConfirm: false,
           fromAddresses,
           toAddresses: [taprootAddress], // Swapped tokens go to taproot
           changeAddress: segwitAddress || taprootAddress, // BTC change to segwit
@@ -434,6 +456,29 @@ export function useSwapMutation() {
             console.log('[useSwapMutation] PSBT has', debugPsbt.txOutputs.length, 'outputs');
           } catch (dbgErr) {
             console.log('[useSwapMutation] PSBT debug parse error:', dbgErr);
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          // Browser wallets handle confirmation via their own popup
+          if (walletType === 'keystore' && !swapData.skipConfirmation) {
+            console.log('[useSwapMutation] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'swap',
+              title: 'Confirm Swap',
+              fromAmount: (parseFloat(swapData.sellAmount) / 1e8).toString(),
+              fromSymbol: getTokenSymbol(swapData.sellCurrency, swapData.sellSymbol),
+              fromId: swapData.sellCurrency === 'btc' ? undefined : swapData.sellCurrency,
+              toAmount: (parseFloat(swapData.buyAmount) / 1e8).toString(),
+              toSymbol: getTokenSymbol(swapData.buyCurrency, swapData.buySymbol),
+              toId: swapData.buyCurrency === 'btc' ? undefined : swapData.buyCurrency,
+              feeRate: swapData.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[useSwapMutation] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[useSwapMutation] User approved transaction');
           }
 
           // Sign the PSBT with both keys (SegWit first, then Taproot)

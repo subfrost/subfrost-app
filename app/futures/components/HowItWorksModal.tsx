@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type HowItWorksModalProps = {
   onClose: () => void;
 };
 
 export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
+  const { t } = useTranslation();
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
       >
         {/* Header */}
         <div className="sticky top-0 z-10 border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">How It Works</h2>
+          <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">{t('howItWorks.title')}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -61,52 +63,48 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Block 1: Buy */}
             <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
-              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">Buy</h3>
+              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">{t('howItWorks.buy')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
-                Buy ftrBTC on the futures market.
-                <br />
-                ftrBTC unlocks into full BTC at expiry.
+                {t('howItWorks.buyDesc')}
               </p>
               <div className="space-y-2 text-xs text-[color:var(--sf-text)]/70">
                 <div>
-                  <span className="font-medium">Example:</span> Buy 1 ftrBTC[8af93c] on secondary market
+                  {t('howItWorks.buyExample')}
                 </div>
                 <div>
-                  <span className="font-medium">Expiry:</span> 30 blocks left (max 100 blocks)
+                  {t('howItWorks.expiry')}
                 </div>
               </div>
             </div>
 
             {/* Block 2: Hold */}
             <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
-              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">Hold</h3>
+              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">{t('howItWorks.hold')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
-                ftrBTC grows toward full BTC value as expiry approaches.
+                {t('howItWorks.holdDesc')}
               </p>
               <div className="space-y-2 text-xs text-[color:var(--sf-text)]/70">
                 <div>
-                  <span className="font-medium">Today value:</span> 0.74 BTC
+                  {t('howItWorks.todayValue')}
                 </div>
                 <div>
-                  <span className="font-medium">Discount:</span> 26% (time-decay)
+                  {t('howItWorks.discount')}
                 </div>
               </div>
             </div>
 
             {/* Block 3: Exercise */}
             <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
-              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">Exercise</h3>
+              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">{t('howItWorks.exercise')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
-                Hold to expiry → exercise 1:1 BTC (no penalty).
-                <br />
-                Early exercise → polynomial fee applies.
+                {t('howItWorks.exerciseDesc')}
               </p>
               <div className="space-y-2 text-xs text-[color:var(--sf-text)]/70">
                 <div>
-                  <span className="font-medium">Exercise now (poly):</span> receives 0.74 BTC
+                  {t('howItWorks.exerciseNow')}
                 </div>
                 <div>
-                  <span className="font-medium">At expiry:</span> 1.00 BTC
+                  {t('howItWorks.atExpiry')}
                 </div>
               </div>
             </div>

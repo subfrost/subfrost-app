@@ -12,13 +12,14 @@ import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
 import { ChevronDown } from "lucide-react";
+import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 // All available tokens that can be deposited into vaults
 const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
   { id: 'btc', symbol: 'BTC' },
   { id: '32:0', symbol: 'frBTC' },
   { id: 'usd', symbol: 'bUSD' },
-  { id: '2:0', symbol: 'DIESEL' },
   { id: 'frUSD', symbol: 'frUSD' },
   { id: 'ordi', symbol: 'ORDI' },
 ];
@@ -28,7 +29,7 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
   const tokenToVaultMap: Record<string, string> = {
     'btc': 'dx-btc',       // BTC -> dxBTC
     '32:0': 'dx-btc',      // frBTC -> dxBTC (prioritize dxBTC over yvfrBTC)
-    '2:0': 've-diesel',    // DIESEL -> veDIESEL
+    '2:0': 've-diesel',    // DIESEL -> FIRE
     'usd': 've-usd',       // bUSD -> veUSD
     'frUSD': 've-usd',     // frUSD -> veUSD
     'ordi': 've-ordi',     // ORDI -> veORDI
@@ -57,7 +58,7 @@ const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol:
   // Map of output asset to default input token
   const defaultInputMap: Record<string, { id: string; symbol: string }> = {
     'dxBTC': { id: 'btc', symbol: 'BTC' },
-    'veDIESEL': { id: '2:0', symbol: 'DIESEL' },
+    'FIRE': { id: '2:0', symbol: 'DIESEL' },
     'veUSD': { id: 'usd', symbol: 'bUSD' },
     'yvfrBTC': { id: '32:0', symbol: 'frBTC' },
     'veORDI': { id: 'ordi', symbol: 'ORDI' },
@@ -97,10 +98,15 @@ export default function VaultDepositInterface({
   );
   const [showTokenSelector, setShowTokenSelector] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  // Collapsible details (all screen sizes)
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [showDepositComingSoon, setShowDepositComingSoon] = useState(false);
+  const { t } = useTranslation();
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { theme } = useTheme();
+  const isDemoGated = useDemoGate();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   // Local deadline state to allow empty field while typing
@@ -179,7 +185,7 @@ export default function VaultDepositInterface({
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
           }`}
         >
-          Deposit
+          {t('vaultDeposit.deposit')}
         </button>
         <button
           onClick={() => onModeChange('withdraw')}
@@ -189,7 +195,7 @@ export default function VaultDepositInterface({
               : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
           }`}
         >
-          Withdraw
+          {t('vaultDeposit.withdraw')}
         </button>
       </div>
 
@@ -226,15 +232,18 @@ export default function VaultDepositInterface({
                 <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
                   {ALL_VAULT_TOKENS.map((token) => {
                     const tokenVault = getVaultForInputToken(token.id);
+                    const isDxBtcToken = tokenVault?.id === 'dx-btc';
                     return (
                       <button
                         key={token.id}
                         type="button"
-                        onClick={() => handleInputTokenSelect(token)}
+                        onClick={() => isDxBtcToken ? handleInputTokenSelect(token) : undefined}
                         className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[400ms] first:rounded-t-xl last:rounded-b-xl ${
-                          selectedInputToken.id === token.id
-                            ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                            : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+                          !isDxBtcToken
+                            ? 'opacity-40 grayscale cursor-default'
+                            : selectedInputToken.id === token.id
+                              ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                              : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -263,7 +272,7 @@ export default function VaultDepositInterface({
             {/* Main content area */}
             <div className="flex flex-col gap-1">
               {/* Label */}
-              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">From Wallet</span>
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">{t('vaultDeposit.fromWallet')}</span>
 
               {/* Input - full width */}
               <div className="pr-32">
@@ -281,7 +290,7 @@ export default function VaultDepositInterface({
               {/* Balance + Percentage Buttons stacked */}
               <div className="flex flex-col items-end gap-1">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  Balance {userBalance}
+                  {t('vaultDeposit.balance')} {userBalance}
                 </div>
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
@@ -310,7 +319,7 @@ export default function VaultDepositInterface({
                     onClick={() => setAmount(userBalance)}
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
                   >
-                    Max
+                    {t('swap.max')}
                   </button>
                 </div>
               </div>
@@ -338,7 +347,7 @@ export default function VaultDepositInterface({
 
             {/* Main content area */}
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">To Vault</span>
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">{t('vaultDeposit.toVault')}</span>
               <div className="pr-32">
                 <NumberField placeholder={isBtcBasedVault(vault) ? "0.00000000" : "0.00"} align="left" value={amount ? formatVaultAmount(amount, vault) : ""} onChange={() => {}} disabled />
               </div>
@@ -351,13 +360,28 @@ export default function VaultDepositInterface({
             </div>
           </div>
 
-          {/* Transaction Settings */}
-          <div className="relative z-[5] rounded-2xl bg-transparent p-5 pb-0 text-sm">
-            <div className="flex flex-col gap-2.5">
+          {/* Transaction Settings - collapsible panel */}
+          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+            {/* Toggle button */}
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(!detailsOpen)}
+              className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+            >
+              <span>{t('vaultDeposit.transactionDetails')}</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {/* Collapsible details content */}
+            <div className={`transition-all duration-300 ease-in-out ${detailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
+            <div className="flex flex-col gap-2.5 px-4 text-sm">
               {/* Minimum Received row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Minimum Received
+                  {t('vaultDeposit.minimumReceived')}
                 </span>
                 <span className="font-semibold text-[color:var(--sf-text)]">
                   {formatVaultAmount(amount, vault)} {vault.outputAsset}
@@ -367,7 +391,7 @@ export default function VaultDepositInterface({
               {/* Deadline (blocks) row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Deadline (blocks)
+                  {t('vaultDeposit.deadlineBlocks')}
                 </span>
                 <div className="flex items-center gap-2">
                   <div className="relative">
@@ -392,7 +416,7 @@ export default function VaultDepositInterface({
                       }}
                       placeholder="3"
                       style={{ outline: 'none', border: 'none' }}
-                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                     />
                   </div>
                 </div>
@@ -401,7 +425,7 @@ export default function VaultDepositInterface({
               {/* Slippage Tolerance row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Slippage Tolerance
+                  {t('vaultDeposit.slippageTolerance')}
                 </span>
                 <div className="flex items-center gap-2">
                   {slippageSelection === 'custom' ? (
@@ -429,7 +453,7 @@ export default function VaultDepositInterface({
                         }}
                         placeholder="5"
                         style={{ outline: 'none', border: 'none' }}
-                        className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                       />
                       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
                     </div>
@@ -449,7 +473,7 @@ export default function VaultDepositInterface({
               {/* Miner Fee Rate row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Miner Fee Rate (sats/vB)
+                  {t('vaultDeposit.minerFeeRate')}
                 </span>
                 <div className="flex items-center gap-2">
                   {feeSelection === 'custom' && setCustomFee ? (
@@ -471,7 +495,7 @@ export default function VaultDepositInterface({
                         }}
                         placeholder="0"
                         style={{ outline: 'none', border: 'none' }}
-                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                       />
                     </div>
                   ) : (
@@ -490,6 +514,7 @@ export default function VaultDepositInterface({
                 </div>
               </div>
             </div>
+            </div>
           </div>
 
           {/* Deposit Button */}
@@ -499,12 +524,22 @@ export default function VaultDepositInterface({
                 onConnectModalOpenChange(true);
                 return;
               }
-              onExecute(amount);
+              if (!isDemoGated) {
+                onExecute(amount);
+                return;
+              }
+              if (!showDepositComingSoon) {
+                setShowDepositComingSoon(true);
+                setTimeout(() => setShowDepositComingSoon(false), 1000);
+              }
             }}
-            disabled={!canExecute}
-            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
           >
-            {isConnected ? 'DEPOSIT' : 'CONNECT WALLET'}
+            {showDepositComingSoon ? (
+              <span className="animate-pulse">{t('badge.comingSoon')}</span>
+            ) : (
+              isConnected ? t('vaultDeposit.depositBtn') : t('vaultDeposit.connectWallet')
+            )}
           </button>
         </div>
       ) : (
@@ -512,13 +547,13 @@ export default function VaultDepositInterface({
         <div className="space-y-4 mb-6">
           <div>
             <label className="text-xs font-bold text-[color:var(--sf-text)] mb-2 block">
-              Select vault unit to redeem
+              {t('vaultDeposit.selectUnit')}
             </label>
             <>
               <div className="max-h-48 overflow-y-auto space-y-2">
                 {vaultUnits.length === 0 ? (
                   <div className="text-sm text-[color:var(--sf-text)]/60 text-center py-4">
-                    No vault units found. Deposit first to receive vault units.
+                    {t('vaultDeposit.noUnits')}
                   </div>
                 ) : (
                   vaultUnits.map((unit) => (
@@ -534,10 +569,10 @@ export default function VaultDepositInterface({
                       <div className="flex items-center justify-between">
                         <div className="text-left">
                           <div className="text-sm font-bold text-[color:var(--sf-text)]">
-                            Unit #{unit.alkaneId.split(':')[1]}
+                            {t('vaultDeposit.unit')} #{unit.alkaneId.split(':')[1]}
                           </div>
                           <div className="text-xs text-[color:var(--sf-text)]/60">
-                            Amount: {unit.amount}
+                            {t('vaultDeposit.amount')} {unit.amount}
                           </div>
                         </div>
                         {selectedUnitId === unit.alkaneId && (
@@ -563,9 +598,9 @@ export default function VaultDepositInterface({
               onExecute('1'); // Vault units are typically 1 per deposit
             }}
             disabled={!canExecute}
-            className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02]  active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${!canExecute ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
           >
-            {isConnected ? 'WITHDRAW' : 'CONNECT WALLET'}
+            {isConnected ? t('vaultDeposit.withdrawBtn') : t('vaultDeposit.connectWallet')}
           </button>
         </div>
       )}
@@ -584,6 +619,7 @@ type MinerFeeButtonProps = {
 };
 
 function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -609,8 +645,8 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
   };
 
   const getDisplayText = () => {
-    if (selection === 'custom') return 'Custom';
-    return selection.charAt(0).toUpperCase() + selection.slice(1);
+    if (selection === 'custom') return t('vaultDeposit.custom');
+    return t(`vaultDeposit.${selection}`);
   };
 
   return (
@@ -638,7 +674,7 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
               }`}
             >
               <div className="flex items-center justify-between">
-                <span>{option}</span>
+                <span>{t(`vaultDeposit.${option}`)}</span>
                 {option !== 'custom' && (
                   <span className="text-[10px] text-[color:var(--sf-text)]/50">
                     {presets[option as keyof typeof presets]}
@@ -667,6 +703,7 @@ type SlippageButtonProps = {
 };
 
 function SlippageButton({ selection, setSelection, setValue }: SlippageButtonProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -695,8 +732,8 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
   };
 
   const getDisplayText = () => {
-    if (selection === 'custom') return 'Custom';
-    return selection.charAt(0).toUpperCase() + selection.slice(1);
+    if (selection === 'custom') return t('vaultDeposit.custom');
+    return t(`vaultDeposit.${selection}`);
   };
 
   return (
@@ -724,7 +761,7 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
               }`}
             >
               <div className="flex items-center justify-between">
-                <span>{option}</span>
+                <span>{t(`vaultDeposit.${option}`)}</span>
                 {option !== 'custom' && (
                   <span className="text-[10px] text-[color:var(--sf-text)]/50">
                     {SLIPPAGE_PRESETS[option]}%

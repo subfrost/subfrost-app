@@ -539,7 +539,7 @@ async function runTestSuite() {
 
       const hasVaults = await page.evaluate(() => {
         const text = document.body.textContent || '';
-        const vaultNames = ['dxBTC', 'veDIESEL', 'veUSD'];
+        const vaultNames = ['dxBTC', 'FIRE', 'veUSD'];
         return vaultNames.some(v => text.includes(v));
       });
 
@@ -556,7 +556,7 @@ async function runTestSuite() {
         const vaultItems = Array.from(document.querySelectorAll('div, button, tr'));
         const vaultItem = vaultItems.find(el => {
           const text = el.textContent || '';
-          return text.includes('dxBTC') || text.includes('veDIESEL');
+          return text.includes('dxBTC') || text.includes('FIRE');
         });
         if (vaultItem) {
           (vaultItem as HTMLElement).click();

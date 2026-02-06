@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { ExternalLink, Image as ImageIcon, FileText, Code, AlertCircle } from 'lucide-react';
+import { getConfig } from '@/utils/getConfig';
 
 interface InscriptionRendererProps {
   inscriptionId: string;
@@ -31,15 +32,19 @@ export default function InscriptionRenderer({
   className = '',
   showMetadata = true,
 }: InscriptionRendererProps) {
-  const { provider } = useAlkanesSDK();
+  const { provider, network } = useAlkanesSDK();
   const [inscription, setInscription] = useState<InscriptionData | null>(null);
   const [contentUrl, setContentUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Get block explorer URL for the current network
+  const config = getConfig(network || 'mainnet');
+  const blockExplorerUrl = config.BLOCK_EXPLORER_URL_BTC;
+
   useEffect(() => {
     loadInscription();
-  }, [inscriptionId]);
+  }, [inscriptionId, provider]);
 
   const loadInscription = async () => {
     if (!provider) return;
@@ -48,20 +53,36 @@ export default function InscriptionRenderer({
     setError(null);
 
     try {
-      const data = await provider.ordInscription(inscriptionId);
-      setInscription(data);
+      // Fetch inscription metadata via JSON-RPC
+      const rpcUrl = typeof window !== 'undefined' ? '/api/rpc' : config.API_URL;
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'ord_inscription',
+          params: [inscriptionId],
+          id: 1,
+        }),
+      });
 
-      // Build content URL - typically served by ord server
-      // For now, use ordiscan.com as fallback
-      const ordServerUrl = `https://ordiscan.com/content/${inscriptionId}`;
-      setContentUrl(ordServerUrl);
+      if (response.ok) {
+        const json = await response.json();
+        if (json.result) {
+          setInscription(json.result as InscriptionData);
+        }
+      }
+
+      // Build content URL using the block explorer (espo.subfrost.io)
+      const contentServerUrl = `${blockExplorerUrl}/content/${inscriptionId}`;
+      setContentUrl(contentServerUrl);
     } catch (err: any) {
       console.error('Failed to load inscription:', err);
       setError(err.message || 'Failed to load inscription');
-      
-      // Even if API fails, we can still show content from ordiscan
-      const ordServerUrl = `https://ordiscan.com/content/${inscriptionId}`;
-      setContentUrl(ordServerUrl);
+
+      // Even if API fails, try to show content from block explorer
+      const contentServerUrl = `${blockExplorerUrl}/content/${inscriptionId}`;
+      setContentUrl(contentServerUrl);
     } finally {
       setLoading(false);
     }
@@ -248,12 +269,12 @@ export default function InscriptionRenderer({
             </span>
           </div>
           <a
-            href={`https://ordiscan.com/inscription/${inscriptionId}`}
+            href={`${blockExplorerUrl}/inscription/${inscriptionId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
           >
-            View on Ordiscan <ExternalLink size={12} />
+            View on Explorer <ExternalLink size={12} />
           </a>
         </div>
       )}

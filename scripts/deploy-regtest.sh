@@ -418,9 +418,9 @@ main() {
     log_info "    - VX Token Gauge Template at [4, 0x1f23]"
     log_info ""
     log_info "  DIESEL Governance (instantiated from templates):"
-    log_info "    - veDIESEL: [6, 0x1f21] → creates at [2, n]"
-    log_info "    - yveDIESEL: [6, 0x1f22] → creates at [2, n]"
-    log_info "    - vxDIESEL Gauge: [6, 0x1f23] → creates at [2, n]"
+    log_info "    - FIRE: [6, 0x1f21] → creates at [2, n]"
+    log_info "    - yFIRE: [6, 0x1f22] → creates at [2, n]"
+    log_info "    - vxFIRE Gauge: [6, 0x1f23] → creates at [2, n]"
     echo ""
     
     # Deploy Core Alkanes
@@ -493,9 +493,9 @@ main() {
     log_info "Phase 5: DIESEL Governance System (Instantiated from Templates)"
     log_info "=========================================="
     
-    # Instantiate veDIESEL from ve-token-vault-template at [4, 0x1f21]
+    # Instantiate FIRE from ve-token-vault-template at [4, 0x1f21]
     # Using [6, 0x1f21] cellpack creates instance at [2, 1] (or next available [2, n])
-    log_info "Instantiating veDIESEL from template [4, 0x1f21]..."
+    log_info "Instantiating FIRE from template [4, 0x1f21]..."
     PROTOSTONE="[6,$((0x1f21)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
     
@@ -513,16 +513,16 @@ main() {
         2>&1
 
     if [ $? -eq 0 ]; then
-        log_success "veDIESEL instantiated at [2, n]"
+        log_success "FIRE instantiated at [2, n]"
     else
-        log_warn "Failed to instantiate veDIESEL"
+        log_warn "Failed to instantiate FIRE"
     fi
 
     echo ""
 
-    # Instantiate yveDIESEL from yve-token-nft-template at [4, 0x1f22]
+    # Instantiate yFIRE from yve-token-nft-template at [4, 0x1f22]
     # Using [6, 0x1f22] cellpack creates instance at [2, n]
-    log_info "Instantiating yveDIESEL from template [4, 0x1f22]..."
+    log_info "Instantiating yFIRE from template [4, 0x1f22]..."
     PROTOSTONE="[6,$((0x1f22)),0,2,0]"  # [6, template_tx, opcode, DIESEL_id]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
 
@@ -540,16 +540,16 @@ main() {
         2>&1
 
     if [ $? -eq 0 ]; then
-        log_success "yveDIESEL instantiated at [2, n]"
+        log_success "yFIRE instantiated at [2, n]"
     else
-        log_warn "Failed to instantiate yveDIESEL"
+        log_warn "Failed to instantiate yFIRE"
     fi
 
     echo ""
 
-    # Instantiate vxDIESEL gauge from vx-token-gauge-template at [4, 0x1f23]
+    # Instantiate vxFIRE gauge from vx-token-gauge-template at [4, 0x1f23]
     # Using [6, 0x1f23] cellpack creates instance at [2, n]
-    log_info "Instantiating vxDIESEL Gauge from template [4, 0x1f23]..."
+    log_info "Instantiating vxFIRE Gauge from template [4, 0x1f23]..."
     # TODO: Update with correct LP token ID and reward rate
     PROTOSTONE="[6,$((0x1f23)),0,2,0,2,1,100]"  # [6, template_tx, opcode, lp_token, ve_token, reward_rate]
     log_info "  Protostone: $PROTOSTONE (creates at [2, n])"
@@ -568,9 +568,9 @@ main() {
         2>&1
 
     if [ $? -eq 0 ]; then
-        log_success "vxDIESEL Gauge instantiated at [2, n]"
+        log_success "vxFIRE Gauge instantiated at [2, n]"
     else
-        log_warn "Failed to instantiate vxDIESEL Gauge"
+        log_warn "Failed to instantiate vxFIRE Gauge"
     fi
 
     # NOTE: ftr-btc at [31, 0] is deployed automatically in alkanes-rs genesis (setup_ftrbtc)
@@ -698,13 +698,13 @@ main() {
     echo ""
     echo "Governance:"
     echo "  - vxFROST Gauge:          [4, 50]"
-    echo "  - veDIESEL Vault:         [4, 60]"
+    echo "  - FIRE Vault:             [4, 60]"
     echo ""
     echo "Additional Vaults & Gauges:"
     echo "  - Gauge Contract:         [4, 100]"
     echo "  - yvBOOST Vault:          [4, 101]"
     echo "  - yvTOKEN Vault:          [4, 102]"
-    echo "  - yveDIESEL Vault:        [4, 103]"
+    echo "  - yFIRE Vault:            [4, 103]"
     echo ""
     echo "OYL AMM System:"
     echo "  - OYL Pool Logic:         [4, $AMM_FACTORY_ID]"

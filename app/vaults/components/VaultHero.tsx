@@ -3,6 +3,7 @@
 import { useWallet } from "@/context/WalletContext";
 import TokenIcon from "@/app/components/TokenIcon";
 import ApySparkline from "./ApySparkline";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   tokenId: string; // Alkane ID like "2:0"
@@ -36,7 +37,16 @@ export default function VaultHero({
   apyHistory = [],
 }: Props) {
   const { network } = useWallet();
-  
+  const { t } = useTranslation();
+
+  const BADGE_KEYS: Record<string, string> = {
+    'Coming Soon': 'badge.comingSoon',
+    'BTC Yield': 'badge.btcYield',
+    'USD Yield': 'badge.usdYield',
+    'Migrate': 'badge.migrate',
+    'New': 'badge.new',
+  };
+
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
     <div className="relative overflow-hidden rounded-2xl p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md text-[color:var(--sf-text)] border-t border-[color:var(--sf-top-highlight)]">
@@ -82,7 +92,7 @@ export default function VaultHero({
 
                 return (
                   <span key={i} className={badgeClassName}>
-                    {badge}
+                    {BADGE_KEYS[badge] ? t(BADGE_KEYS[badge]) : badge}
                   </span>
                 );
               })}
@@ -105,7 +115,7 @@ export default function VaultHero({
       {/* APY Sparkline - Full Width Row */}
       {apyHistory.length > 0 && (
         <div className="w-full h-60 mb-6 relative z-10">
-          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} showLabel={false} fillHeight={true} />
+          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} fillHeight={true} />
         </div>
       )}
 
@@ -114,15 +124,15 @@ export default function VaultHero({
         {/* Row 1: Est. APY, Hist. APY, Boosted APY */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <div className="text-center">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Est. APY</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">{t('vaultHero.estApy')}</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">{apy}%</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Hist. APY</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">{t('vaultHero.histApy')}</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">{historicalApy ? `${historicalApy}%` : '-'}</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Boosted APY</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">{t('vaultHero.boostedApy')}</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">-</div>
           </div>
         </div>
@@ -130,7 +140,7 @@ export default function VaultHero({
         {/* Row 2: Risk Level, Total Deposited, Your Balance */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
           <div className="text-center">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Risk Level</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">{t('vaultHero.riskLevel')}</div>
             <div className="flex gap-1 justify-center">
               {[1, 2, 3, 4, 5].map((level) => (
                 <div
@@ -145,12 +155,12 @@ export default function VaultHero({
             </div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Total Deposited</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">{t('vaultHero.totalDeposited')}</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">{tvl}</div>
             <div className="text-xs text-[color:var(--sf-text)]/70">${tvl}</div>
           </div>
           <div className="text-center">
-            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">Your Balance</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 font-semibold">{t('vaultHero.yourBalance')}</div>
             <div className="text-2xl font-bold text-[color:var(--sf-text)]">{userBalance}</div>
             <div className="text-xs text-[color:var(--sf-text)]/70">$0.00</div>
           </div>

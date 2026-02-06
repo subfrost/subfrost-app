@@ -1,15 +1,21 @@
+'use client';
+
+import { useTranslation } from '@/hooks/useTranslation';
+
 export default function Footer() {
+  const { t } = useTranslation();
+
   return (
     <footer className="w-full py-4 text-xs text-[color:var(--sf-text)]/70">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 sm:flex-row sm:justify-between sm:gap-6">
-        <p className="text-center sm:text-left">© 2025 Subzero Research Inc. All rights reserved.</p>
+        <p className="text-center sm:text-left">{t('footer.copyright')}</p>
         <nav className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
           <div className="flex items-center gap-6">
             <a href="#" className="hover:opacity-80">
-              Terms of Service
+              {t('footer.terms')}
             </a>
             <a href="#" className="hover:opacity-80">
-              Privacy Policy
+              {t('footer.privacy')}
             </a>
           </div>
           <div className="flex items-center gap-4">
@@ -41,5 +47,3 @@ export default function Footer() {
     </footer>
   );
 }
-
-

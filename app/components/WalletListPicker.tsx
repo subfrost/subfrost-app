@@ -10,12 +10,13 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Cloud, Calendar, Info, ExternalLink, Trash2 } from 'lucide-react';
 import type { WalletBackupInfo } from '@/utils/clientSideDrive';
-import { 
-  listWalletBackups, 
+import {
+  listWalletBackups,
   deleteWalletBackup,
   formatBackupDate,
-  getRelativeTime 
+  getRelativeTime
 } from '@/utils/clientSideDrive';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface WalletListPickerProps {
   onSelectWallet: (walletInfo: WalletBackupInfo) => void;
@@ -23,6 +24,7 @@ interface WalletListPickerProps {
 }
 
 export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerProps) {
+  const { t } = useTranslation();
   const [wallets, setWallets] = useState<WalletBackupInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
   const handleDelete = async (e: React.MouseEvent, folderId: string) => {
     e.stopPropagation(); // Don't trigger wallet selection
     
-    if (!confirm('Are you sure you want to delete this wallet backup? This cannot be undone.')) {
+    if (!confirm(t('walletPicker.confirmDelete'))) {
       return;
     }
 
@@ -67,7 +69,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
       setWallets(prev => prev.filter(w => w.folderId !== folderId));
     } catch (err) {
       console.error('Failed to delete wallet:', err);
-      alert('Failed to delete wallet backup. Please try again.');
+      alert(t('walletPicker.deleteFailed'));
     } finally {
       setDeletingId(null);
     }
@@ -77,7 +79,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        <p className="text-sm text-[color:var(--sf-text)]/60">Loading your wallets from Google Drive...</p>
+        <p className="text-sm text-[color:var(--sf-text)]/60">{t('walletPicker.loading')}</p>
       </div>
     );
   }
@@ -88,20 +90,20 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
         <div className="text-red-400 text-center">
           <p className="font-medium mb-2">{error}</p>
           <p className="text-xs text-[color:var(--sf-text)]/50">
-            Make sure you've authorized Google Drive access.
+            {t('walletPicker.authorize')}
           </p>
         </div>
         <button
           onClick={loadWallets}
           className="px-4 py-2 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg text-sm text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
         >
-          Try Again
+          {t('walletPicker.tryAgain')}
         </button>
         <button
           onClick={onCancel}
           className="px-4 py-2 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] text-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
         >
-          Cancel
+          {t('walletPicker.cancel')}
         </button>
       </div>
     );
@@ -112,16 +114,16 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-[color:var(--sf-text)]">Select Wallet to Restore</h3>
+          <h3 className="text-lg font-semibold text-[color:var(--sf-text)]">{t('walletPicker.selectWallet')}</h3>
           <p className="text-sm text-[color:var(--sf-text)]/60 mt-1">
-            Found {wallets.length} wallet{wallets.length !== 1 ? 's' : ''} in your Google Drive
+            {t('walletPicker.foundWallets', { count: wallets.length })}
           </p>
         </div>
         <button
           onClick={loadWallets}
           className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
         >
-          Refresh
+          {t('walletPicker.refresh')}
         </button>
       </div>
 
@@ -154,7 +156,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                   {wallet.hasPasswordHint && (
                     <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
                       <Info className="h-3 w-3" />
-                      <span>Password hint available</span>
+                      <span>{t('walletPicker.passwordHint')}</span>
                     </div>
                   )}
 
@@ -174,7 +176,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-blue-500 dark:hover:text-blue-400 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none opacity-0 group-hover:opacity-100"
-                  title="View in Google Drive"
+                  title={t('walletPicker.viewInDrive')}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </a>
@@ -184,7 +186,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                   onClick={(e) => handleDelete(e, wallet.folderId)}
                   disabled={deletingId === wallet.folderId}
                   className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-red-500 dark:hover:text-red-400 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none opacity-0 group-hover:opacity-100 disabled:opacity-100"
-                  title="Delete backup"
+                  title={t('walletPicker.deleteBackup')}
                 >
                   {deletingId === wallet.folderId ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -204,7 +206,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
           onClick={onCancel}
           className="w-full rounded-lg border border-[color:var(--sf-outline)] py-3 font-medium text-[color:var(--sf-text)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/5"
         >
-          Back
+          {t('walletPicker.back')}
         </button>
       </div>
     </div>

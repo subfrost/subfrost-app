@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { mockContracts, type Contract } from '../data/mockContracts';
 
 // Use Contract type from mockContracts.ts
@@ -42,6 +43,7 @@ type MarketsTableProps = {
 };
 
 export default function MarketsTable({ contracts, onContractSelect }: MarketsTableProps) {
+  const { t } = useTranslation();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRow = (contractId: string) => {
@@ -60,7 +62,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Header */}
       <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
-        <h3 className="text-base font-bold text-[color:var(--sf-text)]">Active Unlockable Positions</h3>
+        <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('markets.activePositions')}</h3>
       </div>
 
       {/* Mobile Card View */}
@@ -97,23 +99,23 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     }}
                     className="px-3 py-1.5 text-[10px] font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap"
                   >
-                    Buy/Sell
+                    {t('markets.buySell')}
                   </button>
                 </div>
 
                 {/* Blocks remaining */}
                 <div className="text-xs text-[color:var(--sf-text)]/60 mb-3">
-                  {contract.blocksLeft} blocks remaining
+                  {contract.blocksLeft} {t('markets.blocksRemaining')}
                 </div>
 
                 {/* Price grid */}
                 <div className="grid grid-cols-2 gap-4 mb-3">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Market Price</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('markets.marketPrice')}</div>
                     <div className="text-sm text-[color:var(--sf-text)]">{contract.marketPriceNum.toFixed(3)} BTC</div>
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Exercise Price</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('markets.exercisePrice')}</div>
                     <div className="text-sm font-medium text-[color:var(--sf-text)]">{calculateExercisePrice(contract.blocksLeft).toFixed(3)} BTC</div>
                   </div>
                 </div>
@@ -144,15 +146,15 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                   </div>
                   <div className="flex items-center justify-between text-xs text-[color:var(--sf-text)]/60">
                     <span>
-                      {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) remaining
+                      {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) {t('markets.remaining')}
                       {contract.mempoolQueue > 0 && (
                         <span className="ml-1 text-[color:var(--sf-primary)]/90">
-                          ({contract.mempoolQueue.toFixed(1)} in mempool)
+                          ({contract.mempoolQueue.toFixed(1)} {t('markets.inMempool')})
                         </span>
                       )}
                     </span>
                     <span>
-                      {((contract.exercised / contract.totalSupply) * 100).toFixed(1)}% exercised
+                      {((contract.exercised / contract.totalSupply) * 100).toFixed(1)}% {t('markets.exercised')}
                     </span>
                   </div>
                 </div>
@@ -167,39 +169,39 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <span className="text-xs text-[color:var(--sf-text)]/70">Total supply:</span>
+                        <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.totalSupply')}</span>
                         <div className="font-medium">{contract.totalSupply.toFixed(1)} BTC</div>
                       </div>
                       <div>
-                        <span className="text-xs text-[color:var(--sf-text)]/70">Remaining:</span>
+                        <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.remainingSupply')}</span>
                         <div className="font-medium">
                           {contract.remaining.toFixed(1)} BTC
                           {contract.mempoolQueue > 0 && (
                             <span className="ml-1 text-[color:var(--sf-primary)]/90 text-xs">
-                              ({contract.mempoolQueue.toFixed(1)} in queue)
+                              ({contract.mempoolQueue.toFixed(1)} {t('markets.inQueue')})
                             </span>
                           )}
                         </div>
                       </div>
                       <div>
-                        <span className="text-xs text-[color:var(--sf-text)]/70">Exercised:</span>
+                        <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.exercisedSupply')}</span>
                         <div className="font-medium">{contract.exercised.toFixed(1)} BTC</div>
                       </div>
                       <div>
-                        <span className="text-xs text-[color:var(--sf-text)]/70">Exercise premium:</span>
+                        <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.exercisePremium')}</span>
                         <div className="font-medium">{calculateExercisePremium(contract.blocksLeft).toFixed(2)}%</div>
                       </div>
                       <div>
-                        <span className="text-xs text-[color:var(--sf-text)]/70">Expiry Block:</span>
+                        <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.expiryBlock')}</span>
                         <div className="font-medium">{contract.expiryBlock.toLocaleString()}</div>
                       </div>
                       <div>
-                        <span className="text-xs text-[color:var(--sf-text)]/70">Created:</span>
-                        <div className="font-medium">{contract.created}</div>
+                        <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.created')}</span>
+                        <div className="font-medium">{t('futures.blocksAgo', { count: parseInt(contract.created) || contract.created })}</div>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-xs text-[color:var(--sf-text)]/70">Underlying yield:</span>
-                        <div className="font-medium">{contract.underlyingYield}</div>
+                        <span className="text-xs text-[color:var(--sf-text)]/70">{t('markets.underlyingYield')}</span>
+                        <div className="font-medium">{t('futures.autoCompounding')}</div>
                       </div>
                     </div>
                   </div>
@@ -216,10 +218,10 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
             <thead>
               <tr className="border-b border-[color:var(--sf-row-border)]">
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70" colSpan={3}>
-                  Contract Details
+                  {t('markets.contractDetails')}
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                  Actions
+                  {t('markets.actions')}
                 </th>
               </tr>
             </thead>
@@ -254,19 +256,19 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                               <div className="font-semibold text-[color:var(--sf-text)]">{contract.id}</div>
                             </div>
                             <div className="text-xs text-[color:var(--sf-text)]/60 ml-5">
-                              {contract.blocksLeft} blocks remaining
+                              {contract.blocksLeft} {t('markets.blocksRemaining')}
                             </div>
                           </div>
-                          {/* Market Price */}
+                          {/* {t('markets.marketPrice')} */}
                           <div className="min-w-[120px]">
-                            <div className="text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/50 mb-1">Market Price</div>
+                            <div className="text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/50 mb-1">{t('markets.marketPrice')}</div>
                             <div className="text-sm text-[color:var(--sf-text)]">
                               {contract.marketPriceNum.toFixed(3)} BTC
                             </div>
                           </div>
-                          {/* Exercise Price */}
+                          {/* {t('markets.exercisePrice')} */}
                           <div className="min-w-[120px]">
-                            <div className="text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/50 mb-1">Exercise Price</div>
+                            <div className="text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/50 mb-1">{t('markets.exercisePrice')}</div>
                             <div className="text-sm font-medium text-[color:var(--sf-text)]">
                               {calculateExercisePrice(contract.blocksLeft).toFixed(3)} BTC
                             </div>
@@ -298,15 +300,15 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           </div>
                           <div className="flex items-center justify-between text-xs text-[color:var(--sf-text)]/60">
                             <span>
-                              {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) remaining
+                              {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) {t('markets.remaining')}
                               {contract.mempoolQueue > 0 && (
                                 <span className="ml-1 text-[color:var(--sf-primary)]/90">
-                                  ({contract.mempoolQueue.toFixed(1)} in mempool)
+                                  ({contract.mempoolQueue.toFixed(1)} {t('markets.inMempool')})
                                 </span>
                               )}
                             </span>
                             <span>
-                              {((contract.exercised / contract.totalSupply) * 100).toFixed(1)}% exercised
+                              {((contract.exercised / contract.totalSupply) * 100).toFixed(1)}% {t('markets.exercised')}
                             </span>
                           </div>
                         </div>
@@ -322,7 +324,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                         }}
                         className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                       >
-                        Buy/Sell
+                        {t('markets.buySell')}
                       </button>
                     </td>
                   </tr>,
@@ -340,26 +342,26 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                             <div className="space-y-3">
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Total supply:
+                                  {t('markets.totalSupply')}
                                 </span>
                                 <div className="font-medium">{contract.totalSupply.toFixed(1)} BTC</div>
                               </div>
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Remaining:
+                                  {t('markets.remainingSupply')}
                                 </span>
                                 <div className="font-medium">
                                   {contract.remaining.toFixed(1)} BTC
                                   {contract.mempoolQueue > 0 && (
                                     <span className="ml-2 text-[color:var(--sf-primary)]/90">
-                                      ({contract.mempoolQueue.toFixed(1)} BTC in queue)
+                                      ({contract.mempoolQueue.toFixed(1)} BTC {t('markets.inQueue')})
                                     </span>
                                   )}
                                 </div>
                               </div>
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Exercised:
+                                  {t('markets.exercisedSupply')}
                                 </span>
                                 <div className="font-medium">{contract.exercised.toFixed(1)} BTC</div>
                               </div>
@@ -368,19 +370,19 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                             <div className="space-y-3">
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Exercise price:
+                                  {t('markets.exercisePrice')}:
                                 </span>
                                 <div className="font-medium">{calculateExercisePrice(contract.blocksLeft).toFixed(3)} BTC</div>
                               </div>
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Exercise premium:
+                                  {t('markets.exercisePremium')}
                                 </span>
                                 <div className="font-medium">{calculateExercisePremium(contract.blocksLeft).toFixed(2)}%</div>
                               </div>
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Expiry Block:
+                                  {t('markets.expiryBlock')}
                                 </span>
                                 <div className="font-medium">{contract.expiryBlock.toLocaleString()}</div>
                               </div>
@@ -389,15 +391,15 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                             <div className="space-y-3">
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Created:
+                                  {t('markets.created')}
                                 </span>
-                                <div className="font-medium">{contract.created}</div>
+                                <div className="font-medium">{t('futures.blocksAgo', { count: parseInt(contract.created) || contract.created })}</div>
                               </div>
                               <div>
                                 <span className="text-xs text-[color:var(--sf-text)]/70">
-                                  Underlying yield:
+                                  {t('markets.underlyingYield')}
                                 </span>
-                                <div className="font-medium">{contract.underlyingYield}</div>
+                                <div className="font-medium">{t('futures.autoCompounding')}</div>
                               </div>
                             </div>
                           </div>

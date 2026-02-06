@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { queryKeys } from '@/queries/keys';
 
 export type DynamicPool = {
   pool_id: string;
@@ -69,11 +70,8 @@ export function useDynamicPools(options?: {
   const { enabled = true } = options || {};
 
   return useQuery<DynamicPoolsResult>({
-    queryKey: ['dynamic-pools', network, factoryId],
-    // Enable when we have all required dependencies
+    queryKey: queryKeys.pools.dynamic(network, factoryId),
     enabled: enabled && !!factoryId && !!network && !!provider,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    // Retry transient failures (network issues, indexer hiccups)
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     queryFn: async () => {

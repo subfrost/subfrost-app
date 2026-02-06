@@ -603,7 +603,7 @@ async function runTestSuite(): Promise<void> {
         return (
           text.includes('dxBTC') ||
           text.includes('yvfrBTC') ||
-          text.includes('veDIESEL') ||
+          text.includes('FIRE') ||
           text.includes('Vault')
         );
       });

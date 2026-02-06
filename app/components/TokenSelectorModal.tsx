@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react';
 import TokenIcon from './TokenIcon';
 import { Search, X } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 // Import Network type from constants
 import type { Network } from '@/utils/constants';
@@ -71,11 +73,14 @@ type Props = {
   mode?: 'from' | 'to' | 'pool0' | 'pool1' | null;
   onBridgeTokenSelect?: (token: string) => void;
   selectedBridgeTokenFromOther?: string; // Bridge token selected in the opposite selector
+  // Percentage selection (shown in 'from' mode)
+  onPercentFrom?: (percent: number) => void;
+  activePercent?: number | null;
 };
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'USDT', enabled: true },
+  { symbol: 'USDT', name: 'USDT', enabled: false },
   { symbol: 'ETH', name: 'ETH', enabled: false },
   { symbol: 'SOL', name: 'SOL', enabled: false },
   { symbol: 'ZEC', name: 'ZEC', enabled: false },
@@ -87,13 +92,17 @@ export default function TokenSelectorModal({
   tokens,
   onSelectToken,
   selectedTokenId,
-  title = 'Select a token',
+  title,
   network = 'mainnet',
   excludedTokenIds = [],
   mode,
   onBridgeTokenSelect,
   selectedBridgeTokenFromOther,
+  onPercentFrom,
+  activePercent,
 }: Props) {
+  const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showAlreadySelected, setShowAlreadySelected] = useState(false);
@@ -131,7 +140,7 @@ export default function TokenSelectorModal({
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
-              {title}
+              {title || t('tokenSelector.selectToken')}
             </h2>
             <button
               onClick={onClose}
@@ -141,9 +150,6 @@ export default function TokenSelectorModal({
               <X size={18} />
             </button>
           </div>
-          <p className="text-xs font-medium text-[color:var(--sf-text)]/60">
-            We only support trades of high-volume assets.
-          </p>
         </div>
 
         {/* Bridge Section - Shown in FROM and TO modes */}
@@ -152,16 +158,16 @@ export default function TokenSelectorModal({
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-                  Cross-chain Swap:
+                  {t('tokenSelector.crossChainSwap')}
                 </span>
                 {showComingSoon && (
                   <span className="text-xs font-bold text-[color:var(--sf-primary)] animate-pulse">
-                    Coming soon!
+                    {t('tokenSelector.comingSoon')}
                   </span>
                 )}
                 {showAlreadySelected && (
                   <span className="text-xs font-bold text-[color:var(--sf-primary)] animate-pulse">
-                    Token already selected!
+                    {t('tokenSelector.alreadySelected')}
                   </span>
                 )}
               </div>
@@ -179,7 +185,7 @@ export default function TokenSelectorModal({
                             setShowAlreadySelected(true);
                             setTimeout(() => setShowAlreadySelected(false), 1000);
                           }
-                        } else if (token.enabled) {
+                        } else if (token.enabled || !isDemoGated) {
                           onBridgeTokenSelect?.(token.symbol);
                         } else {
                           if (!showComingSoon) {
@@ -191,7 +197,7 @@ export default function TokenSelectorModal({
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
                         isSelectedInOther
                           ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
-                          : token.enabled
+                          : (token.enabled || !isDemoGated)
                           ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
                           : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
                       }`}
@@ -199,7 +205,7 @@ export default function TokenSelectorModal({
                       <img
                         src={`/tokens/${token.symbol.toLowerCase()}.svg`}
                         alt={token.symbol}
-                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
+                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && isDemoGated && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
                       />
                       <span className={`font-bold text-sm whitespace-nowrap ${
                         isSelectedInOther
@@ -234,7 +240,7 @@ export default function TokenSelectorModal({
             />
             <input
               type="text"
-              placeholder="Search bitcoin-native assets..."
+              placeholder={t('tokenSelector.searchAssets')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] py-3 pl-10 pr-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
@@ -247,7 +253,7 @@ export default function TokenSelectorModal({
           {filteredTokens.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm font-medium text-[color:var(--sf-text)]/50">
-                No tokens found
+                {t('tokenSelector.noTokens')}
               </p>
             </div>
           ) : (
@@ -285,7 +291,7 @@ export default function TokenSelectorModal({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-                            {token.symbol}
+                            {token.name || token.symbol}
                           </span>
                           {isSelected && (
                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white">
@@ -319,7 +325,7 @@ export default function TokenSelectorModal({
                         )}
                         {!isAvailable && mode === 'from' && (
                           <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                            Not available
+                            {t('tokenSelector.notAvailable')}
                           </span>
                         )}
                       </div>

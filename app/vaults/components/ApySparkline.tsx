@@ -1,16 +1,17 @@
 "use client";
 
 import { useTheme } from "@/context/ThemeContext";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type ApySparklineProps = {
   data: number[]; // Array of APY values (30 days)
   currentApy: number; // Current/latest APY to display
-  showLabel?: boolean; // Whether to show the APY label (default: true)
   fillHeight?: boolean; // Whether to fill parent height (default: false)
 };
 
-export default function ApySparkline({ data, currentApy, showLabel = true, fillHeight = false }: ApySparklineProps) {
+export default function ApySparkline({ data, currentApy, fillHeight = false }: ApySparklineProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   // Grid line color matching CandleChart styling
   const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(40, 67, 114, 0.1)';
@@ -50,7 +51,7 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
   return (
     <div className={`flex flex-col items-end w-full ${fillHeight ? 'h-full' : ''}`}>
       <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-        30-day APY
+        {t('apy.thirtyDayApy')}
       </div>
       <div className={`relative w-full ${fillHeight ? 'flex-1' : 'h-12'}`}>
         {/* Chart line - stretches to fill available width */}
@@ -110,18 +111,12 @@ export default function ApySparkline({ data, currentApy, showLabel = true, fillH
 
         {/* Hist APY label - positioned below the pulsating dot */}
         <div
-          className="absolute z-10 rounded-md bg-[color:var(--sf-info-green-title)] px-1.5 py-0.5 text-[10px] font-semibold text-white whitespace-nowrap -translate-x-1/2"
+          className="absolute z-10 rounded-md bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-1.5 py-0.5 text-[10px] font-bold text-[color:var(--sf-info-green-title)] whitespace-nowrap -translate-x-1/2"
           style={{ left: `${lastPointXPercent}%`, top: `calc(${lastPointYPercent}% + 8px)` }}
         >
           {currentApy.toFixed(1)}%
         </div>
 
-        {/* APY label - right-aligned, positioned at bottom */}
-        {showLabel && (
-          <div className="absolute right-0 bottom-0 text-xs font-bold text-[color:var(--sf-text)]/60 whitespace-nowrap">
-            {currentApy.toFixed(1)}%
-          </div>
-        )}
       </div>
     </div>
   );

@@ -9,6 +9,8 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { ChevronDown } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
+import { useTranslation } from "@/hooks/useTranslation";
+import { useDemoGate } from "@/hooks/useDemoGate";
 
 type BridgeStep = 1 | 2 | 3 | 4 | 5;
 
@@ -49,8 +51,8 @@ export default function SwapInputs({
   onSelectToToken,
   onInvert,
   onSwapClick,
-  fromBalanceText = "No balance",
-  toBalanceText = "No balance",
+  fromBalanceText,
+  toBalanceText,
   fromFiatText = "$0.00",
   toFiatText = "$0.00",
   onMaxFrom,
@@ -62,6 +64,12 @@ export default function SwapInputs({
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
+  const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
+
+  // Apply i18n defaults for balance texts
+  const resolvedFromBalanceText = fromBalanceText ?? t("swap.noBalance");
+  const resolvedToBalanceText = toBalanceText ?? t("swap.noBalance");
 
   // Refs for focusing inputs when clicking the container
   const fromInputRef = useRef<HTMLInputElement>(null);
@@ -73,31 +81,44 @@ export default function SwapInputs({
   const [ethAddressFocused, setEthAddressFocused] = useState(false);
 
   // Bridge state
+  const [showSwapComingSoon, setShowSwapComingSoon] = useState(false);
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState<BridgeStep>(1);
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
 
   // Bridge tokens don't have on-chain balances
-  const BRIDGE_TOKEN_IDS = ['usdt', 'eth', 'sol', 'zec'];
-  const isFromBridgeToken = from?.id ? BRIDGE_TOKEN_IDS.includes(from.id) : false;
+  const BRIDGE_TOKEN_IDS = ["usdt", "eth", "sol", "zec"];
+  const isFromBridgeToken = from?.id
+    ? BRIDGE_TOKEN_IDS.includes(from.id)
+    : false;
   const isToBridgeToken = to?.id ? BRIDGE_TOKEN_IDS.includes(to.id) : false;
 
   // Deposit address for cross-chain swaps
   const DEPOSIT_ADDRESS = "0x59f57b84d6742acdaa56e9da1c770898e4a270b6";
 
   // For testing: allow cross-chain swap button to work even without full pricing
-  const canSwapCrossChain = isConnected && isFromBridgeToken && !!fromAmount && parseFloat(fromAmount) > 0;
-  const canSwap = isConnected &&
-    !!fromAmount && !!toAmount &&
-    isFinite(parseFloat(fromAmount)) && isFinite(parseFloat(toAmount)) &&
-    parseFloat(fromAmount) > 0 && parseFloat(toAmount) > 0;
+  const canSwapCrossChain =
+    isConnected &&
+    isFromBridgeToken &&
+    !!fromAmount &&
+    parseFloat(fromAmount) > 0;
+  const canSwap =
+    isConnected &&
+    !!fromAmount &&
+    !!toAmount &&
+    isFinite(parseFloat(fromAmount)) &&
+    isFinite(parseFloat(toAmount)) &&
+    parseFloat(fromAmount) > 0 &&
+    parseFloat(toAmount) > 0;
 
   // Enable button for cross-chain FROM tokens even without full quote
   const isButtonEnabled = canSwap || canSwapCrossChain;
 
   const ctaText = isConnected
-    ? (isToBridgeToken || isFromBridgeToken ? "CONFIRM CROSS-CHAIN SWAP" : "CONFIRM SWAP")
-    : "CONNECT WALLET";
+    ? isToBridgeToken || isFromBridgeToken
+      ? t("swap.confirmCrossChainSwap")
+      : t("swap.confirmSwap")
+    : t("swap.connectWallet");
 
   const onCtaClick = () => {
     if (!isConnected) {
@@ -131,29 +152,39 @@ export default function SwapInputs({
     const stepTimers: NodeJS.Timeout[] = [];
 
     // Simulate step progression for demo purposes
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1]);
-      setBridgeStep(2);
-    }, 5000));
+    stepTimers.push(
+      setTimeout(() => {
+        setCompletedSteps([1]);
+        setBridgeStep(2);
+      }, 5000),
+    );
 
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1, 2]);
-      setBridgeStep(3);
-    }, 10000));
+    stepTimers.push(
+      setTimeout(() => {
+        setCompletedSteps([1, 2]);
+        setBridgeStep(3);
+      }, 10000),
+    );
 
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1, 2, 3]);
-      setBridgeStep(4);
-    }, 15000));
+    stepTimers.push(
+      setTimeout(() => {
+        setCompletedSteps([1, 2, 3]);
+        setBridgeStep(4);
+      }, 15000),
+    );
 
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1, 2, 3, 4]);
-      setBridgeStep(5);
-    }, 20000));
+    stepTimers.push(
+      setTimeout(() => {
+        setCompletedSteps([1, 2, 3, 4]);
+        setBridgeStep(5);
+      }, 20000),
+    );
 
-    stepTimers.push(setTimeout(() => {
-      setCompletedSteps([1, 2, 3, 4, 5]);
-    }, 22000));
+    stepTimers.push(
+      setTimeout(() => {
+        setCompletedSteps([1, 2, 3, 4, 5]);
+      }, 22000),
+    );
 
     return () => {
       stepTimers.forEach(clearTimeout);
@@ -162,10 +193,10 @@ export default function SwapInputs({
 
   // Calculate balance usage percentage
   const calculateBalanceUsage = (): number => {
-    if (!fromAmount || !fromBalanceText) return 0;
+    if (!fromAmount || !resolvedFromBalanceText) return 0;
 
     // Extract balance from text like "Balance 8.908881"
-    const balanceMatch = fromBalanceText.match(/[\d.]+/);
+    const balanceMatch = resolvedFromBalanceText.match(/[\d.]+/);
     if (!balanceMatch) return 0;
 
     const balance = parseFloat(balanceMatch[0]);
@@ -179,21 +210,21 @@ export default function SwapInputs({
 
   const balanceUsage = calculateBalanceUsage();
 
-  // Color based on usage
+  // Color based on usage - green gradient from light to full opacity
   const getBalanceColor = () => {
-    const isDark = theme === 'dark';
-    if (balanceUsage === 0) return isDark ? 'bg-gray-700' : 'bg-gray-200';
-    if (balanceUsage < 50) return isDark ? 'bg-green-700' : 'bg-green-500';
-    if (balanceUsage < 80) return isDark ? 'bg-yellow-700' : 'bg-yellow-500';
-    if (balanceUsage < 100) return isDark ? 'bg-orange-700' : 'bg-orange-500';
-    return isDark ? 'bg-red-700' : 'bg-red-500';
+    if (balanceUsage === 0) return "bg-green-500/20";
+    if (balanceUsage < 25) return "bg-green-500/40";
+    if (balanceUsage < 50) return "bg-green-500/60";
+    if (balanceUsage < 75) return "bg-green-500/80";
+    if (balanceUsage < 95) return "bg-green-500/90";
+    return "bg-green-500";
   };
 
   // Check if current amount matches a specific percentage of balance
   const getActivePercent = (): number | null => {
-    if (!fromAmount || !fromBalanceText) return null;
+    if (!fromAmount || !resolvedFromBalanceText) return null;
 
-    const balanceMatch = fromBalanceText.match(/[\d.]+/);
+    const balanceMatch = resolvedFromBalanceText.match(/[\d.]+/);
     if (!balanceMatch) return null;
 
     const balance = parseFloat(balanceMatch[0]);
@@ -216,141 +247,213 @@ export default function SwapInputs({
     <div className="relative flex flex-col gap-3">
       {/* Collapsible swap inputs container - slides up when bridge is active */}
       <div
-        className={`flex flex-col gap-3 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+        className={`flex flex-col gap-1 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
           bridgeActive
             ? "max-h-0 opacity-0 -translate-y-full pointer-events-none overflow-hidden"
             : "max-h-[1000px] opacity-100 translate-y-0 overflow-visible"
         }`}
       >
         {/* You Send - entire panel clickable to focus input */}
-        <div
-          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${fromFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
-          onClick={() => fromInputRef.current?.focus()}
-        >
-          {/* Token Selector - floating top-right */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              openTokenSelector('from');
-            }}
-            className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+        <div className="relative">
+          <div
+            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
+              fromFocused
+                ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
+                : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
+            }`}
+            onClick={() => fromInputRef.current?.focus()}
           >
-            {from && (
-              <TokenIcon
-                key={`from-${from.id}-${from.symbol}`}
-                symbol={from.symbol}
-                id={from.id}
-                iconUrl={from.iconUrl}
-                size="sm"
-                network={network}
+            {/* Token Selector - floating top-right */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openTokenSelector("from");
+              }}
+              className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+            >
+              {from && (
+                <TokenIcon
+                  key={`from-${from.id}-${from.symbol}`}
+                  symbol={from.symbol}
+                  id={from.id}
+                  iconUrl={from.iconUrl}
+                  size="sm"
+                  network={network}
+                />
+              )}
+              <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                {from?.name || from?.symbol || t("swap.select")}
+              </span>
+              <ChevronDown
+                size={16}
+                className="text-[color:var(--sf-text)]/60 flex-shrink-0"
               />
-            )}
-            <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {from?.symbol ?? 'Select'}
-            </span>
-            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
-          </button>
+            </button>
 
-          {/* Main content area */}
-          <div className="flex flex-col gap-1">
-            {/* Label */}
-            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">You Send</span>
+            {/* Main content area */}
+            <div className="flex flex-col gap-1">
+              {/* Label */}
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">
+                {t("swap.youSend")}
+              </span>
 
-            {/* Input - full width */}
-            <div className="pr-32">
-              <NumberField
-                ref={fromInputRef}
-                placeholder={"0.00"}
-                align="left"
-                value={fromAmount}
-                onChange={onChangeFromAmount}
-                onFocus={() => setFromFocused(true)}
-                onBlur={() => setFromFocused(false)}
-              />
-            </div>
+              {/* Input - full width */}
+              <div className="pr-32">
+                <NumberField
+                  ref={fromInputRef}
+                  placeholder={"0.00"}
+                  align="left"
+                  value={fromAmount}
+                  onChange={onChangeFromAmount}
+                  onFocus={() => setFromFocused(true)}
+                  onBlur={() => setFromFocused(false)}
+                />
+              </div>
 
-            {/* Fiat value row */}
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{fromFiatText}</div>
-            </div>
-
-            {/* Balance + Percentage Buttons stacked (hidden for bridge tokens) */}
-            {!isFromBridgeToken && (
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2">
-                  {balanceUsage > 0 && (
-                    <div className={`w-16 h-1 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
-                      <div
-                        className={`h-full ${getBalanceColor()} transition-all duration-[400ms]`}
-                        style={{ width: `${balanceUsage}%` }}
-                      />
-                    </div>
-                  )}
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                    {fromBalanceText}
-                    {balanceUsage > 0 && (
-                      <span className="ml-1.5">({balanceUsage.toFixed(1)}%)</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                  {onPercentFrom && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => onPercentFrom(0.25)}
-                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
-                      >
-                        25%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onPercentFrom(0.5)}
-                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
-                      >
-                        50%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onPercentFrom(0.75)}
-                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
-                      >
-                        75%
-                      </button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={onMaxFrom}
-                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${onMaxFrom ? (activePercent === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`) : "opacity-40 cursor-not-allowed"}`}
-                    disabled={!onMaxFrom}
-                  >
-                    Max
-                  </button>
+              {/* Fiat value row */}
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                  {fromFiatText}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Invert button – centered between cards */}
-        <div className="relative -my-1 z-20 flex items-center justify-center">
-          <button
-            type="button"
-            onClick={onInvert}
-            className="group flex h-11 w-11 items-center justify-center rounded-full bg-[color:var(--sf-surface)] text-[color:var(--sf-primary)] shadow-[0_4px_16px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.25)] hover:scale-105 active:scale-95 outline-none"
-            aria-label="Invert swap direction"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group-hover:-rotate-180">
-              <path d="M12 5v14M19 12l-7 7-7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+              {/* Balance + Percentage Buttons (hidden for bridge tokens) */}
+              {!isFromBridgeToken && (
+                <div className="flex flex-col items-end gap-1">
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                    {resolvedFromBalanceText}
+                  </div>
+                  <div
+                    className="flex items-center justify-between w-full"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div
+                      className={`max-w-[45%] flex-1 mr-3 h-1 rounded-full overflow-hidden ${
+                        balanceUsage > 0
+                          ? theme === "dark" ? "bg-gray-700" : "bg-gray-200"
+                          : ""
+                      }`}
+                    >
+                      {balanceUsage > 0 && (
+                        <div
+                          className={`h-full ${getBalanceColor()} transition-all duration-[400ms]`}
+                          style={{ width: `${balanceUsage}%` }}
+                        />
+                      )}
+                    </div>
+                    <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${
+                      fromFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    }`}>
+                    {onPercentFrom && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onPercentFrom(0.25)}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                            activePercent === 0.25
+                              ? "bg-[color:var(--sf-primary)]/20"
+                              : `${
+                                  theme === "dark"
+                                    ? "bg-white/[0.03]"
+                                    : "bg-[color:var(--sf-surface)]"
+                                } hover:bg-white/[0.06]`
+                          }`}
+                        >
+                          25%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onPercentFrom(0.5)}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                            activePercent === 0.5
+                              ? "bg-[color:var(--sf-primary)]/20"
+                              : `${
+                                  theme === "dark"
+                                    ? "bg-white/[0.03]"
+                                    : "bg-[color:var(--sf-surface)]"
+                                } hover:bg-white/[0.06]`
+                          }`}
+                        >
+                          50%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onPercentFrom(0.75)}
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                            activePercent === 0.75
+                              ? "bg-[color:var(--sf-primary)]/20"
+                              : `${
+                                  theme === "dark"
+                                    ? "bg-white/[0.03]"
+                                    : "bg-[color:var(--sf-surface)]"
+                                } hover:bg-white/[0.06]`
+                          }`}
+                        >
+                          75%
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={onMaxFrom}
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                        !onMaxFrom
+                          ? "opacity-40 cursor-not-allowed"
+                          : activePercent === 1
+                          ? "bg-[color:var(--sf-primary)]/20"
+                          : `${
+                                theme === "dark"
+                                  ? "bg-white/[0.03]"
+                                  : "bg-[color:var(--sf-surface)]"
+                              } hover:bg-white/[0.06]`
+                      }`}
+                      disabled={!onMaxFrom}
+                    >
+                      {t("swap.max")}
+                    </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Invert button – overlaps both cards, centered between them */}
+          <div className="pointer-events-none absolute left-1/2 -bottom-6 z-30 -translate-x-1/2">
+            <button
+              type="button"
+              onClick={onInvert}
+              className="pointer-events-auto group flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--sf-primary)] text-white  transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-105 active:scale-95 outline-none"
+              aria-label="Invert swap direction"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group-hover:-rotate-180"
+              >
+                <path
+                  d="M12 5v14M19 12l-7 7-7-7"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* You Receive - entire panel clickable to focus input */}
         <div
-          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${toFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] px-4 pb-4 pt-6 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
+            toFocused
+              ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
+              : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
+          }`}
           onClick={() => toInputRef.current?.focus()}
         >
           {/* Token Selector - floating top-right */}
@@ -358,7 +461,7 @@ export default function SwapInputs({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              openTokenSelector('to');
+              openTokenSelector("to");
             }}
             className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
           >
@@ -373,15 +476,20 @@ export default function SwapInputs({
               />
             )}
             <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-              {to?.symbol ?? 'Select'}
+              {to?.name || to?.symbol || t("swap.select")}
             </span>
-            <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+            <ChevronDown
+              size={16}
+              className="text-[color:var(--sf-text)]/60 flex-shrink-0"
+            />
           </button>
 
           {/* Main content area */}
           <div className="flex flex-col gap-1">
             {/* Label */}
-            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">You Receive</span>
+            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">
+              {t("swap.youReceive")}
+            </span>
 
             {/* Input - full width */}
             <div className="pr-32">
@@ -397,12 +505,16 @@ export default function SwapInputs({
             </div>
 
             {/* Fiat value */}
-            <div className="text-xs font-medium text-[color:var(--sf-text)]/50">{toFiatText}</div>
+            <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
+              {toFiatText}
+            </div>
 
             {/* Balance row at bottom (hidden for bridge tokens) */}
             {!isToBridgeToken && (
               <div className="flex items-center justify-end">
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{to?.id ? toBalanceText : 'Balance 0'}</div>
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  {to?.id ? resolvedToBalanceText : `${t("swap.balance")} 0`}
+                </div>
               </div>
             )}
           </div>
@@ -422,21 +534,27 @@ export default function SwapInputs({
 
       {/* Ethereum Wallet Address for cross-chain tokens (when sending TO bridge token) */}
       {isToBridgeToken && !bridgeActive && (
-        <div className={`relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] ${ethAddressFocused ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}>
+        <div
+          className={`relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] ${
+            ethAddressFocused
+              ? "shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
+              : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
+          }`}
+        >
           <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-            Ethereum Wallet Address
+            {t("swap.ethWalletAddress")}
           </label>
           <input
             type="text"
-            value={ethereumAddress ?? ''}
+            value={ethereumAddress ?? ""}
             onChange={(e) => onChangeEthereumAddress?.(e.target.value)}
             onFocus={() => setEthAddressFocused(true)}
             onBlur={() => setEthAddressFocused(false)}
-            placeholder="Enter USDT recipient address (0x...)"
-            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-sm font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms]"
+            placeholder={t("swap.enterUsdtRecipient")}
+            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms]"
           />
           <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
-            Enter the Ethereum address where you want to receive USDT.
+            {t("swap.enterEthAddress")}
           </p>
         </div>
       )}
@@ -461,11 +579,33 @@ export default function SwapInputs({
       >
         <button
           type="button"
-          onClick={onCtaClick}
-          disabled={!isButtonEnabled && isConnected}
-          className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+          onClick={() => {
+            if (!isConnected) {
+              onConnectModalOpenChange(true);
+              return;
+            }
+            if (!isDemoGated) {
+              onSwapClick();
+              return;
+            }
+            if (!showSwapComingSoon) {
+              setShowSwapComingSoon(true);
+              setTimeout(() => setShowSwapComingSoon(false), 1000);
+            }
+          }}
+          className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
+            isConnected && isDemoGated
+              ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
+              : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
+          }`}
         >
-          {ctaText}
+          {showSwapComingSoon ? (
+            <span className="animate-pulse">{t("badge.comingSoon")}</span>
+          ) : isConnected ? (
+            t("swap.confirmSwap")
+          ) : (
+            t("swap.connectWallet")
+          )}
         </button>
       </div>
     </div>

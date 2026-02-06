@@ -58,7 +58,13 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths;
     }
 
-    // Priority 3: Special handling for bUSD (check by token ID)
+    // Priority 3: Special handling for DIESEL (2:0) — always use Ordiscan CDN icon
+    if (id === '2:0' || symbolLower === 'diesel') {
+      paths.push('https://cdn.ordiscan.com/alkanes/2_0');
+      return paths;
+    }
+
+    // Priority 4: Special handling for bUSD (check by token ID)
     if (id === '2:56801' || symbolLower === 'busd') {
       paths.push('/tokens/busd.png');
       return paths;
@@ -75,16 +81,16 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       paths.push(iconUrl);
     }
 
-    // Priority 6: Try local token assets by symbol (only if we know the icon exists)
+    // Priority 6: Ordiscan CDN for Alkanes tokens (proper token icons)
+    if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
+      const urlSafeId = id.replace(/:/g, '_');
+      paths.push(`https://cdn.ordiscan.com/alkanes/${urlSafeId}`);
+    }
+
+    // Priority 7: Try local token assets by symbol (only if we know the icon exists)
     if (hasLocalIcon) {
       paths.push(`/tokens/${symbolLower}.svg`);
       paths.push(`/tokens/${symbolLower}.png`);
-    }
-
-    // Priority 7: Fallback to Oyl CDN for Alkanes tokens (skip local attempts)
-    if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
-      const urlSafeId = id.replace(/:/g, '-');
-      paths.push(`https://asset.oyl.gg/alkanes/${network}/${urlSafeId}.png`);
     }
 
     return paths;
@@ -96,12 +102,16 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
 
   const currentPath = iconPaths[currentPathIndex];
 
-  // Reset path index when icon paths change (props updated)
+  // Create a stable key from actual paths to avoid resetting when only symbol changes
+  // but the icon URL paths remain the same (e.g., when displayMap loads token names)
+  const iconPathsKey = iconPaths.join('|');
+
+  // Reset path index when actual icon paths change (not just function reference)
   useEffect(() => {
     setCurrentPathIndex(0);
     setHasError(false);
     setIsLoading(true);
-  }, [getIconPaths]);
+  }, [iconPathsKey]);
 
   // Handle cached images that load before onLoad handler is attached
   useEffect(() => {

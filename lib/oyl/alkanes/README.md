@@ -1,20 +1,5 @@
 # deezel-web
 
-> ⚠️ **IMPORTANT SYNC REQUIREMENT**
->
-> These WASM files are aliased from `@alkanes/ts-sdk/wasm` via `next.config.mjs`.
-> When updating the `@alkanes/ts-sdk` package, you **MUST** also sync the WASM files:
->
-> ```bash
-> cp node_modules/@alkanes/ts-sdk/wasm/*.wasm lib/oyl/alkanes/
-> cp node_modules/@alkanes/ts-sdk/wasm/*.js lib/oyl/alkanes/
-> cp node_modules/@alkanes/ts-sdk/wasm/*.d.ts lib/oyl/alkanes/
-> ```
->
-> **Last synced:** 2026-01-18 with `@alkanes/ts-sdk@0.1.4-dfe27c6`
-
----
-
 Web-compatible implementation of deezel-common traits using web-sys APIs for browser environments, with comprehensive browser wallet integration.
 
 ## Overview

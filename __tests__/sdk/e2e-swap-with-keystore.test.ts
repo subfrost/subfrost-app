@@ -16,6 +16,8 @@ import { createTestSigner, TEST_MNEMONIC, type TestSignerResult } from './test-u
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
+const INTEGRATION = !!process.env.INTEGRATION;
+
 // Regtest configuration
 const REGTEST_CONFIG = {
   jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
@@ -26,12 +28,12 @@ const REGTEST_CONFIG = {
 const FRBTC_ID = '32:0';
 const DIESEL_ID = '2:0';
 const POOL_ID = '2:3';
-const FACTORY_ID = '4:65522';
+const FACTORY_ID = '4:65498';
 
-// Factory opcodes (from constants)
+// Factory opcodes — router opcodes on factory proxy [4:65498]
 const FACTORY_OPCODES = {
-  SwapExactTokensForTokens: 3,
-  SwapTokensForExactTokens: 4,
+  SwapExactTokensForTokens: 13,
+  SwapTokensForExactTokens: 14,
 };
 
 // Parse alkane ID helper
@@ -40,7 +42,7 @@ function parseAlkaneId(id: string): { block: number; tx: number } {
   return { block, tx };
 }
 
-describe('E2E Swap with Keystore Signer', () => {
+describe.runIf(INTEGRATION)('E2E Swap with Keystore Signer', () => {
   let provider: WebProvider;
   let testSigner: TestSignerResult;
   let wasm: typeof import('@alkanes/ts-sdk/wasm');
@@ -462,7 +464,7 @@ describe('E2E Swap with Keystore Signer', () => {
   });
 });
 
-describe('Signer Interface Compatibility', () => {
+describe.runIf(INTEGRATION)('Signer Interface Compatibility', () => {
   /**
    * Verify that our test signer produces the same interface as useSignerShim
    */

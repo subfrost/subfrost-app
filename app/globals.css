@@ -23,9 +23,9 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-satoshi), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-    Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Apple Color Emoji",
-    "Segoe UI Emoji";
+  font-family: var(--font-satoshi), ui-sans-serif, system-ui, -apple-system,
+    Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 /* Subfrost brand tokens - Dark Theme (default) */
@@ -33,13 +33,14 @@ body {
   /* Background gradient - deep navy to darker navy */
   --sf-bg-start: #0a1628;
   --sf-bg-end: #0d1f35;
-
-  --sf-surface: #152238;  /* card surface - dark navy */
-  --sf-text: #e8f0ff;     /* primary text - light blue-white */
-  --sf-muted: #7a8ba8;    /* captions - muted blue-gray */
-  --sf-primary: #5b9cff;  /* CTA primary - bright blue */
+  --sf-panel-opaque: #172337;
+  --sf-glass-opaque: #0e1b2f;
+  --sf-surface: #152238; /* card surface - dark navy */
+  --sf-text: #e8f0ff; /* primary text - light blue-white */
+  --sf-muted: #7a8ba8; /* captions - muted blue-gray */
+  --sf-primary: #5b9cff; /* CTA primary - bright blue */
   --sf-primary-pressed: #4080e6;
-  --sf-outline: #2a3f5f;  /* borders/focus - dark blue */
+  --sf-outline: #2a3f5f; /* borders/focus - dark blue */
 
   /* Glass variables (dark frosted glass effect) */
   --sf-glass-bg: rgba(15, 28, 48, 0.85);
@@ -102,6 +103,19 @@ body {
 
   /* Percentage buttons - white in dark mode */
   --sf-percent-btn: #ffffff;
+
+  /* High Fee Warning Modal - dark theme */
+  --sf-fee-warning-bg: rgba(15, 23, 42, 0.95);
+  --sf-fee-warning-title: #ef4444;
+  --sf-fee-warning-desc: #94a3b8;
+  --sf-fee-warning-card-bg: rgba(254, 202, 202, 0.12);
+  --sf-fee-warning-card-border: rgba(254, 202, 202, 0.25);
+  --sf-fee-warning-label: #e2e8f0;
+  --sf-fee-warning-value: #fca5a5;
+  --sf-fee-warning-back-bg: #3f3f46;
+  --sf-fee-warning-back-text: #fafafa;
+  --sf-fee-warning-proceed-bg: #ef4444;
+  --sf-fee-warning-proceed-text: #ffffff;
 }
 
 /* Light Theme (gabes-branch-ui styles) */
@@ -110,28 +124,29 @@ body {
   --foreground: #171717;
 
   /* Background gradient tuned to match reference */
-  --sf-bg-start: #CDE2FF; /* slightly richer top blue */
-  --sf-bg-end: #F2F7FF;   /* very light bottom blue */
+  --sf-bg-start: #cde2ff; /* slightly richer top blue */
+  --sf-bg-end: #f2f7ff; /* very light bottom blue */
 
-  --sf-surface: #FFFFFF;  /* card surface */
-  --sf-text: #284372;     /* primary text */
-  --sf-muted: #6B7280;    /* captions */
-  --sf-primary: #284372;  /* CTA primary */
+  --sf-surface: #ffffff; /* card surface */
+  --sf-text: #284372; /* primary text */
+  --sf-muted: #6b7280; /* captions */
+  --sf-primary: #284372; /* CTA primary */
   --sf-primary-pressed: #1f3a66;
-  --sf-outline: #D5DEF0;  /* borders/focus */
-
+  --sf-outline: #d5def0; /* borders/focus */
+  --sf-panel-opaque: #fff;
+  --sf-glass-opaque: #f0f7ff;
   /* Glass variables (soft white/blue tint) */
   --sf-glass-bg: rgba(240, 247, 255, 0.82);
   --sf-glass-border: rgba(255, 255, 255, 0.55);
   --sf-panel-bg: rgba(255, 255, 255, 0.5);
   --sf-input-bg: var(--sf-surface);
   --sf-list-hover-bg: rgba(255, 255, 255, 0.8);
-  --sf-dropdown-bg: #FFFFFF;
+  --sf-dropdown-bg: #ffffff;
   --sf-row-border: rgba(200, 210, 230, 0.25);
   --sf-top-highlight: transparent;
 
   /* Settings modal - white sections in light mode */
-  --sf-settings-section-bg: #FFFFFF;
+  --sf-settings-section-bg: #ffffff;
   --sf-settings-title: #284372;
 
   /* Boost section - light mode */
@@ -166,7 +181,7 @@ body {
   --sf-info-red-bg: #fef2f2;
   --sf-info-red-border: #fecaca;
   --sf-info-red-title: #7f1d1d;
-  --sf-info-red-text: #991b1b;
+  --sf-info-red-text: #7f1d1d;
   --sf-info-green-bg: #dcfce7;
   --sf-info-green-border: #86efac;
   --sf-info-green-title: #15803d;
@@ -184,6 +199,19 @@ body {
   /* Boost icons - light mode (solid) */
   --sf-boost-icon-from: #a855f7;
   --sf-boost-icon-to: #ec4899;
+
+  /* High Fee Warning Modal - light theme */
+  --sf-fee-warning-bg: rgba(255, 255, 255, 0.98);
+  --sf-fee-warning-title: #dc2626;
+  --sf-fee-warning-desc: #64748b;
+  --sf-fee-warning-card-bg: rgba(254, 226, 226, 0.6);
+  --sf-fee-warning-card-border: rgba(252, 165, 165, 0.5);
+  --sf-fee-warning-label: #374151;
+  --sf-fee-warning-value: #dc2626;
+  --sf-fee-warning-back-bg: #e5e7eb;
+  --sf-fee-warning-back-text: #1f2937;
+  --sf-fee-warning-proceed-bg: rgba(239, 68, 68, 0.15);
+  --sf-fee-warning-proceed-text: #dc2626;
 }
 
 /* Explicit Dark Theme */
@@ -258,6 +286,19 @@ body {
   /* Boost icons - dark mode (light purple to dark purple gradient) */
   --sf-boost-icon-from: #a855f7;
   --sf-boost-icon-to: #7c3aed;
+
+  /* High Fee Warning Modal - dark theme (explicit) */
+  --sf-fee-warning-bg: rgba(15, 23, 42, 0.95);
+  --sf-fee-warning-title: #ef4444;
+  --sf-fee-warning-desc: #94a3b8;
+  --sf-fee-warning-card-bg: rgba(254, 202, 202, 0.12);
+  --sf-fee-warning-card-border: rgba(254, 202, 202, 0.25);
+  --sf-fee-warning-label: #e2e8f0;
+  --sf-fee-warning-value: #fca5a5;
+  --sf-fee-warning-back-bg: #3f3f46;
+  --sf-fee-warning-back-text: #fafafa;
+  --sf-fee-warning-proceed-bg: #ef4444;
+  --sf-fee-warning-proceed-text: #ffffff;
 }
 
 /* Wordmark invert for dark mode */
@@ -325,15 +366,46 @@ body {
 
 /* Lightweight CSS stars overlay - enhanced for dark theme */
 .sf-stars {
-  background:
-    radial-gradient(1.5px 1.5px at 20% 30%, rgba(200, 220, 255, 0.95) 99%, transparent 100%),
-    radial-gradient(1px 1px at 60% 70%, rgba(180, 200, 255, 0.8) 99%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 80% 20%, rgba(200, 220, 255, 0.7) 99%, transparent 100%),
-    radial-gradient(1px 1px at 35% 80%, rgba(180, 200, 255, 0.9) 99%, transparent 100%),
-    radial-gradient(1px 1px at 10% 60%, rgba(200, 220, 255, 0.75) 99%, transparent 100%),
-    radial-gradient(2px 2px at 45% 15%, rgba(220, 240, 255, 0.95) 99%, transparent 100%),
-    radial-gradient(1px 1px at 75% 55%, rgba(180, 200, 255, 0.7) 99%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 25% 10%, rgba(200, 220, 255, 0.85) 99%, transparent 100%);
+  background: radial-gradient(
+      1.5px 1.5px at 20% 30%,
+      rgba(200, 220, 255, 0.95) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 60% 70%,
+      rgba(180, 200, 255, 0.8) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1.5px 1.5px at 80% 20%,
+      rgba(200, 220, 255, 0.7) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 35% 80%,
+      rgba(180, 200, 255, 0.9) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 10% 60%,
+      rgba(200, 220, 255, 0.75) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      2px 2px at 45% 15%,
+      rgba(220, 240, 255, 0.95) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 75% 55%,
+      rgba(180, 200, 255, 0.7) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1.5px 1.5px at 25% 10%,
+      rgba(200, 220, 255, 0.85) 99%,
+      transparent 100%
+    );
   animation: sfDrift 36s linear infinite;
   opacity: 0.9;
 }
@@ -342,20 +414,51 @@ body {
 [data-theme="light"] .sf-snow,
 [data-theme="light"] .sf-snow::before,
 [data-theme="light"] .sf-snow::after {
-  background-image: url('/background/snowflakes-bg-light.svg');
+  background-image: url("/background/snowflakes-bg-light.svg");
 }
 
 /* Light theme stars (white for light backgrounds) */
 [data-theme="light"] .sf-stars {
-  background:
-    radial-gradient(1px 1px at 20% 30%, rgba(255, 255, 255, 0.9) 99%, transparent 100%),
-    radial-gradient(1px 1px at 60% 70%, rgba(255, 255, 255, 0.7) 99%, transparent 100%),
-    radial-gradient(1px 1px at 80% 20%, rgba(255, 255, 255, 0.6) 99%, transparent 100%),
-    radial-gradient(1px 1px at 35% 80%, rgba(255, 255, 255, 0.8) 99%, transparent 100%),
-    radial-gradient(1px 1px at 10% 60%, rgba(255, 255, 255, 0.7) 99%, transparent 100%),
-    radial-gradient(1px 1px at 45% 15%, rgba(255, 255, 255, 0.9) 99%, transparent 100%),
-    radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.6) 99%, transparent 100%),
-    radial-gradient(1px 1px at 25% 10%, rgba(255, 255, 255, 0.8) 99%, transparent 100%);
+  background: radial-gradient(
+      1px 1px at 20% 30%,
+      rgba(255, 255, 255, 0.9) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 60% 70%,
+      rgba(255, 255, 255, 0.7) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 80% 20%,
+      rgba(255, 255, 255, 0.6) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 35% 80%,
+      rgba(255, 255, 255, 0.8) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 10% 60%,
+      rgba(255, 255, 255, 0.7) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 45% 15%,
+      rgba(255, 255, 255, 0.9) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 75% 55%,
+      rgba(255, 255, 255, 0.6) 99%,
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 25% 10%,
+      rgba(255, 255, 255, 0.8) 99%,
+      transparent 100%
+    );
   opacity: 0.7;
 }
 
@@ -417,8 +520,8 @@ textarea:focus-visible,
 
 /* Watermark background (SVG) - hidden in dark mode */
 .sf-watermark {
-  background: url('/background/watermark-bg.svg') center -120px / 1200px auto no-repeat;
-  opacity: 0.08;
+  background: url("/background/watermark-bg.svg") center -120px / 1200px auto no-repeat;
+  opacity: 0.3;
   pointer-events: none;
 }
 
@@ -436,7 +539,7 @@ textarea:focus-visible,
   inset: 0;
   content: "";
   pointer-events: none;
-  background-image: url('/background/snowflakes-bg.svg');
+  background-image: url("/background/snowflakes-bg.svg");
   background-repeat: repeat;
   background-size: 640px auto;
   animation: sfSnow 60s linear infinite;
@@ -588,9 +691,7 @@ input[type="number"] {
     rgba(91, 156, 255, 0.15) var(--sf-range-progress),
     rgba(91, 156, 255, 0.15) 100%
   );
-  box-shadow:
-    inset 0 1px 1px rgba(0, 0, 0, 0.3),
-    0 8px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .sf-range::-webkit-slider-thumb {
@@ -616,15 +717,17 @@ input[type="number"] {
   border-radius: 999px;
   border: 1px solid var(--sf-glass-border);
   background: rgba(91, 156, 255, 0.15);
-  box-shadow:
-    inset 0 1px 1px rgba(0, 0, 0, 0.3),
-    0 8px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3), 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .sf-range::-moz-range-progress {
   height: 12px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(91, 156, 255, 0.5), rgba(91, 156, 255, 0.65));
+  background: linear-gradient(
+    90deg,
+    rgba(91, 156, 255, 0.5),
+    rgba(91, 156, 255, 0.65)
+  );
 }
 
 .sf-range::-moz-range-thumb {
@@ -654,8 +757,7 @@ input[type="number"] {
     rgba(21, 34, 56, 0.9) 0%,
     rgba(15, 28, 48, 0.8) 100%
   );
-  box-shadow:
-    inset 0 1px 1px rgba(0, 0, 0, 0.4),
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4),
     0 12px 28px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }

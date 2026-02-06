@@ -10,6 +10,7 @@ import { useVaultDeposit } from "@/hooks/useVaultDeposit";
 import { useVaultWithdraw } from "@/hooks/useVaultWithdraw";
 import { useVaultUnits } from "@/hooks/useVaultUnits";
 import BoostSection from "./BoostSection";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   vault: VaultConfig;
@@ -20,6 +21,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   const [infoTab, setInfoTab] = useState<'about' | 'strategies' | 'info' | 'risk'>('about');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [currentVault, setCurrentVault] = useState<VaultConfig>(initialVault);
+  const { t } = useTranslation();
 
   // Update current vault when initial vault changes (from parent)
   useEffect(() => {
@@ -164,7 +166,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                   : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
               }`}
             >
-              {tab}
+              {t(`vaultInfo.${tab}`)}
             </button>
           ))}
         </div>
@@ -172,16 +174,10 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         {infoTab === 'about' && (
           <div className="space-y-4">
             <p className="text-sm text-[color:var(--sf-text)]">
-              Lock {currentVault.inputAsset} to earn yield from LP trading fees and external subsidies. Your {currentVault.outputAsset} provides boost to gauge stakers.
+              {t('vaultInfo.aboutDesc', { input: currentVault.inputAsset, output: currentVault.outputAsset })}
             </p>
             <div className="space-y-2">
-              {[
-                'Earn 60% of LP trading fees',
-                'Receive external subsidy rewards (frBTC, DIESEL)',
-                '10% auto-compound on harvest',
-                'No withdrawal timelock',
-                'Provides boost to gauge stakers (1x to 2.5x)',
-              ].map((feature, i) => (
+              {[t('vaultInfo.feature1'), t('vaultInfo.feature2'), t('vaultInfo.feature3'), t('vaultInfo.feature4'), t('vaultInfo.feature5')].map((feature, i) => (
                 <div key={i} className="flex items-center gap-2 text-sm text-[color:var(--sf-text)]">
                   <svg className="h-4 w-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -192,102 +188,102 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             </div>
           </div>
         )}
-        
+
         {infoTab === 'strategies' && (
           <div className="space-y-3">
-            <h4 className="font-semibold text-[color:var(--sf-text)]">Active Strategies</h4>
+            <h4 className="font-semibold text-[color:var(--sf-text)]">{t('vaultInfo.activeStrategies')}</h4>
             <div className="space-y-2">
               <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">LP Fee Harvesting</div>
+                <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">{t('vaultInfo.lpFeeHarvesting')}</div>
                 <div className="text-xs text-[color:var(--sf-info-orange-text)] mb-2">
-                  Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
+                  {t('vaultInfo.lpFeeDesc', { input: currentVault.inputAsset })}
                 </div>
                 <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
-                  Formula: <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
+                  {t('vaultInfo.formula')} <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
                 </div>
               </div>
               <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-info-blue-title)] mb-1">External Subsidies</div>
+                <div className="font-semibold text-sm text-[color:var(--sf-info-blue-title)] mb-1">{t('vaultInfo.externalSubsidies')}</div>
                 <div className="text-xs text-[color:var(--sf-info-blue-text)]">
-                  • DIESEL from Protorunes rewards<br/>
-                  • frBTC from Bitcoin wrapper fees<br/>
-                  • Deposited by strategist
+                  • {t('vaultInfo.subsidyDiesel')}<br/>
+                  • {t('vaultInfo.subsidyFrbtc')}<br/>
+                  • {t('vaultInfo.subsidyDeposited')}
                 </div>
               </div>
               <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-info-green-title)] mb-1">Harvest Distribution</div>
+                <div className="font-semibold text-sm text-[color:var(--sf-info-green-title)] mb-1">{t('vaultInfo.harvestDistribution')}</div>
                 <div className="text-xs text-[color:var(--sf-info-green-text)]">
-                  • 10% auto-compound (locked as more {currentVault.outputAsset})<br/>
-                  • 90% added to reward pool for claimants
+                  • {t('vaultInfo.harvestAutoCompound', { output: currentVault.outputAsset })}<br/>
+                  • {t('vaultInfo.harvestRewardPool')}
                 </div>
               </div>
             </div>
           </div>
         )}
-        
+
         {infoTab === 'info' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <div className="text-[color:var(--sf-text)]/60 mb-1">Contract Type</div>
-                <div className="font-semibold text-[color:var(--sf-text)]">UnitVault</div>
+                <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.contractType')}</div>
+                <div className="font-semibold text-[color:var(--sf-text)]">{t('vaultInfo.unitVault')}</div>
               </div>
               <div>
-                <div className="text-[color:var(--sf-text)]/60 mb-1">Input Asset</div>
+                <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.inputAsset')}</div>
                 <div className="font-semibold text-[color:var(--sf-text)]">{currentVault.inputAsset} [{currentVault.tokenId}]</div>
               </div>
               <div>
-                <div className="text-[color:var(--sf-text)]/60 mb-1">Output Units</div>
-                <div className="font-semibold text-[color:var(--sf-text)]">{currentVault.outputAsset} (non-transferable)</div>
+                <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.outputUnits')}</div>
+                <div className="font-semibold text-[color:var(--sf-text)]">{currentVault.outputAsset} {t('vaultInfo.nonTransferable')}</div>
               </div>
               <div>
-                <div className="text-[color:var(--sf-text)]/60 mb-1">Management Fee</div>
-                <div className="font-semibold text-[color:var(--sf-text)]">0%</div>
+                <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.managementFee')}</div>
+                <div className="font-semibold text-[color:var(--sf-text)]">0.5%</div>
               </div>
               <div>
-                <div className="text-[color:var(--sf-text)]/60 mb-1">Performance Fee</div>
+                <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.performanceFee')}</div>
                 <div className="font-semibold text-[color:var(--sf-text)]">10%</div>
               </div>
               <div>
-                <div className="text-[color:var(--sf-text)]/60 mb-1">Timelock</div>
-                <div className="font-semibold text-green-600">None</div>
+                <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.timelock')}</div>
+                <div className="font-semibold text-green-600">{t('vaultInfo.none')}</div>
               </div>
             </div>
             <div className="pt-3 border-t border-[color:var(--sf-outline)]">
-              <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
+              <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.contractAddress')}</div>
               <div className="text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                 {currentVault.contractAddress}
               </div>
             </div>
           </div>
         )}
-        
+
         {infoTab === 'risk' && (
           <div className="space-y-3">
             <p className="text-sm text-[color:var(--sf-text)]">
-              All vaults carry risk. Please review carefully before depositing.
+              {t('vaultInfo.riskIntro')}
             </p>
             <div className="space-y-2">
               <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-info-yellow-title)] mb-1">Smart Contract Risk</div>
+                <div className="font-semibold text-sm text-[color:var(--sf-info-yellow-title)] mb-1">{t('vaultInfo.smartContractRisk')}</div>
                 <div className="text-xs text-[color:var(--sf-info-yellow-text)]">
-                  Contracts are immutable once deployed. Recommend external audit before mainnet. Test thoroughly on testnet first.
+                  {t('vaultInfo.smartContractDesc')}
                 </div>
               </div>
               <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">Economic Risks</div>
+                <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">{t('vaultInfo.economicRisks')}</div>
                 <div className="text-xs text-[color:var(--sf-info-orange-text)]">
-                  • <strong>Impermanent Loss:</strong> LP providers exposed to IL<br/>
-                  • <strong>Subsidy Variability:</strong> External rewards may fluctuate<br/>
-                  • <strong>Boost Competition:</strong> More {currentVault.outputAsset} dilutes individual boost
+                  • <strong>{t('vaultInfo.ilRisk')}</strong> {t('vaultInfo.ilDesc')}<br/>
+                  • <strong>{t('vaultInfo.subsidyRisk')}</strong> {t('vaultInfo.subsidyDesc')}<br/>
+                  • <strong>{t('vaultInfo.boostRisk')}</strong> {t('vaultInfo.boostDesc', { output: currentVault.outputAsset })}
                 </div>
               </div>
               <div className="rounded-lg bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-3">
-                <div className="font-semibold text-sm text-[color:var(--sf-info-red-title)] mb-1">Operational Risks</div>
+                <div className="font-semibold text-sm text-[color:var(--sf-info-red-title)] mb-1">{t('vaultInfo.operationalRisks')}</div>
                 <div className="text-xs text-[color:var(--sf-info-red-text)]">
-                  • <strong>Harvest Dependency:</strong> Requires strategist to call harvest<br/>
-                  • <strong>Oracle Manipulation:</strong> K-value uses instant price (not TWAP)<br/>
-                  • <strong>Front-running:</strong> Harvest could be front-run in theory
+                  • <strong>{t('vaultInfo.harvestRisk')}</strong> {t('vaultInfo.harvestRiskDesc')}<br/>
+                  • <strong>{t('vaultInfo.oracleRisk')}</strong> {t('vaultInfo.oracleDesc')}<br/>
+                  • <strong>{t('vaultInfo.frontRunRisk')}</strong> {t('vaultInfo.frontRunDesc')}
                 </div>
               </div>
             </div>
@@ -309,7 +305,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
                     : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
                 }`}
               >
-                {tab}
+                {t(`vaultInfo.${tab}`)}
               </button>
             ))}
           </div>
@@ -317,16 +313,10 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           {infoTab === 'about' && (
             <div className="space-y-4">
               <p className="text-sm text-[color:var(--sf-text)]">
-                Lock {currentVault.inputAsset} to earn yield from LP trading fees and external subsidies. Your {currentVault.outputAsset} provides boost to gauge stakers.
+                {t('vaultInfo.aboutDesc', { input: currentVault.inputAsset, output: currentVault.outputAsset })}
               </p>
               <div className="space-y-2">
-                {[
-                  'Earn 60% of LP trading fees',
-                  'Receive external subsidy rewards (frBTC, DIESEL)',
-                  '10% auto-compound on harvest',
-                  'No withdrawal timelock',
-                  'Provides boost to gauge stakers (1x to 2.5x)',
-                ].map((feature, i) => (
+                {[t('vaultInfo.feature1'), t('vaultInfo.feature2'), t('vaultInfo.feature3'), t('vaultInfo.feature4'), t('vaultInfo.feature5')].map((feature, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm text-[color:var(--sf-text)]">
                     <svg className="h-4 w-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -340,66 +330,66 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           
           {infoTab === 'strategies' && (
             <div className="space-y-3">
-              <h4 className="font-semibold text-[color:var(--sf-text)]">Active Strategies</h4>
+              <h4 className="font-semibold text-[color:var(--sf-text)]">{t('vaultInfo.activeStrategies')}</h4>
               <div className="space-y-2">
                 <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">LP Fee Harvesting</div>
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">{t('vaultInfo.lpFeeHarvesting')}</div>
                   <div className="text-xs text-[color:var(--sf-info-orange-text)] mb-2">
-                    Extracts 60% of trading fees from {currentVault.inputAsset}/frBTC pool using k-value growth tracking
+                    {t('vaultInfo.lpFeeDesc', { input: currentVault.inputAsset })}
                   </div>
                   <div className="text-xs text-[color:var(--sf-info-orange-text)]/70">
-                    Formula: <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
+                    {t('vaultInfo.formula')} <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
                   </div>
                 </div>
                 <div className="rounded-lg bg-[color:var(--sf-info-blue-bg)] border border-[color:var(--sf-info-blue-border)] p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-info-blue-title)] mb-1">External Subsidies</div>
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-blue-title)] mb-1">{t('vaultInfo.externalSubsidies')}</div>
                   <div className="text-xs text-[color:var(--sf-info-blue-text)]">
-                    • DIESEL from Protorunes rewards<br/>
-                    • frBTC from Bitcoin wrapper fees<br/>
-                    • Deposited by strategist
+                    • {t('vaultInfo.subsidyDiesel')}<br/>
+                    • {t('vaultInfo.subsidyFrbtc')}<br/>
+                    • {t('vaultInfo.subsidyDeposited')}
                   </div>
                 </div>
                 <div className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-info-green-title)] mb-1">Harvest Distribution</div>
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-green-title)] mb-1">{t('vaultInfo.harvestDistribution')}</div>
                   <div className="text-xs text-[color:var(--sf-info-green-text)]">
-                    • 10% auto-compound (locked as more {currentVault.outputAsset})<br/>
-                    • 90% added to reward pool for claimants
+                    • {t('vaultInfo.harvestAutoCompound', { output: currentVault.outputAsset })}<br/>
+                    • {t('vaultInfo.harvestRewardPool')}
                   </div>
                 </div>
               </div>
             </div>
           )}
-          
+
           {infoTab === 'info' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Contract Type</div>
-                  <div className="font-semibold text-[color:var(--sf-text)]">UnitVault</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.contractType')}</div>
+                  <div className="font-semibold text-[color:var(--sf-text)]">{t('vaultInfo.unitVault')}</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Input Asset</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.inputAsset')}</div>
                   <div className="font-semibold text-[color:var(--sf-text)]">{currentVault.inputAsset} [{currentVault.tokenId}]</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Output Units</div>
-                  <div className="font-semibold text-[color:var(--sf-text)]">{currentVault.outputAsset} (non-transferable)</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.outputUnits')}</div>
+                  <div className="font-semibold text-[color:var(--sf-text)]">{currentVault.outputAsset} {t('vaultInfo.nonTransferable')}</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Management Fee</div>
-                  <div className="font-semibold text-[color:var(--sf-text)]">0%</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.managementFee')}</div>
+                  <div className="font-semibold text-[color:var(--sf-text)]">0.5%</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Performance Fee</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.performanceFee')}</div>
                   <div className="font-semibold text-[color:var(--sf-text)]">10%</div>
                 </div>
                 <div>
-                  <div className="text-[color:var(--sf-text)]/60 mb-1">Timelock</div>
-                  <div className="font-semibold text-green-600">None</div>
+                  <div className="text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.timelock')}</div>
+                  <div className="font-semibold text-green-600">{t('vaultInfo.none')}</div>
                 </div>
               </div>
               <div className="pt-3 border-t border-[color:var(--sf-outline)]">
-                <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">Vault Contract Address</div>
+                <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('vaultInfo.contractAddress')}</div>
                 <div className="text-xs text-[color:var(--sf-info-gray-text)] bg-[color:var(--sf-info-gray-bg)] p-2 rounded">
                   {currentVault.contractAddress}
                 </div>
@@ -410,29 +400,29 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           {infoTab === 'risk' && (
             <div className="space-y-3">
               <p className="text-sm text-[color:var(--sf-text)]">
-                All vaults carry risk. Please review carefully before depositing.
+                {t('vaultInfo.riskIntro')}
               </p>
               <div className="space-y-2">
                 <div className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-info-yellow-title)] mb-1">Smart Contract Risk</div>
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-yellow-title)] mb-1">{t('vaultInfo.smartContractRisk')}</div>
                   <div className="text-xs text-[color:var(--sf-info-yellow-text)]">
-                    Contracts are immutable once deployed. Recommend external audit before mainnet. Test thoroughly on testnet first.
+                    {t('vaultInfo.smartContractDesc')}
                   </div>
                 </div>
                 <div className="rounded-lg bg-[color:var(--sf-info-orange-bg)] border border-[color:var(--sf-info-orange-border)] p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">Economic Risks</div>
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-orange-title)] mb-1">{t('vaultInfo.economicRisks')}</div>
                   <div className="text-xs text-[color:var(--sf-info-orange-text)]">
-                    • <strong>Impermanent Loss:</strong> LP providers exposed to IL<br/>
-                    • <strong>Subsidy Variability:</strong> External rewards may fluctuate<br/>
-                    • <strong>Boost Competition:</strong> More {currentVault.outputAsset} dilutes individual boost
+                    • <strong>{t('vaultInfo.ilRisk')}</strong> {t('vaultInfo.ilDesc')}<br/>
+                    • <strong>{t('vaultInfo.subsidyRisk')}</strong> {t('vaultInfo.subsidyDesc')}<br/>
+                    • <strong>{t('vaultInfo.boostRisk')}</strong> {t('vaultInfo.boostDesc', { output: currentVault.outputAsset })}
                   </div>
                 </div>
                 <div className="rounded-lg bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] p-3">
-                  <div className="font-semibold text-sm text-[color:var(--sf-info-red-title)] mb-1">Operational Risks</div>
+                  <div className="font-semibold text-sm text-[color:var(--sf-info-red-title)] mb-1">{t('vaultInfo.operationalRisks')}</div>
                   <div className="text-xs text-[color:var(--sf-info-red-text)]">
-                    • <strong>Harvest Dependency:</strong> Requires strategist to call harvest<br/>
-                    • <strong>Oracle Manipulation:</strong> K-value uses instant price (not TWAP)<br/>
-                    • <strong>Front-running:</strong> Harvest could be front-run in theory
+                    • <strong>{t('vaultInfo.harvestRisk')}</strong> {t('vaultInfo.harvestRiskDesc')}<br/>
+                    • <strong>{t('vaultInfo.oracleRisk')}</strong> {t('vaultInfo.oracleDesc')}<br/>
+                    • <strong>{t('vaultInfo.frontRunRisk')}</strong> {t('vaultInfo.frontRunDesc')}
                   </div>
                 </div>
               </div>

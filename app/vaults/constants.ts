@@ -17,7 +17,7 @@ export interface VaultConfig {
   riskLevel?: 'low' | 'medium' | 'high' | 'very-high';
   // Boost configuration
   hasBoost: boolean;
-  boostTokenSymbol?: string; // e.g., "vxDIESEL"
+  boostTokenSymbol?: string; // e.g., "vxFIRE"
   boostTokenName?: string;
   boostTokenId?: string; // Alkane ID for boost token icon
   boostIconPath?: string; // Direct path to boost token icon
@@ -45,21 +45,21 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   },
   {
     id: 've-diesel',
-    name: 'veDIESEL Vault',
-    description: 'Stake DIESEL for boosted yield',
+    name: 'FIRE Vault',
+    description: 'First of its kind DeFi vault on Bitcoin',
     tokenId: '2:0',
     tokenSymbol: 'DIESEL',
-    iconPath: 'https://asset.oyl.gg/alkanes/mainnet/2-0.png',
+    iconPath: 'https://cdn.ordiscan.com/alkanes/2_0',
     contractAddress: '0xBe53A1...F6204',
     badge: 'Coming Soon',
     type: 'unit-vault',
     inputAsset: 'DIESEL',
-    outputAsset: 'veDIESEL',
+    outputAsset: 'FIRE',
     estimatedApy: '21',
     apyHistory: [17, 18, 19, 19, 18, 19, 20, 21, 20, 20, 21, 21, 22, 21, 20, 21, 22, 22, 21, 22, 23, 22, 22, 23, 23, 22, 23, 22, 23, 22],
     riskLevel: 'very-high',
     hasBoost: true,
-    boostTokenSymbol: 'vxDIESEL',
+    boostTokenSymbol: 'vxFIRE',
     boostTokenName: 'Staked DIESEL Gauge',
     boostTokenId: '2:0', // Uses DIESEL icon from Oyl CDN
     boostMultiplier: 1.5,
@@ -109,11 +109,11 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 'dx-btc',
     name: 'dxBTC Token',
-    description: 'Stake BTC or frBTC for pure BTC yield',
+    description: 'Stake BTC for pure BTC yield',
     tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     iconPath: '/tokens/btc_snowflake.svg',
-    contractAddress: '4:7936', // dxBTC at [4, 0x1f00] = [4, 7936]
+    contractAddress: '4:xxxx',
     badge: 'Coming Soon',
     type: 'unit-vault',
     inputAsset: 'BTC',

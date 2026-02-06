@@ -3,63 +3,46 @@
  *
  * This hook handles adding liquidity to AMM pools.
  *
- * ## WASM Dependency Note (January 2026)
+ * ## Architecture (2026-01-28)
  *
- * This hook uses `alkanesExecuteWithStrings` from `@alkanes/ts-sdk/wasm` which is
- * aliased to `lib/oyl/alkanes/` in next.config.mjs. If you see "Insufficient alkanes"
- * errors despite having sufficient balance, the lib/oyl WASM may be out of sync.
+ * This hook calls the POOL contract directly (not the factory) for adding liquidity,
+ * matching the pattern used by useSwapMutation and useRemoveLiquidityMutation.
  *
- * To fix: Copy the updated WASM from node_modules (see next.config.mjs comments).
+ * Flow:
+ *   1. Check if pool exists via factory opcode 2 (FindPoolId)
+ *   2. If pool EXISTS: Call pool directly with opcode 1 (AddLiquidity)
+ *   3. If NO pool exists: Use factory opcode 1 (CreateNewPool) to create the pool
  *
- * The fix (in @alkanes/ts-sdk@0.1.4-dfe27c6) uses `protorunes_by_address` directly
- * for UTXO balance fetching instead of the lua batch script which had parsing issues.
+ * ## Two-Protostone Pattern
  *
- * ## IMPORTANT: Factory vs Pool Opcodes (January 2026)
+ * Add liquidity requires TWO protostones (both edicts in p0):
+ *   - p0: Two edicts transferring token0 AND token1 to p1
+ *   - p1: Cellpack protostone calling pool with opcode 1 (AddLiquidity)
  *
- * There are TWO different contracts with different opcodes:
+ * Both edicts are in the same protostone (p0), targeting p1 (the cellpack).
+ * This pattern was proven working in CreateNewPool tx a29d0307 (block 1470).
+ * The pool receives both tokens as `incomingAlkanes`.
+ * Without the edicts, the pool receives zero tokens and fails with "expected 2 alkane inputs".
  *
- * ### FACTORY Contract (e.g., 4:65522)
- * Only has opcodes 0-3 for management:
- *   - 0: InitFactory
- *   - 1: CreateNewPool
- *   - 2: FindExistingPoolId
- *   - 3: GetAllPools
+ * ## Why Call Pool Directly (Not Factory)
  *
- * The FACTORY_OPCODES in constants/index.ts includes opcodes 11 (AddLiquidity)
- * but this is actually a POOL operation that the factory routes to the pool.
+ * The factory's AddLiquidity (opcode 11) and the pool's AddLiquidity (opcode 1) are
+ * different entry points. The pool contract has the actual liquidity logic. Calling the
+ * pool directly is the same pattern used by swap (opcode 3) and remove (opcode 2).
  *
- * ### POOL Contract (e.g., 2:3 for DIESEL/frBTC pool)
- * Has the actual operation opcodes:
- *   - 0: Init
- *   - 1: AddLiquidity (mint LP tokens)
- *   - 2: RemoveLiquidity (burn LP tokens)
- *   - 3: Swap
- *   - 4: SimulateSwap
- *
- * ### Why AddLiquidity Works with Factory
- *
- * AddLiquidity uses a single protostone that calls factory opcode 11.
- * The factory then internally routes this to create/find the pool and
- * execute the AddLiquidity operation. This is different from Swap and
- * RemoveLiquidity which must call the pool directly.
- *
- * ### Contrast with Swap/RemoveLiquidity
- *
- * - Swap: Must call POOL directly with two-protostone pattern (see useSwapMutation.ts)
- * - RemoveLiquidity: Must call POOL directly (see useRemoveLiquidityMutation.ts)
- * - AddLiquidity: Can call FACTORY which routes to pool (this file)
- *
+ * @see useSwapMutation.ts - Same two-protostone pattern calling pool directly
+ * @see useRemoveLiquidityMutation.ts - Same two-protostone pattern calling pool directly
  * @see constants/index.ts - FACTORY_OPCODES documentation
- * @see useSwapMutation.ts - Two-protostone pattern for swaps
- * @see useRemoveLiquidityMutation.ts - Two-protostone pattern for burns
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FACTORY_OPCODES } from '@/constants';
-import { getFutureBlockHeight } from '@/utils/amm';
+
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -74,6 +57,19 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+/**
+ * Pool operation codes (NOT factory opcodes!)
+ * These are the opcodes for calling the pool contract directly.
+ * Same definitions as in useSwapMutation.ts.
+ */
+const POOL_OPCODES = {
+  Init: 0,
+  AddLiquidity: 1, // mint LP tokens
+  RemoveLiquidity: 2, // burn LP tokens
+  Swap: 3,
+  SimulateSwap: 4,
+};
+
 export type AddLiquidityTransactionData = {
   token0Id: string;      // alkane id (e.g., "2:0" for DIESEL)
   token1Id: string;      // alkane id (e.g., "32:0" for frBTC)
@@ -81,9 +77,12 @@ export type AddLiquidityTransactionData = {
   token1Amount: string;  // display amount
   token0Decimals?: number; // default 8
   token1Decimals?: number; // default 8
+  token0Symbol?: string;   // for confirmation display
+  token1Symbol?: string;   // for confirmation display
   maxSlippage?: string;  // percent string, e.g. '0.5' (unused for now, minLP=0)
   feeRate: number;       // sats/vB
   deadlineBlocks?: number; // default 3
+  poolId?: { block: string | number; tx: string | number }; // Pool to add liquidity to
 };
 
 /**
@@ -96,52 +95,88 @@ function toAlks(amount: string, decimals: number = 8): string {
 }
 
 /**
- * Build protostone string for AddLiquidity operation
- * Format: [factory_block,factory_tx,opcode(11),token0_block,token0_tx,token1_block,token1_tx,amount0,amount1,minLP,deadline]:pointer:refund
+ * Build protostone string for CreateNewPool (opcode 1)
+ *
+ * Two-protostone pattern (proven working in tx a29d0307, block 1470):
+ * - p0: Both edicts transferring token0 and token1 to p1
+ * - p1: Cellpack calling factory with opcode 1 (CreateNewPool)
+ *
+ * Both edicts are in p0, targeting p1 (the cellpack). The factory receives
+ * both tokens as `incomingAlkanes`.
+ *
+ * No minLP or deadline args — the factory handles initial liquidity directly.
+ * Matches CLI: alkanes-cli alkanes init-pool
  */
-function buildAddLiquidityProtostone(params: {
+function buildCreateNewPoolProtostone(params: {
   factoryId: string;
   token0Id: string;
   token1Id: string;
   amount0: string;
   amount1: string;
-  minLP: string;
-  deadline: string;
-  pointer?: string;
-  refund?: string;
 }): string {
-  const {
-    factoryId,
-    token0Id,
-    token1Id,
-    amount0,
-    amount1,
-    minLP,
-    deadline,
-    pointer = 'v0',
-    refund = 'v0',
-  } = params;
+  const [factoryBlock, factoryTx] = params.factoryId.split(':');
+  const [token0Block, token0Tx] = params.token0Id.split(':');
+  const [token1Block, token1Tx] = params.token1Id.split(':');
 
-  const [factoryBlock, factoryTx] = factoryId.split(':');
-  const [token0Block, token0Tx] = token0Id.split(':');
-  const [token1Block, token1Tx] = token1Id.split(':');
+  // p0: Two edicts transferring both tokens to p1 (the cellpack)
+  const edict0 = `[${token0Block}:${token0Tx}:${params.amount0}:p1]`;
+  const edict1 = `[${token1Block}:${token1Tx}:${params.amount1}:p1]`;
+  const p0 = `${edict0}:${edict1}:v0:v0`;
 
-  // Build cellpack: [factory_block, factory_tx, opcode(11), token0_block, token0_tx, token1_block, token1_tx, amount0, amount1, minLP, deadline]
+  // p1: Cellpack calling factory opcode 1 (CreateNewPool)
+  // Receives tokens from p0 edicts as incomingAlkanes
   const cellpack = [
-    factoryBlock,
-    factoryTx,
-    FACTORY_OPCODES.AddLiquidity, // '11'
-    token0Block,
-    token0Tx,
-    token1Block,
-    token1Tx,
-    amount0,
-    amount1,
-    minLP,
-    deadline,
+    factoryBlock, factoryTx,
+    FACTORY_OPCODES.CreateNewPool, // '1'
+    token0Block, token0Tx,
+    token1Block, token1Tx,
+    params.amount0, params.amount1,
   ].join(',');
+  const p1 = `[${cellpack}]:v0:v0`;
 
-  return `[${cellpack}]:${pointer}:${refund}`;
+  return `${p0},${p1}`;
+}
+
+/**
+ * Build protostone string for AddLiquidity to existing pool
+ *
+ * Calls the POOL contract directly with opcode 1 (AddLiquidity).
+ *
+ * Two-protostone pattern (proven working for CreateNewPool in tx a29d0307):
+ * - p0: Both edicts transferring token0 and token1 to p1
+ * - p1: Cellpack calling pool directly with opcode 1 (AddLiquidity)
+ *
+ * Both edicts are in p0, targeting p1 (the cellpack). The pool receives
+ * both tokens as `incomingAlkanes`.
+ *
+ * The pool's AddLiquidity (opcode 1) expects exactly 2 incoming alkane tokens.
+ */
+function buildAddLiquidityToPoolProtostone(params: {
+  poolId: { block: string | number; tx: string | number };
+  token0Id: string;
+  token1Id: string;
+  amount0: string;
+  amount1: string;
+}): string {
+  const poolBlock = params.poolId.block.toString();
+  const poolTx = params.poolId.tx.toString();
+  const [token0Block, token0Tx] = params.token0Id.split(':');
+  const [token1Block, token1Tx] = params.token1Id.split(':');
+
+  // p0: Two edicts transferring both tokens to p1 (the cellpack)
+  const edict0 = `[${token0Block}:${token0Tx}:${params.amount0}:p1]`;
+  const edict1 = `[${token1Block}:${token1Tx}:${params.amount1}:p1]`;
+  const p0 = `${edict0}:${edict1}:v0:v0`;
+
+  // p1: Cellpack calling pool directly with opcode 1 (AddLiquidity)
+  // Pool receives tokens from p0 edicts as incomingAlkanes
+  const cellpack = [
+    poolBlock, poolTx,
+    POOL_OPCODES.AddLiquidity, // 1
+  ].join(',');
+  const p1 = `[${cellpack}]:v0:v0`;
+
+  return `${p0},${p1}`;
 }
 
 /**
@@ -162,11 +197,215 @@ function buildAddLiquidityInputRequirements(params: {
   return `${block0}:${tx0}:${amount0},${block1}:${tx1}:${amount1}`;
 }
 
+/**
+ * Check if a pool exists for the given token pair via factory opcode 2 (FindPoolId).
+ * Uses alkanes_simulate RPC to call the factory without a real transaction.
+ * Returns the pool AlkaneId if found, or null if not.
+ */
+async function findPoolId(
+  factoryId: string,
+  token0Id: string,
+  token1Id: string,
+  apiUrl?: string,
+): Promise<{ block: number; tx: number } | null> {
+  const [factoryBlock, factoryTx] = factoryId.split(':').map(Number);
+  const [t0Block, t0Tx] = token0Id.split(':').map(Number);
+  const [t1Block, t1Tx] = token1Id.split(':').map(Number);
+  const rpcUrl = apiUrl || 'https://regtest.subfrost.io/v4/subfrost';
+
+  try {
+    const resp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'alkanes_simulate',
+        params: [{
+          target: { block: factoryBlock, tx: factoryTx },
+          inputs: [2, t0Block, t0Tx, t1Block, t1Tx], // opcode 2 = FindPoolId
+          context: { txid: '0'.repeat(64), vout: 0 },
+          alkanes: [],
+          fuel: 500000000,
+        }],
+        id: 1,
+      }),
+    });
+    const data = await resp.json();
+    // If there's an error containing "doesn't exist", pool doesn't exist
+    if (data?.result?.execution?.error) {
+      console.log('[AddLiquidity] Pool does not exist:', data.result.execution.error);
+      return null;
+    }
+    // status 0 = success, pool exists - parse pool ID from response data
+    if (data?.result?.status === 0 && data?.result?.execution?.data) {
+      const hexData = data.result.execution.data.replace('0x', '');
+      if (hexData.length >= 32) {
+        // AlkaneId is 2 u128s (block, tx) in little-endian
+        const blockHex = hexData.substring(0, 32);
+        const txHex = hexData.substring(32, 64);
+        const block = Number(BigInt('0x' + blockHex.match(/../g)!.reverse().join('')));
+        const tx = Number(BigInt('0x' + txHex.match(/../g)!.reverse().join('')));
+        console.log('[AddLiquidity] Pool found:', `${block}:${tx}`);
+        return { block, tx };
+      }
+      console.log('[AddLiquidity] Pool exists (status 0) but could not parse ID');
+      return null;
+    }
+    return null;
+  } catch (error) {
+    console.warn('[AddLiquidity] Pool existence check failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Discover alkane-bearing UTXOs at the given taproot address.
+ *
+ * Workaround: SDK UTXO selection doesn't find alkane UTXOs automatically.
+ * Uses esplora_address::utxo to find dust UTXOs, then checks each via
+ * alkanes_protorunesbyoutpoint (which works correctly).
+ */
+async function discoverAlkaneUtxos(
+  taprootAddress: string,
+  rpcUrl: string = '/api/rpc',
+): Promise<{ txid: string; vout: number; value: number; alkanes: { block: number; tx: number; amount: number }[] }[]> {
+  console.log('[AddLiquidity] Discovering alkane UTXOs at', taprootAddress);
+
+  // 1. Fetch all UTXOs at the taproot address
+  const utxoResp = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'esplora_address::utxo',
+      params: [taprootAddress],
+      id: 1,
+    }),
+  });
+  const utxoData = await utxoResp.json();
+  const utxos = utxoData.result || [];
+
+  // 2. Filter for dust UTXOs (<=1000 sats) - alkane tokens live on dust outputs
+  const dustUtxos = utxos.filter((u: any) => u.value <= 1000);
+  console.log(`[AddLiquidity] Found ${utxos.length} UTXOs, ${dustUtxos.length} dust UTXOs to check`);
+
+  if (dustUtxos.length === 0) {
+    console.log('[AddLiquidity] No dust UTXOs found - no alkane tokens available');
+    return [];
+  }
+
+  // 3. Check each dust UTXO for alkane balances (in parallel)
+  const checks = dustUtxos.map(async (utxo: any) => {
+    try {
+      const resp = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'alkanes_protorunesbyoutpoint',
+          params: [utxo.txid, utxo.vout],
+          id: 1,
+        }),
+      });
+      const data = await resp.json();
+      const balances = data?.result?.balance_sheet?.cached?.balances || [];
+      if (balances.length > 0) {
+        return {
+          txid: utxo.txid as string,
+          vout: utxo.vout as number,
+          value: utxo.value as number,
+          alkanes: balances.map((b: any) => ({ block: Number(b.block), tx: Number(b.tx), amount: Number(b.amount) })),
+        };
+      }
+    } catch (e) {
+      console.warn(`[AddLiquidity] Failed to check outpoint ${utxo.txid}:${utxo.vout}:`, e);
+    }
+    return null;
+  });
+
+  const results = await Promise.all(checks);
+  const alkaneUtxos = results.filter((r): r is NonNullable<typeof r> => r !== null);
+
+  console.log(`[AddLiquidity] Found ${alkaneUtxos.length} alkane-bearing UTXOs:`,
+    alkaneUtxos.map(u => `${u.txid.slice(0, 8)}:${u.vout} -> ${u.alkanes.map((a: { block: number; tx: number; amount: number }) => `[${a.block}:${a.tx}]=${a.amount}`).join(', ')}`));
+
+  return alkaneUtxos;
+}
+
+/**
+ * Inject alkane-bearing UTXOs into a PSBT that's missing them.
+ *
+ * The SDK builds PSBTs without alkane UTXOs because its UTXO selection doesn't
+ * find them automatically. This function adds the missing alkane inputs so the
+ * protostone edicts can transfer tokens correctly.
+ *
+ * Returns the modified PSBT as base64.
+ */
+function injectAlkaneInputs(
+  psbtBase64: string,
+  alkaneUtxos: { txid: string; vout: number; value: number }[],
+  taprootAddress: string,
+  btcNetwork: bitcoin.Network,
+  tapInternalKeyHex?: string,
+): string {
+  if (alkaneUtxos.length === 0) return psbtBase64;
+
+  const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+
+  // Get existing input outpoints to avoid duplicates
+  const existingInputs = new Set(
+    psbt.txInputs.map(input => {
+      const txid = Buffer.from(input.hash).reverse().toString('hex');
+      return `${txid}:${input.index}`;
+    })
+  );
+
+  const taprootScript = bitcoin.address.toOutputScript(taprootAddress, btcNetwork);
+  const tapInternalKey = tapInternalKeyHex ? Buffer.from(tapInternalKeyHex, 'hex') : undefined;
+
+  let injectedCount = 0;
+  for (const utxo of alkaneUtxos) {
+    const key = `${utxo.txid}:${utxo.vout}`;
+    if (existingInputs.has(key)) {
+      console.log(`[AddLiquidity] Alkane UTXO ${key} already in PSBT, skipping`);
+      continue;
+    }
+
+    const inputData: Parameters<typeof psbt.addInput>[0] = {
+      hash: utxo.txid,
+      index: utxo.vout,
+      witnessUtxo: {
+        script: taprootScript,
+        value: BigInt(utxo.value),
+      },
+    };
+
+    if (tapInternalKey) {
+      inputData.tapInternalKey = tapInternalKey;
+    }
+
+    psbt.addInput(inputData);
+    injectedCount++;
+    console.log(`[AddLiquidity] Injected alkane UTXO ${key} (${utxo.value} sats)`);
+  }
+
+  if (injectedCount > 0) {
+    console.log(`[AddLiquidity] Injected ${injectedCount} alkane input(s) into PSBT`);
+    console.log(`[AddLiquidity] PSBT now has ${psbt.txInputs.length} total inputs`);
+  }
+
+  return psbt.toBase64();
+}
+
 export function useAddLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
-  const { ALKANE_FACTORY_ID } = getConfig(network);
+  const { requestConfirmation } = useTransactionConfirm();
+  const config = getConfig(network);
+  const ALKANE_FACTORY_ID = config.ALKANE_FACTORY_ID;
+  const apiUrl = 'API_URL' in config ? (config as any).API_URL : undefined;
+  const defaultPoolId = 'DEFAULT_POOL_ID' in config ? (config as any).DEFAULT_POOL_ID as string : undefined;
 
   // Get bitcoin network for PSBT parsing
   const getBitcoinNetwork = () => {
@@ -213,28 +452,51 @@ export function useAddLiquidityMutation() {
 
       console.log('[AddLiquidity] Amounts in alks:', { amount0Alks, amount1Alks });
 
-      // Get block height for deadline
-      const deadline = await getFutureBlockHeight(
-        data.deadlineBlocks || 3,
-        provider as any
-      );
+      // Determine pool ID: use provided poolId, discover via factory, or use default
+      let resolvedPoolId = data.poolId || null;
 
-      console.log('[AddLiquidity] Deadline block:', deadline);
+      if (!resolvedPoolId) {
+        console.log('[AddLiquidity] No poolId provided, checking factory for existing pool...');
+        resolvedPoolId = await findPoolId(
+          ALKANE_FACTORY_ID,
+          data.token0Id,
+          data.token1Id,
+          apiUrl,
+        );
+      }
 
-      // For MVP, use minLP = 0 (no slippage protection)
-      // TODO: Calculate minLP based on pool reserves and slippage
-      const minLP = '0';
+      // Fallback: use config DEFAULT_POOL_ID if factory discovery failed
+      // This handles pools created outside the factory (e.g., via direct beacon proxy instantiation)
+      if (!resolvedPoolId && defaultPoolId) {
+        const [block, tx] = defaultPoolId.split(':').map(Number);
+        console.log('[AddLiquidity] Factory returned no pool, using default pool:', defaultPoolId);
+        resolvedPoolId = { block, tx };
+      }
 
-      // Build protostone
-      const protostone = buildAddLiquidityProtostone({
-        factoryId: ALKANE_FACTORY_ID,
-        token0Id: data.token0Id,
-        token1Id: data.token1Id,
-        amount0: amount0Alks,
-        amount1: amount1Alks,
-        minLP,
-        deadline: deadline.toString(),
-      });
+      let protostone: string;
+
+      if (resolvedPoolId) {
+        // Pool exists: call pool directly with opcode 1 (AddLiquidity)
+        // Same pattern as useSwapMutation and useRemoveLiquidityMutation
+        protostone = buildAddLiquidityToPoolProtostone({
+          poolId: resolvedPoolId,
+          token0Id: data.token0Id,
+          token1Id: data.token1Id,
+          amount0: amount0Alks,
+          amount1: amount1Alks,
+        });
+        console.log('[AddLiquidity] Pool found at', `${resolvedPoolId.block}:${resolvedPoolId.tx}`, '- calling pool directly with opcode 1');
+      } else {
+        // Pool doesn't exist: use factory opcode 1 (CreateNewPool)
+        protostone = buildCreateNewPoolProtostone({
+          factoryId: ALKANE_FACTORY_ID,
+          token0Id: data.token0Id,
+          token1Id: data.token1Id,
+          amount0: amount0Alks,
+          amount1: amount1Alks,
+        });
+        console.log('[AddLiquidity] Pool does NOT exist, using factory opcode 1 (CreateNewPool)');
+      }
 
       console.log('[AddLiquidity] Protostone:', protostone);
 
@@ -312,8 +574,50 @@ export function useAddLiquidityMutation() {
             throw new Error('Unexpected PSBT format');
           }
 
+          // === Alkane UTXO Injection ===
+          // The SDK's internal protorunesbyaddress is broken (returns 0x on regtest),
+          // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
+          // alkane UTXOs and inject them into the PSBT before signing.
+          console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
+          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress, '/api/rpc');
+
+          if (alkaneUtxos.length > 0) {
+            const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
+            psbtBase64 = injectAlkaneInputs(
+              psbtBase64,
+              alkaneUtxos,
+              taprootAddress,
+              btcNetwork,
+              tapInternalKeyHex,
+            );
+          } else {
+            console.warn('[AddLiquidity] No alkane UTXOs found - protostone edicts will have no tokens to transfer');
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          if (walletType === 'keystore') {
+            console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'addLiquidity',
+              title: 'Confirm Add Liquidity',
+              token0Amount: (parseFloat(data.token0Amount) / 1e8).toString(),
+              token0Symbol: getTokenSymbol(data.token0Id, data.token0Symbol),
+              token0Id: data.token0Id,
+              token1Amount: (parseFloat(data.token1Amount) / 1e8).toString(),
+              token1Symbol: getTokenSymbol(data.token1Id, data.token1Symbol),
+              token1Id: data.token1Id,
+              feeRate: data.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[AddLiquidity] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[AddLiquidity] User approved transaction');
+          }
+
           // Sign the PSBT with both keys (SegWit first, then Taproot)
-          // The PSBT may have inputs from both address types
+          // The PSBT may have inputs from both address types (including injected alkane inputs)
           console.log('[AddLiquidity] Signing PSBT with SegWit key first, then Taproot key...');
           let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
           signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
@@ -327,6 +631,21 @@ export function useAddLiquidityMutation() {
           const txid = tx.getId();
 
           console.log('[AddLiquidity] Transaction built:', txid);
+          console.log('[AddLiquidity] Inputs:', tx.ins.length);
+          console.log('[AddLiquidity] Outputs:');
+          tx.outs.forEach((output, idx) => {
+            const script = Buffer.from(output.script).toString('hex');
+            if (script.startsWith('6a')) {
+              console.log(`  [${idx}] OP_RETURN (protostone) ${script.length / 2} bytes`);
+            } else {
+              try {
+                const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
+                console.log(`  [${idx}] ${output.value} sats -> ${addr}`);
+              } catch {
+                console.log(`  [${idx}] ${output.value} sats -> unknown script`);
+              }
+            }
+          });
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);

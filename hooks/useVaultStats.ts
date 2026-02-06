@@ -107,8 +107,6 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
         };
       }
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
-    staleTime: 15000, // Data is fresh for 15 seconds
     retry: 2,
   });
 }

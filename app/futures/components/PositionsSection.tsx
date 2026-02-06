@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type FtrPosition = {
   contract: string;
@@ -11,6 +12,7 @@ type FtrPosition = {
 };
 
 export default function PositionsSection() {
+  const { t } = useTranslation();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Mock ftrBTC positions (max 100 blocks in FE context)
@@ -46,24 +48,12 @@ export default function PositionsSection() {
       {/* ftrBTC EXPLAINER */}
       <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] px-6 py-4 text-sm text-[color:var(--sf-text)]/80">
         <div className="font-semibold text-[color:var(--sf-text)] mb-1">
-          How ftrBTC positions work
+          {t('positions.howPositionsWork')}
         </div>
         <ul className="list-disc list-inside space-y-1 text-xs md:text-sm">
-          <li>
-            Each <span className="font-semibold">ftrBTC[xxxxxx]</span> is a
-            time-locked BTC position with a deterministic exercise value defined by the
-            polynomial fee curve.
-          </li>
-          <li>
-            <span className="font-semibold">Exercise value</span> is what you get if you
-            exercise right now via <span className="font-semibold">Exercise</span> (dxBTC
-            redemption). It only depends on time to expiry, not on secondary market prices.
-          </li>
-          <li>
-            <span className="font-semibold">Last trade</span> is the latest price from the
-            futures market. It can trade above or below spot — premiums are constant regardless
-            of secondary prices.
-          </li>
+          <li>{t('positions.positionExplanation')}</li>
+          <li>{t('positions.exerciseExplanation')}</li>
+          <li>{t('positions.lastTradeExplanation')}</li>
         </ul>
       </div>
 
@@ -74,22 +64,22 @@ export default function PositionsSection() {
               <thead>
                 <tr className="border-b border-[color:var(--sf-glass-border)]">
                   <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                    Contract
+                    {t('positions.contract')}
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                    Amount (ftrBTC)
+                    {t('positions.amount')}
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                    Exercise value (poly)
+                    {t('positions.exerciseValue')}
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                    Last trade (market)
+                    {t('positions.lastTrade')}
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                    Blocks left
+                    {t('positions.blocksLeft')}
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
-                    Actions
+                    {t('positions.actions')}
                   </th>
                 </tr>
               </thead>
@@ -143,7 +133,7 @@ export default function PositionsSection() {
                           }}
                           className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-red-500 text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                         >
-                          Exercise
+                          {t('positions.exercise')}
                         </button>
                       </td>
                     </tr>,
@@ -156,18 +146,18 @@ export default function PositionsSection() {
                           <div className="space-y-3">
                             <div className="text-sm text-[color:var(--sf-text)]/80">
                               <div className="font-semibold text-[color:var(--sf-text)] mb-2">
-                                Position details
+                                {t('positions.positionDetails')}
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                   <span className="text-xs text-[color:var(--sf-text)]/70">
-                                    Contract:
+                                    {t('positions.contractLabel')}
                                   </span>
                                   <div className="font-medium">{position.contract}</div>
                                 </div>
                                 <div>
                                   <span className="text-xs text-[color:var(--sf-text)]/70">
-                                    Notional:
+                                    {t('positions.notional')}
                                   </span>
                                   <div className="font-medium">
                                     {position.amount} ftrBTC
@@ -175,7 +165,7 @@ export default function PositionsSection() {
                                 </div>
                                 <div>
                                   <span className="text-xs text-[color:var(--sf-text)]/70">
-                                    Exercise now (poly):
+                                    {t('positions.exerciseNow')}
                                   </span>
                                   <div className="font-medium">
                                     {position.exerciseValue}
@@ -184,7 +174,7 @@ export default function PositionsSection() {
                                 {position.lastTrade && (
                                   <div>
                                     <span className="text-xs text-[color:var(--sf-text)]/70">
-                                      Last market trade:
+                                      {t('positions.lastMarketTrade')}
                                     </span>
                                     <div className="font-medium">
                                       {position.lastTrade}
@@ -193,18 +183,16 @@ export default function PositionsSection() {
                                 )}
                                 <div>
                                   <span className="text-xs text-[color:var(--sf-text)]/70">
-                                    Time to expiry:
+                                    {t('positions.timeToExpiry')}
                                   </span>
                                   <div className="font-medium">{position.timeLeft}</div>
                                 </div>
                                 <div>
                                   <span className="text-xs text-[color:var(--sf-text)]/70">
-                                    Behaviour:
+                                    {t('positions.behaviour')}
                                   </span>
                                   <div className="text-xs md:text-sm">
-                                    Exercise value moves deterministically along the
-                                    polynomial curve as blocks pass. Holding to expiry
-                                    removes the time penalty (0% fee).
+                                    {t('positions.behaviourDesc')}
                                   </div>
                                 </div>
                               </div>

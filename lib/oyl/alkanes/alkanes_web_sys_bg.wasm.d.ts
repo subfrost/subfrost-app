@@ -161,6 +161,7 @@ export const webprovider_brc20progEstimateGas: (a: number, b: number, c: number,
 export const webprovider_brc20progGetLogs: (a: number, b: any) => any;
 export const webprovider_brc20progWeb3ClientVersion: (a: number) => any;
 export const webprovider_metashrewHeight: (a: number) => any;
+export const webprovider_waitForIndexer: (a: number) => any;
 export const webprovider_metashrewStateRoot: (a: number, b: number, c: number) => any;
 export const webprovider_metashrewGetBlockHash: (a: number, b: number) => any;
 export const webprovider_metashrewView: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
@@ -193,6 +194,8 @@ export const webprovider_frbtcWrapAndExecute2: (a: number, b: bigint, c: number,
 export const webprovider_dataApiGetPoolHistory: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: bigint) => any;
 export const webprovider_dataApiGetPools: (a: number, b: number, c: number) => any;
 export const webprovider_dataApiGetAlkanesByAddress: (a: number, b: number, c: number) => any;
+export const webprovider_dataApiGetAllPoolsDetails: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: bigint, h: number, i: number, j: number, k: number) => any;
+export const webprovider_dataApiGetPoolDetails: (a: number, b: number, c: number, d: number, e: number) => any;
 export const webprovider_dataApiGetAddressBalances: (a: number, b: number, c: number, d: number) => any;
 export const webprovider_dataApiGetAllHistory: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: bigint) => any;
 export const webprovider_dataApiGetSwapHistory: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: bigint) => any;
@@ -284,6 +287,8 @@ export const wasm_bindgen__convert__closures_____invoke__h5943629905d90057: (a: 
 export const wasm_bindgen__closure__destroy__h3ba04b4139aaae95: (a: number, b: number) => void;
 export const wasm_bindgen__convert__closures_____invoke__hc67e7f9a7930d925: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__hb154d7ec25b6c414: (a: number, b: number) => void;
+export const wasm_bindgen__convert__closures_____invoke__h01405c57635d3c55: (a: number, b: number) => void;
+export const wasm_bindgen__closure__destroy__he41b8e2aae505aee: (a: number, b: number) => void;
 export const wasm_bindgen__convert__closures_____invoke__h95fdbac5e4c1bfb6: (a: number, b: number, c: any, d: any) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

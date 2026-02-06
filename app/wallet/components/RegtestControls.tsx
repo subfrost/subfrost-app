@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { Pickaxe, Clock, Zap, Fuel } from 'lucide-react';
 import * as bitcoin from 'bitcoinjs-lib';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // DIESEL token ID (2:0) - the free-mint alkane token
 const DIESEL_ID = '2:0';
@@ -23,7 +25,9 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 export default function RegtestControls() {
   const { network, account, signTaprootPsbt } = useWallet();
   const { provider, isWalletLoaded } = useAlkanesSDK();
+  const extendedProvider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -40,10 +44,10 @@ export default function RegtestControls() {
   const mineBlocks = async (count: number) => {
     setMining(true);
     try {
-      // Get taproot address (p2tr:0)
-      const address = account?.taproot?.address;
+      // Get SegWit address (p2wpkh) for mining rewards
+      const address = account?.nativeSegwit?.address;
       if (!address) {
-        throw new Error('No taproot address available. Please connect wallet first.');
+        throw new Error('No SegWit address available. Please connect wallet first.');
       }
 
       // Use the API route which bypasses WASM issues
@@ -139,33 +143,21 @@ export default function RegtestControls() {
 
       console.log('[DIESEL] Protostone:', protostone);
 
-      // No input requirements for DIESEL mint (it's free)
-      const inputRequirements = '';
+      if (!extendedProvider) {
+        throw new Error('Extended provider not initialized');
+      }
 
-      // to_addresses: just the user's taproot address
-      const toAddresses = JSON.stringify([taprootAddress]);
-
-      // Options for the SDK
-      const options: Record<string, any> = {
-        trace_enabled: false,
-        mine_enabled: false,
-        auto_confirm: false, // We'll handle signing ourselves
-        change_address: taprootAddress,
-        alkanes_change_address: taprootAddress,
-        from: [taprootAddress],
-        from_addresses: [taprootAddress],
-      };
-      const optionsJson = JSON.stringify(options);
-
-      // Execute the DIESEL mint
-      const result = await provider.alkanesExecuteWithStrings(
-        toAddresses,
-        inputRequirements,
-        protostone,
-        10, // fee rate
-        null, // envelope_hex
-        optionsJson
-      );
+      // Execute the DIESEL mint using alkanesExecuteTyped
+      const result = await extendedProvider.alkanesExecuteTyped({
+        inputRequirements: '',
+        protostones: protostone,
+        feeRate: 10,
+        toAddresses: [taprootAddress],
+        fromAddresses: [taprootAddress],
+        changeAddress: taprootAddress,
+        alkanesChangeAddress: taprootAddress,
+        autoConfirm: false, // We'll handle signing ourselves
+      });
 
       console.log('[DIESEL] Execution result:', result);
 
@@ -234,7 +226,7 @@ export default function RegtestControls() {
     <div className="mt-8 rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
       <div className="flex items-center gap-3 mb-4">
         <Pickaxe size={24} className="text-orange-400" />
-        <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Regtest Controls</h3>
+        <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('regtest.controls')}</h3>
         <span className="text-sm text-[color:var(--sf-text)]/60">({networkLabel})</span>
       </div>
 
@@ -252,8 +244,8 @@ export default function RegtestControls() {
           className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-orange-500/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Pickaxe size={32} className="text-orange-400" />
-          <span className="font-semibold">Mine 200 Blocks</span>
-          <span className="text-sm text-[color:var(--sf-text)]/60">Generate bulk blocks</span>
+          <span className="font-semibold">{t('regtest.mine200Blocks')}</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.generateBulk')}</span>
         </button>
 
         {/* Mine 1 Block */}
@@ -263,8 +255,8 @@ export default function RegtestControls() {
           className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-[color:var(--sf-primary)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Zap size={32} className="text-[color:var(--sf-primary)]" />
-          <span className="font-semibold">Mine 1 Block</span>
-          <span className="text-sm text-[color:var(--sf-text)]/60">Generate single block</span>
+          <span className="font-semibold">{t('regtest.mine1Block')}</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.generateSingle')}</span>
         </button>
 
         {/* Mine DIESEL */}
@@ -274,8 +266,8 @@ export default function RegtestControls() {
           className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-green-500/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Fuel size={32} className="text-green-500" />
-          <span className="font-semibold">Mint DIESEL</span>
-          <span className="text-sm text-[color:var(--sf-text)]/60">Free-mint DIESEL (2:0)</span>
+          <span className="font-semibold">{t('regtest.mintDiesel')}</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.freeMintDiesel')}</span>
         </button>
 
         {/* Generate Future */}
@@ -285,15 +277,14 @@ export default function RegtestControls() {
           className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-purple-500/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Clock size={32} className="text-purple-500 dark:text-purple-400" />
-          <span className="font-semibold">Generate Future</span>
-          <span className="text-sm text-[color:var(--sf-text)]/60">Create future block</span>
+          <span className="font-semibold">{t('regtest.generateFuture')}</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.createFutureBlock')}</span>
         </button>
       </div>
 
       <div className="mt-4 p-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
         <p className="text-sm text-[color:var(--sf-text)]/60">
-          <strong className="text-[color:var(--sf-text)]/80">Note:</strong> These controls interact with the Bitcoin regtest node.
-          Mining blocks will confirm transactions and generate test BTC to your taproot address.
+          <strong className="text-[color:var(--sf-text)]/80">{t('regtest.note')}</strong> {t('regtest.noteText')}
         </p>
       </div>
     </div>

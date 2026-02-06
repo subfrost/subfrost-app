@@ -62,9 +62,11 @@ export async function executeLuaScript(
  */
 export const BALANCES_LUA = `-- Comprehensive balance information for an address (replacement for sandshrew_balances)
 -- Args: address, protocol_tag (optional, default: "1"), asset_address (optional)
+-- NOTE: Alkane token balances are fetched separately via OYL Alkanode REST API,
+-- not via alkanes_protorunesbyaddress. This script only handles BTC UTXOs,
+-- inscriptions, and regular Runes (ord_outputs).
 
 local address = args[1]
-local protocol_tag = args[2] or "1"
 local asset_address = args[3]
 
 -- Determine which addresses to query
@@ -97,30 +99,11 @@ local all_pending = {}
 for _, addr in ipairs(unique_addresses) do
     -- Get UTXOs
     local utxos = _RPC.esplora_addressutxo(addr) or {}
-    
-    -- Get protorunes/alkanes data
-    local protorunes = _RPC.alkanes_protorunesbyaddress({
-        address = addr,
-        protocolTag = protocol_tag
-    }) or {}
-    
+
     -- Get ord outputs (inscriptions and runes)
     local ord_outputs = _RPC.ord_outputs(addr) or {}
-    
-    -- Build lookup maps
-    local runes_map = {}
-    if protorunes.outpoints then
-        for _, outpoint in ipairs(protorunes.outpoints) do
-            if outpoint.outpoint and outpoint.runes then
-                local txid = outpoint.outpoint.txid
-                local vout = outpoint.outpoint.vout
-                -- Reverse txid for key (to match esplora format)
-                local key = txid .. ":" .. vout
-                runes_map[key] = outpoint.runes
-            end
-        end
-    end
-    
+
+    -- Build lookup map for ord outputs
     local ord_outputs_map = {}
     for _, output in ipairs(ord_outputs) do
         if output.outpoint then
@@ -130,35 +113,30 @@ for _, addr in ipairs(unique_addresses) do
             }
         end
     end
-    
+
     -- Process each UTXO
     for _, utxo in ipairs(utxos) do
         local txid = utxo.txid
         local vout = utxo.vout
         local value = utxo.value
         local key = txid .. ":" .. vout
-        
+
         -- Get height if available
         local height = nil
         if utxo.status and utxo.status.block_height then
             height = utxo.status.block_height
         end
-        
+
         -- Build UTXO entry
         local utxo_entry = {
             outpoint = key,
             value = value
         }
-        
+
         if height then
             utxo_entry.height = height
         end
-        
-        -- Add runes if present
-        if runes_map[key] then
-            utxo_entry.runes = runes_map[key]
-        end
-        
+
         -- Add inscriptions and ord_runes if present
         if ord_outputs_map[key] then
             if #ord_outputs_map[key].inscriptions > 0 then
@@ -168,14 +146,13 @@ for _, addr in ipairs(unique_addresses) do
                 utxo_entry.ord_runes = ord_outputs_map[key].ord_runes
             end
         end
-        
+
         -- Categorize UTXO
-        local has_assets = (utxo_entry.runes and #utxo_entry.runes > 0) or
-                          (utxo_entry.inscriptions and #utxo_entry.inscriptions > 0) or
+        local has_assets = (utxo_entry.inscriptions and #utxo_entry.inscriptions > 0) or
                           (utxo_entry.ord_runes and next(utxo_entry.ord_runes) ~= nil)
-        
+
         local is_confirmed = height and height <= max_indexed_height
-        
+
         if not is_confirmed then
             table.insert(all_pending, utxo_entry)
         elseif has_assets then

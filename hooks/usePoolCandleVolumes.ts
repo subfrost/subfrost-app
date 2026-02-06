@@ -43,13 +43,14 @@ export interface PoolCandleVolume {
 // Network Configuration
 // ============================================================================
 
-const NETWORK_ESPO_URLS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost/espo',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost/espo',
-  signet: 'https://signet.subfrost.io/v4/subfrost/espo',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost/espo',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost/espo',
-  'subfrost-regtest': 'https://mainnet.subfrost.io/v4/subfrost/espo',
+// Temporary: using api.alkanode.com until subfrost espo resyncs
+export const NETWORK_ESPO_URLS: Record<string, string> = {
+  mainnet: 'https://api.alkanode.com/rpc',
+  testnet: 'https://api.alkanode.com/rpc',
+  signet: 'https://api.alkanode.com/rpc',
+  regtest: 'https://api.alkanode.com/rpc',
+  oylnet: 'https://api.alkanode.com/rpc',
+  'subfrost-regtest': 'https://api.alkanode.com/rpc',
 };
 
 // Known quote tokens with USD values
@@ -63,7 +64,7 @@ const BTC_TOKENS = new Set(['32:0']); // frBTC
 /**
  * Fetch candles from the espo API using ammdata.get_candles
  */
-async function fetchCandles(
+export async function fetchCandles(
   espoUrl: string,
   poolId: string,
   timeframe: 'd1' | 'M1' | 'h1' | '10m' | 'w1',
@@ -202,8 +203,6 @@ export function usePoolCandleVolume(
       if (!poolId || !token1Id) return null;
       return fetchPoolVolume(espoUrl, poolId, token1Id, btcPrice);
     },
-    staleTime: 5 * 60_000, // 5 minutes
-    refetchInterval: 5 * 60_000,
     enabled: !!poolId && !!token1Id && !!network,
   });
 }
@@ -238,8 +237,6 @@ export function useAllPoolCandleVolumes(
 
       return results;
     },
-    staleTime: 5 * 60_000, // 5 minutes
-    refetchInterval: 5 * 60_000,
     enabled: !!pools && pools.length > 0 && !!network,
   });
 }

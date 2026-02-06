@@ -8,6 +8,8 @@ import NumberField from '@/app/components/NumberField';
 import { useBtcBalance } from '@/hooks/useBtcBalance';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 type OpenPositionFormProps = {
   contracts: Contract[];
@@ -24,20 +26,23 @@ type PayoutMarker = {
 };
 
 export default function OpenPositionForm({ contracts, onContractSelect }: OpenPositionFormProps) {
+  const { t } = useTranslation();
   const [selectedBlocks, setSelectedBlocks] = useState<number>(30);
   const [investmentAmount, setInvestmentAmount] = useState<string>('1.0');
   const [inputFocused, setInputFocused] = useState(false);
   const [lockPeriodFocused, setLockPeriodFocused] = useState(false);
+  const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Get wallet connection state
-  const { isConnected, onConnectModalOpenChange } = useWallet();
+  const { isConnected, onConnectModalOpenChange, network } = useWallet();
+  const isDemoGated = useDemoGate();
   const { theme } = useTheme();
 
   // Get BTC balance
   const { data: btcBalanceSats } = useBtcBalance();
   const btcBalance = btcBalanceSats ? Number(btcBalanceSats) / 1e8 : 0;
-  const balanceText = `Balance ${btcBalance.toFixed(6)}`;
+  const balanceText = t('openPosition.balance', { amount: btcBalance.toFixed(6) });
   
   // Calculate balance usage percentage
   const calculateBalanceUsage = (): number => {
@@ -309,7 +314,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" />
               </div>
               <div className="flex flex-col gap-1 pl-14">
-                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">Investment Amount</span>
+                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('openPosition.investmentAmount')}</span>
                 <NumberField
                   ref={inputRef}
                   value={investmentAmount}
@@ -379,7 +384,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-                Lock Period (blocks)
+                {t('openPosition.lockPeriod')}
               </label>
               <div className="flex items-center gap-2">
                 <button
@@ -390,14 +395,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   }}
                   className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
                 >
-                  Min
+                  {t('openPosition.min')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedBlocks(maxPeriod)}
                   className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
                 >
-                  Max
+                  {t('openPosition.max')}
                 </button>
               </div>
             </div>
@@ -423,24 +428,40 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   onFocus={() => setLockPeriodFocused(true)}
                   onBlur={() => setLockPeriodFocused(false)}
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${lockPeriodFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={`h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${lockPeriodFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
-                <span className="text-sm text-[color:var(--sf-text)]/70">blocks</span>
+                <span className="text-base text-[color:var(--sf-text)]/70">{t('openPosition.blocks')}</span>
               </div>
             </div>
             <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-              Select how long you want to lock your position (1-{maxPeriod} blocks)
+              {t('openPosition.selectLockPeriod', { max: maxPeriod })}
             </div>
           </div>
 
           {/* Buy Button */}
           <button
             type="button"
-            onClick={handleBuy}
-            disabled={isConnected && !canBuy}
-            className="h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            onClick={() => {
+              if (!isConnected) {
+                onConnectModalOpenChange(true);
+                return;
+              }
+              if (!isDemoGated) {
+                // TODO: wire up actual buy action
+                return;
+              }
+              if (!showBuyComingSoon) {
+                setShowBuyComingSoon(true);
+                setTimeout(() => setShowBuyComingSoon(false), 1000);
+              }
+            }}
+            className={`h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
           >
-            {isConnected ? 'Buy ftrBTC' : 'Connect Wallet'}
+            {showBuyComingSoon ? (
+              <span className="animate-pulse">{t('badge.comingSoon')}</span>
+            ) : (
+              isConnected ? t('openPosition.buyFtrBtc') : t('openPosition.connectWallet')
+            )}
           </button>
         </div>
 
@@ -452,13 +473,13 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
               <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Yield</div>
+                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.totalYield')}</div>
                     <div className={`text-3xl font-bold ${aggregatedYield >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {aggregatedYield >= 0 ? '+' : ''}{aggregatedYield.toFixed(2)}%
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-[color:var(--sf-text)]/70 mb-1">Total Profit</div>
+                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.totalProfit')}</div>
                     <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} BTC
                     </div>
@@ -467,20 +488,20 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
                 <div className="grid grid-cols-3 gap-2 sm:gap-4 pt-4 border-t border-[color:var(--sf-row-border)]">
                   <div className="text-left">
-                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Investment</div>
-                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.investment')}</div>
+                    <div className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)]">
                       {totalInvestment.toFixed(4)} <span className="text-xs text-[color:var(--sf-text)]/60">BTC</span>
                     </div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Contracts</div>
-                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.contracts')}</div>
+                    <div className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)]">
                       {payoutMarkers.length}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">Total Payout</div>
-                    <div className="text-sm sm:text-lg font-semibold text-[color:var(--sf-text)]">
+                    <div className="text-xs text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.totalPayout')}</div>
+                    <div className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)]">
                       {totalPayout.toFixed(4)} <span className="text-xs text-[color:var(--sf-text)]/60">BTC</span>
                     </div>
                   </div>
@@ -491,10 +512,10 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-                    Payout Timeline
+                    {t('openPosition.payoutTimeline')}
                   </div>
                   <div className="text-xs text-[color:var(--sf-text)]/60">
-                    {payoutMarkers.length} payout{payoutMarkers.length !== 1 ? 's' : ''}
+                    {t('openPosition.payouts', { count: payoutMarkers.length })}
                     {payoutMarkers.length > 0 && (
                       <span>
                         {' '}• {payoutMarkers[0].blocksUntil} - {maxBlocksUntil} blocks
@@ -542,9 +563,9 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-50">
                               <div className="bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] rounded-lg p-2 shadow-lg whitespace-nowrap text-xs">
                                 <div className="font-medium text-[color:var(--sf-text)]">{marker.contractId}</div>
-                                <div className="text-[color:var(--sf-text)]/70">Investment: {marker.investmentAmount.toFixed(6)} BTC</div>
-                                <div className="text-[color:var(--sf-text)]/70">Profit: {marker.payoutAmount >= 0 ? '+' : ''}{marker.payoutAmount.toFixed(6)} BTC</div>
-                                <div className="text-[color:var(--sf-text)]/70">Yield: {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%</div>
+                                <div className="text-[color:var(--sf-text)]/70">{t('openPosition.investmentLabel', { amount: marker.investmentAmount.toFixed(6) })}</div>
+                                <div className="text-[color:var(--sf-text)]/70">{t('openPosition.profitLabel', { amount: `${marker.payoutAmount >= 0 ? '' : '-'}${Math.abs(marker.payoutAmount).toFixed(6)}` })}</div>
+                                <div className="text-[color:var(--sf-text)]/70">{t('openPosition.yieldLabel', { percentage: `${marker.yieldPercent >= 0 ? '' : '-'}${Math.abs(marker.yieldPercent).toFixed(2)}` })}</div>
                               </div>
                             </div>
                           </div>
@@ -557,14 +578,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   <div className="absolute left-0 right-0 top-0 flex items-center justify-between text-xs">
                     {/* Left: Now */}
                     <div className="flex flex-col items-start">
-                      <div className="font-medium text-[color:var(--sf-text)]">Now</div>
-                      <div className="text-[color:var(--sf-text)]/50 text-[10px]">0 blocks</div>
+                      <div className="font-medium text-[color:var(--sf-text)]">{t('openPosition.now')}</div>
+                      <div className="text-[color:var(--sf-text)]/50 text-[10px]">{t('openPosition.zeroBlocks')}</div>
                     </div>
                     
                     {/* Right: Max (fixed at 95 blocks) */}
                     <div className="flex flex-col items-end">
-                      <div className="font-medium text-[color:var(--sf-primary)]">Payout</div>
-                      <div className="text-[color:var(--sf-text)]/50 text-[10px]">95 blocks</div>
+                      <div className="font-medium text-[color:var(--sf-primary)]">{t('openPosition.payout')}</div>
+                      <div className="text-[color:var(--sf-text)]/50 text-[10px]">{t('openPosition.ninetyFiveBlocks')}</div>
                     </div>
                   </div>
 
@@ -581,15 +602,15 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between">
-                              <div className="truncate text-sm font-bold text-[color:var(--sf-text)]">{marker.contractId}</div>
-                              <div className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-bold border ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]' : 'bg-[color:var(--sf-info-red-bg)] border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)]'}`}>
+                              <div className="truncate text-base font-bold text-[color:var(--sf-text)]">{marker.contractId}</div>
+                              <div className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-base font-bold border ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]' : 'bg-[color:var(--sf-info-red-bg)] border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)]'}`}>
                                 {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%
                               </div>
                             </div>
                             <div className="flex items-start justify-between mt-1">
                               <div className="text-xs text-[color:var(--sf-text)]/60">
                                 <div>{marker.investmentAmount.toFixed(6)} BTC</div>
-                                <div className="text-[color:var(--sf-text)]/40">In {marker.blocksUntil} blocks</div>
+                                <div className="text-[color:var(--sf-text)]/40">{t('openPosition.inBlocks', { count: marker.blocksUntil })}</div>
                               </div>
                               <div className="text-xs text-[color:var(--sf-text)]/60 text-right">
                                 {marker.payoutAmount >= 0 ? '+' : ''}{marker.payoutAmount.toFixed(6)} BTC
@@ -606,8 +627,8 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
           ) : (
             <div className="flex items-center justify-center h-full text-center py-8 text-[color:var(--sf-text)]/60">
               <div>
-                No profitable contracts available for {selectedBlocks} blocks lock period.
-                <div className="text-xs mt-2">Try selecting a shorter period or check back later.</div>
+                {t('openPosition.noProfitable', { blocks: selectedBlocks })}
+                <div className="text-xs mt-2">{t('openPosition.tryShorter')}</div>
               </div>
             </div>
           )}

@@ -4,7 +4,11 @@
  * Uses Redis caching for performance and the candle-fetcher module for raw data.
  */
 
-import { cacheGet, cacheSet } from '@/lib/redis';
+import { cache } from '@/lib/db/redis';
+
+// Adapter functions for the old cacheGet/cacheSet interface
+const cacheGet = <T>(key: string) => cache.get<T>(key);
+const cacheSet = <T>(key: string, value: T, ttl: number) => cache.set(key, value, ttl);
 import {
   getAlkanesClient,
   getPools,

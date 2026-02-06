@@ -3,6 +3,7 @@
 import { useState } from "react";
 import NumberField from "@/app/components/NumberField";
 import { useWallet } from "@/context/WalletContext";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   mode: 'deposit' | 'withdraw' | 'stake' | 'unstake';
@@ -32,7 +33,8 @@ export default function VaultActionPanel({
   title,
 }: Props) {
   const { isConnected, onConnectModalOpenChange } = useWallet();
-  
+  const { t } = useTranslation();
+
   const showDepositWithdraw = mode === 'deposit' || mode === 'withdraw';
   const showStakeUnstake = mode === 'stake' || mode === 'unstake';
 
@@ -52,7 +54,7 @@ export default function VaultActionPanel({
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              Deposit
+              {t('vaultAction.deposit')}
             </button>
             <button
               onClick={() => onModeChange('withdraw')}
@@ -62,7 +64,7 @@ export default function VaultActionPanel({
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              Withdraw
+              {t('vaultAction.withdraw')}
             </button>
           </>
         )}
@@ -76,7 +78,7 @@ export default function VaultActionPanel({
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              Stake
+              {t('vaultAction.stake')}
             </button>
             <button
               onClick={() => onModeChange('unstake')}
@@ -86,7 +88,7 @@ export default function VaultActionPanel({
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              Unstake
+              {t('vaultAction.unstake')}
             </button>
           </>
         )}
@@ -95,7 +97,7 @@ export default function VaultActionPanel({
       {/* Amount Input */}
       <div className="mb-4">
         <label className="text-xs font-semibold text-[color:var(--sf-text)]/70 mb-2 block">
-          {mode === 'deposit' || mode === 'stake' ? 'Amount to ' + mode : 'Amount to ' + mode}
+          {t('vaultAction.amountTo', { mode: t('vaultAction.' + mode) })}
         </label>
         <div className="flex items-center gap-2">
           <input
@@ -110,11 +112,11 @@ export default function VaultActionPanel({
             onClick={() => onAmountChange(balance)}
             className="px-4 h-12 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-semibold text-gray-700 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
-            MAX
+            {t('vaultAction.max')}
           </button>
         </div>
         <div className="mt-2 text-xs text-[color:var(--sf-text)]/60">
-          Available: {balance} {mode === 'withdraw' || mode === 'unstake' ? outputToken : inputToken}
+          {t('vaultAction.available')} {balance} {mode === 'withdraw' || mode === 'unstake' ? outputToken : inputToken}
         </div>
       </div>
 
@@ -130,14 +132,14 @@ export default function VaultActionPanel({
         disabled={isConnected && (!amount || parseFloat(amount) <= 0)}
         className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] font-bold text-white text-sm uppercase tracking-wider shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)] mb-4"
       >
-        {isConnected ? mode.toUpperCase() : 'CONNECT WALLET'}
+        {isConnected ? t('vaultAction.' + mode).toUpperCase() : t('vaultAction.connectWallet')}
       </button>
 
       {/* Claim Rewards */}
       {onClaim && parseFloat(pendingRewards) > 0 && (
         <div className="pt-4 border-t border-[color:var(--sf-outline)]">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-[color:var(--sf-text)]/70">Pending Rewards</span>
+            <span className="text-sm text-[color:var(--sf-text)]/70">{t('vaultAction.pendingRewards')}</span>
             <span className="text-sm font-semibold text-[color:var(--sf-text)]">
               {pendingRewards} DIESEL
             </span>
@@ -146,7 +148,7 @@ export default function VaultActionPanel({
             onClick={onClaim}
             className="w-full rounded-lg bg-green-500 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-green-600"
           >
-            CLAIM REWARDS
+            {t('vaultAction.claimRewards')}
           </button>
         </div>
       )}

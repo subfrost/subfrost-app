@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ProgressProvider } from '@bprogress/next/app';
 
 import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
@@ -10,6 +11,10 @@ import { WalletProvider } from '@/context/WalletContext';
 import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
 import { ExchangeProvider } from '@/context/ExchangeContext';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { LanguageProvider } from '@/context/LanguageContext';
+import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
+import { HeightPoller } from '@/queries/height';
+import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 
 // Define Network type locally
 import type { Network } from '@/utils/constants';
@@ -47,14 +52,19 @@ export default function Providers({ children }: { children: ReactNode }) {
   const [network, setNetwork] = useState<Network>('subfrost-regtest');
 
   // Memoize QueryClient to prevent recreation on re-renders
+  // All queries use staleTime: Infinity and never self-refresh.
+  // The HeightPoller component is the SINGLE source of invalidation.
   const queryClient = useMemo(
     () =>
       new QueryClient({
         defaultOptions: {
           queries: {
+            staleTime: Infinity,
+            refetchInterval: false,
             refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+            refetchOnMount: false,
             retry: 2,
-            staleTime: 30000, // 30 seconds - prevents immediate refetch on navigation
             gcTime: 5 * 60 * 1000, // 5 minutes cache time
           },
         },
@@ -100,20 +110,33 @@ export default function Providers({ children }: { children: ReactNode }) {
   if (!mounted) return null;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GlobalStore>
-        <ModalStore>
-          <ThemeProvider>
-            <AlkanesSDKProvider network={network}>
-              <WalletProvider network={network}>
-                <ExchangeProvider>
-                  {children}
-                </ExchangeProvider>
-              </WalletProvider>
-            </AlkanesSDKProvider>
-          </ThemeProvider>
-        </ModalStore>
-      </GlobalStore>
-    </QueryClientProvider>
+    <ProgressProvider
+      height="1px"
+      color="#00E5FF"
+      options={{ showSpinner: false }}
+      shallowRouting
+    >
+      <QueryClientProvider client={queryClient}>
+        <HeightPoller network={network} />
+        <GlobalStore>
+          <ModalStore>
+            <ThemeProvider>
+              <LanguageProvider>
+                <AlkanesSDKProvider network={network}>
+                  <WalletProvider network={network}>
+                    <TransactionConfirmProvider>
+                      <ExchangeProvider>
+                        {children}
+                      </ExchangeProvider>
+                      <TransactionConfirmModal />
+                    </TransactionConfirmProvider>
+                  </WalletProvider>
+                </AlkanesSDKProvider>
+              </LanguageProvider>
+            </ThemeProvider>
+          </ModalStore>
+        </GlobalStore>
+      </QueryClientProvider>
+    </ProgressProvider>
   );
 }

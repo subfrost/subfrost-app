@@ -16,6 +16,7 @@ import type { SlippageSelection } from '@/stores/global';
 import type { FeeSelection } from '@/hooks/useFeeRate';
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   sellId: string;
@@ -38,11 +39,14 @@ type Props = {
 export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp, isCrossChainFrom, feeSelection = 'medium', setFeeSelection, customFee = '', setCustomFee, feePresets = { slow: 2, medium: 8, fast: 25 } }: Props) {
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
+  const { t } = useTranslation();
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
 
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
+  // Collapsible details (all screen sizes)
+  const [detailsOpen, setDetailsOpen] = useState(false);
   // Local deadline state to allow empty field while typing
   const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
   const normalizedSell = sellId === 'btc' ? FRBTC_ALKANE_ID : sellId;
@@ -100,8 +104,8 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
     }
   }
 
-  const hasHighSlippage = slippagePercent !== null && slippagePercent > 5;
-  const hasWarningSlippage = slippagePercent !== null && slippagePercent > 1 && slippagePercent <= 5;
+  const hasHighSlippage = slippagePercent !== null && slippagePercent > 5.01;
+  const hasWarningSlippage = slippagePercent !== null && slippagePercent > 1 && slippagePercent <= 5.01;
 
   // Get swap route from quote
   const getSwapRoute = () => {
@@ -175,22 +179,45 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
         <SkeletonLines />
       ) : quote ? (
         <>
+          {/* Panel container with toggle + collapsible content */}
+          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+          {/* Toggle button */}
+          <button
+            type="button"
+            onClick={() => setDetailsOpen(!detailsOpen)}
+            className="flex items-center justify-between w-full p-4 text-xs font-semibold text-[color:var(--sf-text)]/60"
+          >
+            <span>
+              {isWrapPair
+                ? '1 BTC = 1 frBTC'
+                : isUnwrapPair
+                  ? '1 frBTC = 1 BTC'
+                  : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
+            </span>
+            <ChevronDown
+              size={14}
+              className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {/* Details content: collapsible on all screen sizes */}
+          <div className={`transition-all duration-300 ease-in-out ${detailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
           {swapRoute && (
             <div className="rounded-2xl bg-transparent p-4 pb-0">
               <div className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-2">
-                {quote?.hops === 2 ? 'Multi-Hop Swap Route' : 'Swap Route'}
+                {quote?.hops === 2 ? t('swapSummary.multiHopRoute') : t('swapSummary.swapRoute')}
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {swapRoute.map((step, index) => (
-                  <div key={`${step.id}-${index}`} className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-xs font-bold text-[color:var(--sf-primary)]">
+                  <div key={`${step.id}-${index}`} className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)]/20 text-[10px] font-bold text-[color:var(--sf-primary)]">
                         {index + 1}
                       </div>
-                      <span className="text-xs font-semibold text-[color:var(--sf-text)]">{step.symbol}</span>
+                      <span className="text-[11px] font-semibold text-[color:var(--sf-text)]">{step.symbol}</span>
                     </div>
                     {index < swapRoute.length - 1 && (
-                      <svg className="h-3 w-3 text-[color:var(--sf-primary)]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-2.5 w-2.5 text-[color:var(--sf-primary)]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
                       </svg>
                     )}
@@ -205,14 +232,14 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                   <span>
                     {quote?.hops === 2 && swapRoute.length === 3 && (
                       <>
-                        {swapRoute[1].id === BUSD_ALKANE_ID && 'Using bUSD as bridge token'}
-                        {swapRoute[1].id === FRBTC_ALKANE_ID && 'Using frBTC as bridge token'}
+                        {swapRoute[1].id === BUSD_ALKANE_ID && t('swapSummary.bridgeBusd')}
+                        {swapRoute[1].id === FRBTC_ALKANE_ID && t('swapSummary.bridgeFrbtc')}
                       </>
                     )}
-                    {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && 'BTC will seamlessly wrap to frBTC in this Tx.'}
-                    {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && 'BTC will seamlessly wrap to frBTC for this swap, and you won\'t even notice.'}
-                    {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && 'NOTE: frBTC will be unwrapped to BTC in this Tx. BTC will be sent to your wallet after 3 block confirmations.'}
-                    {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && 'NOTE: frBTC will be unwrapped to BTC after this swap. BTC will be sent to your wallet after 3 block confirmations.'}
+                    {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && t('swapSummary.wrapNote')}
+                    {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && t('swapSummary.wrapSwapNote')}
+                    {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && t('swapSummary.unwrapNote')}
+                    {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && t('swapSummary.unwrapSwapNote')}
                     {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
                   </span>
                 </div>
@@ -222,23 +249,14 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           
           {/* Settings rows - px-4 to align with Swap Route content */}
           <div className="flex flex-col gap-2.5 px-4">
-            <Row
-              label="Exchange Rate"
-              value={isWrapPair
-                ? '1 BTC = 1 frBTC'
-                : isUnwrapPair
-                  ? '1 frBTC = 1 BTC'
-                  : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
-              highlight
-            />
             {direction === 'sell' ? (
-              <Row label="Minimum Received" value={`${(() => {
+              <Row className="mt-3" label={t('swapSummary.minimumReceived')} value={`${(() => {
                 const isBtcToken = buyId === 'btc' || buyId === FRBTC_ALKANE_ID || buyName === 'BTC' || buyName === 'frBTC';
                 const decimals = isBtcToken ? 8 : 2;
                 return formatAlks(quote.minimumReceived, decimals, decimals);
               })()} ${buyName ?? buyId}`} />
             ) : (
-              <Row label="Maximum Sent" value={`${(() => {
+              <Row className="mt-3" label="Maximum Sent" value={`${(() => {
                 const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
                 const decimals = isBtcToken ? 8 : 2;
                 return formatAlks(quote.maximumSent, decimals, decimals);
@@ -247,7 +265,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
             {/* Deadline (blocks) row */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                Deadline (blocks)
+                {t('swapSummary.deadlineBlocks')}
               </span>
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -272,7 +290,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                     }}
                     placeholder="3"
                     style={{ outline: 'none', border: 'none' }}
-                    className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                    className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                   />
                 </div>
               </div>
@@ -280,7 +298,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
             {/* Slippage Tolerance row */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                Slippage Tolerance
+                {t('swapSummary.slippageTolerance')}
               </span>
               <div className="flex items-center gap-2">
                 {(isWrapPair || isUnwrapPair) ? (
@@ -313,7 +331,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                           }}
                           placeholder="5"
                           style={{ outline: 'none', border: 'none' }}
-                          className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                          className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                         />
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
                       </div>
@@ -334,7 +352,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
             {/* Miner Fee Rate row */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                {isCrossChainFrom ? "Bitcoin & Ethereum Network Fee" : "Miner Fee Rate (sats/vB)"}
+                {isCrossChainFrom ? t('swapSummary.btcAndEthFee') : t('swapSummary.minerFeeRate')}
               </span>
               <div className="flex items-center gap-2">
                 {isCrossChainFrom ? (
@@ -358,7 +376,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                       }}
                       placeholder="0"
                       style={{ outline: 'none', border: 'none' }}
-                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-sm font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                     />
                   </div>
                 ) : (
@@ -378,27 +396,29 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 )}
               </div>
             </div>
-            {poolFeeText && <Row label="Pool Fee" value={poolFeeText} />}
+            {poolFeeText && <Row label={t('swapSummary.poolFee')} value={poolFeeText} />}
           </div>
           
           {hasHighSlippage && slippagePercent !== null && !isWrapPair && !isUnwrapPair && (
-            <div className="mt-2 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3">
+            <div className="mt-2 mx-2 flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3">
               <svg className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <div className="flex-1">
-                <p className="text-xs font-bold text-red-500 mb-1">High Slippage Warning</p>
-                <p className="text-xs text-red-500/80">This swap has high slippage ({slippagePercent.toFixed(2)}%). You may receive significantly less than expected.</p>
+                <p className="text-xs font-bold text-red-500 mb-1">{t('swapSummary.highSlippageWarning')}</p>
+                <p className="text-xs text-red-500/80">{t('swapSummary.highSlippageMessage', { percentage: slippagePercent.toFixed(2) })}</p>
               </div>
             </div>
           )}
+          </div>
+          </div>
         </>
       ) : null}
     </div>
   );
 }
 
-function Row({ label, value, highlight, warning, danger }: { label: string; value: string; highlight?: boolean; warning?: boolean; danger?: boolean }) {
+function Row({ label, value, highlight, warning, danger, className }: { label: string; value: string; highlight?: boolean; warning?: boolean; danger?: boolean; className?: string }) {
   let labelColor = 'text-[color:var(--sf-text)]/60';
   let valueColor = 'text-[color:var(--sf-text)]';
   
@@ -414,7 +434,7 @@ function Row({ label, value, highlight, warning, danger }: { label: string; valu
   }
   
   return (
-    <div className="flex items-center justify-between">
+    <div className={`flex items-center justify-between ${className ?? ''}`}>
       <span className={`text-xs font-semibold uppercase tracking-wider ${labelColor}`}>
         {label}
       </span>
@@ -472,6 +492,7 @@ type MinerFeeButtonProps = {
 function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -494,9 +515,15 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
     setIsOpen(false);
   };
 
+  const feeDisplayMap: Record<string, string> = {
+    slow: t('swapSummary.slow'),
+    medium: t('swapSummary.medium'),
+    fast: t('swapSummary.fast'),
+    custom: t('swapSummary.custom'),
+  };
+
   const getDisplayText = () => {
-    if (selection === 'custom') return 'Custom';
-    return selection.charAt(0).toUpperCase() + selection.slice(1);
+    return feeDisplayMap[selection] || selection;
   };
 
   return (
@@ -517,14 +544,14 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span>{option}</span>
+                <span>{feeDisplayMap[option] || option}</span>
                 {option !== 'custom' && (
                   <span className="text-[10px] text-[color:var(--sf-text)]/50">
                     {presets[option as keyof typeof presets]}
@@ -554,6 +581,7 @@ type SlippageButtonProps = {
 function SlippageButton({ selection, setSelection, setValue }: SlippageButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -579,9 +607,15 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
     setIsOpen(false);
   };
 
+  const slippageDisplayMap: Record<string, string> = {
+    low: t('swapSummary.low'),
+    medium: t('swapSummary.medium'),
+    high: t('swapSummary.high'),
+    custom: t('swapSummary.custom'),
+  };
+
   const getDisplayText = () => {
-    if (selection === 'custom') return 'Custom';
-    return selection.charAt(0).toUpperCase() + selection.slice(1);
+    return slippageDisplayMap[selection] || selection;
   };
 
   return (
@@ -602,14 +636,14 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span>{option}</span>
+                <span>{slippageDisplayMap[option] || option}</span>
                 {option !== 'custom' && (
                   <span className="text-[10px] text-[color:var(--sf-text)]/50">
                     {SLIPPAGE_PRESETS[option]}%

@@ -42,6 +42,8 @@
     "reference",
     "lib/api-provider",
     "scripts",
-    "e2e"
+    "e2e",
+    "tools",
+    "e2e-tests"
   ]
 }

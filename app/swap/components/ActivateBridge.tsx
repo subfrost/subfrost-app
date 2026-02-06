@@ -251,7 +251,7 @@ export default function ActivateBridge({
 
           {/* Steps indicator - 2x2 grid */}
           {/* Extra gap on xs, sm, lg, xl but normal gap on md */}
-          <div className="grid grid-cols-2 gap-y-10 md:gap-y-4 lg:gap-y-10">
+          <div className="grid grid-cols-2 gap-y-10 lg:gap-y-4 xl:gap-y-10">
             {/* Step 1 */}
             <div className="flex flex-col items-center gap-1">
               <Snowflake

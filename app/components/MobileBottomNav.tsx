@@ -3,16 +3,18 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, ArrowLeftRight, Vault, TrendingUp } from 'lucide-react';
-
-const navItems = [
-  { href: '/', label: 'Home', icon: Home },
-  { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
-  { href: '/vaults', label: 'Vaults', icon: Vault },
-  { href: '/futures', label: 'Futures', icon: TrendingUp },
-];
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
+  const { t } = useTranslation();
+
+  const navItems = [
+    { href: '/', label: t('nav.home'), icon: Home },
+    { href: '/swap', label: t('nav.swap'), icon: ArrowLeftRight },
+    { href: '/vaults', label: t('nav.vaults'), icon: Vault },
+    { href: '/futures', label: t('nav.futures'), icon: TrendingUp },
+  ];
 
   const isActive = (path: string) => {
     if (path === '/') {

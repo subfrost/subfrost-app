@@ -8,17 +8,17 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+# Install pnpm (use latest 9.x for lockfile v9.0 compatibility)
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
+# Copy package files, .npmrc, and prisma schema (needed for postinstall)
+COPY package.json pnpm-lock.yaml* .npmrc* ./
+COPY prisma ./prisma/
 
 # Install dependencies
-# Note: Using --no-frozen-lockfile because @alkanes/ts-sdk is from a tarball URL
-# that may be republished with same version but different content.
-# Force fresh download by disabling offline mode.
-RUN pnpm install --prefer-offline=false
+# --no-frozen-lockfile: allow lockfile updates for tarball URL packages
+# --prefer-offline=false: force fresh fetch for @alkanes/ts-sdk
+RUN pnpm install --no-frozen-lockfile --prefer-offline=false
 
 # ============================================
 # Stage 2: Builder
@@ -26,8 +26,8 @@ RUN pnpm install --prefer-offline=false
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+# Install pnpm (use latest 9.x for lockfile v9.0 compatibility)
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # Copy dependencies
 COPY --from=deps /app/node_modules ./node_modules
@@ -38,6 +38,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ARG NEXT_PUBLIC_NETWORK=mainnet
 ENV NEXT_PUBLIC_NETWORK=${NEXT_PUBLIC_NETWORK}
+ARG NEXT_PUBLIC_DEMO_MODE=
+ENV NEXT_PUBLIC_DEMO_MODE=${NEXT_PUBLIC_DEMO_MODE}
 
 RUN pnpm build
 
@@ -65,6 +67,18 @@ RUN mkdir -p ./.next/server/static/wasm && \
     find ./tmp-server -name "*.wasm" -exec cp {} ./.next/server/static/wasm/ \; 2>/dev/null || true && \
     rm -rf ./tmp-server
 
+# Copy Prisma schema for migrations
+COPY --from=builder /app/prisma ./prisma
+
+# Install prisma CLI for migrations — pinned to v6 to match project (v7 breaks schema format)
+RUN npm install -g prisma@6
+
+# Copy entrypoint script for migrations
+# On first deploy with existing tables (from db:push), the baseline migration
+# must be marked as applied. The script detects this and resolves it automatically.
+COPY --from=builder /app/docker-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Set ownership
 RUN chown -R nextjs:nodejs /app
 
@@ -78,4 +92,4 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-CMD ["node", "server.js"]
+CMD ["/app/entrypoint.sh"]

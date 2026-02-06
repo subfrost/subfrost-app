@@ -1,41 +1,58 @@
 /**
  * useWrapSwapMutation - One-click BTC to DIESEL (or any token) via atomic wrap + swap
  *
- * ## How It Works
+ * ## ⚠️ DEPRECATED — Single-tx atomic wrap+swap does NOT work
  *
- * This hook combines wrap (BTC → frBTC) and swap (frBTC → DIESEL) into a single
- * Bitcoin transaction using two protostones chained together:
+ * This hook is retained for reference but is NO LONGER USED by SwapShell.
+ * BTC→Token swaps now use a two-step flow: wrapMutation → mine → swapMutation.
+ * See SwapShell.tsx handleSwap() for the working implementation.
  *
- * 1. **p0 (Wrap)**: Calls frBTC contract with opcode 77
- *    - Input: BTC directed to signer address (v1)
- *    - Output: frBTC directed to p1 (next protostone) via pointer=p1
+ * ### Journal: 2026-02-01 — Protostone pointer=pN doesn't work for cellpacks
  *
- * 2. **p1 (Swap)**: Calls pool contract with opcode 3
- *    - Input: frBTC from p0 arrives as `incomingAlkanes`
- *    - Output: DIESEL (or target token) to user address (v0)
+ * PROBLEM: BTC→DIESEL swaps broadcast and confirm, but only the wrap executes.
+ * The user receives frBTC instead of DIESEL. Pool reserves unchanged.
  *
- * ## Transaction Output Ordering
+ * INVESTIGATION:
+ *   1. Traced txids be0b988f... and 94eb6608... on regtest.
+ *   2. Both show: vout 0 = 99,900,000 frBTC (user taproot), vout 1 = 1 BTC (signer).
+ *      No DIESEL received. Pool reserves unchanged.
+ *   3. Simulated factory opcode 13 WITHOUT alkanes → "balance underflow,
+ *      transferring(frBTC 99900000), from(factory 4:65498), balance(0)".
+ *      The factory received ZERO frBTC — the pointer=p1 chain didn't deliver tokens.
+ *   4. Simulated factory opcode 13 WITH alkanes → works perfectly (returns DIESEL).
+ *   5. Root cause: the protostone `pointer` field only supports OUTPUT INDICES (v0, v1),
+ *      NOT protostone indices (p0, p1). The SDK type definitions confirm this:
+ *      `pointer?: number` and `refundPointer?: number` — plain output indices.
+ *      The `pN` syntax is only valid in EDICT targets ([block:tx:amount:p1]),
+ *      not in the pointer field after the cellpack ([cellpack]:pointer:refund).
+ *   6. When the SDK encounters `p1` in the pointer position, it either falls back to
+ *      v0 (default) or v1. Either way, frBTC goes to an output, not to the next
+ *      protostone. The swap protostone receives zero incomingAlkanes.
  *
- * - Output 0 (v0): User taproot address (receives final DIESEL)
- * - Output 1 (v1): Signer address (receives BTC for wrap)
- * - Output 2+: Change, OP_RETURN
+ * FIX: SwapShell now uses two separate transactions:
+ *   Step 1: wrapMutation (BTC → frBTC)
+ *   Step 2: mine block + swapMutation (frBTC → DIESEL via edict two-protostone pattern)
+ *   The edict pattern [32:0:amount:p1] correctly delivers frBTC to the swap cellpack.
  *
- * ## Why This Matters
+ * NOTE: The same issue likely affects useSwapUnwrapMutation (Token→BTC) which uses
+ * pointer=p2 on the swap cellpack to chain into the unwrap cellpack.
  *
- * Previously, BTC → DIESEL required TWO transactions:
- * 1. Wrap BTC to frBTC (wait for confirmation)
- * 2. Swap frBTC to DIESEL
+ * ## Original Design (non-functional)
  *
- * Now it's ONE atomic transaction - simpler UX, fewer fees, instant.
+ * Two protostones chained:
+ * - p0: Wrap cellpack [32,0,77]:p1:v0 — frBTC should go to p1 (but doesn't)
+ * - p1: Swap cellpack [4,65498,13,...]:v0:v0 — should receive frBTC (but gets nothing)
  *
- * @see useWrapMutation.ts - Standalone wrap logic
- * @see useSwapMutation.ts - Standalone swap logic with two-protostone pattern
+ * @see useWrapMutation.ts - Standalone wrap logic (works)
+ * @see useSwapMutation.ts - Standalone swap logic with edict pattern (works)
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import {
@@ -47,19 +64,19 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 
 bitcoin.initEccLib(ecc);
 
-// Pool operation codes
-const POOL_OPCODES = {
-  Swap: 3,
-};
+// Factory router opcode for swap
+const FACTORY_SWAP_OPCODE = 13; // SwapExactTokensForTokens
 
 // frBTC wrap opcode
 const FRBTC_WRAP_OPCODE = 77;
 
 // Hardcoded signer addresses per network (same as useWrapMutation)
+// Derived from frBTC contract [32:0] opcode 103 (GET_SIGNER).
+// If the frBTC contract is redeployed, update these. See useWrapMutation.ts header.
 const SIGNER_ADDRESSES: Record<string, string> = {
-  'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
-  'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
+  'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
 };
 
 // Helper to convert Uint8Array to base64
@@ -75,9 +92,10 @@ export type WrapSwapTransactionData = {
   btcAmount: string;        // BTC amount in display units (e.g., "0.5")
   buyAmount: string;        // Expected output amount in alks
   buyCurrency: string;      // Target token alkane id (e.g., "2:0" for DIESEL)
+  buySymbol?: string;       // Symbol for confirmation display (e.g., "DIESEL")
   maxSlippage: string;      // Percent string, e.g., '0.5'
   feeRate: number;          // sats/vB
-  poolId: { block: string | number; tx: string | number };
+  poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
   deadlineBlocks?: number;  // Default 3
 };
 
@@ -86,31 +104,48 @@ export type WrapSwapTransactionData = {
  *
  * Two protostones chained:
  * - p0: Wrap (frBTC contract) with pointer=p1 to forward frBTC to swap
- * - p1: Swap (pool contract) receives frBTC and outputs target token
+ * - p1: Swap (factory contract opcode 13) receives frBTC and outputs target token
  *
- * Format: [frbtc_block,frbtc_tx,77]:p1:v0,[pool_block,pool_tx,3,minOutput,deadline]:v0:v0
+ * Format: [frbtc_block,frbtc_tx,77]:p1:v0,[factory_block,factory_tx,13,path_len,...path,amount_in,min_out,deadline]:v0:v0
  */
 function buildWrapSwapProtostone(params: {
   frbtcId: string;
-  poolId: { block: string | number; tx: string | number };
+  factoryId: string;
+  buyTokenId: string;
+  frbtcAmount: string;      // Expected frBTC amount after wrap fee
   minOutput: string;
   deadline: string;
 }): string {
-  const { frbtcId, poolId, minOutput, deadline } = params;
+  const { frbtcId, factoryId, buyTokenId, frbtcAmount, minOutput, deadline } = params;
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const poolBlock = poolId.block.toString();
-  const poolTx = poolId.tx.toString();
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
 
   // p0: Wrap - call frBTC contract (opcode 77)
-  // pointer=p1 directs minted frBTC to the next protostone (swap)
+  // pointer=p1 directs minted frBTC to next protostone (swap)
   // refund=v0 sends any refunds to user
-  const wrapCellpack = [frbtcBlock, frbtcTx, FRBTC_WRAP_OPCODE].join(',');
+  const blockNum = parseInt(frbtcBlock, 10);
+  const txNum = parseInt(frbtcTx, 10);
+  const wrapCellpack = `${blockNum},${txNum},${FRBTC_WRAP_OPCODE}`;
   const p0 = `[${wrapCellpack}]:p1:v0`;
 
-  // p1: Swap - call pool contract (opcode 3)
+  // p1: Swap - call factory with SwapExactTokensForTokens (opcode 13)
   // Receives frBTC from p0 as incomingAlkanes
+  // Path: frBTC → buyToken
   // pointer=v0 sends output tokens to user
-  const swapCellpack = [poolBlock, poolTx, POOL_OPCODES.Swap, minOutput, deadline].join(',');
+  const swapCellpack = [
+    factoryBlock,
+    factoryTx,
+    FACTORY_SWAP_OPCODE, // 13
+    2, // path_len
+    frbtcBlock,
+    frbtcTx,
+    buyBlock,
+    buyTx,
+    frbtcAmount,
+    minOutput,
+    deadline,
+  ].join(',');
   const p1 = `[${swapCellpack}]:v0:v0`;
 
   // Chain both protostones
@@ -118,10 +153,11 @@ function buildWrapSwapProtostone(params: {
 }
 
 export function useWrapSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
-  const { FRBTC_ALKANE_ID } = getConfig(network);
+  const { requestConfirmation } = useTransactionConfirm();
+  const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
 
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -155,9 +191,9 @@ export function useWrapSwapMutation() {
 
   return useMutation({
     mutationFn: async (data: WrapSwapTransactionData) => {
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═════════════════════════════════════════════════════════');
       console.log('[WrapSwap] ████ ONE-CLICK BTC → TOKEN MUTATION STARTED ████');
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═══════════════════════════════════════════════════════════');
       console.log('[WrapSwap] Input data:', JSON.stringify(data, null, 2));
       console.log('[WrapSwap] Network:', network);
       console.log('[WrapSwap] FRBTC_ALKANE_ID:', FRBTC_ALKANE_ID);
@@ -165,7 +201,6 @@ export function useWrapSwapMutation() {
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
-      if (!data.poolId) throw new Error('Pool ID is required');
 
       // Get addresses
       const taprootAddress = account?.taproot?.address;
@@ -203,15 +238,18 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Expected output:', data.buyAmount);
       console.log('[WrapSwap] Min output (after slippage):', minAmountOut);
 
-      // Get deadline block height
-      const deadlineBlocks = data.deadlineBlocks || 3;
+      // Get deadline block height (regtest uses large offset so deadline never expires)
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       // Build combined protostone
       const protostone = buildWrapSwapProtostone({
         frbtcId: FRBTC_ALKANE_ID,
-        poolId: data.poolId,
+        factoryId: ALKANE_FACTORY_ID,
+        buyTokenId: data.buyCurrency,
+        frbtcAmount: frbtcAmountAfterFee,
         minOutput: new BigNumber(minAmountOut).integerValue(BigNumber.ROUND_FLOOR).toString(),
         deadline: deadline.toString(),
       });
@@ -233,9 +271,9 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] From addresses:', fromAddresses);
       console.log('[WrapSwap] To addresses:', toAddresses);
 
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═════════════════════════════════════════════════════════');
       console.log('[WrapSwap] ████ EXECUTING ATOMIC WRAP+SWAP ████');
-      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('═══════════════════════════════════════════════════════════');
 
       try {
         // Execute using alkanesExecuteTyped
@@ -279,6 +317,28 @@ export function useWrapSwapMutation() {
             psbtBase64 = uint8ArrayToBase64(bytes);
           } else {
             throw new Error('Unexpected PSBT format');
+          }
+
+          // For keystore wallets, request user confirmation before signing
+          if (walletType === 'keystore') {
+            console.log('[WrapSwap] Keystore wallet - requesting user confirmation...');
+            const approved = await requestConfirmation({
+              type: 'swap',
+              title: 'Confirm BTC Swap',
+              description: 'Wrap BTC to frBTC, then swap',
+              fromAmount: data.btcAmount,
+              fromSymbol: 'BTC',
+              toAmount: (parseFloat(data.buyAmount) / 1e8).toString(),
+              toSymbol: getTokenSymbol(data.buyCurrency, data.buySymbol),
+              toId: data.buyCurrency,
+              feeRate: data.feeRate,
+            });
+
+            if (!approved) {
+              console.log('[WrapSwap] User rejected transaction');
+              throw new Error('Transaction rejected by user');
+            }
+            console.log('[WrapSwap] User approved transaction');
           }
 
           // Sign with both keys
@@ -331,9 +391,9 @@ export function useWrapSwapMutation() {
 
         throw new Error('WrapSwap execution did not return a transaction ID');
       } catch (error: any) {
-        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('═════════════════════════════════════════════════════════════');
         console.error('[WrapSwap] ████ EXECUTE ERROR ████');
-        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('═════════════════════════════════════════════════════════════');
         console.error('[WrapSwap] Error:', error?.message);
         console.error('[WrapSwap] Stack:', error?.stack);
         throw error;

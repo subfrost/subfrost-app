@@ -5,12 +5,14 @@ import { useWallet } from "@/context/WalletContext";
 import { VaultConfig } from "../constants";
 import TokenIcon from "@/app/components/TokenIcon";
 import ApySparkline from "./ApySparkline";
+import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
   vault: VaultConfig;
   isSelected: boolean;
   onClick: () => void;
   interactive?: boolean;
+  disabled?: boolean;
 };
 
 function formatApyBadge(apy: string | undefined): string {
@@ -19,8 +21,36 @@ function formatApyBadge(apy: string | undefined): string {
   return `~${rounded}%`;
 }
 
-export default function VaultListItem({ vault, isSelected, onClick, interactive = true }: Props) {
+export default function VaultListItem({ vault, isSelected, onClick, interactive = true, disabled = false }: Props) {
   const { network } = useWallet();
+  const { t } = useTranslation();
+
+  // Translation maps for vault data from constants
+  const VAULT_NAME_KEYS: Record<string, string> = {
+    'yv-frbtc': 'vault.yvfrbtc',
+    've-diesel': 'vault.veDiesel',
+    've-ordi': 'vault.veOrdi',
+    've-usd': 'vault.veUsd',
+    'dx-btc': 'vault.dxBtc',
+  };
+  const VAULT_DESC_KEYS: Record<string, string> = {
+    'yv-frbtc': 'vault.yvfrbtcDesc',
+    've-diesel': 'vault.veDieselDesc',
+    've-ordi': 'vault.veOrdiDesc',
+    've-usd': 'vault.veUsdDesc',
+    'dx-btc': 'vault.dxBtcDesc',
+  };
+  const BADGE_KEYS: Record<string, string> = {
+    'Coming Soon': 'badge.comingSoon',
+    'BTC Yield': 'badge.btcYield',
+    'USD Yield': 'badge.usdYield',
+    'Migrate': 'badge.migrate',
+    'New': 'badge.new',
+  };
+
+  const vaultName = VAULT_NAME_KEYS[vault.id] ? t(VAULT_NAME_KEYS[vault.id]) : vault.name;
+  const vaultDesc = VAULT_DESC_KEYS[vault.id] ? t(VAULT_DESC_KEYS[vault.id]) : vault.description;
+  const badgeText = vault.badge && BADGE_KEYS[vault.badge] ? t(BADGE_KEYS[vault.badge]) : vault.badge;
 
   // Mock data - replace with real vault queries
   const depositsUsd = "$0.00";
@@ -59,6 +89,8 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         isSelected
           ? 'bg-[color:var(--sf-primary)]/10'
           : 'bg-[color:var(--sf-glass-bg)]'
+      } ${
+        disabled ? 'opacity-40 grayscale' : ''
       }`}
     >
       {/* Card layout for small/medium screens */}
@@ -73,27 +105,27 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           </div>
           <div className="min-w-0 flex-1 text-left">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-sm font-bold text-[color:var(--sf-text)] truncate">{vault.name}</h3>
+              <h3 className="text-sm font-bold text-[color:var(--sf-text)] truncate">{vaultName}</h3>
               {vault.badge && (
                 <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
-                  {vault.badge}
+                  {badgeText}
                 </span>
               )}
             </div>
-            <p className="text-xs text-[color:var(--sf-text)]/60 truncate">{vault.description}</p>
+            <p className="text-xs text-[color:var(--sf-text)]/60 truncate">{vaultDesc}</p>
           </div>
         </div>
         
         <div className="grid grid-cols-2 gap-x-3">
           {/* Row 1: EST. APY and RISK LEVEL */}
           <div className="h-[42px]">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est. APY</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.estApy')}</div>
             <div className="inline-flex items-center justify-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-3 py-1 text-sm font-bold text-[color:var(--sf-info-green-title)] min-w-[60px]">
               {formatApyBadge(vault.estimatedApy)}
             </div>
           </div>
           <div className={`h-[42px] ${interactive ? 'flex flex-col items-center' : ''}`}>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Risk Level</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.riskLevel')}</div>
             <div className="flex gap-0.5">
               {[1, 2, 3, 4, 5].map((level) => {
                 const riskValue = vault.riskLevel === 'low' ? 2 : vault.riskLevel === 'medium' ? 3 : vault.riskLevel === 'high' ? 4 : 5;
@@ -113,12 +145,12 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
 
           {/* Row 2: AVAILABLE and DEPOSITS */}
           <div className="pt-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Available</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.available')}</div>
             <div className="text-sm font-bold text-[color:var(--sf-text)]">{availableToken}</div>
             <div className="text-xs text-[color:var(--sf-text)]/60">{availableUsd}</div>
           </div>
           <div className={`pt-3 ${interactive ? 'text-center' : ''}`}>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Deposits</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.deposits')}</div>
             <div className="text-sm font-bold text-[color:var(--sf-text)]">{depositsToken}</div>
             <div className="text-xs text-[color:var(--sf-text)]/60">{depositsUsd}</div>
           </div>
@@ -141,19 +173,19 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         {/* Vault Info */}
         <div className="min-w-[200px] max-w-[300px] lg:max-w-[400px] text-left">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-bold text-[color:var(--sf-text)] whitespace-nowrap">{vault.name}</h3>
+            <h3 className="text-sm font-bold text-[color:var(--sf-text)] whitespace-nowrap">{vaultName}</h3>
             {vault.badge && (
               <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
-                {vault.badge}
+                {badgeText}
               </span>
             )}
           </div>
-          <p className="text-xs text-[color:var(--sf-text)]/60 truncate">{vault.description}</p>
+          <p className="text-xs text-[color:var(--sf-text)]/60 truncate">{vaultDesc}</p>
         </div>
 
         {/* APY */}
         <div className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
-          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">Est. APY</div>
+          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">{t('vaultList.estApy')}</div>
           <div className="inline-flex items-center justify-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)] min-w-[52px]">
             {formatApyBadge(vault.estimatedApy)}
           </div>
@@ -161,7 +193,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
 
         {/* Historical APY */}
         <div className="hidden lg:flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
-          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">Hist. APY</div>
+          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">{t('vaultList.histApy')}</div>
           <div className="text-sm font-semibold text-[color:var(--sf-text)] whitespace-nowrap">
             {vault.historicalApy ? `${vault.historicalApy}%` : '-'}
           </div>
@@ -169,7 +201,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
 
         {/* Risk Level */}
         <div className="hidden lg:flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
-          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">Risk Level</div>
+          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">{t('vaultList.riskLevel')}</div>
           <div className="flex gap-0.5 justify-end">
             {[1, 2, 3, 4, 5].map((level) => {
               const riskValue = vault.riskLevel === 'low' ? 2 : vault.riskLevel === 'medium' ? 3 : vault.riskLevel === 'high' ? 4 : 5;
@@ -189,14 +221,14 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
 
         {/* Available */}
         <div className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
-          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">Available</div>
+          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">{t('vaultList.available')}</div>
           <div className="text-lg font-bold text-[color:var(--sf-text)] whitespace-nowrap">{availableToken}</div>
           <div className="text-xs text-[color:var(--sf-text)]/60 whitespace-nowrap">{availableUsd}</div>
         </div>
 
         {/* Deposits */}
         <div className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
-          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">Deposits</div>
+          <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">{t('vaultList.deposits')}</div>
           <div className="text-lg font-bold text-[color:var(--sf-text)] whitespace-nowrap">{depositsToken}</div>
           <div className="text-xs text-[color:var(--sf-text)]/60 whitespace-nowrap">{depositsUsd}</div>
         </div>

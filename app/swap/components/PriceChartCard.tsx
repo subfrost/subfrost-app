@@ -87,7 +87,7 @@ export default function PriceChartCard({ pool }: Props) {
 
   // Always show chart with BTC/USDT for now
   return (
-    <div className="hidden md:block rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+    <div className="hidden lg:block rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       {/* Timeframe selector */}
       <div className="mb-4 flex items-center justify-between">
         <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 uppercase tracking-wider">
@@ -116,6 +116,7 @@ export default function PriceChartCard({ pool }: Props) {
         height={300}
         loading={false}
         pairLabel="BTC/USDT"
+        resetKey={timeframe}
       />
 
       {/* Token Pair Icons and Label */}

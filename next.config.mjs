@@ -15,8 +15,8 @@ const __dirname = path.dirname(__filename);
 //   cp node_modules/@alkanes/ts-sdk/wasm/*.js lib/oyl/alkanes/
 //   cp node_modules/@alkanes/ts-sdk/wasm/*.d.ts lib/oyl/alkanes/
 //
-// LAST SYNCED: 2026-01-18 with @alkanes/ts-sdk@0.1.4-dfe27c6
-// Fix included: Uses protorunes_by_address directly for UTXO balance fetching
+// LAST SYNCED: 2026-02-04 with @alkanes/ts-sdk@0.1.4-f93aaf9
+// Fixes included: P2WPKH signing fix, UTXO serialization fix, Rebar opt-in only
 // ================================================
 const localWasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 
@@ -24,6 +24,8 @@ const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '.'),
+  // Transpile local file: linked packages
+  transpilePackages: ['@alkanes/ts-sdk'],
   typescript: {
     ignoreBuildErrors: false,
   },
@@ -120,6 +122,7 @@ const nextConfig = {
   // Environment variables exposed to the browser
   env: {
     NEXT_PUBLIC_NETWORK: process.env.NEXT_PUBLIC_NETWORK || 'subfrost-regtest',
+    NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE || '',
   },
 };
 

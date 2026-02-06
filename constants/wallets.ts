@@ -1,128 +1,40 @@
 /**
- * Browser wallet configuration based on alkanes-web-sys BrowserWalletProvider
- * Supports 10+ Bitcoin wallets for browser extension connection
+ * Browser wallet configuration with custom ordering.
+ * Uses SDK wallet data (including base64 icons) with our preferred display order.
+ * Wallets not in the SDK (oyl, tokeo, keplr) use local definitions.
  */
 
-export interface BrowserWalletInfo {
-  id: string;
-  name: string;
-  icon: string;
-  website: string;
-  injectionKey: string;
-  supportsPsbt: boolean;
-  supportsTaproot: boolean;
-  supportsOrdinals: boolean;
-  mobileSupport: boolean;
-  deepLinkScheme?: string;
-}
+import {
+  BROWSER_WALLETS as SDK_WALLETS,
+  type BrowserWalletInfo,
+} from '@alkanes/ts-sdk';
 
-/**
- * List of supported browser extension wallets
- * Icons are located in /public/assets/wallets/
- */
-export const BROWSER_WALLETS: BrowserWalletInfo[] = [
+export type { BrowserWalletInfo };
+
+// Wallets not included in the SDK — local definitions with icons
+const LOCAL_WALLETS: BrowserWalletInfo[] = [
   {
-    id: 'unisat',
-    name: 'Unisat Wallet',
-    icon: '/assets/wallets/unisat.svg',
-    website: 'https://unisat.io/download',
-    injectionKey: 'unisat',
+    id: 'oyl',
+    name: 'Oyl Wallet',
+    icon: '/assets/wallets/oyl.png',
+    website: 'https://chromewebstore.google.com/detail/oyl-wallet-bitcoin-ordina/ilolmnhjbbggkmopnemiphomhaojndmb',
+    injectionKey: 'oyl',
     supportsPsbt: true,
     supportsTaproot: true,
     supportsOrdinals: true,
-    mobileSupport: false,
-  },
-  {
-    id: 'xverse',
-    name: 'Xverse Wallet',
-    icon: '/assets/wallets/xverse.svg',
-    website: 'https://www.xverse.app/download',
-    injectionKey: 'XverseProviders',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: true,
-    deepLinkScheme: 'xverse://',
-  },
-  {
-    id: 'phantom',
-    name: 'Phantom Wallet',
-    icon: '/assets/wallets/phantom.svg',
-    website: 'https://phantom.app/download',
-    injectionKey: 'phantom',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: false,
-    mobileSupport: true,
-    deepLinkScheme: 'phantom://',
-  },
-  {
-    id: 'okx',
-    name: 'OKX Wallet',
-    icon: '/assets/wallets/okx.svg',
-    website: 'https://chromewebstore.google.com/detail/okx-wallet/mcohilncbfahbmgdjkbpemcciiolgcge',
-    injectionKey: 'okxwallet',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: true,
-    deepLinkScheme: 'okx://',
-  },
-  {
-    id: 'leather',
-    name: 'Leather Wallet',
-    icon: '/assets/wallets/leather.svg',
-    website: 'https://leather.io/install-extension',
-    injectionKey: 'LeatherProvider',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: false,
-  },
-  {
-    id: 'magic-eden',
-    name: 'Magic Eden Wallet',
-    icon: '/assets/wallets/magiceden.svg',
-    website: 'https://wallet.magiceden.io/',
-    injectionKey: 'magicEden',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: true,
-    deepLinkScheme: 'magiceden://',
-  },
-  {
-    id: 'wizz',
-    name: 'Wizz Wallet',
-    icon: '/assets/wallets/wizz.svg',
-    website: 'https://wizzwallet.io/#extension',
-    injectionKey: 'wizz',
-    supportsPsbt: true,
-    supportsTaproot: true,
-    supportsOrdinals: true,
-    mobileSupport: false,
-  },
-  {
-    id: 'orange',
-    name: 'Orange Wallet',
-    icon: '/assets/wallets/orange.svg',
-    website: 'https://www.orangewallet.com/',
-    injectionKey: 'orange',
-    supportsPsbt: false,
-    supportsTaproot: false,
-    supportsOrdinals: false,
     mobileSupport: false,
   },
   {
     id: 'tokeo',
     name: 'Tokeo Wallet',
-    icon: '/assets/wallets/tokeo.svg',
-    website: 'https://tokeo.io/',
+    icon: '/assets/wallets/tokeo.png',
+    website: 'https://chromewebstore.google.com/detail/tokeo-wallet/gcfodaebdmongllonjmfmbmefocjmhol',
     injectionKey: 'tokeo',
-    supportsPsbt: false,
-    supportsTaproot: false,
-    supportsOrdinals: false,
-    mobileSupport: false,
+    supportsPsbt: true,
+    supportsTaproot: true,
+    supportsOrdinals: true,
+    mobileSupport: true,
+    deepLinkScheme: 'tokeo://',
   },
   {
     id: 'keplr',
@@ -130,23 +42,79 @@ export const BROWSER_WALLETS: BrowserWalletInfo[] = [
     icon: '/assets/wallets/keplr.svg',
     website: 'https://keplr.app/download',
     injectionKey: 'keplr',
-    supportsPsbt: false,
-    supportsTaproot: false,
+    supportsPsbt: true,
+    supportsTaproot: true,
     supportsOrdinals: false,
     mobileSupport: true,
     deepLinkScheme: 'keplr://',
   },
 ];
 
+// Desired display order (by wallet id)
+const WALLET_ORDER = [
+  'oyl',
+  'okx',
+  'unisat',
+  'xverse',
+  'phantom',
+  'leather',
+  'tokeo',
+  'magic-eden',
+  'orange',
+  'wizz',
+  'keplr',
+];
+
+// Build lookup from SDK + local wallets
+const allWallets = [...SDK_WALLETS, ...LOCAL_WALLETS];
+const walletMap = new Map(allWallets.map(w => [w.id, w]));
+
 /**
- * Detect if a wallet is installed in the browser
+ * Ordered list of supported browser extension wallets.
+ * SDK wallets retain their embedded base64 icons.
+ */
+export const BROWSER_WALLETS: BrowserWalletInfo[] = WALLET_ORDER
+  .map(id => walletMap.get(id))
+  .filter((w): w is BrowserWalletInfo => w !== undefined);
+
+/**
+ * Detect if a wallet is installed in the browser.
+ * Some wallets have nested providers (e.g., phantom.bitcoin, magicEden.bitcoin)
+ * or use non-standard injection keys (e.g., Orange uses OrangeBitcoinProvider).
  */
 export function isWalletInstalled(wallet: BrowserWalletInfo): boolean {
   if (typeof window === 'undefined') return false;
-  
+
   try {
-    const walletObj = (window as any)[wallet.injectionKey];
-    return walletObj !== undefined && walletObj !== null;
+    const win = window as any;
+
+    // Special cases for wallets with non-standard injection patterns
+    switch (wallet.id) {
+      case 'phantom':
+        // Phantom injects at window.phantom.bitcoin for BTC
+        return win.phantom?.bitcoin !== undefined;
+
+      case 'magic-eden':
+        // Magic Eden injects at window.magicEden.bitcoin for BTC
+        return win.magicEden?.bitcoin !== undefined;
+
+      case 'orange':
+        // Orange uses multiple possible injection points
+        return (
+          win.OrangeBitcoinProvider !== undefined ||
+          win.OrangecryptoProviders?.BitcoinProvider !== undefined ||
+          win.OrangeWalletProviders?.OrangeBitcoinProvider !== undefined
+        );
+
+      case 'tokeo':
+        // Tokeo injects at window.tokeo.bitcoin
+        return win.tokeo?.bitcoin !== undefined;
+
+      default:
+        // Standard injection key check
+        const walletObj = win[wallet.injectionKey];
+        return walletObj !== undefined && walletObj !== null;
+    }
   } catch {
     return false;
   }

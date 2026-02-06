@@ -820,6 +820,7 @@ export class WebProvider {
   brc20progGetLogs(filter: any): Promise<any>;
   brc20progWeb3ClientVersion(): Promise<any>;
   metashrewHeight(): Promise<any>;
+  waitForIndexer(): Promise<any>;
   metashrewStateRoot(height?: number | null): Promise<any>;
   metashrewGetBlockHash(height: number): Promise<any>;
   /**
@@ -944,6 +945,8 @@ export class WebProvider {
   dataApiGetPoolHistory(pool_id: string, category?: string | null, limit?: bigint | null, offset?: bigint | null): Promise<any>;
   dataApiGetPools(factory_id: string): Promise<any>;
   dataApiGetAlkanesByAddress(address: string): Promise<any>;
+  dataApiGetAllPoolsDetails(factory_id: string, limit?: bigint | null, offset?: bigint | null, sort_by?: string | null, order?: string | null): Promise<any>;
+  dataApiGetPoolDetails(factory_id: string, pool_id: string): Promise<any>;
   dataApiGetAddressBalances(address: string, include_outpoints: boolean): Promise<any>;
   dataApiGetAllHistory(pool_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
   dataApiGetSwapHistory(pool_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
