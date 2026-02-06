@@ -371,10 +371,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       const selected = new Set<string>();
 
       // Estimate fee based on number of inputs
-      // Each input is ~180 vbytes, output is ~34 vbytes
+      // P2WPKH (SegWit) input: ~68 vbytes, P2WPKH output: ~31 vbytes, overhead: ~10.5 vbytes
       const estimateFee = (numInputs: number) => {
-        const size = numInputs * 180 + 2 * 34 + 10; // 2 outputs (recipient + change)
-        return size * feeRateNum;
+        const vsize = numInputs * 68 + 2 * 31 + 10.5; // 2 outputs (recipient + change)
+        return Math.ceil(vsize * feeRateNum);
       };
 
       const MAX_UTXOS = 100; // Hard limit to keep transaction size reasonable
@@ -430,11 +430,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
     const feeRateNum = feeRate;
     
-    // Estimate transaction size: ~180 bytes per input + ~34 bytes per output + ~10 bytes overhead
+    // Estimate transaction vsize: P2WPKH input ~68 vbytes, P2WPKH output ~31 vbytes, overhead ~10.5 vbytes
     const numInputs = selectedUtxos.size;
     const numOutputs = 2; // recipient + change
-    const estimatedSize = numInputs * 180 + numOutputs * 34 + 10;
-    const estimatedFeeSats = estimatedSize * feeRateNum;
+    const estimatedVsize = numInputs * 68 + numOutputs * 31 + 10.5;
+    const estimatedFeeSats = Math.ceil(estimatedVsize * feeRateNum);
     const calculatedFeeRate = totalSelectedValue > amountSats 
       ? estimatedFeeSats / (totalSelectedValue - amountSats) 
       : 0;
@@ -543,7 +543,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         const psbt = new bitcoin.Psbt({ network: btcNetwork });
 
         // Calculate total needed (amount + estimated fee)
-        const estimatedFeeForCalculation = selectedUtxos.size * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate;
+        const estimatedFeeForCalculation = Math.ceil((selectedUtxos.size * 68 + 2 * 31 + 10.5) * feeRate);
         const totalNeeded = amountSats + estimatedFeeForCalculation;
 
         // Add inputs from selected UTXOs (now verified to exist in fresh data)
@@ -588,7 +588,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         });
 
         // Add change output if needed
-        const actualFee = Math.ceil(psbt.txInputs.length * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate);
+        const actualFee = Math.ceil((psbt.txInputs.length * 68 + 2 * 31 + 10.5) * feeRate);
         const change = totalInputValue - amountSats - actualFee;
 
         if (change > 546) { // Dust threshold
