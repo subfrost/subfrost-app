@@ -231,7 +231,17 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
           filtered = [...filtered].sort((a, b) => {
             const aIsLp = isLpToken(a) ? 0 : 1;
             const bIsLp = isLpToken(b) ? 0 : 1;
-            return aIsLp - bIsLp;
+            if (aIsLp !== bIsLp) return aIsLp - bIsLp;
+            const parsePositionName = (name: string) => {
+              const match = name.match(/^(.*?)(\d+)\s*$/);
+              if (match) return { prefix: match[1].trim(), num: parseInt(match[2], 10) };
+              return { prefix: name.trim(), num: -1 };
+            };
+            const pa = parsePositionName(a.name);
+            const pb = parsePositionName(b.name);
+            const cmp = pa.prefix.localeCompare(pb.prefix);
+            if (cmp !== 0) return cmp;
+            return pa.num - pb.num;
           });
         }
         if (alkaneFilter === 'nfts') {
