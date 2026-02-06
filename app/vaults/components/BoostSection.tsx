@@ -8,6 +8,7 @@ import { useWallet } from "@/context/WalletContext";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 type Props = {
   vault: VaultConfig;
@@ -21,6 +22,7 @@ export default function BoostSection({ vault }: Props) {
   const { theme } = useTheme();
   const { network } = useWallet();
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
 
   // Mock data - replace with real data
   const userVeTokenBalance = "1250.50";
@@ -32,8 +34,8 @@ export default function BoostSection({ vault }: Props) {
   const boostMultiplier = `${multiplier}x`;
 
   // Check if this is the special dxBTC vault with FUEL
-  // On regtest, bypass coming soon so all features are testable
-  const isComingSoon = network?.includes('regtest') ? false : vault.isBoostComingSoon;
+  // When not demo-gated, bypass coming soon so all features are testable
+  const isComingSoon = !isDemoGated ? false : vault.isBoostComingSoon;
 
   if (!vault.hasBoost) {
     return (

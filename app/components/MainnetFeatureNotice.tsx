@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useWallet } from '@/context/WalletContext';
+import { useDemoGate } from '@/hooks/useDemoGate';
 import LanguageToggle from './LanguageToggle';
 
 type FeaturePage = 'swap' | 'vaults' | 'futures';
@@ -13,22 +13,20 @@ interface MainnetFeatureNoticeProps {
 }
 
 /**
- * Shows a "COMING SOON" notice overlay when on mainnet for feature pages.
+ * Shows a "COMING SOON" notice overlay when demo-gated (demo mode ON + mainnet).
  * Smaller than the main DemoBanner, with page-specific messaging.
  */
 export default function MainnetFeatureNotice({ children, feature }: MainnetFeatureNoticeProps) {
   const { t } = useTranslation();
-  const { network } = useWallet();
+  const isDemoGated = useDemoGate();
   const [dismissed, setDismissed] = useState(false);
-
-  const isMainnet = network === 'mainnet';
 
   const handleDismiss = () => {
     setDismissed(true);
   };
 
-  // Only show on mainnet and when not dismissed
-  if (!isMainnet || dismissed) {
+  // Only show when demo-gated and when not dismissed
+  if (!isDemoGated || dismissed) {
     return <>{children}</>;
   }
 

@@ -13,6 +13,7 @@ import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
 import { ChevronDown } from "lucide-react";
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 // All available tokens that can be deposited into vaults
 const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
@@ -105,6 +106,7 @@ export default function VaultDepositInterface({
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { theme } = useTheme();
+  const isDemoGated = useDemoGate();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   // Local deadline state to allow empty field while typing
@@ -522,7 +524,7 @@ export default function VaultDepositInterface({
                 onConnectModalOpenChange(true);
                 return;
               }
-              if (network?.includes('regtest')) {
+              if (!isDemoGated) {
                 onExecute(amount);
                 return;
               }
@@ -531,7 +533,7 @@ export default function VaultDepositInterface({
                 setTimeout(() => setShowDepositComingSoon(false), 1000);
               }
             }}
-            className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && !network?.includes('regtest') ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
+            className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
           >
             {showDepositComingSoon ? (
               <span className="animate-pulse">{t('badge.comingSoon')}</span>

@@ -3,15 +3,14 @@
 import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageHeader from '@/app/components/PageHeader';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useWallet } from '@/context/WalletContext';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 export default function VaultsPageHeader({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
-  const { network } = useWallet();
-  const isRegtest = network?.includes('regtest');
+  const isDemoGated = useDemoGate();
 
   return (
-    <AlkanesMainWrapper header={<PageHeader title={<>{t('vaults.title')}{!isRegtest && <span className="block text-lg font-semibold text-[color:var(--sf-text)]/60">{t('vaults.comingSoon')}</span>}</>} />}>
+    <AlkanesMainWrapper header={<PageHeader title={<>{t('vaults.title')}{isDemoGated && <span className="block text-lg font-semibold text-[color:var(--sf-text)]/60">{t('vaults.comingSoon')}</span>}</>} />}>
       {children}
     </AlkanesMainWrapper>
   );
