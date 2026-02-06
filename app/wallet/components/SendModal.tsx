@@ -11,6 +11,7 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
@@ -125,6 +126,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const { requestConfirmation } = useTransactionConfirm();
   const { ALKANE_FACTORY_ID } = getConfig(network);
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
   const { utxos, balances, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
@@ -1122,10 +1124,14 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       <div className="flex gap-3">
         <button
           data-testid="send-submit"
-          onClick={handleNext}
-          className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
+          onClick={() => { if (!isDemoGated) { handleNext(); } }}
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide ${
+            isDemoGated
+              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+              : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
+          }`}
         >
-          {t('send.reviewAndSend')}
+          {isDemoGated ? t('common.comingSoon') : t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
@@ -1361,11 +1367,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       <div className="flex gap-3">
         <button
-          onClick={handleNext}
+          onClick={() => { if (!isDemoGated) { handleNext(); } }}
           disabled={!selectedAlkaneId || !amount}
-          className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
+            isDemoGated
+              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+              : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
+          }`}
         >
-          {t('send.reviewAndSend')}
+          {isDemoGated ? t('common.comingSoon') : t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
@@ -1461,11 +1471,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </button>
           ) : (
             <button
-              onClick={handleNext}
-              className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide flex items-center justify-center gap-2"
+              onClick={() => { if (!isDemoGated) { handleNext(); } }}
+              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 ${
+                isDemoGated
+                  ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+                  : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
+              }`}
             >
               <Send size={18} />
-              {t('send.sendTransaction')}
+              {isDemoGated ? t('common.comingSoon') : t('send.sendTransaction')}
             </button>
           )}
         </div>
