@@ -13,6 +13,7 @@ import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { getConfig } from '@/utils/getConfig';
+import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -192,8 +193,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const frozenUtxos = getFrozenUtxos();
 
-  // Filter available UTXOs (only from SegWit address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
+  // Filter available UTXOs (only confirmed, from SegWit address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
+    // Only include confirmed UTXOs - pending UTXOs cannot be reliably spent
+    if (!utxo.status.confirmed) return false;
     // Only include UTXOs from the SegWit (payment) address for BTC sends
     if (utxo.address !== btcSendAddress) return false;
 
@@ -370,12 +373,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       let total = 0;
       const selected = new Set<string>();
 
-      // Estimate fee based on number of inputs
-      // P2WPKH (SegWit) input: ~68 vbytes, P2WPKH output: ~31 vbytes, overhead: ~10.5 vbytes
-      const estimateFee = (numInputs: number) => {
-        const vsize = numInputs * 68 + 2 * 31 + 10.5; // 2 outputs (recipient + change)
-        return Math.ceil(vsize * feeRateNum);
-      };
+      // Estimate fee based on number of inputs (for UTXO accumulation loop)
+      const estimateFee = (numInputs: number) => estimateSelectionFee(numInputs, feeRateNum);
 
       const MAX_UTXOS = 100; // Hard limit to keep transaction size reasonable
 
@@ -396,8 +395,9 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         }
       }
 
-      const finalFee = estimateFee(selected.size);
-      const required = amountSats + finalFee;
+      // Compute accurate fee accounting for dust threshold on change output
+      const feeResult = computeSendFee({ inputCount: selected.size, sendAmount: amountSats, totalInputValue: total, feeRate: feeRateNum });
+      const required = amountSats + feeResult.fee;
 
       if (total < required) {
         // Check if we have enough total balance
@@ -420,10 +420,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         return;
       }
 
-      console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, estimated fee: ${(finalFee / 100000000).toFixed(8)} BTC`);
+      console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, fee: ${(feeResult.fee / 100000000).toFixed(8)} BTC (${feeResult.numOutputs} outputs, ${feeResult.effectiveFeeRate.toFixed(2)} sat/vB effective)`);
 
       setSelectedUtxos(selected);
-      setEstimatedFee(finalFee);
+      setEstimatedFee(feeResult.fee);
+      setEstimatedFeeRate(feeResult.effectiveFeeRate);
       setStep('confirm');
     } else if (step === 'confirm') {
       // Check if fee looks suspicious before broadcasting
@@ -435,17 +436,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
     const feeRateNum = feeRate;
     
-    // Estimate transaction vsize: P2WPKH input ~68 vbytes, P2WPKH output ~31 vbytes, overhead ~10.5 vbytes
     const numInputs = selectedUtxos.size;
-    const numOutputs = 2; // recipient + change
-    const estimatedVsize = numInputs * 68 + numOutputs * 31 + 10.5;
-    const estimatedFeeSats = Math.ceil(estimatedVsize * feeRateNum);
-    const calculatedFeeRate = totalSelectedValue > amountSats 
-      ? estimatedFeeSats / (totalSelectedValue - amountSats) 
-      : 0;
+    const feeResult = computeSendFee({ inputCount: numInputs, sendAmount: amountSats, totalInputValue: totalSelectedValue, feeRate: feeRateNum });
 
-    setEstimatedFee(estimatedFeeSats);
-    setEstimatedFeeRate(calculatedFeeRate);
+    setEstimatedFee(feeResult.fee);
+    setEstimatedFeeRate(feeResult.effectiveFeeRate);
+
+    const estimatedFeeSats = feeResult.fee;
 
     // Safety checks:
     // 1. Fee is more than 2% of amount
@@ -544,10 +541,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         // Create PSBT
         const psbt = new bitcoin.Psbt({ network: btcNetwork });
 
-        // Calculate total needed (amount + estimated fee)
-        const estimatedFeeForCalculation = Math.ceil((selectedUtxos.size * 68 + 2 * 31 + 10.5) * feeRate);
-        const totalNeeded = amountSats + estimatedFeeForCalculation;
-
         // Add inputs from selected UTXOs (now verified to exist in fresh data)
         let totalInputValue = 0;
         for (const utxoKey of Array.from(selectedUtxos)) {
@@ -589,14 +582,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           value: BigInt(amountSats),
         });
 
-        // Add change output if needed
-        const actualFee = Math.ceil((psbt.txInputs.length * 68 + 2 * 31 + 10.5) * feeRate);
-        const change = totalInputValue - amountSats - actualFee;
+        // Compute fee and change, accounting for dust threshold
+        const txFeeResult = computeSendFee({ inputCount: psbt.txInputs.length, sendAmount: amountSats, totalInputValue, feeRate });
 
-        if (change > 546) { // Dust threshold
+        if (txFeeResult.numOutputs === 2 && txFeeResult.change > 0) {
           psbt.addOutput({
             address: btcSendAddress,
-            value: BigInt(change),
+            value: BigInt(txFeeResult.change),
           });
         }
 
@@ -614,7 +606,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         const txHex = tx.toHex();
         const computedTxid = tx.getId();
 
-        console.log('[SendModal] Transaction signed, txid:', computedTxid);
+        // Log actual vsize and effective fee rate for verification
+        const actualVsize = tx.virtualSize();
+        const actualFee = totalInputValue - amountSats - (txFeeResult.numOutputs === 2 ? txFeeResult.change : 0);
+        console.log(`[SendModal] Actual vsize: ${actualVsize}, fee: ${actualFee} sats, effective rate: ${(actualFee / actualVsize).toFixed(2)} sat/vB`);
         console.log('[SendModal] Broadcasting...');
 
         // Broadcast using provider
@@ -1452,7 +1447,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </div>
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.feeRateLabel')}</span>
-              <span className="text-[color:var(--sf-text)]">{feeRate} sat/vB</span>
+              <span className="text-[color:var(--sf-text)]">
+                {estimatedFeeRate > 0 && Math.abs(estimatedFeeRate - feeRate) > 0.05
+                  ? `~${estimatedFeeRate.toFixed(2)} sat/vB`
+                  : `${feeRate} sat/vB`}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>

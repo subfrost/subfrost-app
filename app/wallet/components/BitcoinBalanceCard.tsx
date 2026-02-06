@@ -61,6 +61,7 @@ export default function BitcoinBalanceCard() {
 
   const totalBTC = formatBTC(balances.bitcoin.total);
   const totalUSD = bitcoinPrice ? formatUSD(balances.bitcoin.total) : null;
+  const hasPending = balances.bitcoin.pendingTotal > 0;
 
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
@@ -82,7 +83,7 @@ export default function BitcoinBalanceCard() {
         </button>
       </div>
 
-      {/* Total Balance */}
+      {/* Total Balance (confirmed only) */}
       <div className="mb-4">
         <div className="text-xl font-bold text-[color:var(--sf-text)]">{showValue(`${totalBTC} BTC`)}</div>
         <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
@@ -92,6 +93,11 @@ export default function BitcoinBalanceCard() {
             `$${totalUSD || '0.00'} USD`
           )}
         </div>
+        {!isLoadingData && hasPending && (
+          <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">
+            +{formatBTC(balances.bitcoin.pendingTotal)} BTC pending
+          </div>
+        )}
       </div>
 
       {/* Address Breakdown */}
@@ -107,6 +113,11 @@ export default function BitcoinBalanceCard() {
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2wpkh)} BTC`)}
             </div>
+            {!isLoadingData && balances.bitcoin.pendingP2wpkh > 0 && (
+              <div className="text-[10px] text-[color:var(--sf-info-green-text)]/50 mt-0.5">
+                +{formatBTC(balances.bitcoin.pendingP2wpkh)} pending
+              </div>
+            )}
           </div>
           <ExternalLink size={12} className="text-[color:var(--sf-info-green-text)]/60 shrink-0" />
         </a>
@@ -121,6 +132,11 @@ export default function BitcoinBalanceCard() {
             <div className="text-sm text-[color:var(--sf-info-yellow-text)]">
               {showValue(`${formatBTC(balances.bitcoin.p2tr)} BTC`)}
             </div>
+            {!isLoadingData && balances.bitcoin.pendingP2tr > 0 && (
+              <div className="text-[10px] text-[color:var(--sf-info-yellow-text)]/50 mt-0.5">
+                +{formatBTC(balances.bitcoin.pendingP2tr)} pending
+              </div>
+            )}
           </div>
           <ExternalLink size={12} className="text-[color:var(--sf-info-yellow-text)]/60 shrink-0" />
         </a>

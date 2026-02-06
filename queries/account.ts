@@ -146,6 +146,9 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       let p2trBtc = 0;
       let spendableBtc = 0;
       let withAssetsBtc = 0;
+      let pendingP2wpkhBtc = 0;
+      let pendingP2trBtc = 0;
+      let pendingTotalBtc = 0;
       const allUtxos: any[] = [];
       const p2wpkhUtxos: any[] = [];
       const p2trUtxos: any[] = [];
@@ -172,15 +175,27 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
             runes: utxo.ord_runes,
           };
           allUtxos.push(enrichedUtxo);
-          if (isP2WPKH) { p2wpkhUtxos.push(enrichedUtxo); p2wpkhBtc += utxo.value; }
-          else if (isP2TR) { p2trUtxos.push(enrichedUtxo); p2trBtc += utxo.value; }
-          totalBtc += utxo.value;
-          if (isSpendable) spendableBtc += utxo.value;
-          else withAssetsBtc += utxo.value;
-          if (!isConfirmed && txid) {
-            if (isP2WPKH) pendingTxIdsP2wpkh.add(txid);
-            else if (isP2TR) pendingTxIdsP2tr.add(txid);
+          if (isP2WPKH) p2wpkhUtxos.push(enrichedUtxo);
+          else if (isP2TR) p2trUtxos.push(enrichedUtxo);
+
+          if (isConfirmed) {
+            // Confirmed: add to headline balances
+            if (isP2WPKH) p2wpkhBtc += utxo.value;
+            else if (isP2TR) p2trBtc += utxo.value;
+            totalBtc += utxo.value;
+            if (isSpendable) spendableBtc += utxo.value;
+            else withAssetsBtc += utxo.value;
+          } else {
+            // Pending: track separately
+            if (isP2WPKH) pendingP2wpkhBtc += utxo.value;
+            else if (isP2TR) pendingP2trBtc += utxo.value;
+            pendingTotalBtc += utxo.value;
+            if (txid) {
+              if (isP2WPKH) pendingTxIdsP2wpkh.add(txid);
+              else if (isP2TR) pendingTxIdsP2tr.add(txid);
+            }
           }
+
           if (utxo.ord_runes) {
             for (const [runeId, runeData] of Object.entries(utxo.ord_runes)) {
               const rd = runeData as any;
@@ -244,7 +259,16 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       return {
         balances: {
-          bitcoin: { p2wpkh: p2wpkhBtc, p2tr: p2trBtc, total: totalBtc, spendable: spendableBtc, withAssets: withAssetsBtc },
+          bitcoin: {
+            p2wpkh: p2wpkhBtc,
+            p2tr: p2trBtc,
+            total: totalBtc,
+            spendable: spendableBtc,
+            withAssets: withAssetsBtc,
+            pendingP2wpkh: pendingP2wpkhBtc,
+            pendingP2tr: pendingP2trBtc,
+            pendingTotal: pendingTotalBtc,
+          },
           pendingTxCount: { p2wpkh: pendingTxIdsP2wpkh.size, p2tr: pendingTxIdsP2tr.size },
           alkanes: Array.from(alkaneMap.values()),
           runes: Array.from(runeMap.values()),
