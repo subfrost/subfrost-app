@@ -306,13 +306,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         }
 
         if (!selectedAlkaneId) {
-          setError(t('send.selectAlkane') || 'Please select an alkane to send');
+          setError(t('send.selectAlkane'));
           return;
         }
 
         const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
         if (!selectedAlkane) {
-          setError('Selected alkane not found');
+          setError(t('send.selectedAlkaneNotFound'));
           return;
         }
 
@@ -328,7 +328,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         const balanceBaseUnits = BigInt(selectedAlkane.balance);
 
         if (amountBaseUnits > balanceBaseUnits) {
-          setError(t('send.insufficientBalance') || 'Insufficient balance');
+          setError(t('send.insufficientBalance'));
           return;
         }
 
@@ -404,13 +404,18 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         const totalAvailable = availableUtxos.reduce((sum, u) => sum + u.value, 0);
         if (totalAvailable >= required) {
           setError(
-            `Cannot send this amount (hit ${MAX_UTXOS} UTXO limit). ` +
-            `Need ${(required / 100000000).toFixed(8)} BTC, but can only use ${(total / 100000000).toFixed(8)} BTC with ${MAX_UTXOS} UTXOs. ` +
-            `Total available: ${(totalAvailable / 100000000).toFixed(8)} BTC. ` +
-            `Try sending a smaller amount.`
+            t('send.utxoLimitError', {
+              limit: MAX_UTXOS,
+              need: (required / 100000000).toFixed(8),
+              have: (total / 100000000).toFixed(8),
+              total: (totalAvailable / 100000000).toFixed(8),
+            })
           );
         } else {
-          setError(`Insufficient funds. Need ${(required / 100000000).toFixed(8)} BTC, have ${(totalAvailable / 100000000).toFixed(8)} BTC`);
+          setError(t('send.insufficientFundsDetailed', {
+            need: (required / 100000000).toFixed(8),
+            have: (totalAvailable / 100000000).toFixed(8),
+          }));
         }
         return;
       }
@@ -513,10 +518,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           console.error('[SendModal] Selected UTXOs no longer exist:', missingUtxos);
           // Invalidate cache and throw error so user can retry with fresh data
           await refresh();
-          throw new Error(
-            `Some selected UTXOs are no longer available (already spent or not yet confirmed). ` +
-            `Please go back and try again with updated balance.`
-          );
+          throw new Error(t('send.utxosStale'));
         }
 
         // Determine Bitcoin network
@@ -616,7 +618,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         // Broadcast using provider
         if (!alkaneProvider) {
-          throw new Error('Provider not initialized');
+          throw new Error(t('send.providerNotInitialized'));
         }
 
         const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
@@ -634,19 +636,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       // For keystore wallets, use WASM provider
       if (!provider || !isInitialized) {
-        throw new Error('Provider not initialized. Please wait and try again.');
+        throw new Error(t('send.providerNotInitialized'));
       }
 
       // Check if wallet is loaded in provider
       if (!provider.walletIsLoaded()) {
-        throw new Error('Wallet not loaded. Please reconnect your wallet.');
+        throw new Error(t('send.walletNotLoaded'));
       }
 
       // Request user confirmation before broadcasting
       console.log('[SendModal] Keystore wallet - requesting user confirmation...');
       const approved = await requestConfirmation({
         type: 'send',
-        title: 'Confirm Send',
+        title: t('send.confirmSend'),
         fromAmount: amount,
         fromSymbol: 'BTC',
         recipient: recipientAddress,
@@ -655,7 +657,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       if (!approved) {
         console.log('[SendModal] User rejected transaction');
-        setError('Transaction rejected by user');
+        setError(t('send.transactionRejected'));
         return;
       }
       console.log('[SendModal] User approved transaction');
@@ -685,7 +687,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       // Extract txid from result
       const txidResult = typeof result === 'string' ? result : result?.txid || result?.tx_id;
       if (!txidResult) {
-        throw new Error('Transaction sent but no txid returned');
+        throw new Error(t('send.noTxidReturned'));
       }
 
       setTxid(txidResult);
@@ -698,7 +700,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     } catch (err: any) {
       console.error('[SendModal] Transaction failed:', err);
 
-      let errorMessage = err.message || 'Failed to broadcast transaction';
+      let errorMessage = err.message || t('send.failedBroadcast');
 
       setError(errorMessage);
       setStep('confirm');
@@ -715,35 +717,38 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
     try {
       if (!alkaneProvider) {
-        throw new Error('Provider not initialized. Please wait and try again.');
+        throw new Error(t('send.providerNotInitialized'));
       }
 
       if (!selectedAlkaneId) {
-        throw new Error('No alkane selected');
+        throw new Error(t('send.noAlkaneSelected'));
       }
 
       const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
       if (!selectedAlkane) {
-        throw new Error('Selected alkane not found in balances');
+        throw new Error(t('send.alkaneNotFoundInBalances'));
       }
 
       // Validate recipient address (should be Taproot for alkane receives)
       if (!validateAddress(recipientAddress)) {
-        throw new Error('Invalid recipient address');
+        throw new Error(t('send.invalidAddress'));
       }
 
       // Convert amount to base units (respecting decimals)
       const decimals = selectedAlkane.decimals || 8;
       const amountFloat = parseFloat(amount);
       if (isNaN(amountFloat) || amountFloat <= 0) {
-        throw new Error('Invalid amount');
+        throw new Error(t('send.invalidAmount'));
       }
 
       const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
       const balanceBaseUnits = BigInt(selectedAlkane.balance);
 
       if (amountBaseUnits > balanceBaseUnits) {
-        throw new Error(`Insufficient balance. Have ${selectedAlkane.balance}, need ${amountBaseUnits.toString()}`);
+        throw new Error(t('send.insufficientBalanceDetailed', {
+          have: selectedAlkane.balance,
+          need: amountBaseUnits.toString(),
+        }));
       }
 
       console.log('[SendModal] Starting alkane transfer...');
@@ -757,7 +762,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] Keystore wallet - requesting user confirmation...');
         const approved = await requestConfirmation({
           type: 'send',
-          title: 'Confirm Alkane Send',
+          title: t('send.confirmAlkaneSend'),
           fromAmount: amount,
           fromSymbol: selectedAlkane.symbol || 'ALKANE',
           recipient: recipientAddress,
@@ -766,7 +771,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         if (!approved) {
           console.log('[SendModal] User rejected transaction');
-          setError('Transaction rejected by user');
+          setError(t('send.transactionRejected'));
           return;
         }
         console.log('[SendModal] User approved transaction');
@@ -976,12 +981,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       // No txid found
       console.error('[SendModal] No txid found in result:', result);
-      throw new Error('Alkane transfer did not return a transaction ID');
+      throw new Error(t('send.alkaneTxNoId'));
 
     } catch (err: any) {
       console.error('[SendModal] Alkane transfer failed:', err);
 
-      let errorMessage = err.message || 'Failed to send alkanes';
+      let errorMessage = err.message || t('send.failedSendAlkanes');
       setError(errorMessage);
       setStep('input');
     }
@@ -1127,11 +1132,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           onClick={() => { if (!isDemoGated) { handleNext(); } }}
           className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide ${
             isDemoGated
-              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
           }`}
         >
-          {isDemoGated ? t('common.comingSoon') : t('send.reviewAndSend')}
+          {isDemoGated ? <span className="animate-pulse">{t('common.comingSoon')}</span> : t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
@@ -1395,11 +1400,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           disabled={!selectedAlkaneId || !amount}
           className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
             isDemoGated
-              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
           }`}
         >
-          {isDemoGated ? t('common.comingSoon') : t('send.reviewAndSend')}
+          {isDemoGated ? <span className="animate-pulse">{t('common.comingSoon')}</span> : t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
