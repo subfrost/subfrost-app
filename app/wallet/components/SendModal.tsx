@@ -1127,7 +1127,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           onClick={() => { if (!isDemoGated) { handleNext(); } }}
           className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide ${
             isDemoGated
-              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
           }`}
         >
@@ -1395,7 +1395,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           disabled={!selectedAlkaneId || !amount}
           className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
             isDemoGated
-              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
           }`}
         >
@@ -1498,7 +1498,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
               onClick={() => { if (!isDemoGated) { handleNext(); } }}
               className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 ${
                 isDemoGated
-                  ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+                  ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
                   : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
               }`}
             >
