@@ -90,6 +90,8 @@ export default function ConnectWalletModal() {
     setBackupProgress(0);
     setPendingInviteCodeRedemption(null);
     setIsValidatingCode(false);
+    setPasswordHintInput('');
+    setPasswordHint(null);
   };
 
   // Redeem invite code when wallet addresses become available after creation
@@ -536,13 +538,13 @@ export default function ConnectWalletModal() {
               {inviteCodeValidated ? (
                 <>
                   <div className="flex flex-col items-center gap-3 py-4">
-                    <div className="p-4 rounded-full bg-green-500/20 border border-green-500/30">
-                      <Check size={32} className="text-green-400" />
+                    <div className="p-4 rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)]">
+                      <Check size={32} className="text-[color:var(--sf-info-green-text)]" />
                     </div>
                     <div className="text-center">
                       <div className="text-lg font-bold text-[color:var(--sf-text)] mb-1">{t('wallet.inviteCodeVerified')}</div>
                       <p className="text-sm text-[color:var(--sf-text)]/60">
-                        Your code <span className="font-bold text-amber-400">{inviteCode}</span> has been validated.
+                        Your code <span className="font-bold text-[color:var(--sf-info-green-title)]">{inviteCode}</span> has been validated.
                       </p>
                     </div>
                   </div>
@@ -649,7 +651,7 @@ export default function ConnectWalletModal() {
             <div className="flex flex-col gap-4">
               {/* Invite Code Section */}
               {inviteCodeValidated ? (
-                <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium text-green-400">
+                <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium text-[color:var(--sf-info-green-title)]">
                   <Check size={16} />
                   <span>{t('wallet.inviteCodeVerifiedLabel')} <span className="font-bold">{inviteCode}</span></span>
                 </div>
