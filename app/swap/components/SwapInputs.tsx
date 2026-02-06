@@ -254,7 +254,7 @@ export default function SwapInputs({
         }`}
       >
         {/* You Send - entire panel clickable to focus input */}
-        <div className="relative">
+        <div className={`relative ${fromFocused ? "z-30" : ""}`}>
           <div
             className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
               fromFocused
@@ -420,16 +420,20 @@ export default function SwapInputs({
           </div>
 
           {/* Invert button – overlaps both cards, centered between them */}
-          <div className="pointer-events-none absolute left-1/2 -bottom-6 z-30 -translate-x-1/2">
+          <div className="pointer-events-none absolute left-1/2 -bottom-[26px] z-30 -translate-x-1/2">
             <button
               type="button"
               onClick={onInvert}
-              className="pointer-events-auto group flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--sf-primary)] text-white  transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-105 active:scale-95 outline-none"
+              className={`pointer-events-auto group flex h-12 w-12 items-center justify-center rounded-2xl border-4 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-105 active:scale-95 outline-none ${
+                theme === "dark"
+                  ? "border-[#0d192b] bg-[#162338] text-[#498aee]"
+                  : "border-[#dee5f1] bg-[#f7fbff] text-[#233e6b]"
+              }`}
               aria-label="Invert swap direction"
             >
               <svg
-                width="20"
-                height="20"
+                width="24"
+                height="24"
                 viewBox="0 0 24 24"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
