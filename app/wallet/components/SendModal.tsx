@@ -443,7 +443,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     setEstimatedFeeRate(calculatedFeeRate);
 
     // Safety checks:
-    // 1. Fee is more than 1% of amount
+    // 1. Fee is more than 2% of amount
     // 2. Fee is more than 0.01 BTC
     // 3. Fee rate is more than 1000 sat/vbyte
     // 4. Using more than 100 UTXOs
@@ -451,7 +451,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // 0.01 BTC
     const feeRateTooHigh = feeRateNum > 1000;
     const tooManyInputs = numInputs > 100;
-    const feePercentageTooHigh = feePercentage > 1;
+    const feePercentageTooHigh = feePercentage > 2;
 
     if (feeTooHigh || feeRateTooHigh || tooManyInputs || feePercentageTooHigh) {
       setShowFeeWarning(true);
