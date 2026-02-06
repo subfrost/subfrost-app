@@ -13,6 +13,7 @@ import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { getConfig } from '@/utils/getConfig';
+import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -82,42 +83,6 @@ function detectAddressType(address: string): AddressTypeInfo {
   }
 
   return { type: 'unknown', sdkRef: 'p2tr:0', signingMethod: 'taproot' };
-}
-
-/**
- * Compute accurate fee accounting for whether a change output will exist.
- * When change would be below the dust threshold (546 sats), it's absorbed
- * into the miner fee, which raises the effective fee rate above the selected rate.
- *
- * P2WPKH sizing: input ~68 vbytes, output ~31 vbytes, overhead ~10.5 vbytes.
- */
-function computeAccurateFee(
-  numInputs: number,
-  amountSats: number,
-  totalInputValue: number,
-  feeRateNum: number,
-): { fee: number; numOutputs: number; change: number; vsize: number; effectiveFeeRate: number } {
-  // Try with 2 outputs (recipient + change)
-  const vsize2 = numInputs * 68 + 2 * 31 + 10.5;
-  const fee2 = Math.ceil(vsize2 * feeRateNum);
-  const change = totalInputValue - amountSats - fee2;
-
-  if (change > 546) {
-    return { fee: fee2, numOutputs: 2, change, vsize: vsize2, effectiveFeeRate: feeRateNum };
-  }
-
-  // Change is dust or negative — use 1 output, remainder becomes fee
-  const vsize1 = numInputs * 68 + 1 * 31 + 10.5;
-  const minFee1 = Math.ceil(vsize1 * feeRateNum);
-  const remainder = totalInputValue - amountSats;
-
-  if (remainder < minFee1) {
-    // Not enough to cover even 1-output fee
-    return { fee: minFee1, numOutputs: 1, change: 0, vsize: vsize1, effectiveFeeRate: feeRateNum };
-  }
-
-  // Dust absorbed into fee — effective rate is higher than selected
-  return { fee: remainder, numOutputs: 1, change: 0, vsize: vsize1, effectiveFeeRate: remainder / vsize1 };
 }
 
 /**
@@ -408,12 +373,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       let total = 0;
       const selected = new Set<string>();
 
-      // Estimate fee based on number of inputs
-      // P2WPKH (SegWit) input: ~68 vbytes, P2WPKH output: ~31 vbytes, overhead: ~10.5 vbytes
-      const estimateFee = (numInputs: number) => {
-        const vsize = numInputs * 68 + 2 * 31 + 10.5; // 2 outputs (recipient + change)
-        return Math.ceil(vsize * feeRateNum);
-      };
+      // Estimate fee based on number of inputs (for UTXO accumulation loop)
+      const estimateFee = (numInputs: number) => estimateSelectionFee(numInputs, feeRateNum);
 
       const MAX_UTXOS = 100; // Hard limit to keep transaction size reasonable
 
@@ -435,7 +396,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       }
 
       // Compute accurate fee accounting for dust threshold on change output
-      const feeResult = computeAccurateFee(selected.size, amountSats, total, feeRateNum);
+      const feeResult = computeSendFee({ inputCount: selected.size, sendAmount: amountSats, totalInputValue: total, feeRate: feeRateNum });
       const required = amountSats + feeResult.fee;
 
       if (total < required) {
@@ -476,7 +437,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const feeRateNum = feeRate;
     
     const numInputs = selectedUtxos.size;
-    const feeResult = computeAccurateFee(numInputs, amountSats, totalSelectedValue, feeRateNum);
+    const feeResult = computeSendFee({ inputCount: numInputs, sendAmount: amountSats, totalInputValue: totalSelectedValue, feeRate: feeRateNum });
 
     setEstimatedFee(feeResult.fee);
     setEstimatedFeeRate(feeResult.effectiveFeeRate);
@@ -622,7 +583,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         });
 
         // Compute fee and change, accounting for dust threshold
-        const txFeeResult = computeAccurateFee(psbt.txInputs.length, amountSats, totalInputValue, feeRate);
+        const txFeeResult = computeSendFee({ inputCount: psbt.txInputs.length, sendAmount: amountSats, totalInputValue, feeRate });
 
         if (txFeeResult.numOutputs === 2 && txFeeResult.change > 0) {
           psbt.addOutput({
