@@ -418,6 +418,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, estimated fee: ${(finalFee / 100000000).toFixed(8)} BTC`);
 
       setSelectedUtxos(selected);
+      setEstimatedFee(finalFee);
       setStep('confirm');
     } else if (step === 'confirm') {
       // Check if fee looks suspicious before broadcasting
@@ -1413,8 +1414,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const renderConfirm = () => {
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
-    const localEstimatedFee = 150 * feeRate; // Rough estimate for display before warning
-    const total = amountSats + (showFeeWarning ? estimatedFee : localEstimatedFee);
+    const total = amountSats + estimatedFee;
 
     return (
       <>
@@ -1451,7 +1451,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </div>
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
-              <span className="text-[color:var(--sf-text)]">{((showFeeWarning ? estimatedFee : localEstimatedFee) / 100000000).toFixed(8)} BTC</span>
+              <span className="text-[color:var(--sf-text)]">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
             </div>
             <div className="border-t border-[color:var(--sf-text)]/10 pt-2 flex justify-between">
               <span className="text-[color:var(--sf-text)]/80 font-medium">{t('send.total')}</span>
