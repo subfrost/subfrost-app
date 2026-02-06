@@ -98,6 +98,7 @@ jobs:
             --set-env-vars "NEXT_PUBLIC_DEMO_MODE=1" \
             --set-env-vars "REDIS_HOST=${{ secrets.REDIS_HOST }}" \
             --set-env-vars "REDIS_PORT=${{ secrets.REDIS_PORT }}" \
+            --set-env-vars "ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}" \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
             --vpc-connector "subfrost-connector" \
             --vpc-egress "private-ranges-only"
