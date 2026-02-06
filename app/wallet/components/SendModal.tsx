@@ -1429,7 +1429,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 </span>
               </div>
               <p className="text-sm text-[color:var(--sf-info-red-text)]">
-                {t('send.highFeeDescription')}
+                {t('send.highFeeDescription', { percent: total > 0 ? ((estimatedFee / total) * 100).toFixed(1) : '0.0' })}
               </p>
             </div>
           )}
