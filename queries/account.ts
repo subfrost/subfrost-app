@@ -104,6 +104,43 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         return null;
       };
 
+      const fetchMempoolSpent = async (address: string): Promise<number> => {
+        try {
+          const response = await fetch('/api/rpc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'esplora_address::txs:mempool',
+              params: [address],
+              id: 1,
+            }),
+          });
+          const json = await response.json();
+          const txs = json.result;
+          if (!Array.isArray(txs)) return 0;
+
+          // Build set of mempool txids to distinguish confirmed vs unconfirmed parents
+          const mempoolTxids = new Set(txs.map((tx: any) => tx.txid));
+
+          let spent = 0;
+          for (const tx of txs) {
+            for (const vin of (tx.vin || [])) {
+              if (vin.prevout?.scriptpubkey_address === address) {
+                // Only count if parent tx is NOT a mempool tx (i.e., parent is confirmed)
+                if (!mempoolTxids.has(vin.txid)) {
+                  spent += vin.prevout.value;
+                }
+              }
+            }
+          }
+          return spent;
+        } catch (err) {
+          console.error(`[BALANCE] mempool spent fetch failed for ${address}:`, err);
+          return 0;
+        }
+      };
+
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
           const rawResult = await withTimeout(provider.getEnrichedBalances(address), 15000, null);
@@ -220,6 +257,23 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         for (const utxo of toArray(data.pending)) processUtxo(utxo, false, false);
       }
 
+      // Fetch mempool spent amounts per address (confirmed UTXOs being spent in mempool)
+      const mempoolSpentResults = await Promise.all(
+        addresses.map(async (address) => ({
+          address,
+          spent: await withTimeout(fetchMempoolSpent(address), 10000, 0),
+        })),
+      );
+
+      let pendingOutgoingP2wpkh = 0;
+      let pendingOutgoingP2tr = 0;
+      let pendingOutgoingTotal = 0;
+      for (const { address, spent } of mempoolSpentResults) {
+        if (address === deps.account.nativeSegwit?.address) pendingOutgoingP2wpkh += spent;
+        else if (address === deps.account.taproot?.address) pendingOutgoingP2tr += spent;
+        pendingOutgoingTotal += spent;
+      }
+
       // Fetch alkane balances via SDK dataApiGetAlkanesByAddress
       for (const address of addresses) {
         try {
@@ -268,6 +322,9 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
             pendingP2wpkh: pendingP2wpkhBtc,
             pendingP2tr: pendingP2trBtc,
             pendingTotal: pendingTotalBtc,
+            pendingOutgoingP2wpkh,
+            pendingOutgoingP2tr,
+            pendingOutgoingTotal,
           },
           pendingTxCount: { p2wpkh: pendingTxIdsP2wpkh.size, p2tr: pendingTxIdsP2tr.size },
           alkanes: Array.from(alkaneMap.values()),
