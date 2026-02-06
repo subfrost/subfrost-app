@@ -268,7 +268,7 @@ const en: Record<string, string> = {
   'send.invalidFeeRate': 'Invalid fee rate',
   'send.insufficientFunds': 'Insufficient funds',
   'send.highFeeWarning': 'High Fee Warning!',
-  'send.highFeeDescription': 'This transaction has unusually high fees. Please review carefully:',
+  'send.highFeeDescription': 'This transaction has unusually high fees ({percent}%). Please review carefully.',
   'send.reduceUtxos': 'Reduce the number of UTXOs',
   'send.lowerFeeRate': 'Lower the fee rate',
   'send.smallerAmount': 'Consider sending a smaller amount',

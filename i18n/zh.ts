@@ -269,7 +269,7 @@ const zh: Record<string, string> = {
   'send.invalidFeeRate': '\u65e0\u6548\u7684\u8d39\u7387',
   'send.insufficientFunds': '\u4f59\u989d\u4e0d\u8db3',
   'send.highFeeWarning': '\u9ad8\u8d39\u7528\u8b66\u544a\uff01',
-  'send.highFeeDescription': '\u6b64\u4ea4\u6613\u8d39\u7528\u5f02\u5e38\u9ad8\u3002\u8bf7\u4ed4\u7ec6\u68c0\u67e5\uff1a',
+  'send.highFeeDescription': '\u6b64\u4ea4\u6613\u8d39\u7528\u5f02\u5e38\u9ad8 ({percent}%)\u3002\u8bf7\u4ed4\u7ec6\u68c0\u67e5\u3002',
   'send.reduceUtxos': '\u51cf\u5c11 UTXOs \u6570\u91cf',
   'send.lowerFeeRate': '\u964d\u4f4e\u8d39\u7387',
   'send.smallerAmount': '\u8003\u8651\u53d1\u9001\u8f83\u5c0f\u7684\u91d1\u989d',

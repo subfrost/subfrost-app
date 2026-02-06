@@ -418,6 +418,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, estimated fee: ${(finalFee / 100000000).toFixed(8)} BTC`);
 
       setSelectedUtxos(selected);
+      setEstimatedFee(finalFee);
       setStep('confirm');
     } else if (step === 'confirm') {
       // Check if fee looks suspicious before broadcasting
@@ -442,7 +443,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     setEstimatedFeeRate(calculatedFeeRate);
 
     // Safety checks:
-    // 1. Fee is more than 1% of amount
+    // 1. Fee is more than 2% of amount
     // 2. Fee is more than 0.01 BTC
     // 3. Fee rate is more than 1000 sat/vbyte
     // 4. Using more than 100 UTXOs
@@ -450,7 +451,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // 0.01 BTC
     const feeRateTooHigh = feeRateNum > 1000;
     const tooManyInputs = numInputs > 100;
-    const feePercentageTooHigh = feePercentage > 1;
+    const feePercentageTooHigh = feePercentage > 2;
 
     if (feeTooHigh || feeRateTooHigh || tooManyInputs || feePercentageTooHigh) {
       setShowFeeWarning(true);
@@ -1051,7 +1052,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
             placeholder="bc1q..."
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
 
@@ -1066,7 +1067,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00000000"
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
           <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
             {t('send.available')} {(availableUtxos.reduce((sum, u) => sum + u.value, 0) / 100000000).toFixed(8)} BTC
@@ -1097,7 +1098,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -1125,7 +1126,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         <button
           data-testid="send-submit"
           onClick={() => { if (!isDemoGated) { handleNext(); } }}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide ${
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide ${
             isDemoGated
               ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
@@ -1135,7 +1136,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           {t('send.cancel')}
         </button>
@@ -1155,7 +1156,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
             placeholder="bc1p..."
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
 
@@ -1251,7 +1252,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                         ref={isSelected ? selectedAlkaneRef : undefined}
                         type="button"
                         onClick={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
+                        className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
                           isSelected
                             ? 'bg-[color:var(--sf-primary)]/15'
                             : 'hover:bg-[color:var(--sf-primary)]/5'
@@ -1330,7 +1331,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
                 disabled={!selected}
-                className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
               {selected && (
                 <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
@@ -1365,7 +1366,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -1393,7 +1394,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         <button
           onClick={() => { if (!isDemoGated) { handleNext(); } }}
           disabled={!selectedAlkaneId || !amount}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
             isDemoGated
               ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
@@ -1403,7 +1404,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           {t('send.cancel')}
         </button>
@@ -1413,8 +1414,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const renderConfirm = () => {
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
-    const localEstimatedFee = 150 * feeRate; // Rough estimate for display before warning
-    const total = amountSats + (showFeeWarning ? estimatedFee : localEstimatedFee);
+    const total = amountSats + estimatedFee;
 
     return (
       <>
@@ -1429,7 +1429,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 </span>
               </div>
               <p className="text-sm text-[color:var(--sf-info-red-text)]">
-                {t('send.highFeeDescription')}
+                {t('send.highFeeDescription', { percent: total > 0 ? ((estimatedFee / total) * 100).toFixed(1) : '0.0' })}
               </p>
             </div>
           )}
@@ -1451,7 +1451,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </div>
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
-              <span className="text-[color:var(--sf-text)]">{((showFeeWarning ? estimatedFee : localEstimatedFee) / 100000000).toFixed(8)} BTC</span>
+              <span className="text-[color:var(--sf-text)]">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
             </div>
             <div className="border-t border-[color:var(--sf-text)]/10 pt-2 flex justify-between">
               <span className="text-[color:var(--sf-text)]/80 font-medium">{t('send.total')}</span>
@@ -1476,7 +1476,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         <div className="flex gap-3">
           <button
             onClick={() => { setStep('input'); setShowFeeWarning(false); }}
-            className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+            className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
           >
             {t('send.back')}
           </button>
@@ -1484,7 +1484,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             <button
               onClick={proceedWithHighFee}
               disabled={feeWarningCountdown > 0}
-              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${
+              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] ${
                 feeWarningCountdown > 0
                   ? 'bg-[color:var(--sf-info-red-bg)] text-[color:var(--sf-info-red-title)] cursor-not-allowed opacity-70'
                   : 'bg-[color:var(--sf-fee-warning-proceed-bg)] text-[color:var(--sf-fee-warning-proceed-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:transition-none'
@@ -1496,7 +1496,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           ) : (
             <button
               onClick={() => { if (!isDemoGated) { handleNext(); } }}
-              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 ${
+              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 ${
                 isDemoGated
                   ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
                   : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
@@ -1529,7 +1529,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           href={`https://espo.sh/tx/${txid}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer relative"
+          className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 hover:brightness-110 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer relative"
         >
           <ExternalLink size={12} className="absolute top-3 right-3 text-[color:var(--sf-info-green-text)]/60" />
           <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('send.transactionIdLabel')}</div>
@@ -1539,7 +1539,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       <button
         onClick={onClose}
-        className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
+        className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
       >
         {t('send.close')}
       </button>
@@ -1555,7 +1555,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{sendMode === 'btc' ? t('send.title') : t('send.titleAlkanes')}</h2>
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
               aria-label="Close"
             >
               <X size={18} />
@@ -1633,10 +1633,10 @@ function getSendNftImagePaths(symbol: string, id: string, _network: string): str
   const paths: string[] = [];
   const symbolLower = symbol?.toLowerCase() || '';
   if (symbolLower === 'frbtc' || id === '32:0') { paths.push('/tokens/frbtc.svg'); return paths; }
-  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://cdn.ordiscan.com/alkanes/2_0'); return paths; }
+  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://cdn.subfrost.io/alkanes/2_0'); return paths; }
   if (id && /^\d+:\d+/.test(id)) {
     const urlSafeId = id.replace(/:/g, '_');
-    paths.push(`https://cdn.ordiscan.com/alkanes/${urlSafeId}`);
+    paths.push(`https://cdn.subfrost.io/alkanes/${urlSafeId}`);
   }
   return paths;
 }
@@ -1666,7 +1666,7 @@ const SendNftCard = forwardRef<HTMLButtonElement, {
       ref={ref}
       type="button"
       onClick={onSelect}
-      className={`rounded-lg overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+      className={`rounded-lg overflow-hidden transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
         isSelected
           ? 'ring-2 ring-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/15'
           : 'hover:bg-[color:var(--sf-primary)]/5'
@@ -1734,10 +1734,10 @@ function SendMinerFeeButton({ selection, setSelection, presets }: { selection: F
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
       >
         <span>{feeDisplayMap[selection] || selection}</span>
-        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
@@ -1747,7 +1747,7 @@ function SendMinerFeeButton({ selection, setSelection, presets }: { selection: F
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
