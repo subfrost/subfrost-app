@@ -91,7 +91,7 @@ function calculateTvlFromReserves(
 function getTokenIconUrl(tokenId: string, _network: string): string {
   const [block, tx] = tokenId.split(':');
   if (block && tx) {
-    return `https://cdn.ordiscan.com/alkanes/${block}_${tx}`;
+    return `https://cdn.subfrost.io/alkanes/${block}_${tx}`;
   }
   return '';
 }

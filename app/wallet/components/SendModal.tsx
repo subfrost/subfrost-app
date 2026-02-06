@@ -1633,10 +1633,10 @@ function getSendNftImagePaths(symbol: string, id: string, _network: string): str
   const paths: string[] = [];
   const symbolLower = symbol?.toLowerCase() || '';
   if (symbolLower === 'frbtc' || id === '32:0') { paths.push('/tokens/frbtc.svg'); return paths; }
-  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://cdn.ordiscan.com/alkanes/2_0'); return paths; }
+  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://cdn.subfrost.io/alkanes/2_0'); return paths; }
   if (id && /^\d+:\d+/.test(id)) {
     const urlSafeId = id.replace(/:/g, '_');
-    paths.push(`https://cdn.ordiscan.com/alkanes/${urlSafeId}`);
+    paths.push(`https://cdn.subfrost.io/alkanes/${urlSafeId}`);
   }
   return paths;
 }

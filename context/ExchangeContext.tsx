@@ -133,7 +133,7 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
                 name: 'Subfrost BTC',
                 id: FRBTC_ALKANE_ID,
                 decimals: 8,
-                iconUrl: `https://cdn.ordiscan.com/alkanes/${FRBTC_ALKANE_ID.replace(':', '_')}`,
+                iconUrl: `https://cdn.subfrost.io/alkanes/${FRBTC_ALKANE_ID.replace(':', '_')}`,
               },
               // bUSD - uses config value (varies by network)
               [BUSD_ALKANE_ID]: {
@@ -141,7 +141,7 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
                 name: 'Bitcoin USD',
                 id: BUSD_ALKANE_ID,
                 decimals: 8,
-                iconUrl: `https://cdn.ordiscan.com/alkanes/${BUSD_ALKANE_ID.replace(':', '_')}`,
+                iconUrl: `https://cdn.subfrost.io/alkanes/${BUSD_ALKANE_ID.replace(':', '_')}`,
               },
             };
 
@@ -159,7 +159,7 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
               name,
               id: alkaneId,
               decimals: 8,
-              iconUrl: `https://cdn.ordiscan.com/alkanes/${alkaneId.replace(':', '_')}`,
+              iconUrl: `https://cdn.subfrost.io/alkanes/${alkaneId.replace(':', '_')}`,
             };
           };
 
