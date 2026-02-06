@@ -5,6 +5,36 @@ import { useAdminFetch } from './useAdminFetch';
 import CreateCodeModal from './CreateCodeModal';
 import EditCodeModal from './EditCodeModal';
 
+function TruncatedAddress({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  const truncated = address.length > 12
+    ? `${address.slice(0, 6)}...${address.slice(-4)}`
+    : address;
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono">
+      {truncated}
+      <button
+        onClick={handleCopy}
+        title={copied ? 'Copied!' : 'Copy address'}
+        className="text-[color:var(--sf-muted)] hover:text-[color:var(--sf-text)] transition-colors"
+      >
+        {copied ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        )}
+      </button>
+    </span>
+  );
+}
+
 interface Code {
   id: string;
   code: string;
@@ -118,6 +148,7 @@ export default function CodesTab() {
             <thead>
               <tr className="border-b border-[color:var(--sf-row-border)] text-left text-xs text-[color:var(--sf-muted)]">
                 <th className="px-4 py-3">Code</th>
+                <th className="px-4 py-3">Owner</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Redemptions</th>
@@ -130,6 +161,13 @@ export default function CodesTab() {
               {codes.map((code) => (
                 <tr key={code.id}>
                   <td className="px-4 py-3 font-mono text-[color:var(--sf-text)]">{code.code}</td>
+                  <td className="px-4 py-3 text-[color:var(--sf-text)]">
+                    {code.ownerTaprootAddress ? (
+                      <TruncatedAddress address={code.ownerTaprootAddress} />
+                    ) : (
+                      <span className="text-[color:var(--sf-muted)]">-</span>
+                    )}
+                  </td>
                   <td className="max-w-[200px] truncate px-4 py-3 text-[color:var(--sf-muted)]">
                     {code.description || '-'}
                   </td>
@@ -179,7 +217,7 @@ export default function CodesTab() {
               ))}
               {codes.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-[color:var(--sf-muted)]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[color:var(--sf-muted)]">
                     No codes found
                   </td>
                 </tr>
