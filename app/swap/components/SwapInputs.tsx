@@ -10,6 +10,7 @@ import { useModalStore } from "@/stores/modals";
 import { ChevronDown } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useDemoGate } from "@/hooks/useDemoGate";
 
 type BridgeStep = 1 | 2 | 3 | 4 | 5;
 
@@ -64,6 +65,7 @@ export default function SwapInputs({
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
 
   // Apply i18n defaults for balance texts
   const resolvedFromBalanceText = fromBalanceText ?? t("swap.noBalance");
@@ -582,8 +584,7 @@ export default function SwapInputs({
               onConnectModalOpenChange(true);
               return;
             }
-            const isRegtest = network?.includes('regtest');
-            if (isRegtest) {
+            if (!isDemoGated) {
               onSwapClick();
               return;
             }
@@ -593,7 +594,7 @@ export default function SwapInputs({
             }
           }}
           className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-            isConnected && !network?.includes('regtest')
+            isConnected && isDemoGated
               ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
               : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
           }`}

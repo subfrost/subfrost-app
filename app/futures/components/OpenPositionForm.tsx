@@ -9,6 +9,7 @@ import { useBtcBalance } from '@/hooks/useBtcBalance';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 type OpenPositionFormProps = {
   contracts: Contract[];
@@ -35,7 +36,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
   // Get wallet connection state
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
-  const isRegtest = network?.includes('regtest');
+  const isDemoGated = useDemoGate();
   const { theme } = useTheme();
 
   // Get BTC balance
@@ -445,8 +446,8 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 onConnectModalOpenChange(true);
                 return;
               }
-              if (isRegtest) {
-                // TODO: wire up actual buy action for regtest
+              if (!isDemoGated) {
+                // TODO: wire up actual buy action
                 return;
               }
               if (!showBuyComingSoon) {
@@ -454,7 +455,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 setTimeout(() => setShowBuyComingSoon(false), 1000);
               }
             }}
-            className={`h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && !isRegtest ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
+            className={`h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
           >
             {showBuyComingSoon ? (
               <span className="animate-pulse">{t('badge.comingSoon')}</span>

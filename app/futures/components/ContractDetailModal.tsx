@@ -6,6 +6,7 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useWallet } from '@/context/WalletContext';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)
@@ -47,7 +48,7 @@ export default function ContractDetailModal({
 }: ContractDetailModalProps) {
   const { t } = useTranslation();
   const { network } = useWallet();
-  const isRegtest = network?.includes('regtest');
+  const isDemoGated = useDemoGate();
   const [amount, setAmount] = useState('1.00');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
@@ -209,8 +210,8 @@ export default function ContractDetailModal({
                 <button
                   type="button"
                   onClick={() => {
-                    if (isRegtest) {
-                      // TODO: wire up actual buy action for regtest
+                    if (!isDemoGated) {
+                      // TODO: wire up actual buy action
                       return;
                     }
                     if (!showBuyComingSoon) {
@@ -218,7 +219,7 @@ export default function ContractDetailModal({
                       setTimeout(() => setShowBuyComingSoon(false), 1000);
                     }
                   }}
-                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${!isRegtest ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)]'}`}
+                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)]'}`}
                 >
                   {showBuyComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -229,8 +230,8 @@ export default function ContractDetailModal({
                 <button
                   type="button"
                   onClick={() => {
-                    if (isRegtest) {
-                      // TODO: wire up actual sell action for regtest
+                    if (!isDemoGated) {
+                      // TODO: wire up actual sell action
                       return;
                     }
                     if (!showSellComingSoon) {
@@ -238,7 +239,7 @@ export default function ContractDetailModal({
                       setTimeout(() => setShowSellComingSoon(false), 1000);
                     }
                   }}
-                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${!isRegtest ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]'}`}
+                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]'}`}
                 >
                   {showSellComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>

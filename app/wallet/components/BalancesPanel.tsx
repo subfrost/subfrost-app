@@ -5,11 +5,13 @@ import { useWallet } from '@/context/WalletContext';
 import { Flame } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useFuelAllocation } from '@/hooks/useFuelAllocation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 export default function BalancesPanel() {
   const { network } = useWallet() as any;
   const { t } = useTranslation();
   const fuelAllocation = useFuelAllocation();
+  const isDemoGated = useDemoGate();
   const [inscriptionFilter, setInscriptionFilter] = useState<'brc20' | 'ordinals'>('brc20');
 
   return (
@@ -41,7 +43,7 @@ export default function BalancesPanel() {
         </div>
 
         <div className="text-center py-2 text-[color:var(--sf-text)]/60">
-          <span className="text-sm font-medium">{network?.includes('regtest') ? t('balances.tabBrc20') : t('balances.comingSoon')}</span>
+          <span className="text-sm font-medium">{!isDemoGated ? t('balances.tabBrc20') : t('balances.comingSoon')}</span>
         </div>
       </div>
 

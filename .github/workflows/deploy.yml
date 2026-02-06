@@ -67,6 +67,7 @@ jobs:
             --tag "${IMAGE}:${{ github.sha }}" \
             --tag "${IMAGE}:latest" \
             --build-arg NEXT_PUBLIC_NETWORK=mainnet \
+            --build-arg NEXT_PUBLIC_DEMO_MODE=1 \
             --no-cache \
             .
 
@@ -94,6 +95,7 @@ jobs:
             --timeout 60 \
             --set-env-vars "NODE_ENV=production" \
             --set-env-vars "NEXT_PUBLIC_NETWORK=mainnet" \
+            --set-env-vars "NEXT_PUBLIC_DEMO_MODE=1" \
             --set-env-vars "REDIS_HOST=${{ secrets.REDIS_HOST }}" \
             --set-env-vars "REDIS_PORT=${{ secrets.REDIS_PORT }}" \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest" \

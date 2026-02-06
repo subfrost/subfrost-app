@@ -16,12 +16,13 @@ import WalletSettings from './components/WalletSettings';
 import RegtestControls from './components/RegtestControls';
 import ReceiveModal from './components/ReceiveModal';
 import SendModal from './components/SendModal';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
   const { connected, isConnected, address, paymentAddress, network } = useWallet() as any;
-  const isRegtest = network?.includes('regtest');
+  const isDemoGated = useDemoGate();
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,7 +70,7 @@ export default function WalletDashboardPage() {
   const tabs = [
     { id: 'balances' as TabView, label: 'Other Balances', shortLabel: 'Other Balances', mobileLabel: 'Others', icon: Wallet, disabled: false },
     { id: 'transactions' as TabView, label: t('walletDash.transactionHistory'), shortLabel: t('walletDash.history'), icon: Activity, disabled: false },
-    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), mobileLabel: 'UTXOs', icon: BarChart2, disabled: !isRegtest },
+    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), mobileLabel: 'UTXOs', icon: BarChart2, disabled: isDemoGated },
   ];
 
   return (

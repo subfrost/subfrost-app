@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import TokenIcon from './TokenIcon';
 import { Search, X } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 // Import Network type from constants
 import type { Network } from '@/utils/constants';
@@ -101,6 +102,7 @@ export default function TokenSelectorModal({
   activePercent,
 }: Props) {
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showAlreadySelected, setShowAlreadySelected] = useState(false);
@@ -183,7 +185,7 @@ export default function TokenSelectorModal({
                             setShowAlreadySelected(true);
                             setTimeout(() => setShowAlreadySelected(false), 1000);
                           }
-                        } else if (token.enabled || network?.includes('regtest')) {
+                        } else if (token.enabled || !isDemoGated) {
                           onBridgeTokenSelect?.(token.symbol);
                         } else {
                           if (!showComingSoon) {
@@ -195,7 +197,7 @@ export default function TokenSelectorModal({
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
                         isSelectedInOther
                           ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
-                          : (token.enabled || network?.includes('regtest'))
+                          : (token.enabled || !isDemoGated)
                           ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
                           : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
                       }`}
@@ -203,7 +205,7 @@ export default function TokenSelectorModal({
                       <img
                         src={`/tokens/${token.symbol.toLowerCase()}.svg`}
                         alt={token.symbol}
-                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
+                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && isDemoGated && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
                       />
                       <span className={`font-bold text-sm whitespace-nowrap ${
                         isSelectedInOther
