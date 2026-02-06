@@ -1420,17 +1420,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const signMessage = useCallback(async (message: string): Promise<string> => {
     // For browser wallets
     if (browserWallet && walletType === 'browser') {
-      // OYL has a different signMessage API: { address, message, protocol? } => { address, signature }
+      // OYL signMessage is now handled natively by the SDK's ConnectedWallet.signMessage()
       const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
-      if (connectedWalletId === 'oyl') {
-        const oylProvider = (window as any).oyl;
-        if (!oylProvider) throw new Error('OYL wallet not available');
-        const result = await oylProvider.signMessage({
-          address: browserWallet.address,
-          message,
-        });
-        return result.signature;
-      }
 
       // Tokeo: signMessage(message, protocol?) => signature
       if (connectedWalletId === 'tokeo') {
