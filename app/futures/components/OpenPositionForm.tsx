@@ -558,7 +558,15 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                           }}
                         >
                           {/* Marker dot */}
-                          <div className="w-4 h-4 rounded-full bg-[color:var(--sf-primary)] border-2 border-[color:var(--sf-glass-bg)] shadow-lg cursor-pointer hover:scale-125 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+                          <div
+                            className="w-4 h-4 rounded-full bg-[color:var(--sf-primary)] border-2 border-[color:var(--sf-glass-bg)] shadow-lg cursor-pointer hover:scale-125 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                            onClick={() => {
+                              const contract = contracts.find(c => c.id === marker.contractId);
+                              if (contract && onContractSelect) {
+                                onContractSelect(contract.id, contract.blocksLeft);
+                              }
+                            }}
+                          >
                             {/* Tooltip on hover */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none z-50">
                               <div className="bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] rounded-lg p-2 shadow-lg whitespace-nowrap text-xs">
@@ -594,7 +602,13 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     {payoutMarkers.map((marker, index) => (
                       <div
                         key={`summary-${marker.contractId}-${index}`}
-                        className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none"
+                        className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none cursor-pointer"
+                        onClick={() => {
+                          const contract = contracts.find(c => c.id === marker.contractId);
+                          if (contract && onContractSelect) {
+                            onContractSelect(contract.id, contract.blocksLeft);
+                          }
+                        }}
                       >
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-transparent flex items-center justify-center">
