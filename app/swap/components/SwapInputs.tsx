@@ -424,9 +424,9 @@ export default function SwapInputs({
             <button
               type="button"
               onClick={onInvert}
-              className={`pointer-events-auto group flex h-12 w-12 items-center justify-center rounded-2xl border-4 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-105 active:scale-95 outline-none ${
+              className={`pointer-events-auto group flex h-12 w-12 items-center justify-center rounded-2xl border-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] hover:scale-105 active:scale-95 outline-none ${
                 theme === "dark"
-                  ? "border-[#0d192b] bg-[#162338] text-[#498aee]"
+                  ? "border-[#0d192b] bg-[#162338] text-white"
                   : "border-[#dee5f1] bg-[#f7fbff] text-[#233e6b]"
               }`}
               aria-label="Invert swap direction"
