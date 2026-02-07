@@ -55,6 +55,9 @@ import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
 
 // Helper to convert Uint8Array to base64
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -77,7 +80,7 @@ const FRBTC_WRAP_OPCODE = 77;
 // The CLI derives this dynamically via get_subfrost_address().
 // Must match the address the frBTC contract expects BTC to be sent to.
 const SIGNER_ADDRESSES: Record<string, string> = {
-  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqd3ndxc',
+  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqcdrpr6',
   'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
@@ -157,8 +160,9 @@ export function useWrapMutation() {
       // B:amount:v0 tells the SDK to set output 0's value to the wrap amount
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
-      // Get user's taproot address for output labeling
+      // Get user's addresses
       const userTaprootAddress = account?.taproot?.address;
+      const userSegwitAddress = account?.nativeSegwit?.address;
       if (!userTaprootAddress) throw new Error('No taproot address available');
 
       // Get bitcoin network for PSBT parsing
@@ -167,28 +171,36 @@ export function useWrapMutation() {
       // Get the signer address for this network
       const signerAddress = getSignerAddress(network);
 
-      // to_addresses: [signer (actual), user (symbolic)]
-      // Matches CLI wrap_btc.rs output ordering:
-      //   Output 0 (v0): signer (receives BTC via B:amount:v0)
-      //   Output 1 (v1): user (receives minted frBTC via pointer=v1)
-      const toAddresses = [signerAddress, 'p2tr:0'];
+      const isBrowserWallet = walletType === 'browser';
+
+      // For browser wallets, use actual addresses for UTXO discovery (passed as
+      // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
+      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      const fromAddresses = isBrowserWallet
+        ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
+        : ['p2wpkh:0', 'p2tr:0'];
+
+      // toAddresses use symbolic placeholders — the WASM SDK parses these to construct
+      // output scripts, and mainnet bech32m addresses trigger LegacyAddressTooLong.
+      // All outputs are patched to correct addresses after PSBT construction.
+      const toAddresses = ['p2tr:0', 'p2tr:0'];
 
       console.log('[WRAP] ============ alkanesExecuteTyped CALL ============');
       console.log('[WRAP] to_addresses:', toAddresses);
+      console.log('[WRAP] from_addresses:', fromAddresses);
       console.log('[WRAP] input_requirements:', inputRequirements);
       console.log('[WRAP] protostone:', protostone);
       console.log('[WRAP] fee_rate:', wrapData.feeRate);
+      console.log('[WRAP] wallet_type:', walletType);
       console.log('[WRAP] ===================================================');
 
       try {
-        // Use alkanesExecuteTyped for cleaner parameter handling
         const result = await provider.alkanesExecuteTyped({
           toAddresses,
           inputRequirements,
           protostones: protostone,
           feeRate: wrapData.feeRate,
-          // Use symbolic addresses for from/change (resolved by SDK)
-          fromAddresses: ['p2wpkh:0', 'p2tr:0'],
+          fromAddresses,
           changeAddress: 'p2wpkh:0',
           alkanesChangeAddress: 'p2tr:0',
           autoConfirm: false,
@@ -223,6 +235,69 @@ export function useWrapMutation() {
             throw new Error('Unexpected PSBT format');
           }
 
+          // Patch PSBT outputs with correct addresses.
+          // The WASM SDK can't parse mainnet bech32m addresses (LegacyAddressTooLong),
+          // so all outputs used symbolic placeholders. We now replace them:
+          //   - Output 0: signer address (receives BTC)
+          //   - Other P2TR outputs: user's taproot address
+          //   - Other P2WPKH outputs: user's segwit address
+          const signerScript = bitcoin.address.toOutputScript(signerAddress, btcNetwork);
+          const userTaprootScript = bitcoin.address.toOutputScript(userTaprootAddress, btcNetwork);
+          const userSegwitScript = userSegwitAddress
+            ? bitcoin.address.toOutputScript(userSegwitAddress, btcNetwork)
+            : null;
+          const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const outs = (psbtForPatch.data.globalMap.unsignedTx as any).tx.outs;
+
+          // Always patch output 0 with signer address
+          outs[0].script = signerScript;
+
+          // For browser wallets, also patch remaining outputs (symbolic resolved to dummy wallet)
+          if (isBrowserWallet) {
+            for (let i = 1; i < outs.length; i++) {
+              const script = Buffer.from(outs[i].script);
+              if (script[0] === 0x6a) continue; // Skip OP_RETURN
+              if (script[0] === 0x51 && script.length === 34) {
+                outs[i].script = userTaprootScript; // P2TR → user taproot
+              } else if (script[0] === 0x00 && script.length === 22 && userSegwitScript) {
+                outs[i].script = userSegwitScript; // P2WPKH → user segwit
+              }
+            }
+          }
+
+          // For browser wallets with P2SH-P2WPKH payment address (starts with '3' or '2'),
+          // add redeemScript to P2SH inputs so the wallet can sign them.
+          // The SDK doesn't add redeemScript for external addresses it doesn't have keys for.
+          if (isBrowserWallet && account?.nativeSegwit?.pubkey && userSegwitAddress) {
+            const isP2SH = userSegwitAddress.startsWith('3') || userSegwitAddress.startsWith('2');
+            if (isP2SH) {
+              const segwitPubkey = Buffer.from(account.nativeSegwit.pubkey, 'hex');
+              const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: segwitPubkey, network: btcNetwork });
+              const redeemScript = p2wpkh.output!;
+
+              const p2shScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(userSegwitAddress, btcNetwork));
+
+              for (let i = 0; i < psbtForPatch.data.inputs.length; i++) {
+                const input = psbtForPatch.data.inputs[i];
+                let prevScript: Buffer | null = null;
+                if (input.witnessUtxo) {
+                  prevScript = Buffer.from(input.witnessUtxo.script);
+                } else if (input.nonWitnessUtxo) {
+                  const prevTx = bitcoin.Transaction.fromBuffer(Buffer.from(input.nonWitnessUtxo));
+                  const txIn = (psbtForPatch.data.globalMap.unsignedTx as any).tx.ins[i];
+                  prevScript = Buffer.from(prevTx.outs[txIn.index].script);
+                }
+                if (prevScript && prevScript.equals(p2shScriptPubKey)) {
+                  psbtForPatch.updateInput(i, { redeemScript });
+                  console.log('[WRAP] Added redeemScript to P2SH input', i);
+                }
+              }
+            }
+          }
+
+          psbtBase64 = psbtForPatch.toBase64();
+          console.log('[WRAP] Patched PSBT (signer + browser wallet:', isBrowserWallet, ')');
+
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[WRAP] Keystore wallet - requesting user confirmation...');
@@ -243,14 +318,18 @@ export function useWrapMutation() {
             console.log('[WRAP] User approved transaction');
           }
 
-          // Sign the PSBT with both SegWit and Taproot keys
+          // Sign the PSBT
           console.log('[WRAP] Signing PSBT...');
+          let signedPsbtBase64: string;
 
-          // First sign with SegWit key (for native segwit inputs)
-          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-
-          // Then sign with Taproot key (for taproot inputs)
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          if (isBrowserWallet) {
+            // Browser wallets sign all input types in a single signPsbt call
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            // Keystore wallets need separate signing for each key type
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          }
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

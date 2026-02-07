@@ -68,7 +68,7 @@ const FRBTC_UNWRAP_OPCODE = 78;
 
 // Hardcoded signer addresses per network (same as useUnwrapMutation)
 const SIGNER_ADDRESSES: Record<string, string> = {
-  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqd3ndxc',
+  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqcdrpr6',
   'regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'subfrost-regtest': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
   'oylnet': 'bcrt1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9stl3eft',
@@ -249,17 +249,19 @@ export function useSwapUnwrapMutation() {
       const inputRequirements = `${sellBlock}:${sellTx}:${new BigNumber(data.sellAmount).integerValue(BigNumber.ROUND_FLOOR).toString()}`;
       console.log('[SwapUnwrap] Input requirements:', inputRequirements);
 
-      // Build address arrays
-      const fromAddresses: string[] = [];
-      if (segwitAddress) fromAddresses.push(segwitAddress);
-      if (taprootAddress) fromAddresses.push(taprootAddress);
+      const isBrowserWallet = walletType === 'browser';
 
-      // toAddresses: [user (v0), signer (v1)]
-      // Note: For unwrap, the signer receives the frBTC and sends BTC to user
-      const toAddresses = [taprootAddress, signerAddress];
+      // For browser wallets, use actual addresses for UTXO discovery.
+      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      const fromAddresses = isBrowserWallet
+        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
+        : ['p2wpkh:0', 'p2tr:0'];
 
-      console.log('[SwapUnwrap] From addresses:', fromAddresses);
-      console.log('[SwapUnwrap] To addresses:', toAddresses);
+      // toAddresses use symbolic placeholders (WASM can't parse mainnet bech32m for outputs).
+      const toAddresses = ['p2tr:0', 'p2tr:0'];
+
+      console.log('[SwapUnwrap] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[SwapUnwrap] To addresses (symbolic, patched post-PSBT):', toAddresses);
 
       console.log('═══════════════════════════════════════════════════════════════');
       console.log('[SwapUnwrap] ████ EXECUTING ATOMIC SWAP+UNWRAP ████');
@@ -274,8 +276,8 @@ export function useSwapUnwrapMutation() {
           autoConfirm: false, // We handle signing
           fromAddresses,
           toAddresses,
-          changeAddress: segwitAddress || taprootAddress,
-          alkanesChangeAddress: taprootAddress,
+          changeAddress: 'p2wpkh:0',
+          alkanesChangeAddress: 'p2tr:0',
         });
 
         console.log('[SwapUnwrap] Execute result:', JSON.stringify(result, null, 2));
@@ -309,6 +311,62 @@ export function useSwapUnwrapMutation() {
             throw new Error('Unexpected PSBT format');
           }
 
+          // Patch PSBT outputs with correct addresses.
+          const signerScript = bitcoin.address.toOutputScript(signerAddress, btcNetwork);
+          const userTaprootScript = bitcoin.address.toOutputScript(taprootAddress, btcNetwork);
+          const userSegwitScript = segwitAddress
+            ? bitcoin.address.toOutputScript(segwitAddress, btcNetwork)
+            : null;
+          const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const outs = (psbtForPatch.data.globalMap.unsignedTx as any).tx.outs;
+
+          // Signer is at output 1 for swap+unwrap
+          outs[1].script = signerScript;
+
+          // For browser wallets, patch remaining outputs (symbolic resolved to dummy wallet)
+          if (isBrowserWallet) {
+            for (let i = 0; i < outs.length; i++) {
+              if (i === 1) continue; // Already set to signer
+              const script = Buffer.from(outs[i].script);
+              if (script[0] === 0x6a) continue; // Skip OP_RETURN
+              if (script[0] === 0x51 && script.length === 34) {
+                outs[i].script = userTaprootScript;
+              } else if (script[0] === 0x00 && script.length === 22 && userSegwitScript) {
+                outs[i].script = userSegwitScript;
+              }
+            }
+          }
+
+          // For browser wallets with P2SH-P2WPKH payment address (starts with '3' or '2'),
+          // add redeemScript to P2SH inputs so the wallet can sign them.
+          if (isBrowserWallet && account?.nativeSegwit?.pubkey && segwitAddress) {
+            const isP2SH = segwitAddress.startsWith('3') || segwitAddress.startsWith('2');
+            if (isP2SH) {
+              const segwitPubkey = Buffer.from(account.nativeSegwit.pubkey, 'hex');
+              const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: segwitPubkey, network: btcNetwork });
+              const redeemScript = p2wpkh.output!;
+              const p2shScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(segwitAddress, btcNetwork));
+              for (let i = 0; i < psbtForPatch.data.inputs.length; i++) {
+                const input = psbtForPatch.data.inputs[i];
+                let prevScript: Buffer | null = null;
+                if (input.witnessUtxo) {
+                  prevScript = Buffer.from(input.witnessUtxo.script);
+                } else if (input.nonWitnessUtxo) {
+                  const prevTx = bitcoin.Transaction.fromBuffer(Buffer.from(input.nonWitnessUtxo));
+                  const txIn = (psbtForPatch.data.globalMap.unsignedTx as any).tx.ins[i];
+                  prevScript = Buffer.from(prevTx.outs[txIn.index].script);
+                }
+                if (prevScript && prevScript.equals(p2shScriptPubKey)) {
+                  psbtForPatch.updateInput(i, { redeemScript });
+                  console.log('[SwapUnwrap] Added redeemScript to P2SH input', i);
+                }
+              }
+            }
+          }
+
+          psbtBase64 = psbtForPatch.toBase64();
+          console.log('[SwapUnwrap] Patched PSBT (signer + browser wallet:', isBrowserWallet, ')');
+
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[SwapUnwrap] Keystore wallet - requesting user confirmation...');
@@ -331,10 +389,17 @@ export function useSwapUnwrapMutation() {
             console.log('[SwapUnwrap] User approved transaction');
           }
 
-          // Sign with both keys
-          console.log('[SwapUnwrap] Signing PSBT with SegWit, then Taproot...');
-          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          // Sign PSBT — browser wallets sign all input types in a single call,
+          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
+          let signedPsbtBase64: string;
+          if (isBrowserWallet) {
+            console.log('[SwapUnwrap] Browser wallet: signing PSBT once (all input types)...');
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            console.log('[SwapUnwrap] Keystore: signing PSBT with SegWit, then Taproot...');
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          }
 
           // Finalize and extract
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

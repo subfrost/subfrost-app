@@ -113,8 +113,21 @@ function buildTransferProtostone(params: {
   return `[${block},${tx},50]:v0:v1`;
 }
 
+/**
+ * Map a Bitcoin address to a symbolic SDK reference to avoid LegacyAddressTooLong.
+ * The WASM SDK tries base58 parsing first; bech32/bech32m addresses (bc1p, bc1q)
+ * are longer than expected for base58 and trigger the error.
+ * P2SH/P2PKH addresses are base58-encoded and can be passed directly.
+ */
+function addressToSymbolic(address: string): string {
+  const l = address.toLowerCase();
+  if (l.startsWith('bc1p') || l.startsWith('tb1p') || l.startsWith('bcrt1p')) return 'p2tr:0';
+  if (l.startsWith('bc1q') || l.startsWith('tb1q') || l.startsWith('bcrt1q')) return 'p2wpkh:0';
+  return address;
+}
+
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
-  const { address: taprootAddress, paymentAddress, network, walletType, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
+  const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
   // Address strategy:
   // - BTC sends: SegWit only (paymentAddress) for both send and change
   // - Alkane sends: Taproot (address) for token send/change, SegWit (paymentAddress) for BTC fees/change
@@ -481,8 +494,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
         console.log('[SendModal] From address (SegWit):', btcSendAddress);
 
-        setStep('broadcasting');
-
         // Fetch fresh UTXOs directly from esplora API to avoid stale cache issues
         console.log('[SendModal] Fetching fresh UTXOs from esplora...');
         const freshUtxosResponse = await fetch('/api/rpc', {
@@ -591,21 +602,50 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         }
 
         // Convert PSBT to base64 for signing
-        const psbtBase64 = psbt.toBase64();
+        let psbtBase64 = psbt.toBase64();
         console.log('[SendModal] PSBT created, signing with browser wallet...');
 
-        // Sign with browser wallet (SegWit)
-        const signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+        // For browser wallets with P2SH-P2WPKH payment address (starts with '3'),
+        // inject redeemScript so the wallet can sign P2SH inputs.
+        if (account?.nativeSegwit?.pubkey && btcSendAddress) {
+          const isP2SH = btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2');
+          if (isP2SH) {
+            const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            const segwitPubkey = Buffer.from(account.nativeSegwit.pubkey, 'hex');
+            const p2wpkhPayment = bitcoin.payments.p2wpkh({ pubkey: segwitPubkey, network: btcNetwork });
+            const redeemScript = p2wpkhPayment.output!;
+            const p2shScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(btcSendAddress, btcNetwork));
+
+            for (let i = 0; i < psbtForPatch.data.inputs.length; i++) {
+              const input = psbtForPatch.data.inputs[i];
+              const prevScript = input.witnessUtxo
+                ? Buffer.from(input.witnessUtxo.script)
+                : null;
+              if (prevScript && prevScript.equals(p2shScriptPubKey)) {
+                psbtForPatch.updateInput(i, { redeemScript });
+                console.log('[SendModal] Added redeemScript to P2SH input', i);
+              }
+            }
+            psbtBase64 = psbtForPatch.toBase64();
+          }
+        }
+
+        // Browser wallets sign all input types in a single call.
+        // Use signTaprootPsbt which has the Xverse direct-call bypass.
+        const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+
+        // Show broadcasting spinner now that signing is complete
+        setStep('broadcasting');
 
         // Finalize and extract transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
         signedPsbt.finalizeAllInputs();
-        const tx = signedPsbt.extractTransaction();
-        const txHex = tx.toHex();
-        const computedTxid = tx.getId();
+        const txObj = signedPsbt.extractTransaction();
+        const txHex = txObj.toHex();
+        const computedTxid = txObj.getId();
 
         // Log actual vsize and effective fee rate for verification
-        const actualVsize = tx.virtualSize();
+        const actualVsize = txObj.virtualSize();
         const actualFee = totalInputValue - amountSats - (txFeeResult.numOutputs === 2 ? txFeeResult.change : 0);
         console.log(`[SendModal] Actual vsize: ${actualVsize}, fee: ${actualFee} sats, effective rate: ${(actualFee / actualVsize).toFixed(2)} sat/vB`);
         console.log('[SendModal] Broadcasting...');
@@ -771,8 +811,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] User approved transaction');
       }
 
-      setStep('broadcasting');
-
       // Build input requirements: alkaneId:amount
       const inputRequirements = `${selectedAlkaneId}:${amountBaseUnits.toString()}`;
 
@@ -842,15 +880,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       // toAddresses: [recipient, changeAddress] maps to v0 and v1 in the protostone
       // - v0 = recipient gets forwarded alkanes (Factory Forward pointer)
       // - v1 = sender change (refund on failure)
+      //
+      // Use symbolic addresses for bech32/bech32m (bc1p, bc1q) to avoid
+      // LegacyAddressTooLong error. fromAddresses use actual addresses since
+      // they're only used for UTXO lookup (opaque strings to esplora).
+      // Outputs are patched to actual scriptPubKeys after the PSBT is returned.
       const result = await alkaneProvider.alkanesExecuteTyped({
         inputRequirements,
         protostones: protostone,
         feeRate,
         autoConfirm: false, // We handle signing manually
         fromAddresses,
-        toAddresses: [normalizedRecipientAddress, alkaneSendAddress], // v0 = recipient, v1 = our change
-        changeAddress: btcChangeAddress, // BTC change (SegWit in dual mode, Taproot in single mode)
-        alkanesChangeAddress: alkaneSendAddress, // Alkane change to Taproot
+        toAddresses: [addressToSymbolic(normalizedRecipientAddress), addressToSymbolic(alkaneSendAddress)],
+        changeAddress: addressToSymbolic(btcChangeAddress),
+        alkanesChangeAddress: addressToSymbolic(alkaneSendAddress),
       });
 
       console.log('[SendModal] Execute result:', JSON.stringify(result, null, 2));
@@ -880,35 +923,103 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         console.log('[SendModal] PSBT base64 length:', psbtBase64.length);
 
-        // Sign the PSBT based on wallet mode and detected address types
+        const isBrowserWallet = walletType === 'browser';
+
+        // Patch PSBT outputs from symbolic/dummy addresses to actual scriptPubKeys.
+        // Output 0 = recipient (toAddresses[0]) — always needs patching because
+        // symbolic resolves to the dummy wallet (browser) or keystore user (not recipient).
+        // For browser wallets, all other outputs also need patching (dummy wallet).
+        // For keystore wallets, sender change outputs resolve correctly via mnemonic.
+        // Uses same direct mutation approach as useWrapMutation and other hooks.
+        {
+          const psbtForOutputPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const outs = (psbtForOutputPatch.data.globalMap.unsignedTx as any).tx.outs;
+          const recipientScript = bitcoin.address.toOutputScript(normalizedRecipientAddress, btcNetwork);
+
+          // Patch output 0 to recipient's actual scriptPubKey
+          if (outs.length > 0 && outs[0].script[0] !== 0x6a) {
+            outs[0].script = recipientScript;
+            console.log('[SendModal] Patched output 0 to recipient scriptPubKey');
+          }
+
+          // For browser wallets, patch all other non-OP_RETURN outputs to sender's addresses
+          if (isBrowserWallet) {
+            const senderTaprootScript = bitcoin.address.toOutputScript(alkaneSendAddress, btcNetwork);
+            const senderPaymentScript = (btcSendAddress && btcSendAddress !== alkaneSendAddress)
+              ? bitcoin.address.toOutputScript(btcSendAddress, btcNetwork)
+              : senderTaprootScript;
+
+            for (let i = 1; i < outs.length; i++) {
+              const script = Buffer.from(outs[i].script);
+              if (script[0] === 0x6a) continue; // OP_RETURN
+              if (script[0] === 0x51 && script.length === 34) {
+                outs[i].script = senderTaprootScript; // P2TR → sender's taproot
+              } else if (script[0] === 0x00 && script.length === 22) {
+                outs[i].script = senderPaymentScript; // P2WPKH → sender's payment
+              }
+              // P2SH outputs (0xa9, 23 bytes) are already correct — passed as actual base58 address
+            }
+            console.log('[SendModal] Patched browser wallet outputs to actual addresses');
+          }
+
+          psbtBase64 = psbtForOutputPatch.toBase64();
+        }
+
+        // For browser wallets with P2SH-P2WPKH payment address (starts with '3'),
+        // inject redeemScript so the wallet can sign P2SH inputs.
+        // Same pattern used in all mutation hooks (useWrapMutation, useSwapMutation, etc.)
+        if (isBrowserWallet && account?.nativeSegwit?.pubkey && btcSendAddress) {
+          const isP2SH = btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2');
+          if (isP2SH) {
+            const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            const segwitPubkey = Buffer.from(account.nativeSegwit.pubkey, 'hex');
+            const p2wpkhPayment = bitcoin.payments.p2wpkh({ pubkey: segwitPubkey, network: btcNetwork });
+            const redeemScript = p2wpkhPayment.output!;
+            const p2shScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(btcSendAddress, btcNetwork));
+
+            for (let i = 0; i < psbtForPatch.data.inputs.length; i++) {
+              const input = psbtForPatch.data.inputs[i];
+              let prevScript: Buffer | null = null;
+              if (input.witnessUtxo) {
+                prevScript = Buffer.from(input.witnessUtxo.script);
+              } else if (input.nonWitnessUtxo) {
+                const prevTx = bitcoin.Transaction.fromBuffer(Buffer.from(input.nonWitnessUtxo));
+                const txIn = (psbtForPatch.data.globalMap.unsignedTx as any).tx.ins[i];
+                prevScript = Buffer.from(prevTx.outs[txIn.index].script);
+              }
+              if (prevScript && prevScript.equals(p2shScriptPubKey)) {
+                psbtForPatch.updateInput(i, { redeemScript });
+                console.log('[SendModal] Added redeemScript to P2SH input', i);
+              }
+            }
+            psbtBase64 = psbtForPatch.toBase64();
+          }
+        }
+
+        // Sign the PSBT
         let signedPsbtBase64: string;
-        if (isSingleAddressMode) {
-          // Single-address mode: sign with the appropriate key based on detected address type
+        if (isBrowserWallet) {
+          // Browser wallets sign ALL input types (P2TR, P2WPKH, P2SH) in one call.
+          // Always use signTaprootPsbt which has the Xverse direct-call bypass.
+          console.log('[SendModal] Browser wallet: signing all inputs in single call...');
+          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+        } else if (isSingleAddressMode) {
+          // Keystore single-address mode
           console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
           if (primaryAddressType.signingMethod === 'taproot') {
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           } else {
-            // SegWit, nested SegWit, or legacy - all use signSegwitPsbt
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
           }
-          console.log(`[SendModal] PSBT signed with ${primaryAddressType.type} key`);
         } else {
-          // Dual-address mode: sign with both keys based on their types
-          console.log('[SendModal] Signing PSBT with both keys...');
-          // Sign with secondary (usually SegWit for fees) first
-          if (secondaryAddressType?.signingMethod === 'taproot') {
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          }
-          // Then sign with primary (usually Taproot for alkanes)
-          if (primaryAddressType.signingMethod === 'taproot') {
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          } else {
-            signedPsbtBase64 = await signSegwitPsbt(signedPsbtBase64);
-          }
-          console.log(`[SendModal] PSBT signed with ${secondaryAddressType?.type} and ${primaryAddressType.type} keys`);
+          // Keystore dual-address mode: sign with both keys sequentially
+          console.log('[SendModal] Keystore: signing with both keys...');
+          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
         }
+
+        // Show broadcasting spinner now that signing is complete
+        setStep('broadcasting');
 
         // Parse the signed PSBT, finalize, and extract the raw transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

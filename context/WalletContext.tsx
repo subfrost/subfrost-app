@@ -1124,8 +1124,55 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           publicKey: pubKey,
           addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
         });
+      } else if (walletId === 'okx') {
+        // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
+        const okxProvider = (window as any).okxwallet?.bitcoin;
+        if (!okxProvider) throw new Error('OKX wallet not available');
+
+        const result = await okxProvider.connect();
+        const addr = result?.address;
+        const pubKey = result?.publicKey;
+        if (!addr) throw new Error('No address returned from OKX');
+
+        const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
+        if (isTaproot) {
+          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
+        } else {
+          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
+        }
+
+        connected = new (ConnectedWallet as any)(walletInfo, okxProvider, {
+          address: addr,
+          publicKey: pubKey,
+          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
+        });
+      } else if (walletId === 'unisat') {
+        // Unisat exposes window.unisat with requestAccounts(), getPublicKey(), signPsbt()
+        // Only provides one address type at a time (user-configurable in wallet settings)
+        const unisatProvider = (window as any).unisat;
+        if (!unisatProvider) throw new Error('Unisat wallet not available');
+
+        const accounts = await unisatProvider.requestAccounts();
+        if (!accounts?.length) throw new Error('No accounts returned from Unisat');
+        const addr = accounts[0];
+
+        let pubKey: string | undefined;
+        try { pubKey = await unisatProvider.getPublicKey(); } catch {}
+
+        const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
+        if (isTaproot) {
+          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
+        } else {
+          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
+        }
+
+        connected = new (ConnectedWallet as any)(walletInfo, unisatProvider, {
+          address: addr,
+          publicKey: pubKey,
+          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
+        });
       } else {
-        // For other wallets (Unisat, OKX, etc.), use the standard connector
+        // For other wallets, use the standard connector
         const connector = getWalletConnector();
         connected = await connector.connect(walletInfo);
       }
@@ -1198,14 +1245,109 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Sign PSBT with taproot inputs (BIP86 derivation)
   // Uses SDK wallet adapters for browser wallets, BIP86 derivation for keystore
+  //
+  // JOURNAL (2026-02-06): For Xverse wallets, we bypass the SDK adapter and call
+  // the Xverse Bitcoin Provider directly. The SDK's XverseAdapter.signPsbt swallows
+  // detailed error info from Xverse, making P2SH-P2WPKH signing failures opaque.
+  // Direct calls give us full response logging and avoid adapter quirks.
   const signTaprootPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
-    // For browser wallets - use the SDK adapter which handles all wallet-specific logic
+    // For browser wallets - handle signing based on wallet type
     if (walletAdapter && walletType === 'browser') {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      console.log('[WalletContext] Signing taproot PSBT with SDK adapter');
-      const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+      // For Xverse: call the Xverse Bitcoin Provider directly
+      const xverse = (window as any).XverseProviders?.BitcoinProvider;
+      if (xverse && browserWallet?.info?.id === 'xverse') {
+        console.log('[WalletContext] Xverse: signing PSBT directly (bypassing SDK adapter)');
+        const bitcoin = await import('bitcoinjs-lib');
+        const psbt = bitcoin.Psbt.fromHex(psbtHex);
+        // Derive bitcoin network from app network setting
+        const btcNetwork = (() => {
+          switch (network) {
+            case 'mainnet': return bitcoin.networks.bitcoin;
+            case 'testnet': case 'signet': return bitcoin.networks.testnet;
+            default: return bitcoin.networks.regtest;
+          }
+        })();
+
+        // Build signInputs: map each input to the correct signing address
+        const ordinalsAddr = browserWallet.address;
+        // paymentAddress is a runtime getter on ConnectedWallet (not in TS types)
+        const paymentAddr: string | undefined = (browserWallet as any).paymentAddress;
+        console.log('[WalletContext] Ordinals:', ordinalsAddr, '| Payment:', paymentAddr);
+
+        const signInputs: Record<string, number[]> = {};
+        const ordIdx: number[] = [];
+        const payIdx: number[] = [];
+
+        for (let i = 0; i < psbt.data.inputs.length; i++) {
+          const input = psbt.data.inputs[i];
+          if (!input.witnessUtxo) {
+            // No witnessUtxo — assume payment input
+            if (paymentAddr) payIdx.push(i);
+            else ordIdx.push(i);
+            continue;
+          }
+          try {
+            const addr = bitcoin.address.fromOutputScript(
+              Buffer.from(input.witnessUtxo.script), btcNetwork
+            );
+            if (paymentAddr && addr === paymentAddr) {
+              payIdx.push(i);
+            } else if (addr === ordinalsAddr) {
+              ordIdx.push(i);
+            } else {
+              // Heuristic: P2SH (3...) or P2WPKH (bc1q...) → payment; else → ordinals
+              const isSegwit = addr.startsWith('3') || addr.toLowerCase().startsWith('bc1q');
+              if (isSegwit && paymentAddr) payIdx.push(i);
+              else ordIdx.push(i);
+            }
+          } catch {
+            ordIdx.push(i);
+          }
+        }
+
+        if (ordIdx.length > 0) signInputs[ordinalsAddr] = ordIdx;
+        if (paymentAddr && payIdx.length > 0) signInputs[paymentAddr] = payIdx;
+
+        console.log('[WalletContext] Xverse signInputs:', JSON.stringify(signInputs));
+
+        const response = await xverse.request('signPsbt', {
+          psbt: psbt.toBase64(),
+          signInputs,
+          broadcast: false,
+        });
+
+        console.log('[WalletContext] Xverse response:', JSON.stringify(response));
+
+        // Xverse returns either:
+        //   - SIP format: { status: "success", result: { psbt: "..." } }
+        //   - JSON-RPC format: { jsonrpc: "2.0", result: { psbt: "..." } }
+        // Handle both response formats.
+        const signedPsbtBase64 = response.result?.psbt;
+        if (signedPsbtBase64) {
+          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64);
+          return signedPsbt.toBase64();
+        }
+
+        // No signed PSBT in response — surface the full error
+        const errDetail = response.error
+          ? JSON.stringify(response.error)
+          : JSON.stringify(response);
+        throw new Error(`Xverse signing failed: ${errDetail}`);
+      }
+
+      // For other browser wallets (OYL, OKX, Unisat, etc.): use SDK adapter
+      const walletId = browserWallet?.info?.id || 'unknown';
+      console.log(`[WalletContext] Signing PSBT with SDK adapter (${walletId})`);
+      let signedHex: string;
+      try {
+        signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+      } catch (e: any) {
+        console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, e?.message || e);
+        throw new Error(`${walletId} signing failed: ${e?.message || e}`);
+      }
 
       // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
@@ -1295,7 +1437,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return psbt.toBase64();
-  }, [wallet, network, walletAdapter, walletType]);
+  }, [wallet, network, walletAdapter, walletType, browserWallet]);
 
   // Sign PSBT with segwit inputs (BIP84 derivation)
   // Uses SDK wallet adapters for browser wallets, BIP84 derivation for keystore

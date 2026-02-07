@@ -26,13 +26,19 @@ import { Network } from '@/utils/constants';
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
 /**
- * Check if we're running in a browser context on localhost (development)
- * Used to determine whether to route SDK calls through our proxy to avoid CORS
+ * Check if we're running in a browser context.
+ * Used to determine whether to route SDK calls through our /api/rpc proxy to
+ * avoid CORS issues. The proxy is a same-origin Next.js API route, so it works
+ * from any deployed origin (localhost, staging, production) without CORS.
+ *
+ * JOURNAL ENTRY (2026-02-06):
+ * Previously only checked for localhost. Staging (staging-app.subfrost.io) hit
+ * CORS errors because mainnet.subfrost.io doesn't return proper headers for
+ * non-localhost origins. Extended to all browser contexts since the proxy is
+ * always available at the same origin and the latency overhead is negligible.
  */
-const isBrowserLocalhost = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const hostname = window.location.hostname;
-  return hostname === 'localhost' || hostname === '127.0.0.1';
+const isBrowserContext = (): boolean => {
+  return typeof window !== 'undefined';
 };
 
 /**
@@ -119,13 +125,9 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
 };
 
 /**
- * Networks that should use proxy when in browser localhost context
- * These are remote networks that don't have proper CORS headers configured
- *
- * JOURNAL ENTRY (2026-01-28):
- * regtest, oylnet, subfrost-regtest all point to regtest.subfrost.io which
- * blocks browser requests from localhost. regtest-local uses local Docker
- * which doesn't have CORS issues (same origin or localhost).
+ * Networks that should use proxy when in browser context.
+ * These are remote networks whose endpoints may not return proper CORS headers.
+ * regtest-local uses local Docker (localhost) which doesn't need a proxy.
  */
 const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'mainnet', 'testnet', 'signet'];
 
@@ -136,9 +138,9 @@ const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtes
 const getNetworkConfig = (network: Network): Record<string, string> | undefined => {
   const directConfig = DIRECT_NETWORK_CONFIG[network];
 
-  // If we're in browser localhost and this network needs proxy, use proxy URL
+  // If we're in browser and this network needs proxy, use proxy URL
   // Include network as a query parameter so the proxy knows which backend to target
-  if (isBrowserLocalhost() && NETWORKS_NEEDING_PROXY.includes(network)) {
+  if (isBrowserContext() && NETWORKS_NEEDING_PROXY.includes(network)) {
     const proxyUrl = `${getProxyUrl()}?network=${encodeURIComponent(network)}`;
     console.log(`[AlkanesSDK] Using proxy URL for ${network}:`, proxyUrl);
     return {
