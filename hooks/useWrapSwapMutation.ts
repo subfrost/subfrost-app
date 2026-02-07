@@ -74,6 +74,7 @@ const FRBTC_WRAP_OPCODE = 77;
 // Derived from frBTC contract [32:0] opcode 103 (GET_SIGNER).
 // If the frBTC contract is redeployed, update these. See useWrapMutation.ts header.
 const SIGNER_ADDRESSES: Record<string, string> = {
+  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqd3ndxc',
   'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
