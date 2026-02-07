@@ -86,33 +86,31 @@ function detectAddressType(address: string): AddressTypeInfo {
 }
 
 /**
- * Build protostone for alkane transfer using edict pattern.
+ * Build protostone for alkane transfer using Factory Forward (opcode 50).
  *
- * IMPORTANT: We use the edict pattern [block:tx:amount:v0]:v1:v1 instead of
- * Factory Forward (50) because:
- * - Edict sends EXACTLY the specified amount to recipient (v0)
- * - Excess alkanes go to v1 (our change address)
- * - Prevents accidentally sending all alkanes if UTXO has more than intended
+ * IMPORTANT: Do NOT use a manual edict here. The SDK's `alkanesExecuteWithStrings`
+ * auto-generates edicts from `inputRequirements`. Adding a manual edict causes a
+ * double-edict bug where protostone indices shift and tokens go to wrong outputs.
+ * (Same bug fixed for swaps in 2026-02-01 — see useSwapMutation.ts lines 131-146.)
  *
- * Pattern: [block:tx:amount:v0]:v1:v1
- *   - [block:tx:amount:v0] = Edict: send exactly `amount` of alkane to vout 0
- *   - :v1 = Pointer: excess alkanes go to vout 1 (our change)
- *   - :v1 = Refund: refunds go to vout 1 (our change)
+ * Pattern: [factory_block,factory_tx,50]:v0:v1
+ *   - Cellpack calls Factory Forward (opcode 50), which passes incomingAlkanes through
+ *   - v0 = pointer: recipient gets the forwarded alkanes
+ *   - v1 = refund: sender change address (safe failure path)
  *
- * toAddresses must be: [recipientAddress, changeAddress]
+ * The SDK's auto-edict from `inputRequirements` handles token delivery:
+ *   1. inputRequirements selects the alkane UTXO and routes exact amount to cellpack
+ *   2. If UTXO has excess, SDK splits: needed → cellpack, excess → alkanesChangeAddress
+ *   3. Factory Forward receives exactly the needed amount as incomingAlkanes
+ *   4. Forward passes them to pointer output (v0 = recipient)
+ *
+ * toAddresses must be: [recipientAddress, senderChangeAddress]
  */
 function buildTransferProtostone(params: {
-  alkaneId: string; // e.g., "2:0" for DIESEL
-  amount: string;   // Amount to transfer (as string for BigInt compatibility)
+  factoryId: string; // e.g., "4:65498" regtest, "4:65522" mainnet
 }): string {
-  const { alkaneId, amount } = params;
-  const [block, tx] = alkaneId.split(':');
-
-  // Edict format: [block:tx:amount:target]:pointer:refund
-  // - target v0 = recipient (first address in toAddresses)
-  // - pointer v1 = excess goes to sender change (second address in toAddresses)
-  // - refund v1 = refunds also go to sender change
-  return `[${block}:${tx}:${amount}:v0]:v1:v1`;
+  const [block, tx] = params.factoryId.split(':');
+  return `[${block},${tx},50]:v0:v1`;
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
@@ -778,14 +776,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       // Build input requirements: alkaneId:amount
       const inputRequirements = `${selectedAlkaneId}:${amountBaseUnits.toString()}`;
 
-      // Build the protostone for alkane transfer using edict pattern
-      // Pattern: [block:tx:amount:v0]:v1:v1
-      // - Edict sends exactly `amount` to v0 (recipient)
-      // - Excess alkanes go to v1 (our change address)
-      // - This prevents accidentally sending all alkanes if UTXO has more than intended
+      // Build the protostone for alkane transfer using Factory Forward (opcode 50)
+      // The SDK's auto-edict from inputRequirements handles token delivery to the cellpack.
+      // Factory Forward passes incomingAlkanes through to v0 (recipient).
       const protostone = buildTransferProtostone({
-        alkaneId: selectedAlkaneId,
-        amount: amountBaseUnits.toString(),
+        factoryId: ALKANE_FACTORY_ID,
       });
 
       console.log('[SendModal] Protostone:', protostone);
@@ -845,8 +840,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       // Execute the alkane transfer
       // toAddresses: [recipient, changeAddress] maps to v0 and v1 in the protostone
-      // - v0 = recipient gets exactly the specified amount (from edict)
-      // - v1 = sender gets excess alkanes back (from pointer/refund)
+      // - v0 = recipient gets forwarded alkanes (Factory Forward pointer)
+      // - v1 = sender change (refund on failure)
       const result = await alkaneProvider.alkanesExecuteTyped({
         inputRequirements,
         protostones: protostone,

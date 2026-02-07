@@ -116,6 +116,24 @@ function buildUnwrapProtostone(params: {
 }
 
 /**
+ * Build protostone for alkane transfer using Factory Forward (opcode 50).
+ *
+ * Uses the factory's Forward opcode to pass incomingAlkanes to the pointer output.
+ * The SDK's auto-edict from inputRequirements handles token delivery — do NOT
+ * add manual edicts (causes double-edict bug where protostone indices shift).
+ *
+ * Format: [factory_block,factory_tx,50]:v0:v1
+ *   - v0 = pointer: recipient gets forwarded alkanes
+ *   - v1 = refund: sender change (safe failure path)
+ */
+function buildTransferProtostone(params: {
+  factoryId: string;
+}): string {
+  const [block, tx] = params.factoryId.split(':');
+  return `[${block},${tx},50]:v0:v1`;
+}
+
+/**
  * Build protostone for vault deposit (Purchase opcode 1)
  * NOTE: Default pointers are v1:v1 matching hooks/useVaultDeposit.ts
  */
@@ -520,6 +538,34 @@ describe('buildVaultWithdrawProtostone', () => {
 });
 
 // ==========================================
+// Transfer Protostone Tests
+// ==========================================
+
+describe('buildTransferProtostone', () => {
+  it('should build Factory Forward cellpack (not an edict)', () => {
+    const protostone = buildTransferProtostone({ factoryId: '4:65498' });
+    // Cellpack uses commas inside brackets, NOT colons (colons = edict)
+    expect(protostone).toContain('[4,65498,50]');
+    expect(protostone).not.toMatch(/\[\d+:\d+/); // No colons inside brackets
+  });
+
+  it('should use opcode 50 (Forward)', () => {
+    const protostone = buildTransferProtostone({ factoryId: '4:65498' });
+    expect(protostone).toContain(',50]');
+  });
+
+  it('should route to v0 (recipient) with v1 refund (sender)', () => {
+    const protostone = buildTransferProtostone({ factoryId: '4:65498' });
+    expect(protostone).toBe('[4,65498,50]:v0:v1');
+  });
+
+  it('should handle mainnet factory ID', () => {
+    const protostone = buildTransferProtostone({ factoryId: '4:65522' });
+    expect(protostone).toBe('[4,65522,50]:v0:v1');
+  });
+});
+
+// ==========================================
 // Integration: Complete Transaction Building
 // ==========================================
 
@@ -641,6 +687,27 @@ describe('Integration: Transaction Building', () => {
 
       expect(protostone).toBe('[2,123,1,100000000]:v1:v1');
       expect(inputRequirements).toBe('32:0:100000000');
+    });
+  });
+
+  describe('Alkane transfer transaction (Factory Forward)', () => {
+    it('should build complete transfer transaction data', () => {
+      const FACTORY_ID = '4:65498';
+      const DIESEL_ID = '2:0';
+      const TRANSFER_AMOUNT = '1000';
+
+      // Build protostone — Factory Forward, no manual edict
+      const protostone = buildTransferProtostone({
+        factoryId: FACTORY_ID,
+      });
+
+      // Build input requirements — SDK auto-edict handles delivery
+      const inputRequirements = buildInputRequirements({
+        alkaneInputs: [{ alkaneId: DIESEL_ID, amount: TRANSFER_AMOUNT }],
+      });
+
+      expect(protostone).toBe('[4,65498,50]:v0:v1');
+      expect(inputRequirements).toBe('2:0:1000');
     });
   });
 
