@@ -19,42 +19,26 @@ import { queryKeys } from './keys';
 // ---------------------------------------------------------------------------
 
 async function fetchHeight(network: string): Promise<number> {
-  const isRegtest =
-    network === 'regtest' ||
-    network === 'subfrost-regtest' ||
-    network === 'regtest-local';
+  // All networks use metashrew_height via the RPC proxy (subfrost endpoints)
+  const networkSlug = network === 'mainnet' ? 'mainnet'
+    : network === 'testnet' ? 'testnet'
+    : network === 'signet' ? 'signet'
+    : network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' ? 'regtest'
+    : 'mainnet';
 
-  if (isRegtest) {
-    // Use metashrew_height via the RPC proxy
-    const res = await fetch('/api/rpc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'metashrew_height',
-        params: [],
-        id: 1,
-      }),
-    });
-    const json = await res.json();
-    return typeof json.result === 'number' ? json.result : 0;
-  }
-
-  // Mainnet / testnet / signet — use Espo get_espo_height
-  const res = await fetch('https://api.alkanode.com/rpc', {
+  const res = await fetch(`/api/rpc/${networkSlug}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       jsonrpc: '2.0',
-      method: 'get_espo_height',
-      params: {},
+      method: 'metashrew_height',
+      params: [],
       id: 1,
     }),
   });
   const json = await res.json();
-  return typeof json.result === 'number'
-    ? json.result
-    : json.result?.height ?? 0;
+  const result = json.result;
+  return typeof result === 'number' ? result : (typeof result === 'string' ? parseInt(result, 10) || 0 : 0);
 }
 
 export function espoHeightQueryOptions(network: string) {

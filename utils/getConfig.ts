@@ -29,7 +29,7 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
 };
 
 export function getConfig(network: string) {
-  const host = typeof window !== 'undefined' ? window.location.host : '';
+  const host = (typeof window !== 'undefined' && window.location?.host) || '';
 
   // Get API URL for network (defaults to mainnet)
   const apiUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;

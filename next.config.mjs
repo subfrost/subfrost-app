@@ -15,8 +15,7 @@ const __dirname = path.dirname(__filename);
 //   cp node_modules/@alkanes/ts-sdk/wasm/*.js lib/oyl/alkanes/
 //   cp node_modules/@alkanes/ts-sdk/wasm/*.d.ts lib/oyl/alkanes/
 //
-// LAST SYNCED: 2026-02-04 with @alkanes/ts-sdk@0.1.4-f93aaf9
-// Fixes included: P2WPKH signing fix, UTXO serialization fix, Rebar opt-in only
+// LAST SYNCED: 2026-02-07 with @alkanes/ts-sdk@0.1.4-d0c3a16
 // ================================================
 const localWasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 

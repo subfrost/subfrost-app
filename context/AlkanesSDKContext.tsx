@@ -138,10 +138,12 @@ const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtes
 const getNetworkConfig = (network: Network): Record<string, string> | undefined => {
   const directConfig = DIRECT_NETWORK_CONFIG[network];
 
-  // If we're in browser and this network needs proxy, use proxy URL
-  // Include network as a query parameter so the proxy knows which backend to target
+  // If we're in browser and this network needs proxy, use proxy URL.
+  // Network is encoded in the path (not query param) so the SDK can
+  // safely append REST sub-paths like /get-alkanes-by-address without
+  // breaking the URL structure.
   if (isBrowserContext() && NETWORKS_NEEDING_PROXY.includes(network)) {
-    const proxyUrl = `${getProxyUrl()}?network=${encodeURIComponent(network)}`;
+    const proxyUrl = `${getProxyUrl()}/${encodeURIComponent(network)}`;
     console.log(`[AlkanesSDK] Using proxy URL for ${network}:`, proxyUrl);
     return {
       jsonrpc_url: proxyUrl,

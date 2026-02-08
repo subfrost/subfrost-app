@@ -2,13 +2,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { fetchCandles, NETWORK_ESPO_URLS, type CandleData } from '@/hooks/usePoolCandleVolumes';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { fetchCandles, type CandleData } from '@/hooks/usePoolCandleVolumes';
 import type { CandleDataPoint } from '@/app/swap/components/CandleChart';
 
 export type CandleTimeframe = '1h' | '4h' | '1d' | '1w';
 
-// Map UI timeframes to Espo API timeframes
-const ESPO_TIMEFRAME_MAP: Record<CandleTimeframe, 'd1' | 'h1' | '10m' | 'w1' | 'M1'> = {
+// Map UI timeframes to API timeframes
+const TIMEFRAME_MAP: Record<CandleTimeframe, 'd1' | 'h1' | '10m' | 'w1' | 'M1'> = {
   '1h': 'h1',
   '4h': 'h1', // Fetch h1 and aggregate client-side
   '1d': 'd1',
@@ -16,7 +17,6 @@ const ESPO_TIMEFRAME_MAP: Record<CandleTimeframe, 'd1' | 'h1' | '10m' | 'w1' | '
 };
 
 // Number of candles to fetch per timeframe
-// Each timeframe has different data density, so we fetch different amounts
 const CANDLE_LIMITS: Record<CandleTimeframe, number> = {
   '1h': 2880,  // ~120 days of hourly data
   '4h': 720,   // ~120 days of 4H data (fetches 720*4=2880 h1 candles, aggregates to 720)
@@ -25,9 +25,9 @@ const CANDLE_LIMITS: Record<CandleTimeframe, number> = {
 };
 
 /**
- * Convert Espo CandleData to CandleDataPoint.
+ * Convert CandleData to CandleDataPoint.
  * CandleChart expects `timestamp` in milliseconds (it divides by 1000 internally).
- * Auto-detect whether Espo returns seconds or milliseconds based on magnitude.
+ * Auto-detect whether API returns seconds or milliseconds based on magnitude.
  */
 function toCandleDataPoint(candle: CandleData): CandleDataPoint {
   const timestampMs = candle.ts < 1e12 ? candle.ts * 1000 : candle.ts;
@@ -78,25 +78,6 @@ function aggregateTo4h(h1Candles: CandleDataPoint[]): CandleDataPoint[] {
   return result.sort((a, b) => a.timestamp - b.timestamp);
 }
 
-/**
- * Fetch candles from Espo API in a single request.
- */
-async function fetchCandlesSimple(
-  espoUrl: string,
-  poolId: string,
-  espoTimeframe: 'd1' | 'h1' | '10m' | 'w1' | 'M1',
-  side: 'base' | 'quote',
-  limit: number
-): Promise<CandleData[]> {
-  const response = await fetchCandles(espoUrl, poolId, espoTimeframe, side, limit, 1);
-
-  if (!response?.candles || response.candles.length === 0) {
-    return [];
-  }
-
-  return response.candles;
-}
-
 interface UsePoolEspoCandlesOptions {
   poolId?: string;
   timeframe?: CandleTimeframe;
@@ -104,7 +85,7 @@ interface UsePoolEspoCandlesOptions {
 }
 
 /**
- * Hook to fetch candlestick data for a pool from the Espo API (ammdata.get_candles).
+ * Hook to fetch candlestick data for a pool via the SDK's dataApiGetCandles.
  * Each timeframe has a configured limit for historical data.
  * For 4h timeframe, fetches h1 candles and aggregates them client-side.
  */
@@ -114,26 +95,26 @@ export function usePoolEspoCandles({
   enabled = true,
 }: UsePoolEspoCandlesOptions) {
   const { network } = useWallet();
-  const espoUrl = NETWORK_ESPO_URLS[network] || NETWORK_ESPO_URLS.mainnet;
+  const { provider } = useAlkanesSDK();
 
   return useQuery({
     queryKey: ['pool-espo-candles', poolId, timeframe, network],
     queryFn: async (): Promise<CandleDataPoint[]> => {
-      if (!poolId) return [];
+      if (!poolId || !provider) return [];
 
-      const espoTimeframe = ESPO_TIMEFRAME_MAP[timeframe];
+      const apiTimeframe = TIMEFRAME_MAP[timeframe];
       // For 4H, we fetch h1 candles and aggregate, so we need 4x the desired candle count
       const limit = timeframe === '4h'
         ? CANDLE_LIMITS['4h'] * 4
         : CANDLE_LIMITS[timeframe];
 
-      const rawCandles = await fetchCandlesSimple(espoUrl, poolId, espoTimeframe, 'base', limit);
+      const response = await fetchCandles(provider, poolId, apiTimeframe, 'base', limit, 1);
 
-      if (rawCandles.length === 0) {
+      if (!response?.candles || response.candles.length === 0) {
         return [];
       }
 
-      let points = rawCandles.map(toCandleDataPoint);
+      let points = response.candles.map(toCandleDataPoint);
 
       if (timeframe === '4h') {
         points = aggregateTo4h(points);
@@ -141,7 +122,7 @@ export function usePoolEspoCandles({
 
       return points.sort((a, b) => a.timestamp - b.timestamp);
     },
-    enabled: enabled && !!poolId,
+    enabled: enabled && !!poolId && !!provider,
     gcTime: 5 * 60_000,
     retry: 2,
     // Keep previous timeframe's data visible while new timeframe loads

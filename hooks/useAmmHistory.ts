@@ -1,3 +1,15 @@
+/**
+ * useAmmHistory — Infinite-scroll AMM transaction history
+ *
+ * All data fetched through @alkanes/ts-sdk methods:
+ * - Pool metadata: alkanesGetAllPoolsWithDetails (for enriching mint/burn/creation txs)
+ * - Transaction history: dataApiGetPoolHistory (per-pool, aggregated client-side)
+ *
+ * JOURNAL (2026-02-07):
+ * Previously used direct fetch to subfrost REST endpoints (/get-all-amm-tx-history).
+ * Replaced with SDK methods to route all calls through the SDK's configured provider,
+ * which uses /api/rpc proxy internally (avoids CORS issues).
+ */
 'use client';
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -13,16 +25,6 @@ type AmmPageResponse<T> = {
 
 export type AmmTransactionType = 'swap' | 'mint' | 'burn' | 'creation' | 'wrap' | 'unwrap';
 
-// Network to API base URL mapping for REST API (using subfrost API key)
-const NETWORK_API_URLS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-};
-
 // Pool metadata cache type
 type PoolMetadata = {
   token0BlockId: string;
@@ -32,101 +34,63 @@ type PoolMetadata = {
   poolName: string;
 };
 
-// Helper to fetch single pool metadata via get-pool-by-id
-async function fetchPoolMetadataById(
-  apiUrl: string,
-  poolBlockId: string,
-  poolTxId: string
-): Promise<PoolMetadata | null> {
-  try {
-    const response = await fetch(`${apiUrl}/get-pool-by-id`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        poolId: { block: poolBlockId, tx: poolTxId }
-      }),
-    });
-
-    if (!response.ok) return null;
-
-    const result = await response.json();
-    const pool = result?.data?.pool || result?.pool || result?.data || result;
-
-    if (!pool || !pool.token0_block_id) return null;
-
-    return {
-      token0BlockId: pool.token0_block_id,
-      token0TxId: pool.token0_tx_id,
-      token1BlockId: pool.token1_block_id,
-      token1TxId: pool.token1_tx_id,
-      poolName: pool.pool_name || '',
-    };
-  } catch {
-    return null;
-  }
-}
-
-// Hook to fetch pool metadata for enriching mint/burn/creation transactions
-// Uses get-pools first, falls back to individual get-pool-by-id calls if that fails
+// Hook to fetch pool metadata via SDK's alkanesGetAllPoolsWithDetails
 function usePoolsMetadata(network: string, poolIds: string[]) {
   const { ALKANE_FACTORY_ID } = getConfig(network);
-  const [factoryBlock, factoryTx] = (ALKANE_FACTORY_ID || '4:65522').split(':');
+  const { provider } = useAlkanesSDK();
 
   return useQuery({
     queryKey: ['poolsMetadata', network, poolIds.sort().join(',')],
-    enabled: !!network && poolIds.length > 0,
+    enabled: !!network && poolIds.length > 0 && !!provider,
     queryFn: async (): Promise<Record<string, PoolMetadata>> => {
-      const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
       const poolMap: Record<string, PoolMetadata> = {};
 
-      // First try get-pools endpoint
       try {
-        const response = await fetch(`${apiUrl}/get-pools`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            factoryId: { block: factoryBlock, tx: factoryTx }
-          }),
-        });
+        const rpcResult = await Promise.race([
+          provider!.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
+        ]);
+        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+        const pools = parsed?.pools || [];
 
-        if (response.ok) {
-          const result = await response.json();
-          const pools = result?.data?.pools || result?.pools || [];
-
-          for (const pool of pools) {
-            const poolId = `${pool.pool_block_id}:${pool.pool_tx_id}`;
-            poolMap[poolId] = {
-              token0BlockId: pool.token0_block_id,
-              token0TxId: pool.token0_tx_id,
-              token1BlockId: pool.token1_block_id,
-              token1TxId: pool.token1_tx_id,
-              poolName: pool.pool_name || '',
-            };
-          }
-
-          // Check if we have metadata for all requested pools
-          const missingPools = poolIds.filter(id => !poolMap[id]);
-          if (missingPools.length === 0) {
-            return poolMap;
-          }
-          // If some pools are missing, fall through to individual fetches
-          console.log('[usePoolsMetadata] get-pools missing some pools, fetching individually:', missingPools);
+        for (const p of pools) {
+          const poolId = `${p.pool_id_block}:${p.pool_id_tx}`;
+          if (!poolIds.includes(poolId)) continue;
+          const d = p.details || {};
+          poolMap[poolId] = {
+            token0BlockId: String(d.token_a_block ?? ''),
+            token0TxId: String(d.token_a_tx ?? ''),
+            token1BlockId: String(d.token_b_block ?? ''),
+            token1TxId: String(d.token_b_tx ?? ''),
+            poolName: d.pool_name || '',
+          };
         }
-      } catch (error) {
-        console.log('[usePoolsMetadata] get-pools failed, falling back to individual fetches:', error);
+      } catch (e) {
+        console.warn('[usePoolsMetadata] SDK fetch failed:', e);
       }
 
-      // Fallback: fetch metadata for missing pools individually
-      const missingPools = poolIds.filter(id => !poolMap[id]);
-      const fetchPromises = missingPools.map(async (poolId) => {
-        const [blockId, txId] = poolId.split(':');
-        const metadata = await fetchPoolMetadataById(apiUrl, blockId, txId);
-        if (metadata) {
-          poolMap[poolId] = metadata;
-        }
-      });
-
-      await Promise.all(fetchPromises);
+      // For any pools still missing, try individual ammGetPoolDetails
+      const missing = poolIds.filter(id => !poolMap[id]);
+      if (missing.length > 0 && provider) {
+        await Promise.all(missing.map(async (poolId) => {
+          try {
+            const details = await Promise.race([
+              provider!.ammGetPoolDetails(poolId),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+            ]);
+            const parsed = typeof details === 'string' ? JSON.parse(details) : details;
+            if (parsed?.token_a_block != null) {
+              poolMap[poolId] = {
+                token0BlockId: String(parsed.token_a_block),
+                token0TxId: String(parsed.token_a_tx),
+                token1BlockId: String(parsed.token_b_block),
+                token1TxId: String(parsed.token_b_tx),
+                poolName: parsed.pool_name || '',
+              };
+            }
+          } catch { /* skip */ }
+        }));
+      }
 
       return poolMap;
     },
@@ -144,7 +108,8 @@ export function useInfiniteAmmTxHistory({
   enabled?: boolean;
   transactionType?: AmmTransactionType;
 }) {
-  const { network, isInitialized } = useAlkanesSDK();
+  const { network, isInitialized, provider } = useAlkanesSDK();
+  const { ALKANE_FACTORY_ID } = getConfig(network);
 
   const query = useInfiniteQuery<
     AmmPageResponse<any>,
@@ -155,51 +120,73 @@ export function useInfiniteAmmTxHistory({
   >({
     queryKey: ['ammTxHistory', network, address ?? 'all', count, transactionType ?? 'all'],
     initialPageParam: 0,
-    enabled: enabled && isInitialized && !!network,
+    enabled: enabled && isInitialized && !!network && !!provider,
     queryFn: async ({ pageParam }) => {
       const offset = pageParam * count;
-      const apiUrl = NETWORK_API_URLS[network] || NETWORK_API_URLS.mainnet;
 
       try {
-        // Use the REST API directly for reliable data
-        const endpoint = address
-          ? `${apiUrl}/get-all-address-amm-tx-history`
-          : `${apiUrl}/get-all-amm-tx-history`;
+        // SDK has per-pool history (dataApiGetPoolHistory) but no aggregate method.
+        // Fetch all pool IDs, then get history for each pool and merge.
+        const allPoolsResult = await Promise.race([
+          provider!.alkanesGetAllPools(ALKANE_FACTORY_ID),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+        ]);
+        const parsed = typeof allPoolsResult === 'string' ? JSON.parse(allPoolsResult) : allPoolsResult;
+        const poolIds: string[] = (parsed?.pools || parsed || []).map((p: any) =>
+          p.pool_id || `${p.pool_id_block ?? p.block}:${p.pool_id_tx ?? p.tx}`
+        );
 
-        const body: Record<string, any> = {
-          count,
-          offset,
-        };
+        if (poolIds.length === 0) {
+          return { items: [], nextPage: undefined, total: 0 };
+        }
 
+        // Fetch history from each pool in parallel (with per-call timeout)
+        const category = transactionType === 'swap' ? 'swap'
+          : transactionType === 'mint' ? 'mint'
+          : transactionType === 'burn' ? 'burn'
+          : null;
+
+        const perPoolResults = await Promise.all(
+          poolIds.map(async (poolId) => {
+            try {
+              const history = await Promise.race([
+                provider!.dataApiGetPoolHistory(poolId, category, BigInt(count), BigInt(0)),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+              ]);
+              const data = typeof history === 'string' ? JSON.parse(history) : history;
+              const items = data?.data?.transactions || data?.transactions || data?.data || data || [];
+              return Array.isArray(items) ? items : [];
+            } catch {
+              return [];
+            }
+          })
+        );
+
+        // Merge all pool histories, sort by timestamp/block descending
+        let allItems = perPoolResults.flat();
+
+        // Filter by address if specified
         if (address) {
-          body.address = address;
+          const addrLower = address.toLowerCase();
+          allItems = allItems.filter((item: any) =>
+            (item.address || item.sender || item.from || '').toLowerCase() === addrLower
+          );
         }
 
-        if (transactionType) {
-          body.transactionType = transactionType;
-        }
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+        // Sort by timestamp descending (newest first)
+        allItems.sort((a: any, b: any) => {
+          const tsA = a.timestamp || a.blockHeight || 0;
+          const tsB = b.timestamp || b.blockHeight || 0;
+          return tsB - tsA;
         });
 
-        if (!response.ok) {
-          throw new Error(`API request failed: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        // Handle different response formats:
-        // { data: { transactions: [...] } } or { data: { items: [...] } } or { data: [...] } or [...]
-        const rawData = result?.data?.transactions || result?.data?.items || result?.data || result?.transactions || result?.items || result || [];
-        const items = Array.isArray(rawData) ? rawData : [];
+        // Apply pagination
+        const paginated = allItems.slice(offset, offset + count);
 
         return {
-          items,
-          nextPage: items.length === count ? pageParam + 1 : undefined,
-          total: result?.data?.total ?? result?.total ?? -1,
+          items: paginated,
+          nextPage: paginated.length === count ? pageParam + 1 : undefined,
+          total: allItems.length,
         };
       } catch (error) {
         console.error('[useAmmHistory] Failed to fetch AMM history:', error);
