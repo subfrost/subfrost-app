@@ -116,21 +116,21 @@ function buildUnwrapProtostone(params: {
 }
 
 /**
- * Build protostone for alkane transfer using Factory Forward (opcode 50).
+ * Build an edict-based protostone for alkane token transfers.
  *
- * Uses the factory's Forward opcode to pass incomingAlkanes to the pointer output.
- * The SDK's auto-edict from inputRequirements handles token delivery — do NOT
- * add manual edicts (causes double-edict bug where protostone indices shift).
+ * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
+ * The edict sends the exact `amount` of alkane `alkaneId` to output v0 (recipient).
+ * Pointer v1 receives any unedicted remainder (sender change via p2tr:0).
+ * RefundPointer v1 handles failure refunds to the same change output.
  *
- * Format: [factory_block,factory_tx,50]:v0:v1
- *   - v0 = pointer: recipient gets forwarded alkanes
- *   - v1 = refund: sender change (safe failure path)
+ * Pattern per SDK maintainer: [block:tx:amount:v0]:v1:v1
  */
 function buildTransferProtostone(params: {
-  factoryId: string;
+  alkaneId: string;
+  amount: string;
 }): string {
-  const [block, tx] = params.factoryId.split(':');
-  return `[${block},${tx},50]:v0:v1`;
+  const [block, tx] = params.alkaneId.split(':');
+  return `[${block}:${tx}:${params.amount}:v0]:v1:v1`;
 }
 
 /**
@@ -542,26 +542,26 @@ describe('buildVaultWithdrawProtostone', () => {
 // ==========================================
 
 describe('buildTransferProtostone', () => {
-  it('should build Factory Forward cellpack (not an edict)', () => {
-    const protostone = buildTransferProtostone({ factoryId: '4:65498' });
-    // Cellpack uses commas inside brackets, NOT colons (colons = edict)
-    expect(protostone).toContain('[4,65498,50]');
-    expect(protostone).not.toMatch(/\[\d+:\d+/); // No colons inside brackets
+  it('should build edict-based protostone (colons inside brackets, not commas)', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '1000' });
+    // Edict uses colons inside brackets; cellpack uses commas
+    expect(protostone).toMatch(/\[\d+:\d+:\d+:v0\]/);
+    expect(protostone).not.toContain(','); // No commas (not a cellpack)
   });
 
-  it('should use opcode 50 (Forward)', () => {
-    const protostone = buildTransferProtostone({ factoryId: '4:65498' });
-    expect(protostone).toContain(',50]');
+  it('should send exact amount to v0 (recipient)', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '5000' });
+    expect(protostone).toBe('[2:0:5000:v0]:v1:v1');
   });
 
-  it('should route to v0 (recipient) with v1 refund (sender)', () => {
-    const protostone = buildTransferProtostone({ factoryId: '4:65498' });
-    expect(protostone).toBe('[4,65498,50]:v0:v1');
+  it('should use v1 for both pointer (change) and refund', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '32:0', amount: '100' });
+    expect(protostone).toBe('[32:0:100:v0]:v1:v1');
   });
 
-  it('should handle mainnet factory ID', () => {
-    const protostone = buildTransferProtostone({ factoryId: '4:65522' });
-    expect(protostone).toBe('[4,65522,50]:v0:v1');
+  it('should handle large amounts', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '999999999999' });
+    expect(protostone).toBe('[2:0:999999999999:v0]:v1:v1');
   });
 });
 
@@ -690,23 +690,23 @@ describe('Integration: Transaction Building', () => {
     });
   });
 
-  describe('Alkane transfer transaction (Factory Forward)', () => {
+  describe('Alkane transfer transaction (Edict Pattern)', () => {
     it('should build complete transfer transaction data', () => {
-      const FACTORY_ID = '4:65498';
       const DIESEL_ID = '2:0';
       const TRANSFER_AMOUNT = '1000';
 
-      // Build protostone — Factory Forward, no manual edict
+      // Build edict protostone — sends exact amount to v0, remainder to v1
       const protostone = buildTransferProtostone({
-        factoryId: FACTORY_ID,
+        alkaneId: DIESEL_ID,
+        amount: TRANSFER_AMOUNT,
       });
 
-      // Build input requirements — SDK auto-edict handles delivery
+      // Build input requirements — tells WASM which alkane UTXOs to select
       const inputRequirements = buildInputRequirements({
         alkaneInputs: [{ alkaneId: DIESEL_ID, amount: TRANSFER_AMOUNT }],
       });
 
-      expect(protostone).toBe('[4,65498,50]:v0:v1');
+      expect(protostone).toBe('[2:0:1000:v0]:v1:v1');
       expect(inputRequirements).toBe('2:0:1000');
     });
   });

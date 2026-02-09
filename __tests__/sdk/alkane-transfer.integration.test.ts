@@ -1,16 +1,17 @@
 /**
  * Alkane Transfer Integration Tests
  *
- * Tests alkane transfers using Factory Forward (opcode 50) via `alkanesExecuteTyped`.
+ * Tests alkane transfers using edict-based splitting via `alkanesExecuteTyped`.
  *
- * ## Correct Pattern: Factory Forward (opcode 50)
+ * ## Correct Pattern: Edict-based splitting (per SDK maintainer)
  *
  * ```typescript
- * const FACTORY_ID = '4:65498'; // regtest; '4:65522' on mainnet
- * const protostone = '[4,65498,50]:v0:v1';  // Factory Forward cellpack
+ * const alkaneId = '2:0'; // DIESEL
+ * const amount = '1000';
+ * const protostone = `[2:0:1000:v0]:v1:v1`;  // Edict sends exact amount to v0
  *
  * const result = await alkanesExecuteTyped(provider, {
- *   inputRequirements: '2:0:1000',           // SDK auto-edict delivers tokens
+ *   inputRequirements: '2:0:1000',             // Selects alkane UTXOs
  *   protostones: protostone,
  *   toAddresses: [recipientAddress, 'p2tr:0'], // v0 = recipient, v1 = sender change
  *   changeAddress: 'p2wpkh:0',
@@ -18,20 +19,11 @@
  * });
  * ```
  *
- * ## Why Factory Forward instead of manual edict?
+ * ## Why edict-based instead of Factory Forward?
  *
- * Manual edicts (`[block:tx:amount:v0]:v1:v1`) combined with `inputRequirements`
- * cause a **double-edict bug**: the SDK's `alkanesExecuteWithStrings` auto-generates
- * its own edict from `inputRequirements`, shifting protostone indices so tokens go
- * to wrong outputs. This was the same bug fixed for swaps on 2026-02-01.
- *
- * Factory Forward avoids this because:
- * 1. `inputRequirements` controls the exact amount via SDK auto-edict
- * 2. Factory Forward (opcode 50) receives tokens as `incomingAlkanes` and passes
- *    them through to the pointer output (v0 = recipient)
- * 3. v1 = sender change catches tokens if Forward fails (safe failure path)
- * 4. Excess alkanes (UTXO has more than needed) go to `alkanesChangeAddress`
- *    via the SDK's auto-edict split logic
+ * Factory Forward (opcode 50) sent the ENTIRE alkane UTXO balance to the recipient
+ * with no amount splitting. The edict pattern explicitly splits: exact amount to v0
+ * (recipient), unedicted remainder to v1 (sender change via pointer).
  *
  * Gated behind INTEGRATION=true env var — skipped during normal `vitest run`.
  * Run with: INTEGRATION=true pnpm test:sdk
@@ -263,47 +255,46 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 2. Simple Alkane Transfer — Factory Forward (opcode 50)
+  // 2. Simple Alkane Transfer — Edict-based splitting
   // -------------------------------------------------------------------------
-  describe('2. Simple Alkane Transfer (Factory Forward)', () => {
-    it('should build and execute an alkane transfer using Factory Forward pattern', async () => {
-      // CORRECT PATTERN: Factory Forward (opcode 50)
-      // - Cellpack [4,65498,50] calls Factory Forward
-      // - SDK auto-edict from inputRequirements delivers tokens to cellpack
-      // - Forward passes incomingAlkanes to pointer output (v0 = recipient)
-      // - v1 = sender change (refund on failure)
-      //
-      // DO NOT use manual edicts — they cause a double-edict bug with inputRequirements.
+  describe('2. Simple Alkane Transfer (Edict Pattern)', () => {
+    it('should build and execute an alkane transfer using edict-based splitting', async () => {
+      // CORRECT PATTERN per SDK maintainer: Edict-based splitting
+      // - Edict [block:tx:amount:v0] sends exact amount to v0 (recipient)
+      // - Pointer v1 receives unedicted remainder (sender change via p2tr:0)
+      // - RefundPointer v1 handles failure refunds
+      // - inputRequirements tells WASM which alkane UTXOs to select
+      // - No contract call needed — pure edict transfer
 
       await delay(3000); // Delay to avoid rate limiting
 
-      const FACTORY_ID = '4:65498'; // regtest factory
       const transferAmount = '1000'; // Transfer 1000 DIESEL
+      const alkaneId = '2:0'; // DIESEL
 
       // Use a different recipient to verify transfer works
       const recipientAddress = 'bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648';
 
-      // Factory Forward cellpack — no manual edict needed
-      const [fBlock, fTx] = FACTORY_ID.split(':');
-      const protostone = `[${fBlock},${fTx},50]:v0:v1`;
+      // Edict protostone: [block:tx:amount:v0]:v1:v1
+      const [aBlock, aTx] = alkaneId.split(':');
+      const protostone = `[${aBlock}:${aTx}:${transferAmount}:v0]:v1:v1`;
 
-      // Input requirements — SDK auto-edict handles delivery
-      const inputRequirements = `2:0:${transferAmount}`;
+      // Input requirements — tells WASM which alkane UTXOs to select
+      const inputRequirements = `${alkaneId}:${transferAmount}`;
 
-      // v0 = recipient, v1 = our taproot for change/refund
+      // v0 = recipient, v1 = sender change (p2tr:0)
       const toAddresses = [recipientAddress, 'p2tr:0'];
 
       console.log('[Transfer] ========================================');
-      console.log('[Transfer] FACTORY FORWARD TRANSFER PATTERN:');
+      console.log('[Transfer] EDICT-BASED TRANSFER PATTERN:');
       console.log('[Transfer] protostone:', protostone);
       console.log('[Transfer] inputRequirements:', inputRequirements);
       console.log('[Transfer] toAddresses:', JSON.stringify(toAddresses));
       console.log('[Transfer]');
       console.log('[Transfer] Pattern breakdown:');
-      console.log('[Transfer]   - [4,65498,50] = Cellpack calls Factory Forward');
-      console.log('[Transfer]   - :v0 = Pointer - forwarded alkanes go to recipient');
-      console.log('[Transfer]   - :v1 = Refund - sender change on failure');
-      console.log('[Transfer]   - inputRequirements controls amount via SDK auto-edict');
+      console.log('[Transfer]   - [2:0:1000:v0] = Edict sends 1000 DIESEL to v0 (recipient)');
+      console.log('[Transfer]   - :v1 = Pointer - unedicted remainder to sender change');
+      console.log('[Transfer]   - :v1 = Refund - failure refund to sender change');
+      console.log('[Transfer]   - inputRequirements selects alkane UTXOs');
       console.log('[Transfer] ========================================');
 
       try {
@@ -314,7 +305,7 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
           toAddresses,
           fromAddresses: [segwitAddress, walletAddress], // SegWit for fees, Taproot for alkanes
           changeAddress: segwitAddress, // BTC change to SegWit
-          alkanesChangeAddress: walletAddress, // Alkane excess to Taproot
+          alkanesChangeAddress: 'p2tr:0', // Alkane excess to Taproot
         });
 
         console.log('[Transfer] Execute result:', JSON.stringify(result).slice(0, 500));
@@ -336,7 +327,7 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
           console.log('[Transfer] SKIPPED: Wallet has no DIESEL (mint may have failed or not synced)');
           console.log('[Transfer]');
           console.log('[Transfer] The PATTERN IS CORRECT:');
-          console.log('[Transfer]   protostone: [4,65498,50]:v0:v1');
+          console.log('[Transfer]   protostone: [2:0:1000:v0]:v1:v1');
           console.log('[Transfer]   inputRequirements: 2:0:1000');
           console.log('[Transfer]   toAddresses: [recipient, "p2tr:0"]');
           console.log('[Transfer] ========================================');
@@ -359,8 +350,8 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
 
       await delay(3000); // Delay to avoid rate limiting
 
-      const FACTORY_ID = '4:65498'; // regtest factory
       const transferAmount = '500'; // Transfer 500 DIESEL
+      const alkaneId = '2:0'; // DIESEL
       const recipientAddress = 'bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648';
 
       // Detect address type from wallet address
@@ -368,14 +359,14 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
                          walletAddress.startsWith('bcrt1q') ? 'p2wpkh' : 'p2tr';
       const sdkRef = `${addressType}:0`;
 
-      // Factory Forward — same pattern regardless of wallet mode
-      const [fBlock, fTx] = FACTORY_ID.split(':');
-      const protostone = `[${fBlock},${fTx},50]:v0:v1`;
-      const inputRequirements = `2:0:${transferAmount}`;
+      // Edict-based transfer — same pattern regardless of wallet mode
+      const [aBlock, aTx] = alkaneId.split(':');
+      const protostone = `[${aBlock}:${aTx}:${transferAmount}:v0]:v1:v1`;
+      const inputRequirements = `${alkaneId}:${transferAmount}`;
       const toAddresses = [recipientAddress, sdkRef]; // v0 = recipient, v1 = our change
 
       console.log('[SingleAddress] ========================================');
-      console.log('[SingleAddress] SINGLE-ADDRESS MODE (Factory Forward):');
+      console.log('[SingleAddress] SINGLE-ADDRESS MODE (Edict Pattern):');
       console.log('[SingleAddress] Detected address type:', addressType);
       console.log('[SingleAddress] SDK reference:', sdkRef);
       console.log('[SingleAddress] protostone:', protostone);
@@ -392,7 +383,7 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
           // SINGLE-ADDRESS MODE: Only use the connected address
           fromAddresses: [walletAddress],
           changeAddress: walletAddress,
-          alkanesChangeAddress: walletAddress,
+          alkanesChangeAddress: sdkRef,
         });
 
         console.log('[SingleAddress] Execute result:', JSON.stringify(result).slice(0, 500));
@@ -467,38 +458,37 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
   // -------------------------------------------------------------------------
   describe('5. Pattern Documentation', () => {
     it('should document the correct alkane transfer protostone patterns', () => {
-      // Factory Forward is the primary transfer pattern.
-      // Manual edicts combined with inputRequirements cause a double-edict bug.
-      const forwardPattern = '[4,65498,50]:v0:v1';
+      // Edict-based splitting is the correct transfer pattern per SDK maintainer.
+      // The edict sends exact amount to v0 (recipient), pointer v1 gets remainder.
+      const edictPattern = '[2:0:1000:v0]:v1:v1';
 
-      // Forward pattern should have cellpack with opcode 50
-      expect(forwardPattern).toContain('[4,65498,50]');
-      // Pointer v0 = recipient, refund v1 = sender change
-      expect(forwardPattern).toContain(':v0:v1');
+      // Edict pattern uses colons inside brackets (edict syntax)
+      expect(edictPattern).toMatch(/\[\d+:\d+:\d+:v0\]/);
+      // Pointer v1 = sender change, refund v1 = failure refund
+      expect(edictPattern).toContain(':v1:v1');
 
-      // WRONG: Manual edict + inputRequirements = double-edict bug
-      const brokenEdictPattern = '[2:0:1000:v0]:v1:v1';
-      // This uses colons inside brackets (edict syntax) — causes index shift
-      expect(brokenEdictPattern).toMatch(/\[\d+:\d+/);
-      // The correct pattern uses commas (cellpack syntax)
-      expect(forwardPattern).not.toMatch(/\[\d+:\d+/);
+      // OLD (WRONG): Factory Forward sent entire balance, no splitting
+      const brokenForwardPattern = '[4,65498,50]:v0:v1';
+      // This uses commas (cellpack syntax) — calls contract instead of edict transfer
+      expect(brokenForwardPattern).toContain(',50]');
     });
 
     it('should document wallet mode configuration', () => {
       // Dual-address (Xverse, Leather, OYL, Magic Eden):
       //   fromAddresses: [segwitAddress, taprootAddress]
-      //   changeAddress: segwitAddress
-      //   alkanesChangeAddress: taprootAddress
+      //   toAddresses: [recipientAddress, 'p2tr:0']
+      //   changeAddress: segwitAddress (BTC change)
+      //   alkanesChangeAddress: 'p2tr:0' (alkane excess)
       //
       // Single-address (OKX, Unisat, Phantom, hardware wallets):
       //   fromAddresses: [connectedAddress]
+      //   toAddresses: [recipientAddress, sdkRef]
       //   changeAddress: connectedAddress
-      //   alkanesChangeAddress: connectedAddress
-      //   toAddresses[1]: matching SDK ref (p2tr:0, p2wpkh:0, etc.)
+      //   alkanesChangeAddress: sdkRef
 
-      // Factory Forward pattern is the same in both modes
-      const protostone = '[4,65498,50]:v0:v1';
-      expect(protostone).toBe('[4,65498,50]:v0:v1');
+      // Edict pattern is the same in both modes (amount and alkaneId vary)
+      const protostone = '[2:0:1000:v0]:v1:v1';
+      expect(protostone).toBe('[2:0:1000:v0]:v1:v1');
     });
   });
 });

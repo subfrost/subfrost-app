@@ -12,7 +12,6 @@ import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useDemoGate } from '@/hooks/useDemoGate';
-import { getConfig } from '@/utils/getConfig';
 import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
@@ -123,11 +122,22 @@ function detectAddressType(address: string): AddressTypeInfo {
  * and P2SH-P2WPKH redeemScript injection with pattern-based matching.
  * First mainnet tx with this fix: f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2
  */
+/**
+ * Build an edict-based protostone for alkane token transfers.
+ *
+ * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
+ * The edict sends the exact `amount` of alkane `alkaneId` to output v0 (recipient).
+ * Pointer v1 receives any unedicted remainder (sender change via p2tr:0).
+ * RefundPointer v1 handles failure refunds to the same change output.
+ *
+ * Pattern per SDK maintainer: [block:tx:amount:v0]:v1:v1
+ */
 function buildTransferProtostone(params: {
-  factoryId: string; // e.g., "4:65498" regtest, "4:65522" mainnet
+  alkaneId: string; // e.g., "2:0" (DIESEL), "32:0" (frBTC)
+  amount: string;   // base units to transfer
 }): string {
-  const [block, tx] = params.factoryId.split(':');
-  return `[${block},${tx},50]:v0:v1`;
+  const [block, tx] = params.alkaneId.split(':');
+  return `[${block}:${tx}:${params.amount}:v0]:v1:v1`;
 }
 
 /**
@@ -153,7 +163,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const { provider, isInitialized } = useAlkanesSDK();
   const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
-  const { ALKANE_FACTORY_ID } = getConfig(network);
   const { t } = useTranslation();
   const isDemoGated = useDemoGate();
   const { utxos, balances, refresh } = useEnrichedWalletData();
@@ -820,14 +829,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] User approved transaction');
       }
 
-      // Build input requirements: alkaneId:amount
+      // Build input requirements: alkaneId:amount (tells WASM which alkane UTXOs to select)
       const inputRequirements = `${selectedAlkaneId}:${amountBaseUnits.toString()}`;
 
-      // Build the protostone for alkane transfer using Factory Forward (opcode 50)
-      // The SDK's auto-edict from inputRequirements handles token delivery to the cellpack.
-      // Factory Forward passes incomingAlkanes through to v0 (recipient).
+      // Build edict protostone for alkane transfer.
+      // The edict sends exact `amount` to v0 (recipient). Unedicted remainder
+      // goes to v1 (sender change via pointer). No contract call needed.
       const protostone = buildTransferProtostone({
-        factoryId: ALKANE_FACTORY_ID,
+        alkaneId: selectedAlkaneId,
+        amount: amountBaseUnits.toString(),
       });
 
       console.log('[SendModal] Protostone:', protostone);
@@ -886,13 +896,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log('[SendModal] Recipient (toAddresses[0]):', recipientAddress);
 
       // Execute the alkane transfer
-      // toAddresses: [recipient, changeAddress] maps to v0 and v1 in the protostone
-      // - v0 = recipient gets forwarded alkanes (Factory Forward pointer)
-      // - v1 = sender change (refund on failure)
+      // toAddresses maps to vN outputs in the protostone:
+      // - v0 = recipient (edict sends exact amount here)
+      // - v1 = sender change (pointer: unedicted remainder goes here)
       //
-      // Use symbolic addresses for bech32/bech32m (bc1p, bc1q) to avoid
-      // LegacyAddressTooLong error. fromAddresses use actual addresses since
-      // they're only used for UTXO lookup (opaque strings to esplora).
+      // Use symbolic addresses for toAddresses to avoid LegacyAddressTooLong.
+      // fromAddresses use actual addresses (opaque strings for esplora UTXO lookup).
       // Outputs are patched to actual scriptPubKeys after the PSBT is returned.
       const result = await alkaneProvider.alkanesExecuteTyped({
         inputRequirements,
@@ -900,9 +909,9 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         feeRate,
         autoConfirm: false, // We handle signing manually
         fromAddresses,
-        toAddresses: [addressToSymbolic(normalizedRecipientAddress), addressToSymbolic(alkaneSendAddress)],
+        toAddresses: [addressToSymbolic(normalizedRecipientAddress), 'p2tr:0'],
         changeAddress: addressToSymbolic(btcChangeAddress),
-        alkanesChangeAddress: addressToSymbolic(alkaneSendAddress),
+        alkanesChangeAddress: 'p2tr:0',
       });
 
       console.log('[SendModal] Execute result:', JSON.stringify(result, null, 2));
