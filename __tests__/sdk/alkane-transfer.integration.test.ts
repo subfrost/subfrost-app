@@ -8,12 +8,12 @@
  * ```typescript
  * const alkaneId = '2:0'; // DIESEL
  * const amount = '1000';
- * const protostone = `[2:0:1000:v0]:v1:v1`;  // Edict sends exact amount to v0
+ * const protostone = `[2:0:1000:v1]:v0:v0`;  // Edict sends exact amount to v1
  *
  * const result = await alkanesExecuteTyped(provider, {
  *   inputRequirements: '2:0:1000',             // Selects alkane UTXOs
  *   protostones: protostone,
- *   toAddresses: [recipientAddress, 'p2tr:0'], // v0 = recipient, v1 = sender change
+ *   toAddresses: ['p2tr:0', recipientAddress], // v0 = sender change, v1 = recipient
  *   changeAddress: 'p2wpkh:0',
  *   alkanesChangeAddress: 'p2tr:0',
  * });
@@ -259,12 +259,12 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
   // -------------------------------------------------------------------------
   describe('2. Simple Alkane Transfer (Edict Pattern)', () => {
     it('should build and execute an alkane transfer using edict-based splitting', async () => {
-      // CORRECT PATTERN per SDK maintainer: Edict-based splitting
-      // - Edict [block:tx:amount:v0] sends exact amount to v0 (recipient)
-      // - Pointer v1 receives unedicted remainder (sender change via p2tr:0)
-      // - RefundPointer v1 handles failure refunds
+      // CORRECT PATTERN per SDK convention (matches OYL SDK token.ts):
+      // - v0 = sender change (p2tr:0) — SDK auto-edict routes excess alkanes here
+      // - v1 = recipient — our edict sends exact amount here
+      // - Edict [block:tx:amount:v1] sends exact amount to v1 (recipient)
+      // - Pointer v0 receives unedicted remainder (sender change)
       // - inputRequirements tells WASM which alkane UTXOs to select
-      // - No contract call needed — pure edict transfer
 
       await delay(3000); // Delay to avoid rate limiting
 
@@ -274,15 +274,15 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
       // Use a different recipient to verify transfer works
       const recipientAddress = 'bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648';
 
-      // Edict protostone: [block:tx:amount:v0]:v1:v1
+      // Edict protostone: [block:tx:amount:v1]:v0:v0
       const [aBlock, aTx] = alkaneId.split(':');
-      const protostone = `[${aBlock}:${aTx}:${transferAmount}:v0]:v1:v1`;
+      const protostone = `[${aBlock}:${aTx}:${transferAmount}:v1]:v0:v0`;
 
       // Input requirements — tells WASM which alkane UTXOs to select
       const inputRequirements = `${alkaneId}:${transferAmount}`;
 
-      // v0 = recipient, v1 = sender change (p2tr:0)
-      const toAddresses = [recipientAddress, 'p2tr:0'];
+      // v0 = sender change (p2tr:0), v1 = recipient
+      const toAddresses = ['p2tr:0', recipientAddress];
 
       console.log('[Transfer] ========================================');
       console.log('[Transfer] EDICT-BASED TRANSFER PATTERN:');
@@ -291,9 +291,9 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
       console.log('[Transfer] toAddresses:', JSON.stringify(toAddresses));
       console.log('[Transfer]');
       console.log('[Transfer] Pattern breakdown:');
-      console.log('[Transfer]   - [2:0:1000:v0] = Edict sends 1000 DIESEL to v0 (recipient)');
-      console.log('[Transfer]   - :v1 = Pointer - unedicted remainder to sender change');
-      console.log('[Transfer]   - :v1 = Refund - failure refund to sender change');
+      console.log('[Transfer]   - [2:0:1000:v1] = Edict sends 1000 DIESEL to v1 (recipient)');
+      console.log('[Transfer]   - :v0 = Pointer - unedicted remainder to sender change');
+      console.log('[Transfer]   - :v0 = Refund - failure refund to sender change');
       console.log('[Transfer]   - inputRequirements selects alkane UTXOs');
       console.log('[Transfer] ========================================');
 
@@ -327,9 +327,9 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
           console.log('[Transfer] SKIPPED: Wallet has no DIESEL (mint may have failed or not synced)');
           console.log('[Transfer]');
           console.log('[Transfer] The PATTERN IS CORRECT:');
-          console.log('[Transfer]   protostone: [2:0:1000:v0]:v1:v1');
+          console.log('[Transfer]   protostone: [2:0:1000:v1]:v0:v0');
           console.log('[Transfer]   inputRequirements: 2:0:1000');
-          console.log('[Transfer]   toAddresses: [recipient, "p2tr:0"]');
+          console.log('[Transfer]   toAddresses: ["p2tr:0", recipient]');
           console.log('[Transfer] ========================================');
           expect(true).toBe(true);
           return;
@@ -360,10 +360,11 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
       const sdkRef = `${addressType}:0`;
 
       // Edict-based transfer — same pattern regardless of wallet mode
+      // v0 = sender change, v1 = recipient (SDK convention)
       const [aBlock, aTx] = alkaneId.split(':');
-      const protostone = `[${aBlock}:${aTx}:${transferAmount}:v0]:v1:v1`;
+      const protostone = `[${aBlock}:${aTx}:${transferAmount}:v1]:v0:v0`;
       const inputRequirements = `${alkaneId}:${transferAmount}`;
-      const toAddresses = [recipientAddress, sdkRef]; // v0 = recipient, v1 = our change
+      const toAddresses = [sdkRef, recipientAddress]; // v0 = our change, v1 = recipient
 
       console.log('[SingleAddress] ========================================');
       console.log('[SingleAddress] SINGLE-ADDRESS MODE (Edict Pattern):');
@@ -433,8 +434,8 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
       console.log('Example configuration:');
       console.log('  const result = await alkanesExecuteTyped(provider, {');
       console.log('    inputRequirements: "2:0:1000",  // Only spend 1000 DIESEL');
-      console.log('    protostones: "[2:0:1000:v0]:v1:v1",');
-      console.log('    toAddresses: [recipient, "p2tr:0"],');
+      console.log('    protostones: "[2:0:1000:v1]:v0:v0",');
+      console.log('    toAddresses: ["p2tr:0", recipient],');
       console.log('    fromAddresses: [segwitAddress, taprootAddress],');
       console.log('    changeAddress: segwitAddress,');
       console.log('    alkanesChangeAddress: taprootAddress,');
@@ -458,14 +459,14 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
   // -------------------------------------------------------------------------
   describe('5. Pattern Documentation', () => {
     it('should document the correct alkane transfer protostone patterns', () => {
-      // Edict-based splitting is the correct transfer pattern per SDK maintainer.
-      // The edict sends exact amount to v0 (recipient), pointer v1 gets remainder.
-      const edictPattern = '[2:0:1000:v0]:v1:v1';
+      // Edict-based splitting with SDK-convention output ordering:
+      // v0 = sender change, v1 = recipient (matches OYL SDK token.ts)
+      const edictPattern = '[2:0:1000:v1]:v0:v0';
 
       // Edict pattern uses colons inside brackets (edict syntax)
-      expect(edictPattern).toMatch(/\[\d+:\d+:\d+:v0\]/);
-      // Pointer v1 = sender change, refund v1 = failure refund
-      expect(edictPattern).toContain(':v1:v1');
+      expect(edictPattern).toMatch(/\[\d+:\d+:\d+:v1\]/);
+      // Pointer v0 = sender change, refund v0 = failure refund
+      expect(edictPattern).toContain(':v0:v0');
 
       // OLD (WRONG): Factory Forward sent entire balance, no splitting
       const brokenForwardPattern = '[4,65498,50]:v0:v1';
@@ -474,21 +475,23 @@ describe.runIf(INTEGRATION)('Alkane Transfer (integration)', () => {
     });
 
     it('should document wallet mode configuration', () => {
+      // Output ordering (SDK convention): v0 = sender change, v1 = recipient
+      //
       // Dual-address (Xverse, Leather, OYL, Magic Eden):
       //   fromAddresses: [segwitAddress, taprootAddress]
-      //   toAddresses: [recipientAddress, 'p2tr:0']
+      //   toAddresses: ['p2tr:0', recipientAddress]
       //   changeAddress: segwitAddress (BTC change)
       //   alkanesChangeAddress: 'p2tr:0' (alkane excess)
       //
       // Single-address (OKX, Unisat, Phantom, hardware wallets):
       //   fromAddresses: [connectedAddress]
-      //   toAddresses: [recipientAddress, sdkRef]
+      //   toAddresses: [sdkRef, recipientAddress]
       //   changeAddress: connectedAddress
       //   alkanesChangeAddress: sdkRef
 
       // Edict pattern is the same in both modes (amount and alkaneId vary)
-      const protostone = '[2:0:1000:v0]:v1:v1';
-      expect(protostone).toBe('[2:0:1000:v0]:v1:v1');
+      const protostone = '[2:0:1000:v1]:v0:v0';
+      expect(protostone).toBe('[2:0:1000:v1]:v0:v0');
     });
   });
 });

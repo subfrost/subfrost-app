@@ -119,18 +119,19 @@ function buildUnwrapProtostone(params: {
  * Build an edict-based protostone for alkane token transfers.
  *
  * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
- * The edict sends the exact `amount` of alkane `alkaneId` to output v0 (recipient).
- * Pointer v1 receives any unedicted remainder (sender change via p2tr:0).
- * RefundPointer v1 handles failure refunds to the same change output.
+ * The edict sends the exact `amount` to output v1 (recipient).
+ * Pointer v0 = sender change (matches SDK auto-edict convention).
+ * RefundPointer v0 = failure refund to sender.
  *
- * Pattern per SDK maintainer: [block:tx:amount:v0]:v1:v1
+ * Output ordering (SDK convention): v0 = sender change, v1 = recipient
+ * Pattern: [block:tx:amount:v1]:v0:v0
  */
 function buildTransferProtostone(params: {
   alkaneId: string;
   amount: string;
 }): string {
   const [block, tx] = params.alkaneId.split(':');
-  return `[${block}:${tx}:${params.amount}:v0]:v1:v1`;
+  return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
 }
 
 /**
@@ -545,23 +546,23 @@ describe('buildTransferProtostone', () => {
   it('should build edict-based protostone (colons inside brackets, not commas)', () => {
     const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '1000' });
     // Edict uses colons inside brackets; cellpack uses commas
-    expect(protostone).toMatch(/\[\d+:\d+:\d+:v0\]/);
+    expect(protostone).toMatch(/\[\d+:\d+:\d+:v1\]/);
     expect(protostone).not.toContain(','); // No commas (not a cellpack)
   });
 
-  it('should send exact amount to v0 (recipient)', () => {
+  it('should send exact amount to v1 (recipient), pointer v0 (sender change)', () => {
     const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '5000' });
-    expect(protostone).toBe('[2:0:5000:v0]:v1:v1');
+    expect(protostone).toBe('[2:0:5000:v1]:v0:v0');
   });
 
-  it('should use v1 for both pointer (change) and refund', () => {
+  it('should use v0 for both pointer (change) and refund', () => {
     const protostone = buildTransferProtostone({ alkaneId: '32:0', amount: '100' });
-    expect(protostone).toBe('[32:0:100:v0]:v1:v1');
+    expect(protostone).toBe('[32:0:100:v1]:v0:v0');
   });
 
   it('should handle large amounts', () => {
     const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '999999999999' });
-    expect(protostone).toBe('[2:0:999999999999:v0]:v1:v1');
+    expect(protostone).toBe('[2:0:999999999999:v1]:v0:v0');
   });
 });
 
@@ -695,7 +696,7 @@ describe('Integration: Transaction Building', () => {
       const DIESEL_ID = '2:0';
       const TRANSFER_AMOUNT = '1000';
 
-      // Build edict protostone — sends exact amount to v0, remainder to v1
+      // Build edict protostone — sends exact amount to v1 (recipient), v0 = sender change
       const protostone = buildTransferProtostone({
         alkaneId: DIESEL_ID,
         amount: TRANSFER_AMOUNT,
@@ -706,7 +707,7 @@ describe('Integration: Transaction Building', () => {
         alkaneInputs: [{ alkaneId: DIESEL_ID, amount: TRANSFER_AMOUNT }],
       });
 
-      expect(protostone).toBe('[2:0:1000:v0]:v1:v1');
+      expect(protostone).toBe('[2:0:1000:v1]:v0:v0');
       expect(inputRequirements).toBe('2:0:1000');
     });
   });

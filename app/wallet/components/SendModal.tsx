@@ -126,18 +126,22 @@ function detectAddressType(address: string): AddressTypeInfo {
  * Build an edict-based protostone for alkane token transfers.
  *
  * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
- * The edict sends the exact `amount` of alkane `alkaneId` to output v0 (recipient).
- * Pointer v1 receives any unedicted remainder (sender change via p2tr:0).
- * RefundPointer v1 handles failure refunds to the same change output.
+ * The edict sends the exact `amount` of alkane `alkaneId` to output v1 (recipient).
+ * Pointer v0 receives any unedicted remainder (sender change via p2tr:0).
+ * RefundPointer v0 handles failure refunds to the same change output.
  *
- * Pattern per SDK maintainer: [block:tx:amount:v0]:v1:v1
+ * Output ordering follows SDK convention (same as OYL SDK token.ts):
+ *   v0 = sender change (p2tr:0)  — SDK auto-edict also sends excess here
+ *   v1 = recipient               — edict sends exact amount here
+ *
+ * Pattern: [block:tx:amount:v1]:v0:v0
  */
 function buildTransferProtostone(params: {
   alkaneId: string; // e.g., "2:0" (DIESEL), "32:0" (frBTC)
   amount: string;   // base units to transfer
 }): string {
   const [block, tx] = params.alkaneId.split(':');
-  return `[${block}:${tx}:${params.amount}:v0]:v1:v1`;
+  return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
 }
 
 /**
@@ -893,12 +897,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log('[SendModal] From addresses:', fromAddresses);
       console.log('[SendModal] BTC change address:', btcChangeAddress);
       console.log('[SendModal] Alkanes change address:', alkaneSendAddress);
-      console.log('[SendModal] Recipient (toAddresses[0]):', recipientAddress);
+      console.log('[SendModal] Recipient (toAddresses[1] = v1):', recipientAddress);
 
       // Execute the alkane transfer
-      // toAddresses maps to vN outputs in the protostone:
-      // - v0 = recipient (edict sends exact amount here)
-      // - v1 = sender change (pointer: unedicted remainder goes here)
+      // toAddresses maps to vN outputs in the protostone (SDK convention):
+      // - v0 = sender change (p2tr:0) — SDK auto-edict sends excess alkanes here
+      // - v1 = recipient (edict sends exact amount here)
+      //
+      // This matches the OYL SDK token.ts convention where output 0 = change,
+      // output 1 = recipient. The SDK's auto-edict from inputRequirements always
+      // routes alkane change to output 0, so the sender MUST be at v0.
       //
       // Use symbolic addresses for toAddresses to avoid LegacyAddressTooLong.
       // fromAddresses use actual addresses (opaque strings for esplora UTXO lookup).
@@ -909,7 +917,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         feeRate,
         autoConfirm: false, // We handle signing manually
         fromAddresses,
-        toAddresses: [addressToSymbolic(normalizedRecipientAddress), 'p2tr:0'],
+        toAddresses: ['p2tr:0', addressToSymbolic(normalizedRecipientAddress)],
         changeAddress: addressToSymbolic(btcChangeAddress),
         alkanesChangeAddress: 'p2tr:0',
       });
@@ -943,13 +951,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         const isBrowserWallet = walletType === 'browser';
 
-        // Patch PSBT: recipient at output 0, replace dummy wallet outputs,
-        // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+        // Patch PSBT: recipient at output 1 (v1), sender change at output 0 (v0).
+        // Replace dummy wallet outputs, inject redeemScript for P2SH-P2WPKH wallets.
+        // See lib/psbt-patching.ts for details.
         //
-        // For the alkane send path, the sender's payment address (btcSendAddress) may
-        // differ from the taproot address (alkaneSendAddress). The segwitAddress param
-        // controls what P2WPKH outputs get patched to, and also drives redeemScript
-        // injection for P2SH wallets.
+        // fixedOutputs pins the recipient address at output 1 so browser wallet
+        // patching doesn't overwrite it with the sender's scriptPubKey.
         {
           const result = patchPsbtForBrowserWallet({
             psbtBase64,
@@ -958,7 +965,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             taprootAddress: alkaneSendAddress,
             segwitAddress: btcSendAddress || undefined,
             paymentPubkeyHex: account?.nativeSegwit?.pubkey,
-            fixedOutputs: { 0: normalizedRecipientAddress },
+            fixedOutputs: { 1: normalizedRecipientAddress },
           });
           psbtBase64 = result.psbtBase64;
           if (result.inputsPatched > 0) {
