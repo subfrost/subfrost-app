@@ -1351,6 +1351,27 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   // the Xverse Bitcoin Provider directly. The SDK's XverseAdapter.signPsbt swallows
   // detailed error info from Xverse, making P2SH-P2WPKH signing failures opaque.
   // Direct calls give us full response logging and avoid adapter quirks.
+  //
+  // JOURNAL (2026-02-09): Xverse signing requires two PSBT input fixes for browser wallets:
+  // 1. tapInternalKey: SDK builds PSBTs with dummy wallet's key (from walletCreate()).
+  //    Xverse validates tapInternalKey matches its own key → "No taproot scripts signed".
+  //    Fix: patch input.tapInternalKey to user's actual x-only pubkey before signing.
+  // 2. P2SH-P2WPKH witnessUtxo + redeemScript: centralized in lib/psbt-patching.ts.
+  //    The SDK's dummy wallet hashes differ from the user's → pattern-based matching.
+  //    All output + input patching now goes through patchPsbtForBrowserWallet() in the
+  //    calling code (SendModal, mutation hooks), not here.
+  // Key gotchas:
+  // - psbt.updateInput() throws "Can not add duplicate data" — use direct assignment
+  // - bitcoinjs-lib may return Uint8Array not Buffer — wrap in Buffer.from() for .equals()
+  // - Do NOT add bip32Derivation/tapBip32Derivation — signInputs mapping is sufficient
+  //
+  // JOURNAL (2026-02-09): paymentAddress resolution for signInputs mapping:
+  // (browserWallet as any).paymentAddress returns undefined for Xverse — the runtime
+  // getter doesn't exist on the ConnectedWallet object. Without a valid paymentAddr,
+  // all inputs map to the ordinals (taproot) address, causing Xverse to sign P2SH inputs
+  // with the wrong key. Fix: fall back to browserWalletAddresses.nativeSegwit.address,
+  // which is populated from the wallet connect response and reliably has the payment addr.
+  // Proven on mainnet: tx f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2c4f9f09957d454c
   const signTaprootPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
     // For browser wallets - handle signing based on wallet type
     if (walletAdapter && walletType === 'browser') {
@@ -1374,8 +1395,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         // Build signInputs: map each input to the correct signing address
         const ordinalsAddr = browserWallet.address;
-        // paymentAddress is a runtime getter on ConnectedWallet (not in TS types)
-        const paymentAddr: string | undefined = (browserWallet as any).paymentAddress;
+        // paymentAddress runtime getter on ConnectedWallet returns undefined for some
+        // wallet types. Fall back to browserWalletAddresses which is populated from
+        // the wallet connect response (getAddress / sats-connect).
+        const paymentAddr: string | undefined =
+          (browserWallet as any).paymentAddress ||
+          browserWalletAddresses?.nativeSegwit?.address;
         console.log('[WalletContext] Ordinals:', ordinalsAddr, '| Payment:', paymentAddr);
 
         const signInputs: Record<string, number[]> = {};
@@ -1413,6 +1438,23 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         if (paymentAddr && payIdx.length > 0) signInputs[paymentAddr] = payIdx;
 
         console.log('[WalletContext] Xverse signInputs:', JSON.stringify(signInputs));
+
+        // Patch tapInternalKey on taproot inputs to the user's actual x-only public key.
+        // The SDK builds PSBTs with a dummy wallet's tapInternalKey (from AlkanesSDKContext's
+        // walletCreate()). Xverse validates tapInternalKey matches its own key before signing —
+        // mismatch causes "No taproot scripts signed" error.
+        const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey;
+        if (taprootPubKey) {
+          const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
+          const xOnlyBuf = Buffer.from(xOnlyHex, 'hex');
+          for (let i = 0; i < psbt.data.inputs.length; i++) {
+            const input = psbt.data.inputs[i];
+            if (input.tapInternalKey) {
+              input.tapInternalKey = xOnlyBuf;
+            }
+          }
+          console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
+        }
 
         const response = await xverse.request('signPsbt', {
           psbt: psbt.toBase64(),
@@ -1538,7 +1580,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return psbt.toBase64();
-  }, [wallet, network, walletAdapter, walletType, browserWallet]);
+  }, [wallet, network, walletAdapter, walletType, browserWallet, browserWalletAddresses]);
 
   // Sign PSBT with segwit inputs (BIP84 derivation)
   // Uses SDK wallet adapters for browser wallets, BIP84 derivation for keystore

@@ -255,6 +255,7 @@ const en: Record<string, string> = {
   'send.total': 'Total:',
   'send.verifyWarning': 'Please verify the recipient address before sending. Transactions cannot be reversed.',
   'send.reviewAndSend': 'Review & Send',
+  'send.preparing': 'Preparing...',
   'send.selectUtxosBtn': 'Select UTXOs',
   'send.sendTransaction': 'Send Transaction',
   'send.cancel': 'Cancel',

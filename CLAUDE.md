@@ -7,6 +7,8 @@
 
 **Journal entries / investigation notes MUST be written as inline comments in the relevant source files they pertain to — NOT in separate documentation files.** CLAUDE.md is for architectural reference and historical issues only. When documenting a fix or finding, put the notes directly in the file header comment of the hook, component, or utility that was affected. Never create standalone docs/ files for investigation notes.
 
+**Rolling insight log:** Maintain a persistent rolling log of insights, gotchas, and debugging patterns in `MEMORY.md` (auto-memory) to create psychic continuity across LLM sessions. When you discover a non-obvious behavior (SDK quirks, wallet-specific bugs, Buffer vs Uint8Array issues, etc.), record it immediately in MEMORY.md and as a JOURNAL comment in the relevant source file. Future sessions should consult these notes before attempting fixes.
+
 ## Critical Safety Rules
 
 **NEVER touch these Kubernetes namespaces:**

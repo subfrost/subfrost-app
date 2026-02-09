@@ -83,6 +83,7 @@ import {
 } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
+import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 
 bitcoin.initEccLib(ecc);
 
@@ -443,50 +444,21 @@ export function useSwapMutation() {
           }
           console.log('[useSwapMutation] PSBT base64 length:', psbtBase64.length);
 
-          // For browser wallets, patch all outputs to use real wallet addresses
-          // (symbolic addresses resolved to the dummy wallet loaded in AlkanesSDKContext)
+          // Patch PSBT: replace dummy wallet outputs with real addresses,
+          // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
           if (isBrowserWallet) {
-            const userTaprootScript = bitcoin.address.toOutputScript(taprootAddress, btcNetwork);
-            const userSegwitScript = segwitAddress
-              ? bitcoin.address.toOutputScript(segwitAddress, btcNetwork)
-              : null;
-            const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            const outs = (psbtForPatch.data.globalMap.unsignedTx as any).tx.outs;
-            for (let i = 0; i < outs.length; i++) {
-              const script = Buffer.from(outs[i].script);
-              if (script[0] === 0x6a) continue; // Skip OP_RETURN
-              if (script[0] === 0x51 && script.length === 34) {
-                outs[i].script = userTaprootScript;
-              } else if (script[0] === 0x00 && script.length === 22 && userSegwitScript) {
-                outs[i].script = userSegwitScript;
-              }
+            const result = patchPsbtForBrowserWallet({
+              psbtBase64,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = result.psbtBase64;
+            if (result.inputsPatched > 0) {
+              console.log('[useSwapMutation] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
             }
-            // For P2SH-P2WPKH payment address, add redeemScript to P2SH inputs
-            if (account?.nativeSegwit?.pubkey && segwitAddress) {
-              const isP2SH = segwitAddress.startsWith('3') || segwitAddress.startsWith('2');
-              if (isP2SH) {
-                const segwitPubkey = Buffer.from(account.nativeSegwit.pubkey, 'hex');
-                const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: segwitPubkey, network: btcNetwork });
-                const redeemScript = p2wpkh.output!;
-                const p2shScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(segwitAddress, btcNetwork));
-                for (let i = 0; i < psbtForPatch.data.inputs.length; i++) {
-                  const input = psbtForPatch.data.inputs[i];
-                  let prevScript: Buffer | null = null;
-                  if (input.witnessUtxo) {
-                    prevScript = Buffer.from(input.witnessUtxo.script);
-                  } else if (input.nonWitnessUtxo) {
-                    const prevTx = bitcoin.Transaction.fromBuffer(Buffer.from(input.nonWitnessUtxo));
-                    const txIn = (psbtForPatch.data.globalMap.unsignedTx as any).tx.ins[i];
-                    prevScript = Buffer.from(prevTx.outs[txIn.index].script);
-                  }
-                  if (prevScript && prevScript.equals(p2shScriptPubKey)) {
-                    psbtForPatch.updateInput(i, { redeemScript });
-                    console.log('[useSwapMutation] Added redeemScript to P2SH input', i);
-                  }
-                }
-              }
-            }
-            psbtBase64 = psbtForPatch.toBase64();
             console.log('[useSwapMutation] Patched PSBT outputs for browser wallet');
           }
 

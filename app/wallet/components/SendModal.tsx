@@ -16,6 +16,7 @@ import { getConfig } from '@/utils/getConfig';
 import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
+import { patchPsbtForBrowserWallet, injectRedeemScripts } from '@/lib/psbt-patching';
 
 bitcoin.initEccLib(ecc);
 
@@ -105,6 +106,22 @@ function detectAddressType(address: string): AddressTypeInfo {
  *   4. Forward passes them to pointer output (v0 = recipient)
  *
  * toAddresses must be: [recipientAddress, senderChangeAddress]
+ *
+ * JOURNAL (2026-02-09): P2SH-P2WPKH redeemScript injection fix
+ * The SDK's WASM builds PSBTs with a dummy wallet (walletCreate()), so witnessUtxo.script
+ * contains the DUMMY wallet's P2WPKH hash (0014<dummy_hash>), not the user's. The original
+ * redeemScript injection compared exact bytes against the user's P2SH scriptPubKey and
+ * user's P2WPKH redeemScript — neither matched the dummy hash, so redeemScript was never
+ * injected. Fix: match by script TYPE PATTERN (script[0]===0x00 && length===22) instead
+ * of exact bytes, same approach used for output patching. When matched, replace witnessUtxo
+ * with P2SH scriptPubKey and inject redeemScript.
+ *
+ * JOURNAL (2026-02-09): Refactored all PSBT patching into lib/psbt-patching.ts.
+ * ~483 lines of duplicated output/input patching code across 7 hooks + SendModal
+ * consolidated into patchPsbtForBrowserWallet() and injectRedeemScripts(). The utility
+ * handles: output patching by script type, fixed output overrides (signer/recipient),
+ * and P2SH-P2WPKH redeemScript injection with pattern-based matching.
+ * First mainnet tx with this fix: f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2
  */
 function buildTransferProtostone(params: {
   factoryId: string; // e.g., "4:65498" regtest, "4:65522" mainnet
@@ -157,6 +174,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
+  const [isProcessing, setIsProcessing] = useState(false);
   const selectedAlkaneRef = useRef<HTMLButtonElement>(null);
 
   // Normalize Bech32 addresses to lowercase (BIP-173: case-insensitive)
@@ -249,6 +267,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       setSendMode('btc');
       setSelectedAlkaneId(null);
       setAlkaneFilter('tokens');
+      setIsProcessing(false);
     }
   }, [isOpen]);
 
@@ -605,29 +624,18 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         let psbtBase64 = psbt.toBase64();
         console.log('[SendModal] PSBT created, signing with browser wallet...');
 
-        // For browser wallets with P2SH-P2WPKH payment address (starts with '3'),
-        // inject redeemScript so the wallet can sign P2SH inputs.
+        // Inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
         if (account?.nativeSegwit?.pubkey && btcSendAddress) {
-          const isP2SH = btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2');
-          if (isP2SH) {
-            const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            const segwitPubkey = Buffer.from(account.nativeSegwit.pubkey, 'hex');
-            const p2wpkhPayment = bitcoin.payments.p2wpkh({ pubkey: segwitPubkey, network: btcNetwork });
-            const redeemScript = p2wpkhPayment.output!;
-            const p2shScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(btcSendAddress, btcNetwork));
-
-            for (let i = 0; i < psbtForPatch.data.inputs.length; i++) {
-              const input = psbtForPatch.data.inputs[i];
-              const prevScript = input.witnessUtxo
-                ? Buffer.from(input.witnessUtxo.script)
-                : null;
-              if (prevScript && prevScript.equals(p2shScriptPubKey)) {
-                psbtForPatch.updateInput(i, { redeemScript });
-                console.log('[SendModal] Added redeemScript to P2SH input', i);
-              }
-            }
-            psbtBase64 = psbtForPatch.toBase64();
+          const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const patched = injectRedeemScripts(psbtForPatch, {
+            paymentAddress: btcSendAddress,
+            pubkeyHex: account.nativeSegwit.pubkey,
+            network: btcNetwork,
+          });
+          if (patched > 0) {
+            console.log('[SendModal] BTC send: patched', patched, 'P2SH inputs with redeemScript');
           }
+          psbtBase64 = psbtForPatch.toBase64();
         }
 
         // Browser wallets sign all input types in a single call.
@@ -748,6 +756,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
    */
   const handleAlkaneBroadcast = async () => {
     setError('');
+    setIsProcessing(true);
 
     try {
       if (!alkaneProvider) {
@@ -925,75 +934,28 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         const isBrowserWallet = walletType === 'browser';
 
-        // Patch PSBT outputs from symbolic/dummy addresses to actual scriptPubKeys.
-        // Output 0 = recipient (toAddresses[0]) — always needs patching because
-        // symbolic resolves to the dummy wallet (browser) or keystore user (not recipient).
-        // For browser wallets, all other outputs also need patching (dummy wallet).
-        // For keystore wallets, sender change outputs resolve correctly via mnemonic.
-        // Uses same direct mutation approach as useWrapMutation and other hooks.
+        // Patch PSBT: recipient at output 0, replace dummy wallet outputs,
+        // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+        //
+        // For the alkane send path, the sender's payment address (btcSendAddress) may
+        // differ from the taproot address (alkaneSendAddress). The segwitAddress param
+        // controls what P2WPKH outputs get patched to, and also drives redeemScript
+        // injection for P2SH wallets.
         {
-          const psbtForOutputPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          const outs = (psbtForOutputPatch.data.globalMap.unsignedTx as any).tx.outs;
-          const recipientScript = bitcoin.address.toOutputScript(normalizedRecipientAddress, btcNetwork);
-
-          // Patch output 0 to recipient's actual scriptPubKey
-          if (outs.length > 0 && outs[0].script[0] !== 0x6a) {
-            outs[0].script = recipientScript;
-            console.log('[SendModal] Patched output 0 to recipient scriptPubKey');
+          const result = patchPsbtForBrowserWallet({
+            psbtBase64,
+            network: btcNetwork,
+            isBrowserWallet,
+            taprootAddress: alkaneSendAddress,
+            segwitAddress: btcSendAddress || undefined,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            fixedOutputs: { 0: normalizedRecipientAddress },
+          });
+          psbtBase64 = result.psbtBase64;
+          if (result.inputsPatched > 0) {
+            console.log('[SendModal] Alkane send: patched', result.inputsPatched, 'P2SH inputs with redeemScript');
           }
-
-          // For browser wallets, patch all other non-OP_RETURN outputs to sender's addresses
-          if (isBrowserWallet) {
-            const senderTaprootScript = bitcoin.address.toOutputScript(alkaneSendAddress, btcNetwork);
-            const senderPaymentScript = (btcSendAddress && btcSendAddress !== alkaneSendAddress)
-              ? bitcoin.address.toOutputScript(btcSendAddress, btcNetwork)
-              : senderTaprootScript;
-
-            for (let i = 1; i < outs.length; i++) {
-              const script = Buffer.from(outs[i].script);
-              if (script[0] === 0x6a) continue; // OP_RETURN
-              if (script[0] === 0x51 && script.length === 34) {
-                outs[i].script = senderTaprootScript; // P2TR → sender's taproot
-              } else if (script[0] === 0x00 && script.length === 22) {
-                outs[i].script = senderPaymentScript; // P2WPKH → sender's payment
-              }
-              // P2SH outputs (0xa9, 23 bytes) are already correct — passed as actual base58 address
-            }
-            console.log('[SendModal] Patched browser wallet outputs to actual addresses');
-          }
-
-          psbtBase64 = psbtForOutputPatch.toBase64();
-        }
-
-        // For browser wallets with P2SH-P2WPKH payment address (starts with '3'),
-        // inject redeemScript so the wallet can sign P2SH inputs.
-        // Same pattern used in all mutation hooks (useWrapMutation, useSwapMutation, etc.)
-        if (isBrowserWallet && account?.nativeSegwit?.pubkey && btcSendAddress) {
-          const isP2SH = btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2');
-          if (isP2SH) {
-            const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            const segwitPubkey = Buffer.from(account.nativeSegwit.pubkey, 'hex');
-            const p2wpkhPayment = bitcoin.payments.p2wpkh({ pubkey: segwitPubkey, network: btcNetwork });
-            const redeemScript = p2wpkhPayment.output!;
-            const p2shScriptPubKey = Buffer.from(bitcoin.address.toOutputScript(btcSendAddress, btcNetwork));
-
-            for (let i = 0; i < psbtForPatch.data.inputs.length; i++) {
-              const input = psbtForPatch.data.inputs[i];
-              let prevScript: Buffer | null = null;
-              if (input.witnessUtxo) {
-                prevScript = Buffer.from(input.witnessUtxo.script);
-              } else if (input.nonWitnessUtxo) {
-                const prevTx = bitcoin.Transaction.fromBuffer(Buffer.from(input.nonWitnessUtxo));
-                const txIn = (psbtForPatch.data.globalMap.unsignedTx as any).tx.ins[i];
-                prevScript = Buffer.from(prevTx.outs[txIn.index].script);
-              }
-              if (prevScript && prevScript.equals(p2shScriptPubKey)) {
-                psbtForPatch.updateInput(i, { redeemScript });
-                console.log('[SendModal] Added redeemScript to P2SH input', i);
-              }
-            }
-            psbtBase64 = psbtForPatch.toBase64();
-          }
+          console.log('[SendModal] Patched PSBT (recipient + browser wallet:', isBrowserWallet, ')');
         }
 
         // Sign the PSBT
@@ -1091,6 +1053,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       let errorMessage = err.message || t('send.failedSendAlkanes');
       setError(errorMessage);
       setStep('input');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1498,15 +1462,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       <div className="flex gap-3">
         <button
-          onClick={() => { if (!isDemoGated) { handleNext(); } }}
-          disabled={!selectedAlkaneId || !amount}
+          onClick={() => { if (!isDemoGated && !isProcessing) { handleNext(); } }}
+          disabled={!selectedAlkaneId || !amount || isProcessing}
           className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
             isDemoGated
               ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
           }`}
         >
-          {isDemoGated ? <span className="animate-pulse">{t('common.comingSoon')}</span> : t('send.reviewAndSend')}
+          {isProcessing ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              {t('send.preparing')}
+            </span>
+          ) : isDemoGated ? <span className="animate-pulse">{t('common.comingSoon')}</span> : t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}

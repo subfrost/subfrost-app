@@ -256,6 +256,7 @@ const zh: Record<string, string> = {
   'send.total': '\u603b\u8ba1\uff1a',
   'send.verifyWarning': '\u53d1\u9001\u524d\u8bf7\u9a8c\u8bc1\u6536\u4ef6\u4eba\u5730\u5740\u3002\u4ea4\u6613\u65e0\u6cd5\u64a4\u9500\u3002',
   'send.reviewAndSend': '\u5ba1\u67e5\u5e76\u53d1\u9001',
+  'send.preparing': '\u51c6\u5907\u4e2d...',
   'send.selectUtxosBtn': '\u9009\u62e9 UTXOs',
   'send.sendTransaction': '\u53d1\u9001\u4ea4\u6613',
   'send.cancel': '\u53d6\u6d88',
