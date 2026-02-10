@@ -51,6 +51,12 @@ const DIESEL_ID = '2:0';
 // Helper: delay to avoid rate limiting (20 req/min on regtest.subfrost.io)
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+// Helper: mine blocks via the provider's bitcoind RPC
+async function mineBlocks(provider: WebProvider, count: number) {
+  // Use a burn address so mined coinbase doesn't pollute test wallet UTXOs
+  await provider.bitcoindGenerateToAddress(count, 'bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdku202t');
+}
+
 // ---------------------------------------------------------------------------
 // signAndBroadcast — signs a PSBT returned by alkanesExecuteTyped, broadcasts,
 // mines a block, and returns the txid.
