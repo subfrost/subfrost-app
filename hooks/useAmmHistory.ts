@@ -1,10 +1,12 @@
 /**
  * useAmmHistory — Infinite-scroll AMM transaction history
  *
- * Primary: Single fetch to /get-all-amm-tx-history (or /get-all-address-amm-tx-history)
- * via the RPC proxy. Returns all AMM transactions across all pools in one call.
- *
+ * Primary: SDK DataApi calls (dataApiGetAllAmmTxHistory / dataApiGetAllAddressAmmTxHistory)
  * Pool metadata enrichment for mint/burn/creation txs uses alkanesGetAllPoolsWithDetails.
+ *
+ * JOURNAL ENTRY (2026-02-10):
+ * Replaced raw fetch to /api/rpc/{slug}/get-all-amm-tx-history with SDK
+ * DataApi methods. Removed networkToSlug helper since SDK handles routing.
  */
 'use client';
 
@@ -30,16 +32,19 @@ type PoolMetadata = {
   poolName: string;
 };
 
-/**
- * Map wallet network string to the RPC proxy slug.
- * Same pattern as queries/height.ts fetchHeight.
- */
-function networkToSlug(network: string): string {
-  if (network === 'mainnet') return 'mainnet';
-  if (network === 'testnet') return 'testnet';
-  if (network === 'signet') return 'signet';
-  if (network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local') return 'regtest';
-  return 'mainnet';
+// Convert Map instances (from WASM serde) to plain objects
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
 }
 
 // Hook to fetch pool metadata via SDK's alkanesGetAllPoolsWithDetails
@@ -116,7 +121,7 @@ export function useInfiniteAmmTxHistory({
   enabled?: boolean;
   transactionType?: AmmTransactionType;
 }) {
-  const { network, isInitialized } = useAlkanesSDK();
+  const { network, isInitialized, provider } = useAlkanesSDK();
 
   const query = useInfiniteQuery<
     AmmPageResponse<any>,
@@ -127,55 +132,37 @@ export function useInfiniteAmmTxHistory({
   >({
     queryKey: ['ammTxHistory', network, address ?? 'all', count, transactionType ?? 'all'],
     initialPageParam: 0,
-    enabled: enabled && isInitialized && !!network,
+    enabled: enabled && isInitialized && !!network && !!provider,
     queryFn: async ({ pageParam }) => {
+      if (!provider) return { items: [], nextPage: undefined, total: 0 };
       const offset = pageParam * count;
-      const slug = networkToSlug(network);
 
       try {
-        // Build request body for the data API
-        const body: Record<string, any> = {
-          count,
-          offset,
-        };
-
-        // Use address-specific endpoint when filtering by address
-        const endpoint = address
-          ? `/api/rpc/${slug}/get-all-address-amm-tx-history`
-          : `/api/rpc/${slug}/get-all-amm-tx-history`;
-
+        let raw: any;
         if (address) {
-          body.address = address;
+          raw = await provider.dataApiGetAllAddressAmmTxHistory(address, BigInt(count), BigInt(offset));
+        } else {
+          raw = await provider.dataApiGetAllAmmTxHistory(BigInt(count), BigInt(offset));
         }
 
-        // Map transactionType to API category filter if applicable
-        if (transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap') {
-          body.category = transactionType;
-        }
-
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-
-        if (!res.ok) {
-          throw new Error(`Data API returned ${res.status}`);
-        }
-
-        const json = await res.json();
+        const result = mapToObject(raw);
 
         // API may return { data: { items, total, count, offset } } or { items, ... } directly
-        const payload = json?.data ?? json;
+        const payload = result?.data ?? result;
         const rawItems = Array.isArray(payload?.items) ? payload.items
           : Array.isArray(payload) ? payload
           : [];
         const total = payload?.total ?? rawItems.length;
 
-        console.log(`[useAmmHistory] ${endpoint} returned ${rawItems.length} items (total: ${total})`);
+        // Client-side category filter if the API doesn't support it
+        const filteredItems = transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap'
+          ? rawItems.filter((item: any) => item?.type === transactionType)
+          : rawItems;
+
+        console.log(`[useAmmHistory] DataApi returned ${rawItems.length} items (total: ${total})`);
 
         return {
-          items: rawItems,
+          items: filteredItems,
           nextPage: rawItems.length === count ? pageParam + 1 : undefined,
           total,
         };
