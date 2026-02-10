@@ -203,19 +203,43 @@ export default function SplashScreen() {
         height={160}
         style={{ width: 160, height: 160 }}
       />
-      <div
-        style={{
-          marginTop: 20,
-          fontSize: 16,
-          fontWeight: 700,
-          letterSpacing: 8,
-          color: '#5b9cff',
-          textShadow: '0 0 20px rgba(91,156,255,0.4)',
-          fontFamily: 'monospace',
-        }}
+      {/* SUBFROST wordmark — geometric SVG paths, no font dependency */}
+      <svg
+        width="220"
+        height="24"
+        viewBox="0 0 220 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ marginTop: 20 }}
       >
-        SUBFROST
-      </div>
+        <defs>
+          <filter id="sf-glow">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <g filter="url(#sf-glow)" stroke="#5b9cff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none">
+          {/* S */}
+          <path d="M14 4 L4 4 L4 11 L14 11 L14 20 L4 20" />
+          {/* U */}
+          <path d="M22 4 L22 18 Q22 20 24 20 L32 20 Q34 20 34 18 L34 4" />
+          {/* B */}
+          <path d="M42 4 L42 20 L50 20 Q54 20 54 16 Q54 12.5 50 12 L42 12 M42 4 L50 4 Q54 4 54 8 Q54 12 50 12" />
+          {/* F */}
+          <path d="M62 4 L74 4 M62 4 L62 20 M62 12 L72 12" />
+          {/* R */}
+          <path d="M82 4 L82 20 M82 4 L90 4 Q94 4 94 8 Q94 12 90 12 L82 12 M90 12 L94 20" />
+          {/* O */}
+          <path d="M104 6 Q102 4 104 4 L112 4 Q114 4 114 6 L114 18 Q114 20 112 20 L104 20 Q102 20 102 18 Z" />
+          {/* S */}
+          <path d="M132 4 L122 4 L122 11 L132 11 L132 20 L122 20" />
+          {/* T */}
+          <path d="M140 4 L154 4 M147 4 L147 20" />
+        </g>
+      </svg>
       <div
         style={{
           marginTop: 28,
@@ -242,7 +266,7 @@ export default function SplashScreen() {
         style={{
           marginTop: 10,
           fontSize: 10,
-          fontFamily: 'monospace',
+          fontFamily: '"Courier New", Courier, monospace',
           color: 'rgba(91,156,255,0.4)',
           letterSpacing: 3,
         }}
