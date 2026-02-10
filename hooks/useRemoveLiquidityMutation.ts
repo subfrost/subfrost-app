@@ -75,6 +75,7 @@ import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { getAddressConfig } from '@/lib/address-utils';
 
 bitcoin.initEccLib(ecc);
 
@@ -293,12 +294,8 @@ export function useRemoveLiquidityMutation() {
       const btcNetwork = getBitcoinNetwork();
 
       const isBrowserWallet = walletType === 'browser';
-
-      // For browser wallets, use actual addresses for UTXO discovery.
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      const fromAddresses = isBrowserWallet
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      // Dynamic address routing for single-address wallet support
+      const addrConfig = getAddressConfig({ walletType, taprootAddress, segwitAddress });
 
       try {
         const result = await provider.alkanesExecuteTyped({
@@ -306,10 +303,10 @@ export function useRemoveLiquidityMutation() {
           protostones: protostone,
           feeRate: data.feeRate,
           autoConfirm: false,
-          fromAddresses,
-          toAddresses: ['p2tr:0'],
-          changeAddress: 'p2wpkh:0',
-          alkanesChangeAddress: 'p2tr:0',
+          fromAddresses: addrConfig.fromAddresses,
+          toAddresses: [addrConfig.alkanesChangeAddress],
+          changeAddress: addrConfig.changeAddress,
+          alkanesChangeAddress: addrConfig.alkanesChangeAddress,
         });
 
         console.log('[RemoveLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -396,6 +393,10 @@ export function useRemoveLiquidityMutation() {
           if (isBrowserWallet) {
             console.log('[RemoveLiquidity] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else if (addrConfig.isSingleAddressMode) {
+            signedPsbtBase64 = taprootAddress
+              ? await signTaprootPsbt(psbtBase64)
+              : await signSegwitPsbt(psbtBase64);
           } else {
             console.log('[RemoveLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);

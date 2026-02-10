@@ -66,6 +66,8 @@ export interface WalletBalances {
   };
   alkanes: AlkaneAsset[];
   runes: Array<{ id: string; symbol: string; balance: string; divisibility: number }>;
+  /** Alkane tokens being spent in pending mempool txs (deducted from displayed balance) */
+  pendingOutgoingAlkanes: Array<{ alkaneId: string; amount: string }>;
 }
 
 export interface EnrichedWalletData {
@@ -85,6 +87,7 @@ const EMPTY_BALANCES: WalletBalances = {
   pendingTxCount: { p2wpkh: 0, p2tr: 0 },
   alkanes: [],
   runes: [],
+  pendingOutgoingAlkanes: [],
 };
 
 const EMPTY_UTXOS = { p2wpkh: [] as EnrichedUTXO[], p2tr: [] as EnrichedUTXO[], all: [] as EnrichedUTXO[] };

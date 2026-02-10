@@ -367,6 +367,18 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               const isTaproot = primaryAddr.startsWith('bc1p') || primaryAddr.startsWith('tb1p') || primaryAddr.startsWith('bcrt1p');
 
               const providerObj = (window as any)[walletInfo.injectionKey];
+
+              // OYL requires connect() before signPsbt will work.
+              // On page reload the extension forgets the site connection,
+              // so re-establish it silently during auto-reconnect.
+              if (storedBrowserWalletId === 'oyl' && providerObj && typeof providerObj.connect === 'function') {
+                try {
+                  await providerObj.connect();
+                } catch (e) {
+                  console.warn('[WalletContext] OYL silent reconnect failed:', e);
+                }
+              }
+
               const connected = new (ConnectedWallet as any)(walletInfo, providerObj, {
                 address: primaryAddr,
                 publicKey: primaryPubKey,
@@ -1006,7 +1018,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           addressType: isTaproot ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'oyl') {
-        // OYL wallet exposes window.oyl with getAddresses(), signPsbt(), signMessage()
+        // OYL wallet exposes window.oyl with connect(), getAddresses(), signPsbt(), signMessage()
+        // getAddresses() implicitly connects the site origin on first use.
+        // If signPsbt() later fails with "Site origin must be connected first"
+        // (e.g. after page reload), the signing fallback in signTaprootPsbt
+        // will call connect() and retry.
         const oylProvider = (window as any).oyl;
         if (!oylProvider) throw new Error('OYL wallet not available');
 
@@ -1444,15 +1460,99 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         throw new Error(`Xverse signing failed: ${errDetail}`);
       }
 
-      // For other browser wallets (OYL, OKX, Unisat, etc.): use SDK adapter
+      // For Unisat: call window.unisat.signPsbt() directly.
+      // The SDK's BaseWalletAdapter.signPsbt() calls ConnectedWallet.signPsbt() which
+      // is a keystore method (signs with derived private key) — not the browser extension.
+      // UnisatAdapter only overrides signPsbts (plural), not signPsbt (singular).
+      const unisatProvider = (window as any).unisat;
+      if (unisatProvider && browserWallet?.info?.id === 'unisat') {
+        console.log('[WalletContext] Unisat: signing PSBT directly (bypassing SDK adapter)');
+        const bitcoin = await import('bitcoinjs-lib');
+        const psbt = bitcoin.Psbt.fromHex(psbtHex);
+
+        // Patch tapInternalKey to user's actual key (same as Xverse path)
+        const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey;
+        if (taprootPubKey) {
+          const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
+          const xOnlyBuf = Buffer.from(xOnlyHex, 'hex');
+          for (let i = 0; i < psbt.data.inputs.length; i++) {
+            const input = psbt.data.inputs[i];
+            if (input.tapInternalKey) {
+              input.tapInternalKey = xOnlyBuf;
+            }
+          }
+          console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
+        }
+
+        try {
+          const signedHex = await unisatProvider.signPsbt(psbt.toHex(), {
+            autoFinalized: false,
+          });
+          const signedPsbt = bitcoin.Psbt.fromHex(signedHex);
+          return signedPsbt.toBase64();
+        } catch (e: any) {
+          const errMsg = e?.message || String(e);
+          console.error('[WalletContext] Unisat signPsbt error:', errMsg);
+          throw new Error(`Unisat signing failed: ${errMsg}`);
+        }
+      }
+
+      // For OKX: call window.okxwallet.bitcoin.signPsbt() directly (same reason as Unisat).
+      const okxProvider = (window as any).okxwallet?.bitcoin;
+      if (okxProvider && browserWallet?.info?.id === 'okx') {
+        console.log('[WalletContext] OKX: signing PSBT directly (bypassing SDK adapter)');
+        const bitcoin = await import('bitcoinjs-lib');
+        const psbt = bitcoin.Psbt.fromHex(psbtHex);
+
+        // Patch tapInternalKey to user's actual key
+        const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey;
+        if (taprootPubKey) {
+          const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
+          const xOnlyBuf = Buffer.from(xOnlyHex, 'hex');
+          for (let i = 0; i < psbt.data.inputs.length; i++) {
+            const input = psbt.data.inputs[i];
+            if (input.tapInternalKey) {
+              input.tapInternalKey = xOnlyBuf;
+            }
+          }
+          console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
+        }
+
+        try {
+          const signedHex = await okxProvider.signPsbt(psbt.toHex(), {
+            autoFinalized: false,
+          });
+          const signedPsbt = bitcoin.Psbt.fromHex(signedHex);
+          return signedPsbt.toBase64();
+        } catch (e: any) {
+          const errMsg = e?.message || String(e);
+          console.error('[WalletContext] OKX signPsbt error:', errMsg);
+          throw new Error(`OKX signing failed: ${errMsg}`);
+        }
+      }
+
+      // For other browser wallets (OYL, etc.): use SDK adapter
       const walletId = browserWallet?.info?.id || 'unknown';
       console.log(`[WalletContext] Signing PSBT with SDK adapter (${walletId})`);
       let signedHex: string;
       try {
         signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
       } catch (e: any) {
-        console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, e?.message || e);
-        throw new Error(`${walletId} signing failed: ${e?.message || e}`);
+        // OYL: "Site origin must be connected first" — reconnect and retry once
+        const errMsg = e?.message || String(e);
+        if (walletId === 'oyl' && errMsg.includes('must be connected')) {
+          console.log('[WalletContext] OYL not connected — calling connect() and retrying sign');
+          const oylProvider = (window as any).oyl;
+          if (oylProvider && typeof oylProvider.connect === 'function') {
+            await oylProvider.connect();
+            signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+          } else {
+            throw new Error(`${walletId} signing failed: ${errMsg}`);
+          }
+        } else {
+          console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, errMsg);
+          throw new Error(`${walletId} signing failed: ${errMsg}`);
+        }
       }
 
       // Convert signed hex back to base64

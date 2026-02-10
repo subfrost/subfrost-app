@@ -62,6 +62,7 @@ import {
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { getAddressConfig } from '@/lib/address-utils';
 
 bitcoin.initEccLib(ecc);
 
@@ -263,19 +264,15 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
-
-      // For browser wallets, use actual addresses for UTXO discovery (passed as
-      // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      const fromAddresses = isBrowserWallet
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      // Dynamic address routing for single-address wallet support
+      const addrConfig = getAddressConfig({ walletType, taprootAddress, segwitAddress });
 
       // toAddresses use symbolic placeholders (WASM can't parse mainnet bech32m for outputs).
       // All outputs are patched to correct addresses after PSBT construction.
-      const toAddresses = ['p2tr:0', 'p2tr:0'];
+      // v0 = signer (BTC for wrap), v1 = user (receives swapped tokens)
+      const toAddresses = ['p2tr:0', addrConfig.alkanesChangeAddress];
 
-      console.log('[WrapSwap] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[WrapSwap] From addresses:', addrConfig.fromAddresses, '(browser:', isBrowserWallet, ')');
       console.log('[WrapSwap] To addresses (symbolic, patched post-PSBT):', toAddresses);
 
       console.log('═════════════════════════════════════════════════════════');
@@ -289,10 +286,10 @@ export function useWrapSwapMutation() {
           protostones: protostone,
           feeRate: data.feeRate,
           autoConfirm: false, // We handle signing
-          fromAddresses,
+          fromAddresses: addrConfig.fromAddresses,
           toAddresses,
-          changeAddress: 'p2wpkh:0',
-          alkanesChangeAddress: 'p2tr:0',
+          changeAddress: addrConfig.changeAddress,
+          alkanesChangeAddress: addrConfig.alkanesChangeAddress,
         });
 
         console.log('[WrapSwap] Execute result:', JSON.stringify(result, null, 2));
@@ -373,6 +370,10 @@ export function useWrapSwapMutation() {
           if (isBrowserWallet) {
             console.log('[WrapSwap] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else if (addrConfig.isSingleAddressMode) {
+            signedPsbtBase64 = taprootAddress
+              ? await signTaprootPsbt(psbtBase64)
+              : await signSegwitPsbt(psbtBase64);
           } else {
             console.log('[WrapSwap] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);

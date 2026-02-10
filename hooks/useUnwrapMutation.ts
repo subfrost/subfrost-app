@@ -10,6 +10,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { getAddressConfig } from '@/lib/address-utils';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
@@ -144,21 +145,18 @@ export function useUnwrapMutation() {
 
       const isBrowserWallet = walletType === 'browser';
 
-      // For browser wallets, use actual addresses for UTXO discovery.
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      const fromAddresses = isBrowserWallet
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      // Dynamic address routing for single-address wallet support
+      const addrConfig = getAddressConfig({ walletType, taprootAddress, segwitAddress });
 
       const result = await provider.alkanesExecuteTyped({
-        toAddresses: ['p2wpkh:0'],
+        toAddresses: [addrConfig.changeAddress],
         inputRequirements,
         protostones: protostone,
         feeRate: unwrapData.feeRate,
         autoConfirm: false,
-        fromAddresses,
-        changeAddress: 'p2wpkh:0',
-        alkanesChangeAddress: 'p2tr:0',
+        fromAddresses: addrConfig.fromAddresses,
+        changeAddress: addrConfig.changeAddress,
+        alkanesChangeAddress: addrConfig.alkanesChangeAddress,
       });
 
       console.log('[useUnwrapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -238,6 +236,10 @@ export function useUnwrapMutation() {
         if (isBrowserWallet) {
           console.log('[useUnwrapMutation] Browser wallet: signing PSBT once (all input types)...');
           signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+        } else if (addrConfig.isSingleAddressMode) {
+          signedPsbtBase64 = taprootAddress
+            ? await signTaprootPsbt(psbtBase64)
+            : await signSegwitPsbt(psbtBase64);
         } else {
           console.log('[useUnwrapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
           signedPsbtBase64 = await signSegwitPsbt(psbtBase64);

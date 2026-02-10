@@ -140,8 +140,13 @@ export async function alkanesExecuteTyped(
     optionsJson,
   ]);
 
+  // Timeout guard: the WASM SDK may hang indefinitely if UTXO discovery fails
+  // (e.g., esplora unreachable, symbolic address resolves to wrong wallet).
+  // 60s is generous — normal calls complete in <10s on mainnet.
+  const EXECUTE_TIMEOUT_MS = 60_000;
+
   try {
-    const result = await provider.alkanesExecuteWithStrings(
+    const executePromise = provider.alkanesExecuteWithStrings(
       toAddressesJson,
       params.inputRequirements,
       params.protostones,
@@ -149,6 +154,16 @@ export async function alkanesExecuteTyped(
       params.envelopeHex ?? null,
       optionsJson
     );
+
+    const result = await Promise.race([
+      executePromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          `alkanesExecuteWithStrings timed out after ${EXECUTE_TIMEOUT_MS / 1000}s. ` +
+          'This may indicate UTXO discovery is stuck — check browser console for network errors.'
+        )), EXECUTE_TIMEOUT_MS)
+      ),
+    ]);
 
     const parsed = typeof result === 'string' ? JSON.parse(result) : result;
     logWasmResult('alkanesExecuteWithStrings', parsed, Date.now() - startTime);

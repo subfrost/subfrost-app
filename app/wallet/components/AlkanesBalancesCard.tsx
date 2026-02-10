@@ -328,11 +328,24 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                     </div>
                     <div className="text-right shrink-0 ml-2">
                       <div className="font-bold text-sm text-[color:var(--sf-text)]">
-                        {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals, alkane))}
+                        {showValue((() => {
+                          const deduction = balances.pendingOutgoingAlkanes?.find(p => p.alkaneId === alkane.alkaneId);
+                          const displayBalance = deduction
+                            ? (() => {
+                                const adjusted = BigInt(alkane.balance) - BigInt(deduction.amount);
+                                return (adjusted > 0n ? adjusted : 0n).toString();
+                              })()
+                            : alkane.balance;
+                          return formatAlkaneBalance(displayBalance, alkane.decimals, alkane);
+                        })())}
                       </div>
                       {!isLoadingData && (() => {
                         const decimals = alkane.decimals || 8;
-                        const balanceFloat = Number(BigInt(alkane.balance)) / Math.pow(10, decimals);
+                        const deduction = balances.pendingOutgoingAlkanes?.find(p => p.alkaneId === alkane.alkaneId);
+                        const effectiveBalance = deduction
+                          ? (() => { const adj = BigInt(alkane.balance) - BigInt(deduction.amount); return adj > 0n ? adj : 0n; })()
+                          : BigInt(alkane.balance);
+                        const balanceFloat = Number(effectiveBalance) / Math.pow(10, decimals);
                         const formatUsdValue = (usd: number) => (
                           <div className="text-[10px] text-[color:var(--sf-text)]/60">
                             ${usd < 0.01 ? '<0.01' : usd > 999.99
@@ -363,7 +376,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             const r0 = Number(pool.token0Amount) / 1e8;
                             const r1 = Number(pool.token1Amount) / 1e8;
                             const poolTvl = r0 * p0 + r1 * p1;
-                            const userShare = Number(BigInt(alkane.balance)) / totalSupply;
+                            const userShare = Number(effectiveBalance) / totalSupply;
                             const userValue = userShare * poolTvl;
                             if (userValue > 0) return formatUsdValue(userValue);
                           }

@@ -508,7 +508,7 @@ describe('WalletContext connection logic (source verification)', () => {
     expect(xverseBlock).toContain("purpose === 'payment'");
   });
 
-  it('OYL path calls getAddresses directly', () => {
+  it('OYL path calls getAddresses and has signing fallback for connect', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(
@@ -520,6 +520,10 @@ describe('WalletContext connection logic (source verification)', () => {
     expect(oylBlock).toContain('oylProvider.getAddresses()');
     expect(oylBlock).toContain('addresses.taproot.address');
     expect(oylBlock).toContain('addresses.nativeSegwit.address');
+
+    // Signing path has connect-and-retry fallback for "Site origin must be connected"
+    expect(src).toContain("walletId === 'oyl' && errMsg.includes('must be connected')");
+    expect(src).toContain('oylProvider.connect()');
   });
 
   it('Unisat path calls requestAccounts and getPublicKey', () => {
