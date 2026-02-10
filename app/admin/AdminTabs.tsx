@@ -6,6 +6,7 @@ import CodesTab from './CodesTab';
 import RedemptionsTab from './RedemptionsTab';
 import HierarchyTab from './HierarchyTab';
 import BulkTab from './BulkTab';
+import ToolsTab from './ToolsTab';
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -13,6 +14,7 @@ const TABS = [
   { key: 'redemptions', label: 'Redemptions' },
   { key: 'hierarchy', label: 'Hierarchy' },
   { key: 'bulk', label: 'Bulk Generate' },
+  { key: 'tools', label: 'Tools' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -43,6 +45,7 @@ export default function AdminTabs() {
         {activeTab === 'redemptions' && <RedemptionsTab />}
         {activeTab === 'hierarchy' && <HierarchyTab />}
         {activeTab === 'bulk' && <BulkTab />}
+        {activeTab === 'tools' && <ToolsTab />}
       </div>
     </div>
   );
