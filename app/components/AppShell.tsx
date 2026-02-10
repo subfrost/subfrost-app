@@ -6,6 +6,7 @@ import Footer from '@/app/components/Footer';
 import FloatingActions from '@/app/components/FloatingActions';
 import MobileBottomNav from '@/app/components/MobileBottomNav';
 import DemoBanner from '@/app/components/DemoBanner';
+import SplashDismisser from '@/app/components/SplashDismisser';
 
 // Lazy load modal - not needed until user clicks connect
 const ConnectWalletModal = lazy(() => import('@/app/components/ConnectWalletModal'));
@@ -13,6 +14,7 @@ const ConnectWalletModal = lazy(() => import('@/app/components/ConnectWalletModa
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="sf-bg min-h-dvh relative flex flex-col">
+      <SplashDismisser />
       <div className="absolute inset-0 sf-snow" aria-hidden />
       <Header />
       <DemoBanner />
