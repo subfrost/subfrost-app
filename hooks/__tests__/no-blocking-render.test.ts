@@ -125,11 +125,10 @@ describe('Xverse wallet uses current API', () => {
       'utf-8'
     );
 
-    // Xverse uses the SDK's WalletConnector.connect() which calls getAccounts
-    // internally and constructs a ConnectedWallet with paymentAddress set.
-    // We then extract paymentAddress from account to populate additionalAddresses.
-    expect(walletContextSrc).toContain('connector.connect(walletInfo)');
-    expect(walletContextSrc).toContain('account?.paymentAddress');
+    // Xverse uses sats-connect's getAddress() to connect and extract addresses.
+    // The response contains ordinals (taproot) and payment (segwit) accounts.
+    expect(walletContextSrc).toContain("import('sats-connect')");
+    expect(walletContextSrc).toContain("purpose === 'ordinals'");
   });
 });
 

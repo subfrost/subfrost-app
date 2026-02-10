@@ -500,13 +500,11 @@ describe('WalletContext connection logic (source verification)', () => {
     const end = src.indexOf("walletId === 'leather'");
     const xverseBlock = src.slice(start, end);
 
-    // Must dispatch the legacy CustomEvent directly to document
-    expect(xverseBlock).toContain("xverse_btc_address_request");
-    expect(xverseBlock).toContain("btcAddressRequest");
-    expect(xverseBlock).toContain("getAddressResponse");
-    // Must also try RPC path
-    expect(xverseBlock).toContain("xverseProvider.request('getAccounts'");
-    // Must extract both ordinals and payment accounts
+    // Uses sats-connect's getAddress() for the canonical Xverse connect flow
+    expect(xverseBlock).toContain("import('sats-connect')");
+    expect(xverseBlock).toContain("getAddress");
+    expect(xverseBlock).toContain("AddressPurpose");
+    // Must extract both ordinals and payment accounts from response
     expect(xverseBlock).toContain("purpose === 'ordinals'");
     expect(xverseBlock).toContain("purpose === 'payment'");
   });
