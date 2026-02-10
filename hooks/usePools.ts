@@ -172,7 +172,8 @@ async function fetchPoolsFromDataApi(
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dataApiGetAllPoolsDetails timeout (30s)')), 30000)),
   ]);
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-  const pools = parsed?.pools || [];
+  // SDK may return raw API response wrapped in { data: ... } or already unwrapped
+  const pools = parsed?.pools || parsed?.data?.pools || [];
 
   console.log('[usePools] dataApiGetAllPoolsDetails returned', pools.length, 'pools');
 

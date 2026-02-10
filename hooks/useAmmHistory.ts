@@ -165,11 +165,12 @@ export function useInfiniteAmmTxHistory({
 
         const json = await res.json();
 
-        // The API response has { items, total, count, offset } (Page<AllAddressAmmTxRow>)
-        const rawItems = Array.isArray(json?.items) ? json.items
-          : Array.isArray(json) ? json
+        // API may return { data: { items, total, count, offset } } or { items, ... } directly
+        const payload = json?.data ?? json;
+        const rawItems = Array.isArray(payload?.items) ? payload.items
+          : Array.isArray(payload) ? payload
           : [];
-        const total = json?.total ?? rawItems.length;
+        const total = payload?.total ?? rawItems.length;
 
         console.log(`[useAmmHistory] ${endpoint} returned ${rawItems.length} items (total: ${total})`);
 
