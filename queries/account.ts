@@ -274,21 +274,23 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         pendingOutgoingTotal += spent;
       }
 
-      // Fetch alkane balances via SDK dataApiGetAlkanesByAddress
-      for (const address of addresses) {
+      // Fetch alkane balances via server-side parallel protorunesbyoutpoint + Redis cache
+      const alkaneBalancePromises = addresses.map(async (address) => {
         try {
-          const alkaneBalances = await withTimeout(
-            provider.dataApiGetAlkanesByAddress(address),
+          const resp = await withTimeout(
+            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
             15000,
-            { alkanes: [] },
+            null,
           );
-          const alkanes = alkaneBalances?.alkanes || alkaneBalances?.data || [];
-          for (const entry of alkanes) {
-            const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
-            const amountStr = String(entry.amount || entry.balance || '0');
+          if (!resp) return;
+          const data = await resp.json();
+          const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
+          for (const entry of balances) {
+            const alkaneIdStr = entry.alkaneId;
+            const amountStr = String(entry.balance || '0');
             const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-              symbol: entry.symbol || '',
-              name: entry.name || `Token ${alkaneIdStr}`,
+              symbol: '',
+              name: `Token ${alkaneIdStr}`,
               decimals: 8,
             };
             if (!alkaneMap.has(alkaneIdStr)) {
@@ -298,18 +300,21 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
                 symbol: tokenInfo.symbol,
                 balance: amountStr,
                 decimals: tokenInfo.decimals,
-                priceUsd: entry.priceUsd ? Number(entry.priceUsd) : undefined,
-                priceInSatoshi: entry.priceInSatoshi ? Number(entry.priceInSatoshi) : undefined,
               });
             } else {
               const existing = alkaneMap.get(alkaneIdStr)!;
-              existing.balance = (BigInt(existing.balance) + BigInt(amountStr)).toString();
+              try {
+                existing.balance = (BigInt(existing.balance) + BigInt(amountStr)).toString();
+              } catch {
+                existing.balance = String(Number(existing.balance) + Number(amountStr));
+              }
             }
           }
         } catch (error) {
-          console.error(`[BALANCE] SDK dataApi failed for ${address}:`, error);
+          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
         }
-      }
+      });
+      await Promise.all(alkaneBalancePromises);
 
       return {
         balances: {
@@ -401,17 +406,20 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
           addresses.push(deps.walletAddress);
         }
 
-        for (const address of addresses) {
+        const sellBalancePromises = addresses.map(async (address) => {
           try {
-            const result = await deps.provider!.dataApiGetAlkanesByAddress(address);
-            const alkaneBalances = result?.alkanes || result?.data || [];
+            const resp = await fetch(
+              `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
+            );
+            const data = await resp.json();
+            const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
 
-            for (const entry of alkaneBalances) {
-              const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
-              const balance = String(entry.amount || entry.balance || '0');
+            for (const entry of balances) {
+              const alkaneIdStr = entry.alkaneId;
+              const balance = String(entry.balance || '0');
               const tokenInfo = KNOWN_TOKENS_SELL[alkaneIdStr] || {
-                symbol: entry.symbol || alkaneIdStr.split(':')[1] || '',
-                name: entry.name || `Token ${alkaneIdStr}`,
+                symbol: alkaneIdStr.split(':')[1] || '',
+                name: `Token ${alkaneIdStr}`,
                 decimals: 8,
               };
 
@@ -427,8 +435,8 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
                   symbol: tokenInfo.symbol,
                   balance,
                   priceInfo: {
-                    price: Number(entry.priceUsd || 0),
-                    idClubMarketplace: entry.idClubMarketplace || false,
+                    price: 0,
+                    idClubMarketplace: false,
                   },
                 });
               } else {
@@ -441,9 +449,10 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
               }
             }
           } catch (error) {
-            console.error(`[sellableCurrencies] SDK dataApi failed for ${address}:`, error);
+            console.error(`[sellableCurrencies] alkane-balances API failed for ${address}:`, error);
           }
-        }
+        });
+        await Promise.all(sellBalancePromises);
 
         allAlkanes.push(...alkaneMap.values());
 
