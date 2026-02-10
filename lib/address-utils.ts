@@ -86,7 +86,7 @@ export function getAddressConfig(params: {
 
     const symbolic = addressToSymbolic(addr);
     return {
-      fromAddresses: [symbolic],
+      fromAddresses: [addr],  // actual address for esplora UTXO discovery
       changeAddress: symbolic,
       alkanesChangeAddress: symbolic,
       isSingleAddressMode: true,
