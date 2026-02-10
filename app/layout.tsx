@@ -77,8 +77,6 @@ export default function RootLayout({
         {/* Google Drive API for client-side OAuth */}
         <script src="https://apis.google.com/js/api.js" async defer></script>
         <script src="https://accounts.google.com/gsi/client" async defer></script>
-        {/* Splash screen animation — defer so it runs after DOM is parsed */}
-        <script src="/splash.js" defer></script>
       </head>
       <body className={`${satoshi.variable} ${geistMono.variable} antialiased`}>
         {/* Splash screen — shows while JS/WASM loads. Canvas snowflake + progress bar. */}
