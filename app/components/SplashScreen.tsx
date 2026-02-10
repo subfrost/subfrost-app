@@ -205,12 +205,12 @@ export default function SplashScreen() {
       />
       {/* SUBFROST wordmark — geometric SVG paths, no font dependency */}
       <svg
-        width="220"
-        height="24"
-        viewBox="0 0 220 24"
+        width="240"
+        height="32"
+        viewBox="0 0 160 24"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ marginTop: 20 }}
+        style={{ marginTop: 22 }}
       >
         <defs>
           <filter id="sf-glow">
@@ -223,21 +223,21 @@ export default function SplashScreen() {
         </defs>
         <g filter="url(#sf-glow)" stroke="#5b9cff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none">
           {/* S */}
-          <path d="M14 4 L4 4 L4 11 L14 11 L14 20 L4 20" />
+          <path d="M12 4 L3 4 L3 11 L12 11 L12 20 L3 20" />
           {/* U */}
-          <path d="M22 4 L22 18 Q22 20 24 20 L32 20 Q34 20 34 18 L34 4" />
+          <path d="M19 4 L19 18 Q19 20 21 20 L28 20 Q30 20 30 18 L30 4" />
           {/* B */}
-          <path d="M42 4 L42 20 L50 20 Q54 20 54 16 Q54 12.5 50 12 L42 12 M42 4 L50 4 Q54 4 54 8 Q54 12 50 12" />
+          <path d="M37 4 L37 20 L44 20 Q48 20 48 16 Q48 12.5 44 12 L37 12 M37 4 L44 4 Q48 4 48 8 Q48 12 44 12" />
           {/* F */}
-          <path d="M62 4 L74 4 M62 4 L62 20 M62 12 L72 12" />
+          <path d="M55 4 L66 4 M55 4 L55 20 M55 12 L64 12" />
           {/* R */}
-          <path d="M82 4 L82 20 M82 4 L90 4 Q94 4 94 8 Q94 12 90 12 L82 12 M90 12 L94 20" />
+          <path d="M73 4 L73 20 M73 4 L80 4 Q84 4 84 8 Q84 12 80 12 L73 12 M80 12 L84 20" />
           {/* O */}
-          <path d="M104 6 Q102 4 104 4 L112 4 Q114 4 114 6 L114 18 Q114 20 112 20 L104 20 Q102 20 102 18 Z" />
+          <path d="M93 6 Q91 4 93 4 L100 4 Q102 4 102 6 L102 18 Q102 20 100 20 L93 20 Q91 20 91 18 Z" />
           {/* S */}
-          <path d="M132 4 L122 4 L122 11 L132 11 L132 20 L122 20" />
+          <path d="M118 4 L109 4 L109 11 L118 11 L118 20 L109 20" />
           {/* T */}
-          <path d="M140 4 L154 4 M147 4 L147 20" />
+          <path d="M125 4 L138 4 M131.5 4 L131.5 20" />
         </g>
       </svg>
       <div
