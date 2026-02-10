@@ -1,27 +1,35 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 
 /**
- * Takes over the server-rendered #sf-splash div, runs the canvas snowflake
- * animation + progress bar, and fades it out once the SDK is initialized.
- *
- * The static splash HTML in layout.tsx shows "SUBFROST" immediately on page
- * load. This component starts the animation once React hydrates, tracks WASM
- * initialization, and dismisses the splash when everything is ready.
+ * Full-screen splash with animated canvas snowflake + progress bar.
+ * Renders as a React component so it doesn't cause hydration mismatches.
+ * Fades out and unmounts once the SDK (WASM) is initialized.
  */
-export default function SplashDismisser() {
+export default function SplashScreen() {
   const { isInitialized } = useAlkanesSDK();
+  const [visible, setVisible] = useState(true);
+  const [fading, setFading] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const readyRef = useRef(false);
-  const goneRef = useRef(false);
   const startRef = useRef(performance.now());
+  const frameRef = useRef<number>(0);
 
+  const dismiss = useCallback((fast: boolean) => {
+    if (fast) {
+      setVisible(false);
+    } else {
+      setFading(true);
+      setTimeout(() => setVisible(false), 550);
+    }
+  }, []);
+
+  // Canvas animation
   useEffect(() => {
-    const splash = document.getElementById('sf-splash');
-    if (!splash || goneRef.current) return;
-
-    const canvas = document.getElementById('sf-splash-canvas') as HTMLCanvasElement | null;
+    if (!visible || fading) return;
+    const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -34,7 +42,6 @@ export default function SplashDismisser() {
 
     const t0 = startRef.current;
     let progress = 0, targetP = 0;
-    let frameId: number;
 
     // Particles
     const pts: { x: number; y: number; vx: number; vy: number; s: number; a: number }[] = [];
@@ -45,6 +52,9 @@ export default function SplashDismisser() {
         s: Math.random() * 1.2 + 0.4, a: Math.random() * 0.3 + 0.08,
       });
     }
+
+    const bar = document.getElementById('sf-splash-bar');
+    const pct = document.getElementById('sf-splash-pct');
 
     function draw(t: number) {
       ctx!.clearRect(0, 0, W, H);
@@ -75,9 +85,7 @@ export default function SplashDismisser() {
 
         for (let i = 0; i < 6; i++) {
           ctx!.save(); ctx!.rotate(i * 1.0472);
-          // Main arm
           ctx!.beginPath(); ctx!.moveTo(0, 0); ctx!.lineTo(sz, 0); ctx!.stroke();
-          // Branches
           const bp = [0.35, 0.6, 0.82], bl = [0.38, 0.28, 0.16], ba = 0.6981;
           for (let j = 0; j < 3; j++) {
             const px = bp[j] * sz, ln = bl[j] * sz;
@@ -86,7 +94,6 @@ export default function SplashDismisser() {
             ctx!.beginPath(); ctx!.moveTo(px, 0);
             ctx!.lineTo(px + ln * Math.cos(-ba), -ln * Math.sin(-ba)); ctx!.stroke();
           }
-          // Tip diamond
           if (pass === 1) {
             const d = 4;
             ctx!.fillStyle = 'rgba(199,224,254,0.35)';
@@ -113,18 +120,10 @@ export default function SplashDismisser() {
       ctx!.globalAlpha = 1; ctx!.shadowBlur = 12; ctx!.shadowColor = '#c7e0fe';
       ctx!.beginPath(); ctx!.arc(0, 0, 2.5, 0, 6.283);
       ctx!.fillStyle = '#c7e0fe'; ctx!.fill();
-
       ctx!.restore();
     }
 
-    const bar = document.getElementById('sf-splash-bar');
-    const pct = document.getElementById('sf-splash-pct');
-
     function tick() {
-      if (goneRef.current) return;
-      const elapsed = (performance.now() - t0) / 1000;
-
-      // Simulated progress ramp
       if (!readyRef.current) {
         if (targetP < 20) targetP += 0.6;
         else if (targetP < 45) targetP += 0.25;
@@ -135,47 +134,102 @@ export default function SplashDismisser() {
       }
       progress += (targetP - progress) * 0.08;
 
+      const elapsed = (performance.now() - t0) / 1000;
       draw(elapsed);
       if (bar) bar.style.width = Math.min(progress, 100) + '%';
       if (pct) pct.textContent = Math.round(Math.min(progress, 100)) + '%';
 
       if (readyRef.current && progress > 99.5) {
-        splash!.style.transition = 'opacity 0.5s ease';
-        splash!.style.opacity = '0';
-        setTimeout(() => { splash!.remove(); goneRef.current = true; }, 550);
+        dismiss(false);
         return;
       }
-      frameId = requestAnimationFrame(tick);
+      frameRef.current = requestAnimationFrame(tick);
     }
     tick();
 
-    // Safety: remove after 30s no matter what
-    const safetyTimer = setTimeout(() => { if (!goneRef.current) readyRef.current = true; }, 30000);
+    const safetyTimer = setTimeout(() => { readyRef.current = true; }, 30000);
+    return () => { cancelAnimationFrame(frameRef.current); clearTimeout(safetyTimer); };
+  }, [visible, fading, dismiss]);
 
-    return () => {
-      cancelAnimationFrame(frameId);
-      clearTimeout(safetyTimer);
-    };
-  }, []); // Run once on mount
-
-  // Watch for SDK initialization
+  // Watch SDK initialization
   useEffect(() => {
     if (!isInitialized) return;
     const elapsed = performance.now() - startRef.current;
-
     if (elapsed < 1000) {
-      // Fast load (cached) — skip animation, remove immediately
-      const splash = document.getElementById('sf-splash');
-      if (splash && !goneRef.current) {
-        splash.style.transition = 'opacity 0.2s ease';
-        splash.style.opacity = '0';
-        setTimeout(() => { splash.remove(); goneRef.current = true; }, 250);
-      }
+      dismiss(true);
     } else {
-      // Slow load — let the animation finish to 100%
       readyRef.current = true;
     }
-  }, [isInitialized]);
+  }, [isInitialized, dismiss]);
 
-  return null;
+  if (!visible) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 99999,
+        background: '#0a1628',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: fading ? 0 : 1,
+        transition: fading ? 'opacity 0.5s ease' : undefined,
+        pointerEvents: fading ? 'none' : undefined,
+      }}
+    >
+      <canvas
+        ref={canvasRef}
+        width={160}
+        height={160}
+        style={{ width: 160, height: 160 }}
+      />
+      <div
+        style={{
+          marginTop: 20,
+          fontSize: 16,
+          fontWeight: 700,
+          letterSpacing: 8,
+          color: '#5b9cff',
+          textShadow: '0 0 20px rgba(91,156,255,0.4)',
+          fontFamily: 'monospace',
+        }}
+      >
+        SUBFROST
+      </div>
+      <div
+        style={{
+          marginTop: 28,
+          width: 200,
+          height: 2,
+          background: 'rgba(91,156,255,0.12)',
+          borderRadius: 1,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          id="sf-splash-bar"
+          style={{
+            height: '100%',
+            width: '0%',
+            background: 'linear-gradient(90deg, #3a6fd8, #5b9cff, #c7e0fe)',
+            borderRadius: 1,
+            transition: 'width 0.3s ease',
+          }}
+        />
+      </div>
+      <div
+        id="sf-splash-pct"
+        style={{
+          marginTop: 10,
+          fontSize: 10,
+          fontFamily: 'monospace',
+          color: 'rgba(91,156,255,0.4)',
+          letterSpacing: 3,
+        }}
+      />
+    </div>
+  );
 }
