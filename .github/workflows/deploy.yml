@@ -89,7 +89,7 @@ jobs:
             --port 3000 \
             --cpu 1 \
             --memory 512Mi \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances 10 \
             --concurrency 80 \
             --timeout 60 \
