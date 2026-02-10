@@ -119,15 +119,15 @@ describe('Xverse wallet uses current API', () => {
     expect(walletsSrc).toContain('XverseProviders?.BitcoinProvider');
   });
 
-  it('Xverse connection uses SDK WalletConnector and extracts paymentAddress', () => {
+  it('Xverse connection uses direct BitcoinProvider.request and extracts paymentAddress', () => {
     const walletContextSrc = fs.readFileSync(
       path.resolve(__dirname, '../../context/WalletContext.tsx'),
       'utf-8'
     );
 
-    // Xverse uses sats-connect's getAddress() to connect and extract addresses.
+    // Xverse uses direct BitcoinProvider.request('getAccounts') — no sats-connect.
     // The response contains ordinals (taproot) and payment (segwit) accounts.
-    expect(walletContextSrc).toContain("import('sats-connect')");
+    expect(walletContextSrc).toContain("request('getAccounts'");
     expect(walletContextSrc).toContain("purpose === 'ordinals'");
   });
 });

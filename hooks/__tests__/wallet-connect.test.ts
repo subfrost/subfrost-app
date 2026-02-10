@@ -487,7 +487,7 @@ describe('OKX connection via direct API', () => {
 });
 
 describe('WalletContext connection logic (source verification)', () => {
-  it('Xverse path dispatches legacy CustomEvent + RPC getAccounts in parallel', () => {
+  it('Xverse path uses direct BitcoinProvider.request getAccounts', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(
@@ -500,10 +500,9 @@ describe('WalletContext connection logic (source verification)', () => {
     const end = src.indexOf("walletId === 'leather'");
     const xverseBlock = src.slice(start, end);
 
-    // Uses sats-connect's getAddress() for the canonical Xverse connect flow
-    expect(xverseBlock).toContain("import('sats-connect')");
-    expect(xverseBlock).toContain("getAddress");
-    expect(xverseBlock).toContain("AddressPurpose");
+    // Uses direct BitcoinProvider.request('getAccounts') — no sats-connect dependency
+    expect(xverseBlock).toContain("request('getAccounts'");
+    expect(xverseBlock).toContain("purposes: ['ordinals', 'payment']");
     // Must extract both ordinals and payment accounts from response
     expect(xverseBlock).toContain("purpose === 'ordinals'");
     expect(xverseBlock).toContain("purpose === 'payment'");

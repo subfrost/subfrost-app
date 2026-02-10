@@ -841,114 +841,69 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // The modal component handles its own UI state (loading/connecting overlay).
 
       if (walletId === 'xverse') {
-        // Xverse connection using sats-connect's getAddress() — the canonical
-        // method used by Xverse's own demo app (dapp-cookie-cutter).
-        // Internally calls provider.connect(jwt) which dispatches a CustomEvent
-        // to the extension's content script, opening the address approval popup.
+        // Xverse connection using direct BitcoinProvider.request('getAccounts')
+        // — no sats-connect dependency needed. Same API used for signing.
         const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
         if (!xverseProvider) throw new Error('Xverse wallet not detected. Please install the Xverse extension.');
 
-        // Diagnostic: log provider state before connection attempt
-        console.log('[WalletContext] Xverse provider found:', {
-          hasConnect: typeof xverseProvider.connect,
-          hasRequest: typeof xverseProvider.request,
-          hasSignTransaction: typeof xverseProvider.signTransaction,
-          btcProviders: (window as any).btc_providers?.length,
-          windowBitcoinProvider: !!(window as any).BitcoinProvider,
-        });
+        console.log('[WalletContext] Xverse: calling getAccounts via direct provider...');
 
-        // Set up a diagnostic listener to observe ALL window messages from the extension
-        const diagnosticMessages: any[] = [];
-        const diagHandler = (event: MessageEvent) => {
-          const { data } = event;
-          if (data?.source === 'xverse-wallet' || data?.source === 'xverse-content-script' || data?.jsonrpc === '2.0') {
-            diagnosticMessages.push({ time: Date.now(), data });
-            console.log('[WalletContext] Xverse message received:', data);
-          }
-        };
-        window.addEventListener('message', diagHandler);
+        const response: any = await Promise.race([
+          xverseProvider.request('getAccounts', {
+            purposes: ['ordinals', 'payment'],
+            message: 'Connect to Subfrost',
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'Xverse connection timed out after 60s. ' +
+              'Try: (1) open/unlock your Xverse extension popup first, ' +
+              '(2) check chrome://extensions for errors in Xverse service worker, ' +
+              '(3) try connecting on another site to verify extension works.'
+            )), 60000)
+          ),
+        ]);
 
-        try {
-          // Use sats-connect's getAddress() — the proven legacy connect flow.
-          // This creates an unsigned JWT and calls provider.connect(token).
-          // @ts-ignore — sats-connect is loaded at runtime via dynamic import; not a build dependency
-          const { getAddress, AddressPurpose } = await import('sats-connect');
-          console.log('[WalletContext] Calling sats-connect getAddress()...');
-
-          const connectResponse: any = await Promise.race([
-            new Promise<any>((resolve, reject) => {
-              (getAddress as any)({
-                payload: {
-                  purposes: [AddressPurpose.Ordinals, AddressPurpose.Payment],
-                  message: 'Connect to Subfrost',
-                  network: { type: toSatsConnectNetwork(network) },
-                },
-                onFinish: (response: any) => {
-                  console.log('[WalletContext] Xverse getAddress onFinish:', response);
-                  resolve(response);
-                },
-                onCancel: () => {
-                  console.log('[WalletContext] Xverse getAddress onCancel');
-                  reject(new Error('Xverse connection cancelled by user'));
-                },
-              });
-            }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => {
-                console.log('[WalletContext] Xverse timeout. Diagnostic messages:', diagnosticMessages);
-                reject(new Error(
-                  'Xverse connection timed out after 60s. ' +
-                  'Try: (1) open/unlock your Xverse extension popup first, ' +
-                  '(2) check chrome://extensions for errors in Xverse service worker, ' +
-                  '(3) try connecting on another site to verify extension works.'
-                ));
-              }, 60000)
-            ),
-          ]);
-
-          const accounts = connectResponse?.addresses || [];
-          if (accounts.length === 0) {
-            throw new Error(
-              'Xverse connection failed — no accounts returned. ' +
-              'Try: (1) refresh this page, (2) open/unlock your Xverse extension, ' +
-              '(3) check that this site is not blocked in Xverse settings.'
-            );
-          }
-
-          const ordinalsAccount = accounts.find((a: any) =>
-            a.purpose === 'ordinals' || a.addressType === 'p2tr'
-          ) || accounts[0];
-          const paymentAccount = accounts.find((a: any) =>
-            a.purpose === 'payment' || a.addressType === 'p2wpkh' || a.addressType === 'p2sh'
+        console.log('[WalletContext] Xverse getAccounts response:', response);
+        const accounts = response?.result || [];
+        if (accounts.length === 0) {
+          throw new Error(
+            'Xverse connection failed — no accounts returned. ' +
+            'Try: (1) refresh this page, (2) open/unlock your Xverse extension, ' +
+            '(3) check that this site is not blocked in Xverse settings.'
           );
-
-          if (ordinalsAccount) {
-            additionalAddresses.taproot = {
-              address: ordinalsAccount.address,
-              publicKey: ordinalsAccount.publicKey,
-            };
-          }
-          if (paymentAccount) {
-            additionalAddresses.nativeSegwit = {
-              address: paymentAccount.address,
-              publicKey: paymentAccount.publicKey,
-            };
-          }
-
-          const primaryAddr = ordinalsAccount?.address || paymentAccount?.address;
-          if (!primaryAddr) throw new Error('No address found in Xverse accounts');
-
-          const primaryIsTaproot = primaryAddr.startsWith('bc1p') || primaryAddr.startsWith('tb1p') || primaryAddr.startsWith('bcrt1p');
-          connected = new (ConnectedWallet as any)(walletInfo, xverseProvider, {
-            address: primaryAddr,
-            publicKey: ordinalsAccount?.publicKey || paymentAccount?.publicKey,
-            addressType: primaryIsTaproot ? 'p2tr' : 'p2wpkh',
-            paymentAddress: paymentAccount?.address,
-            paymentPublicKey: paymentAccount?.publicKey,
-          });
-        } finally {
-          window.removeEventListener('message', diagHandler);
         }
+
+        const ordinalsAccount = accounts.find((a: any) =>
+          a.purpose === 'ordinals' || a.addressType === 'p2tr'
+        ) || accounts[0];
+        const paymentAccount = accounts.find((a: any) =>
+          a.purpose === 'payment' || a.addressType === 'p2wpkh' || a.addressType === 'p2sh'
+        );
+
+        if (ordinalsAccount) {
+          additionalAddresses.taproot = {
+            address: ordinalsAccount.address,
+            publicKey: ordinalsAccount.publicKey,
+          };
+        }
+        if (paymentAccount) {
+          additionalAddresses.nativeSegwit = {
+            address: paymentAccount.address,
+            publicKey: paymentAccount.publicKey,
+          };
+        }
+
+        const primaryAddr = ordinalsAccount?.address || paymentAccount?.address;
+        if (!primaryAddr) throw new Error('No address found in Xverse accounts');
+
+        const primaryIsTaproot = primaryAddr.startsWith('bc1p') || primaryAddr.startsWith('tb1p') || primaryAddr.startsWith('bcrt1p');
+        connected = new (ConnectedWallet as any)(walletInfo, xverseProvider, {
+          address: primaryAddr,
+          publicKey: ordinalsAccount?.publicKey || paymentAccount?.publicKey,
+          addressType: primaryIsTaproot ? 'p2tr' : 'p2wpkh',
+          paymentAddress: paymentAccount?.address,
+          paymentPublicKey: paymentAccount?.publicKey,
+        });
       } else if (walletId === 'leather') {
         const leatherProvider = (window as any).LeatherProvider;
         if (!leatherProvider) throw new Error('Leather provider not available');
@@ -1253,9 +1208,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         // Unisat exposes window.unisat with requestAccounts(), getPublicKey(), signPsbt()
         // Only provides one address type at a time (user-configurable in wallet settings)
         const unisatProvider = (window as any).unisat;
-        if (!unisatProvider) throw new Error('Unisat wallet not available');
+        if (!unisatProvider) throw new Error('Unisat wallet not available. Please install the Unisat extension.');
 
-        const accounts = await unisatProvider.requestAccounts();
+        let accounts: string[];
+        try {
+          accounts = await unisatProvider.requestAccounts();
+        } catch (e: any) {
+          // Unisat may throw a non-Error (string or object) on rejection
+          const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
+          throw new Error(`Unisat requestAccounts failed: ${msg}`);
+        }
         if (!accounts?.length) throw new Error('No accounts returned from Unisat');
         const addr = accounts[0];
 
