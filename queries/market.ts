@@ -153,7 +153,7 @@ export function frbtcPremiumQueryOptions(
 // Token display map
 // ---------------------------------------------------------------------------
 
-async function fetchAlkaneNamesBatch(alkaneIds: string[]): Promise<Record<string, TokenDisplay>> {
+export async function fetchAlkaneNamesBatch(alkaneIds: string[], network?: string): Promise<Record<string, TokenDisplay>> {
   const map: Record<string, TokenDisplay> = {};
   if (alkaneIds.length === 0) return map;
 
@@ -164,7 +164,8 @@ async function fetchAlkaneNamesBatch(alkaneIds: string[]): Promise<Record<string
     params: { alkane: id },
   }));
 
-  const response = await fetch('/api/rpc', {
+  const slug = network || 'mainnet';
+  const response = await fetch(`/api/rpc/${slug}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(batch),
@@ -213,7 +214,7 @@ export function tokenDisplayMapQueryOptions(
         }
       }
       if (toFetch.length > 0) {
-        const batchResults = await fetchAlkaneNamesBatch(toFetch);
+        const batchResults = await fetchAlkaneNamesBatch(toFetch, network);
         Object.assign(map, batchResults);
       }
       return map;

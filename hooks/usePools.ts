@@ -11,6 +11,7 @@ import { getConfig } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { queryKeys } from '@/queries/keys';
+import { fetchAlkaneNamesBatch } from '@/queries/market';
 
 export type UsePoolsParams = {
   search?: string;
@@ -82,46 +83,11 @@ function getTokenName(tokenId: string, rawName?: string): string {
 }
 
 /**
- * Fetch token names for unknown tokens via SDK's alkanesReflect.
- * Returns a map of tokenId → { name, symbol }.
- */
-async function fetchUnknownTokenNames(
-  tokenIds: string[],
-  provider: any
-): Promise<Record<string, { name: string; symbol: string }>> {
-  if (tokenIds.length === 0 || !provider) return {};
-
-  const map: Record<string, { name: string; symbol: string }> = {};
-
-  // Fetch in parallel with individual timeouts
-  await Promise.all(
-    tokenIds.map(async (tokenId) => {
-      try {
-        const reflection = await Promise.race([
-          provider.alkanesReflect(tokenId),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-        ]);
-        const parsed = typeof reflection === 'string' ? JSON.parse(reflection) : reflection;
-        const name = (parsed?.name || '').replace('SUBFROST BTC', 'frBTC').trim();
-        const symbol = (parsed?.symbol || '').trim();
-        if (name || symbol) {
-          map[tokenId] = { name, symbol };
-        }
-      } catch {
-        // Skip tokens that fail — name will fall back to pool_name parsing
-      }
-    })
-  );
-
-  return map;
-}
-
-/**
  * Enrich pool items with dynamically fetched token names for any tokens
  * not in the hardcoded KNOWN_TOKENS map.
+ * Uses Espo batch RPC (essentials.get_alkane_info) — one call for all tokens.
  */
-async function enrichTokenNames(items: PoolsListItem[], provider: any): Promise<void> {
-  // Collect unknown token IDs
+async function enrichTokenNames(items: PoolsListItem[], network: string): Promise<void> {
   const unknownIds = new Set<string>();
   for (const item of items) {
     if (!KNOWN_TOKENS[item.token0.id]) unknownIds.add(item.token0.id);
@@ -130,12 +96,11 @@ async function enrichTokenNames(items: PoolsListItem[], provider: any): Promise<
 
   if (unknownIds.size === 0) return;
 
-  console.log('[usePools] Fetching names for', unknownIds.size, 'unknown tokens:', Array.from(unknownIds));
-  const nameMap = await fetchUnknownTokenNames(Array.from(unknownIds), provider);
+  console.log('[usePools] Batch-fetching names for', unknownIds.size, 'unknown tokens');
+  const nameMap = await fetchAlkaneNamesBatch(Array.from(unknownIds), network);
 
   if (Object.keys(nameMap).length === 0) return;
 
-  // Apply fetched names to pool items
   for (const item of items) {
     const t0Info = nameMap[item.token0.id];
     const t1Info = nameMap[item.token1.id];
@@ -149,7 +114,6 @@ async function enrichTokenNames(items: PoolsListItem[], provider: any): Promise<
       if (t1Info.symbol) item.token1.symbol = t1Info.symbol;
     }
 
-    // Rebuild pairLabel using names
     const name0 = item.token0.name || item.token0.symbol;
     const name1 = item.token1.name || item.token1.symbol;
     item.pairLabel = `${name0} / ${name1} LP`;
@@ -341,8 +305,8 @@ export function usePools(params: UsePoolsParams = {}) {
         throw new Error('Failed to fetch pools from any source');
       }
 
-      // Enrich tokens not in KNOWN_TOKENS with names from SDK
-      await enrichTokenNames(items, provider);
+      // Enrich tokens not in KNOWN_TOKENS via Espo batch RPC (single call)
+      await enrichTokenNames(items, network);
 
       // Remove known scam/impersonator pools
       const beforeCount = items.length;
