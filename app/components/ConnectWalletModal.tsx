@@ -976,7 +976,7 @@ export default function ConnectWalletModal() {
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Enabled wallet IDs - only these wallets are fully supported */}
                 {(() => {
-                  const ENABLED_WALLET_IDS = new Set(['oyl', 'okx', 'unisat', 'xverse']);
+                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse']);
                   const installedIds = new Set(installedWallets.map(w => w.id));
 
                   // Separate installed wallets into enabled and coming soon

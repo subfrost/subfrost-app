@@ -11,7 +11,6 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDemoGate } from '@/hooks/useDemoGate';
 import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
@@ -168,7 +167,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
   const { t } = useTranslation();
-  const isDemoGated = useDemoGate();
   const { utxos, balances, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
@@ -1211,14 +1209,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       <div className="flex gap-3">
         <button
           data-testid="send-submit"
-          onClick={() => { if (!isDemoGated) { handleNext(); } }}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide ${
-            isDemoGated
-              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
-              : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
-          }`}
+          onClick={() => { handleNext(); }}
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
         >
-          {isDemoGated ? <span className="animate-pulse">{t('common.comingSoon')}</span> : t('send.reviewAndSend')}
+          {t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
@@ -1478,20 +1472,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       <div className="flex gap-3">
         <button
-          onClick={() => { if (!isDemoGated && !isProcessing) { handleNext(); } }}
+          onClick={() => { if (!isProcessing) { handleNext(); } }}
           disabled={!selectedAlkaneId || !amount || isProcessing}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
-            isDemoGated
-              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
-              : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
-          }`}
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
         >
           {isProcessing ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 size={16} className="animate-spin" />
               {t('send.preparing')}
             </span>
-          ) : isDemoGated ? <span className="animate-pulse">{t('common.comingSoon')}</span> : t('send.reviewAndSend')}
+          ) : t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
@@ -1590,15 +1580,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </button>
           ) : (
             <button
-              onClick={() => { if (!isDemoGated) { handleNext(); } }}
-              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 ${
-                isDemoGated
-                  ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
-                  : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
-              }`}
+              onClick={() => { handleNext(); }}
+              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
             >
               <Send size={18} />
-              {isDemoGated ? t('common.comingSoon') : t('send.sendTransaction')}
+              {t('send.sendTransaction')}
             </button>
           )}
         </div>
