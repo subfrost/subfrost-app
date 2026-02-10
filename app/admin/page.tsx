@@ -37,8 +37,10 @@ import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageHeader from '@/app/components/PageHeader';
 import AdminTabs from './AdminTabs';
 import { getAdminSecret, setAdminSecret, clearAdminSecret } from './useAdminFetch';
+import { useHydrated } from '@/hooks/useHydrated';
 
 export default function AdminPage() {
+  const hydrated = useHydrated();
   const [authed, setAuthed] = useState(false);
   const [password, setPassword] = useState('');
   const [checking, setChecking] = useState(false);
@@ -121,10 +123,10 @@ export default function AdminPage() {
               )}
               <button
                 type="submit"
-                disabled={checking || !password}
+                disabled={!hydrated || checking || !password}
                 className="rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
               >
-                {checking ? 'Verifying...' : 'Login'}
+                {!hydrated ? 'Loading...' : checking ? 'Verifying...' : 'Login'}
               </button>
             </form>
           </div>

@@ -6,16 +6,33 @@ import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 /**
  * Full-screen splash with animated canvas snowflake + progress bar.
  * Renders as a React component so it doesn't cause hydration mismatches.
- * Fades out and unmounts once the SDK (WASM) is initialized.
+ *
+ * Dismisses only when ALL of the following are true:
+ * 1. SDK WASM is initialized (isInitialized)
+ * 2. All page assets have loaded (document.readyState === 'complete')
+ *
+ * This ensures the user never sees a "looks interactive but isn't" state.
  */
 export default function SplashScreen() {
   const { isInitialized } = useAlkanesSDK();
   const [visible, setVisible] = useState(true);
   const [fading, setFading] = useState(false);
+  const [pageLoaded, setPageLoaded] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const readyRef = useRef(false);
   const startRef = useRef(performance.now());
   const frameRef = useRef<number>(0);
+
+  // Track when all page resources (JS, CSS, images, WASM) have finished loading
+  useEffect(() => {
+    if (document.readyState === 'complete') {
+      setPageLoaded(true);
+      return;
+    }
+    const onLoad = () => setPageLoaded(true);
+    window.addEventListener('load', onLoad);
+    return () => window.removeEventListener('load', onLoad);
+  }, []);
 
   const dismiss = useCallback((fast: boolean) => {
     if (fast) {
@@ -151,16 +168,16 @@ export default function SplashScreen() {
     return () => { cancelAnimationFrame(frameRef.current); clearTimeout(safetyTimer); };
   }, [visible, fading, dismiss]);
 
-  // Watch SDK initialization
+  // Dismiss only when SDK is initialized AND page is fully loaded
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || !pageLoaded) return;
     const elapsed = performance.now() - startRef.current;
     if (elapsed < 1000) {
       dismiss(true);
     } else {
       readyRef.current = true;
     }
-  }, [isInitialized, dismiss]);
+  }, [isInitialized, pageLoaded, dismiss]);
 
   if (!visible) return null;
 
