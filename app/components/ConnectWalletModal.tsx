@@ -8,6 +8,7 @@ import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
 import { initGoogleDrive, isDriveConfigured, type WalletBackupInfo } from '@/utils/clientSideDrive';
 import { WalletListPicker } from './WalletListPicker';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useInviteCodeRedemption } from '@/hooks/useInviteCodeRedemption';
 
 type WalletView = 'select' | 'invite-code' | 'create' | 'restore-options' | 'restore-mnemonic' | 'restore-json' | 'restore-drive' | 'restore-drive-picker' | 'restore-drive-unlock' | 'browser-extension' | 'unlock' | 'show-mnemonic';
 
@@ -54,22 +55,7 @@ export default function ConnectWalletModal() {
   const [uploadedKeystore, setUploadedKeystore] = useState<string | null>(null);
   const [backupSuccess, setBackupSuccess] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
-  const [pendingInviteCodeRedemption, setPendingInviteCodeRedemptionRaw] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('subfrost_pending_invite_redemption');
-    }
-    return null;
-  });
-  const setPendingInviteCodeRedemption = (code: string | null) => {
-    setPendingInviteCodeRedemptionRaw(code);
-    if (typeof window !== 'undefined') {
-      if (code) {
-        localStorage.setItem('subfrost_pending_invite_redemption', code);
-      } else {
-        localStorage.removeItem('subfrost_pending_invite_redemption');
-      }
-    }
-  };
+  const { pendingCode: pendingInviteCodeRedemption, setPendingCode: setPendingInviteCodeRedemption } = useInviteCodeRedemption(addresses);
   const [isValidatingCode, setIsValidatingCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wasModalOpenRef = useRef(false);
@@ -112,41 +98,6 @@ export default function ConnectWalletModal() {
     setPasswordHint(null);
     setConnectingWallet(null);
   };
-
-  // Redeem invite code when wallet addresses become available after creation
-  useEffect(() => {
-    if (!pendingInviteCodeRedemption) return;
-    if (!addresses?.taproot?.address) return;
-
-    const redeemCode = async () => {
-      try {
-        const response = await fetch('/api/invite-codes/redeem', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            code: pendingInviteCodeRedemption,
-            taprootAddress: addresses.taproot.address,
-            segwitAddress: addresses.nativeSegwit?.address,
-            taprootPubkey: addresses.taproot.pubkey,
-          }),
-        });
-        const data = await response.json();
-        if (data.success) {
-          console.log('[InviteCode] Redeemed:', pendingInviteCodeRedemption, '->', addresses.taproot.address);
-          setPendingInviteCodeRedemption(null);
-        } else {
-          console.warn('[InviteCode] Redemption failed:', data.error);
-          // Clear on definitive failures (invalid code, etc.) to avoid infinite retries
-          setPendingInviteCodeRedemption(null);
-        }
-      } catch (err) {
-        console.error('[InviteCode] Redemption error (will retry):', err);
-        // Keep pending code in localStorage — network errors are transient
-      }
-    };
-
-    redeemCode();
-  }, [pendingInviteCodeRedemption, addresses?.taproot?.address, addresses?.nativeSegwit?.address, addresses?.taproot?.pubkey]);
 
   const validateInviteCode = async () => {
     const code = inviteCode.trim().toUpperCase();
