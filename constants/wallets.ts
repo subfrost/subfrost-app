@@ -110,6 +110,10 @@ export function isWalletInstalled(wallet: BrowserWalletInfo): boolean {
         // Tokeo injects at window.tokeo.bitcoin
         return win.tokeo?.bitcoin !== undefined;
 
+      case 'xverse':
+        // Xverse injects at window.XverseProviders.BitcoinProvider
+        return win.XverseProviders?.BitcoinProvider !== undefined;
+
       default:
         // Standard injection key check
         const walletObj = win[wallet.injectionKey];

@@ -11,10 +11,10 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDemoGate } from '@/hooks/useDemoGate';
-import { getConfig } from '@/utils/getConfig';
+import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
+import { patchPsbtForBrowserWallet, injectRedeemScripts } from '@/lib/psbt-patching';
 
 bitcoin.initEccLib(ecc);
 
@@ -85,37 +85,79 @@ function detectAddressType(address: string): AddressTypeInfo {
 }
 
 /**
- * Build protostone for alkane transfer using edict pattern.
+ * Build protostone for alkane transfer using Factory Forward (opcode 50).
  *
- * IMPORTANT: We use the edict pattern [block:tx:amount:v0]:v1:v1 instead of
- * Factory Forward (50) because:
- * - Edict sends EXACTLY the specified amount to recipient (v0)
- * - Excess alkanes go to v1 (our change address)
- * - Prevents accidentally sending all alkanes if UTXO has more than intended
+ * IMPORTANT: Do NOT use a manual edict here. The SDK's `alkanesExecuteWithStrings`
+ * auto-generates edicts from `inputRequirements`. Adding a manual edict causes a
+ * double-edict bug where protostone indices shift and tokens go to wrong outputs.
+ * (Same bug fixed for swaps in 2026-02-01 — see useSwapMutation.ts lines 131-146.)
  *
- * Pattern: [block:tx:amount:v0]:v1:v1
- *   - [block:tx:amount:v0] = Edict: send exactly `amount` of alkane to vout 0
- *   - :v1 = Pointer: excess alkanes go to vout 1 (our change)
- *   - :v1 = Refund: refunds go to vout 1 (our change)
+ * Pattern: [factory_block,factory_tx,50]:v0:v1
+ *   - Cellpack calls Factory Forward (opcode 50), which passes incomingAlkanes through
+ *   - v0 = pointer: recipient gets the forwarded alkanes
+ *   - v1 = refund: sender change address (safe failure path)
  *
- * toAddresses must be: [recipientAddress, changeAddress]
+ * The SDK's auto-edict from `inputRequirements` handles token delivery:
+ *   1. inputRequirements selects the alkane UTXO and routes exact amount to cellpack
+ *   2. If UTXO has excess, SDK splits: needed → cellpack, excess → alkanesChangeAddress
+ *   3. Factory Forward receives exactly the needed amount as incomingAlkanes
+ *   4. Forward passes them to pointer output (v0 = recipient)
+ *
+ * toAddresses must be: [recipientAddress, senderChangeAddress]
+ *
+ * JOURNAL (2026-02-09): P2SH-P2WPKH redeemScript injection fix
+ * The SDK's WASM builds PSBTs with a dummy wallet (walletCreate()), so witnessUtxo.script
+ * contains the DUMMY wallet's P2WPKH hash (0014<dummy_hash>), not the user's. The original
+ * redeemScript injection compared exact bytes against the user's P2SH scriptPubKey and
+ * user's P2WPKH redeemScript — neither matched the dummy hash, so redeemScript was never
+ * injected. Fix: match by script TYPE PATTERN (script[0]===0x00 && length===22) instead
+ * of exact bytes, same approach used for output patching. When matched, replace witnessUtxo
+ * with P2SH scriptPubKey and inject redeemScript.
+ *
+ * JOURNAL (2026-02-09): Refactored all PSBT patching into lib/psbt-patching.ts.
+ * ~483 lines of duplicated output/input patching code across 7 hooks + SendModal
+ * consolidated into patchPsbtForBrowserWallet() and injectRedeemScripts(). The utility
+ * handles: output patching by script type, fixed output overrides (signer/recipient),
+ * and P2SH-P2WPKH redeemScript injection with pattern-based matching.
+ * First mainnet tx with this fix: f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2
+ */
+/**
+ * Build an edict-based protostone for alkane token transfers.
+ *
+ * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
+ * The edict sends the exact `amount` of alkane `alkaneId` to output v1 (recipient).
+ * Pointer v0 receives any unedicted remainder (sender change via p2tr:0).
+ * RefundPointer v0 handles failure refunds to the same change output.
+ *
+ * Output ordering follows SDK convention (same as OYL SDK token.ts):
+ *   v0 = sender change (p2tr:0)  — SDK auto-edict also sends excess here
+ *   v1 = recipient               — edict sends exact amount here
+ *
+ * Pattern: [block:tx:amount:v1]:v0:v0
  */
 function buildTransferProtostone(params: {
-  alkaneId: string; // e.g., "2:0" for DIESEL
-  amount: string;   // Amount to transfer (as string for BigInt compatibility)
+  alkaneId: string; // e.g., "2:0" (DIESEL), "32:0" (frBTC)
+  amount: string;   // base units to transfer
 }): string {
-  const { alkaneId, amount } = params;
-  const [block, tx] = alkaneId.split(':');
+  const [block, tx] = params.alkaneId.split(':');
+  return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
+}
 
-  // Edict format: [block:tx:amount:target]:pointer:refund
-  // - target v0 = recipient (first address in toAddresses)
-  // - pointer v1 = excess goes to sender change (second address in toAddresses)
-  // - refund v1 = refunds also go to sender change
-  return `[${block}:${tx}:${amount}:v0]:v1:v1`;
+/**
+ * Map a Bitcoin address to a symbolic SDK reference to avoid LegacyAddressTooLong.
+ * The WASM SDK tries base58 parsing first; bech32/bech32m addresses (bc1p, bc1q)
+ * are longer than expected for base58 and trigger the error.
+ * P2SH/P2PKH addresses are base58-encoded and can be passed directly.
+ */
+function addressToSymbolic(address: string): string {
+  const l = address.toLowerCase();
+  if (l.startsWith('bc1p') || l.startsWith('tb1p') || l.startsWith('bcrt1p')) return 'p2tr:0';
+  if (l.startsWith('bc1q') || l.startsWith('tb1q') || l.startsWith('bcrt1q')) return 'p2wpkh:0';
+  return address;
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
-  const { address: taprootAddress, paymentAddress, network, walletType, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
+  const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
   // Address strategy:
   // - BTC sends: SegWit only (paymentAddress) for both send and change
   // - Alkane sends: Taproot (address) for token send/change, SegWit (paymentAddress) for BTC fees/change
@@ -124,9 +166,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const { provider, isInitialized } = useAlkanesSDK();
   const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
-  const { ALKANE_FACTORY_ID } = getConfig(network);
   const { t } = useTranslation();
-  const isDemoGated = useDemoGate();
   const { utxos, balances, refresh } = useEnrichedWalletData();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
@@ -145,6 +185,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
+  const [isProcessing, setIsProcessing] = useState(false);
   const selectedAlkaneRef = useRef<HTMLButtonElement>(null);
 
   // Normalize Bech32 addresses to lowercase (BIP-173: case-insensitive)
@@ -192,8 +233,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const frozenUtxos = getFrozenUtxos();
 
-  // Filter available UTXOs (only from SegWit address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
+  // Filter available UTXOs (only confirmed, from SegWit address, exclude frozen, inscriptions, runes, alkanes for simple BTC sends)
   const availableUtxos = utxos.all.filter((utxo) => {
+    // Only include confirmed UTXOs - pending UTXOs cannot be reliably spent
+    if (!utxo.status.confirmed) return false;
     // Only include UTXOs from the SegWit (payment) address for BTC sends
     if (utxo.address !== btcSendAddress) return false;
 
@@ -235,6 +278,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       setSendMode('btc');
       setSelectedAlkaneId(null);
       setAlkaneFilter('tokens');
+      setIsProcessing(false);
     }
   }, [isOpen]);
 
@@ -306,13 +350,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         }
 
         if (!selectedAlkaneId) {
-          setError(t('send.selectAlkane') || 'Please select an alkane to send');
+          setError(t('send.selectAlkane'));
           return;
         }
 
         const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
         if (!selectedAlkane) {
-          setError('Selected alkane not found');
+          setError(t('send.selectedAlkaneNotFound'));
           return;
         }
 
@@ -328,7 +372,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         const balanceBaseUnits = BigInt(selectedAlkane.balance);
 
         if (amountBaseUnits > balanceBaseUnits) {
-          setError(t('send.insufficientBalance') || 'Insufficient balance');
+          setError(t('send.insufficientBalance'));
           return;
         }
 
@@ -370,12 +414,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       let total = 0;
       const selected = new Set<string>();
 
-      // Estimate fee based on number of inputs
-      // Each input is ~180 vbytes, output is ~34 vbytes
-      const estimateFee = (numInputs: number) => {
-        const size = numInputs * 180 + 2 * 34 + 10; // 2 outputs (recipient + change)
-        return size * feeRateNum;
-      };
+      // Estimate fee based on number of inputs (for UTXO accumulation loop)
+      const estimateFee = (numInputs: number) => estimateSelectionFee(numInputs, feeRateNum);
 
       const MAX_UTXOS = 100; // Hard limit to keep transaction size reasonable
 
@@ -396,28 +436,36 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         }
       }
 
-      const finalFee = estimateFee(selected.size);
-      const required = amountSats + finalFee;
+      // Compute accurate fee accounting for dust threshold on change output
+      const feeResult = computeSendFee({ inputCount: selected.size, sendAmount: amountSats, totalInputValue: total, feeRate: feeRateNum });
+      const required = amountSats + feeResult.fee;
 
       if (total < required) {
         // Check if we have enough total balance
         const totalAvailable = availableUtxos.reduce((sum, u) => sum + u.value, 0);
         if (totalAvailable >= required) {
           setError(
-            `Cannot send this amount (hit ${MAX_UTXOS} UTXO limit). ` +
-            `Need ${(required / 100000000).toFixed(8)} BTC, but can only use ${(total / 100000000).toFixed(8)} BTC with ${MAX_UTXOS} UTXOs. ` +
-            `Total available: ${(totalAvailable / 100000000).toFixed(8)} BTC. ` +
-            `Try sending a smaller amount.`
+            t('send.utxoLimitError', {
+              limit: MAX_UTXOS,
+              need: (required / 100000000).toFixed(8),
+              have: (total / 100000000).toFixed(8),
+              total: (totalAvailable / 100000000).toFixed(8),
+            })
           );
         } else {
-          setError(`Insufficient funds. Need ${(required / 100000000).toFixed(8)} BTC, have ${(totalAvailable / 100000000).toFixed(8)} BTC`);
+          setError(t('send.insufficientFundsDetailed', {
+            need: (required / 100000000).toFixed(8),
+            have: (totalAvailable / 100000000).toFixed(8),
+          }));
         }
         return;
       }
 
-      console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, estimated fee: ${(finalFee / 100000000).toFixed(8)} BTC`);
+      console.log(`[SendModal] Auto-selected ${selected.size} UTXOs, total: ${(total / 100000000).toFixed(8)} BTC, fee: ${(feeResult.fee / 100000000).toFixed(8)} BTC (${feeResult.numOutputs} outputs, ${feeResult.effectiveFeeRate.toFixed(2)} sat/vB effective)`);
 
       setSelectedUtxos(selected);
+      setEstimatedFee(feeResult.fee);
+      setEstimatedFeeRate(feeResult.effectiveFeeRate);
       setStep('confirm');
     } else if (step === 'confirm') {
       // Check if fee looks suspicious before broadcasting
@@ -429,20 +477,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
     const feeRateNum = feeRate;
     
-    // Estimate transaction size: ~180 bytes per input + ~34 bytes per output + ~10 bytes overhead
     const numInputs = selectedUtxos.size;
-    const numOutputs = 2; // recipient + change
-    const estimatedSize = numInputs * 180 + numOutputs * 34 + 10;
-    const estimatedFeeSats = estimatedSize * feeRateNum;
-    const calculatedFeeRate = totalSelectedValue > amountSats 
-      ? estimatedFeeSats / (totalSelectedValue - amountSats) 
-      : 0;
+    const feeResult = computeSendFee({ inputCount: numInputs, sendAmount: amountSats, totalInputValue: totalSelectedValue, feeRate: feeRateNum });
 
-    setEstimatedFee(estimatedFeeSats);
-    setEstimatedFeeRate(calculatedFeeRate);
+    setEstimatedFee(feeResult.fee);
+    setEstimatedFeeRate(feeResult.effectiveFeeRate);
+
+    const estimatedFeeSats = feeResult.fee;
 
     // Safety checks:
-    // 1. Fee is more than 1% of amount
+    // 1. Fee is more than 2% of amount
     // 2. Fee is more than 0.01 BTC
     // 3. Fee rate is more than 1000 sat/vbyte
     // 4. Using more than 100 UTXOs
@@ -450,7 +494,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // 0.01 BTC
     const feeRateTooHigh = feeRateNum > 1000;
     const tooManyInputs = numInputs > 100;
-    const feePercentageTooHigh = feePercentage > 1;
+    const feePercentageTooHigh = feePercentage > 2;
 
     if (feeTooHigh || feeRateTooHigh || tooManyInputs || feePercentageTooHigh) {
       setShowFeeWarning(true);
@@ -479,8 +523,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
         console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
         console.log('[SendModal] From address (SegWit):', btcSendAddress);
-
-        setStep('broadcasting');
 
         // Fetch fresh UTXOs directly from esplora API to avoid stale cache issues
         console.log('[SendModal] Fetching fresh UTXOs from esplora...');
@@ -513,10 +555,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           console.error('[SendModal] Selected UTXOs no longer exist:', missingUtxos);
           // Invalidate cache and throw error so user can retry with fresh data
           await refresh();
-          throw new Error(
-            `Some selected UTXOs are no longer available (already spent or not yet confirmed). ` +
-            `Please go back and try again with updated balance.`
-          );
+          throw new Error(t('send.utxosStale'));
         }
 
         // Determine Bitcoin network
@@ -540,10 +579,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         // Create PSBT
         const psbt = new bitcoin.Psbt({ network: btcNetwork });
-
-        // Calculate total needed (amount + estimated fee)
-        const estimatedFeeForCalculation = selectedUtxos.size * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate;
-        const totalNeeded = amountSats + estimatedFeeForCalculation;
 
         // Add inputs from selected UTXOs (now verified to exist in fresh data)
         let totalInputValue = 0;
@@ -586,37 +621,57 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           value: BigInt(amountSats),
         });
 
-        // Add change output if needed
-        const actualFee = Math.ceil(psbt.txInputs.length * 180 * feeRate + 2 * 34 * feeRate + 10 * feeRate);
-        const change = totalInputValue - amountSats - actualFee;
+        // Compute fee and change, accounting for dust threshold
+        const txFeeResult = computeSendFee({ inputCount: psbt.txInputs.length, sendAmount: amountSats, totalInputValue, feeRate });
 
-        if (change > 546) { // Dust threshold
+        if (txFeeResult.numOutputs === 2 && txFeeResult.change > 0) {
           psbt.addOutput({
             address: btcSendAddress,
-            value: BigInt(change),
+            value: BigInt(txFeeResult.change),
           });
         }
 
         // Convert PSBT to base64 for signing
-        const psbtBase64 = psbt.toBase64();
+        let psbtBase64 = psbt.toBase64();
         console.log('[SendModal] PSBT created, signing with browser wallet...');
 
-        // Sign with browser wallet (SegWit)
-        const signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+        // Inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+        if (account?.nativeSegwit?.pubkey && btcSendAddress) {
+          const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const patched = injectRedeemScripts(psbtForPatch, {
+            paymentAddress: btcSendAddress,
+            pubkeyHex: account.nativeSegwit.pubkey,
+            network: btcNetwork,
+          });
+          if (patched > 0) {
+            console.log('[SendModal] BTC send: patched', patched, 'P2SH inputs with redeemScript');
+          }
+          psbtBase64 = psbtForPatch.toBase64();
+        }
+
+        // Browser wallets sign all input types in a single call.
+        // Use signTaprootPsbt which has the Xverse direct-call bypass.
+        const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+
+        // Show broadcasting spinner now that signing is complete
+        setStep('broadcasting');
 
         // Finalize and extract transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
         signedPsbt.finalizeAllInputs();
-        const tx = signedPsbt.extractTransaction();
-        const txHex = tx.toHex();
-        const computedTxid = tx.getId();
+        const txObj = signedPsbt.extractTransaction();
+        const txHex = txObj.toHex();
+        const computedTxid = txObj.getId();
 
-        console.log('[SendModal] Transaction signed, txid:', computedTxid);
+        // Log actual vsize and effective fee rate for verification
+        const actualVsize = txObj.virtualSize();
+        const actualFee = totalInputValue - amountSats - (txFeeResult.numOutputs === 2 ? txFeeResult.change : 0);
+        console.log(`[SendModal] Actual vsize: ${actualVsize}, fee: ${actualFee} sats, effective rate: ${(actualFee / actualVsize).toFixed(2)} sat/vB`);
         console.log('[SendModal] Broadcasting...');
 
         // Broadcast using provider
         if (!alkaneProvider) {
-          throw new Error('Provider not initialized');
+          throw new Error(t('send.providerNotInitialized'));
         }
 
         const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
@@ -634,19 +689,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       // For keystore wallets, use WASM provider
       if (!provider || !isInitialized) {
-        throw new Error('Provider not initialized. Please wait and try again.');
+        throw new Error(t('send.providerNotInitialized'));
       }
 
       // Check if wallet is loaded in provider
       if (!provider.walletIsLoaded()) {
-        throw new Error('Wallet not loaded. Please reconnect your wallet.');
+        throw new Error(t('send.walletNotLoaded'));
       }
 
       // Request user confirmation before broadcasting
       console.log('[SendModal] Keystore wallet - requesting user confirmation...');
       const approved = await requestConfirmation({
         type: 'send',
-        title: 'Confirm Send',
+        title: t('send.confirmSend'),
         fromAmount: amount,
         fromSymbol: 'BTC',
         recipient: recipientAddress,
@@ -655,7 +710,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       if (!approved) {
         console.log('[SendModal] User rejected transaction');
-        setError('Transaction rejected by user');
+        setError(t('send.transactionRejected'));
         return;
       }
       console.log('[SendModal] User approved transaction');
@@ -685,7 +740,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       // Extract txid from result
       const txidResult = typeof result === 'string' ? result : result?.txid || result?.tx_id;
       if (!txidResult) {
-        throw new Error('Transaction sent but no txid returned');
+        throw new Error(t('send.noTxidReturned'));
       }
 
       setTxid(txidResult);
@@ -698,7 +753,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
     } catch (err: any) {
       console.error('[SendModal] Transaction failed:', err);
 
-      let errorMessage = err.message || 'Failed to broadcast transaction';
+      let errorMessage = err.message || t('send.failedBroadcast');
 
       setError(errorMessage);
       setStep('confirm');
@@ -712,38 +767,42 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
    */
   const handleAlkaneBroadcast = async () => {
     setError('');
+    setIsProcessing(true);
 
     try {
       if (!alkaneProvider) {
-        throw new Error('Provider not initialized. Please wait and try again.');
+        throw new Error(t('send.providerNotInitialized'));
       }
 
       if (!selectedAlkaneId) {
-        throw new Error('No alkane selected');
+        throw new Error(t('send.noAlkaneSelected'));
       }
 
       const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
       if (!selectedAlkane) {
-        throw new Error('Selected alkane not found in balances');
+        throw new Error(t('send.alkaneNotFoundInBalances'));
       }
 
       // Validate recipient address (should be Taproot for alkane receives)
       if (!validateAddress(recipientAddress)) {
-        throw new Error('Invalid recipient address');
+        throw new Error(t('send.invalidAddress'));
       }
 
       // Convert amount to base units (respecting decimals)
       const decimals = selectedAlkane.decimals || 8;
       const amountFloat = parseFloat(amount);
       if (isNaN(amountFloat) || amountFloat <= 0) {
-        throw new Error('Invalid amount');
+        throw new Error(t('send.invalidAmount'));
       }
 
       const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
       const balanceBaseUnits = BigInt(selectedAlkane.balance);
 
       if (amountBaseUnits > balanceBaseUnits) {
-        throw new Error(`Insufficient balance. Have ${selectedAlkane.balance}, need ${amountBaseUnits.toString()}`);
+        throw new Error(t('send.insufficientBalanceDetailed', {
+          have: selectedAlkane.balance,
+          need: amountBaseUnits.toString(),
+        }));
       }
 
       console.log('[SendModal] Starting alkane transfer...');
@@ -757,7 +816,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] Keystore wallet - requesting user confirmation...');
         const approved = await requestConfirmation({
           type: 'send',
-          title: 'Confirm Alkane Send',
+          title: t('send.confirmAlkaneSend'),
           fromAmount: amount,
           fromSymbol: selectedAlkane.symbol || 'ALKANE',
           recipient: recipientAddress,
@@ -766,22 +825,18 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         if (!approved) {
           console.log('[SendModal] User rejected transaction');
-          setError('Transaction rejected by user');
+          setError(t('send.transactionRejected'));
           return;
         }
         console.log('[SendModal] User approved transaction');
       }
 
-      setStep('broadcasting');
-
-      // Build input requirements: alkaneId:amount
+      // Build input requirements: alkaneId:amount (tells WASM which alkane UTXOs to select)
       const inputRequirements = `${selectedAlkaneId}:${amountBaseUnits.toString()}`;
 
-      // Build the protostone for alkane transfer using edict pattern
-      // Pattern: [block:tx:amount:v0]:v1:v1
-      // - Edict sends exactly `amount` to v0 (recipient)
-      // - Excess alkanes go to v1 (our change address)
-      // - This prevents accidentally sending all alkanes if UTXO has more than intended
+      // Build edict protostone for alkane transfer.
+      // The edict sends exact `amount` to v0 (recipient). Unedicted remainder
+      // goes to v1 (sender change via pointer). No contract call needed.
       const protostone = buildTransferProtostone({
         alkaneId: selectedAlkaneId,
         amount: amountBaseUnits.toString(),
@@ -840,21 +895,29 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log('[SendModal] From addresses:', fromAddresses);
       console.log('[SendModal] BTC change address:', btcChangeAddress);
       console.log('[SendModal] Alkanes change address:', alkaneSendAddress);
-      console.log('[SendModal] Recipient (toAddresses[0]):', recipientAddress);
+      console.log('[SendModal] Recipient (toAddresses[1] = v1):', recipientAddress);
 
       // Execute the alkane transfer
-      // toAddresses: [recipient, changeAddress] maps to v0 and v1 in the protostone
-      // - v0 = recipient gets exactly the specified amount (from edict)
-      // - v1 = sender gets excess alkanes back (from pointer/refund)
+      // toAddresses maps to vN outputs in the protostone (SDK convention):
+      // - v0 = sender change (p2tr:0) — SDK auto-edict sends excess alkanes here
+      // - v1 = recipient (edict sends exact amount here)
+      //
+      // This matches the OYL SDK token.ts convention where output 0 = change,
+      // output 1 = recipient. The SDK's auto-edict from inputRequirements always
+      // routes alkane change to output 0, so the sender MUST be at v0.
+      //
+      // Use symbolic addresses for toAddresses to avoid LegacyAddressTooLong.
+      // fromAddresses use actual addresses (opaque strings for esplora UTXO lookup).
+      // Outputs are patched to actual scriptPubKeys after the PSBT is returned.
       const result = await alkaneProvider.alkanesExecuteTyped({
         inputRequirements,
         protostones: protostone,
         feeRate,
         autoConfirm: false, // We handle signing manually
         fromAddresses,
-        toAddresses: [normalizedRecipientAddress, alkaneSendAddress], // v0 = recipient, v1 = our change
-        changeAddress: btcChangeAddress, // BTC change (SegWit in dual mode, Taproot in single mode)
-        alkanesChangeAddress: alkaneSendAddress, // Alkane change to Taproot
+        toAddresses: ['p2tr:0', addressToSymbolic(normalizedRecipientAddress)],
+        changeAddress: addressToSymbolic(btcChangeAddress),
+        alkanesChangeAddress: 'p2tr:0',
       });
 
       console.log('[SendModal] Execute result:', JSON.stringify(result, null, 2));
@@ -884,35 +947,55 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         console.log('[SendModal] PSBT base64 length:', psbtBase64.length);
 
-        // Sign the PSBT based on wallet mode and detected address types
+        const isBrowserWallet = walletType === 'browser';
+
+        // Patch PSBT: recipient at output 1 (v1), sender change at output 0 (v0).
+        // Replace dummy wallet outputs, inject redeemScript for P2SH-P2WPKH wallets.
+        // See lib/psbt-patching.ts for details.
+        //
+        // fixedOutputs pins the recipient address at output 1 so browser wallet
+        // patching doesn't overwrite it with the sender's scriptPubKey.
+        {
+          const result = patchPsbtForBrowserWallet({
+            psbtBase64,
+            network: btcNetwork,
+            isBrowserWallet,
+            taprootAddress: alkaneSendAddress,
+            segwitAddress: btcSendAddress || undefined,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            fixedOutputs: { 1: normalizedRecipientAddress },
+          });
+          psbtBase64 = result.psbtBase64;
+          if (result.inputsPatched > 0) {
+            console.log('[SendModal] Alkane send: patched', result.inputsPatched, 'P2SH inputs with redeemScript');
+          }
+          console.log('[SendModal] Patched PSBT (recipient + browser wallet:', isBrowserWallet, ')');
+        }
+
+        // Sign the PSBT
         let signedPsbtBase64: string;
-        if (isSingleAddressMode) {
-          // Single-address mode: sign with the appropriate key based on detected address type
+        if (isBrowserWallet) {
+          // Browser wallets sign ALL input types (P2TR, P2WPKH, P2SH) in one call.
+          // Always use signTaprootPsbt which has the Xverse direct-call bypass.
+          console.log('[SendModal] Browser wallet: signing all inputs in single call...');
+          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+        } else if (isSingleAddressMode) {
+          // Keystore single-address mode
           console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
           if (primaryAddressType.signingMethod === 'taproot') {
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           } else {
-            // SegWit, nested SegWit, or legacy - all use signSegwitPsbt
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
           }
-          console.log(`[SendModal] PSBT signed with ${primaryAddressType.type} key`);
         } else {
-          // Dual-address mode: sign with both keys based on their types
-          console.log('[SendModal] Signing PSBT with both keys...');
-          // Sign with secondary (usually SegWit for fees) first
-          if (secondaryAddressType?.signingMethod === 'taproot') {
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          }
-          // Then sign with primary (usually Taproot for alkanes)
-          if (primaryAddressType.signingMethod === 'taproot') {
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          } else {
-            signedPsbtBase64 = await signSegwitPsbt(signedPsbtBase64);
-          }
-          console.log(`[SendModal] PSBT signed with ${secondaryAddressType?.type} and ${primaryAddressType.type} keys`);
+          // Keystore dual-address mode: sign with both keys sequentially
+          console.log('[SendModal] Keystore: signing with both keys...');
+          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
         }
+
+        // Show broadcasting spinner now that signing is complete
+        setStep('broadcasting');
 
         // Parse the signed PSBT, finalize, and extract the raw transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
@@ -976,14 +1059,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       // No txid found
       console.error('[SendModal] No txid found in result:', result);
-      throw new Error('Alkane transfer did not return a transaction ID');
+      throw new Error(t('send.alkaneTxNoId'));
 
     } catch (err: any) {
       console.error('[SendModal] Alkane transfer failed:', err);
 
-      let errorMessage = err.message || 'Failed to send alkanes';
+      let errorMessage = err.message || t('send.failedSendAlkanes');
       setError(errorMessage);
       setStep('input');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1051,7 +1136,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
             placeholder="bc1q..."
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
 
@@ -1066,7 +1151,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00000000"
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
           <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
             {t('send.available')} {(availableUtxos.reduce((sum, u) => sum + u.value, 0) / 100000000).toFixed(8)} BTC
@@ -1097,7 +1182,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -1124,18 +1209,14 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       <div className="flex gap-3">
         <button
           data-testid="send-submit"
-          onClick={() => { if (!isDemoGated) { handleNext(); } }}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide ${
-            isDemoGated
-              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
-              : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
-          }`}
+          onClick={() => { handleNext(); }}
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
         >
-          {isDemoGated ? t('common.comingSoon') : t('send.reviewAndSend')}
+          {t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           {t('send.cancel')}
         </button>
@@ -1155,7 +1236,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             value={recipientAddress}
             onChange={(e) => setRecipientAddress(e.target.value)}
             placeholder="bc1p..."
-            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
         </div>
 
@@ -1251,7 +1332,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                         ref={isSelected ? selectedAlkaneRef : undefined}
                         type="button"
                         onClick={() => setSelectedAlkaneId(isSelected ? null : alkane.alkaneId)}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
+                        className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-left ${
                           isSelected
                             ? 'bg-[color:var(--sf-primary)]/15'
                             : 'hover:bg-[color:var(--sf-primary)]/5'
@@ -1330,7 +1411,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
                 disabled={!selected}
-                className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
               {selected && (
                 <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
@@ -1365,7 +1446,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                   }}
                   placeholder="0"
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
                 />
               </div>
             ) : (
@@ -1391,19 +1472,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       <div className="flex gap-3">
         <button
-          onClick={() => { if (!isDemoGated) { handleNext(); } }}
-          disabled={!selectedAlkaneId || !amount}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed ${
-            isDemoGated
-              ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
-              : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
-          }`}
+          onClick={() => { if (!isProcessing) { handleNext(); } }}
+          disabled={!selectedAlkaneId || !amount || isProcessing}
+          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
         >
-          {isDemoGated ? t('common.comingSoon') : t('send.reviewAndSend')}
+          {isProcessing ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              {t('send.preparing')}
+            </span>
+          ) : t('send.reviewAndSend')}
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           {t('send.cancel')}
         </button>
@@ -1413,8 +1495,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
   const renderConfirm = () => {
     const amountSats = Math.floor(parseFloat(amount) * 100000000);
-    const localEstimatedFee = 150 * feeRate; // Rough estimate for display before warning
-    const total = amountSats + (showFeeWarning ? estimatedFee : localEstimatedFee);
+    const total = amountSats + estimatedFee;
 
     return (
       <>
@@ -1429,7 +1510,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 </span>
               </div>
               <p className="text-sm text-[color:var(--sf-info-red-text)]">
-                {t('send.highFeeDescription')}
+                {t('send.highFeeDescription', { percent: total > 0 ? ((estimatedFee / total) * 100).toFixed(1) : '0.0' })}
               </p>
             </div>
           )}
@@ -1447,11 +1528,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </div>
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.feeRateLabel')}</span>
-              <span className="text-[color:var(--sf-text)]">{feeRate} sat/vB</span>
+              <span className="text-[color:var(--sf-text)]">
+                {estimatedFeeRate > 0 && Math.abs(estimatedFeeRate - feeRate) > 0.05
+                  ? `~${estimatedFeeRate.toFixed(2)} sat/vB`
+                  : `${feeRate} sat/vB`}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-[color:var(--sf-text)]/60">{t('send.estimatedFee')}</span>
-              <span className="text-[color:var(--sf-text)]">{((showFeeWarning ? estimatedFee : localEstimatedFee) / 100000000).toFixed(8)} BTC</span>
+              <span className="text-[color:var(--sf-text)]">{(estimatedFee / 100000000).toFixed(8)} BTC</span>
             </div>
             <div className="border-t border-[color:var(--sf-text)]/10 pt-2 flex justify-between">
               <span className="text-[color:var(--sf-text)]/80 font-medium">{t('send.total')}</span>
@@ -1476,7 +1561,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         <div className="flex gap-3">
           <button
             onClick={() => { setStep('input'); setShowFeeWarning(false); }}
-            className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+            className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
           >
             {t('send.back')}
           </button>
@@ -1484,7 +1569,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             <button
               onClick={proceedWithHighFee}
               disabled={feeWarningCountdown > 0}
-              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${
+              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] ${
                 feeWarningCountdown > 0
                   ? 'bg-[color:var(--sf-info-red-bg)] text-[color:var(--sf-info-red-title)] cursor-not-allowed opacity-70'
                   : 'bg-[color:var(--sf-fee-warning-proceed-bg)] text-[color:var(--sf-fee-warning-proceed-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:transition-none'
@@ -1495,15 +1580,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             </button>
           ) : (
             <button
-              onClick={() => { if (!isDemoGated) { handleNext(); } }}
-              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 ${
-                isDemoGated
-                  ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
-                  : 'bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white'
-              }`}
+              onClick={() => { handleNext(); }}
+              className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide flex items-center justify-center gap-2 bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
             >
               <Send size={18} />
-              {isDemoGated ? t('common.comingSoon') : t('send.sendTransaction')}
+              {t('send.sendTransaction')}
             </button>
           )}
         </div>
@@ -1529,7 +1610,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           href={`https://espo.sh/tx/${txid}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer relative"
+          className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 hover:brightness-110 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer relative"
         >
           <ExternalLink size={12} className="absolute top-3 right-3 text-[color:var(--sf-info-green-text)]/60" />
           <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('send.transactionIdLabel')}</div>
@@ -1539,7 +1620,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       <button
         onClick={onClose}
-        className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
+        className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
       >
         {t('send.close')}
       </button>
@@ -1555,7 +1636,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{sendMode === 'btc' ? t('send.title') : t('send.titleAlkanes')}</h2>
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
               aria-label="Close"
             >
               <X size={18} />
@@ -1633,10 +1714,10 @@ function getSendNftImagePaths(symbol: string, id: string, _network: string): str
   const paths: string[] = [];
   const symbolLower = symbol?.toLowerCase() || '';
   if (symbolLower === 'frbtc' || id === '32:0') { paths.push('/tokens/frbtc.svg'); return paths; }
-  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://cdn.ordiscan.com/alkanes/2_0'); return paths; }
+  if (id === '2:0' || symbolLower === 'diesel') { paths.push('https://cdn.subfrost.io/alkanes/2_0'); return paths; }
   if (id && /^\d+:\d+/.test(id)) {
     const urlSafeId = id.replace(/:/g, '_');
-    paths.push(`https://cdn.ordiscan.com/alkanes/${urlSafeId}`);
+    paths.push(`https://cdn.subfrost.io/alkanes/${urlSafeId}`);
   }
   return paths;
 }
@@ -1666,7 +1747,7 @@ const SendNftCard = forwardRef<HTMLButtonElement, {
       ref={ref}
       type="button"
       onClick={onSelect}
-      className={`rounded-lg overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+      className={`rounded-lg overflow-hidden transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
         isSelected
           ? 'ring-2 ring-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/15'
           : 'hover:bg-[color:var(--sf-primary)]/5'
@@ -1734,10 +1815,10 @@ function SendMinerFeeButton({ selection, setSelection, presets }: { selection: F
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[400ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
       >
         <span>{feeDisplayMap[selection] || selection}</span>
-        <ChevronDown size={12} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
@@ -1747,7 +1828,7 @@ function SendMinerFeeButton({ selection, setSelection, presets }: { selection: F
               key={option}
               type="button"
               onClick={() => handleSelect(option)}
-              className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+              className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                 selection === option
                   ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
                   : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'

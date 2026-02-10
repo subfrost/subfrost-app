@@ -74,6 +74,7 @@ import { getTokenSymbol } from '@/lib/alkanes-client';
 import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
+import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 
 bitcoin.initEccLib(ecc);
 
@@ -291,30 +292,27 @@ export function useRemoveLiquidityMutation() {
 
       const btcNetwork = getBitcoinNetwork();
 
-      try {
-        // Build fromAddresses array - use actual wallet addresses, not SDK descriptors
-        // This ensures the SDK can find UTXOs correctly even when wallet isn't loaded via mnemonic
-        const fromAddresses: string[] = [];
-        if (segwitAddress) fromAddresses.push(segwitAddress);
-        if (taprootAddress) fromAddresses.push(taprootAddress);
+      const isBrowserWallet = walletType === 'browser';
 
-        // Execute using alkanesExecuteTyped with ACTUAL addresses:
-        // - fromAddresses: actual wallet addresses (fixes "Available: []" issue)
-        // - changeAddress: segwit address for BTC change
-        // - alkanesChangeAddress: taproot address for alkane change
-        // - toAddresses: taproot address for outputs
+      // For browser wallets, use actual addresses for UTXO discovery.
+      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      const fromAddresses = isBrowserWallet
+        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
+        : ['p2wpkh:0', 'p2tr:0'];
+
+      try {
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: data.feeRate,
           autoConfirm: false,
           fromAddresses,
-          toAddresses: [taprootAddress], // Returned tokens go to taproot
-          changeAddress: segwitAddress || taprootAddress, // BTC change to segwit
-          alkanesChangeAddress: taprootAddress, // Alkane change to taproot
+          toAddresses: ['p2tr:0'],
+          changeAddress: 'p2wpkh:0',
+          alkanesChangeAddress: 'p2tr:0',
         });
 
-        console.log('[RemoveLiquidity] Called alkanesExecuteTyped with fromAddresses:', fromAddresses);
+        console.log('[RemoveLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 
         console.log('[RemoveLiquidity] Execute result:', JSON.stringify(result, null, 2));
 
@@ -347,6 +345,24 @@ export function useRemoveLiquidityMutation() {
             throw new Error('Unexpected PSBT format');
           }
 
+          // Patch PSBT: replace dummy wallet outputs with real addresses,
+          // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+          if (isBrowserWallet) {
+            const result = patchPsbtForBrowserWallet({
+              psbtBase64,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = result.psbtBase64;
+            if (result.inputsPatched > 0) {
+              console.log('[RemoveLiquidity] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
+            }
+            console.log('[RemoveLiquidity] Patched PSBT outputs for browser wallet');
+          }
+
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[RemoveLiquidity] Keystore wallet - requesting user confirmation...');
@@ -374,11 +390,17 @@ export function useRemoveLiquidityMutation() {
             console.log('[RemoveLiquidity] User approved transaction');
           }
 
-          // Sign the PSBT with both keys (SegWit first, then Taproot)
-          // The PSBT may have inputs from both address types
-          console.log('[RemoveLiquidity] Signing PSBT with SegWit key first, then Taproot key...');
-          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          // Sign PSBT — browser wallets sign all input types in a single call,
+          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
+          let signedPsbtBase64: string;
+          if (isBrowserWallet) {
+            console.log('[RemoveLiquidity] Browser wallet: signing PSBT once (all input types)...');
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            console.log('[RemoveLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          }
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

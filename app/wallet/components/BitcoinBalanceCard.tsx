@@ -59,8 +59,11 @@ export default function BitcoinBalanceCard() {
     );
   }
 
-  const totalBTC = formatBTC(balances.bitcoin.total);
-  const totalUSD = bitcoinPrice ? formatUSD(balances.bitcoin.total) : null;
+  // Adjust confirmed balance to include confirmed UTXOs currently being spent in mempool
+  const adjustedConfirmed = balances.bitcoin.total + balances.bitcoin.pendingOutgoingTotal;
+  const pendingDiff = balances.bitcoin.pendingTotal - balances.bitcoin.pendingOutgoingTotal;
+  const totalBTC = formatBTC(adjustedConfirmed);
+  const totalUSD = bitcoinPrice ? formatUSD(adjustedConfirmed) : null;
 
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
@@ -82,7 +85,7 @@ export default function BitcoinBalanceCard() {
         </button>
       </div>
 
-      {/* Total Balance */}
+      {/* Total Balance (confirmed only) */}
       <div className="mb-4">
         <div className="text-xl font-bold text-[color:var(--sf-text)]">{showValue(`${totalBTC} BTC`)}</div>
         <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
@@ -92,6 +95,11 @@ export default function BitcoinBalanceCard() {
             `$${totalUSD || '0.00'} USD`
           )}
         </div>
+        {!isLoadingData && pendingDiff !== 0 && (
+          <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">
+            {pendingDiff > 0 ? '+' : ''}{formatBTC(pendingDiff)} BTC pending
+          </div>
+        )}
       </div>
 
       {/* Address Breakdown */}
@@ -105,8 +113,13 @@ export default function BitcoinBalanceCard() {
           <div>
             <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Native SegWit (Spendable)</div>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
-              {showValue(`${formatBTC(balances.bitcoin.p2wpkh)} BTC`)}
+              {showValue(`${formatBTC(balances.bitcoin.p2wpkh + balances.bitcoin.pendingOutgoingP2wpkh)} BTC`)}
             </div>
+            {!isLoadingData && (balances.bitcoin.pendingP2wpkh - balances.bitcoin.pendingOutgoingP2wpkh) !== 0 && (
+              <div className="text-[10px] text-[color:var(--sf-info-green-text)]/50 mt-0.5">
+                {(balances.bitcoin.pendingP2wpkh - balances.bitcoin.pendingOutgoingP2wpkh) > 0 ? '+' : ''}{formatBTC(balances.bitcoin.pendingP2wpkh - balances.bitcoin.pendingOutgoingP2wpkh)} pending
+              </div>
+            )}
           </div>
           <ExternalLink size={12} className="text-[color:var(--sf-info-green-text)]/60 shrink-0" />
         </a>
@@ -119,8 +132,13 @@ export default function BitcoinBalanceCard() {
           <div>
             <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">{t('balances.taproot')}</div>
             <div className="text-sm text-[color:var(--sf-info-yellow-text)]">
-              {showValue(`${formatBTC(balances.bitcoin.p2tr)} BTC`)}
+              {showValue(`${formatBTC(balances.bitcoin.p2tr + balances.bitcoin.pendingOutgoingP2tr)} BTC`)}
             </div>
+            {!isLoadingData && (balances.bitcoin.pendingP2tr - balances.bitcoin.pendingOutgoingP2tr) !== 0 && (
+              <div className="text-[10px] text-[color:var(--sf-info-yellow-text)]/50 mt-0.5">
+                {(balances.bitcoin.pendingP2tr - balances.bitcoin.pendingOutgoingP2tr) > 0 ? '+' : ''}{formatBTC(balances.bitcoin.pendingP2tr - balances.bitcoin.pendingOutgoingP2tr)} pending
+              </div>
+            )}
           </div>
           <ExternalLink size={12} className="text-[color:var(--sf-info-yellow-text)]/60 shrink-0" />
         </a>

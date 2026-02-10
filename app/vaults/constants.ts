@@ -49,7 +49,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     description: 'First of its kind DeFi vault on Bitcoin',
     tokenId: '2:0',
     tokenSymbol: 'DIESEL',
-    iconPath: 'https://cdn.ordiscan.com/alkanes/2_0',
+    iconPath: 'https://cdn.subfrost.io/alkanes/2_0',
     contractAddress: '0xBe53A1...F6204',
     badge: 'Coming Soon',
     type: 'unit-vault',

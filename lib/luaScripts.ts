@@ -62,7 +62,7 @@ export async function executeLuaScript(
  */
 export const BALANCES_LUA = `-- Comprehensive balance information for an address (replacement for sandshrew_balances)
 -- Args: address, protocol_tag (optional, default: "1"), asset_address (optional)
--- NOTE: Alkane token balances are fetched separately via OYL Alkanode REST API,
+-- NOTE: Alkane token balances are fetched separately via @alkanes/ts-sdk,
 -- not via alkanes_protorunesbyaddress. This script only handles BTC UTXOs,
 -- inscriptions, and regular Runes (ord_outputs).
 

@@ -45,6 +45,7 @@ export default function ConnectWalletModal() {
   const [hasExistingKeystore, setHasExistingKeystore] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mnemonicConfirmed, setMnemonicConfirmed] = useState(false);
+  const [connectingWallet, setConnectingWallet] = useState<string | null>(null);
   // Use installed wallets from context (already detected on init)
   const installedWallets = installedWalletsFromContext;
   const [selectedDriveWallet, setSelectedDriveWallet] = useState<WalletBackupInfo | null>(null);
@@ -92,6 +93,7 @@ export default function ConnectWalletModal() {
     setIsValidatingCode(false);
     setPasswordHintInput('');
     setPasswordHint(null);
+    setConnectingWallet(null);
   };
 
   // Redeem invite code when wallet addresses become available after creation
@@ -413,8 +415,8 @@ export default function ConnectWalletModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm"
-      onClick={handleClose}
+      className={`fixed inset-0 z-50 grid place-items-center px-4 backdrop-blur-sm transition-colors ${connectingWallet ? 'bg-black/30' : 'bg-black/50'}`}
+      onClick={connectingWallet ? undefined : handleClose}
     >
       <div
         className="w-[480px] max-w-[92vw] overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
@@ -974,7 +976,7 @@ export default function ConnectWalletModal() {
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Enabled wallet IDs - only these wallets are fully supported */}
                 {(() => {
-                  const ENABLED_WALLET_IDS = new Set(['oyl', 'okx', 'unisat', 'xverse']);
+                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse']);
                   const installedIds = new Set(installedWallets.map(w => w.id));
 
                   // Separate installed wallets into enabled and coming soon
@@ -999,15 +1001,18 @@ export default function ConnectWalletModal() {
                                 key={wallet.id}
                                 onClick={async () => {
                                   setIsLoading(true);
+                                  setConnectingWallet(wallet.name);
                                   setError(null);
                                   try {
                                     await connectBrowserWalletFromContext(wallet.id);
                                     console.log('Connected to browser wallet:', wallet.name);
                                     handleCloseAndNavigate();
                                   } catch (err) {
+                                    console.error('Wallet connection error:', err);
                                     setError(err instanceof Error ? err.message : 'Failed to connect wallet');
                                   } finally {
                                     setIsLoading(false);
+                                    setConnectingWallet(null);
                                   }
                                 }}
                                 disabled={isLoading}
@@ -1019,7 +1024,11 @@ export default function ConnectWalletModal() {
                                     <div className="font-bold text-[color:var(--sf-text)]">{wallet.name}</div>
                                   </div>
                                 </div>
-                                <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
+                                {connectingWallet === wallet.name ? (
+                                  <div className="w-5 h-5 border-2 border-[color:var(--sf-primary)] border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <ChevronRight size={20} className="text-[color:var(--sf-text)]/40" />
+                                )}
                               </button>
                             ))}
                             {/* Coming soon installed wallets */}
@@ -1087,11 +1096,21 @@ export default function ConnectWalletModal() {
                 })()}
               </div>
 
+              {connectingWallet && (
+                <div className="flex items-center gap-3 rounded-xl bg-[color:var(--sf-input-bg)] p-4">
+                  <div className="w-5 h-5 border-2 border-[color:var(--sf-primary)] border-t-transparent rounded-full animate-spin" />
+                  <div className="text-sm font-medium text-[color:var(--sf-text)]">
+                    Connecting to {connectingWallet}... Check your wallet extension.
+                  </div>
+                </div>
+              )}
+
               {error && <div className="text-sm font-medium text-red-400">{error}</div>}
 
               <button
                 onClick={() => { setView('select'); resetForm(); }}
-                className="w-full rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                disabled={!!connectingWallet}
+                className="w-full rounded-xl bg-[color:var(--sf-input-bg)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] disabled:opacity-50"
               >
                 {t('common.back')}
               </button>

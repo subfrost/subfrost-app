@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+
 
 import { NetworkMap, type Network } from '@/utils/constants';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
@@ -85,7 +85,7 @@ function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
 }
 
 // Helper to create SATS Connect unsecured JWT token
-// Used by Magic Eden and Orange wallets which follow the SATS Connect protocol
+// Used by Xverse, Magic Eden, and Orange wallets which follow the SATS Connect protocol
 function createSatsConnectToken(payload: any): string {
   const header = { typ: 'JWT', alg: 'none' };
   const encodeBase64 = (obj: any) => {
@@ -337,7 +337,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // Check for browser wallet auto-reconnect
       const storedBrowserWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
       if (storedBrowserWalletId && storedWalletType === 'browser') {
-        // Restore cached addresses from localStorage to avoid re-prompting
+        // Restore cached addresses from localStorage
         let cachedAddrs: string | null = null;
         try {
           cachedAddrs = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
@@ -349,32 +349,52 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
 
         try {
-          const connector = getWalletConnector();
           const walletInfo = BROWSER_WALLETS.find(w => w.id === storedBrowserWalletId);
           if (walletInfo && isWalletInstalled(walletInfo)) {
-            // Attempt to reconnect to the browser wallet
-            const connected = await connector.connect(walletInfo);
-            setBrowserWallet(connected);
-            setWalletType('browser');
-            // Create SDK wallet adapter for signing
-            const adapter = createWalletAdapter(connected);
-            setWalletAdapter(adapter);
-            console.log('[WalletContext] Reconnected to browser wallet:', walletInfo.name);
-
-            // Use cached addresses from localStorage instead of re-prompting
-            // The addresses were cached during the initial connectBrowserWallet call
-
-            // Auto-detect network from cached/connected addresses and switch if needed
+            // Reconstruct ConnectedWallet from cached addresses WITHOUT prompting the
+            // extension. connector.connect() would show a popup (e.g., Xverse getAddresses)
+            // which blocks initialization and can leave the extension in a conflicting
+            // state if the user dismisses it or it times out.
             let cachedParsed: any = null;
             try { cachedParsed = cachedAddrs ? JSON.parse(cachedAddrs) : null; } catch {}
-            const addrToCheck = cachedParsed?.taproot?.address
-              || cachedParsed?.nativeSegwit?.address
-              || connected.address;
-            if (addrToCheck) {
-              const detectedNetwork = detectNetworkFromAddress(addrToCheck);
+
+            const primaryAddr = cachedParsed?.taproot?.address
+              || cachedParsed?.nativeSegwit?.address;
+
+            if (primaryAddr) {
+              const primaryPubKey = cachedParsed?.taproot?.publicKey
+                || cachedParsed?.nativeSegwit?.publicKey;
+              const isTaproot = primaryAddr.startsWith('bc1p') || primaryAddr.startsWith('tb1p') || primaryAddr.startsWith('bcrt1p');
+
+              const providerObj = (window as any)[walletInfo.injectionKey];
+              const connected = new (ConnectedWallet as any)(walletInfo, providerObj, {
+                address: primaryAddr,
+                publicKey: primaryPubKey,
+                addressType: isTaproot ? 'p2tr' : 'p2wpkh',
+              });
+
+              setBrowserWallet(connected);
+              setWalletType('browser');
+              const adapter = createWalletAdapter(connected);
+              setWalletAdapter(adapter);
+              console.log('[WalletContext] Restored browser wallet from cache:', walletInfo.name);
+
+              // Auto-detect network from cached address
+              const detectedNetwork = detectNetworkFromAddress(primaryAddr);
               if (detectedNetwork) {
                 switchNetworkToMatch(detectedNetwork);
               }
+            } else {
+              // No cached addresses — don't call connector.connect() on page load.
+              // It sends a request to the extension that may never resolve (e.g.,
+              // Xverse getAccounts opens a popup). If the popup is dismissed or
+              // the request times out, the extension can be left in a conflicting
+              // state that blocks subsequent manual connection attempts.
+              // Instead, just clear the stored wallet and let the user reconnect.
+              console.log('[WalletContext] No cached addresses for auto-reconnect, clearing stored wallet');
+              localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
+              localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
+              localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
             }
           }
         } catch (error) {
@@ -738,19 +758,18 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     try {
       switch (walletId) {
         case 'xverse': {
-          // Xverse supports both ordinals (taproot) and payment (native segwit) addresses
+          // Use getAccounts on the direct BitcoinProvider (same as SDK WalletConnector)
           const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
           if (xverseProvider) {
             const response = await xverseProvider.request('getAccounts', {
               purposes: ['ordinals', 'payment'],
             });
-            if (response?.result) {
-              for (const account of response.result) {
-                if (account.purpose === 'ordinals' || account.addressType === 'p2tr') {
-                  result.taproot = { address: account.address, publicKey: account.publicKey };
-                } else if (account.purpose === 'payment' || account.addressType === 'p2wpkh') {
-                  result.nativeSegwit = { address: account.address, publicKey: account.publicKey };
-                }
+            const addrs = response?.result || [];
+            for (const account of addrs) {
+              if (account.purpose === 'ordinals' || account.addressType === 'p2tr') {
+                result.taproot = { address: account.address, publicKey: account.publicKey };
+              } else if (account.purpose === 'payment' || account.addressType === 'p2wpkh') {
+                result.nativeSegwit = { address: account.address, publicKey: account.publicKey };
               }
             }
           }
@@ -817,34 +836,73 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // For wallets that support multiple address types, call their native API
       // directly to get ALL addresses in a single user prompt, then construct
       // a ConnectedWallet manually. This avoids a second prompt from
-      // fetchBrowserWalletAddresses calling getAccounts again.
+      // fetchBrowserWalletAddresses calling getAddresses again.
+      // NOTE: The modal stays open during connection so errors are visible.
+      // The modal component handles its own UI state (loading/connecting overlay).
+
       if (walletId === 'xverse') {
+        // Xverse connection using direct BitcoinProvider.request('getAccounts')
+        // — no sats-connect dependency needed. Same API used for signing.
         const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
-        if (!xverseProvider) throw new Error('Xverse provider not available');
+        if (!xverseProvider) throw new Error('Xverse wallet not detected. Please install the Xverse extension.');
 
-        // Single prompt: get all accounts (ordinals + payment)
-        const response = await xverseProvider.request('getAccounts', {
-          purposes: ['ordinals', 'payment'],
-        });
-        if (!response?.result?.length) throw new Error('No accounts returned from Xverse');
+        console.log('[WalletContext] Xverse: calling getAccounts via direct provider...');
 
-        // Extract all addresses from the single response
-        let primaryAccount = response.result[0];
-        for (const account of response.result) {
-          if (account.purpose === 'ordinals' || account.addressType === 'p2tr') {
-            additionalAddresses.taproot = { address: account.address, publicKey: account.publicKey };
-          } else if (account.purpose === 'payment' || account.addressType === 'p2wpkh') {
-            additionalAddresses.nativeSegwit = { address: account.address, publicKey: account.publicKey };
-          }
+        const response: any = await Promise.race([
+          xverseProvider.request('getAccounts', {
+            purposes: ['ordinals', 'payment'],
+            message: 'Connect to Subfrost',
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'Xverse connection timed out after 60s. ' +
+              'Try: (1) open/unlock your Xverse extension popup first, ' +
+              '(2) check chrome://extensions for errors in Xverse service worker, ' +
+              '(3) try connecting on another site to verify extension works.'
+            )), 60000)
+          ),
+        ]);
+
+        console.log('[WalletContext] Xverse getAccounts response:', response);
+        const accounts = response?.result || [];
+        if (accounts.length === 0) {
+          throw new Error(
+            'Xverse connection failed — no accounts returned. ' +
+            'Try: (1) refresh this page, (2) open/unlock your Xverse extension, ' +
+            '(3) check that this site is not blocked in Xverse settings.'
+          );
         }
 
-        // Construct ConnectedWallet using the SDK class (same constructor the SDK uses internally)
-        // The constructor takes (info, provider, account) but the .d.ts doesn't expose it
-        const provider = (window as any)[walletInfo.injectionKey];
-        connected = new (ConnectedWallet as any)(walletInfo, provider, {
-          address: primaryAccount.address,
-          publicKey: primaryAccount.publicKey,
-          addressType: primaryAccount.addressType,
+        const ordinalsAccount = accounts.find((a: any) =>
+          a.purpose === 'ordinals' || a.addressType === 'p2tr'
+        ) || accounts[0];
+        const paymentAccount = accounts.find((a: any) =>
+          a.purpose === 'payment' || a.addressType === 'p2wpkh' || a.addressType === 'p2sh'
+        );
+
+        if (ordinalsAccount) {
+          additionalAddresses.taproot = {
+            address: ordinalsAccount.address,
+            publicKey: ordinalsAccount.publicKey,
+          };
+        }
+        if (paymentAccount) {
+          additionalAddresses.nativeSegwit = {
+            address: paymentAccount.address,
+            publicKey: paymentAccount.publicKey,
+          };
+        }
+
+        const primaryAddr = ordinalsAccount?.address || paymentAccount?.address;
+        if (!primaryAddr) throw new Error('No address found in Xverse accounts');
+
+        const primaryIsTaproot = primaryAddr.startsWith('bc1p') || primaryAddr.startsWith('tb1p') || primaryAddr.startsWith('bcrt1p');
+        connected = new (ConnectedWallet as any)(walletInfo, xverseProvider, {
+          address: primaryAddr,
+          publicKey: ordinalsAccount?.publicKey || paymentAccount?.publicKey,
+          addressType: primaryIsTaproot ? 'p2tr' : 'p2wpkh',
+          paymentAddress: paymentAccount?.address,
+          paymentPublicKey: paymentAccount?.publicKey,
         });
       } else if (walletId === 'leather') {
         const leatherProvider = (window as any).LeatherProvider;
@@ -1124,8 +1182,62 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           publicKey: pubKey,
           addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
         });
+      } else if (walletId === 'okx') {
+        // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
+        const okxProvider = (window as any).okxwallet?.bitcoin;
+        if (!okxProvider) throw new Error('OKX wallet not available');
+
+        const result = await okxProvider.connect();
+        const addr = result?.address;
+        const pubKey = result?.publicKey;
+        if (!addr) throw new Error('No address returned from OKX');
+
+        const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
+        if (isTaproot) {
+          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
+        } else {
+          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
+        }
+
+        connected = new (ConnectedWallet as any)(walletInfo, okxProvider, {
+          address: addr,
+          publicKey: pubKey,
+          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
+        });
+      } else if (walletId === 'unisat') {
+        // Unisat exposes window.unisat with requestAccounts(), getPublicKey(), signPsbt()
+        // Only provides one address type at a time (user-configurable in wallet settings)
+        const unisatProvider = (window as any).unisat;
+        if (!unisatProvider) throw new Error('Unisat wallet not available. Please install the Unisat extension.');
+
+        let accounts: string[];
+        try {
+          accounts = await unisatProvider.requestAccounts();
+        } catch (e: any) {
+          // Unisat may throw a non-Error (string or object) on rejection
+          const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
+          throw new Error(`Unisat requestAccounts failed: ${msg}`);
+        }
+        if (!accounts?.length) throw new Error('No accounts returned from Unisat');
+        const addr = accounts[0];
+
+        let pubKey: string | undefined;
+        try { pubKey = await unisatProvider.getPublicKey(); } catch {}
+
+        const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
+        if (isTaproot) {
+          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
+        } else {
+          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
+        }
+
+        connected = new (ConnectedWallet as any)(walletInfo, unisatProvider, {
+          address: addr,
+          publicKey: pubKey,
+          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
+        });
       } else {
-        // For other wallets (Unisat, OKX, etc.), use the standard connector
+        // For other wallets, use the standard connector
         const connector = getWalletConnector();
         connected = await connector.connect(walletInfo);
       }
@@ -1141,7 +1253,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       setBrowserWallet(connected);
       setBrowserWalletAddresses(additionalAddresses);
       setWalletType('browser');
-      setIsConnectModalOpen(false);
 
       // Create SDK wallet adapter for signing - handles all wallet-specific logic
       const adapter = createWalletAdapter(connected);
@@ -1198,14 +1309,151 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Sign PSBT with taproot inputs (BIP86 derivation)
   // Uses SDK wallet adapters for browser wallets, BIP86 derivation for keystore
+  //
+  // JOURNAL (2026-02-06): For Xverse wallets, we bypass the SDK adapter and call
+  // the Xverse Bitcoin Provider directly. The SDK's XverseAdapter.signPsbt swallows
+  // detailed error info from Xverse, making P2SH-P2WPKH signing failures opaque.
+  // Direct calls give us full response logging and avoid adapter quirks.
+  //
+  // JOURNAL (2026-02-09): Xverse signing requires two PSBT input fixes for browser wallets:
+  // 1. tapInternalKey: SDK builds PSBTs with dummy wallet's key (from walletCreate()).
+  //    Xverse validates tapInternalKey matches its own key → "No taproot scripts signed".
+  //    Fix: patch input.tapInternalKey to user's actual x-only pubkey before signing.
+  // 2. P2SH-P2WPKH witnessUtxo + redeemScript: centralized in lib/psbt-patching.ts.
+  //    The SDK's dummy wallet hashes differ from the user's → pattern-based matching.
+  //    All output + input patching now goes through patchPsbtForBrowserWallet() in the
+  //    calling code (SendModal, mutation hooks), not here.
+  // Key gotchas:
+  // - psbt.updateInput() throws "Can not add duplicate data" — use direct assignment
+  // - bitcoinjs-lib may return Uint8Array not Buffer — wrap in Buffer.from() for .equals()
+  // - Do NOT add bip32Derivation/tapBip32Derivation — signInputs mapping is sufficient
+  //
+  // JOURNAL (2026-02-09): paymentAddress resolution for signInputs mapping:
+  // (browserWallet as any).paymentAddress returns undefined for Xverse — the runtime
+  // getter doesn't exist on the ConnectedWallet object. Without a valid paymentAddr,
+  // all inputs map to the ordinals (taproot) address, causing Xverse to sign P2SH inputs
+  // with the wrong key. Fix: fall back to browserWalletAddresses.nativeSegwit.address,
+  // which is populated from the wallet connect response and reliably has the payment addr.
+  // Proven on mainnet: tx f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2c4f9f09957d454c
   const signTaprootPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
-    // For browser wallets - use the SDK adapter which handles all wallet-specific logic
+    // For browser wallets - handle signing based on wallet type
     if (walletAdapter && walletType === 'browser') {
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      console.log('[WalletContext] Signing taproot PSBT with SDK adapter');
-      const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+      // For Xverse: call the Xverse Bitcoin Provider directly
+      const xverse = (window as any).XverseProviders?.BitcoinProvider;
+      if (xverse && browserWallet?.info?.id === 'xverse') {
+        console.log('[WalletContext] Xverse: signing PSBT directly (bypassing SDK adapter)');
+        const bitcoin = await import('bitcoinjs-lib');
+        const psbt = bitcoin.Psbt.fromHex(psbtHex);
+        // Derive bitcoin network from app network setting
+        const btcNetwork = (() => {
+          switch (network) {
+            case 'mainnet': return bitcoin.networks.bitcoin;
+            case 'testnet': case 'signet': return bitcoin.networks.testnet;
+            default: return bitcoin.networks.regtest;
+          }
+        })();
+
+        // Build signInputs: map each input to the correct signing address
+        const ordinalsAddr = browserWallet.address;
+        // paymentAddress runtime getter on ConnectedWallet returns undefined for some
+        // wallet types. Fall back to browserWalletAddresses which is populated from
+        // the wallet connect response (getAddress / sats-connect).
+        const paymentAddr: string | undefined =
+          (browserWallet as any).paymentAddress ||
+          browserWalletAddresses?.nativeSegwit?.address;
+        console.log('[WalletContext] Ordinals:', ordinalsAddr, '| Payment:', paymentAddr);
+
+        const signInputs: Record<string, number[]> = {};
+        const ordIdx: number[] = [];
+        const payIdx: number[] = [];
+
+        for (let i = 0; i < psbt.data.inputs.length; i++) {
+          const input = psbt.data.inputs[i];
+          if (!input.witnessUtxo) {
+            // No witnessUtxo — assume payment input
+            if (paymentAddr) payIdx.push(i);
+            else ordIdx.push(i);
+            continue;
+          }
+          try {
+            const addr = bitcoin.address.fromOutputScript(
+              Buffer.from(input.witnessUtxo.script), btcNetwork
+            );
+            if (paymentAddr && addr === paymentAddr) {
+              payIdx.push(i);
+            } else if (addr === ordinalsAddr) {
+              ordIdx.push(i);
+            } else {
+              // Heuristic: P2SH (3...) or P2WPKH (bc1q...) → payment; else → ordinals
+              const isSegwit = addr.startsWith('3') || addr.toLowerCase().startsWith('bc1q');
+              if (isSegwit && paymentAddr) payIdx.push(i);
+              else ordIdx.push(i);
+            }
+          } catch {
+            ordIdx.push(i);
+          }
+        }
+
+        if (ordIdx.length > 0) signInputs[ordinalsAddr] = ordIdx;
+        if (paymentAddr && payIdx.length > 0) signInputs[paymentAddr] = payIdx;
+
+        console.log('[WalletContext] Xverse signInputs:', JSON.stringify(signInputs));
+
+        // Patch tapInternalKey on taproot inputs to the user's actual x-only public key.
+        // The SDK builds PSBTs with a dummy wallet's tapInternalKey (from AlkanesSDKContext's
+        // walletCreate()). Xverse validates tapInternalKey matches its own key before signing —
+        // mismatch causes "No taproot scripts signed" error.
+        const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey;
+        if (taprootPubKey) {
+          const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
+          const xOnlyBuf = Buffer.from(xOnlyHex, 'hex');
+          for (let i = 0; i < psbt.data.inputs.length; i++) {
+            const input = psbt.data.inputs[i];
+            if (input.tapInternalKey) {
+              input.tapInternalKey = xOnlyBuf;
+            }
+          }
+          console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
+        }
+
+        const response = await xverse.request('signPsbt', {
+          psbt: psbt.toBase64(),
+          signInputs,
+          broadcast: false,
+        });
+
+        console.log('[WalletContext] Xverse response:', JSON.stringify(response));
+
+        // Xverse returns either:
+        //   - SIP format: { status: "success", result: { psbt: "..." } }
+        //   - JSON-RPC format: { jsonrpc: "2.0", result: { psbt: "..." } }
+        // Handle both response formats.
+        const signedPsbtBase64 = response.result?.psbt;
+        if (signedPsbtBase64) {
+          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64);
+          return signedPsbt.toBase64();
+        }
+
+        // No signed PSBT in response — surface the full error
+        const errDetail = response.error
+          ? JSON.stringify(response.error)
+          : JSON.stringify(response);
+        throw new Error(`Xverse signing failed: ${errDetail}`);
+      }
+
+      // For other browser wallets (OYL, OKX, Unisat, etc.): use SDK adapter
+      const walletId = browserWallet?.info?.id || 'unknown';
+      console.log(`[WalletContext] Signing PSBT with SDK adapter (${walletId})`);
+      let signedHex: string;
+      try {
+        signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+      } catch (e: any) {
+        console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, e?.message || e);
+        throw new Error(`${walletId} signing failed: ${e?.message || e}`);
+      }
 
       // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
@@ -1295,7 +1543,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return psbt.toBase64();
-  }, [wallet, network, walletAdapter, walletType]);
+  }, [wallet, network, walletAdapter, walletType, browserWallet, browserWalletAddresses]);
 
   // Sign PSBT with segwit inputs (BIP84 derivation)
   // Uses SDK wallet adapters for browser wallets, BIP84 derivation for keystore
@@ -1420,17 +1668,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const signMessage = useCallback(async (message: string): Promise<string> => {
     // For browser wallets
     if (browserWallet && walletType === 'browser') {
-      // OYL has a different signMessage API: { address, message, protocol? } => { address, signature }
+      // OYL signMessage is now handled natively by the SDK's ConnectedWallet.signMessage()
       const connectedWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
-      if (connectedWalletId === 'oyl') {
-        const oylProvider = (window as any).oyl;
-        if (!oylProvider) throw new Error('OYL wallet not available');
-        const result = await oylProvider.signMessage({
-          address: browserWallet.address,
-          message,
-        });
-        return result.signature;
-      }
 
       // Tokeo: signMessage(message, protocol?) => signature
       if (connectedWalletId === 'tokeo') {
@@ -1749,14 +1988,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       hasStoredKeystore,
     ]
   );
-
-  if (isInitializing) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 size={32} color="#449CFF" className="animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <WalletContext.Provider value={contextValue}>

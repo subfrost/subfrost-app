@@ -70,7 +70,7 @@ function TransactionTypeIcon({ type }: { type: TransactionDetails['type'] }) {
   }
 }
 
-function SwapDetails({ details }: { details: TransactionDetails }) {
+function SwapDetails({ details, t }: { details: TransactionDetails; t: (key: string) => string }) {
   return (
     <div className="space-y-3">
       {/* From */}
@@ -78,7 +78,7 @@ function SwapDetails({ details }: { details: TransactionDetails }) {
         <div className="flex items-center gap-3">
           <TokenIcon symbol={details.fromSymbol || ''} id={details.fromId} size="lg" />
           <div>
-            <div className="text-xs text-[color:var(--sf-text)]/60">You pay</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60">{t('confirm.youPay')}</div>
             <div className="text-lg font-bold text-[color:var(--sf-text)]">
               {formatAmount(details.fromAmount, details.fromSymbol)} {details.fromSymbol}
             </div>
@@ -98,7 +98,7 @@ function SwapDetails({ details }: { details: TransactionDetails }) {
         <div className="flex items-center gap-3">
           <TokenIcon symbol={details.toSymbol || ''} id={details.toId} size="lg" />
           <div>
-            <div className="text-xs text-[color:var(--sf-text)]/60">You receive</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60">{t('confirm.youReceive')}</div>
             <div className="text-lg font-bold text-[color:var(--sf-text)]">
               {formatAmount(details.toAmount, details.toSymbol)} {details.toSymbol}
             </div>
@@ -109,7 +109,7 @@ function SwapDetails({ details }: { details: TransactionDetails }) {
   );
 }
 
-function LiquidityDetails({ details }: { details: TransactionDetails }) {
+function LiquidityDetails({ details, t }: { details: TransactionDetails; t: (key: string) => string }) {
   const isAdd = details.type === 'addLiquidity';
 
   return (
@@ -118,7 +118,7 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
         <>
           {/* Tokens being added */}
           <div className="p-3 rounded-lg bg-[color:var(--sf-surface)] space-y-2">
-            <div className="text-xs text-[color:var(--sf-text)]/60">You deposit</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60">{t('confirm.youDeposit')}</div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TokenIcon symbol={details.token0Symbol || ''} id={details.token0Id} size="md" />
@@ -141,7 +141,7 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
           {/* LP tokens received */}
           {details.lpAmount && (
             <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-              <div className="text-xs text-green-400/80">You receive LP tokens</div>
+              <div className="text-xs text-green-400/80">{t('confirm.youReceiveLp')}</div>
               <div className="text-lg font-bold text-green-400">
                 ~{formatAmount(details.lpAmount, 'LP')} LP
               </div>
@@ -152,9 +152,9 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
         <>
           {/* LP being burned */}
           <div className="p-3 rounded-lg bg-[color:var(--sf-surface)]">
-            <div className="text-xs text-[color:var(--sf-text)]/60">You burn</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60">{t('confirm.youBurn')}</div>
             <div className="text-lg font-bold text-[color:var(--sf-text)]">
-              {formatAmount(details.lpAmount, 'LP')} LP tokens
+              {formatAmount(details.lpAmount, 'LP')} {t('confirm.lpTokens')}
             </div>
             {details.poolName && (
               <div className="text-sm text-[color:var(--sf-text)]/60">{details.poolName}</div>
@@ -162,7 +162,7 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
           </div>
           {/* Tokens received */}
           <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 space-y-2">
-            <div className="text-xs text-green-400/80">You receive</div>
+            <div className="text-xs text-green-400/80">{t('confirm.youReceive')}</div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TokenIcon symbol={details.token0Symbol || ''} id={details.token0Id} size="md" />
@@ -188,26 +188,26 @@ function LiquidityDetails({ details }: { details: TransactionDetails }) {
   );
 }
 
-function SendDetails({ details }: { details: TransactionDetails }) {
+function SendDetails({ details, t }: { details: TransactionDetails; t: (key: string) => string }) {
   return (
     <div className="p-4 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-3">
       {details.recipient && (
         <div className="flex justify-between">
-          <span className="text-[color:var(--sf-text)]/60">Recipient</span>
+          <span className="text-[color:var(--sf-text)]/60">{t('confirm.recipient')}</span>
           <span className="text-sm text-[color:var(--sf-text)] break-all ml-4 text-right">
             {truncateAddress(details.recipient)}
           </span>
         </div>
       )}
       <div className="flex justify-between">
-        <span className="text-[color:var(--sf-text)]/60">Amount</span>
+        <span className="text-[color:var(--sf-text)]/60">{t('confirm.amount')}</span>
         <span className="font-medium text-[color:var(--sf-text)]">
           {formatAmount(details.fromAmount, details.fromSymbol)} {details.fromSymbol}
         </span>
       </div>
       {(details.feeRate || details.estimatedFee) && (
         <div className="flex justify-between">
-          <span className="text-[color:var(--sf-text)]/60">Network Fee</span>
+          <span className="text-[color:var(--sf-text)]/60">{t('confirm.networkFee')}</span>
           <span className="text-[color:var(--sf-text)]">
             {details.estimatedFee ? `~${details.estimatedFee} sats` : `${details.feeRate} sat/vB`}
           </span>
@@ -217,7 +217,7 @@ function SendDetails({ details }: { details: TransactionDetails }) {
   );
 }
 
-function WrapUnwrapDetails({ details }: { details: TransactionDetails }) {
+function WrapUnwrapDetails({ details, t }: { details: TransactionDetails; t: (key: string) => string }) {
   const isWrap = details.type === 'wrap';
 
   return (
@@ -226,7 +226,7 @@ function WrapUnwrapDetails({ details }: { details: TransactionDetails }) {
         <div className="flex items-center gap-3">
           <TokenIcon symbol={isWrap ? 'BTC' : 'frBTC'} size="lg" />
           <div>
-            <div className="text-xs text-[color:var(--sf-text)]/60">You {isWrap ? 'wrap' : 'unwrap'}</div>
+            <div className="text-xs text-[color:var(--sf-text)]/60">{isWrap ? t('confirm.youWrap') : t('confirm.youUnwrap')}</div>
             <div className="text-lg font-bold text-[color:var(--sf-text)]">
               {formatAmount(details.fromAmount, details.fromSymbol)} {isWrap ? 'BTC' : 'frBTC'}
             </div>
@@ -244,7 +244,7 @@ function WrapUnwrapDetails({ details }: { details: TransactionDetails }) {
         <div className="flex items-center gap-3">
           <TokenIcon symbol={isWrap ? 'frBTC' : 'BTC'} size="lg" />
           <div>
-            <div className="text-xs text-green-400/80">You receive</div>
+            <div className="text-xs text-green-400/80">{t('confirm.youReceive')}</div>
             <div className="text-lg font-bold text-green-400">
               {formatAmount(details.toAmount, details.toSymbol)} {isWrap ? 'frBTC' : 'BTC'}
             </div>
@@ -284,45 +284,43 @@ export default function TransactionConfirmModal() {
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-[#0f1c30] shadow-2xl border border-[color:var(--sf-outline)] overflow-hidden">
+      <div className="relative z-10 w-full max-w-md mx-4 rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[color:var(--sf-outline)]">
-          <div className="flex items-center gap-3">
-            {/* <TransactionTypeIcon type={details.type} /> */}
-            <div>
-              <h2 className="text-lg font-bold text-[color:var(--sf-text)]">
-                {details.title}
-              </h2>
-              {details.description && (
-                <p className="text-sm text-[color:var(--sf-text)]/60">
-                  {details.description}
-                </p>
-              )}
-            </div>
+        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
+              {details.title}
+            </h2>
+            <button
+              onClick={reject}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <button
-            onClick={reject}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-surface)] transition-colors"
-          >
-            <X className="w-5 h-5 text-[color:var(--sf-text)]/60" />
-          </button>
+          {details.description && (
+            <p className="text-sm text-[color:var(--sf-text)]/60 mt-1">
+              {details.description}
+            </p>
+          )}
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+        <div className="p-6 space-y-4">
           {/* Transaction details based on type */}
-          {details.type === 'swap' && <SwapDetails details={details} />}
-          {details.type === 'wrap' && <WrapUnwrapDetails details={details} />}
-          {details.type === 'unwrap' && <WrapUnwrapDetails details={details} />}
+          {details.type === 'swap' && <SwapDetails details={details} t={t} />}
+          {details.type === 'wrap' && <WrapUnwrapDetails details={details} t={t} />}
+          {details.type === 'unwrap' && <WrapUnwrapDetails details={details} t={t} />}
           {(details.type === 'addLiquidity' || details.type === 'removeLiquidity') && (
-            <LiquidityDetails details={details} />
+            <LiquidityDetails details={details} t={t} />
           )}
-          {details.type === 'send' && <SendDetails details={details} />}
+          {details.type === 'send' && <SendDetails details={details} t={t} />}
 
           {/* Fee info (not shown for 'send' type since it's included in SendDetails) */}
           {details.type !== 'send' && (details.feeRate || details.estimatedFee) && (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-surface)] text-sm">
-              <span className="text-[color:var(--sf-text)]/60">Network fee</span>
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm">
+              <span className="text-[color:var(--sf-text)]/60">{t('confirm.networkFee')}</span>
               <span className="text-[color:var(--sf-text)]">
                 {details.estimatedFee ? `~${details.estimatedFee} sats` : `${details.feeRate} sat/vB`}
               </span>
@@ -330,27 +328,24 @@ export default function TransactionConfirmModal() {
           )}
 
           {/* Warning */}
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-            <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-[color:var(--sf-info-yellow-text)]">
-              Review the transaction details carefully. This action cannot be undone once confirmed.
-            </p>
+          <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
+            {t('confirm.reviewWarning')}
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 p-4 border-t border-[color:var(--sf-outline)]">
-          <button
-            onClick={reject}
-            className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] font-semibold hover:bg-[color:var(--sf-surface)]/80 transition-colors"
-          >
-            Cancel
-          </button>
+        <div className="flex gap-3 px-6 pb-6">
           <button
             onClick={approve}
-            className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white font-semibold hover:shadow-lg transition-all"
+            className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
           >
-            Confirm
+            {t('confirm.confirm')}
+          </button>
+          <button
+            onClick={reject}
+            className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+          >
+            {t('confirm.cancel')}
           </button>
         </div>
       </div>

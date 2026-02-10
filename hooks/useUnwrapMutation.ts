@@ -9,6 +9,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
+import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
@@ -141,28 +142,26 @@ export function useUnwrapMutation() {
         feeRate: unwrapData.feeRate,
       });
 
-      // Build fromAddresses array - use actual wallet addresses, not SDK descriptors
-      // This ensures the SDK can find UTXOs correctly even when wallet isn't loaded via mnemonic
-      const fromAddresses: string[] = [];
-      if (segwitAddress) fromAddresses.push(segwitAddress);
-      if (taprootAddress) fromAddresses.push(taprootAddress);
+      const isBrowserWallet = walletType === 'browser';
 
-      // Execute using alkanesExecuteTyped with ACTUAL addresses:
-      // - fromAddresses: actual wallet addresses (fixes "Available: []" issue)
-      // - changeAddress: segwit address for BTC change
-      // - alkanesChangeAddress: taproot address for alkane change
+      // For browser wallets, use actual addresses for UTXO discovery.
+      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      const fromAddresses = isBrowserWallet
+        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
+        : ['p2wpkh:0', 'p2tr:0'];
+
       const result = await provider.alkanesExecuteTyped({
-        toAddresses: [recipientAddress],  // SegWit address for BTC output
+        toAddresses: ['p2wpkh:0'],
         inputRequirements,
         protostones: protostone,
         feeRate: unwrapData.feeRate,
-        autoConfirm: false,  // Handle PSBT signing manually for consistency
+        autoConfirm: false,
         fromAddresses,
-        changeAddress: segwitAddress || taprootAddress, // BTC change to segwit
-        alkanesChangeAddress: taprootAddress, // Alkane change to taproot
+        changeAddress: 'p2wpkh:0',
+        alkanesChangeAddress: 'p2tr:0',
       });
 
-      console.log('[useUnwrapMutation] Called alkanesExecuteTyped with fromAddresses:', fromAddresses);
+      console.log('[useUnwrapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 
       console.log('[useUnwrapMutation] Execute result:', JSON.stringify(result, null, 2));
 
@@ -195,6 +194,24 @@ export function useUnwrapMutation() {
           throw new Error('Unexpected PSBT format');
         }
 
+        // Patch PSBT: replace dummy wallet outputs with real addresses,
+        // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+        if (isBrowserWallet) {
+          const result = patchPsbtForBrowserWallet({
+            psbtBase64,
+            network: btcNetwork,
+            isBrowserWallet,
+            taprootAddress,
+            segwitAddress,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+          });
+          psbtBase64 = result.psbtBase64;
+          if (result.inputsPatched > 0) {
+            console.log('[useUnwrapMutation] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
+          }
+          console.log('[useUnwrapMutation] Patched PSBT outputs for browser wallet');
+        }
+
         // For keystore wallets, request user confirmation before signing
         if (walletType === 'keystore') {
           console.log('[useUnwrapMutation] Keystore wallet - requesting user confirmation...');
@@ -215,11 +232,17 @@ export function useUnwrapMutation() {
           console.log('[useUnwrapMutation] User approved transaction');
         }
 
-        // Sign the PSBT with both keys (SegWit first, then Taproot)
-        // The PSBT may have inputs from both address types
-        console.log('[useUnwrapMutation] Signing PSBT with SegWit key first, then Taproot key...');
-        let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+        // Sign PSBT — browser wallets sign all input types in a single call,
+        // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
+        let signedPsbtBase64: string;
+        if (isBrowserWallet) {
+          console.log('[useUnwrapMutation] Browser wallet: signing PSBT once (all input types)...');
+          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+        } else {
+          console.log('[useUnwrapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
+          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+        }
 
         // Finalize and extract transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

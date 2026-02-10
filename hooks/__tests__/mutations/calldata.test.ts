@@ -116,6 +116,25 @@ function buildUnwrapProtostone(params: {
 }
 
 /**
+ * Build an edict-based protostone for alkane token transfers.
+ *
+ * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
+ * The edict sends the exact `amount` to output v1 (recipient).
+ * Pointer v0 = sender change (matches SDK auto-edict convention).
+ * RefundPointer v0 = failure refund to sender.
+ *
+ * Output ordering (SDK convention): v0 = sender change, v1 = recipient
+ * Pattern: [block:tx:amount:v1]:v0:v0
+ */
+function buildTransferProtostone(params: {
+  alkaneId: string;
+  amount: string;
+}): string {
+  const [block, tx] = params.alkaneId.split(':');
+  return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
+}
+
+/**
  * Build protostone for vault deposit (Purchase opcode 1)
  * NOTE: Default pointers are v1:v1 matching hooks/useVaultDeposit.ts
  */
@@ -520,6 +539,34 @@ describe('buildVaultWithdrawProtostone', () => {
 });
 
 // ==========================================
+// Transfer Protostone Tests
+// ==========================================
+
+describe('buildTransferProtostone', () => {
+  it('should build edict-based protostone (colons inside brackets, not commas)', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '1000' });
+    // Edict uses colons inside brackets; cellpack uses commas
+    expect(protostone).toMatch(/\[\d+:\d+:\d+:v1\]/);
+    expect(protostone).not.toContain(','); // No commas (not a cellpack)
+  });
+
+  it('should send exact amount to v1 (recipient), pointer v0 (sender change)', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '5000' });
+    expect(protostone).toBe('[2:0:5000:v1]:v0:v0');
+  });
+
+  it('should use v0 for both pointer (change) and refund', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '32:0', amount: '100' });
+    expect(protostone).toBe('[32:0:100:v1]:v0:v0');
+  });
+
+  it('should handle large amounts', () => {
+    const protostone = buildTransferProtostone({ alkaneId: '2:0', amount: '999999999999' });
+    expect(protostone).toBe('[2:0:999999999999:v1]:v0:v0');
+  });
+});
+
+// ==========================================
 // Integration: Complete Transaction Building
 // ==========================================
 
@@ -641,6 +688,27 @@ describe('Integration: Transaction Building', () => {
 
       expect(protostone).toBe('[2,123,1,100000000]:v1:v1');
       expect(inputRequirements).toBe('32:0:100000000');
+    });
+  });
+
+  describe('Alkane transfer transaction (Edict Pattern)', () => {
+    it('should build complete transfer transaction data', () => {
+      const DIESEL_ID = '2:0';
+      const TRANSFER_AMOUNT = '1000';
+
+      // Build edict protostone — sends exact amount to v1 (recipient), v0 = sender change
+      const protostone = buildTransferProtostone({
+        alkaneId: DIESEL_ID,
+        amount: TRANSFER_AMOUNT,
+      });
+
+      // Build input requirements — tells WASM which alkane UTXOs to select
+      const inputRequirements = buildInputRequirements({
+        alkaneInputs: [{ alkaneId: DIESEL_ID, amount: TRANSFER_AMOUNT }],
+      });
+
+      expect(protostone).toBe('[2:0:1000:v1]:v0:v0');
+      expect(inputRequirements).toBe('2:0:1000');
     });
   });
 

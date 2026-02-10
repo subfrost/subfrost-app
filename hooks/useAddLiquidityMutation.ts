@@ -45,6 +45,7 @@ import { FACTORY_OPCODES } from '@/constants';
 
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
+import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 
 bitcoin.initEccLib(ecc);
 
@@ -199,46 +200,41 @@ function buildAddLiquidityInputRequirements(params: {
 
 /**
  * Check if a pool exists for the given token pair via factory opcode 2 (FindPoolId).
- * Uses alkanes_simulate RPC to call the factory without a real transaction.
+ * Uses SDK's alkanesSimulate to call the factory without a real transaction.
  * Returns the pool AlkaneId if found, or null if not.
  */
 async function findPoolId(
+  provider: any,
   factoryId: string,
   token0Id: string,
   token1Id: string,
-  apiUrl?: string,
 ): Promise<{ block: number; tx: number } | null> {
-  const [factoryBlock, factoryTx] = factoryId.split(':').map(Number);
   const [t0Block, t0Tx] = token0Id.split(':').map(Number);
   const [t1Block, t1Tx] = token1Id.split(':').map(Number);
-  const rpcUrl = apiUrl || 'https://regtest.subfrost.io/v4/subfrost';
 
   try {
-    const resp = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'alkanes_simulate',
-        params: [{
-          target: { block: factoryBlock, tx: factoryTx },
-          inputs: [2, t0Block, t0Tx, t1Block, t1Tx], // opcode 2 = FindPoolId
-          context: { txid: '0'.repeat(64), vout: 0 },
-          alkanes: [],
-          fuel: 500000000,
-        }],
-        id: 1,
-      }),
+    const context = JSON.stringify({
+      alkanes: [],
+      calldata: [2, t0Block, t0Tx, t1Block, t1Tx], // opcode 2 = FindPoolId
+      height: 1000000,
+      txindex: 0,
+      pointer: 0,
+      refund_pointer: 0,
+      vout: 0,
+      transaction: [],
+      block: [],
     });
-    const data = await resp.json();
+
+    const result = await provider.alkanesSimulate(factoryId, context, 'latest');
+
     // If there's an error containing "doesn't exist", pool doesn't exist
-    if (data?.result?.execution?.error) {
-      console.log('[AddLiquidity] Pool does not exist:', data.result.execution.error);
+    if (result?.execution?.error) {
+      console.log('[AddLiquidity] Pool does not exist:', result.execution.error);
       return null;
     }
     // status 0 = success, pool exists - parse pool ID from response data
-    if (data?.result?.status === 0 && data?.result?.execution?.data) {
-      const hexData = data.result.execution.data.replace('0x', '');
+    if (result?.status === 0 && result?.execution?.data) {
+      const hexData = (result.execution.data as string).replace('0x', '');
       if (hexData.length >= 32) {
         // AlkaneId is 2 u128s (block, tx) in little-endian
         const blockHex = hexData.substring(0, 32);
@@ -404,7 +400,6 @@ export function useAddLiquidityMutation() {
   const { requestConfirmation } = useTransactionConfirm();
   const config = getConfig(network);
   const ALKANE_FACTORY_ID = config.ALKANE_FACTORY_ID;
-  const apiUrl = 'API_URL' in config ? (config as any).API_URL : undefined;
   const defaultPoolId = 'DEFAULT_POOL_ID' in config ? (config as any).DEFAULT_POOL_ID as string : undefined;
 
   // Get bitcoin network for PSBT parsing
@@ -458,10 +453,10 @@ export function useAddLiquidityMutation() {
       if (!resolvedPoolId) {
         console.log('[AddLiquidity] No poolId provided, checking factory for existing pool...');
         resolvedPoolId = await findPoolId(
+          provider,
           ALKANE_FACTORY_ID,
           data.token0Id,
           data.token1Id,
-          apiUrl,
         );
       }
 
@@ -518,30 +513,27 @@ export function useAddLiquidityMutation() {
 
       const btcNetwork = getBitcoinNetwork();
 
-      try {
-        // Build fromAddresses array - use actual wallet addresses, not SDK descriptors
-        // This ensures the SDK can find UTXOs correctly even when wallet isn't loaded via mnemonic
-        const fromAddresses: string[] = [];
-        if (segwitAddress) fromAddresses.push(segwitAddress);
-        if (taprootAddress) fromAddresses.push(taprootAddress);
+      const isBrowserWallet = walletType === 'browser';
 
-        // Execute using alkanesExecuteTyped with ACTUAL addresses:
-        // - fromAddresses: actual wallet addresses (fixes "Available: []" issue)
-        // - changeAddress: segwit address for BTC change
-        // - alkanesChangeAddress: taproot address for alkane change
-        // - toAddresses: taproot address for outputs
+      // For browser wallets, use actual addresses for UTXO discovery.
+      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      const fromAddresses = isBrowserWallet
+        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
+        : ['p2wpkh:0', 'p2tr:0'];
+
+      try {
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: data.feeRate,
           autoConfirm: false,
           fromAddresses,
-          toAddresses: [taprootAddress], // LP tokens go to taproot
-          changeAddress: segwitAddress || taprootAddress, // BTC change to segwit (or taproot if no segwit)
-          alkanesChangeAddress: taprootAddress, // Alkane change to taproot
+          toAddresses: ['p2tr:0'],
+          changeAddress: 'p2wpkh:0',
+          alkanesChangeAddress: 'p2tr:0',
         });
 
-        console.log('[AddLiquidity] Called alkanesExecuteTyped with fromAddresses:', fromAddresses);
+        console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 
         console.log('[AddLiquidity] Execute result:', JSON.stringify(result, null, 2));
 
@@ -594,6 +586,24 @@ export function useAddLiquidityMutation() {
             console.warn('[AddLiquidity] No alkane UTXOs found - protostone edicts will have no tokens to transfer');
           }
 
+          // Patch PSBT: replace dummy wallet outputs with real addresses,
+          // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+          if (isBrowserWallet) {
+            const result = patchPsbtForBrowserWallet({
+              psbtBase64,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = result.psbtBase64;
+            if (result.inputsPatched > 0) {
+              console.log('[AddLiquidity] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
+            }
+            console.log('[AddLiquidity] Patched PSBT outputs for browser wallet');
+          }
+
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
@@ -616,11 +626,17 @@ export function useAddLiquidityMutation() {
             console.log('[AddLiquidity] User approved transaction');
           }
 
-          // Sign the PSBT with both keys (SegWit first, then Taproot)
-          // The PSBT may have inputs from both address types (including injected alkane inputs)
-          console.log('[AddLiquidity] Signing PSBT with SegWit key first, then Taproot key...');
-          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          // Sign PSBT — browser wallets sign all input types in a single call,
+          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
+          let signedPsbtBase64: string;
+          if (isBrowserWallet) {
+            console.log('[AddLiquidity] Browser wallet: signing PSBT once (all input types)...');
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            console.log('[AddLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          }
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

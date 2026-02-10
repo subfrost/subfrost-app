@@ -1,9 +1,8 @@
 /**
  * usePools - Fetch pool data from Subfrost API via @alkanes/ts-sdk
  *
- * Primary: Espo ammdata.get_pools (mainnet)
- * Secondary: ts-sdk dataApi.getPools
- * Fallback: RPC simulation for regtest
+ * All pool data comes from the SDK's dataApiGetPools / alkanesGetAllPoolsWithDetails
+ * which route through subfrost endpoints. No external services (alkanode/Espo) are used.
  */
 import { useQuery } from '@tanstack/react-query';
 
@@ -91,7 +90,7 @@ function calculateTvlFromReserves(
 function getTokenIconUrl(tokenId: string, _network: string): string {
   const [block, tx] = tokenId.split(':');
   if (block && tx) {
-    return `https://cdn.ordiscan.com/alkanes/${block}_${tx}`;
+    return `https://cdn.subfrost.io/alkanes/${block}_${tx}`;
   }
   return '';
 }
@@ -126,55 +125,45 @@ function getTokenName(tokenId: string, rawName?: string): string {
 }
 
 /**
- * Fetch token names for unknown tokens via essentials.get_alkane_info RPC.
+ * Fetch token names for unknown tokens via SDK's alkanesReflect.
  * Returns a map of tokenId → { name, symbol }.
  */
-async function fetchUnknownTokenNames(tokenIds: string[]): Promise<Record<string, { name: string; symbol: string }>> {
-  if (tokenIds.length === 0) return {};
+async function fetchUnknownTokenNames(
+  tokenIds: string[],
+  provider: any
+): Promise<Record<string, { name: string; symbol: string }>> {
+  if (tokenIds.length === 0 || !provider) return {};
 
-  const rpcUrl = typeof window !== 'undefined' ? '/api/rpc' : (
-    process.env.REGTEST_RPC_URL || 'https://regtest.subfrost.io/v4/subfrost'
+  const map: Record<string, { name: string; symbol: string }> = {};
+
+  // Fetch in parallel with individual timeouts
+  await Promise.all(
+    tokenIds.map(async (tokenId) => {
+      try {
+        const reflection = await Promise.race([
+          provider.alkanesReflect(tokenId),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ]);
+        const parsed = typeof reflection === 'string' ? JSON.parse(reflection) : reflection;
+        const name = (parsed?.name || '').replace('SUBFROST BTC', 'frBTC').trim();
+        const symbol = (parsed?.symbol || '').trim();
+        if (name || symbol) {
+          map[tokenId] = { name, symbol };
+        }
+      } catch {
+        // Skip tokens that fail — name will fall back to pool_name parsing
+      }
+    })
   );
 
-  const batch = tokenIds.map((id, i) => ({
-    jsonrpc: '2.0',
-    id: i,
-    method: 'essentials.get_alkane_info',
-    params: { alkane: id },
-  }));
-
-  try {
-    const res = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(batch),
-    });
-
-    if (!res.ok) return {};
-    const results: Array<{ id: number; result?: { name?: string; symbol?: string }; error?: any }> = await res.json();
-
-    const map: Record<string, { name: string; symbol: string }> = {};
-    for (const r of results) {
-      const tokenId = tokenIds[r.id];
-      if (!tokenId || !r.result) continue;
-      const name = (r.result.name || '').replace('SUBFROST BTC', 'frBTC').trim();
-      const symbol = (r.result.symbol || '').trim();
-      if (name || symbol) {
-        map[tokenId] = { name, symbol };
-      }
-    }
-    return map;
-  } catch (e) {
-    console.warn('[usePools] Failed to fetch token names:', e);
-    return {};
-  }
+  return map;
 }
 
 /**
  * Enrich pool items with dynamically fetched token names for any tokens
  * not in the hardcoded KNOWN_TOKENS map.
  */
-async function enrichTokenNames(items: PoolsListItem[]): Promise<void> {
+async function enrichTokenNames(items: PoolsListItem[], provider: any): Promise<void> {
   // Collect unknown token IDs
   const unknownIds = new Set<string>();
   for (const item of items) {
@@ -185,7 +174,7 @@ async function enrichTokenNames(items: PoolsListItem[]): Promise<void> {
   if (unknownIds.size === 0) return;
 
   console.log('[usePools] Fetching names for', unknownIds.size, 'unknown tokens:', Array.from(unknownIds));
-  const nameMap = await fetchUnknownTokenNames(Array.from(unknownIds));
+  const nameMap = await fetchUnknownTokenNames(Array.from(unknownIds), provider);
 
   if (Object.keys(nameMap).length === 0) return;
 
@@ -212,222 +201,8 @@ async function enrichTokenNames(items: PoolsListItem[]): Promise<void> {
   console.log('[usePools] Enriched token names:', Object.keys(nameMap).length, 'tokens');
 }
 
-/**
- * Extract pools array from various response formats (object, Map, array)
- */
-function extractPoolsArray(response: any): any[] {
-  if (!response) return [];
-  if (Array.isArray(response)) return response;
-  if (response instanceof Map) {
-    const pools = response.get('pools');
-    return Array.isArray(pools) ? pools : [];
-  }
-  if (response.pools && Array.isArray(response.pools)) return response.pools;
-  if (response.data?.pools && Array.isArray(response.data.pools)) return response.data.pools;
-  if (response.data && Array.isArray(response.data)) return response.data;
-  return [];
-}
-
 // ============================================================================
-// Espo ammdata.get_pools (primary for mainnet)
-// ============================================================================
-
-const ESPO_RPC_URL = process.env.NEXT_PUBLIC_ESPO_RPC_URL || 'https://api.alkanode.com/rpc';
-
-async function fetchPoolsFromEspo(
-  network: string,
-  btcPrice: number | undefined,
-  busdTokenId: string,
-): Promise<PoolsListItem[]> {
-  const response = await fetch(ESPO_RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'ammdata.get_pools',
-      params: {},
-      id: 1,
-    }),
-  });
-
-  if (!response.ok) throw new Error(`Espo HTTP error: ${response.status}`);
-  const json = await response.json();
-  const result = json.result;
-  if (!result?.ok || !result.pools) throw new Error(result?.error || 'espo returned no pools');
-
-  const items: PoolsListItem[] = [];
-  for (const [poolId, pool] of Object.entries(result.pools) as [string, any][]) {
-    const baseId = pool.base;
-    const quoteId = pool.quote;
-    if (!baseId || !quoteId) continue;
-
-    const token0Symbol = getTokenSymbol(baseId);
-    const token1Symbol = getTokenSymbol(quoteId);
-    const token0Name = getTokenName(baseId);
-    const token1Name = getTokenName(quoteId);
-
-    const tvlCalc = calculateTvlFromReserves(baseId, quoteId, pool.base_reserve || '0', pool.quote_reserve || '0', btcPrice, busdTokenId);
-
-    items.push({
-      id: poolId,
-      pairLabel: `${token0Name} / ${token1Name} LP`,
-      token0: { id: baseId, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(baseId, network) },
-      token1: { id: quoteId, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(quoteId, network) },
-      tvlUsd: tvlCalc.tvlUsd,
-      token0TvlUsd: tvlCalc.token0TvlUsd,
-      token1TvlUsd: tvlCalc.token1TvlUsd,
-      vol24hUsd: 0,
-      vol7dUsd: 0,
-      vol30dUsd: 0,
-      apr: 0,
-      token0Amount: pool.base_reserve || '0',
-      token1Amount: pool.quote_reserve || '0',
-    });
-  }
-
-  return items;
-}
-
-// ============================================================================
-// Direct RPC simulation fallback (regtest — factory opcode 3 + pool opcode 999)
-// ============================================================================
-
-function readU128LE(hex: string, byteOffset: number): bigint {
-  const start = byteOffset * 2;
-  const bytes = hex.slice(start, start + 32);
-  if (bytes.length < 32) return 0n;
-  let val = 0n;
-  for (let i = 0; i < 16; i++) {
-    const byte = parseInt(bytes.slice(i * 2, i * 2 + 2), 16);
-    val += BigInt(byte) << BigInt(i * 8);
-  }
-  return val;
-}
-
-async function fetchPoolsViaRpcSimulation(
-  factoryId: string,
-  network: string,
-  btcPrice: number | undefined,
-  busdTokenId: string,
-): Promise<PoolsListItem[]> {
-  const rpcUrl = typeof window !== 'undefined' ? '/api/rpc' : (
-    process.env.REGTEST_RPC_URL || 'https://regtest.subfrost.io/v4/subfrost'
-  );
-
-  // Step 1: Get all pool IDs from factory (opcode 3)
-  const resp = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'alkanes_simulate',
-      params: [{
-        target: factoryId,
-        inputs: ['3'],
-        alkanes: [],
-        transaction: '0x',
-        block: '0x',
-        height: '999999',
-        txindex: 0,
-        vout: 0,
-      }],
-      id: 1,
-    }),
-  });
-
-  if (!resp.ok) throw new Error(`RPC error: ${resp.status}`);
-  const json = await resp.json();
-  const exec = json.result?.execution;
-  if (exec?.error || !exec?.data) throw new Error(exec?.error || 'no data');
-
-  const data = exec.data.startsWith('0x') ? exec.data.slice(2) : exec.data;
-  if (data.length < 32) return [];
-
-  const poolCount = Number(readU128LE(data, 0));
-  const poolIds: { block: string; tx: string }[] = [];
-  for (let i = 0; i < poolCount; i++) {
-    poolIds.push({
-      block: readU128LE(data, 16 + i * 32).toString(),
-      tx: readU128LE(data, 16 + i * 32 + 16).toString(),
-    });
-  }
-
-  if (poolIds.length === 0) return [];
-
-  // Step 2: Query pool details (opcode 999) individually
-  // NOTE: Individual requests instead of batch because /api/rpc proxy routes
-  // batch arrays to /v4/jsonrpc which may not support alkanes_simulate.
-  const items: PoolsListItem[] = [];
-  for (let i = 0; i < poolIds.length; i++) {
-    const pool = poolIds[i];
-
-    try {
-      const detailResp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'alkanes_simulate',
-          params: [{
-            target: `${pool.block}:${pool.tx}`,
-            inputs: ['999'],
-            alkanes: [],
-            transaction: '0x',
-            block: '0x',
-            height: '999999',
-            txindex: 0,
-            vout: 0,
-          }],
-          id: 1,
-        }),
-      });
-
-      if (!detailResp.ok) continue;
-      const detailJson = await detailResp.json();
-      const result = detailJson.result?.execution;
-      if (!result?.data || result.error) continue;
-
-      const d = result.data.startsWith('0x') ? result.data.slice(2) : result.data;
-      if (d.length < 192) continue;
-
-      const token0Id = `${readU128LE(d, 0)}:${readU128LE(d, 16)}`;
-      const token1Id = `${readU128LE(d, 32)}:${readU128LE(d, 48)}`;
-      const reserve0 = readU128LE(d, 64).toString();
-      const reserve1 = readU128LE(d, 80).toString();
-      const totalSupply = d.length >= 224 ? readU128LE(d, 96).toString() : '0';
-
-      const token0Symbol = getTokenSymbol(token0Id);
-      const token1Symbol = getTokenSymbol(token1Id);
-      const token0Name = getTokenName(token0Id);
-      const token1Name = getTokenName(token1Id);
-      const tvlCalc = calculateTvlFromReserves(token0Id, token1Id, reserve0, reserve1, btcPrice, busdTokenId);
-
-      items.push({
-        id: `${pool.block}:${pool.tx}`,
-        pairLabel: `${token0Name} / ${token1Name} LP`,
-        token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
-        token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-        tvlUsd: tvlCalc.tvlUsd,
-        token0TvlUsd: tvlCalc.token0TvlUsd,
-        token1TvlUsd: tvlCalc.token1TvlUsd,
-        vol24hUsd: 0,
-        vol7dUsd: 0,
-        vol30dUsd: 0,
-        apr: 0,
-        token0Amount: reserve0,
-        token1Amount: reserve1,
-        lpTotalSupply: totalSupply,
-      });
-    } catch (e) {
-      console.warn(`[fetchPoolsViaRpc] Failed to fetch details for pool ${pool.block}:${pool.tx}:`, e);
-    }
-  }
-
-  return items;
-}
-
-// ============================================================================
-// SDK fallback fetch
+// SDK pool fetch (primary and only data source — alkanesGetAllPoolsWithDetails)
 // ============================================================================
 
 async function fetchPoolsFromSDK(
@@ -439,39 +214,34 @@ async function fetchPoolsFromSDK(
 ): Promise<PoolsListItem[]> {
   let rawPools: any[] = [];
 
-  // Method 1: dataApiGetPools
+  // alkanesGetAllPoolsWithDetails: alkanes_simulate RPC calls through /api/rpc proxy.
+  // Makes N+1 calls (1 factory opcode 3 + N pool opcode 999). 30s timeout for mainnet.
+  // This is the only reliable method — dataApiGetPools calls subfrost /get-pools which
+  // returns bare pool IDs without token/reserve data, then tries unsupported endpoints.
   try {
-    const dataApiResult = await provider.dataApiGetPools(factoryId);
-    rawPools = extractPoolsArray(dataApiResult);
-    console.log('[usePools] SDK dataApiGetPools returned', rawPools.length, 'pools');
+    const rpcResult = await Promise.race([
+      provider.alkanesGetAllPoolsWithDetails(factoryId),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('alkanesGetAllPoolsWithDetails timeout (30s)')), 30000)),
+    ]);
+    const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+    const rpcPools = parsed?.pools || [];
+
+    rawPools = rpcPools.map((p: any) => ({
+      pool_block_id: p.pool_id_block,
+      pool_tx_id: p.pool_id_tx,
+      token0_block_id: p.details?.token_a_block,
+      token0_tx_id: p.details?.token_a_tx,
+      token1_block_id: p.details?.token_b_block,
+      token1_tx_id: p.details?.token_b_tx,
+      token0_amount: p.details?.reserve_a || '0',
+      token1_amount: p.details?.reserve_b || '0',
+      pool_name: p.details?.pool_name || '',
+      token0_name: p.details?.token_a_name || '',
+      token1_name: p.details?.token_b_name || '',
+    }));
+    console.log('[usePools] alkanesGetAllPoolsWithDetails returned', rawPools.length, 'pools');
   } catch (e) {
-    console.warn('[usePools] SDK dataApiGetPools failed:', e);
-  }
-
-  // Method 2: alkanesGetAllPoolsWithDetails
-  if (rawPools.length === 0) {
-    try {
-      const rpcResult = await provider.alkanesGetAllPoolsWithDetails(factoryId);
-      const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-      const rpcPools = parsed?.pools || [];
-
-      rawPools = rpcPools.map((p: any) => ({
-        pool_block_id: p.pool_id_block,
-        pool_tx_id: p.pool_id_tx,
-        token0_block_id: p.details?.token_a_block,
-        token0_tx_id: p.details?.token_a_tx,
-        token1_block_id: p.details?.token_b_block,
-        token1_tx_id: p.details?.token_b_tx,
-        token0_amount: p.details?.reserve_a || '0',
-        token1_amount: p.details?.reserve_b || '0',
-        pool_name: p.details?.pool_name || '',
-        token0_name: p.details?.token_a_name || '',
-        token1_name: p.details?.token_b_name || '',
-      }));
-      console.log('[usePools] SDK RPC returned', rawPools.length, 'pools');
-    } catch (e) {
-      console.warn('[usePools] SDK RPC failed:', e);
-    }
+    console.warn('[usePools] alkanesGetAllPoolsWithDetails failed:', e);
   }
 
   if (rawPools.length === 0) return [];
@@ -551,50 +321,23 @@ export function usePools(params: UsePoolsParams = {}) {
     queryKey: queryKeys.pools.list(network, paramsKey, btcPrice ?? 0),
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-    enabled: !!network && !!ALKANE_FACTORY_ID,
+    enabled: !!network && !!ALKANE_FACTORY_ID && !!provider,
     queryFn: async () => {
       console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID);
 
-      let items: PoolsListItem[] = [];
-      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
-
-      // Priority 1: Espo ammdata.get_pools (mainnet only — Espo returns mainnet data,
-      // so using it on regtest would give wrong pool reserves for matching token IDs like 2:0/32:0)
-      if (!isRegtest) {
-        try {
-          items = await fetchPoolsFromEspo(network, btcPrice, BUSD_ALKANE_ID);
-          console.log('[usePools] Espo returned', items.length, 'pools');
-        } catch (e) {
-          console.warn('[usePools] Espo failed:', e);
-        }
+      if (!provider) {
+        throw new Error('SDK provider not available');
       }
 
-      // Priority 2: ts-sdk dataApi.getPools
-      if (items.length === 0 && provider) {
-        try {
-          items = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
-          console.log('[usePools] SDK dataApi returned', items.length, 'pools');
-        } catch (e) {
-          console.warn('[usePools] SDK dataApi failed:', e);
-        }
-      }
-
-      // Priority 3: Direct RPC simulation (regtest/universal fallback)
-      if (items.length === 0) {
-        try {
-          items = await fetchPoolsViaRpcSimulation(ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
-          console.log('[usePools] RPC simulation returned', items.length, 'pools');
-        } catch (e) {
-          console.warn('[usePools] RPC simulation failed:', e);
-        }
-      }
+      let items = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
+      console.log('[usePools] SDK returned', items.length, 'pools');
 
       if (items.length === 0) {
-        throw new Error('Failed to fetch pools from any source');
+        throw new Error('Failed to fetch pools from SDK');
       }
 
-      // Enrich tokens not in KNOWN_TOKENS with names from RPC
-      await enrichTokenNames(items);
+      // Enrich tokens not in KNOWN_TOKENS with names from SDK
+      await enrichTokenNames(items, provider);
 
       // Remove known scam/impersonator pools
       const beforeCount = items.length;

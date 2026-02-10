@@ -1,11 +1,11 @@
 /**
  * useDynamicPools - Fetches pools dynamically via ts-sdk
  *
- * Uses ts-sdk methods exclusively with a fallback chain:
- * 1. dataApiGetPools (Data API - more reliable)
- * 2. alkanesGetAllPoolsWithDetails (RPC simulate)
- *
- * @see Blueprint: Phase 2 - Pool Data Migration
+ * Uses only alkanesGetAllPoolsWithDetails (alkanes_simulate RPC through /api/rpc proxy).
+ * dataApiGetPools was removed — subfrost /get-pools returns bare pool IDs {block,tx}
+ * without token info or reserves, and the SDK's follow-up calls to /get-pool-details (422)
+ * and /get-all-pools-with-details (404) are unsupported. This caused the perpetual loading
+ * spinner: ExchangeContext (which wraps all pages) blocked indefinitely.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -39,22 +39,6 @@ export type DynamicPoolsResult = {
 };
 
 /**
- * Extract pools array from various response formats (object, Map, array)
- */
-function extractPoolsArray(response: any): any[] {
-  if (!response) return [];
-  if (Array.isArray(response)) return response;
-  if (response instanceof Map) {
-    const pools = response.get('pools');
-    return Array.isArray(pools) ? pools : [];
-  }
-  if (response.pools && Array.isArray(response.pools)) return response.pools;
-  if (response.data?.pools && Array.isArray(response.data.pools)) return response.data.pools;
-  if (response.data && Array.isArray(response.data)) return response.data;
-  return [];
-}
-
-/**
  * Fetch all pools from factory using ts-sdk
  */
 export function useDynamicPools(options?: {
@@ -77,33 +61,26 @@ export function useDynamicPools(options?: {
     queryFn: async () => {
       console.log('[useDynamicPools] Fetching pools via ts-sdk for factory:', factoryId);
 
+      // Timeout wrapper to prevent infinite hangs from CORS-blocked internal SDK fetches
+      const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
+        Promise.race([
+          promise,
+          new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)),
+        ]);
+
       let rawPools: any[] = [];
 
-      // =====================================================================
-      // Method 1: dataApiGetPools (Data API - more reliable)
-      // =====================================================================
+      // alkanesGetAllPoolsWithDetails: alkanes_simulate RPC calls through /api/rpc proxy.
+      // Makes N+1 calls (1 factory opcode 3 + N pool opcode 999). 30s timeout for mainnet.
+      // This is the only reliable method — dataApiGetPools calls subfrost /get-pools which
+      // returns bare pool IDs without token/reserve data, then tries unsupported endpoints.
       try {
-        console.log('[useDynamicPools] Trying dataApiGetPools...');
-        const dataApiResult = await provider!.dataApiGetPools(factoryId);
-        rawPools = extractPoolsArray(dataApiResult);
-        console.log('[useDynamicPools] dataApiGetPools returned', rawPools.length, 'pools');
+        const rpcResult = await withTimeout(provider!.alkanesGetAllPoolsWithDetails(factoryId), 30000, 'alkanesGetAllPoolsWithDetails');
+        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+        rawPools = parsed?.pools || [];
+        console.log('[useDynamicPools] alkanesGetAllPoolsWithDetails returned', rawPools.length, 'pools');
       } catch (e) {
-        console.warn('[useDynamicPools] dataApiGetPools failed:', e);
-      }
-
-      // =====================================================================
-      // Method 2: alkanesGetAllPoolsWithDetails (RPC simulate)
-      // =====================================================================
-      if (rawPools.length === 0) {
-        try {
-          console.log('[useDynamicPools] Trying alkanesGetAllPoolsWithDetails...');
-          const rpcResult = await provider!.alkanesGetAllPoolsWithDetails(factoryId);
-          const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-          rawPools = parsed?.pools || [];
-          console.log('[useDynamicPools] alkanesGetAllPoolsWithDetails returned', rawPools.length, 'pools');
-        } catch (e) {
-          console.warn('[useDynamicPools] alkanesGetAllPoolsWithDetails failed:', e);
-        }
+        console.warn('[useDynamicPools] alkanesGetAllPoolsWithDetails failed:', e);
       }
 
       // If both methods failed, throw error for React Query to handle

@@ -61,6 +61,7 @@ import {
 } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
+import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 
 bitcoin.initEccLib(ecc);
 
@@ -74,6 +75,7 @@ const FRBTC_WRAP_OPCODE = 77;
 // Derived from frBTC contract [32:0] opcode 103 (GET_SIGNER).
 // If the frBTC contract is redeployed, update these. See useWrapMutation.ts header.
 const SIGNER_ADDRESSES: Record<string, string> = {
+  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqcdrpr6',
   'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
@@ -260,16 +262,21 @@ export function useWrapSwapMutation() {
       const inputRequirements = `B:${btcAmountSats}:v1`;
       console.log('[WrapSwap] Input requirements:', inputRequirements);
 
-      // Build address arrays
-      const fromAddresses: string[] = [];
-      if (segwitAddress) fromAddresses.push(segwitAddress);
-      if (taprootAddress) fromAddresses.push(taprootAddress);
+      const isBrowserWallet = walletType === 'browser';
 
-      // toAddresses: [user (v0), signer (v1)]
-      const toAddresses = [taprootAddress, signerAddress];
+      // For browser wallets, use actual addresses for UTXO discovery (passed as
+      // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
+      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      const fromAddresses = isBrowserWallet
+        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
+        : ['p2wpkh:0', 'p2tr:0'];
 
-      console.log('[WrapSwap] From addresses:', fromAddresses);
-      console.log('[WrapSwap] To addresses:', toAddresses);
+      // toAddresses use symbolic placeholders (WASM can't parse mainnet bech32m for outputs).
+      // All outputs are patched to correct addresses after PSBT construction.
+      const toAddresses = ['p2tr:0', 'p2tr:0'];
+
+      console.log('[WrapSwap] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[WrapSwap] To addresses (symbolic, patched post-PSBT):', toAddresses);
 
       console.log('═════════════════════════════════════════════════════════');
       console.log('[WrapSwap] ████ EXECUTING ATOMIC WRAP+SWAP ████');
@@ -284,8 +291,8 @@ export function useWrapSwapMutation() {
           autoConfirm: false, // We handle signing
           fromAddresses,
           toAddresses,
-          changeAddress: segwitAddress || taprootAddress,
-          alkanesChangeAddress: taprootAddress,
+          changeAddress: 'p2wpkh:0',
+          alkanesChangeAddress: 'p2tr:0',
         });
 
         console.log('[WrapSwap] Execute result:', JSON.stringify(result, null, 2));
@@ -319,6 +326,25 @@ export function useWrapSwapMutation() {
             throw new Error('Unexpected PSBT format');
           }
 
+          // Patch PSBT: signer at output 1, replace dummy wallet outputs,
+          // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+          {
+            const result = patchPsbtForBrowserWallet({
+              psbtBase64,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+              fixedOutputs: { 1: signerAddress },
+            });
+            psbtBase64 = result.psbtBase64;
+            if (result.inputsPatched > 0) {
+              console.log('[WrapSwap] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
+            }
+            console.log('[WrapSwap] Patched PSBT (signer + browser wallet:', isBrowserWallet, ')');
+          }
+
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
             console.log('[WrapSwap] Keystore wallet - requesting user confirmation...');
@@ -341,10 +367,17 @@ export function useWrapSwapMutation() {
             console.log('[WrapSwap] User approved transaction');
           }
 
-          // Sign with both keys
-          console.log('[WrapSwap] Signing PSBT with SegWit, then Taproot...');
-          let signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          // Sign PSBT — browser wallets sign all input types in a single call,
+          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
+          let signedPsbtBase64: string;
+          if (isBrowserWallet) {
+            console.log('[WrapSwap] Browser wallet: signing PSBT once (all input types)...');
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            console.log('[WrapSwap] Keystore: signing PSBT with SegWit, then Taproot...');
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          }
 
           // Finalize and extract
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

@@ -104,6 +104,43 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         return null;
       };
 
+      const fetchMempoolSpent = async (address: string): Promise<number> => {
+        try {
+          const response = await fetch('/api/rpc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'esplora_address::txs:mempool',
+              params: [address],
+              id: 1,
+            }),
+          });
+          const json = await response.json();
+          const txs = json.result;
+          if (!Array.isArray(txs)) return 0;
+
+          // Build set of mempool txids to distinguish confirmed vs unconfirmed parents
+          const mempoolTxids = new Set(txs.map((tx: any) => tx.txid));
+
+          let spent = 0;
+          for (const tx of txs) {
+            for (const vin of (tx.vin || [])) {
+              if (vin.prevout?.scriptpubkey_address === address) {
+                // Only count if parent tx is NOT a mempool tx (i.e., parent is confirmed)
+                if (!mempoolTxids.has(vin.txid)) {
+                  spent += vin.prevout.value;
+                }
+              }
+            }
+          }
+          return spent;
+        } catch (err) {
+          console.error(`[BALANCE] mempool spent fetch failed for ${address}:`, err);
+          return 0;
+        }
+      };
+
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
           const rawResult = await withTimeout(provider.getEnrichedBalances(address), 15000, null);
@@ -146,6 +183,9 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       let p2trBtc = 0;
       let spendableBtc = 0;
       let withAssetsBtc = 0;
+      let pendingP2wpkhBtc = 0;
+      let pendingP2trBtc = 0;
+      let pendingTotalBtc = 0;
       const allUtxos: any[] = [];
       const p2wpkhUtxos: any[] = [];
       const p2trUtxos: any[] = [];
@@ -172,15 +212,27 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
             runes: utxo.ord_runes,
           };
           allUtxos.push(enrichedUtxo);
-          if (isP2WPKH) { p2wpkhUtxos.push(enrichedUtxo); p2wpkhBtc += utxo.value; }
-          else if (isP2TR) { p2trUtxos.push(enrichedUtxo); p2trBtc += utxo.value; }
-          totalBtc += utxo.value;
-          if (isSpendable) spendableBtc += utxo.value;
-          else withAssetsBtc += utxo.value;
-          if (!isConfirmed && txid) {
-            if (isP2WPKH) pendingTxIdsP2wpkh.add(txid);
-            else if (isP2TR) pendingTxIdsP2tr.add(txid);
+          if (isP2WPKH) p2wpkhUtxos.push(enrichedUtxo);
+          else if (isP2TR) p2trUtxos.push(enrichedUtxo);
+
+          if (isConfirmed) {
+            // Confirmed: add to headline balances
+            if (isP2WPKH) p2wpkhBtc += utxo.value;
+            else if (isP2TR) p2trBtc += utxo.value;
+            totalBtc += utxo.value;
+            if (isSpendable) spendableBtc += utxo.value;
+            else withAssetsBtc += utxo.value;
+          } else {
+            // Pending: track separately
+            if (isP2WPKH) pendingP2wpkhBtc += utxo.value;
+            else if (isP2TR) pendingP2trBtc += utxo.value;
+            pendingTotalBtc += utxo.value;
+            if (txid) {
+              if (isP2WPKH) pendingTxIdsP2wpkh.add(txid);
+              else if (isP2TR) pendingTxIdsP2tr.add(txid);
+            }
           }
+
           if (utxo.ord_runes) {
             for (const [runeId, runeData] of Object.entries(utxo.ord_runes)) {
               const rd = runeData as any;
@@ -203,6 +255,23 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         for (const utxo of toArray(data.spendable)) processUtxo(utxo, true, true);
         for (const utxo of toArray(data.assets)) processUtxo(utxo, true, false);
         for (const utxo of toArray(data.pending)) processUtxo(utxo, false, false);
+      }
+
+      // Fetch mempool spent amounts per address (confirmed UTXOs being spent in mempool)
+      const mempoolSpentResults = await Promise.all(
+        addresses.map(async (address) => ({
+          address,
+          spent: await withTimeout(fetchMempoolSpent(address), 10000, 0),
+        })),
+      );
+
+      let pendingOutgoingP2wpkh = 0;
+      let pendingOutgoingP2tr = 0;
+      let pendingOutgoingTotal = 0;
+      for (const { address, spent } of mempoolSpentResults) {
+        if (address === deps.account.nativeSegwit?.address) pendingOutgoingP2wpkh += spent;
+        else if (address === deps.account.taproot?.address) pendingOutgoingP2tr += spent;
+        pendingOutgoingTotal += spent;
       }
 
       // Fetch alkane balances via SDK dataApiGetAlkanesByAddress
@@ -244,7 +313,19 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       return {
         balances: {
-          bitcoin: { p2wpkh: p2wpkhBtc, p2tr: p2trBtc, total: totalBtc, spendable: spendableBtc, withAssets: withAssetsBtc },
+          bitcoin: {
+            p2wpkh: p2wpkhBtc,
+            p2tr: p2trBtc,
+            total: totalBtc,
+            spendable: spendableBtc,
+            withAssets: withAssetsBtc,
+            pendingP2wpkh: pendingP2wpkhBtc,
+            pendingP2tr: pendingP2trBtc,
+            pendingTotal: pendingTotalBtc,
+            pendingOutgoingP2wpkh,
+            pendingOutgoingP2tr,
+            pendingOutgoingTotal,
+          },
           pendingTxCount: { p2wpkh: pendingTxIdsP2wpkh.size, p2tr: pendingTxIdsP2tr.size },
           alkanes: Array.from(alkaneMap.values()),
           runes: Array.from(runeMap.values()),

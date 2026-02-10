@@ -36,7 +36,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200" onClick={close}>
       <div
-        className="w-[540px] max-w-[92vw] overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-[400ms]"
+        className="w-[540px] max-w-[92vw] overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-[200ms]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -48,7 +48,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{t('txSettings.title')}</h2>
             <button
               onClick={close}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
               aria-label="Close"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -68,7 +68,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                   key={p}
                   type="button"
                   onClick={() => setMaxSlippage(p)}
-                  className={`rounded-lg px-4 py-2 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  className={`rounded-lg px-4 py-2 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                     maxSlippage === p
                       ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                       : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
@@ -92,7 +92,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                   }}
                   onFocus={() => setFocusedField('slippage')}
                   onBlur={() => setFocusedField(null)}
-                  className={`h-10 w-28 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-10 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'slippage' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
+                  className={`h-10 w-28 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-10 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
               </div>
@@ -115,7 +115,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
               }}
               onFocus={() => setFocusedField('deadline')}
               onBlur={() => setFocusedField(null)}
-              className={`h-10 w-32 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'deadline' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
+              className={`h-10 w-32 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
             />
           </section>
 
@@ -136,7 +136,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                     key={s}
                     type="button"
                     onClick={() => setSelection(s)}
-                    className={`rounded-lg px-4 py-2 text-sm font-bold capitalize shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                    className={`rounded-lg px-4 py-2 text-sm font-bold capitalize shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                       selection === s
                         ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                         : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
@@ -148,7 +148,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                 <button
                   type="button"
                   onClick={() => setSelection('custom')}
-                  className={`rounded-lg px-4 py-2 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  className={`rounded-lg px-4 py-2 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                     selection === 'custom'
                       ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                       : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
@@ -169,7 +169,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
                       onFocus={() => setFocusedField('fee')}
                       onBlur={() => setFocusedField(null)}
                       placeholder="0"
-                      className={`h-10 w-36 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-20 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ${focusedField === 'fee' ? 'shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
+                      className={`h-10 w-36 rounded-lg bg-[color:var(--sf-input-bg)] px-3 pr-20 text-base font-semibold text-[color:var(--sf-text)] !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'}`}
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">{t('txSettings.satsVb')}</span>
                   </div>
@@ -186,7 +186,7 @@ export default function TransactionSettingsModal({ selection, setSelection, cust
             <button 
               type="button" 
               onClick={close} 
-              className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-6 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-xl hover:scale-105 active:scale-95"
+              className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-6 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-lg transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-xl hover:scale-105 active:scale-95"
             >
               {t('txSettings.done')}
             </button>

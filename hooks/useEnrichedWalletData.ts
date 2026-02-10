@@ -53,6 +53,12 @@ export interface WalletBalances {
     total: number;
     spendable: number;
     withAssets: number;
+    pendingP2wpkh: number;
+    pendingP2tr: number;
+    pendingTotal: number;
+    pendingOutgoingP2wpkh: number;
+    pendingOutgoingP2tr: number;
+    pendingOutgoingTotal: number;
   };
   pendingTxCount: {
     p2wpkh: number;
@@ -75,7 +81,7 @@ export interface EnrichedWalletData {
 }
 
 const EMPTY_BALANCES: WalletBalances = {
-  bitcoin: { p2wpkh: 0, p2tr: 0, total: 0, spendable: 0, withAssets: 0 },
+  bitcoin: { p2wpkh: 0, p2tr: 0, total: 0, spendable: 0, withAssets: 0, pendingP2wpkh: 0, pendingP2tr: 0, pendingTotal: 0, pendingOutgoingP2wpkh: 0, pendingOutgoingP2tr: 0, pendingOutgoingTotal: 0 },
   pendingTxCount: { p2wpkh: 0, p2tr: 0 },
   alkanes: [],
   runes: [],

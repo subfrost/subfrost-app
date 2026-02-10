@@ -1,12 +1,13 @@
 /**
- * Hook to fetch pool volumes using ammdata.get_candles from the espo API
+ * Hook to fetch pool volumes using the SDK's dataApiGetCandles.
  *
- * Uses the Alkanode API endpoint to get candle data with volume information.
- * Docs: https://api.alkanode.com/
+ * All candle data routes through @alkanes/ts-sdk which is configured
+ * with subfrost endpoints. No external services (alkanode/Espo) are used.
  */
 
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 
 // ============================================================================
@@ -39,20 +40,6 @@ export interface PoolCandleVolume {
   lastUpdated: number;
 }
 
-// ============================================================================
-// Network Configuration
-// ============================================================================
-
-// Temporary: using api.alkanode.com until subfrost espo resyncs
-export const NETWORK_ESPO_URLS: Record<string, string> = {
-  mainnet: 'https://api.alkanode.com/rpc',
-  testnet: 'https://api.alkanode.com/rpc',
-  signet: 'https://api.alkanode.com/rpc',
-  regtest: 'https://api.alkanode.com/rpc',
-  oylnet: 'https://api.alkanode.com/rpc',
-  'subfrost-regtest': 'https://api.alkanode.com/rpc',
-};
-
 // Known quote tokens with USD values
 const USD_STABLE_TOKENS = new Set(['2:56801']); // bUSD
 const BTC_TOKENS = new Set(['32:0']); // frBTC
@@ -62,10 +49,10 @@ const BTC_TOKENS = new Set(['32:0']); // frBTC
 // ============================================================================
 
 /**
- * Fetch candles from the espo API using ammdata.get_candles
+ * Fetch candles via the SDK's dataApiGetCandles method.
  */
 export async function fetchCandles(
-  espoUrl: string,
+  provider: any,
   poolId: string,
   timeframe: 'd1' | 'M1' | 'h1' | '10m' | 'w1',
   side: 'base' | 'quote' = 'quote',
@@ -73,35 +60,17 @@ export async function fetchCandles(
   page: number = 1
 ): Promise<CandleResponse | null> {
   try {
-    const response = await fetch(espoUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'ammdata.get_candles',
-        params: {
-          pool: poolId,
-          timeframe,
-          side,
-          limit,
-          page,
-        },
-      }),
-    });
+    const result = await provider.dataApiGetCandles(poolId, timeframe, side, page, BigInt(limit));
 
-    const json = await response.json();
-
-    if (json?.result?.ok) {
-      return json.result as CandleResponse;
+    // Handle various response formats
+    if (result?.ok !== undefined) {
+      return result as CandleResponse;
+    }
+    if (result?.result?.ok) {
+      return result.result as CandleResponse;
     }
 
-    // Some APIs return result directly without the wrapper
-    if (json?.ok !== undefined) {
-      return json as CandleResponse;
-    }
-
-    console.warn(`[usePoolCandleVolumes] No candle data for pool ${poolId}:`, json);
+    console.warn(`[usePoolCandleVolumes] No candle data for pool ${poolId}:`, result);
     return null;
   } catch (error) {
     console.error(`[usePoolCandleVolumes] Error fetching candles for ${poolId}:`, error);
@@ -124,14 +93,14 @@ function sumCandleVolume(candles: CandleData[]): number {
  * For frBTC pools, we multiply by BTC price to get USD.
  */
 async function fetchPoolVolume(
-  espoUrl: string,
+  provider: any,
   poolId: string,
   token1Id: string,
   btcPrice: number | undefined
 ): Promise<PoolCandleVolume | null> {
   try {
     // Fetch 30d volume (30 daily candles) - this includes the 24h data as the first candle
-    const candles30d = await fetchCandles(espoUrl, poolId, 'd1', 'quote', 30);
+    const candles30d = await fetchCandles(provider, poolId, 'd1', 'quote', 30);
 
     if (!candles30d || !candles30d.candles || candles30d.candles.length === 0) {
       return null;
@@ -144,7 +113,6 @@ async function fetchPoolVolume(
     const volume30d = sumCandleVolume(candles30d.candles);
 
     // Convert to USD based on quote token type
-    // API returns volume already in decimal format (not satoshis)
     let volume24hUsd = 0;
     let volume30dUsd = 0;
 
@@ -187,47 +155,47 @@ async function fetchPoolVolume(
 // ============================================================================
 
 /**
- * Fetch volume data for a single pool using ammdata.get_candles
+ * Fetch volume data for a single pool using SDK's dataApiGetCandles
  */
 export function usePoolCandleVolume(
   poolId: string | undefined,
   token1Id: string | undefined
 ): UseQueryResult<PoolCandleVolume | null> {
   const { network } = useWallet();
+  const { provider } = useAlkanesSDK();
   const { data: btcPrice } = useBtcPrice();
-  const espoUrl = NETWORK_ESPO_URLS[network] || NETWORK_ESPO_URLS.mainnet;
 
   return useQuery({
     queryKey: ['pool-candle-volume', poolId, token1Id, network, btcPrice],
     queryFn: async () => {
-      if (!poolId || !token1Id) return null;
-      return fetchPoolVolume(espoUrl, poolId, token1Id, btcPrice);
+      if (!poolId || !token1Id || !provider) return null;
+      return fetchPoolVolume(provider, poolId, token1Id, btcPrice);
     },
-    enabled: !!poolId && !!token1Id && !!network,
+    enabled: !!poolId && !!token1Id && !!network && !!provider,
   });
 }
 
 /**
- * Fetch volume data for multiple pools using ammdata.get_candles
+ * Fetch volume data for multiple pools using SDK's dataApiGetCandles
  * Returns a map of poolId -> PoolCandleVolume
  */
 export function useAllPoolCandleVolumes(
   pools: Array<{ id: string; token1Id: string }> | undefined
 ): UseQueryResult<Record<string, PoolCandleVolume>> {
   const { network } = useWallet();
+  const { provider } = useAlkanesSDK();
   const { data: btcPrice } = useBtcPrice();
-  const espoUrl = NETWORK_ESPO_URLS[network] || NETWORK_ESPO_URLS.mainnet;
 
   return useQuery({
     queryKey: ['all-pool-candle-volumes', pools?.map(p => p.id).join(','), network, btcPrice],
     queryFn: async () => {
-      if (!pools || pools.length === 0) return {};
+      if (!pools || pools.length === 0 || !provider) return {};
 
       const results: Record<string, PoolCandleVolume> = {};
 
       // Fetch volumes for all pools in parallel
       const volumePromises = pools.map(async (pool) => {
-        const volume = await fetchPoolVolume(espoUrl, pool.id, pool.token1Id, btcPrice);
+        const volume = await fetchPoolVolume(provider, pool.id, pool.token1Id, btcPrice);
         if (volume) {
           results[pool.id] = volume;
         }
@@ -237,7 +205,7 @@ export function useAllPoolCandleVolumes(
 
       return results;
     },
-    enabled: !!pools && pools.length > 0 && !!network,
+    enabled: !!pools && pools.length > 0 && !!network && !!provider,
   });
 }
 
@@ -245,24 +213,22 @@ export function useAllPoolCandleVolumes(
  * Standalone function to fetch volume for a single pool (for testing/debugging)
  */
 export async function getPoolCandleVolume(
+  provider: any,
   poolId: string,
   token1Id: string,
-  network: string = 'mainnet',
   btcPrice?: number
 ): Promise<PoolCandleVolume | null> {
-  const espoUrl = NETWORK_ESPO_URLS[network] || NETWORK_ESPO_URLS.mainnet;
-  return fetchPoolVolume(espoUrl, poolId, token1Id, btcPrice);
+  return fetchPoolVolume(provider, poolId, token1Id, btcPrice);
 }
 
 /**
  * Direct function to fetch raw candle data (useful for debugging)
  */
 export async function getRawCandles(
+  provider: any,
   poolId: string,
   timeframe: 'd1' | 'M1' | 'h1' | '10m' | 'w1',
-  network: string = 'mainnet',
   limit: number = 30
 ): Promise<CandleResponse | null> {
-  const espoUrl = NETWORK_ESPO_URLS[network] || NETWORK_ESPO_URLS.mainnet;
-  return fetchCandles(espoUrl, poolId, timeframe, 'quote', limit);
+  return fetchCandles(provider, poolId, timeframe, 'quote', limit);
 }

@@ -247,16 +247,16 @@ export default function SwapInputs({
     <div className="relative flex flex-col gap-3">
       {/* Collapsible swap inputs container - slides up when bridge is active */}
       <div
-        className={`flex flex-col gap-1 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+        className={`flex flex-col gap-1 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
           bridgeActive
             ? "max-h-0 opacity-0 -translate-y-full pointer-events-none overflow-hidden"
             : "max-h-[1000px] opacity-100 translate-y-0 overflow-visible"
         }`}
       >
         {/* You Send - entire panel clickable to focus input */}
-        <div className="relative">
+        <div className={`relative ${fromFocused ? "z-30" : ""}`}>
           <div
-            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
+            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
               fromFocused
                 ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
                 : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
@@ -270,7 +270,7 @@ export default function SwapInputs({
                 e.stopPropagation();
                 openTokenSelector("from");
               }}
-              className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+              className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
             >
               {from && (
                 <TokenIcon
@@ -337,7 +337,7 @@ export default function SwapInputs({
                     >
                       {balanceUsage > 0 && (
                         <div
-                          className={`h-full ${getBalanceColor()} transition-all duration-[400ms]`}
+                          className={`h-full ${getBalanceColor()} transition-all duration-[200ms]`}
                           style={{ width: `${balanceUsage}%` }}
                         />
                       )}
@@ -350,7 +350,7 @@ export default function SwapInputs({
                         <button
                           type="button"
                           onClick={() => onPercentFrom(0.25)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
                             activePercent === 0.25
                               ? "bg-[color:var(--sf-primary)]/20"
                               : `${
@@ -365,7 +365,7 @@ export default function SwapInputs({
                         <button
                           type="button"
                           onClick={() => onPercentFrom(0.5)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
                             activePercent === 0.5
                               ? "bg-[color:var(--sf-primary)]/20"
                               : `${
@@ -380,7 +380,7 @@ export default function SwapInputs({
                         <button
                           type="button"
                           onClick={() => onPercentFrom(0.75)}
-                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
                             activePercent === 0.75
                               ? "bg-[color:var(--sf-primary)]/20"
                               : `${
@@ -397,7 +397,7 @@ export default function SwapInputs({
                     <button
                       type="button"
                       onClick={onMaxFrom}
-                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
                         !onMaxFrom
                           ? "opacity-40 cursor-not-allowed"
                           : activePercent === 1
@@ -420,20 +420,24 @@ export default function SwapInputs({
           </div>
 
           {/* Invert button – overlaps both cards, centered between them */}
-          <div className="pointer-events-none absolute left-1/2 -bottom-6 z-30 -translate-x-1/2">
+          <div className="pointer-events-none absolute left-1/2 -bottom-[26px] z-30 -translate-x-1/2">
             <button
               type="button"
               onClick={onInvert}
-              className="pointer-events-auto group flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--sf-primary)] text-white  transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-105 active:scale-95 outline-none"
+              className={`pointer-events-auto group flex h-12 w-12 items-center justify-center rounded-2xl border-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] hover:scale-105 active:scale-95 outline-none ${
+                theme === "dark"
+                  ? "border-[#0d192b] bg-[#162338] text-white"
+                  : "border-[#dee5f1] bg-[#f7fbff] text-[#233e6b]"
+              }`}
               aria-label="Invert swap direction"
             >
               <svg
-                width="20"
-                height="20"
+                width="24"
+                height="24"
                 viewBox="0 0 24 24"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
-                className="transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group-hover:-rotate-180"
+                className="transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group-hover:-rotate-180"
               >
                 <path
                   d="M12 5v14M19 12l-7 7-7-7"
@@ -449,7 +453,7 @@ export default function SwapInputs({
 
         {/* You Receive - entire panel clickable to focus input */}
         <div
-          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] px-4 pb-4 pt-6 backdrop-blur-md transition-shadow duration-[400ms] cursor-text ${
+          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] px-4 pb-4 pt-6 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
             toFocused
               ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
               : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
@@ -463,7 +467,7 @@ export default function SwapInputs({
               e.stopPropagation();
               openTokenSelector("to");
             }}
-            className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+            className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
           >
             {to && (
               <TokenIcon
@@ -523,7 +527,7 @@ export default function SwapInputs({
 
       {/* Summary - hidden when bridge is active */}
       <div
-        className={`relative z-20 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+        className={`relative z-20 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
           bridgeActive
             ? "max-h-0 opacity-0 -translate-y-4 pointer-events-none overflow-hidden"
             : "max-h-[500px] opacity-100 translate-y-0"
@@ -535,9 +539,9 @@ export default function SwapInputs({
       {/* Ethereum Wallet Address for cross-chain tokens (when sending TO bridge token) */}
       {isToBridgeToken && !bridgeActive && (
         <div
-          className={`relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[400ms] ${
+          className={`relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] ${
             ethAddressFocused
-              ? "shadow-[0_0_20px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
+              ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
               : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
           }`}
         >
@@ -551,7 +555,7 @@ export default function SwapInputs({
             onFocus={() => setEthAddressFocused(true)}
             onBlur={() => setEthAddressFocused(false)}
             placeholder={t("swap.enterUsdtRecipient")}
-            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms]"
+            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms]"
           />
           <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
             {t("swap.enterEthAddress")}
@@ -571,7 +575,7 @@ export default function SwapInputs({
 
       {/* CTA Button - slides down when bridge is active */}
       <div
-        className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+        className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
           bridgeActive
             ? "max-h-0 opacity-0 translate-y-full pointer-events-none mt-0 overflow-hidden"
             : "max-h-20 opacity-100 translate-y-0 mt-2"
@@ -593,7 +597,7 @@ export default function SwapInputs({
               setTimeout(() => setShowSwapComingSoon(false), 1000);
             }
           }}
-          className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
+          className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
             isConnected && isDemoGated
               ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
               : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"

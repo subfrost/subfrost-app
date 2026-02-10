@@ -14,6 +14,7 @@ type FtrPosition = {
 export default function PositionsSection() {
   const { t } = useTranslation();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
 
   // Mock ftrBTC positions (max 100 blocks in FE context)
   const ftrBTCPositions: FtrPosition[] = [
@@ -89,8 +90,10 @@ export default function PositionsSection() {
                   const rows = [
                     <tr
                       key={position.contract}
-                      className="border-b border-[color:var(--sf-glass-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                      className={`${isExpanded ? '' : 'border-b border-[color:var(--sf-glass-border)]'} transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer ${hoveredRow === position.contract ? 'bg-[color:var(--sf-primary)]/10' : ''}`}
                       onClick={() => toggleRow(position.contract)}
+                      onMouseEnter={() => setHoveredRow(position.contract)}
+                      onMouseLeave={() => setHoveredRow(null)}
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
@@ -141,13 +144,16 @@ export default function PositionsSection() {
 
                   if (isExpanded) {
                     rows.push(
-                      <tr key={`${position.contract}-details`} className="bg-[color:var(--sf-primary)]/5">
+                      <tr
+                        key={`${position.contract}-details`}
+                        className={`border-b border-[color:var(--sf-glass-border)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer ${hoveredRow === position.contract ? 'bg-[color:var(--sf-primary)]/10' : 'bg-[color:var(--sf-primary)]/5'}`}
+                        onClick={() => toggleRow(position.contract)}
+                        onMouseEnter={() => setHoveredRow(position.contract)}
+                        onMouseLeave={() => setHoveredRow(null)}
+                      >
                         <td colSpan={6} className="px-6 py-4">
                           <div className="space-y-3">
                             <div className="text-sm text-[color:var(--sf-text)]/80">
-                              <div className="font-semibold text-[color:var(--sf-text)] mb-2">
-                                {t('positions.positionDetails')}
-                              </div>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                   <span className="text-xs text-[color:var(--sf-text)]/70">
