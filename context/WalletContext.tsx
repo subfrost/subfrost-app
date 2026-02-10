@@ -871,6 +871,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         try {
           // Use sats-connect's getAddress() — the proven legacy connect flow.
           // This creates an unsigned JWT and calls provider.connect(token).
+          // @ts-ignore — sats-connect is loaded at runtime via dynamic import; not a build dependency
           const { getAddress, AddressPurpose } = await import('sats-connect');
           console.log('[WalletContext] Calling sats-connect getAddress()...');
 
