@@ -1,14 +1,10 @@
 /**
  * useAmmHistory — Infinite-scroll AMM transaction history
  *
- * All data fetched through @alkanes/ts-sdk methods:
- * - Pool metadata: alkanesGetAllPoolsWithDetails (for enriching mint/burn/creation txs)
- * - Transaction history: dataApiGetPoolHistory (per-pool, aggregated client-side)
+ * Primary: Single fetch to /get-all-amm-tx-history (or /get-all-address-amm-tx-history)
+ * via the RPC proxy. Returns all AMM transactions across all pools in one call.
  *
- * JOURNAL (2026-02-07):
- * Previously used direct fetch to subfrost REST endpoints (/get-all-amm-tx-history).
- * Replaced with SDK methods to route all calls through the SDK's configured provider,
- * which uses /api/rpc proxy internally (avoids CORS issues).
+ * Pool metadata enrichment for mint/burn/creation txs uses alkanesGetAllPoolsWithDetails.
  */
 'use client';
 
@@ -33,6 +29,18 @@ type PoolMetadata = {
   token1TxId: string;
   poolName: string;
 };
+
+/**
+ * Map wallet network string to the RPC proxy slug.
+ * Same pattern as queries/height.ts fetchHeight.
+ */
+function networkToSlug(network: string): string {
+  if (network === 'mainnet') return 'mainnet';
+  if (network === 'testnet') return 'testnet';
+  if (network === 'signet') return 'signet';
+  if (network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local') return 'regtest';
+  return 'mainnet';
+}
 
 // Hook to fetch pool metadata via SDK's alkanesGetAllPoolsWithDetails
 function usePoolsMetadata(network: string, poolIds: string[]) {
@@ -108,8 +116,7 @@ export function useInfiniteAmmTxHistory({
   enabled?: boolean;
   transactionType?: AmmTransactionType;
 }) {
-  const { network, isInitialized, provider } = useAlkanesSDK();
-  const { ALKANE_FACTORY_ID } = getConfig(network);
+  const { network, isInitialized } = useAlkanesSDK();
 
   const query = useInfiniteQuery<
     AmmPageResponse<any>,
@@ -120,73 +127,56 @@ export function useInfiniteAmmTxHistory({
   >({
     queryKey: ['ammTxHistory', network, address ?? 'all', count, transactionType ?? 'all'],
     initialPageParam: 0,
-    enabled: enabled && isInitialized && !!network && !!provider,
+    enabled: enabled && isInitialized && !!network,
     queryFn: async ({ pageParam }) => {
       const offset = pageParam * count;
+      const slug = networkToSlug(network);
 
       try {
-        // SDK has per-pool history (dataApiGetPoolHistory) but no aggregate method.
-        // Fetch all pool IDs, then get history for each pool and merge.
-        const allPoolsResult = await Promise.race([
-          provider!.alkanesGetAllPools(ALKANE_FACTORY_ID),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
-        ]);
-        const parsed = typeof allPoolsResult === 'string' ? JSON.parse(allPoolsResult) : allPoolsResult;
-        const poolIds: string[] = (parsed?.pools || parsed || []).map((p: any) =>
-          p.pool_id || `${p.pool_id_block ?? p.block}:${p.pool_id_tx ?? p.tx}`
-        );
+        // Build request body for the data API
+        const body: Record<string, any> = {
+          count,
+          offset,
+        };
 
-        if (poolIds.length === 0) {
-          return { items: [], nextPage: undefined, total: 0 };
-        }
+        // Use address-specific endpoint when filtering by address
+        const endpoint = address
+          ? `/api/rpc/${slug}/get-all-address-amm-tx-history`
+          : `/api/rpc/${slug}/get-all-amm-tx-history`;
 
-        // Fetch history from each pool in parallel (with per-call timeout)
-        const category = transactionType === 'swap' ? 'swap'
-          : transactionType === 'mint' ? 'mint'
-          : transactionType === 'burn' ? 'burn'
-          : null;
-
-        const perPoolResults = await Promise.all(
-          poolIds.map(async (poolId) => {
-            try {
-              const history = await Promise.race([
-                provider!.dataApiGetPoolHistory(poolId, category, BigInt(count), BigInt(0)),
-                new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
-              ]);
-              const data = typeof history === 'string' ? JSON.parse(history) : history;
-              const items = data?.data?.transactions || data?.transactions || data?.data || data || [];
-              return Array.isArray(items) ? items : [];
-            } catch {
-              return [];
-            }
-          })
-        );
-
-        // Merge all pool histories, sort by timestamp/block descending
-        let allItems = perPoolResults.flat();
-
-        // Filter by address if specified
         if (address) {
-          const addrLower = address.toLowerCase();
-          allItems = allItems.filter((item: any) =>
-            (item.address || item.sender || item.from || '').toLowerCase() === addrLower
-          );
+          body.address = address;
         }
 
-        // Sort by timestamp descending (newest first)
-        allItems.sort((a: any, b: any) => {
-          const tsA = a.timestamp || a.blockHeight || 0;
-          const tsB = b.timestamp || b.blockHeight || 0;
-          return tsB - tsA;
+        // Map transactionType to API category filter if applicable
+        if (transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap') {
+          body.category = transactionType;
+        }
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
         });
 
-        // Apply pagination
-        const paginated = allItems.slice(offset, offset + count);
+        if (!res.ok) {
+          throw new Error(`Data API returned ${res.status}`);
+        }
+
+        const json = await res.json();
+
+        // The API response has { items, total, count, offset } (Page<AllAddressAmmTxRow>)
+        const rawItems = Array.isArray(json?.items) ? json.items
+          : Array.isArray(json) ? json
+          : [];
+        const total = json?.total ?? rawItems.length;
+
+        console.log(`[useAmmHistory] ${endpoint} returned ${rawItems.length} items (total: ${total})`);
 
         return {
-          items: paginated,
-          nextPage: paginated.length === count ? pageParam + 1 : undefined,
-          total: allItems.length,
+          items: rawItems,
+          nextPage: rawItems.length === count ? pageParam + 1 : undefined,
+          total,
         };
       } catch (error) {
         console.error('[useAmmHistory] Failed to fetch AMM history:', error);

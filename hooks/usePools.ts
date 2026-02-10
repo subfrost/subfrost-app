@@ -1,14 +1,13 @@
 /**
- * usePools - Fetch pool data from Subfrost API via @alkanes/ts-sdk
+ * usePools - Fetch pool data from Subfrost Data API via @alkanes/ts-sdk
  *
- * All pool data comes from the SDK's dataApiGetPools / alkanesGetAllPoolsWithDetails
- * which route through subfrost endpoints. No external services (alkanode/Espo) are used.
+ * Primary: provider.dataApiGetAllPoolsDetails (single HTTP call, returns TVL/volume/APR)
+ * Fallback: provider.alkanesGetAllPoolsWithDetails (N+1 RPC sims, no TVL/volume)
  */
 import { useQuery } from '@tanstack/react-query';
 
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
-import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { queryKeys } from '@/queries/keys';
@@ -38,51 +37,9 @@ export type PoolsListItem = {
   lpTotalSupply?: string; // Total LP token supply (sub-units)
 };
 
-// Token IDs for TVL calculation (used by SDK fallback)
-const FRBTC_TOKEN_ID = '32:0';
-
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/**
- * Calculate TVL in USD from pool reserves (SDK fallback only)
- */
-function calculateTvlFromReserves(
-  token0Id: string,
-  token1Id: string,
-  _token0Amount: string,
-  token1Amount: string,
-  btcPrice: number | undefined,
-  busdTokenId: string
-): { tvlUsd: number; token0TvlUsd: number; token1TvlUsd: number } {
-  const decimals = 8;
-  const token1Value = Number(token1Amount) / Math.pow(10, decimals);
-
-  let token1PriceUsd = 0;
-  if (token1Id === FRBTC_TOKEN_ID && btcPrice) {
-    token1PriceUsd = btcPrice;
-  } else if (token1Id === busdTokenId) {
-    token1PriceUsd = 1;
-  } else if (token0Id === FRBTC_TOKEN_ID && btcPrice) {
-    const token0Value = Number(_token0Amount) / Math.pow(10, decimals);
-    const token0TvlUsd = token0Value * btcPrice;
-    return { tvlUsd: token0TvlUsd * 2, token0TvlUsd, token1TvlUsd: token0TvlUsd };
-  } else if (token0Id === busdTokenId) {
-    const token0Value = Number(_token0Amount) / Math.pow(10, decimals);
-    const token0TvlUsd = token0Value;
-    return { tvlUsd: token0TvlUsd * 2, token0TvlUsd, token1TvlUsd: token0TvlUsd };
-  }
-
-  if (token1PriceUsd === 0) {
-    return { tvlUsd: 0, token0TvlUsd: 0, token1TvlUsd: 0 };
-  }
-
-  const token1TvlUsd = token1Value * token1PriceUsd;
-  const token0TvlUsd = token1TvlUsd;
-  const tvlUsd = token0TvlUsd + token1TvlUsd;
-  return { tvlUsd, token0TvlUsd, token1TvlUsd };
-}
 
 /**
  * Build icon URL for a token
@@ -202,64 +159,111 @@ async function enrichTokenNames(items: PoolsListItem[], provider: any): Promise<
 }
 
 // ============================================================================
-// SDK pool fetch (primary and only data source — alkanesGetAllPoolsWithDetails)
+// Data API pool fetch (primary — single call via dataApiGetAllPoolsDetails)
 // ============================================================================
 
-async function fetchPoolsFromSDK(
+async function fetchPoolsFromDataApi(
   provider: any,
   factoryId: string,
   network: string,
-  btcPrice: number | undefined,
-  busdTokenId: string,
 ): Promise<PoolsListItem[]> {
-  let rawPools: any[] = [];
+  const result = await Promise.race([
+    provider.dataApiGetAllPoolsDetails(factoryId),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dataApiGetAllPoolsDetails timeout (30s)')), 30000)),
+  ]);
+  const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+  const pools = parsed?.pools || [];
 
-  // alkanesGetAllPoolsWithDetails: alkanes_simulate RPC calls through /api/rpc proxy.
-  // Makes N+1 calls (1 factory opcode 3 + N pool opcode 999). 30s timeout for mainnet.
-  // This is the only reliable method — dataApiGetPools calls subfrost /get-pools which
-  // returns bare pool IDs without token/reserve data, then tries unsupported endpoints.
-  try {
-    const rpcResult = await Promise.race([
-      provider.alkanesGetAllPoolsWithDetails(factoryId),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('alkanesGetAllPoolsWithDetails timeout (30s)')), 30000)),
-    ]);
-    const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-    const rpcPools = parsed?.pools || [];
-
-    rawPools = rpcPools.map((p: any) => ({
-      pool_block_id: p.pool_id_block,
-      pool_tx_id: p.pool_id_tx,
-      token0_block_id: p.details?.token_a_block,
-      token0_tx_id: p.details?.token_a_tx,
-      token1_block_id: p.details?.token_b_block,
-      token1_tx_id: p.details?.token_b_tx,
-      token0_amount: p.details?.reserve_a || '0',
-      token1_amount: p.details?.reserve_b || '0',
-      pool_name: p.details?.pool_name || '',
-      token0_name: p.details?.token_a_name || '',
-      token1_name: p.details?.token_b_name || '',
-    }));
-    console.log('[usePools] alkanesGetAllPoolsWithDetails returned', rawPools.length, 'pools');
-  } catch (e) {
-    console.warn('[usePools] alkanesGetAllPoolsWithDetails failed:', e);
-  }
-
-  if (rawPools.length === 0) return [];
+  console.log('[usePools] dataApiGetAllPoolsDetails returned', pools.length, 'pools');
 
   const items: PoolsListItem[] = [];
 
-  for (const p of rawPools) {
-    const poolId = p.pool_id || `${p.pool_block_id}:${p.pool_tx_id}`;
-    const token0Id = p.token0_id || (p.token0_block_id != null && p.token0_tx_id != null
-      ? `${p.token0_block_id}:${p.token0_tx_id}` : '');
-    const token1Id = p.token1_id || (p.token1_block_id != null && p.token1_tx_id != null
-      ? `${p.token1_block_id}:${p.token1_tx_id}` : '');
+  for (const p of pools) {
+    const poolId = p.poolId
+      ? `${p.poolId.block}:${p.poolId.tx}`
+      : '';
+    const token0Id = p.token0
+      ? `${p.token0.block}:${p.token0.tx}`
+      : '';
+    const token1Id = p.token1
+      ? `${p.token1.block}:${p.token1.tx}`
+      : '';
 
-    let token0Symbol = getTokenSymbol(token0Id, p.token0_name);
-    let token1Symbol = getTokenSymbol(token1Id, p.token1_name);
+    if (!poolId || !token0Id || !token1Id) continue;
 
-    if ((!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') && p.pool_name) {
-      const match = p.pool_name.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+    // Extract token names from pool name (e.g., "DIESEL / frBTC LP")
+    let token0NameFromPool = '';
+    let token1NameFromPool = '';
+    if (p.poolName) {
+      const match = p.poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+      if (match) {
+        token0NameFromPool = match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        token1NameFromPool = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+      }
+    }
+
+    const token0Symbol = getTokenSymbol(token0Id, token0NameFromPool);
+    const token1Symbol = getTokenSymbol(token1Id, token1NameFromPool);
+
+    if (!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') continue;
+
+    const token0Name = getTokenName(token0Id, token0NameFromPool);
+    const token1Name = getTokenName(token1Id, token1NameFromPool);
+
+    items.push({
+      id: poolId,
+      pairLabel: `${token0Name} / ${token1Name} LP`,
+      token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
+      token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
+      tvlUsd: p.poolTvlInUsd ?? 0,
+      token0TvlUsd: p.token0TvlInUsd ?? 0,
+      token1TvlUsd: p.token1TvlInUsd ?? 0,
+      vol24hUsd: p.poolVolume1dInUsd ?? 0,
+      vol7dUsd: p.poolVolume7dInUsd ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? 0,
+      apr: p.poolApr ?? 0,
+      token0Amount: p.token0Amount || '0',
+      token1Amount: p.token1Amount || '0',
+      lpTotalSupply: p.tokenSupply || undefined,
+    });
+  }
+
+  return items;
+}
+
+// ============================================================================
+// SDK RPC fallback (N+1 calls via alkanesGetAllPoolsWithDetails)
+// ============================================================================
+
+async function fetchPoolsFromSDKFallback(
+  provider: any,
+  factoryId: string,
+  network: string,
+): Promise<PoolsListItem[]> {
+  const rpcResult = await Promise.race([
+    provider.alkanesGetAllPoolsWithDetails(factoryId),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('alkanesGetAllPoolsWithDetails timeout (30s)')), 30000)),
+  ]);
+  const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+  const rpcPools = parsed?.pools || [];
+
+  console.log('[usePools] SDK fallback returned', rpcPools.length, 'pools');
+
+  const items: PoolsListItem[] = [];
+
+  for (const p of rpcPools) {
+    const poolId = `${p.pool_id_block}:${p.pool_id_tx}`;
+    const d = p.details || {};
+    const token0Id = d.token_a_block != null && d.token_a_tx != null
+      ? `${d.token_a_block}:${d.token_a_tx}` : '';
+    const token1Id = d.token_b_block != null && d.token_b_tx != null
+      ? `${d.token_b_block}:${d.token_b_tx}` : '';
+
+    let token0Symbol = getTokenSymbol(token0Id, d.token_a_name);
+    let token1Symbol = getTokenSymbol(token1Id, d.token_b_name);
+
+    if ((!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') && d.pool_name) {
+      const match = d.pool_name.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
       if (match) {
         if (!token0Symbol || token0Symbol === 'UNK') token0Symbol = match[1].trim().replace('SUBFROST BTC', 'frBTC');
         if (!token1Symbol || token1Symbol === 'UNK') token1Symbol = match[2].trim().replace('SUBFROST BTC', 'frBTC');
@@ -268,37 +272,23 @@ async function fetchPoolsFromSDK(
 
     if (!poolId || !token0Id || !token1Id || !token0Symbol || !token1Symbol) continue;
 
-    const token0Name = getTokenName(token0Id, p.token0_name);
-    const token1Name = getTokenName(token1Id, p.token1_name);
-
-    let tvlUsd = 0;
-    let token0TvlUsd = 0;
-    let token1TvlUsd = 0;
-
-    const reserve0 = p.token0_amount || p.reserve_a || '0';
-    const reserve1 = p.token1_amount || p.reserve_b || '0';
-
-    if (btcPrice && (reserve0 !== '0' || reserve1 !== '0')) {
-      const calculated = calculateTvlFromReserves(token0Id, token1Id, reserve0, reserve1, btcPrice, busdTokenId);
-      tvlUsd = calculated.tvlUsd;
-      token0TvlUsd = calculated.token0TvlUsd;
-      token1TvlUsd = calculated.token1TvlUsd;
-    }
+    const token0Name = getTokenName(token0Id, d.token_a_name);
+    const token1Name = getTokenName(token1Id, d.token_b_name);
 
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd,
-      token0TvlUsd,
-      token1TvlUsd,
+      tvlUsd: 0,
+      token0TvlUsd: 0,
+      token1TvlUsd: 0,
       vol24hUsd: 0,
       vol7dUsd: 0,
       vol30dUsd: 0,
       apr: 0,
-      token0Amount: reserve0,
-      token1Amount: reserve1,
+      token0Amount: d.reserve_a || '0',
+      token1Amount: d.reserve_b || '0',
     });
   }
 
@@ -311,14 +301,13 @@ async function fetchPoolsFromSDK(
 
 export function usePools(params: UsePoolsParams = {}) {
   const { network } = useWallet();
-  const { ALKANE_FACTORY_ID, BUSD_ALKANE_ID } = getConfig(network);
-  const { data: btcPrice } = useBtcPrice();
+  const { ALKANE_FACTORY_ID } = getConfig(network);
   const { provider } = useAlkanesSDK();
 
   const paramsKey = `${params.search ?? ''}|${params.limit ?? 100}|${params.offset ?? 0}|${params.sortBy ?? 'tvl'}|${params.order ?? 'desc'}`;
 
   return useQuery<{ items: PoolsListItem[]; total: number }>({
-    queryKey: queryKeys.pools.list(network, paramsKey, btcPrice ?? 0),
+    queryKey: queryKeys.pools.list(network, paramsKey),
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!network && !!ALKANE_FACTORY_ID && !!provider,
@@ -329,11 +318,26 @@ export function usePools(params: UsePoolsParams = {}) {
         throw new Error('SDK provider not available');
       }
 
-      let items = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network, btcPrice, BUSD_ALKANE_ID);
-      console.log('[usePools] SDK returned', items.length, 'pools');
+      let items: PoolsListItem[] = [];
+
+      // Primary: Data API (single call with pre-calculated TVL/volume/APR)
+      try {
+        items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network);
+      } catch (e) {
+        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to SDK:', e);
+      }
+
+      // Fallback: N+1 RPC simulation calls (no TVL/volume data)
+      if (items.length === 0) {
+        try {
+          items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network);
+        } catch (e) {
+          console.warn('[usePools] SDK fallback also failed:', e);
+        }
+      }
 
       if (items.length === 0) {
-        throw new Error('Failed to fetch pools from SDK');
+        throw new Error('Failed to fetch pools from any source');
       }
 
       // Enrich tokens not in KNOWN_TOKENS with names from SDK
