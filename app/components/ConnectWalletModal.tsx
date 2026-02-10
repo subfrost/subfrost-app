@@ -54,7 +54,22 @@ export default function ConnectWalletModal() {
   const [uploadedKeystore, setUploadedKeystore] = useState<string | null>(null);
   const [backupSuccess, setBackupSuccess] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
-  const [pendingInviteCodeRedemption, setPendingInviteCodeRedemption] = useState<string | null>(null);
+  const [pendingInviteCodeRedemption, setPendingInviteCodeRedemptionRaw] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('subfrost_pending_invite_redemption');
+    }
+    return null;
+  });
+  const setPendingInviteCodeRedemption = (code: string | null) => {
+    setPendingInviteCodeRedemptionRaw(code);
+    if (typeof window !== 'undefined') {
+      if (code) {
+        localStorage.setItem('subfrost_pending_invite_redemption', code);
+      } else {
+        localStorage.removeItem('subfrost_pending_invite_redemption');
+      }
+    }
+  };
   const [isValidatingCode, setIsValidatingCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wasModalOpenRef = useRef(false);
@@ -89,7 +104,9 @@ export default function ConnectWalletModal() {
     setUploadedKeystore(null);
     setBackupSuccess(false);
     setBackupProgress(0);
-    setPendingInviteCodeRedemption(null);
+    // NOTE: Do NOT clear pendingInviteCodeRedemption here — it must survive
+    // modal close/reopen so the redemption useEffect can fire once addresses
+    // are available after wallet creation.
     setIsValidatingCode(false);
     setPasswordHintInput('');
     setPasswordHint(null);
@@ -116,13 +133,15 @@ export default function ConnectWalletModal() {
         const data = await response.json();
         if (data.success) {
           console.log('[InviteCode] Redeemed:', pendingInviteCodeRedemption, '->', addresses.taproot.address);
+          setPendingInviteCodeRedemption(null);
         } else {
           console.warn('[InviteCode] Redemption failed:', data.error);
+          // Clear on definitive failures (invalid code, etc.) to avoid infinite retries
+          setPendingInviteCodeRedemption(null);
         }
       } catch (err) {
-        console.error('[InviteCode] Redemption error:', err);
-      } finally {
-        setPendingInviteCodeRedemption(null);
+        console.error('[InviteCode] Redemption error (will retry):', err);
+        // Keep pending code in localStorage — network errors are transient
       }
     };
 
