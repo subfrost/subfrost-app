@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:unit": "vitest run --exclude='**/*.integration.test.ts' --exclude='**/e2e/**' --exclude='**/__tests__/sdk/**' --exclude='.external-build/**' --exclude='**/useFrbtcPremium.test.ts' --exclude='**/vaultCalldata.test.ts' --exclude='**/utxoParsing.test.ts' --exclude='**/useSwapQuotes.wrap-unwrap.test.ts' --exclude='**/wasm-init.test.ts'",
+    "test:unit": "vitest run --exclude='**/*.integration.test.ts' --exclude='**/e2e/**' --exclude='**/e2e-tests/**' --exclude='**/__tests__/sdk/**' --exclude='.external-build/**' --exclude='**/useFrbtcPremium.test.ts' --exclude='**/vaultCalldata.test.ts' --exclude='**/utxoParsing.test.ts' --exclude='**/useSwapQuotes.wrap-unwrap.test.ts' --exclude='**/wasm-init.test.ts' --exclude='**/sdk-pool-data.test.ts'",
     "test:utils": "vitest run utils/__tests__ lib/**/__tests__ app/**/__tests__",
     "test:hooks": "vitest run hooks/__tests__",
     "test:sdk": "vitest run __tests__/sdk",
