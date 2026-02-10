@@ -42,100 +42,6 @@ function mapToObject(value: any): any {
   return value;
 }
 
-/**
- * Fetch alkane tokens being spent in pending mempool transactions.
- *
- * When a user sends alkanes, the mempool tx spends dust UTXOs carrying
- * alkane tokens. The indexer still counts these as part of the balance
- * (it only sees confirmed state). We detect spent dust UTXOs (≤1000 sats)
- * and look up their alkane contents via alkanes_protorunesbyoutpoint.
- */
-async function fetchMempoolSpentAlkanes(
-  addresses: string[],
-): Promise<{ alkaneId: string; amount: string }[]> {
-  try {
-    // Collect spent dust outpoints across all addresses
-    const spentOutpoints: { txid: string; vout: number }[] = [];
-
-    for (const address of addresses) {
-      try {
-        const response = await fetch('/api/rpc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'esplora_address::txs:mempool',
-            params: [address],
-            id: 1,
-          }),
-        });
-        const json = await response.json();
-        const txs = json.result;
-        if (!Array.isArray(txs)) continue;
-
-        const mempoolTxids = new Set(txs.map((tx: any) => tx.txid));
-
-        for (const tx of txs) {
-          for (const vin of tx.vin || []) {
-            if (vin.prevout?.scriptpubkey_address === address) {
-              // Only confirmed parents, dust UTXOs (alkane carriers typically ≤1000 sats)
-              if (!mempoolTxids.has(vin.txid) && vin.prevout.value <= 1000) {
-                spentOutpoints.push({ txid: vin.txid, vout: vin.vout });
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn(`[BALANCE] mempool alkane scan failed for ${address}:`, err);
-      }
-    }
-
-    if (spentOutpoints.length === 0) return [];
-
-    // Cap at 10 lookups to avoid rate limiting
-    const capped = spentOutpoints.slice(0, 10);
-
-    // Look up alkane contents for each spent outpoint
-    const alkaneDeductions = new Map<string, bigint>();
-
-    await Promise.all(
-      capped.map(async (outpoint) => {
-        try {
-          const resp = await fetch('/api/rpc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'alkanes_protorunesbyoutpoint',
-              params: [outpoint.txid, outpoint.vout],
-              id: 1,
-            }),
-          });
-          const data = await resp.json();
-          const balances = data?.result?.balance_sheet?.cached?.balances || [];
-          for (const b of balances) {
-            const id = `${Number(b.block)}:${Number(b.tx)}`;
-            const amount = BigInt(b.amount || '0');
-            if (amount > 0n) {
-              alkaneDeductions.set(id, (alkaneDeductions.get(id) || 0n) + amount);
-            }
-          }
-        } catch (err) {
-          console.warn(`[BALANCE] protorunesbyoutpoint failed for ${outpoint.txid}:${outpoint.vout}:`, err);
-        }
-      }),
-    );
-
-    return Array.from(alkaneDeductions.entries()).map(([alkaneId, amount]) => ({
-      alkaneId,
-      amount: amount.toString(),
-    }));
-  } catch (err) {
-    console.error('[BALANCE] fetchMempoolSpentAlkanes failed:', err);
-    return [];
-  }
-}
-
 interface EnrichedWalletDeps {
   provider: WebProvider | null;
   isInitialized: boolean;
@@ -368,30 +274,23 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         pendingOutgoingTotal += spent;
       }
 
-      // Fetch alkane tokens being spent in pending mempool transactions.
-      // The indexer only sees confirmed state, so we detect dust UTXOs being spent
-      // in mempool and look up their alkane contents to compute a deduction.
-      const pendingOutgoingAlkanes = await withTimeout(
-        fetchMempoolSpentAlkanes(addresses),
-        10000,
-        [] as { alkaneId: string; amount: string }[],
-      );
-
-      // Fetch alkane balances via SDK dataApiGetAlkanesByAddress
-      for (const address of addresses) {
+      // Fetch alkane balances via server-side parallel protorunesbyoutpoint + Redis cache
+      const alkaneBalancePromises = addresses.map(async (address) => {
         try {
-          const alkaneBalances = await withTimeout(
-            provider.dataApiGetAlkanesByAddress(address),
+          const resp = await withTimeout(
+            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
             15000,
-            { alkanes: [] },
+            null,
           );
-          const alkanes = alkaneBalances?.alkanes || alkaneBalances?.data || [];
-          for (const entry of alkanes) {
-            const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
-            const amountStr = String(entry.amount || entry.balance || '0');
+          if (!resp) return;
+          const data = await resp.json();
+          const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
+          for (const entry of balances) {
+            const alkaneIdStr = entry.alkaneId;
+            const amountStr = String(entry.balance || '0');
             const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-              symbol: entry.symbol || '',
-              name: entry.name || `Token ${alkaneIdStr}`,
+              symbol: '',
+              name: `Token ${alkaneIdStr}`,
               decimals: 8,
             };
             if (!alkaneMap.has(alkaneIdStr)) {
@@ -401,18 +300,21 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
                 symbol: tokenInfo.symbol,
                 balance: amountStr,
                 decimals: tokenInfo.decimals,
-                priceUsd: entry.priceUsd ? Number(entry.priceUsd) : undefined,
-                priceInSatoshi: entry.priceInSatoshi ? Number(entry.priceInSatoshi) : undefined,
               });
             } else {
               const existing = alkaneMap.get(alkaneIdStr)!;
-              existing.balance = (BigInt(existing.balance) + BigInt(amountStr)).toString();
+              try {
+                existing.balance = (BigInt(existing.balance) + BigInt(amountStr)).toString();
+              } catch {
+                existing.balance = String(Number(existing.balance) + Number(amountStr));
+              }
             }
           }
         } catch (error) {
-          console.error(`[BALANCE] SDK dataApi failed for ${address}:`, error);
+          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
         }
-      }
+      });
+      await Promise.all(alkaneBalancePromises);
 
       return {
         balances: {
@@ -432,7 +334,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           pendingTxCount: { p2wpkh: pendingTxIdsP2wpkh.size, p2tr: pendingTxIdsP2tr.size },
           alkanes: Array.from(alkaneMap.values()),
           runes: Array.from(runeMap.values()),
-          pendingOutgoingAlkanes,
+          pendingOutgoingAlkanes: [],
         },
         utxos: { p2wpkh: p2wpkhUtxos, p2tr: p2trUtxos, all: allUtxos },
       };
@@ -505,17 +407,20 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
           addresses.push(deps.walletAddress);
         }
 
-        for (const address of addresses) {
+        const sellBalancePromises = addresses.map(async (address) => {
           try {
-            const result = await deps.provider!.dataApiGetAlkanesByAddress(address);
-            const alkaneBalances = result?.alkanes || result?.data || [];
+            const resp = await fetch(
+              `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
+            );
+            const data = await resp.json();
+            const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
 
-            for (const entry of alkaneBalances) {
-              const alkaneIdStr = entry.id || `${entry.alkaneId?.block}:${entry.alkaneId?.tx}`;
-              const balance = String(entry.amount || entry.balance || '0');
+            for (const entry of balances) {
+              const alkaneIdStr = entry.alkaneId;
+              const balance = String(entry.balance || '0');
               const tokenInfo = KNOWN_TOKENS_SELL[alkaneIdStr] || {
-                symbol: entry.symbol || alkaneIdStr.split(':')[1] || '',
-                name: entry.name || `Token ${alkaneIdStr}`,
+                symbol: alkaneIdStr.split(':')[1] || '',
+                name: `Token ${alkaneIdStr}`,
                 decimals: 8,
               };
 
@@ -531,8 +436,8 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
                   symbol: tokenInfo.symbol,
                   balance,
                   priceInfo: {
-                    price: Number(entry.priceUsd || 0),
-                    idClubMarketplace: entry.idClubMarketplace || false,
+                    price: 0,
+                    idClubMarketplace: false,
                   },
                 });
               } else {
@@ -545,9 +450,10 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
               }
             }
           } catch (error) {
-            console.error(`[sellableCurrencies] SDK dataApi failed for ${address}:`, error);
+            console.error(`[sellableCurrencies] alkane-balances API failed for ${address}:`, error);
           }
-        }
+        });
+        await Promise.all(sellBalancePromises);
 
         allAlkanes.push(...alkaneMap.values());
 
