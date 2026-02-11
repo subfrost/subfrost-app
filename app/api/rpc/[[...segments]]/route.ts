@@ -57,22 +57,25 @@ function encodeVF(fieldNum: number, value: number | bigint): Buffer {
   return Buffer.concat([tag, encodeVarint(value)]);
 }
 
-/** uint128 message: { uint64 lo = 1; uint64 hi = 2; } */
-function encodeUint128(value: bigint): Buffer {
-  const lo = value & ((1n << 64n) - 1n);
-  const hi = value >> 64n;
-  const parts: Buffer[] = [];
-  if (lo > 0n) parts.push(encodeVF(1, lo));
-  if (hi > 0n) parts.push(encodeVF(2, hi));
-  return Buffer.concat(parts);
+/** Encode a bigint as a little-endian byte array (for protobuf `bytes` fields representing uint128) */
+function encodeUint128Bytes(value: bigint): Buffer {
+  const buf = Buffer.alloc(16);
+  let v = value;
+  for (let i = 0; i < 16; i++) {
+    buf[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  // Trim trailing zero bytes for compactness (decoder pads back to 16)
+  let len = 16;
+  while (len > 1 && buf[len - 1] === 0) len--;
+  return buf.subarray(0, len);
 }
 
-/** RuneId: { uint128 height = 1; uint128 txindex = 2; } */
+/** RuneId: { uint32 height = 1; uint32 txindex = 2; } — both are varint, NOT uint128 */
 function encodeRuneId(block: number, tx: number): Buffer {
   const parts: Buffer[] = [];
-  parts.push(encodeLD(1, encodeUint128(BigInt(block))));
-  // Always include txindex (even if 0) — SDK expects it present
-  parts.push(encodeLD(2, encodeUint128(BigInt(tx))));
+  parts.push(encodeVF(1, block));
+  parts.push(encodeVF(2, tx));
   return Buffer.concat(parts);
 }
 
@@ -81,11 +84,11 @@ function encodeRune(block: number, tx: number): Buffer {
   return encodeLD(1, encodeRuneId(block, tx));
 }
 
-/** BalanceSheetItem: { Rune rune = 1; bytes balance = 2; } */
+/** BalanceSheetItem: { Rune rune = 1; bytes balance = 2; } — balance is raw LE bytes */
 function encodeBalanceSheetItem(block: number, tx: number, amount: bigint): Buffer {
   return Buffer.concat([
     encodeLD(1, encodeRune(block, tx)),
-    encodeLD(2, encodeUint128(amount)),
+    encodeLD(2, encodeUint128Bytes(amount)),
   ]);
 }
 
@@ -271,13 +274,11 @@ export async function POST(
       targetUrl = pickEndpoint(body, network);
     }
 
-    // NOTE: espo-first / race logic for protorunesbyaddress was attempted but
-    // our protobuf WalletResponse encoding has a bug — the SDK decodes 0 alkane
-    // balances from our encoded response. Metashrew is the authoritative source
-    // and responds in ~130ms when cached. The espo-on-error fallback (below)
-    // still works for when metashrew is genuinely down.
-    // TODO: Fix protobuf encoding to match metashrew's format, then re-enable
-    // espo-first for cold-start latency optimization.
+    // Metashrew is the primary source for protorunesbyaddress. The espo fallback
+    // (below + in the !response.ok block) triggers when metashrew returns an
+    // error or times out (504). Protobuf encoding was fixed 2026-02-11 to match
+    // the actual proto schema: RuneId uses uint32 varints (not uint128 messages)
+    // and BalanceSheetItem.balance is raw LE bytes (not a uint128 sub-message).
 
     const response = await fetch(targetUrl, {
       method: 'POST',
@@ -286,6 +287,52 @@ export async function POST(
     });
 
     if (!response.ok) {
+      // --- HTTP-level fallback for metashrew (504 Gateway Timeout, etc.) ---
+      if (!Array.isArray(body)) {
+        // metashrew_height → try getblockcount
+        if (body?.method === 'metashrew_height') {
+          console.log(`[RPC Proxy] metashrew_height HTTP ${response.status}, falling back to getblockcount`);
+          try {
+            const blockResp = await fetch(targetUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', method: 'getblockcount', params: [], id: body.id ?? 1 }),
+            });
+            if (blockResp.ok) {
+              const blockData = await blockResp.json();
+              if (blockData?.result != null) {
+                return NextResponse.json({
+                  jsonrpc: '2.0',
+                  result: String(blockData.result),
+                  id: body.id ?? 1,
+                });
+              }
+            }
+          } catch (err) {
+            console.warn('[RPC Proxy] getblockcount fallback failed:', err);
+          }
+        }
+
+        // metashrew_view protorunesbyaddress → try espo
+        if (
+          body?.method === 'metashrew_view' &&
+          Array.isArray(body?.params) &&
+          body.params[0] === 'protorunesbyaddress'
+        ) {
+          const payloadHex = body.params[1] as string;
+          const address = parseAddressFromPayload(payloadHex);
+          if (address) {
+            console.log(`[RPC Proxy] metashrew_view HTTP ${response.status} for ${address}, trying espo fallback...`);
+            const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
+            const espoUrl = `${baseUrl}/espo`;
+            const fallback = await espoProtorunesFallback(espoUrl, address, body.id ?? 1);
+            if (fallback) {
+              return NextResponse.json(fallback);
+            }
+          }
+        }
+      }
+
       return NextResponse.json(
         { error: `RPC request failed: ${response.status}` },
         { status: response.status }
