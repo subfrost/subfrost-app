@@ -366,7 +366,26 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
                 || cachedParsed?.nativeSegwit?.publicKey;
               const isTaproot = primaryAddr.startsWith('bc1p') || primaryAddr.startsWith('tb1p') || primaryAddr.startsWith('bcrt1p');
 
-              const providerObj = (window as any)[walletInfo.injectionKey];
+              // Get the correct provider object for each wallet.
+              // Some wallets use nested providers (e.g., okxwallet.bitcoin,
+              // phantom.bitcoin, magicEden.bitcoin) rather than a top-level injection.
+              let providerObj: any;
+              switch (storedBrowserWalletId) {
+                case 'okx':
+                  providerObj = (window as any).okxwallet?.bitcoin;
+                  break;
+                case 'phantom':
+                  providerObj = (window as any).phantom?.bitcoin;
+                  break;
+                case 'magic-eden':
+                  providerObj = (window as any).magicEden?.bitcoin;
+                  break;
+                case 'tokeo':
+                  providerObj = (window as any).tokeo?.bitcoin;
+                  break;
+                default:
+                  providerObj = (window as any)[walletInfo.injectionKey];
+              }
 
               // OYL requires connect() before signPsbt will work.
               // On page reload the extension forgets the site connection,
@@ -1198,25 +1217,37 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'okx') {
-        // OKX wallet exposes window.okxwallet.bitcoin with requestAccounts(), signPsbt()
+        // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
         // Only provides one address type at a time (like Unisat).
-        // connect() may auto-connect silently without a popup — requestAccounts()
-        // always prompts the user to approve the site connection.
+        // connect() returns {address, compressedPublicKey, publicKey}.
         const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
-        let accounts: string[];
+        console.log('[WalletContext] OKX: calling connect()...');
+
+        let result: any;
         try {
-          accounts = await okxProvider.requestAccounts();
+          result = await Promise.race([
+            okxProvider.connect(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(
+                'OKX connection timed out after 60s. ' +
+                'Try: (1) open/unlock your OKX wallet extension popup first, ' +
+                '(2) check chrome://extensions for errors in OKX service worker, ' +
+                '(3) try connecting on another site to verify extension works.'
+              )), 60000)
+            ),
+          ]);
         } catch (e: any) {
           const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
-          throw new Error(`OKX requestAccounts failed: ${msg}`);
+          throw new Error(`OKX connect failed: ${msg}`);
         }
-        if (!accounts?.length) throw new Error('No accounts returned from OKX');
-        const addr = accounts[0];
 
-        let pubKey: string | undefined;
-        try { pubKey = await okxProvider.getPublicKey(); } catch {}
+        console.log('[WalletContext] OKX connect result:', result);
+
+        const addr = result?.address;
+        const pubKey = result?.compressedPublicKey || result?.publicKey;
+        if (!addr) throw new Error('No address returned from OKX');
 
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
         if (isTaproot) {
