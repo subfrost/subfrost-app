@@ -480,8 +480,10 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   </div>
                   <div className="min-w-0 text-right">
                     <div className="text-sm sm:text-base text-[color:var(--sf-text)]/70 mb-1 whitespace-nowrap">{t('openPosition.totalProfit')}</div>
-                    <div className={`text-xl sm:text-3xl font-bold truncate ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
-                      {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} <span className="text-base sm:text-2xl">BTC</span>
+                    <div className={`text-xl sm:text-3xl font-bold ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
+                      <span className="sm:hidden">{totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(4)}</span>
+                      <span className="hidden sm:inline">{totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)}</span>
+                      {' '}<span className="text-base sm:text-2xl">BTC</span>
                     </div>
                   </div>
                 </div>
