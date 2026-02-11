@@ -272,30 +272,65 @@ export async function POST(
 
     const data = await response.json();
 
-    // --- Espo fallback for metashrew_view protorunesbyaddress ---
-    // When the subfrost backend's metashrew service is unreachable, the SDK's
-    // internal protorunesbyaddress call fails and it thinks the wallet has 0
-    // alkanes ("Insufficient alkanes"). Espo has the same data indexed and
-    // available. We detect the failure and re-encode the espo response as the
-    // protobuf WalletResponse the SDK expects.
-    if (
-      data?.error &&
-      !Array.isArray(body) &&
-      body?.method === 'metashrew_view' &&
-      Array.isArray(body?.params) &&
-      body.params[0] === 'protorunesbyaddress'
-    ) {
-      const payloadHex = body.params[1] as string;
-      const address = parseAddressFromPayload(payloadHex);
-      if (address) {
-        console.log(`[RPC Proxy] metashrew_view failed for ${address}, trying espo fallback...`);
-        const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
-        const espoUrl = `${baseUrl}/espo`;
-        const fallback = await espoProtorunesFallback(espoUrl, address, body.id ?? 1);
-        if (fallback) {
-          return NextResponse.json(fallback);
+    // --- Metashrew fallback when the service is unreachable ---
+    // The subfrost backend routes metashrew_height and metashrew_view to an
+    // internal metashrew:8080 service. When that service is down, both calls
+    // fail. The SDK calls them in sequence: metashrew_height first, then
+    // metashrew_view protorunesbyaddress. We must handle BOTH failures:
+    //
+    // 1. metashrew_height: fall back to getblockcount (same endpoint, works)
+    // 2. metashrew_view protorunesbyaddress: fall back to espo outpoints
+    //    re-encoded as the protobuf WalletResponse the SDK expects
+    if (data?.error && !Array.isArray(body)) {
+      const isMetashrewError =
+        typeof data.error === 'object' &&
+        typeof data.error.message === 'string' &&
+        data.error.message.includes('metashrew');
+
+      // --- metashrew_height fallback: use getblockcount ---
+      if (isMetashrewError && body?.method === 'metashrew_height') {
+        console.log('[RPC Proxy] metashrew_height failed, falling back to getblockcount');
+        try {
+          const blockResp = await fetch(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'getblockcount', params: [], id: body.id ?? 1 }),
+          });
+          if (blockResp.ok) {
+            const blockData = await blockResp.json();
+            if (blockData?.result != null) {
+              // metashrew_height returns a string; getblockcount returns a number
+              return NextResponse.json({
+                jsonrpc: '2.0',
+                result: String(blockData.result),
+                id: body.id ?? 1,
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[RPC Proxy] getblockcount fallback failed:', err);
         }
-        console.warn('[RPC Proxy] Espo fallback returned null, returning original error');
+      }
+
+      // --- metashrew_view protorunesbyaddress fallback: use espo ---
+      if (
+        isMetashrewError &&
+        body?.method === 'metashrew_view' &&
+        Array.isArray(body?.params) &&
+        body.params[0] === 'protorunesbyaddress'
+      ) {
+        const payloadHex = body.params[1] as string;
+        const address = parseAddressFromPayload(payloadHex);
+        if (address) {
+          console.log(`[RPC Proxy] metashrew_view failed for ${address}, trying espo fallback...`);
+          const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
+          const espoUrl = `${baseUrl}/espo`;
+          const fallback = await espoProtorunesFallback(espoUrl, address, body.id ?? 1);
+          if (fallback) {
+            return NextResponse.json(fallback);
+          }
+          console.warn('[RPC Proxy] Espo fallback returned null, returning original error');
+        }
       }
     }
 
