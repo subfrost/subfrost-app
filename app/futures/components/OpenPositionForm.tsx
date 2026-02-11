@@ -96,13 +96,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
   const activePercent = getActivePercent();
 
-  // Pre-compute button base class to avoid nested template literals with /[
-  // which triggers Turbopack SWC "Unterminated regexp literal" parser bug
-  const btnBase = theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]';
+  // Pre-compute button classes. Turbopack SWC parser treats /[ as regexp start,
+  // so we avoid that sequence entirely by using percentage opacity (3, 6) instead
+  // of arbitrary values ([0.03], [0.06]).
+  const btnBase = theme === 'dark' ? 'bg-white/3' : 'bg-[color:var(--sf-surface)]';
   const btnBaseSmall = `inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
   const btnBaseLarge = `inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
   const btnActiveClass = 'bg-[color:var(--sf-primary)]/20';
-  const btnInactiveClass = `${btnBase} hover:bg-white/[0.06]`;
+  const btnInactiveClass = `${btnBase} hover:bg-white/6`;
 
   // Calculate maximum blocks left among available contracts
   const maxBlocksLeft = contracts
