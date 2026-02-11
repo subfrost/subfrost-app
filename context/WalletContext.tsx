@@ -1198,14 +1198,25 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'okx') {
-        // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
+        // OKX wallet exposes window.okxwallet.bitcoin with requestAccounts(), signPsbt()
+        // Only provides one address type at a time (like Unisat).
+        // connect() may auto-connect silently without a popup — requestAccounts()
+        // always prompts the user to approve the site connection.
         const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
-        const result = await okxProvider.connect();
-        const addr = result?.address;
-        const pubKey = result?.publicKey;
-        if (!addr) throw new Error('No address returned from OKX');
+        let accounts: string[];
+        try {
+          accounts = await okxProvider.requestAccounts();
+        } catch (e: any) {
+          const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
+          throw new Error(`OKX requestAccounts failed: ${msg}`);
+        }
+        if (!accounts?.length) throw new Error('No accounts returned from OKX');
+        const addr = accounts[0];
+
+        let pubKey: string | undefined;
+        try { pubKey = await okxProvider.getPublicKey(); } catch {}
 
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
         if (isTaproot) {
