@@ -666,6 +666,38 @@ alkanes: [{id: {block: sell_block, tx: sell_tx}, value: amount_in}]
 - When swap quotes seem unreasonable, compare the quote's reserves against `alkanes_simulate` opcode 97 (GetReserves) on the actual pool.
 - The SDK's auto-edict from `inputRequirements` handles token delivery — do NOT also construct manual edict protostones.
 
+### 2026-02-10: Unisat PSBT "scriptPk undefined" — Server-Side Decode Limitation
+
+**Symptom:** `unisat.signPsbt()` opens the Unisat popup with an infinite spinner. The popup's console shows: `"Failed to decode PSBT data: Error: Cannot read properties of undefined (reading 'scriptPk')"`
+
+**Root cause (confirmed from Unisat open-source code):**
+1. `unisat.signPsbt()` → extension calls `wallet.decodePsbt(psbtHex, website)` → POSTs to `api.unisat.io/v5/tx/decode2`
+2. Server looks up each input txid:vout in its own indexer → `utxoMap[key].scriptPk`
+3. If any UTXO not in indexer → `undefined.scriptPk` → server returns error
+4. Extension catches API error, but React UI crashes rendering null data → infinite spinner
+
+**Key insight:** The signing code (`formatOptionsToSignInputs` in `wallet.ts`) is LOCAL — it reads `witnessUtxo`/`nonWitnessUtxo` from the PSBT. The server decode is display-only. **Signing would work if the UI didn't crash.**
+
+**Why it fails for alkane sends specifically:**
+- Alkane dust UTXOs (546 sats) may not be indexed by Unisat's server
+- Unisat's `/v5/tx/decode2` also processes outputs — alkane OP_RETURN format may not be recognized
+- Xverse/OYL parse PSBTs locally → no server dependency → they work
+
+**Extension version matters:**
+- Newer monorepo (`useSignPsbtLogic.ts`): catches decode error silently, sign button still appears
+- Older extension (`usePsbtInitializer.ts`): may leave loading state stuck
+
+**What we tried (all produced same spinner):**
+1. Clean PSBT rebuild + tapInternalKey
+2. Removed tapInternalKey / removed toSignInputs
+3. signPsbts (plural) API
+4. Added nonWitnessUtxo from esplora
+5. Direct `signPsbt(hex)` vs `request('signPsbt')` format
+
+**Lesson:** Any approach that goes through `unisat.signPsbt()` hits the server decode. This is a Unisat-side limitation for non-indexed UTXOs. The only client-side fixes are: (a) ensure PSBT has correct `witnessUtxo` data so LOCAL signing works when the UI proceeds, or (b) use a signing method that bypasses the server decode.
+
+**Source repos:** `github.com/unisat-wallet/wallet` (monorepo), `github.com/unisat-wallet/extension` (older)
+
 ### 2026-01-18: WASM Alias Bug
 - `next.config.mjs` aliases `@alkanes/ts-sdk/wasm` to `lib/oyl/alkanes/`
 - Old WASM in lib/oyl caused "Insufficient alkanes" errors
