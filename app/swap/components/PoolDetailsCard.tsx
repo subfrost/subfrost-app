@@ -73,7 +73,7 @@ export default function PoolDetailsCard({ pool }: Props) {
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] overflow-hidden">
       {pool ? (
-        <div className="relative" style={{ height: 680 }}>
+        <div className="relative" style={{ height: 460 }}>
           {isSymbolLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-[color:var(--sf-primary)] border-t-transparent" />
@@ -84,7 +84,7 @@ export default function PoolDetailsCard({ pool }: Props) {
               key={symbol}
               src={iframeUrl}
               className="w-full h-full border-0"
-              style={{ height: 680 }}
+              style={{ height: 460 }}
               allow="clipboard-write"
               loading="lazy"
               title={`${pool.token0.symbol} price chart`}
