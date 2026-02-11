@@ -303,18 +303,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
           {/* Investment Amount */}
           <div className="space-y-3">
             <div
-              className={`relative rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
               onClick={() => inputRef.current?.focus()}
             >
-              {/* Floating BTC icon */}
-              <div
-                className="absolute left-4 top-1/2 -translate-y-1/2 z-10"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" />
-              </div>
-              <div className="flex flex-col gap-1 pl-14">
-                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('openPosition.investmentAmount')}</span>
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('openPosition.investmentAmount')}</span>
+              <div className="flex items-center gap-3 mt-1">
+                <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" />
+                </div>
                 <NumberField
                   ref={inputRef}
                   value={investmentAmount}
@@ -324,8 +320,9 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
                 />
-                {/* Balance and percentage buttons stacked */}
-                <div className="flex flex-col items-end gap-1">
+              </div>
+              {/* Balance and percentage buttons stacked */}
+              <div className="flex flex-col items-end gap-1 mt-1">
                   <div className="flex items-center gap-2">
                     <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                       {balanceText}
