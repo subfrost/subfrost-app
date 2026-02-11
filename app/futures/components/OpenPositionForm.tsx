@@ -393,7 +393,6 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                       Max
                     </button>
                   </div>
-                </div>
               </div>
             </div>
           </div>
