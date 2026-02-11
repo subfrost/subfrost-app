@@ -968,6 +968,41 @@ export class WebProvider {
   dataApiGetBlockHeight(): Promise<any>;
   dataApiGetBlockHash(): Promise<any>;
   dataApiGetIndexerPosition(): Promise<any>;
+  dataApiGetPoolCreationHistory(limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetPoolSwapHistory(pool_id?: string | null, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetTokenSwapHistory(alkane_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetPoolMintHistory(pool_id?: string | null, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetPoolBurnHistory(pool_id?: string | null, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAddressSwapHistoryForPool(address: string, pool_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAddressSwapHistoryForToken(address: string, alkane_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAddressWrapHistory(address: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAddressUnwrapHistory(address: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAllWrapHistory(limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAllUnwrapHistory(limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetTotalUnwrapAmount(): Promise<any>;
+  dataApiGetAddressPoolCreationHistory(address: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAddressPoolMintHistory(address: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAddressPoolBurnHistory(address: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAllAddressAmmTxHistory(address: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAllAmmTxHistory(limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAddressPositions(address: string, factory_id: string): Promise<any>;
+  dataApiGetTokenPairs(factory_id: string, alkane_id?: string | null, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAllTokenPairs(factory_id: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiGetAlkaneSwapPairDetails(factory_id: string, token_a_id: string, token_b_id: string): Promise<any>;
+  dataApiGetAlkanesUtxo(address: string): Promise<any>;
+  dataApiGetAmmUtxos(address: string): Promise<any>;
+  dataApiGetAddressUtxos(address: string): Promise<any>;
+  dataApiGetAddressBalance(address: string): Promise<any>;
+  dataApiGetTaprootBalance(address: string): Promise<any>;
+  dataApiGetAccountUtxos(account: string): Promise<any>;
+  dataApiGetAccountBalance(account: string): Promise<any>;
+  dataApiGetAddressOutpoints(address: string): Promise<any>;
+  dataApiGlobalAlkanesSearch(search_query: string, limit?: bigint | null, offset?: bigint | null): Promise<any>;
+  dataApiPathfind(token_in: string, token_out: string, amount_in: string, max_hops?: bigint | null): Promise<any>;
+  dataApiGetBitcoinMarketWeekly(): Promise<any>;
+  dataApiGetBitcoinMarkets(): Promise<any>;
+  dataApiGetTaprootHistory(taproot_address: string, total_txs: bigint): Promise<any>;
+  dataApiGetIntentHistory(address: string, total_txs?: bigint | null, last_seen_tx_id?: string | null): Promise<any>;
   /**
    * Reflect alkane token metadata by querying standard opcodes
    *
@@ -1039,4 +1074,112 @@ export class WebProvider {
    * Find the best MEV swap opportunity for a token using ESPO
    */
   espoGetBestMevSwap(token: string, fee_bps?: number | null, max_hops?: number | null): Promise<any>;
+  /**
+   * Get AMM factories from ESPO
+   */
+  espoGetAmmFactories(page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get all alkanes from ESPO
+   */
+  espoGetAllAlkanes(page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get alkane info from ESPO
+   */
+  espoGetAlkaneInfo(alkane_id: string): Promise<any>;
+  /**
+   * Get block summary from ESPO
+   */
+  espoGetBlockSummary(height: number): Promise<any>;
+  /**
+   * Get circulating supply of an alkane from ESPO
+   */
+  espoGetCirculatingSupply(alkane_id: string, height?: number | null): Promise<any>;
+  /**
+   * Get transfer volume for an alkane from ESPO
+   */
+  espoGetTransferVolume(alkane_id: string, page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get total received for an alkane from ESPO
+   */
+  espoGetTotalReceived(alkane_id: string, page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get address activity from ESPO
+   */
+  espoGetAddressActivity(address: string): Promise<any>;
+  /**
+   * Get all balances for an alkane (all holders) from ESPO
+   */
+  espoGetAlkaneBalances(alkane_id: string): Promise<any>;
+  /**
+   * Get alkane balance via metashrew from ESPO
+   */
+  espoGetAlkaneBalanceMetashrew(owner: string, target: string, height?: number | null): Promise<any>;
+  /**
+   * Get alkane balance transactions from ESPO
+   */
+  espoGetAlkaneBalanceTxs(alkane_id: string, page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get alkane balance transactions by token from ESPO
+   */
+  espoGetAlkaneBalanceTxsByToken(owner: string, token: string, page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get block traces from ESPO
+   */
+  espoGetBlockTraces(height: number): Promise<any>;
+  /**
+   * Get alkane transaction summary from ESPO
+   */
+  espoGetAlkaneTxSummary(txid: string): Promise<any>;
+  /**
+   * Get alkane transactions in a block from ESPO
+   */
+  espoGetAlkaneBlockTxs(height: number, page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get alkane transactions for an address from ESPO
+   */
+  espoGetAlkaneAddressTxs(address: string, page?: number | null, limit?: number | null): Promise<any>;
+  /**
+   * Get all transactions for an address from ESPO
+   */
+  espoGetAddressTransactions(address: string, page?: number | null, limit?: number | null, only_alkane_txs?: boolean | null): Promise<any>;
+  /**
+   * Get latest alkane traces from ESPO
+   */
+  espoGetAlkaneLatestTraces(): Promise<any>;
+  /**
+   * Get mempool traces from ESPO
+   */
+  espoGetMempoolTraces(page?: number | null, limit?: number | null, address?: string | null): Promise<any>;
+  /**
+   * Get all wrap events from ESPO (subfrost namespace)
+   */
+  espoGetWrapEvents(count?: number | null, offset?: number | null, successful?: boolean | null): Promise<any>;
+  /**
+   * Get wrap events for a specific address from ESPO (subfrost namespace)
+   */
+  espoGetWrapEventsByAddress(address: string, count?: number | null, offset?: number | null, successful?: boolean | null): Promise<any>;
+  /**
+   * Get all unwrap events from ESPO (subfrost namespace)
+   */
+  espoGetUnwrapEvents(count?: number | null, offset?: number | null, successful?: boolean | null): Promise<any>;
+  /**
+   * Get unwrap events for a specific address from ESPO (subfrost namespace)
+   */
+  espoGetUnwrapEventsByAddress(address: string, count?: number | null, offset?: number | null, successful?: boolean | null): Promise<any>;
+  /**
+   * Get series ID from alkane ID (pizzafun namespace)
+   */
+  espoGetSeriesIdFromAlkaneId(alkane_id: string): Promise<any>;
+  /**
+   * Get series IDs from multiple alkane IDs (pizzafun namespace)
+   */
+  espoGetSeriesIdsFromAlkaneIds(alkane_ids: string[]): Promise<any>;
+  /**
+   * Get alkane ID from series ID (pizzafun namespace)
+   */
+  espoGetAlkaneIdFromSeriesId(series_id: string): Promise<any>;
+  /**
+   * Get alkane IDs from multiple series IDs (pizzafun namespace)
+   */
+  espoGetAlkaneIdsFromSeriesIds(series_ids: string[]): Promise<any>;
 }

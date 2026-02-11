@@ -21,9 +21,9 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Network } from '@/utils/constants';
+import * as alkWasm from '@alkanes/ts-sdk/wasm';
 
-// Import the WASM WebProvider type
-type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
+type WebProvider = InstanceType<typeof alkWasm.WebProvider>;
 
 /**
  * Check if we're running in a browser context.
@@ -183,16 +183,13 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       try {
         console.log('[AlkanesSDK] Initializing WASM WebProvider for network:', network);
 
-        // Dynamically import the WASM module
-        const wasm = await import('@alkanes/ts-sdk/wasm');
-
         // Get provider preset name and config overrides
         // Uses proxy URL for networks with CORS issues when in browser localhost context
         const providerName = NETWORK_TO_PROVIDER[network] || 'mainnet';
         const configOverrides = getNetworkConfig(network);
 
-        // Create the WASM WebProvider
-        const providerInstance = new wasm.WebProvider(providerName, configOverrides);
+        // Create the WASM WebProvider (module loaded eagerly via static import)
+        const providerInstance = new alkWasm.WebProvider(providerName, configOverrides);
 
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
         console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());

@@ -37,8 +37,10 @@ import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageHeader from '@/app/components/PageHeader';
 import AdminTabs from './AdminTabs';
 import { getAdminSecret, setAdminSecret, clearAdminSecret } from './useAdminFetch';
+import { useHydrated } from '@/hooks/useHydrated';
 
 export default function AdminPage() {
+  const hydrated = useHydrated();
   const [authed, setAuthed] = useState(false);
   const [password, setPassword] = useState('');
   const [checking, setChecking] = useState(false);
@@ -58,24 +60,33 @@ export default function AdminPage() {
     }
   }, []);
 
+  const [loginMs, setLoginMs] = useState<number | null>(null);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setChecking(true);
     setError('');
+    setLoginMs(null);
+    const t0 = performance.now();
 
     try {
       const res = await fetch('/api/admin/stats', {
         headers: { 'x-admin-secret': password },
       });
+      const elapsed = Math.round(performance.now() - t0);
+      setLoginMs(elapsed);
+      console.log(`[Admin] Login fetch took ${elapsed}ms, status=${res.status}`);
 
       if (res.ok) {
         setAdminSecret(password);
         setAuthed(true);
       } else {
-        setError('Invalid admin secret');
+        setError(`Invalid admin secret (${elapsed}ms)`);
       }
     } catch {
-      setError('Failed to connect');
+      const elapsed = Math.round(performance.now() - t0);
+      setLoginMs(elapsed);
+      setError(`Failed to connect (${elapsed}ms)`);
     } finally {
       setChecking(false);
     }
@@ -107,12 +118,15 @@ export default function AdminPage() {
                 />
               </div>
               {error && <div className="text-sm text-red-400">{error}</div>}
+              {loginMs !== null && !error && (
+                <div className="text-xs text-[color:var(--sf-muted)]">API response: {loginMs}ms</div>
+              )}
               <button
                 type="submit"
-                disabled={checking || !password}
+                disabled={!hydrated || checking || !password}
                 className="rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
               >
-                {checking ? 'Verifying...' : 'Login'}
+                {!hydrated ? 'Loading...' : checking ? 'Verifying...' : 'Login'}
               </button>
             </form>
           </div>

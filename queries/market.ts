@@ -153,39 +153,58 @@ export function frbtcPremiumQueryOptions(
 // Token display map
 // ---------------------------------------------------------------------------
 
-async function fetchAlkaneNamesBatch(alkaneIds: string[]): Promise<Record<string, TokenDisplay>> {
+// Convert Map instances (from WASM serde) to plain objects
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
+}
+
+/**
+ * Fetch token names/symbols via SDK's espoGetAlkaneInfo.
+ *
+ * JOURNAL ENTRY (2026-02-10):
+ * Replaced raw essentials.get_alkane_info batch fetch with individual
+ * SDK espoGetAlkaneInfo() calls. Slightly more HTTP requests but uses
+ * the typed SDK path instead of raw JSON-RPC through the proxy.
+ */
+async function fetchAlkaneNamesBatch(
+  provider: WebProvider,
+  alkaneIds: string[],
+): Promise<Record<string, TokenDisplay>> {
   const map: Record<string, TokenDisplay> = {};
   if (alkaneIds.length === 0) return map;
 
-  const batch = alkaneIds.map((id, i) => ({
-    jsonrpc: '2.0',
-    id: i,
-    method: 'essentials.get_alkane_info',
-    params: { alkane: id },
-  }));
+  const results = await Promise.all(
+    alkaneIds.map(async (id) => {
+      try {
+        const raw = await provider.espoGetAlkaneInfo(id);
+        const info = mapToObject(raw);
+        const data = info?.result ?? info;
+        if (data?.name) {
+          const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
+          return { id, name, symbol: data.symbol || '' };
+        }
+        return { id, name: undefined as string | undefined, symbol: '' };
+      } catch {
+        return { id, name: undefined as string | undefined, symbol: '' };
+      }
+    }),
+  );
 
-  const response = await fetch('/api/rpc', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(batch),
-  });
-
-  if (!response.ok) {
-    console.warn('[tokenDisplayMap] Espo batch failed:', response.status);
-    return map;
-  }
-
-  const results: Array<{ id: number; result?: { name?: string; symbol?: string }; error?: any }> =
-    await response.json();
-
-  for (const res of results) {
-    const alkaneId = alkaneIds[res.id];
-    if (!alkaneId) continue;
-    if (res.result && res.result.name) {
-      const name = res.result.name.replace('SUBFROST BTC', 'frBTC');
-      map[alkaneId] = { id: alkaneId, name, symbol: res.result.symbol || '' };
+  for (const r of results) {
+    if (r.name) {
+      map[r.id] = { id: r.id, name: r.name, symbol: r.symbol };
     } else {
-      map[alkaneId] = { id: alkaneId };
+      map[r.id] = { id: r.id };
     }
   }
 
@@ -195,13 +214,14 @@ async function fetchAlkaneNamesBatch(alkaneIds: string[]): Promise<Record<string
 export function tokenDisplayMapQueryOptions(
   network: string,
   ids: string[] | undefined,
+  provider?: WebProvider | null,
 ) {
   const unique = ids ? Array.from(new Set(ids)) : [];
   const sortedKey = unique.sort().join(',');
 
   return queryOptions<Record<string, TokenDisplay>>({
     queryKey: queryKeys.market.tokenDisplayMap(network, sortedKey),
-    enabled: unique.length > 0,
+    enabled: unique.length > 0 && !!provider,
     queryFn: async () => {
       const map: Record<string, TokenDisplay> = {};
       const toFetch: string[] = [];
@@ -212,8 +232,8 @@ export function tokenDisplayMapQueryOptions(
           toFetch.push(id);
         }
       }
-      if (toFetch.length > 0) {
-        const batchResults = await fetchAlkaneNamesBatch(toFetch);
+      if (toFetch.length > 0 && provider) {
+        const batchResults = await fetchAlkaneNamesBatch(provider, toFetch);
         Object.assign(map, batchResults);
       }
       return map;

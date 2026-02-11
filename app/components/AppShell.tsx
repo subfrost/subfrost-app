@@ -1,18 +1,18 @@
 'use client';
 
-import { lazy, Suspense, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import Header from '@/app/components/Header';
 import Footer from '@/app/components/Footer';
 import FloatingActions from '@/app/components/FloatingActions';
 import MobileBottomNav from '@/app/components/MobileBottomNav';
 import DemoBanner from '@/app/components/DemoBanner';
-
-// Lazy load modal - not needed until user clicks connect
-const ConnectWalletModal = lazy(() => import('@/app/components/ConnectWalletModal'));
+import SplashScreen from '@/app/components/SplashScreen';
+import ConnectWalletModal from '@/app/components/ConnectWalletModal';
 
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="sf-bg min-h-dvh relative flex flex-col">
+      <SplashScreen />
       <div className="absolute inset-0 sf-snow" aria-hidden />
       <Header />
       <DemoBanner />
@@ -24,9 +24,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <Footer />
       <MobileBottomNav />
       <FloatingActions />
-      <Suspense fallback={null}>
-        <ConnectWalletModal />
-      </Suspense>
+      <ConnectWalletModal />
       {/* Spacer for mobile bottom nav */}
       <div className="h-16 md:hidden" />
     </div>

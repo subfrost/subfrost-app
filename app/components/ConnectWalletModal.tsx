@@ -108,6 +108,7 @@ export default function ConnectWalletModal() {
 
     setIsValidatingCode(true);
     setError(null);
+    const t0 = performance.now();
 
     try {
       const response = await fetch('/api/invite-codes/validate', {
@@ -117,9 +118,11 @@ export default function ConnectWalletModal() {
       });
 
       const data = await response.json();
+      const elapsed = Math.round(performance.now() - t0);
+      console.log(`[InviteCode] Validation took ${elapsed}ms, valid=${data.valid}`);
 
       if (!data.valid) {
-        setError(data.error || t('wallet.invalidInviteCode'));
+        setError(`${data.error || t('wallet.invalidInviteCode')} (${elapsed}ms)`);
         return;
       }
 
@@ -127,8 +130,9 @@ export default function ConnectWalletModal() {
       setError(null);
       // Stay on invite-code view to show success state
     } catch (err) {
-      console.error('[InviteCode] Validation error:', err);
-      setError('Unable to validate code. Please check your connection.');
+      const elapsed = Math.round(performance.now() - t0);
+      console.error(`[InviteCode] Validation error (${elapsed}ms):`, err);
+      setError(`Unable to validate code. Please check your connection. (${elapsed}ms)`);
     } finally {
       setIsValidatingCode(false);
     }
@@ -946,7 +950,7 @@ export default function ConnectWalletModal() {
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Enabled wallet IDs - only these wallets are fully supported */}
                 {(() => {
-                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse']);
+                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse', 'okx', 'unisat']);
                   const installedIds = new Set(installedWallets.map(w => w.id));
 
                   // Separate installed wallets into enabled and coming soon

@@ -159,9 +159,12 @@ function addressToSymbolic(address: string): string {
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
   const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
   // Address strategy:
-  // - BTC sends: SegWit only (paymentAddress) for both send and change
+  // - BTC sends: SegWit (paymentAddress) preferred for both send and change.
+  //   For browser extension wallets that only expose a taproot address (e.g. Unisat
+  //   in taproot mode), paymentAddress is empty — fall back to taprootAddress so the
+  //   UTXO filter, esplora fetch, and change output all use the correct address.
   // - Alkane sends: Taproot (address) for token send/change, SegWit (paymentAddress) for BTC fees/change
-  const btcSendAddress = paymentAddress;
+  const btcSendAddress = paymentAddress || taprootAddress;
   const alkaneSendAddress = taprootAddress;
   const { provider, isInitialized } = useAlkanesSDK();
   const alkaneProvider = useSandshrewProvider();
@@ -249,10 +252,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   });
 
   // Debug: Log UTXO distribution
-  console.log('[SendModal] BTC send address (SegWit):', btcSendAddress);
+  console.log('[SendModal] BTC send address:', btcSendAddress);
   console.log('[SendModal] Total UTXOs:', utxos.all.length);
   console.log('[SendModal] UTXOs by address:', {
-    segwitAddress: utxos.all.filter(u => u.address === btcSendAddress).length,
+    btcSendAddress: utxos.all.filter(u => u.address === btcSendAddress).length,
     otherAddresses: utxos.all.filter(u => u.address !== btcSendAddress).length,
   });
   console.log('[SendModal] Available UTXOs for SegWit address:', availableUtxos.length);
@@ -522,7 +525,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] Recipient:', recipientAddress);
         console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
         console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-        console.log('[SendModal] From address (SegWit):', btcSendAddress);
+        console.log('[SendModal] From address:', btcSendAddress);
 
         // Fetch fresh UTXOs directly from esplora API to avoid stale cache issues
         console.log('[SendModal] Fetching fresh UTXOs from esplora...');
@@ -721,7 +724,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log('[SendModal] Recipient:', recipientAddress);
       console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
       console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-      console.log('[SendModal] From address (SegWit):', btcSendAddress);
+      console.log('[SendModal] From address:', btcSendAddress);
 
       // Use WASM provider's walletSend method
       const sendParams = {

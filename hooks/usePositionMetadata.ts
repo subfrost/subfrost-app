@@ -1,13 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 
 /**
- * Position metadata fetched from essentials.get_keys RPC.
+ * Position metadata fetched via SDK's espoGetKeys / espoGetAlkaneInfo.
  * Used to enrich staked position display with deposit token name and amount.
  *
  * For positions where name = "Position #N" and symbol = "POS-N", we fetch
  * /deposit-token-alkane-id and /deposit_amount from the on-chain key store
  * to show e.g. "DIESEL Position #73" and the actual deposit amount instead
  * of the generic "1 Position" label.
+ *
+ * JOURNAL ENTRY (2026-02-10):
+ * Replaced raw essentials.get_keys and essentials.get_alkane_info fetch
+ * calls with SDK espoGetKeys() and espoGetAlkaneInfo() methods.
  */
 export interface PositionMeta {
   depositTokenId: string;
@@ -43,29 +48,34 @@ function parseU128LE(hex: string): bigint {
   return BigInt('0x' + bytes.join(''));
 }
 
-interface GetKeysResult {
-  items: Record<string, { value_hex?: string; value_u128?: string | null }>;
+// Convert Map instances (from WASM serde) to plain objects
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
 }
 
-async function fetchPositionKeys(alkaneId: string): Promise<{ depositTokenId: string; depositAmount: string } | null> {
-  const res = await fetch('/api/rpc', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'essentials.get_keys',
-      params: { alkane: alkaneId, limit: 10, page: 1, try_decode_utf8: true },
-    }),
-  });
+type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
-  if (!res.ok) return null;
-  const json = await res.json();
-  const result: GetKeysResult | undefined = json?.result;
-  if (!result?.items) return null;
+async function fetchPositionKeys(
+  provider: WebProvider,
+  alkaneId: string,
+): Promise<{ depositTokenId: string; depositAmount: string } | null> {
+  const raw = await provider.espoGetKeys(alkaneId, 1, 10);
+  const result = mapToObject(raw);
+  const items = result?.items ?? result?.result?.items;
+  if (!items) return null;
 
-  const depositTokenEntry = result.items['/deposit-token-alkane-id'];
-  const depositAmountEntry = result.items['/deposit_amount'];
+  const depositTokenEntry = items['/deposit-token-alkane-id'];
+  const depositAmountEntry = items['/deposit_amount'];
 
   if (!depositTokenEntry?.value_hex) return null;
 
@@ -86,34 +96,34 @@ async function fetchPositionKeys(alkaneId: string): Promise<{ depositTokenId: st
   return { depositTokenId, depositAmount };
 }
 
-async function fetchTokenInfoBatch(tokenIds: string[]): Promise<Record<string, { name: string; symbol: string; decimals: number }>> {
+async function fetchTokenInfoBatch(
+  provider: WebProvider,
+  tokenIds: string[],
+): Promise<Record<string, { name: string; symbol: string; decimals: number }>> {
   if (tokenIds.length === 0) return {};
 
-  const batch = tokenIds.map((id, i) => ({
-    jsonrpc: '2.0',
-    id: i,
-    method: 'essentials.get_alkane_info',
-    params: { alkane: id },
-  }));
-
-  const res = await fetch('/api/rpc', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(batch),
-  });
-
-  if (!res.ok) return {};
-  const results: Array<{ id: number; result?: { name?: string; symbol?: string; decimals?: number }; error?: any }> = await res.json();
+  const results = await Promise.all(
+    tokenIds.map(async (id) => {
+      try {
+        const raw = await provider.espoGetAlkaneInfo(id);
+        const info = mapToObject(raw);
+        // Response may be wrapped in result or direct
+        const data = info?.result ?? info;
+        return {
+          id,
+          name: (data?.name || '').replace('SUBFROST BTC', 'frBTC'),
+          symbol: data?.symbol || '',
+          decimals: data?.decimals ?? 8,
+        };
+      } catch {
+        return { id, name: '', symbol: '', decimals: 8 };
+      }
+    }),
+  );
 
   const map: Record<string, { name: string; symbol: string; decimals: number }> = {};
   for (const r of results) {
-    const tokenId = tokenIds[r.id];
-    if (!tokenId || !r.result) continue;
-    map[tokenId] = {
-      name: (r.result.name || '').replace('SUBFROST BTC', 'frBTC'),
-      symbol: r.result.symbol || '',
-      decimals: r.result.decimals ?? 8,
-    };
+    map[r.id] = { name: r.name, symbol: r.symbol, decimals: r.decimals };
   }
   return map;
 }
@@ -123,19 +133,22 @@ async function fetchTokenInfoBatch(tokenIds: string[]): Promise<Record<string, {
  * Returns a map: positionAlkaneId → PositionMeta
  */
 export function usePositionMetadata(alkanes: Array<{ alkaneId: string; name: string; symbol: string }> | undefined) {
+  const { provider, isInitialized } = useAlkanesSDK();
+
   const positionIds = (alkanes || [])
     .filter((a) => isEnrichablePosition(a))
     .map((a) => a.alkaneId);
 
   return useQuery<Record<string, PositionMeta>>({
     queryKey: ['position-metadata', positionIds.sort().join(',')],
-    enabled: positionIds.length > 0,
+    enabled: positionIds.length > 0 && isInitialized && !!provider,
     queryFn: async () => {
+      if (!provider) return {};
       const meta: Record<string, PositionMeta> = {};
 
       // Step 1: Fetch keys for each position in parallel
       const keysResults = await Promise.all(
-        positionIds.map(async (id) => ({ id, result: await fetchPositionKeys(id) }))
+        positionIds.map(async (id) => ({ id, result: await fetchPositionKeys(provider, id).catch(() => null) }))
       );
 
       // Collect unique deposit token IDs
@@ -148,7 +161,7 @@ export function usePositionMetadata(alkanes: Array<{ alkaneId: string; name: str
       }
 
       // Step 2: Batch-fetch deposit token info
-      const tokenInfo = await fetchTokenInfoBatch(Array.from(depositTokenIds));
+      const tokenInfo = await fetchTokenInfoBatch(provider, Array.from(depositTokenIds));
 
       // Step 3: Assemble metadata
       for (const [posId, keys] of positionKeyMap) {
