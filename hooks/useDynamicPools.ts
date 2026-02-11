@@ -1,11 +1,10 @@
 /**
- * useDynamicPools - Fetches pools dynamically via ts-sdk
+ * useDynamicPools - Fetches pools via SDK's espoGetPools (single indexed call)
  *
- * Uses only alkanesGetAllPoolsWithDetails (alkanes_simulate RPC through /api/rpc proxy).
- * dataApiGetPools was removed — subfrost /get-pools returns bare pool IDs {block,tx}
- * without token info or reserves, and the SDK's follow-up calls to /get-pool-details (422)
- * and /get-all-pools-with-details (404) are unsupported. This caused the perpetual loading
- * spinner: ExchangeContext (which wraps all pages) blocked indefinitely.
+ * Uses provider.espoGetPools() which makes ONE call to the Espo indexer,
+ * following the same pattern as provider.espoGetAlkaneInfo() used elsewhere.
+ * Replaces the previous N+1 alkanes_simulate calls via alkanesGetAllPoolsWithDetails
+ * that flooded the RPC endpoint and froze the app.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -38,8 +37,86 @@ export type DynamicPoolsResult = {
   pools: DynamicPool[];
 };
 
+// Convert Map instances (from WASM serde) to plain objects
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
+}
+
 /**
- * Fetch all pools from factory using ts-sdk
+ * Parse espo pool data into DynamicPool format.
+ * Espo get_pools returns: { pools: { "2:6": { base, quote, base_reserve, quote_reserve } } }
+ * Pool IDs are object keys, not array items.
+ */
+function parseEspoPools(raw: any): DynamicPool[] {
+  const pools: DynamicPool[] = [];
+  const poolsObj = raw?.pools || {};
+
+  // Handle both object-keyed format and array format
+  const entries: [string, any][] = Array.isArray(poolsObj)
+    ? poolsObj.map((p: any, i: number) => [p.pool_id || String(i), p])
+    : Object.entries(poolsObj);
+
+  for (const [poolId, p] of entries) {
+    const [poolBlockStr, poolTxStr] = poolId.split(':');
+    const poolIdBlock = parseInt(poolBlockStr, 10) || 0;
+    const poolIdTx = parseInt(poolTxStr, 10) || 0;
+
+    // Espo fields: base, quote, base_reserve, quote_reserve
+    // Also handle normalized format: base_id, quote_id, base_amount, quote_amount
+    const baseId = p.base || p.base_id || '';
+    const quoteId = p.quote || p.quote_id || '';
+    const [baseBlock, baseTx] = (baseId || '0:0').split(':');
+    const [quoteBlock, quoteTx] = (quoteId || '0:0').split(':');
+
+    const reserveA = String(p.base_reserve || p.base_amount || '0');
+    const reserveB = String(p.quote_reserve || p.quote_amount || '0');
+    const poolName = p.pool_name || p.name || '';
+
+    // Get token names from espo or parse from pool_name
+    let tokenAName = (p.base_name || p.base_symbol || '').replace('SUBFROST BTC', 'frBTC');
+    let tokenBName = (p.quote_name || p.quote_symbol || '').replace('SUBFROST BTC', 'frBTC');
+
+    if ((!tokenAName || !tokenBName) && poolName) {
+      const match = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+      if (match) {
+        tokenAName = tokenAName || match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        tokenBName = tokenBName || match[2].trim().replace('SUBFROST BTC', 'frBTC');
+      }
+    }
+
+    pools.push({
+      pool_id: poolId,
+      pool_id_block: poolIdBlock,
+      pool_id_tx: poolIdTx,
+      details: {
+        token_a_block: parseInt(baseBlock, 10) || 0,
+        token_a_tx: parseInt(baseTx, 10) || 0,
+        token_b_block: parseInt(quoteBlock, 10) || 0,
+        token_b_tx: parseInt(quoteTx, 10) || 0,
+        token_a_name: tokenAName,
+        token_b_name: tokenBName,
+        reserve_a: reserveA,
+        reserve_b: reserveB,
+        pool_name: poolName,
+      },
+    });
+  }
+
+  return pools;
+}
+
+/**
+ * Fetch all pools via SDK espoGetPools (single Espo indexed call)
  */
 export function useDynamicPools(options?: {
   chunk_size?: number;
@@ -48,7 +125,7 @@ export function useDynamicPools(options?: {
 }) {
   const { network } = useWallet();
   const config = getConfig(network);
-  const factoryId = config.ALKANE_FACTORY_ID; // e.g., "4:65522"
+  const factoryId = config.ALKANE_FACTORY_ID;
   const { provider } = useAlkanesSDK();
 
   const { enabled = true } = options || {};
@@ -59,94 +136,76 @@ export function useDynamicPools(options?: {
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     queryFn: async () => {
-      console.log('[useDynamicPools] Fetching pools via ts-sdk for factory:', factoryId);
+      if (!provider) throw new Error('SDK provider not available');
 
-      // Timeout wrapper to prevent infinite hangs from CORS-blocked internal SDK fetches
-      const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
-        Promise.race([
-          promise,
-          new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)),
-        ]);
+      console.log('[useDynamicPools] Fetching pools via espoGetPools for network:', network);
 
-      let rawPools: any[] = [];
-
-      // alkanesGetAllPoolsWithDetails: alkanes_simulate RPC calls through /api/rpc proxy.
-      // Makes N+1 calls (1 factory opcode 3 + N pool opcode 999). 30s timeout for mainnet.
-      // This is the only reliable method — dataApiGetPools calls subfrost /get-pools which
-      // returns bare pool IDs without token/reserve data, then tries unsupported endpoints.
+      // Primary: espoGetPools (single indexed call, same pattern as espoGetAlkaneInfo)
       try {
-        const rpcResult = await withTimeout(provider!.alkanesGetAllPoolsWithDetails(factoryId), 30000, 'alkanesGetAllPoolsWithDetails');
-        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-        rawPools = parsed?.pools || [];
-        console.log('[useDynamicPools] alkanesGetAllPoolsWithDetails returned', rawPools.length, 'pools');
+        const raw = await Promise.race([
+          provider.espoGetPools(500),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('espoGetPools timeout (15s)')), 15000)),
+        ]);
+        const parsed = mapToObject(typeof raw === 'string' ? JSON.parse(raw) : raw);
+        console.log('[useDynamicPools] espoGetPools raw response keys:', Object.keys(parsed || {}));
+
+        const pools = parseEspoPools(parsed);
+        if (pools.length > 0) {
+          console.log('[useDynamicPools] espoGetPools returned', pools.length, 'pools');
+          return { total: pools.length, count: pools.length, pools };
+        }
+        console.warn('[useDynamicPools] espoGetPools returned 0 pools');
       } catch (e) {
-        console.warn('[useDynamicPools] alkanesGetAllPoolsWithDetails failed:', e);
+        console.warn('[useDynamicPools] espoGetPools failed:', e);
       }
 
-      // If both methods failed, throw error for React Query to handle
-      if (rawPools.length === 0) {
-        console.error('[useDynamicPools] All ts-sdk methods failed to return pools');
-        throw new Error('Failed to fetch pools from ts-sdk');
-      }
+      // Fallback: dataApiGetAllPoolsDetails (single DataApi call, no simulate)
+      try {
+        const raw = await Promise.race([
+          provider.dataApiGetAllPoolsDetails(factoryId),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dataApi timeout (20s)')), 20000)),
+        ]);
+        const parsed = mapToObject(typeof raw === 'string' ? JSON.parse(raw) : raw);
+        const apiPools = parsed?.pools || parsed?.data?.pools || [];
+        console.log('[useDynamicPools] dataApi fallback returned', apiPools.length, 'pools');
 
-      // Process raw pools into DynamicPool format
-      const pools: DynamicPool[] = [];
+        const pools: DynamicPool[] = [];
+        for (const p of apiPools) {
+          const poolId = p.poolId ? `${p.poolId.block}:${p.poolId.tx}` : '';
+          const token0Id = p.token0 ? `${p.token0.block}:${p.token0.tx}` : '';
+          const token1Id = p.token1 ? `${p.token1.block}:${p.token1.tx}` : '';
+          if (!poolId) continue;
 
-      for (const p of rawPools) {
-        // Handle Data API format (pool_block_id, pool_tx_id, token0_*, token1_*)
-        // and RPC format (pool_id_block, pool_id_tx, details: { token_a_*, token_b_* })
-        const details = p.details || {};
+          const [pBlock, pTx] = poolId.split(':');
+          const [t0Block, t0Tx] = (token0Id || '0:0').split(':');
+          const [t1Block, t1Tx] = (token1Id || '0:0').split(':');
 
-        // Determine pool ID
-        const poolIdBlock = p.pool_id_block ?? p.pool_block_id ?? 0;
-        const poolIdTx = p.pool_id_tx ?? p.pool_tx_id ?? 0;
-        const poolId = p.pool_id || `${poolIdBlock}:${poolIdTx}`;
-
-        // Get token info - handle both formats
-        const tokenABlock = details.token_a_block ?? p.token0_block_id ?? 0;
-        const tokenATx = details.token_a_tx ?? p.token0_tx_id ?? 0;
-        const tokenBBlock = details.token_b_block ?? p.token1_block_id ?? 0;
-        const tokenBTx = details.token_b_tx ?? p.token1_tx_id ?? 0;
-
-        // Get token names
-        let tokenAName = (details.token_a_name || p.token0_name || '').replace('SUBFROST BTC', 'frBTC');
-        let tokenBName = (details.token_b_name || p.token1_name || '').replace('SUBFROST BTC', 'frBTC');
-
-        // Try to parse from pool_name if names not available
-        const poolName = details.pool_name || p.pool_name || '';
-        if ((!tokenAName || !tokenBName) && poolName) {
-          const match = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
-          if (match) {
-            tokenAName = tokenAName || match[1].trim().replace('SUBFROST BTC', 'frBTC');
-            tokenBName = tokenBName || match[2].trim().replace('SUBFROST BTC', 'frBTC');
-          }
+          pools.push({
+            pool_id: poolId,
+            pool_id_block: parseInt(pBlock, 10) || 0,
+            pool_id_tx: parseInt(pTx, 10) || 0,
+            details: {
+              token_a_block: parseInt(t0Block, 10) || 0,
+              token_a_tx: parseInt(t0Tx, 10) || 0,
+              token_b_block: parseInt(t1Block, 10) || 0,
+              token_b_tx: parseInt(t1Tx, 10) || 0,
+              token_a_name: '',
+              token_b_name: '',
+              reserve_a: p.token0Amount || '0',
+              reserve_b: p.token1Amount || '0',
+              pool_name: p.poolName || '',
+            },
+          });
         }
 
-        pools.push({
-          pool_id: poolId,
-          pool_id_block: poolIdBlock,
-          pool_id_tx: poolIdTx,
-          details: {
-            token_a_block: tokenABlock,
-            token_a_tx: tokenATx,
-            token_b_block: tokenBBlock,
-            token_b_tx: tokenBTx,
-            token_a_name: tokenAName,
-            token_b_name: tokenBName,
-            reserve_a: details.reserve_a || p.token0_amount || '0',
-            reserve_b: details.reserve_b || p.token1_amount || '0',
-            pool_name: poolName,
-          },
-        });
+        if (pools.length > 0) {
+          return { total: pools.length, count: pools.length, pools };
+        }
+      } catch (e) {
+        console.warn('[useDynamicPools] dataApi fallback failed:', e);
       }
 
-      console.log('[useDynamicPools] Processed', pools.length, 'pools');
-
-      return {
-        total: pools.length,
-        count: pools.length,
-        pools,
-      };
+      throw new Error('Failed to fetch pools from espo and dataApi');
     },
   });
 }
@@ -164,10 +223,7 @@ export function useFilteredDynamicPools(
 ) {
   const poolsQuery = useDynamicPools(options);
 
-  const filteredPools = poolsQuery.data?.pools.filter((pool) => {
-    // Parse pool details to check if tokens are in whitelist
-    // This would need to be adapted based on the actual response format
-    // For now, we'll just return all pools and let the UI filter
+  const filteredPools = poolsQuery.data?.pools.filter(() => {
     return true;
   });
 

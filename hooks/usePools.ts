@@ -2,7 +2,7 @@
  * usePools - Fetch pool data from Subfrost Data API via @alkanes/ts-sdk
  *
  * Primary: provider.dataApiGetAllPoolsDetails (single HTTP call, returns TVL/volume/APR)
- * Fallback: provider.alkanesGetAllPoolsWithDetails (N+1 RPC sims, no TVL/volume)
+ * Fallback: /api/espo-pools (single cached Espo RPC call, no TVL/volume)
  */
 import { useQuery } from '@tanstack/react-query';
 
@@ -81,27 +81,43 @@ function getTokenName(tokenId: string, rawName?: string): string {
   return getTokenSymbol(tokenId, rawName);
 }
 
+// Convert Map instances (from WASM serde) to plain objects
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
+}
+
 /**
- * Fetch token names for unknown tokens via SDK's alkanesReflect.
+ * Fetch token names for unknown tokens via provider.espoGetAlkaneInfo().
+ * Same pattern as queries/market.ts tokenDisplayMapQueryOptions.
  * Returns a map of tokenId → { name, symbol }.
  */
 async function fetchUnknownTokenNames(
   tokenIds: string[],
-  provider: any
+  provider: any,
 ): Promise<Record<string, { name: string; symbol: string }>> {
   if (tokenIds.length === 0 || !provider) return {};
 
   const map: Record<string, { name: string; symbol: string }> = {};
 
-  // Fetch in parallel with individual timeouts
+  // Fetch in parallel via espoGetAlkaneInfo (same pattern as queries/market.ts)
   await Promise.all(
     tokenIds.map(async (tokenId) => {
       try {
-        const reflection = await Promise.race([
-          provider.alkanesReflect(tokenId),
+        const raw = await Promise.race([
+          provider.espoGetAlkaneInfo(tokenId),
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
         ]);
-        const parsed = typeof reflection === 'string' ? JSON.parse(reflection) : reflection;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
         const name = (parsed?.name || '').replace('SUBFROST BTC', 'frBTC').trim();
         const symbol = (parsed?.symbol || '').trim();
         if (name || symbol) {
@@ -233,48 +249,55 @@ async function fetchPoolsFromDataApi(
 }
 
 // ============================================================================
-// SDK RPC fallback (N+1 calls via alkanesGetAllPoolsWithDetails)
+// Espo pools fallback (single call via provider.espoGetPools)
 // ============================================================================
 
-async function fetchPoolsFromSDKFallback(
+async function fetchPoolsFromEspoFallback(
   provider: any,
-  factoryId: string,
   network: string,
 ): Promise<PoolsListItem[]> {
-  const rpcResult = await Promise.race([
-    provider.alkanesGetAllPoolsWithDetails(factoryId),
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('alkanesGetAllPoolsWithDetails timeout (30s)')), 30000)),
+  const raw = await Promise.race([
+    provider.espoGetPools(500),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('espoGetPools timeout (15s)')), 15000)),
   ]);
-  const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-  const rpcPools = parsed?.pools || [];
+  const parsed = mapToObject(typeof raw === 'string' ? JSON.parse(raw) : raw);
+  const poolsObj = parsed?.pools || {};
 
-  console.log('[usePools] SDK fallback returned', rpcPools.length, 'pools');
+  // Handle both object-keyed format and array format
+  const entries: [string, any][] = Array.isArray(poolsObj)
+    ? poolsObj.map((p: any, i: number) => [p.pool_id || String(i), p])
+    : Object.entries(poolsObj);
+
+  console.log(`[usePools] espoGetPools fallback returned ${entries.length} pools`);
 
   const items: PoolsListItem[] = [];
 
-  for (const p of rpcPools) {
-    const poolId = `${p.pool_id_block}:${p.pool_id_tx}`;
-    const d = p.details || {};
-    const token0Id = d.token_a_block != null && d.token_a_tx != null
-      ? `${d.token_a_block}:${d.token_a_tx}` : '';
-    const token1Id = d.token_b_block != null && d.token_b_tx != null
-      ? `${d.token_b_block}:${d.token_b_tx}` : '';
+  for (const [poolId, p] of entries) {
+    const token0Id = p.base || p.base_id || '';
+    const token1Id = p.quote || p.quote_id || '';
 
-    let token0Symbol = getTokenSymbol(token0Id, d.token_a_name);
-    let token1Symbol = getTokenSymbol(token1Id, d.token_b_name);
+    if (!poolId || !token0Id || !token1Id) continue;
 
-    if ((!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') && d.pool_name) {
-      const match = d.pool_name.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+    // Get token names from espo or parse from pool_name
+    let token0RawName = (p.base_name || p.base_symbol || '').replace('SUBFROST BTC', 'frBTC');
+    let token1RawName = (p.quote_name || p.quote_symbol || '').replace('SUBFROST BTC', 'frBTC');
+
+    const poolName = p.pool_name || p.name || '';
+    if ((!token0RawName || !token1RawName) && poolName) {
+      const match = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
       if (match) {
-        if (!token0Symbol || token0Symbol === 'UNK') token0Symbol = match[1].trim().replace('SUBFROST BTC', 'frBTC');
-        if (!token1Symbol || token1Symbol === 'UNK') token1Symbol = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+        token0RawName = token0RawName || match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        token1RawName = token1RawName || match[2].trim().replace('SUBFROST BTC', 'frBTC');
       }
     }
 
-    if (!poolId || !token0Id || !token1Id || !token0Symbol || !token1Symbol) continue;
+    const token0Symbol = getTokenSymbol(token0Id, token0RawName);
+    const token1Symbol = getTokenSymbol(token1Id, token1RawName);
 
-    const token0Name = getTokenName(token0Id, d.token_a_name);
-    const token1Name = getTokenName(token1Id, d.token_b_name);
+    if (!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') continue;
+
+    const token0Name = getTokenName(token0Id, token0RawName);
+    const token1Name = getTokenName(token1Id, token1RawName);
 
     items.push({
       id: poolId,
@@ -288,8 +311,8 @@ async function fetchPoolsFromSDKFallback(
       vol7dUsd: 0,
       vol30dUsd: 0,
       apr: 0,
-      token0Amount: d.reserve_a || '0',
-      token1Amount: d.reserve_b || '0',
+      token0Amount: String(p.base_reserve || p.base_amount || '0'),
+      token1Amount: String(p.quote_reserve || p.quote_amount || '0'),
     });
   }
 
@@ -328,12 +351,12 @@ export function usePools(params: UsePoolsParams = {}) {
         console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to SDK:', e);
       }
 
-      // Fallback: N+1 RPC simulation calls (no TVL/volume data)
+      // Fallback: espo-pools (single cached call, no TVL/volume data)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network);
+          items = await fetchPoolsFromEspoFallback(provider, network);
         } catch (e) {
-          console.warn('[usePools] SDK fallback also failed:', e);
+          console.warn('[usePools] espo-pools fallback also failed:', e);
         }
       }
 
@@ -341,7 +364,7 @@ export function usePools(params: UsePoolsParams = {}) {
         throw new Error('Failed to fetch pools from any source');
       }
 
-      // Enrich tokens not in KNOWN_TOKENS with names from SDK
+      // Enrich tokens not in KNOWN_TOKENS with names from Espo
       await enrichTokenNames(items, provider);
 
       // Remove known scam/impersonator pools

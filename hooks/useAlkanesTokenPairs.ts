@@ -1,8 +1,9 @@
 /**
  * useAlkanesTokenPairs - Find pools containing a specific token
  *
- * All pool data comes from the SDK's dataApiGetPools / alkanesGetAllPoolsWithDetails
- * which route through subfrost endpoints. No external services (alkanode/Espo) are used.
+ * Uses provider.espoGetPools() (single indexed call) then filters client-side.
+ * Same pattern as provider.espoGetAlkaneInfo() used in queries/market.ts.
+ * Replaces N+1 alkanes_simulate calls via alkanesGetAllPoolsWithDetails.
  */
 import { useQuery } from '@tanstack/react-query';
 import type { AlkanesTokenPairsResult } from '@/lib/api-provider/apiclient/types';
@@ -31,83 +32,82 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
   return tokenId.split(':')[1] || 'UNK';
 }
 
-// ============================================================================
-// SDK pool fetch (primary and only data source — alkanesGetAllPoolsWithDetails)
-// ============================================================================
-
-async function fetchPoolsFromSDK(
-  provider: any,
-  factoryId: string,
-): Promise<AlkanesTokenPair[]> {
-  let poolsArray: any[] = [];
-
-  // alkanesGetAllPoolsWithDetails: alkanes_simulate RPC calls through /api/rpc proxy.
-  // This is the only reliable method — dataApiGetPools calls subfrost /get-pools which
-  // returns bare pool IDs without token/reserve data, then tries unsupported endpoints.
-  try {
-    const rpcResult = await Promise.race([
-      provider.alkanesGetAllPoolsWithDetails(factoryId),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('alkanesGetAllPoolsWithDetails timeout (30s)')), 30000)),
-    ]);
-    const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-    const rpcPools = parsed?.pools || [];
-    poolsArray = rpcPools.map((p: any) => ({
-      pool_block_id: p.pool_id_block,
-      pool_tx_id: p.pool_id_tx,
-      token0_block_id: p.details?.token_a_block,
-      token0_tx_id: p.details?.token_a_tx,
-      token1_block_id: p.details?.token_b_block,
-      token1_tx_id: p.details?.token_b_tx,
-      token0_amount: p.details?.reserve_a || '0',
-      token1_amount: p.details?.reserve_b || '0',
-      pool_name: p.details?.pool_name || '',
-    }));
-    console.log('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails returned', poolsArray.length, 'pools');
-  } catch (e) {
-    console.warn('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails failed:', e);
+// Convert Map instances (from WASM serde) to plain objects
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
   }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
+}
 
-  if (poolsArray.length === 0) return [];
+// ============================================================================
+// Espo pool fetch (single indexed call via SDK)
+// ============================================================================
+
+async function fetchPoolsFromEspo(
+  provider: any,
+): Promise<AlkanesTokenPair[]> {
+  const raw = await Promise.race([
+    provider.espoGetPools(500),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('espoGetPools timeout (15s)')), 15000)),
+  ]);
+  const parsed = mapToObject(typeof raw === 'string' ? JSON.parse(raw) : raw);
+  const poolsObj = parsed?.pools || {};
+
+  // Handle both object-keyed format and array format
+  const entries: [string, any][] = Array.isArray(poolsObj)
+    ? poolsObj.map((p: any, i: number) => [p.pool_id || String(i), p])
+    : Object.entries(poolsObj);
+
+  console.log(`[useAlkanesTokenPairs] espoGetPools returned ${entries.length} pools`);
 
   const items: AlkanesTokenPair[] = [];
-  for (const pool of poolsArray) {
-    const token0Id = pool.token0_block_id && pool.token0_tx_id
-      ? `${pool.token0_block_id}:${pool.token0_tx_id}` : '';
-    const token1Id = pool.token1_block_id && pool.token1_tx_id
-      ? `${pool.token1_block_id}:${pool.token1_tx_id}` : '';
 
-    let token0Name = '';
-    let token1Name = '';
-    const poolName = pool.pool_name || '';
-    if (poolName) {
-      const match = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
-      if (match) {
-        token0Name = match[1].trim().replace('SUBFROST BTC', 'frBTC');
-        token1Name = match[2].trim().replace('SUBFROST BTC', 'frBTC');
-      }
-    }
-
-    const poolIdBlock = pool.pool_block_id || 0;
-    const poolIdTx = pool.pool_tx_id || 0;
+  for (const [poolId, p] of entries) {
+    // Espo fields: base, quote, base_reserve, quote_reserve
+    const token0Id = p.base || p.base_id || '';
+    const token1Id = p.quote || p.quote_id || '';
 
     if (!token0Id || !token1Id) continue;
+
+    const [poolBlockStr, poolTxStr] = poolId.split(':');
+
+    // Get token names from pool_name
+    let token0Name = (p.base_name || p.base_symbol || '').replace('SUBFROST BTC', 'frBTC');
+    let token1Name = (p.quote_name || p.quote_symbol || '').replace('SUBFROST BTC', 'frBTC');
+
+    const poolName = p.pool_name || p.name || '';
+    if ((!token0Name || !token1Name) && poolName) {
+      const match = poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+      if (match) {
+        token0Name = token0Name || match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        token1Name = token1Name || match[2].trim().replace('SUBFROST BTC', 'frBTC');
+      }
+    }
 
     items.push({
       token0: {
         id: token0Id,
-        token0Amount: pool.token0_amount || '0',
+        token0Amount: String(p.base_reserve || p.base_amount || '0'),
         alkaneId: parseAlkaneId(token0Id || '0:0'),
         name: token0Name,
         symbol: token0Name,
       },
       token1: {
         id: token1Id,
-        token1Amount: pool.token1_amount || '0',
+        token1Amount: String(p.quote_reserve || p.quote_amount || '0'),
         alkaneId: parseAlkaneId(token1Id || '0:0'),
         name: token1Name,
         symbol: token1Name,
       },
-      poolId: { block: poolIdBlock, tx: poolIdTx },
+      poolId: { block: parseInt(poolBlockStr, 10) || 0, tx: parseInt(poolTxStr, 10) || 0 },
       poolName,
     } as AlkanesTokenPair);
   }
@@ -139,15 +139,13 @@ export function useAlkanesTokenPairs(
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     queryFn: async () => {
-      if (!provider) {
-        throw new Error('SDK provider not available');
-      }
+      if (!provider) throw new Error('SDK provider not available');
 
-      const allPools = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID);
-      console.log('[useAlkanesTokenPairs] SDK returned', allPools.length, 'pools');
+      const allPools = await fetchPoolsFromEspo(provider);
+      console.log('[useAlkanesTokenPairs] espo returned', allPools.length, 'pools');
 
       if (allPools.length === 0) {
-        throw new Error('Failed to fetch pools from SDK');
+        throw new Error('No pools returned from espo');
       }
 
       // Filter to pools containing the requested token
