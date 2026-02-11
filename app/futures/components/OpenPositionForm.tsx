@@ -472,16 +472,16 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
               {/* Total Yield Card */}
               <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] space-y-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.totalYield')}</div>
-                    <div className={`text-2xl sm:text-3xl font-bold ${aggregatedYield >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
+                  <div className="min-w-0 shrink-0">
+                    <div className="text-sm sm:text-base text-[color:var(--sf-text)]/70 mb-1 whitespace-nowrap">{t('openPosition.totalYield')}</div>
+                    <div className={`text-xl sm:text-3xl font-bold ${aggregatedYield >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {aggregatedYield >= 0 ? '+' : ''}{aggregatedYield.toFixed(2)}%
                     </div>
                   </div>
                   <div className="min-w-0 text-right">
-                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.totalProfit')}</div>
-                    <div className={`text-2xl sm:text-3xl font-bold truncate ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
-                      {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} <span className="text-lg sm:text-2xl">BTC</span>
+                    <div className="text-sm sm:text-base text-[color:var(--sf-text)]/70 mb-1 whitespace-nowrap">{t('openPosition.totalProfit')}</div>
+                    <div className={`text-xl sm:text-3xl font-bold truncate ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
+                      {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} <span className="text-base sm:text-2xl">BTC</span>
                     </div>
                   </div>
                 </div>
