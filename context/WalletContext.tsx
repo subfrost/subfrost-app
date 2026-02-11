@@ -710,35 +710,34 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Disconnect (lock) wallet - works for both keystore and browser wallets
   const disconnect = useCallback(async () => {
-    // Clear keystore session
-    sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
-    setWallet(null);
+    // Capture reference before clearing state (for async cleanup below)
+    const walletToDisconnect = browserWallet;
 
-    // Clear browser wallet connection
-    if (browserWallet) {
-      try {
-        await browserWallet.disconnect();
-      } catch (error) {
-        console.warn('[WalletContext] Failed to disconnect browser wallet:', error);
-      }
-    }
-    setBrowserWallet(null);
-    setBrowserWalletAddresses(null);
-    setWalletAdapter(null); // Clear SDK wallet adapter
+    // Clear ALL state and storage immediately so the UI updates right away.
+    // External disconnect calls (browserWallet.disconnect, connector.disconnect)
+    // may hang for wallets like Unisat/OKX that were manually constructed —
+    // we must not block the UI on those.
+    sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
     localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
 
-    // Disconnect the WalletConnector
-    const connector = getWalletConnector();
-    try {
-      await connector.disconnect();
-    } catch (error) {
-      // Ignore disconnect errors
-    }
-
+    setWallet(null);
+    setBrowserWallet(null);
+    setBrowserWalletAddresses(null);
+    setWalletAdapter(null);
     setWalletType(null);
     setIsConnectModalOpen(false);
+
+    // Clean up external wallet connections (fire-and-forget, don't block UI)
+    if (walletToDisconnect) {
+      Promise.resolve(walletToDisconnect.disconnect()).catch(() => {});
+    }
+    try {
+      getWalletConnector().disconnect();
+    } catch {
+      // Ignore disconnect errors
+    }
   }, [browserWallet, getWalletConnector]);
 
   // Detect installed browser wallets
