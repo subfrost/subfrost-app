@@ -665,7 +665,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         // Finalize and extract transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-        signedPsbt.finalizeAllInputs();
+        try {
+          signedPsbt.finalizeAllInputs();
+        } catch (finalizeErr: any) {
+          console.error('[SendModal] BTC PSBT finalization failed:', finalizeErr);
+          throw new Error(`Transaction finalization failed: ${finalizeErr.message || finalizeErr}. The wallet may have returned invalid signatures.`);
+        }
         const txObj = signedPsbt.extractTransaction();
         const txHex = txObj.toHex();
         const computedTxid = txObj.getId();
@@ -681,7 +686,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           throw new Error(t('send.providerNotInitialized'));
         }
 
-        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        const BROADCAST_TIMEOUT_MS = 30_000;
+        const broadcastTxid = await Promise.race([
+          alkaneProvider.broadcastTransaction(txHex),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'Transaction broadcast timed out after 30s. The transaction may still be processing — check the explorer before retrying.'
+            )), BROADCAST_TIMEOUT_MS)
+          ),
+        ]);
         console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
 
         setTxid(broadcastTxid || computedTxid);
@@ -1013,7 +1026,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         // Finalize all inputs
         console.log('[SendModal] Finalizing PSBT...');
-        signedPsbt.finalizeAllInputs();
+        try {
+          signedPsbt.finalizeAllInputs();
+        } catch (finalizeErr: any) {
+          console.error('[SendModal] PSBT finalization failed:', finalizeErr);
+          throw new Error(`Transaction finalization failed: ${finalizeErr.message || finalizeErr}. The wallet may have returned invalid signatures.`);
+        }
 
         // Extract the raw transaction
         const tx = signedPsbt.extractTransaction();
@@ -1023,9 +1041,17 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] Transaction ID:', computedTxid);
         console.log('[SendModal] Transaction hex length:', txHex.length);
 
-        // Broadcast the transaction
+        // Broadcast the transaction with timeout guard
         console.log('[SendModal] Broadcasting transaction...');
-        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        const BROADCAST_TIMEOUT_MS = 30_000;
+        const broadcastTxid = await Promise.race([
+          alkaneProvider.broadcastTransaction(txHex),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'Transaction broadcast timed out after 30s. The transaction may still be processing — check the explorer before retrying.'
+            )), BROADCAST_TIMEOUT_MS)
+          ),
+        ]);
         console.log('[SendModal] Transaction broadcast successful');
         console.log('[SendModal] Broadcast returned txid:', broadcastTxid);
 
