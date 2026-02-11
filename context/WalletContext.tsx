@@ -1463,7 +1463,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         console.log('[WalletContext] Xverse signInputs:', JSON.stringify(signInputs));
 
-        // Patch tapInternalKey on taproot inputs to the user's actual x-only public key.
+        // Patch tapInternalKey on ALL taproot inputs to the user's actual x-only public key.
         // The SDK builds PSBTs with a dummy wallet's tapInternalKey (from AlkanesSDKContext's
         // walletCreate()). Xverse validates tapInternalKey matches its own key before signing —
         // mismatch causes "No taproot scripts signed" error.
@@ -1475,6 +1475,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             const input = psbt.data.inputs[i];
             if (input.tapInternalKey) {
               input.tapInternalKey = xOnlyBuf;
+            } else if (input.witnessUtxo) {
+              // Add tapInternalKey for taproot inputs that are missing it
+              const script = Buffer.from(input.witnessUtxo.script);
+              if (script[0] === 0x51 && script.length === 34) {
+                input.tapInternalKey = xOnlyBuf;
+              }
             }
           }
           console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
@@ -1515,24 +1521,56 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const bitcoin = await import('bitcoinjs-lib');
         const psbt = bitcoin.Psbt.fromHex(psbtHex);
 
-        // Patch tapInternalKey to user's actual key (same as Xverse path)
+        // Patch tapInternalKey on ALL taproot inputs (not just those that already have it).
+        // The WASM SDK builds PSBTs with a dummy wallet — tapInternalKey may be missing
+        // or set to the dummy key. Unisat needs the correct tapInternalKey to match its
+        // signing key, otherwise its modal spins endlessly trying to identify inputs.
         const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey;
         if (taprootPubKey) {
           const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
           const xOnlyBuf = Buffer.from(xOnlyHex, 'hex');
           for (let i = 0; i < psbt.data.inputs.length; i++) {
             const input = psbt.data.inputs[i];
+            // Patch existing tapInternalKey (dummy wallet's key → user's key)
             if (input.tapInternalKey) {
               input.tapInternalKey = xOnlyBuf;
+            } else if (input.witnessUtxo) {
+              // Add tapInternalKey for taproot inputs that are missing it
+              // P2TR script: OP_1 (0x51) + 32-byte x-only pubkey = 34 bytes
+              const script = Buffer.from(input.witnessUtxo.script);
+              if (script[0] === 0x51 && script.length === 34) {
+                input.tapInternalKey = xOnlyBuf;
+              }
             }
           }
           console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
         }
 
+        // Build explicit toSignInputs so Unisat doesn't rely on auto-detection.
+        // Without this, Unisat's modal can spin endlessly trying to identify inputs
+        // (especially when tapInternalKey was patched or the PSBT was built by a dummy wallet).
+        const userAddress = browserWalletAddresses?.taproot?.address
+          || browserWalletAddresses?.nativeSegwit?.address
+          || browserWallet.address;
+        const toSignInputs: Array<{ index: number; address: string }> = [];
+        for (let i = 0; i < psbt.data.inputs.length; i++) {
+          toSignInputs.push({ index: i, address: userAddress });
+        }
+        console.log('[WalletContext] Unisat toSignInputs:', toSignInputs.length, 'inputs, address:', userAddress);
+
         try {
-          const signedHex = await unisatProvider.signPsbt(psbt.toHex(), {
-            autoFinalized: false,
-          });
+          const SIGN_TIMEOUT_MS = 60_000;
+          const signedHex = await Promise.race([
+            unisatProvider.signPsbt(psbt.toHex(), {
+              autoFinalized: false,
+              toSignInputs,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(
+                'Unisat signing timed out. Please try again or check the Unisat extension.'
+              )), SIGN_TIMEOUT_MS)
+            ),
+          ]);
           const signedPsbt = bitcoin.Psbt.fromHex(signedHex);
           return signedPsbt.toBase64();
         } catch (e: any) {
@@ -1549,7 +1587,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const bitcoin = await import('bitcoinjs-lib');
         const psbt = bitcoin.Psbt.fromHex(psbtHex);
 
-        // Patch tapInternalKey to user's actual key
+        // Patch tapInternalKey on ALL taproot inputs (same as Unisat path above)
         const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey;
         if (taprootPubKey) {
           const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
@@ -1558,15 +1596,39 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             const input = psbt.data.inputs[i];
             if (input.tapInternalKey) {
               input.tapInternalKey = xOnlyBuf;
+            } else if (input.witnessUtxo) {
+              const script = Buffer.from(input.witnessUtxo.script);
+              if (script[0] === 0x51 && script.length === 34) {
+                input.tapInternalKey = xOnlyBuf;
+              }
             }
           }
           console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
         }
 
+        // Build explicit toSignInputs (same as Unisat path above)
+        const userAddress = browserWalletAddresses?.taproot?.address
+          || browserWalletAddresses?.nativeSegwit?.address
+          || browserWallet.address;
+        const toSignInputs: Array<{ index: number; address: string }> = [];
+        for (let i = 0; i < psbt.data.inputs.length; i++) {
+          toSignInputs.push({ index: i, address: userAddress });
+        }
+        console.log('[WalletContext] OKX toSignInputs:', toSignInputs.length, 'inputs, address:', userAddress);
+
         try {
-          const signedHex = await okxProvider.signPsbt(psbt.toHex(), {
-            autoFinalized: false,
-          });
+          const SIGN_TIMEOUT_MS = 60_000;
+          const signedHex = await Promise.race([
+            okxProvider.signPsbt(psbt.toHex(), {
+              autoFinalized: false,
+              toSignInputs,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(
+                'OKX signing timed out. Please try again or check the OKX extension.'
+              )), SIGN_TIMEOUT_MS)
+            ),
+          ]);
           const signedPsbt = bitcoin.Psbt.fromHex(signedHex);
           return signedPsbt.toBase64();
         } catch (e: any) {
