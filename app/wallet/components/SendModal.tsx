@@ -40,6 +40,22 @@ interface UTXO {
   frozen?: boolean;
 }
 
+// Convert WASM proxy objects (Maps) to plain JS objects.
+// Same helper used in usePools.ts, useAmmHistory.ts, etc.
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
+}
+
 // Helper to convert Uint8Array to base64
 function uint8ArrayToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -882,8 +898,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             setTimeout(() => reject(new Error('espo outpoints timeout (10s)')), 10_000)
           ),
         ]);
-        const espoResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        console.log('[SendModal] Espo outpoints raw:', JSON.stringify(espoResult).slice(0, 500));
+        const espoResult = mapToObject(typeof raw === 'string' ? JSON.parse(raw) : raw);
+        console.log('[SendModal] Espo outpoints:', JSON.stringify(espoResult).slice(0, 500));
 
         const outpoints = espoResult?.outpoints || [];
         let onChainBalance = 0n;
