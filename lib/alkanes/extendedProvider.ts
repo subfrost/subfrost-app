@@ -141,9 +141,10 @@ export async function alkanesExecuteTyped(
   ]);
 
   // Timeout guard: the WASM SDK may hang indefinitely if UTXO discovery fails.
-  // Wallets with many UTXOs (200+) trigger a slow metashrew_view protorunesbyaddress
-  // call that can take 20-30s. 45s gives it room to complete.
-  const EXECUTE_TIMEOUT_MS = 45_000;
+  // The RPC proxy now races metashrew vs espo for protorunesbyaddress, so the
+  // slow path (20-30s) is largely eliminated. 90s covers getrawtransaction
+  // calls for many-input transactions + any residual indexer latency.
+  const EXECUTE_TIMEOUT_MS = 90_000;
 
   try {
     const executePromise = provider.alkanesExecuteWithStrings(

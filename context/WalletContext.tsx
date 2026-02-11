@@ -1553,24 +1553,68 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             }
           }
           console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
+
+          // Patch witnessUtxo.script on P2TR inputs: the WASM SDK's dummy wallet
+          // builds witnessUtxo with its own tweaked key, not the user's. Unisat
+          // validates that witnessUtxo.script matches the signing key — mismatch
+          // causes the confirmation modal to spin endlessly (black screen).
+          //
+          // Derive the P2TR script from the user's address. Try all networks
+          // since the wallet's address encoding may differ from the app's
+          // network setting (e.g. mainnet bc1p on a regtest-configured app).
+          const userAddr = browserWalletAddresses?.taproot?.address || browserWallet.address;
+          let userP2trScript: Buffer | null = null;
+          if (userAddr) {
+            for (const net of [btcNetwork, bitcoin.networks.bitcoin, bitcoin.networks.testnet, bitcoin.networks.regtest]) {
+              try {
+                userP2trScript = Buffer.from(bitcoin.address.toOutputScript(userAddr, net));
+                break;
+              } catch { continue; }
+            }
+          }
+          if (userP2trScript) {
+            for (let i = 0; i < psbt.data.inputs.length; i++) {
+              const input = psbt.data.inputs[i];
+              if (input.witnessUtxo) {
+                const script = Buffer.from(input.witnessUtxo.script);
+                if (script[0] === 0x51 && script.length === 34) {
+                  input.witnessUtxo = { value: input.witnessUtxo.value, script: userP2trScript };
+                }
+              }
+            }
+            console.log('[WalletContext] Patched P2TR witnessUtxo.script to user address');
+          } else {
+            console.warn('[WalletContext] Could not derive P2TR script from address:', userAddr);
+          }
         }
 
-        // Clean dummy wallet artifacts from PSBT inputs.
-        // The SDK's dummy wallet (walletCreate()) may add BIP32 derivation paths
-        // that point to the dummy wallet's HD tree. Unisat tries to use these to
-        // locate signing keys and hangs when they don't match any key in its store.
-        // Also strip nonWitnessUtxo from P2TR inputs — taproot signing only needs
-        // witnessUtxo, and full raw transactions slow down Unisat's validation.
+        // Clean ALL dummy wallet artifacts from PSBT inputs.
+        // The SDK's dummy wallet (walletCreate()) adds BIP32 paths, tap tree data,
+        // sighash types, and sometimes even signatures — all referencing the dummy
+        // wallet's keys. Unisat validates every field when building its confirmation
+        // UI; any mismatch causes an infinite black spinner. Strip everything except
+        // the fields we've already patched (tapInternalKey, witnessUtxo).
         for (let i = 0; i < psbt.data.inputs.length; i++) {
-          const input = psbt.data.inputs[i];
+          const input = psbt.data.inputs[i] as any;
           // Strip dummy wallet BIP32 derivation paths
-          if ((input as any).tapBip32Derivation) {
-            delete (input as any).tapBip32Derivation;
-          }
-          if ((input as any).bip32Derivation) {
-            delete (input as any).bip32Derivation;
-          }
-          // Strip nonWitnessUtxo from taproot inputs (not needed, reduces PSBT size)
+          delete input.tapBip32Derivation;
+          delete input.bip32Derivation;
+          // Strip tap tree data (dummy wallet's script tree, not user's)
+          delete input.tapLeafScript;
+          delete input.tapScriptSig;
+          delete input.tapMerkleRoot;
+          // Strip any signatures from the dummy wallet
+          delete input.tapKeySig;
+          delete input.partialSig;
+          delete input.finalScriptWitness;
+          delete input.finalScriptSig;
+          // Strip sighashType — let Unisat choose the appropriate sighash
+          // (the dummy wallet may set a type that conflicts with taproot signing)
+          delete input.sighashType;
+          // Strip unknown key-value pairs that may confuse the wallet
+          if (input.unknownKeyVals) delete input.unknownKeyVals;
+          // Strip nonWitnessUtxo from taproot inputs (reduces PSBT size,
+          // taproot signing only needs witnessUtxo)
           if (input.witnessUtxo && input.nonWitnessUtxo) {
             const script = Buffer.from(input.witnessUtxo.script);
             if (script[0] === 0x51 && script.length === 34) {
@@ -1579,56 +1623,72 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           }
         }
 
-        // Build explicit toSignInputs with per-input address matching.
-        // Like the Xverse path, derive the address from each input's witnessUtxo.script
-        // to handle mixed input types (P2TR + P2WPKH) correctly.
+        // Clean global PSBT data that references the dummy wallet's HD tree
+        if ((psbt.data.globalMap as any).globalXpub) {
+          delete (psbt.data.globalMap as any).globalXpub;
+        }
+
+        // Build toSignInputs with publicKey for P2TR inputs. Unisat's internal
+        // key lookup is more reliable with publicKey than address for taproot —
+        // it can directly match the x-only key to its keyring without decoding.
         const taprootAddr = browserWalletAddresses?.taproot?.address || '';
         const segwitAddr = browserWalletAddresses?.nativeSegwit?.address || '';
         const fallbackAddr = browserWallet.address;
-        const toSignInputs: Array<{ index: number; address: string }> = [];
+        // Unisat expects the full compressed public key (33 bytes / 66 hex),
+        // not the x-only key. It matches against its keyring using this format.
+        const fullPubKeyHex = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey || '';
+        const toSignInputs: Array<{
+          index: number;
+          address?: string;
+          publicKey?: string;
+          disableTweakSigner?: boolean;
+        }> = [];
 
         for (let i = 0; i < psbt.data.inputs.length; i++) {
           const input = psbt.data.inputs[i];
-          let inputAddr = taprootAddr || fallbackAddr;
-
           if (input.witnessUtxo) {
-            try {
-              const decoded = bitcoin.address.fromOutputScript(
-                Buffer.from(input.witnessUtxo.script), btcNetwork
-              );
-              // Match to the correct wallet address
-              if (taprootAddr && decoded === taprootAddr) {
-                inputAddr = taprootAddr;
-              } else if (segwitAddr && decoded === segwitAddr) {
-                inputAddr = segwitAddr;
-              } else {
-                // Heuristic: P2TR scripts → taproot, P2WPKH scripts → segwit
-                const script = Buffer.from(input.witnessUtxo.script);
-                if (script[0] === 0x51 && script.length === 34) {
-                  inputAddr = taprootAddr || fallbackAddr;
-                } else if (script[0] === 0x00 && script.length === 22 && segwitAddr) {
-                  inputAddr = segwitAddr;
-                }
-              }
-            } catch {
-              // Can't decode script — use default
+            const script = Buffer.from(input.witnessUtxo.script);
+            if (script[0] === 0x51 && script.length === 34) {
+              // P2TR input: use publicKey for reliable key matching
+              toSignInputs.push({
+                index: i,
+                address: taprootAddr || fallbackAddr,
+                publicKey: fullPubKeyHex || undefined,
+                disableTweakSigner: false,
+              });
+            } else if (script[0] === 0x00 && script.length === 22) {
+              // P2WPKH input
+              toSignInputs.push({ index: i, address: segwitAddr || fallbackAddr });
+            } else {
+              toSignInputs.push({ index: i, address: fallbackAddr });
             }
+          } else {
+            toSignInputs.push({ index: i, address: fallbackAddr });
           }
-
-          toSignInputs.push({ index: i, address: inputAddr });
         }
-        console.log('[WalletContext] Unisat toSignInputs:', JSON.stringify(toSignInputs));
 
-        // Diagnostic: log input details for debugging
+        // Diagnostic: comprehensive PSBT state before signing
+        const outs = (psbt.data.globalMap.unsignedTx as any).tx.outs;
+        console.log(`[WalletContext] PSBT for Unisat: ${psbt.data.inputs.length} inputs, ${outs.length} outputs`);
+        console.log('[WalletContext] toSignInputs:', JSON.stringify(toSignInputs));
+        console.log('[WalletContext] taproot addr:', taprootAddr, '| segwit addr:', segwitAddr, '| pubKey:', fullPubKeyHex?.slice(0, 16) + '...');
         for (let i = 0; i < psbt.data.inputs.length; i++) {
           const input = psbt.data.inputs[i];
-          const hasWitness = !!input.witnessUtxo;
-          const hasNonWitness = !!input.nonWitnessUtxo;
-          const hasTapKey = !!input.tapInternalKey;
-          const scriptType = hasWitness
-            ? (Buffer.from(input.witnessUtxo!.script)[0] === 0x51 ? 'P2TR' : 'P2WPKH')
-            : 'unknown';
-          console.log(`[WalletContext] Input ${i}: ${scriptType}, witnessUtxo=${hasWitness}, nonWitnessUtxo=${hasNonWitness}, tapInternalKey=${hasTapKey}`);
+          if (input.witnessUtxo) {
+            const script = Buffer.from(input.witnessUtxo.script);
+            const isP2TR = script[0] === 0x51 && script.length === 34;
+            const outputKeyHex = isP2TR ? script.subarray(2).toString('hex') : '';
+            const tapKeyHex = input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'none';
+            console.log(`[WalletContext]   in[${i}]: ${isP2TR ? 'P2TR' : 'P2WPKH'} val=${input.witnessUtxo.value} outputKey=${outputKeyHex.slice(0, 12)}... tapIntKey=${tapKeyHex.slice(0, 12)}...`);
+          } else {
+            console.log(`[WalletContext]   in[${i}]: NO witnessUtxo`);
+          }
+        }
+        for (let i = 0; i < outs.length; i++) {
+          const outScript = Buffer.from(outs[i].script);
+          let outAddr = 'unknown';
+          try { outAddr = bitcoin.address.fromOutputScript(outScript, btcNetwork); } catch {}
+          console.log(`[WalletContext]   out[${i}]: ${outAddr} val=${outs[i].value}`);
         }
 
         try {
@@ -1686,17 +1746,48 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             }
           }
           console.log('[WalletContext] Patched tapInternalKey to user x-only:', xOnlyHex);
+
+          // Patch witnessUtxo.script on P2TR inputs (same as Unisat path above)
+          const okxUserAddr = browserWalletAddresses?.taproot?.address || browserWallet.address;
+          let okxUserP2trScript: Buffer | null = null;
+          if (okxUserAddr) {
+            for (const net of [btcNetwork, bitcoin.networks.bitcoin, bitcoin.networks.testnet, bitcoin.networks.regtest]) {
+              try {
+                okxUserP2trScript = Buffer.from(bitcoin.address.toOutputScript(okxUserAddr, net));
+                break;
+              } catch { continue; }
+            }
+          }
+          if (okxUserP2trScript) {
+            for (let i = 0; i < psbt.data.inputs.length; i++) {
+              const input = psbt.data.inputs[i];
+              if (input.witnessUtxo) {
+                const script = Buffer.from(input.witnessUtxo.script);
+                if (script[0] === 0x51 && script.length === 34) {
+                  input.witnessUtxo = { value: input.witnessUtxo.value, script: okxUserP2trScript };
+                }
+              }
+            }
+            console.log('[WalletContext] Patched P2TR witnessUtxo.script to user address');
+          } else {
+            console.warn('[WalletContext] Could not derive P2TR script from address:', okxUserAddr);
+          }
         }
 
-        // Clean dummy wallet artifacts (same as Unisat path above)
+        // Clean ALL dummy wallet artifacts (same comprehensive cleanup as Unisat)
         for (let i = 0; i < psbt.data.inputs.length; i++) {
-          const input = psbt.data.inputs[i];
-          if ((input as any).tapBip32Derivation) {
-            delete (input as any).tapBip32Derivation;
-          }
-          if ((input as any).bip32Derivation) {
-            delete (input as any).bip32Derivation;
-          }
+          const input = psbt.data.inputs[i] as any;
+          delete input.tapBip32Derivation;
+          delete input.bip32Derivation;
+          delete input.tapLeafScript;
+          delete input.tapScriptSig;
+          delete input.tapMerkleRoot;
+          delete input.tapKeySig;
+          delete input.partialSig;
+          delete input.finalScriptWitness;
+          delete input.finalScriptSig;
+          delete input.sighashType;
+          if (input.unknownKeyVals) delete input.unknownKeyVals;
           if (input.witnessUtxo && input.nonWitnessUtxo) {
             const script = Buffer.from(input.witnessUtxo.script);
             if (script[0] === 0x51 && script.length === 34) {
@@ -1704,53 +1795,55 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             }
           }
         }
+        if ((psbt.data.globalMap as any).globalXpub) {
+          delete (psbt.data.globalMap as any).globalXpub;
+        }
 
-        // Build explicit toSignInputs with per-input address matching
+        // Build toSignInputs with publicKey for P2TR (same as Unisat path)
         const okxTaprootAddr = browserWalletAddresses?.taproot?.address || '';
         const okxSegwitAddr = browserWalletAddresses?.nativeSegwit?.address || '';
         const okxFallbackAddr = browserWallet.address;
-        const toSignInputs: Array<{ index: number; address: string }> = [];
+        const okxFullPubKeyHex = browserWalletAddresses?.taproot?.publicKey || browserWallet.publicKey || '';
+        const toSignInputs: Array<{
+          index: number;
+          address?: string;
+          publicKey?: string;
+          disableTweakSigner?: boolean;
+        }> = [];
 
         for (let i = 0; i < psbt.data.inputs.length; i++) {
           const input = psbt.data.inputs[i];
-          let inputAddr = okxTaprootAddr || okxFallbackAddr;
-
           if (input.witnessUtxo) {
-            try {
-              const decoded = bitcoin.address.fromOutputScript(
-                Buffer.from(input.witnessUtxo.script), btcNetwork
-              );
-              if (okxTaprootAddr && decoded === okxTaprootAddr) {
-                inputAddr = okxTaprootAddr;
-              } else if (okxSegwitAddr && decoded === okxSegwitAddr) {
-                inputAddr = okxSegwitAddr;
-              } else {
-                const script = Buffer.from(input.witnessUtxo.script);
-                if (script[0] === 0x51 && script.length === 34) {
-                  inputAddr = okxTaprootAddr || okxFallbackAddr;
-                } else if (script[0] === 0x00 && script.length === 22 && okxSegwitAddr) {
-                  inputAddr = okxSegwitAddr;
-                }
-              }
-            } catch {
-              // Can't decode script — use default
+            const script = Buffer.from(input.witnessUtxo.script);
+            if (script[0] === 0x51 && script.length === 34) {
+              toSignInputs.push({
+                index: i,
+                address: okxTaprootAddr || okxFallbackAddr,
+                publicKey: okxFullPubKeyHex || undefined,
+                disableTweakSigner: false,
+              });
+            } else if (script[0] === 0x00 && script.length === 22) {
+              toSignInputs.push({ index: i, address: okxSegwitAddr || okxFallbackAddr });
+            } else {
+              toSignInputs.push({ index: i, address: okxFallbackAddr });
             }
+          } else {
+            toSignInputs.push({ index: i, address: okxFallbackAddr });
           }
-
-          toSignInputs.push({ index: i, address: inputAddr });
         }
-        console.log('[WalletContext] OKX toSignInputs:', JSON.stringify(toSignInputs));
 
         // Diagnostic logging
+        console.log(`[WalletContext] PSBT for OKX: ${psbt.data.inputs.length} inputs, ${(psbt.data.globalMap.unsignedTx as any).tx.outs.length} outputs`);
+        console.log('[WalletContext] OKX toSignInputs:', JSON.stringify(toSignInputs));
         for (let i = 0; i < psbt.data.inputs.length; i++) {
           const input = psbt.data.inputs[i];
-          const hasWitness = !!input.witnessUtxo;
-          const hasNonWitness = !!input.nonWitnessUtxo;
-          const hasTapKey = !!input.tapInternalKey;
-          const scriptType = hasWitness
-            ? (Buffer.from(input.witnessUtxo!.script)[0] === 0x51 ? 'P2TR' : 'P2WPKH')
-            : 'unknown';
-          console.log(`[WalletContext] Input ${i}: ${scriptType}, witnessUtxo=${hasWitness}, nonWitnessUtxo=${hasNonWitness}, tapInternalKey=${hasTapKey}`);
+          if (input.witnessUtxo) {
+            const script = Buffer.from(input.witnessUtxo.script);
+            const isP2TR = script[0] === 0x51 && script.length === 34;
+            const keyHex = isP2TR ? script.subarray(2).toString('hex') : '';
+            const tapKeyHex = input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'none';
+            console.log(`[WalletContext]   in[${i}]: ${isP2TR ? 'P2TR' : 'P2WPKH'} val=${input.witnessUtxo.value} outKey=${keyHex.slice(0, 12)}... tapKey=${tapKeyHex.slice(0, 12)}...`);
+          }
         }
 
         try {

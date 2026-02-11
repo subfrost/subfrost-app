@@ -171,8 +171,21 @@ async function espoProtorunesFallback(
     if (!espoResp.ok) return null;
 
     const espoData = await espoResp.json();
+    console.log(`[RPC Proxy] Espo raw response keys:`, Object.keys(espoData?.result || {}));
     const outpoints = espoData?.result?.outpoints;
-    if (!Array.isArray(outpoints)) return null;
+    if (!Array.isArray(outpoints)) {
+      console.log(`[RPC Proxy] Espo: outpoints is not array, result:`, JSON.stringify(espoData?.result)?.slice(0, 500));
+      return null;
+    }
+
+    // Log a sample outpoint to debug field names
+    const withEntries = outpoints.filter((op: any) => op.entries?.length > 0);
+    console.log(`[RPC Proxy] Espo: ${outpoints.length} total outpoints, ${withEntries.length} with entries`);
+    if (withEntries.length > 0) {
+      console.log(`[RPC Proxy] Espo sample outpoint:`, JSON.stringify(withEntries[0]));
+    } else if (outpoints.length > 0) {
+      console.log(`[RPC Proxy] Espo sample (no entries):`, JSON.stringify(outpoints[0]));
+    }
 
     // Convert espo outpoints to protobuf WalletResponse
     const pbOutpoints = outpoints.map((op: any) => {
@@ -185,7 +198,8 @@ async function espoProtorunesFallback(
     });
 
     const walletResponse = encodeWalletResponse(pbOutpoints);
-    console.log(`[RPC Proxy] Espo fallback: encoded ${pbOutpoints.length} outpoints for ${address}`);
+    const totalAlkaneEntries = pbOutpoints.reduce((sum: number, op: any) => sum + op.entries.length, 0);
+    console.log(`[RPC Proxy] Espo: encoded ${pbOutpoints.length} outpoints, ${totalAlkaneEntries} alkane entries for ${address}`);
 
     return {
       jsonrpc: '2.0',
@@ -256,6 +270,14 @@ export async function POST(
       network = request.nextUrl.searchParams.get('network') || process.env.NEXT_PUBLIC_NETWORK || 'regtest';
       targetUrl = pickEndpoint(body, network);
     }
+
+    // NOTE: espo-first / race logic for protorunesbyaddress was attempted but
+    // our protobuf WalletResponse encoding has a bug — the SDK decodes 0 alkane
+    // balances from our encoded response. Metashrew is the authoritative source
+    // and responds in ~130ms when cached. The espo-on-error fallback (below)
+    // still works for when metashrew is genuinely down.
+    // TODO: Fix protobuf encoding to match metashrew's format, then re-enable
+    // espo-first for cold-start latency optimization.
 
     const response = await fetch(targetUrl, {
       method: 'POST',
