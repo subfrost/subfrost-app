@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import type { PoolSummary } from "../types";
 import { useTranslation } from '@/hooks/useTranslation';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useQuery } from '@tanstack/react-query';
 
 type Props = {
@@ -19,32 +18,41 @@ const TIMEFRAME_OPTIONS: { value: ChartTimeframe; label: string }[] = [
   { value: '1w', label: '1W' },
 ];
 
+const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
+
 /**
  * Resolve the pizza.fun series ID (symbol) for a given alkane ID.
- * Calls pizzafun.get_series_id_from_alkane_id via the SDK's Espo wrapper.
+ * Calls pizzafun.get_series_id_from_alkane_id on the Espo RPC at api.alkanode.com.
+ * The SDK's espoGetSeriesIdFromAlkaneId routes through data_api_url (subfrost.io)
+ * which doesn't support the pizzafun namespace — must call alkanode directly.
  */
 function usePizzaFunSymbol(alkaneId?: string) {
-  const { provider } = useAlkanesSDK();
-
   return useQuery({
     queryKey: ['pizzafun-series-id', alkaneId],
     queryFn: async (): Promise<string | null> => {
-      if (!provider || !alkaneId) return null;
+      if (!alkaneId) return null;
       try {
-        const result = await provider.espoGetSeriesIdFromAlkaneId(alkaneId);
-        // The SDK returns the series ID string (e.g. "DIESEL")
-        if (typeof result === 'string') return result;
-        // Handle object responses (e.g. { series_id: "DIESEL" })
-        if (result?.series_id) return result.series_id;
-        if (result?.seriesId) return result.seriesId;
-        console.warn('[PoolDetailsCard] Unexpected series ID response:', result);
+        const res = await fetch(ALKANODE_RPC_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'pizzafun.get_series_id_from_alkane_id',
+            params: { alkane_id: alkaneId },
+            id: 1,
+          }),
+        });
+        const data = await res.json();
+        const seriesId = data?.result?.series_id;
+        if (typeof seriesId === 'string' && seriesId) return seriesId;
+        console.warn('[PoolDetailsCard] No series_id in response for', alkaneId, data);
         return null;
       } catch (err) {
         console.warn('[PoolDetailsCard] Failed to fetch series ID for', alkaneId, err);
         return null;
       }
     },
-    enabled: !!provider && !!alkaneId,
+    enabled: !!alkaneId,
     gcTime: 30 * 60_000, // Cache for 30 min — series IDs don't change
     staleTime: 30 * 60_000,
     retry: 2,
