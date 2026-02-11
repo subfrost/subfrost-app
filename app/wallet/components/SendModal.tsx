@@ -872,6 +872,44 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       console.log('[SendModal] Change:', addrConfig.changeAddress, 'Alkanes change:', addrConfig.alkanesChangeAddress);
       console.log('[SendModal] Recipient (toAddresses[1] = v1):', recipientAddress);
 
+      // --- Pre-validate alkane balance via espo (fast, single call) ---
+      // Same pattern as provider.espoGetPools() in usePools.ts
+      console.log('[SendModal] Pre-validating alkane balance via espo...');
+      try {
+        const raw = await Promise.race([
+          alkaneProvider.espoGetAddressOutpoints(alkaneSendAddress),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('espo outpoints timeout (10s)')), 10_000)
+          ),
+        ]);
+        const espoResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const outpoints = espoResult?.outpoints || [];
+
+        // Sum on-chain balance for the target alkane across all outpoints
+        let onChainBalance = 0n;
+        for (const op of outpoints) {
+          for (const entry of (op.entries || [])) {
+            if (entry.alkane === selectedAlkaneId) {
+              onChainBalance += BigInt(entry.amount);
+            }
+          }
+        }
+
+        console.log(`[SendModal] Espo: ${selectedAlkaneId} balance = ${onChainBalance.toString()} across ${outpoints.length} outpoints`);
+
+        if (onChainBalance < amountBaseUnits) {
+          throw new Error(
+            `Insufficient on-chain ${selectedAlkane.symbol} balance. ` +
+            `Available: ${onChainBalance.toString()}, need: ${amountBaseUnits.toString()}`
+          );
+        }
+      } catch (espoErr: any) {
+        // Balance errors → throw immediately (fast feedback)
+        if (espoErr.message?.includes('Insufficient on-chain')) throw espoErr;
+        // Other espo failures are non-fatal — SDK will validate too (slower)
+        console.warn('[SendModal] Espo pre-validation failed (non-fatal):', espoErr.message);
+      }
+
       // Execute the alkane transfer
       // toAddresses: v0 = sender change, v1 = recipient (edict sends exact amount)
       // Use symbolic addresses for toAddresses to avoid LegacyAddressTooLong.

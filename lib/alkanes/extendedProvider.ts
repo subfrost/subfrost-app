@@ -142,8 +142,9 @@ export async function alkanesExecuteTyped(
 
   // Timeout guard: the WASM SDK may hang indefinitely if UTXO discovery fails
   // (e.g., esplora unreachable, symbolic address resolves to wrong wallet).
-  // 60s is generous — normal calls complete in <10s on mainnet.
-  const EXECUTE_TIMEOUT_MS = 60_000;
+  // 20s is sufficient — normal calls complete in <10s on mainnet.
+  // Pre-validation via espo catches balance issues before this timeout.
+  const EXECUTE_TIMEOUT_MS = 20_000;
 
   try {
     const executePromise = provider.alkanesExecuteWithStrings(
