@@ -96,6 +96,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
   const activePercent = getActivePercent();
 
+  // Pre-compute button base class to avoid nested template literals with /[
+  // which triggers Turbopack SWC "Unterminated regexp literal" parser bug
+  const btnBase = theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]';
+  const btnBaseSmall = `inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
+  const btnBaseLarge = `inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
+  const btnActiveClass = 'bg-[color:var(--sf-primary)]/20';
+  const btnInactiveClass = `${btnBase} hover:bg-white/[0.06]`;
+
   // Calculate maximum blocks left among available contracts
   const maxBlocksLeft = contracts
     .filter((contract) => contract.remaining > 0)
@@ -345,28 +353,28 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     <button
                       type="button"
                       onClick={() => handlePercent(0.25)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseSmall} ${activePercent === 0.25 ? btnActiveClass : btnInactiveClass}`}
                     >
                       25%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.5)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseSmall} ${activePercent === 0.5 ? btnActiveClass : btnInactiveClass}`}
                     >
                       50%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.75)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseSmall} ${activePercent === 0.75 ? btnActiveClass : btnInactiveClass}`}
                     >
                       75%
                     </button>
                     <button
                       type="button"
                       onClick={handleMax}
-                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseLarge} ${activePercent === 1 ? btnActiveClass : btnInactiveClass}`}
                       disabled={btcBalance === 0}
                     >
                       Max
@@ -390,14 +398,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     const minPeriod = findMinimumProfitablePeriod();
                     setSelectedBlocks(minPeriod);
                   }}
-                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  className={`${btnBaseLarge} ${btnInactiveClass}`}
                 >
                   {t('openPosition.min')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedBlocks(maxPeriod)}
-                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  className={`${btnBaseLarge} ${btnInactiveClass}`}
                 >
                   {t('openPosition.max')}
                 </button>
