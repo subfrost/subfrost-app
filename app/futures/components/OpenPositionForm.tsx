@@ -96,14 +96,26 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
   const activePercent = getActivePercent();
 
-  // Pre-compute button classes. Turbopack SWC parser treats /[ as regexp start,
-  // so we avoid that sequence entirely by using percentage opacity (3, 6) instead
-  // of arbitrary values ([0.03], [0.06]).
+  // Pre-compute className strings to work around Turbopack SWC parser bug
+  // where complex template literals with Tailwind arbitrary values cause
+  // "Unterminated regexp literal" errors.
   const btnBase = theme === 'dark' ? 'bg-white/3' : 'bg-[color:var(--sf-surface)]';
   const btnBaseSmall = `inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
   const btnBaseLarge = `inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
   const btnActiveClass = 'bg-[color:var(--sf-primary)]/20';
   const btnInactiveClass = `${btnBase} hover:bg-white/6`;
+
+  const inputPanelClass = inputFocused
+    ? 'rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+    : 'rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]';
+
+  const lockPeriodInputClass = lockPeriodFocused
+    ? 'h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+    : 'h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]';
+
+  const buyBtnClass = isConnected && isDemoGated
+    ? 'h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
+    : 'h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]';
 
   // Calculate maximum blocks left among available contracts
   const maxBlocksLeft = contracts
@@ -312,7 +324,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
           {/* Investment Amount */}
           <div className="space-y-3">
             <div
-              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+              className={inputPanelClass}
               onClick={() => inputRef.current?.focus()}
             >
               <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('openPosition.investmentAmount')}</span>
@@ -434,7 +446,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   onFocus={() => setLockPeriodFocused(true)}
                   onBlur={() => setLockPeriodFocused(false)}
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${lockPeriodFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={lockPeriodInputClass}
                 />
                 <span className="text-base text-[color:var(--sf-text)]/70">{t('openPosition.blocks')}</span>
               </div>
@@ -461,7 +473,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 setTimeout(() => setShowBuyComingSoon(false), 1000);
               }
             }}
-            className={`h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
+            className={buyBtnClass}
           >
             {showBuyComingSoon ? (
               <span className="animate-pulse">{t('badge.comingSoon')}</span>
