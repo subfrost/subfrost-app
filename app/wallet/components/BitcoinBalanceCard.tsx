@@ -59,11 +59,13 @@ export default function BitcoinBalanceCard() {
     );
   }
 
-  // Adjust confirmed balance to include confirmed UTXOs currently being spent in mempool
-  const adjustedConfirmed = balances.bitcoin.total + balances.bitcoin.pendingOutgoingTotal;
+  // Show spendable balance (excludes UTXOs carrying inscriptions/runes/alkanes)
+  // This matches what wallet extensions like Xverse/OKX display
+  const spendableConfirmed = balances.bitcoin.spendable + balances.bitcoin.pendingOutgoingTotal;
+  const lockedInAssets = balances.bitcoin.withAssets;
   const pendingDiff = balances.bitcoin.pendingTotal - balances.bitcoin.pendingOutgoingTotal;
-  const totalBTC = formatBTC(adjustedConfirmed);
-  const totalUSD = bitcoinPrice ? formatUSD(adjustedConfirmed) : null;
+  const totalBTC = formatBTC(spendableConfirmed);
+  const totalUSD = bitcoinPrice ? formatUSD(spendableConfirmed) : null;
 
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
@@ -98,6 +100,11 @@ export default function BitcoinBalanceCard() {
         {!isLoadingData && pendingDiff !== 0 && (
           <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">
             {pendingDiff > 0 ? '+' : ''}{formatBTC(pendingDiff)} BTC pending
+          </div>
+        )}
+        {!isLoadingData && lockedInAssets > 0 && (
+          <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">
+            {formatBTC(lockedInAssets)} BTC locked in assets
           </div>
         )}
       </div>

@@ -366,7 +366,38 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
                 || cachedParsed?.nativeSegwit?.publicKey;
               const isTaproot = primaryAddr.startsWith('bc1p') || primaryAddr.startsWith('tb1p') || primaryAddr.startsWith('bcrt1p');
 
-              const providerObj = (window as any)[walletInfo.injectionKey];
+              // Get the correct provider object for each wallet.
+              // Some wallets use nested providers (e.g., okxwallet.bitcoin,
+              // phantom.bitcoin, magicEden.bitcoin) rather than a top-level injection.
+              let providerObj: any;
+              switch (storedBrowserWalletId) {
+                case 'okx':
+                  providerObj = (window as any).okxwallet?.bitcoin;
+                  break;
+                case 'phantom':
+                  providerObj = (window as any).phantom?.bitcoin;
+                  break;
+                case 'magic-eden':
+                  providerObj = (window as any).magicEden?.bitcoin;
+                  break;
+                case 'tokeo':
+                  providerObj = (window as any).tokeo?.bitcoin;
+                  break;
+                default:
+                  providerObj = (window as any)[walletInfo.injectionKey];
+              }
+
+              // OYL requires connect() before signPsbt will work.
+              // On page reload the extension forgets the site connection,
+              // so re-establish it silently during auto-reconnect.
+              if (storedBrowserWalletId === 'oyl' && providerObj && typeof providerObj.connect === 'function') {
+                try {
+                  await providerObj.connect();
+                } catch (e) {
+                  console.warn('[WalletContext] OYL silent reconnect failed:', e);
+                }
+              }
+
               const connected = new (ConnectedWallet as any)(walletInfo, providerObj, {
                 address: primaryAddr,
                 publicKey: primaryPubKey,
@@ -698,35 +729,34 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Disconnect (lock) wallet - works for both keystore and browser wallets
   const disconnect = useCallback(async () => {
-    // Clear keystore session
-    sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
-    setWallet(null);
+    // Capture reference before clearing state (for async cleanup below)
+    const walletToDisconnect = browserWallet;
 
-    // Clear browser wallet connection
-    if (browserWallet) {
-      try {
-        await browserWallet.disconnect();
-      } catch (error) {
-        console.warn('[WalletContext] Failed to disconnect browser wallet:', error);
-      }
-    }
-    setBrowserWallet(null);
-    setBrowserWalletAddresses(null);
-    setWalletAdapter(null); // Clear SDK wallet adapter
+    // Clear ALL state and storage immediately so the UI updates right away.
+    // External disconnect calls (browserWallet.disconnect, connector.disconnect)
+    // may hang for wallets like Unisat/OKX that were manually constructed —
+    // we must not block the UI on those.
+    sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
     localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
 
-    // Disconnect the WalletConnector
-    const connector = getWalletConnector();
-    try {
-      await connector.disconnect();
-    } catch (error) {
-      // Ignore disconnect errors
-    }
-
+    setWallet(null);
+    setBrowserWallet(null);
+    setBrowserWalletAddresses(null);
+    setWalletAdapter(null);
     setWalletType(null);
     setIsConnectModalOpen(false);
+
+    // Clean up external wallet connections (fire-and-forget, don't block UI)
+    if (walletToDisconnect) {
+      Promise.resolve(walletToDisconnect.disconnect()).catch(() => {});
+    }
+    try {
+      getWalletConnector().disconnect();
+    } catch {
+      // Ignore disconnect errors
+    }
   }, [browserWallet, getWalletConnector]);
 
   // Detect installed browser wallets
@@ -1006,7 +1036,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           addressType: isTaproot ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'oyl') {
-        // OYL wallet exposes window.oyl with getAddresses(), signPsbt(), signMessage()
+        // OYL wallet exposes window.oyl with connect(), getAddresses(), signPsbt(), signMessage()
+        // getAddresses() implicitly connects the site origin on first use.
+        // If signPsbt() later fails with "Site origin must be connected first"
+        // (e.g. after page reload), the signing fallback in signTaprootPsbt
+        // will call connect() and retry.
         const oylProvider = (window as any).oyl;
         if (!oylProvider) throw new Error('OYL wallet not available');
 
@@ -1183,14 +1217,41 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'okx') {
-        // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
+        // OKX wallet: window.okxwallet.bitcoin
+        // Only provides one address type at a time (like Unisat).
+        // IMPORTANT: requestAccounts() must be called immediately within the
+        // user gesture context (click handler). Any async delay (like a prior
+        // getAccounts() timeout) causes Chrome to block the extension popup.
         const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
-        const result = await okxProvider.connect();
-        const addr = result?.address;
-        const pubKey = result?.publicKey;
-        if (!addr) throw new Error('No address returned from OKX');
+        console.log('[WalletContext] OKX: calling requestAccounts() (immediate, preserving user gesture)...');
+
+        let accounts: string[];
+        try {
+          accounts = await Promise.race([
+            okxProvider.requestAccounts(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(
+                'OKX connection timed out after 60s. ' +
+                'Try: (1) open/unlock your OKX wallet extension popup first, ' +
+                '(2) disconnect this site in OKX settings and retry, ' +
+                '(3) check chrome://extensions for OKX service worker errors.'
+              )), 60000)
+            ),
+          ]);
+        } catch (e: any) {
+          const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
+          throw new Error(`OKX connection failed: ${msg}`);
+        }
+
+        console.log('[WalletContext] OKX: requestAccounts returned:', accounts);
+
+        if (!accounts?.length) throw new Error('No accounts returned from OKX');
+        const addr = accounts[0];
+
+        let pubKey: string | undefined;
+        try { pubKey = await okxProvider.getPublicKey(); } catch {}
 
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
         if (isTaproot) {
@@ -1468,23 +1529,83 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         throw new Error(`Xverse signing failed: ${errDetail}`);
       }
 
-      // For other browser wallets (OYL, OKX, Unisat, etc.): use SDK adapter
-      // Pass the patched PSBT (with corrected tapInternalKey) as hex
+      // JOURNAL (2026-02-10→11): Unisat/OKX PSBT signing — known limitation
+      //
+      // ROOT CAUSE (confirmed via auto-narrowing diagnostics):
+      // Unisat's server-side decode (wallet-api.unisat.io/v5/tx/decode2) crashes
+      // on OP_RETURN outputs containing alkane protostone data. All inputs and
+      // non-OP_RETURN outputs decode fine individually (DIAG-A/B pass). The
+      // OP_RETURN is inherent to the alkane protocol and cannot be removed
+      // (signatures commit to all outputs via SIGHASH_ALL).
+      //
+      // The SDK adapter (0.1.4-9e11c26) patches tapInternalKey at the adapter
+      // level and routes signing through ConnectedWallet.signPsbt() which calls
+      // window.unisat.signPsbt(). The decode issue is in the extension's server
+      // call, not in our PSBT construction.
+      //
+      // Newer Unisat extension versions (monorepo: useSignPsbtLogic.ts) catch
+      // decode errors and show the sign button anyway. Older versions show an
+      // infinite spinner. If the user's extension handles decode failure gracefully,
+      // signing will work — the actual signing logic is local (formatOptionsToSignInputs).
+      //
+      // We now use the SDK adapter for all wallets (Unisat, OKX, OYL, etc.) as
+      // the develop branch intended, with enhanced error messaging.
+      // --- REMOVED (2026-02-11): Direct Unisat + OKX signing blocks ---
+      // See commit 2ffe33d for the full implementation. Removed because the OP_RETURN
+      // output (alkane protostone) crashes Unisat's server-side decode regardless of
+      // PSBT construction. SDK adapter (0.1.4-9e11c26) handles tapInternalKey patching.
+      // The decode issue is a Unisat extension limitation — newer versions handle it.
+
+      // For Unisat/OKX/OYL and all other browser wallets: use SDK adapter
+      // The SDK's BaseWalletAdapter.patchTapInternalKey() fixes the dummy wallet key,
+      // and ConnectedWallet.signPsbt() routes to the correct extension API per wallet.
       const patchedPsbtHex = psbt.toHex();
       const walletId = browserWallet?.info?.id || 'unknown';
       console.log(`[WalletContext] Signing PSBT with SDK adapter (${walletId})`);
+
+      // Pre-flight: warn about Unisat OP_RETURN limitation
+      if (walletId === 'unisat') {
+        console.warn(
+          '[WalletContext] Unisat: alkane transactions include an OP_RETURN output that may ' +
+          'cause Unisat\'s server-side decode to fail (scriptPk error). If the extension shows ' +
+          'an infinite spinner, try updating to the latest Unisat version or use Xverse/OYL wallet.'
+        );
+      }
+
       let signedHex: string;
       try {
         signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
       } catch (e: any) {
-        console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, e?.message || e);
-        throw new Error(`${walletId} signing failed: ${e?.message || e}`);
+        const errMsg = e?.message || String(e);
+
+        // OYL: "Site origin must be connected first" — reconnect and retry once
+        if (walletId === 'oyl' && errMsg.includes('must be connected')) {
+          console.log('[WalletContext] OYL not connected — calling connect() and retrying sign');
+          const oylProvider = (window as any).oyl;
+          if (oylProvider && typeof oylProvider.connect === 'function') {
+            await oylProvider.connect();
+            signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
+          } else {
+            throw new Error(`${walletId} signing failed: ${errMsg}`);
+          }
+        } else if (walletId === 'unisat' && (errMsg.includes('scriptPk') || errMsg.includes('decode') || errMsg.includes('timeout') || errMsg.includes('timed out'))) {
+          // Unisat OP_RETURN decode limitation — show helpful message
+          throw new Error(
+            'Unisat cannot process this transaction due to an alkane OP_RETURN output that ' +
+            'its server-side decoder doesn\'t recognize. Please try: (1) Update Unisat extension ' +
+            'to the latest version, or (2) Use Xverse or OYL wallet for alkane transactions.'
+          );
+        } else {
+          console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, errMsg);
+          throw new Error(`${walletId} signing failed: ${errMsg}`);
+        }
       }
 
       // Convert signed hex back to base64
       const signedBuffer = Buffer.from(signedHex, 'hex');
       return signedBuffer.toString('base64');
     }
+
 
     // For keystore wallets, use BIP86 derivation
     if (!wallet) {

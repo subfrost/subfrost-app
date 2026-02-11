@@ -15,6 +15,7 @@ import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/t
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet, injectRedeemScripts } from '@/lib/psbt-patching';
+import { addressToSymbolic, getAddressConfig } from '@/lib/address-utils';
 
 bitcoin.initEccLib(ecc);
 
@@ -37,6 +38,22 @@ interface UTXO {
   runes?: any;
   inscriptions?: any[];
   frozen?: boolean;
+}
+
+// Convert WASM proxy objects (Maps) to plain JS objects.
+// Same helper used in usePools.ts, useAmmHistory.ts, etc.
+function mapToObject(value: any): any {
+  if (value instanceof Map) {
+    const obj: Record<string, any> = {};
+    for (const [k, v] of value.entries()) {
+      obj[k] = mapToObject(v);
+    }
+    return obj;
+  }
+  if (Array.isArray(value)) {
+    return value.map(mapToObject);
+  }
+  return value;
 }
 
 // Helper to convert Uint8Array to base64
@@ -141,19 +158,6 @@ function buildTransferProtostone(params: {
 }): string {
   const [block, tx] = params.alkaneId.split(':');
   return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
-}
-
-/**
- * Map a Bitcoin address to a symbolic SDK reference to avoid LegacyAddressTooLong.
- * The WASM SDK tries base58 parsing first; bech32/bech32m addresses (bc1p, bc1q)
- * are longer than expected for base58 and trigger the error.
- * P2SH/P2PKH addresses are base58-encoded and can be passed directly.
- */
-function addressToSymbolic(address: string): string {
-  const l = address.toLowerCase();
-  if (l.startsWith('bc1p') || l.startsWith('tb1p') || l.startsWith('bcrt1p')) return 'p2tr:0';
-  if (l.startsWith('bc1q') || l.startsWith('tb1q') || l.startsWith('bcrt1q')) return 'p2wpkh:0';
-  return address;
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
@@ -661,7 +665,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         // Finalize and extract transaction
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-        signedPsbt.finalizeAllInputs();
+        try {
+          signedPsbt.finalizeAllInputs();
+        } catch (finalizeErr: any) {
+          console.error('[SendModal] BTC PSBT finalization failed:', finalizeErr);
+          throw new Error(`Transaction finalization failed: ${finalizeErr.message || finalizeErr}. The wallet may have returned invalid signatures.`);
+        }
         const txObj = signedPsbt.extractTransaction();
         const txHex = txObj.toHex();
         const computedTxid = txObj.getId();
@@ -677,7 +686,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           throw new Error(t('send.providerNotInitialized'));
         }
 
-        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        const BROADCAST_TIMEOUT_MS = 30_000;
+        const broadcastTxid = await Promise.race([
+          alkaneProvider.broadcastTransaction(txHex),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'Transaction broadcast timed out after 30s. The transaction may still be processing — check the explorer before retrying.'
+            )), BROADCAST_TIMEOUT_MS)
+          ),
+        ]);
         console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
 
         setTxid(broadcastTxid || computedTxid);
@@ -867,48 +884,52 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
           break;
       }
 
-      // Determine wallet mode based on available addresses
-      // - Dual-address: wallet provides both SegWit (paymentAddress) and Taproot (address)
-      // - Single-address: wallet only provides one address type (could be any type)
-      const hasBothAddresses = !!btcSendAddress && !!alkaneSendAddress && btcSendAddress !== alkaneSendAddress;
-      const isSingleAddressMode = !hasBothAddresses;
+      // Dynamic address routing for single-address wallet support
+      const addrConfig = getAddressConfig({
+        walletType,
+        taprootAddress: alkaneSendAddress,
+        segwitAddress: btcSendAddress,
+      });
 
-      // Detect address types for proper SDK references and signing
+      // Detect address types for signing method selection (keystore only)
       const primaryAddress = alkaneSendAddress || btcSendAddress;
       const primaryAddressType = detectAddressType(primaryAddress);
-      const secondaryAddressType = btcSendAddress ? detectAddressType(btcSendAddress) : null;
+      const isSingleAddressMode = addrConfig.isSingleAddressMode;
 
-      // Build from addresses array based on wallet mode
-      const fromAddresses: string[] = [];
-      if (hasBothAddresses) {
-        // Dual-address mode: use both addresses
-        fromAddresses.push(btcSendAddress); // Usually SegWit for fees
-        fromAddresses.push(alkaneSendAddress); // Usually Taproot for alkanes
-      } else {
-        // Single-address mode: only use the available address
-        fromAddresses.push(primaryAddress);
-      }
-
-      // Determine change address based on wallet mode
-      const btcChangeAddress = hasBothAddresses ? btcSendAddress : primaryAddress;
-
-      console.log('[SendModal] Wallet mode:', isSingleAddressMode
-        ? `Single-address (${primaryAddressType.type})`
-        : `Dual-address (${secondaryAddressType?.type} + ${primaryAddressType.type})`);
-      console.log('[SendModal] From addresses:', fromAddresses);
-      console.log('[SendModal] BTC change address:', btcChangeAddress);
-      console.log('[SendModal] Alkanes change address:', alkaneSendAddress);
+      console.log('[SendModal] Wallet mode:', isSingleAddressMode ? 'Single-address' : 'Dual-address');
+      console.log('[SendModal] From addresses:', addrConfig.fromAddresses);
+      console.log('[SendModal] Change:', addrConfig.changeAddress, 'Alkanes change:', addrConfig.alkanesChangeAddress);
       console.log('[SendModal] Recipient (toAddresses[1] = v1):', recipientAddress);
 
+      // --- Pre-check alkane outpoints via espo (informational, never blocking) ---
+      // Same pattern as provider.espoGetPools() in usePools.ts
+      // Logs outpoint data for debugging; SDK handles actual validation.
+      try {
+        const raw = await Promise.race([
+          alkaneProvider.espoGetAddressOutpoints(alkaneSendAddress),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('espo outpoints timeout (10s)')), 10_000)
+          ),
+        ]);
+        const espoResult = mapToObject(typeof raw === 'string' ? JSON.parse(raw) : raw);
+        console.log('[SendModal] Espo outpoints:', JSON.stringify(espoResult).slice(0, 500));
+
+        const outpoints = espoResult?.outpoints || [];
+        let onChainBalance = 0n;
+        for (const op of outpoints) {
+          for (const entry of (op.entries || [])) {
+            if (entry.alkane === selectedAlkaneId) {
+              onChainBalance += BigInt(entry.amount);
+            }
+          }
+        }
+        console.log(`[SendModal] Espo: ${selectedAlkaneId} balance = ${onChainBalance.toString()} across ${outpoints.length} outpoints`);
+      } catch (espoErr: any) {
+        console.warn('[SendModal] Espo pre-check failed (non-fatal):', espoErr.message);
+      }
+
       // Execute the alkane transfer
-      // toAddresses maps to vN outputs in the protostone (SDK convention):
-      // - v0 = sender change (p2tr:0) — SDK auto-edict sends excess alkanes here
-      // - v1 = recipient (edict sends exact amount here)
-      //
-      // This matches the OYL SDK token.ts convention where output 0 = change,
-      // output 1 = recipient. The SDK's auto-edict from inputRequirements always
-      // routes alkane change to output 0, so the sender MUST be at v0.
-      //
+      // toAddresses: v0 = sender change, v1 = recipient (edict sends exact amount)
       // Use symbolic addresses for toAddresses to avoid LegacyAddressTooLong.
       // fromAddresses use actual addresses (opaque strings for esplora UTXO lookup).
       // Outputs are patched to actual scriptPubKeys after the PSBT is returned.
@@ -916,11 +937,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         inputRequirements,
         protostones: protostone,
         feeRate,
-        autoConfirm: false, // We handle signing manually
-        fromAddresses,
-        toAddresses: ['p2tr:0', addressToSymbolic(normalizedRecipientAddress)],
-        changeAddress: addressToSymbolic(btcChangeAddress),
-        alkanesChangeAddress: 'p2tr:0',
+        autoConfirm: false,
+        fromAddresses: addrConfig.fromAddresses,
+        toAddresses: [addrConfig.alkanesChangeAddress, addressToSymbolic(normalizedRecipientAddress)],
+        changeAddress: addrConfig.changeAddress,
+        alkanesChangeAddress: addrConfig.alkanesChangeAddress,
       });
 
       console.log('[SendModal] Execute result:', JSON.stringify(result, null, 2));
@@ -1005,7 +1026,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         // Finalize all inputs
         console.log('[SendModal] Finalizing PSBT...');
-        signedPsbt.finalizeAllInputs();
+        try {
+          signedPsbt.finalizeAllInputs();
+        } catch (finalizeErr: any) {
+          console.error('[SendModal] PSBT finalization failed:', finalizeErr);
+          throw new Error(`Transaction finalization failed: ${finalizeErr.message || finalizeErr}. The wallet may have returned invalid signatures.`);
+        }
 
         // Extract the raw transaction
         const tx = signedPsbt.extractTransaction();
@@ -1015,9 +1041,17 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] Transaction ID:', computedTxid);
         console.log('[SendModal] Transaction hex length:', txHex.length);
 
-        // Broadcast the transaction
+        // Broadcast the transaction with timeout guard
         console.log('[SendModal] Broadcasting transaction...');
-        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+        const BROADCAST_TIMEOUT_MS = 30_000;
+        const broadcastTxid = await Promise.race([
+          alkaneProvider.broadcastTransaction(txHex),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'Transaction broadcast timed out after 30s. The transaction may still be processing — check the explorer before retrying.'
+            )), BROADCAST_TIMEOUT_MS)
+          ),
+        ]);
         console.log('[SendModal] Transaction broadcast successful');
         console.log('[SendModal] Broadcast returned txid:', broadcastTxid);
 

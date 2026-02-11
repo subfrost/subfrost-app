@@ -334,6 +334,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           pendingTxCount: { p2wpkh: pendingTxIdsP2wpkh.size, p2tr: pendingTxIdsP2tr.size },
           alkanes: Array.from(alkaneMap.values()),
           runes: Array.from(runeMap.values()),
+          pendingOutgoingAlkanes: [],
         },
         utxos: { p2wpkh: p2wpkhUtxos, p2tr: p2trUtxos, all: allUtxos },
       };

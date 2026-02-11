@@ -140,8 +140,14 @@ export async function alkanesExecuteTyped(
     optionsJson,
   ]);
 
+  // Timeout guard: the WASM SDK may hang indefinitely if UTXO discovery fails.
+  // The RPC proxy now races metashrew vs espo for protorunesbyaddress, so the
+  // slow path (20-30s) is largely eliminated. 90s covers getrawtransaction
+  // calls for many-input transactions + any residual indexer latency.
+  const EXECUTE_TIMEOUT_MS = 90_000;
+
   try {
-    const result = await provider.alkanesExecuteWithStrings(
+    const executePromise = provider.alkanesExecuteWithStrings(
       toAddressesJson,
       params.inputRequirements,
       params.protostones,
@@ -149,6 +155,16 @@ export async function alkanesExecuteTyped(
       params.envelopeHex ?? null,
       optionsJson
     );
+
+    const result = await Promise.race([
+      executePromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          `alkanesExecuteWithStrings timed out after ${EXECUTE_TIMEOUT_MS / 1000}s. ` +
+          'This may indicate UTXO discovery is stuck — check browser console for network errors.'
+        )), EXECUTE_TIMEOUT_MS)
+      ),
+    ]);
 
     const parsed = typeof result === 'string' ? JSON.parse(result) : result;
     logWasmResult('alkanesExecuteWithStrings', parsed, Date.now() - startTime);

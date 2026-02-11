@@ -9,6 +9,8 @@
  *    - Cache HIT → use cached balance sheet (no RPC call)
  *    - Cache MISS → alkanes_protorunesbyoutpoint(txid, vout) → cache permanently
  * 3. Aggregate all balance sheets → return alkane token map
+ * 4. If any previously-known alkanes went to 0 AND there are pending mempool txs,
+ *    include the last-known balance with `pending: true` (tokens are in transit).
  *
  * Why this is fast:
  * - Parallel outpoint lookups: many small protorunesbyoutpoint calls vs one protorunesbyaddress
@@ -17,6 +19,10 @@
  *
  * JOURNAL ENTRY (2026-02-10): Created to replace slow dataApiGetAlkanesByAddress
  * which internally calls protorunesbyaddress (single large metashrew_view call).
+ * JOURNAL ENTRY (2026-02-11): Added in-transit balance preservation. When an alkane
+ * send is in the mempool, the source UTXO is spent but the change UTXO isn't indexed
+ * yet → balance shows 0. Now caches last-known balances per address and returns them
+ * with `pending: true` when mempool activity explains the missing tokens.
  */
 
 import { NextResponse } from 'next/server';
@@ -36,6 +42,12 @@ interface OutpointBalance {
   block: number;
   tx: number;
   amount: string;
+}
+
+interface AlkaneBalance {
+  alkaneId: string;
+  balance: string;
+  pending?: boolean;
 }
 
 const BATCH_SIZE = 30;
@@ -96,13 +108,25 @@ export async function GET(request: Request) {
   }
 
   const endpoint = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
+  const addrCacheKey = `alkane-addr:${network}:${address}`;
 
   try {
+    // Read last-known balances BEFORE computing current (so we can detect missing tokens)
+    let lastKnownBalances: AlkaneBalance[] | null = null;
+    try {
+      lastKnownBalances = await cache.get<AlkaneBalance[]>(addrCacheKey);
+    } catch { /* cache read failure is non-fatal */ }
+
     // 1. Get all UTXOs for the address via esplora
     const utxoData = await rpcCall(endpoint, 'esplora_address::utxo', [address]);
     const utxos: { txid: string; vout: number; value: number }[] = utxoData?.result || [];
 
     if (utxos.length === 0) {
+      // No UTXOs at all — check if tokens are in transit
+      if (lastKnownBalances && lastKnownBalances.length > 0) {
+        const fallback = await getTransitFallback(endpoint, address, [], lastKnownBalances);
+        if (fallback) return NextResponse.json(fallback);
+      }
       return NextResponse.json({ balances: [] });
     }
 
@@ -132,18 +156,71 @@ export async function GET(request: Request) {
       }
     }
 
-    // 4. Return aggregated balances
-    const balances = Array.from(tokenMap.entries()).map(([alkaneId, balance]) => ({
+    // 4. Build result
+    const currentBalances: AlkaneBalance[] = Array.from(tokenMap.entries()).map(([alkaneId, balance]) => ({
       alkaneId,
       balance,
     }));
 
-    return NextResponse.json({ balances });
+    // 5. Update last-known cache (only if we have non-empty results)
+    if (currentBalances.length > 0) {
+      try {
+        await cache.set(addrCacheKey, currentBalances, 7200); // 2hr TTL
+      } catch { /* cache write failure is non-fatal */ }
+    }
+
+    // 6. Check if any previously-known alkanes went to 0 (could be in transit)
+    if (lastKnownBalances && lastKnownBalances.length > 0) {
+      const fallback = await getTransitFallback(endpoint, address, currentBalances, lastKnownBalances);
+      if (fallback) return NextResponse.json(fallback);
+    }
+
+    return NextResponse.json({ balances: currentBalances });
   } catch (error) {
     console.error('[alkane-balances] Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch alkane balances' },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * When alkanes that were previously known go to 0, check if there are pending
+ * mempool transactions for the address. If so, the tokens are likely in transit
+ * (source UTXO spent, change UTXO not yet indexed). Return the last-known
+ * balance for those tokens with `pending: true`.
+ */
+async function getTransitFallback(
+  endpoint: string,
+  address: string,
+  currentBalances: AlkaneBalance[],
+  lastKnownBalances: AlkaneBalance[],
+): Promise<{ balances: AlkaneBalance[]; hasPendingTransactions: boolean } | null> {
+  try {
+    const currentIds = new Set(currentBalances.map(b => b.alkaneId));
+    const missingAlkanes = lastKnownBalances.filter(cb => !currentIds.has(cb.alkaneId));
+
+    if (missingAlkanes.length === 0) return null;
+
+    // Only use fallback if there are pending mempool txs (confirming in-transit state)
+    const mempoolData = await rpcCall(endpoint, 'esplora_address::txs:mempool', [address]);
+    const pendingTxs = mempoolData?.result || [];
+    if (pendingTxs.length === 0) return null;
+
+    console.log(
+      `[alkane-balances] ${missingAlkanes.length} alkane(s) in transit for ${address} ` +
+      `(${pendingTxs.length} pending tx(s)), using last-known balances`,
+    );
+
+    return {
+      balances: [
+        ...currentBalances,
+        ...missingAlkanes.map(b => ({ alkaneId: b.alkaneId, balance: b.balance, pending: true })),
+      ],
+      hasPendingTransactions: true,
+    };
+  } catch {
+    return null;
   }
 }

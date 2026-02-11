@@ -2,18 +2,18 @@
  * useAmmHistory — Infinite-scroll AMM transaction history
  *
  * Primary: SDK DataApi calls (dataApiGetAllAmmTxHistory / dataApiGetAllAddressAmmTxHistory)
- * Pool metadata enrichment for mint/burn/creation txs uses alkanesGetAllPoolsWithDetails.
+ * Pool metadata enrichment for mint/burn/creation txs uses /api/espo-pools.
  *
  * JOURNAL ENTRY (2026-02-10):
  * Replaced raw fetch to /api/rpc/{slug}/get-all-amm-tx-history with SDK
  * DataApi methods. Removed networkToSlug helper since SDK handles routing.
+ * Replaced alkanesGetAllPoolsWithDetails with /api/espo-pools for metadata.
  */
 'use client';
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { getConfig } from '@/utils/getConfig';
 
 type AmmPageResponse<T> = {
   items: T[];
@@ -47,9 +47,8 @@ function mapToObject(value: any): any {
   return value;
 }
 
-// Hook to fetch pool metadata via SDK's alkanesGetAllPoolsWithDetails
+// Hook to fetch pool metadata via SDK's espoGetPools (single indexed call)
 function usePoolsMetadata(network: string, poolIds: string[]) {
-  const { ALKANE_FACTORY_ID } = getConfig(network);
   const { provider } = useAlkanesSDK();
 
   return useQuery({
@@ -59,50 +58,36 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
       const poolMap: Record<string, PoolMetadata> = {};
 
       try {
-        const rpcResult = await Promise.race([
-          provider!.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
+        const raw = await Promise.race([
+          provider!.espoGetPools(500),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
         ]);
-        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-        const pools = parsed?.pools || [];
+        const parsed = mapToObject(typeof raw === 'string' ? JSON.parse(raw) : raw);
+        const poolsObj = parsed?.pools || {};
 
-        for (const p of pools) {
-          const poolId = `${p.pool_id_block}:${p.pool_id_tx}`;
+        // Handle both object-keyed and array formats
+        const entries: [string, any][] = Array.isArray(poolsObj)
+          ? poolsObj.map((p: any, i: number) => [p.pool_id || String(i), p])
+          : Object.entries(poolsObj);
+
+        for (const [poolId, p] of entries) {
           if (!poolIds.includes(poolId)) continue;
-          const d = p.details || {};
+
+          const baseId = p.base || p.base_id || '0:0';
+          const quoteId = p.quote || p.quote_id || '0:0';
+          const [baseBlock, baseTx] = baseId.split(':');
+          const [quoteBlock, quoteTx] = quoteId.split(':');
+
           poolMap[poolId] = {
-            token0BlockId: String(d.token_a_block ?? ''),
-            token0TxId: String(d.token_a_tx ?? ''),
-            token1BlockId: String(d.token_b_block ?? ''),
-            token1TxId: String(d.token_b_tx ?? ''),
-            poolName: d.pool_name || '',
+            token0BlockId: baseBlock || '',
+            token0TxId: baseTx || '',
+            token1BlockId: quoteBlock || '',
+            token1TxId: quoteTx || '',
+            poolName: p.pool_name || p.name || '',
           };
         }
       } catch (e) {
-        console.warn('[usePoolsMetadata] SDK fetch failed:', e);
-      }
-
-      // For any pools still missing, try individual ammGetPoolDetails
-      const missing = poolIds.filter(id => !poolMap[id]);
-      if (missing.length > 0 && provider) {
-        await Promise.all(missing.map(async (poolId) => {
-          try {
-            const details = await Promise.race([
-              provider!.ammGetPoolDetails(poolId),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-            ]);
-            const parsed = typeof details === 'string' ? JSON.parse(details) : details;
-            if (parsed?.token_a_block != null) {
-              poolMap[poolId] = {
-                token0BlockId: String(parsed.token_a_block),
-                token0TxId: String(parsed.token_a_tx),
-                token1BlockId: String(parsed.token_b_block),
-                token1TxId: String(parsed.token_b_tx),
-                poolName: parsed.pool_name || '',
-              };
-            }
-          } catch { /* skip */ }
-        }));
+        console.warn('[usePoolsMetadata] espoGetPools failed:', e);
       }
 
       return poolMap;

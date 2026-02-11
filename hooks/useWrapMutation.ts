@@ -57,6 +57,7 @@ import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { getAddressConfig } from '@/lib/address-utils';
 
 bitcoin.initEccLib(ecc);
 
@@ -174,21 +175,22 @@ export function useWrapMutation() {
 
       const isBrowserWallet = walletType === 'browser';
 
-      // For browser wallets, use actual addresses for UTXO discovery (passed as
-      // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      const fromAddresses = isBrowserWallet
-        ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      // Dynamic address routing for single-address wallet support
+      const addrConfig = getAddressConfig({
+        walletType,
+        taprootAddress: userTaprootAddress,
+        segwitAddress: userSegwitAddress,
+      });
 
       // toAddresses use symbolic placeholders — the WASM SDK parses these to construct
       // output scripts, and mainnet bech32m addresses trigger LegacyAddressTooLong.
       // All outputs are patched to correct addresses after PSBT construction.
-      const toAddresses = ['p2tr:0', 'p2tr:0'];
+      // Output 0 = signer (always taproot), Output 1 = user (detected type for single-address wallets)
+      const toAddresses = ['p2tr:0', addrConfig.alkanesChangeAddress];
 
       console.log('[WRAP] ============ alkanesExecuteTyped CALL ============');
       console.log('[WRAP] to_addresses:', toAddresses);
-      console.log('[WRAP] from_addresses:', fromAddresses);
+      console.log('[WRAP] from_addresses:', addrConfig.fromAddresses);
       console.log('[WRAP] input_requirements:', inputRequirements);
       console.log('[WRAP] protostone:', protostone);
       console.log('[WRAP] fee_rate:', wrapData.feeRate);
@@ -201,9 +203,9 @@ export function useWrapMutation() {
           inputRequirements,
           protostones: protostone,
           feeRate: wrapData.feeRate,
-          fromAddresses,
-          changeAddress: 'p2wpkh:0',
-          alkanesChangeAddress: 'p2tr:0',
+          fromAddresses: addrConfig.fromAddresses,
+          changeAddress: addrConfig.changeAddress,
+          alkanesChangeAddress: addrConfig.alkanesChangeAddress,
           autoConfirm: false,
           traceEnabled: false,
           mineEnabled: false,
@@ -282,6 +284,10 @@ export function useWrapMutation() {
           if (isBrowserWallet) {
             // Browser wallets sign all input types in a single signPsbt call
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else if (addrConfig.isSingleAddressMode) {
+            signedPsbtBase64 = userTaprootAddress
+              ? await signTaprootPsbt(psbtBase64)
+              : await signSegwitPsbt(psbtBase64);
           } else {
             // Keystore wallets need separate signing for each key type
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);

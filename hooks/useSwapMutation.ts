@@ -84,6 +84,7 @@ import {
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { getAddressConfig } from '@/lib/address-utils';
 
 bitcoin.initEccLib(ecc);
 
@@ -382,11 +383,9 @@ export function useSwapMutation() {
 
       const isBrowserWallet = walletType === 'browser';
 
-      // For browser wallets, use actual addresses for UTXO discovery.
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      const fromAddresses = isBrowserWallet
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      // Dynamic address routing: single-address wallets (OKX, Unisat) need
+      // changeAddress/alkanesChangeAddress to match their one address type.
+      const addrConfig = getAddressConfig({ walletType, taprootAddress, segwitAddress });
 
       try {
         const result = await provider.alkanesExecuteTyped({
@@ -394,10 +393,10 @@ export function useSwapMutation() {
           protostones: protostone,
           feeRate: swapData.feeRate,
           autoConfirm: false,
-          fromAddresses,
-          toAddresses: ['p2tr:0'],
-          changeAddress: 'p2wpkh:0',
-          alkanesChangeAddress: 'p2tr:0',
+          fromAddresses: addrConfig.fromAddresses,
+          toAddresses: [addrConfig.alkanesChangeAddress],
+          changeAddress: addrConfig.changeAddress,
+          alkanesChangeAddress: addrConfig.alkanesChangeAddress,
         });
 
         console.log('[useSwapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -491,6 +490,11 @@ export function useSwapMutation() {
           if (isBrowserWallet) {
             console.log('[useSwapMutation] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else if (addrConfig.isSingleAddressMode) {
+            console.log('[useSwapMutation] Keystore single-address: signing with', taprootAddress ? 'taproot' : 'segwit');
+            signedPsbtBase64 = taprootAddress
+              ? await signTaprootPsbt(psbtBase64)
+              : await signSegwitPsbt(psbtBase64);
           } else {
             console.log('[useSwapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
