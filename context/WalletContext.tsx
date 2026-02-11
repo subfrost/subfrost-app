@@ -1217,37 +1217,89 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           addressType: addr?.startsWith('bc1p') || addr?.startsWith('tb1p') ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'okx') {
-        // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
+        // OKX wallet: window.okxwallet.bitcoin
         // Only provides one address type at a time (like Unisat).
-        // connect() returns {address, compressedPublicKey, publicKey}.
         const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
-        console.log('[WalletContext] OKX: calling connect()...');
+        // Log available methods for diagnostics
+        const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(okxProvider) || okxProvider)
+          .filter(k => typeof okxProvider[k] === 'function');
+        console.log('[WalletContext] OKX provider methods:', methods);
+        console.log('[WalletContext] OKX: has connect?', typeof okxProvider.connect);
+        console.log('[WalletContext] OKX: has requestAccounts?', typeof okxProvider.requestAccounts);
+        console.log('[WalletContext] OKX: has getAccounts?', typeof okxProvider.getAccounts);
 
-        let result: any;
-        try {
-          result = await Promise.race([
-            okxProvider.connect(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(
-                'OKX connection timed out after 60s. ' +
-                'Try: (1) open/unlock your OKX wallet extension popup first, ' +
-                '(2) check chrome://extensions for errors in OKX service worker, ' +
-                '(3) try connecting on another site to verify extension works.'
-              )), 60000)
-            ),
-          ]);
-        } catch (e: any) {
-          const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
-          throw new Error(`OKX connect failed: ${msg}`);
+        let addr: string | undefined;
+        let pubKey: string | undefined;
+
+        // 1) Try getAccounts() — returns already-connected accounts without popup
+        if (typeof okxProvider.getAccounts === 'function') {
+          try {
+            console.log('[WalletContext] OKX: trying getAccounts()...');
+            const existing = await Promise.race([
+              okxProvider.getAccounts(),
+              new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 3000)),
+            ]);
+            if (existing?.length) {
+              addr = existing[0];
+              console.log('[WalletContext] OKX: getAccounts returned:', addr);
+            }
+          } catch (e) {
+            console.warn('[WalletContext] OKX: getAccounts failed:', e);
+          }
         }
 
-        console.log('[WalletContext] OKX connect result:', result);
+        // 2) Try requestAccounts() — standard method, triggers popup
+        if (!addr && typeof okxProvider.requestAccounts === 'function') {
+          try {
+            console.log('[WalletContext] OKX: trying requestAccounts()...');
+            const accounts = await Promise.race([
+              okxProvider.requestAccounts(),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('OKX requestAccounts timed out (30s)')), 30000)
+              ),
+            ]);
+            if (accounts?.length) {
+              addr = accounts[0];
+              console.log('[WalletContext] OKX: requestAccounts returned:', addr);
+            }
+          } catch (e) {
+            console.warn('[WalletContext] OKX: requestAccounts failed:', e);
+          }
+        }
 
-        const addr = result?.address;
-        const pubKey = result?.compressedPublicKey || result?.publicKey;
-        if (!addr) throw new Error('No address returned from OKX');
+        // 3) Fallback: connect() — returns {address, publicKey, compressedPublicKey}
+        if (!addr && typeof okxProvider.connect === 'function') {
+          try {
+            console.log('[WalletContext] OKX: trying connect()...');
+            const result = await Promise.race([
+              okxProvider.connect(),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('OKX connect timed out (30s)')), 30000)
+              ),
+            ]);
+            console.log('[WalletContext] OKX: connect result:', result);
+            addr = result?.address;
+            pubKey = result?.compressedPublicKey || result?.publicKey;
+          } catch (e) {
+            console.warn('[WalletContext] OKX: connect failed:', e);
+          }
+        }
+
+        if (!addr) {
+          throw new Error(
+            'OKX wallet connection failed — no address obtained. ' +
+            'Try: (1) open/unlock your OKX extension popup first, ' +
+            '(2) disconnect this site in OKX settings and retry, ' +
+            '(3) check chrome://extensions for OKX service worker errors.'
+          );
+        }
+
+        // Get public key if we don't have it yet
+        if (!pubKey && typeof okxProvider.getPublicKey === 'function') {
+          try { pubKey = await okxProvider.getPublicKey(); } catch {}
+        }
 
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
         if (isTaproot) {
