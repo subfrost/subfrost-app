@@ -9,17 +9,27 @@
  *
  * Before signing, we must rewrite:
  *   1. OUTPUTS: replace dummy scriptPubKeys with the user's real addresses
- *   2. INPUTS: for P2SH-P2WPKH wallets (Xverse), inject redeemScript and
- *      replace witnessUtxo.script so the wallet can match its signing key
+ *   2. INPUTS (witnessUtxo): replace dummy witnessUtxo.script on P2TR and
+ *      P2WPKH inputs with the user's real scriptPubKey — required for correct
+ *      sighash computation AND for wallets that validate witnessUtxo (UniSat)
+ *   3. INPUTS (P2SH): for P2SH-P2WPKH wallets (Xverse), inject redeemScript
  *
  * Matching is by SCRIPT TYPE PATTERN (opcode + length), never by exact
  * bytes, because the dummy wallet's hashes differ from the user's.
  *
  * WALLET GENERALIZATION:
  * - Xverse: P2SH-P2WPKH payment (starts with '3'). Needs redeemScript.
- * - Leather/OYL/Phantom/etc: native P2WPKH (bc1q). No redeemScript needed —
- *   the `isP2SH` check returns false and input patching is skipped.
+ * - UniSat/OKX: single-address (P2TR or P2WPKH). Need witnessUtxo patching.
+ * - Leather/OYL/Phantom/etc: native P2WPKH (bc1q). Need witnessUtxo patching.
  * - Keystore: different code path entirely (real mnemonic loaded).
+ *
+ * JOURNAL (2026-02-11): Added patchInputWitnessScripts step. Previously only
+ * outputs were patched, leaving input witnessUtxo.script with the dummy wallet's
+ * keys. UniSat's PSBT decoder fails with "Cannot read properties of undefined
+ * (reading 'scriptPk')" when it encounters inputs with mismatched/missing
+ * witnessUtxo data. Additionally, incorrect witnessUtxo.script causes wrong
+ * sighash computation for all wallets. Now all P2TR/P2WPKH input scripts are
+ * patched to the user's actual addresses.
  *
  * First proven on mainnet: tx f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2
  * (Xverse P2SH-P2WPKH input 0 signed correctly with injected redeemScript)
@@ -110,6 +120,104 @@ export function patchOutputs(
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Input witnessUtxo script patching
+// ---------------------------------------------------------------------------
+
+/**
+ * Patch witnessUtxo.script on PSBT inputs from the dummy wallet's keys to
+ * the user's real scriptPubKeys.
+ *
+ * The WASM SDK builds inputs using a dummy wallet, so witnessUtxo.script
+ * contains the dummy's P2TR or P2WPKH scriptPubKey. This causes:
+ *   - UniSat: "Failed to decode PSBT data: Cannot read properties of
+ *     undefined (reading 'scriptPk')" — UniSat validates witnessUtxo
+ *     consistency and fails on the dummy keys
+ *   - All wallets: incorrect sighash because BIP 341 sighash includes
+ *     the previous output scriptPubKey from witnessUtxo
+ *
+ * For each input with witnessUtxo, replaces the script by type:
+ *   - P2TR (0x51, 34 bytes) → user's taproot scriptPubKey
+ *   - P2WPKH (0x00, 22 bytes) → user's segwit scriptPubKey
+ *
+ * Also handles inputs missing witnessUtxo entirely by reconstructing
+ * from nonWitnessUtxo when available, with the correct user script.
+ *
+ * @returns number of inputs patched (for logging)
+ */
+export function patchInputWitnessScripts(
+  psbt: bitcoin.Psbt,
+  config: OutputPatchConfig,
+): number {
+  const { taprootAddress, segwitAddress, network } = config;
+  const taprootScript = bitcoin.address.toOutputScript(taprootAddress, network);
+
+  // Only use segwitScript for P2WPKH patching if the address is actually
+  // a P2WPKH/P2SH address (not a taproot address). For single-address wallets
+  // like UniSat, segwitAddress may be the same as taprootAddress.
+  const segwitScript = (() => {
+    if (!segwitAddress || segwitAddress === taprootAddress) return null;
+    const s = bitcoin.address.toOutputScript(segwitAddress, network);
+    const buf = Buffer.from(s);
+    // Only use for P2WPKH patching if the script type matches segwit/P2SH
+    return isP2WPKH(buf) || (buf.length === 23 && buf[0] === 0xa9) ? s : null;
+  })();
+
+  let patched = 0;
+
+  for (let i = 0; i < psbt.data.inputs.length; i++) {
+    const input = psbt.data.inputs[i];
+
+    // If witnessUtxo exists, patch the script
+    if (input.witnessUtxo) {
+      const script = Buffer.from(input.witnessUtxo.script);
+      if (isP2TR(script)) {
+        input.witnessUtxo = { ...input.witnessUtxo, script: taprootScript };
+        patched++;
+      } else if (isP2WPKH(script) && segwitScript) {
+        input.witnessUtxo = { ...input.witnessUtxo, script: segwitScript };
+        patched++;
+      }
+      continue;
+    }
+
+    // witnessUtxo is missing — try to reconstruct from nonWitnessUtxo
+    if (input.nonWitnessUtxo) {
+      const prevTx = bitcoin.Transaction.fromBuffer(Buffer.from(input.nonWitnessUtxo));
+      const txIn = (psbt.data.globalMap.unsignedTx as any).tx.ins[i];
+      if (txIn && prevTx.outs[txIn.index]) {
+        const prevOut = prevTx.outs[txIn.index];
+        const prevScript = Buffer.from(prevOut.script);
+        // Reconstruct witnessUtxo with the user's script
+        let newScript: Buffer | Uint8Array | null = null;
+        if (isP2TR(prevScript)) {
+          newScript = taprootScript;
+        } else if (isP2WPKH(prevScript) && segwitScript) {
+          newScript = segwitScript;
+        }
+        if (newScript) {
+          input.witnessUtxo = {
+            value: prevOut.value,
+            script: Buffer.from(newScript),
+          };
+          patched++;
+        }
+      }
+      continue;
+    }
+
+    // Neither witnessUtxo nor nonWitnessUtxo — reconstruct from input type
+    // Use tapInternalKey presence as a heuristic for P2TR inputs
+    if (input.tapInternalKey) {
+      // P2TR input without witnessUtxo — we can't know the value, so we
+      // can only log a warning. The wallet will likely fail on this input.
+      console.warn(`[patchInputWitnessScripts] Input ${i} has tapInternalKey but no witnessUtxo or nonWitnessUtxo`);
+    }
+  }
+
+  return patched;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,10 +312,10 @@ export interface PatchPsbtParams {
 }
 
 /**
- * One-call PSBT patching: outputs + inputs.
+ * One-call PSBT patching: outputs + input witnessUtxo + redeemScripts.
  *
- * Parses the PSBT, patches outputs, injects redeemScripts if needed,
- * and returns the updated base64 string + patch count for logging.
+ * Parses the PSBT, patches outputs, patches input witnessUtxo scripts,
+ * injects redeemScripts if needed, and returns the updated base64 string.
  */
 export function patchPsbtForBrowserWallet(params: PatchPsbtParams): {
   psbtBase64: string;
@@ -225,17 +333,32 @@ export function patchPsbtForBrowserWallet(params: PatchPsbtParams): {
 
   const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
 
-  // 1. Patch outputs
+  // 1. Patch outputs (dummy scriptPubKeys → user's real addresses)
   patchOutputs(psbt, { taprootAddress, segwitAddress, network, fixedOutputs }, isBrowserWallet);
 
-  // 2. Inject redeemScripts for P2SH-P2WPKH inputs
   let inputsPatched = 0;
-  if (isBrowserWallet && paymentPubkeyHex && segwitAddress) {
-    inputsPatched = injectRedeemScripts(psbt, {
-      paymentAddress: segwitAddress,
-      pubkeyHex: paymentPubkeyHex,
+
+  if (isBrowserWallet) {
+    // 2. Patch input witnessUtxo scripts (dummy → user's real scriptPubKeys)
+    // This must run BEFORE redeemScript injection since it handles P2TR and P2WPKH,
+    // while redeemScript injection handles the P2SH-wrapped P2WPKH case.
+    const witnessPatched = patchInputWitnessScripts(psbt, {
+      taprootAddress,
+      segwitAddress,
       network,
     });
+    if (witnessPatched > 0) {
+      console.log(`[patchPsbtForBrowserWallet] Patched witnessUtxo.script on ${witnessPatched} input(s)`);
+    }
+
+    // 3. Inject redeemScripts for P2SH-P2WPKH inputs (Xverse)
+    if (paymentPubkeyHex && segwitAddress) {
+      inputsPatched = injectRedeemScripts(psbt, {
+        paymentAddress: segwitAddress,
+        pubkeyHex: paymentPubkeyHex,
+        network,
+      });
+    }
   }
 
   return { psbtBase64: psbt.toBase64(), inputsPatched };

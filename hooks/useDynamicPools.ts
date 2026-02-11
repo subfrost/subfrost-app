@@ -1,11 +1,14 @@
 /**
  * useDynamicPools - Fetches pools dynamically via ts-sdk
  *
- * Uses only alkanesGetAllPoolsWithDetails (alkanes_simulate RPC through /api/rpc proxy).
- * dataApiGetPools was removed — subfrost /get-pools returns bare pool IDs {block,tx}
- * without token info or reserves, and the SDK's follow-up calls to /get-pool-details (422)
- * and /get-all-pools-with-details (404) are unsupported. This caused the perpetual loading
- * spinner: ExchangeContext (which wraps all pages) blocked indefinitely.
+ * Priority order for pool data:
+ * 1. dataApiGetAllPoolsDetails — single REST call to /get-all-pools-details (fastest)
+ * 2. espoGetPools — Espo service REST call (structured pool data)
+ * 3. alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (slowest, always works)
+ *
+ * JOURNAL ENTRY (2026-02-11): Added dataApi and Espo as preferred sources over
+ * alkanes_simulate. Previously only used alkanesGetAllPoolsWithDetails which makes
+ * N+1 RPC calls. dataApiGetAllPoolsDetails is a single REST call when supported.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -70,20 +73,79 @@ export function useDynamicPools(options?: {
 
       let rawPools: any[] = [];
 
-      // alkanesGetAllPoolsWithDetails: alkanes_simulate RPC calls through /api/rpc proxy.
-      // Makes N+1 calls (1 factory opcode 3 + N pool opcode 999). 30s timeout for mainnet.
-      // This is the only reliable method — dataApiGetPools calls subfrost /get-pools which
-      // returns bare pool IDs without token/reserve data, then tries unsupported endpoints.
-      try {
-        const rpcResult = await withTimeout(provider!.alkanesGetAllPoolsWithDetails(factoryId), 30000, 'alkanesGetAllPoolsWithDetails');
-        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-        rawPools = parsed?.pools || [];
-        console.log('[useDynamicPools] alkanesGetAllPoolsWithDetails returned', rawPools.length, 'pools');
-      } catch (e) {
-        console.warn('[useDynamicPools] alkanesGetAllPoolsWithDetails failed:', e);
+      // Method 1: dataApiGetAllPoolsDetails — single REST call (preferred)
+      if (rawPools.length === 0) {
+        try {
+          const dataApiResult = await withTimeout(provider!.dataApiGetAllPoolsDetails(factoryId), 15000, 'dataApiGetAllPoolsDetails');
+          const parsed = typeof dataApiResult === 'string' ? JSON.parse(dataApiResult) : dataApiResult;
+          const pools = parsed?.pools || parsed?.data || (Array.isArray(parsed) ? parsed : []);
+          if (pools.length > 0) {
+            rawPools = pools.map((p: any) => ({
+              pool_id_block: p.pool_block_id ?? p.pool_id_block ?? 0,
+              pool_id_tx: p.pool_tx_id ?? p.pool_id_tx ?? 0,
+              pool_id: p.pool_id || `${p.pool_block_id ?? p.pool_id_block ?? 0}:${p.pool_tx_id ?? p.pool_id_tx ?? 0}`,
+              details: {
+                token_a_block: p.token0_block_id ?? p.details?.token_a_block ?? 0,
+                token_a_tx: p.token0_tx_id ?? p.details?.token_a_tx ?? 0,
+                token_b_block: p.token1_block_id ?? p.details?.token_b_block ?? 0,
+                token_b_tx: p.token1_tx_id ?? p.details?.token_b_tx ?? 0,
+                token_a_name: p.token0_name ?? p.details?.token_a_name ?? '',
+                token_b_name: p.token1_name ?? p.details?.token_b_name ?? '',
+                reserve_a: p.token0_amount ?? p.details?.reserve_a ?? '0',
+                reserve_b: p.token1_amount ?? p.details?.reserve_b ?? '0',
+                pool_name: p.pool_name ?? p.details?.pool_name ?? '',
+              },
+            }));
+            console.log('[useDynamicPools] dataApiGetAllPoolsDetails returned', rawPools.length, 'pools');
+          }
+        } catch (e) {
+          console.warn('[useDynamicPools] dataApiGetAllPoolsDetails failed:', e);
+        }
       }
 
-      // If both methods failed, throw error for React Query to handle
+      // Method 2: espoGetPools — Espo service REST call
+      if (rawPools.length === 0) {
+        try {
+          const espoResult = await withTimeout(provider!.espoGetPools(), 15000, 'espoGetPools');
+          const parsed = typeof espoResult === 'string' ? JSON.parse(espoResult) : espoResult;
+          const pools = parsed?.pools || parsed?.data || (Array.isArray(parsed) ? parsed : []);
+          if (pools.length > 0) {
+            rawPools = pools.map((p: any) => ({
+              pool_id_block: p.pool_block_id ?? p.pool_id_block ?? 0,
+              pool_id_tx: p.pool_tx_id ?? p.pool_id_tx ?? 0,
+              pool_id: p.pool_id || `${p.pool_block_id ?? p.pool_id_block ?? 0}:${p.pool_tx_id ?? p.pool_id_tx ?? 0}`,
+              details: {
+                token_a_block: p.token0_block_id ?? p.details?.token_a_block ?? 0,
+                token_a_tx: p.token0_tx_id ?? p.details?.token_a_tx ?? 0,
+                token_b_block: p.token1_block_id ?? p.details?.token_b_block ?? 0,
+                token_b_tx: p.token1_tx_id ?? p.details?.token_b_tx ?? 0,
+                token_a_name: p.token0_name ?? p.details?.token_a_name ?? '',
+                token_b_name: p.token1_name ?? p.details?.token_b_name ?? '',
+                reserve_a: p.token0_amount ?? p.details?.reserve_a ?? '0',
+                reserve_b: p.token1_amount ?? p.details?.reserve_b ?? '0',
+                pool_name: p.pool_name ?? p.details?.pool_name ?? '',
+              },
+            }));
+            console.log('[useDynamicPools] espoGetPools returned', rawPools.length, 'pools');
+          }
+        } catch (e) {
+          console.warn('[useDynamicPools] espoGetPools failed:', e);
+        }
+      }
+
+      // Method 3: alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (fallback)
+      if (rawPools.length === 0) {
+        try {
+          const rpcResult = await withTimeout(provider!.alkanesGetAllPoolsWithDetails(factoryId), 30000, 'alkanesGetAllPoolsWithDetails');
+          const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+          rawPools = parsed?.pools || [];
+          console.log('[useDynamicPools] alkanesGetAllPoolsWithDetails returned', rawPools.length, 'pools');
+        } catch (e) {
+          console.warn('[useDynamicPools] alkanesGetAllPoolsWithDetails failed:', e);
+        }
+      }
+
+      // If all methods failed, throw error for React Query to handle
       if (rawPools.length === 0) {
         console.error('[useDynamicPools] All ts-sdk methods failed to return pools');
         throw new Error('Failed to fetch pools from ts-sdk');

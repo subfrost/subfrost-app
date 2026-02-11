@@ -554,12 +554,31 @@ class AlkanesClient {
 
   async getPoolReserves(pool: PoolConfig, _blockTag: string = 'latest'): Promise<PoolReserves | null> {
     try {
-      // TODO: Migrate to @alkanes/ts-sdk once SDK correctly supports get-pool-details endpoint
-      // Currently using direct REST API call as workaround for SDK issues:
-      // - SDK's getPoolReserves() calls get-reserves endpoint which returns zeros
-      // - SDK's alkanes.getPoolDetails() returns raw hex requiring custom parsing
-      // See: https://mainnet.subfrost.io/v4/subfrost/get-pool-details
-      const baseUrl = this.networkConfig.url; // includes /subfrost API key
+      const provider = await this.ensureProvider();
+
+      // Method 1: dataApi.getReserves — single REST call (preferred)
+      try {
+        const result = await provider.dataApi.getReserves(pool.id);
+        if (result) {
+          const data = typeof result === 'string' ? JSON.parse(result) : result;
+          const r0 = data?.reserve0 ?? data?.token0_amount ?? data?.data?.token0_amount;
+          const r1 = data?.reserve1 ?? data?.token1_amount ?? data?.data?.token1_amount;
+          const ts = data?.totalSupply ?? data?.token_supply ?? data?.data?.token_supply;
+          if (r0 !== undefined && r1 !== undefined) {
+            return {
+              reserve0: BigInt(String(r0 || '0')),
+              reserve1: BigInt(String(r1 || '0')),
+              totalSupply: BigInt(String(ts || '0')),
+            };
+          }
+        }
+      } catch {
+        // fall through to direct REST
+      }
+
+      // Method 2: Direct REST to /get-pool-details (fallback)
+      // JOURNAL ENTRY (2026-02-11): Kept as fallback. SDK dataApi.getReserves is preferred.
+      const baseUrl = this.networkConfig.url;
       const response = await fetch(`${baseUrl}/get-pool-details`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -611,6 +630,27 @@ class AlkanesClient {
   }
 
   async getDieselTotalSupply(): Promise<bigint | null> {
+    const provider = await this.ensureProvider();
+
+    // Method 1: espo.getCirculatingSupply — structured response (preferred)
+    // Note: method exists at runtime but may not be in installed type declarations
+    try {
+      const result = await (provider.espo as any).getCirculatingSupply('2:0');
+      if (result != null) {
+        const val = typeof result === 'object'
+          ? (result as any)?.supply ?? (result as any)?.circulating_supply ?? (result as any)?.data
+          : result;
+        if (val != null) {
+          const n = typeof val === 'string' ? BigInt(val) : BigInt(Number(val));
+          if (n > BigInt(0)) return n;
+        }
+      }
+    } catch {
+      // fall through to metashrew_view
+    }
+
+    // Method 2: metashrewView simulate — raw protobuf hex (fallback)
+    // JOURNAL ENTRY (2026-02-11): Kept as fallback. espo.getCirculatingSupply is preferred.
     try {
       const hex = await this.metashrewView('simulate', DIESEL_TOKEN.totalSupplyPayload, 'latest');
       return this.parseTotalSupplyHex(hex);
@@ -649,13 +689,25 @@ class AlkanesClient {
   // ==========================================================================
 
   async getBitcoinPrice(): Promise<number> {
-    // TODO: Migrate to @alkanes/ts-sdk once SDK correctly parses the API response
-    // Currently using direct REST API call as workaround for SDK issue:
-    // - SDK's getBitcoinPrice() returns 0 because it expects result.price
-    //   but API returns { statusCode: 200, data: { bitcoin: { usd: number } } }
-    // See: https://mainnet.subfrost.io/v4/subfrost/get-bitcoin-price
+    // Method 1: SDK dataApi.getBitcoinPrice (preferred)
+    // JOURNAL ENTRY (2026-02-11): Try SDK first, fall back to direct REST.
     try {
-      // Always use mainnet for BTC price (network-agnostic) with subfrost API key
+      const provider = await this.ensureProvider();
+      const result = await provider.dataApi.getBitcoinPrice();
+      if (result != null) {
+        const data = typeof result === 'string' ? JSON.parse(result) : result;
+        const price = typeof data === 'number' ? data
+          : data?.usd ?? data?.price ?? data?.data?.bitcoin?.usd ?? 0;
+        if (typeof price === 'number' && price > 0) {
+          return price;
+        }
+      }
+    } catch {
+      // fall through to direct REST
+    }
+
+    // Method 2: Direct REST (fallback)
+    try {
       const response = await fetch('https://mainnet.subfrost.io/v4/subfrost/get-bitcoin-price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
