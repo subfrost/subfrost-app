@@ -428,15 +428,17 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
               `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
             );
             const data = await resp.json();
-            const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
+            const balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = data?.balances || [];
 
             for (const entry of balances) {
               const alkaneIdStr = entry.alkaneId;
               const balance = String(entry.balance || '0');
-              const tokenInfo = KNOWN_TOKENS_SELL[alkaneIdStr] || {
-                symbol: alkaneIdStr.split(':')[1] || '',
-                name: `Token ${alkaneIdStr}`,
-                decimals: 8,
+              // Use metadata from the data API response, fall back to known tokens, then raw ID
+              const knownToken = KNOWN_TOKENS_SELL[alkaneIdStr];
+              const tokenInfo = {
+                symbol: entry.symbol || knownToken?.symbol || alkaneIdStr.split(':')[1] || '',
+                name: entry.name || knownToken?.name || entry.symbol || alkaneIdStr,
+                decimals: knownToken?.decimals ?? 8,
               };
 
               if (deps.tokensWithPools && !deps.tokensWithPools.some((p) => p.id === alkaneIdStr)) {

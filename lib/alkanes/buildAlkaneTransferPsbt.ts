@@ -72,7 +72,7 @@ async function fetchUtxos(address: string): Promise<SimpleUtxo[]> {
  * Fetch raw transaction hex for a txid (needed for witnessUtxo).
  */
 async function fetchTxHex(txid: string, networkName: string): Promise<string> {
-  const resp = await fetch(`/api/esplora/${networkName}/tx/${txid}/hex`);
+  const resp = await fetch(`/api/esplora/tx/${txid}/hex?network=${encodeURIComponent(networkName)}`);
   if (!resp.ok) throw new Error(`Failed to fetch tx hex for ${txid}`);
   return resp.text();
 }
@@ -122,7 +122,7 @@ export async function buildAlkaneTransferPsbt(
 ): Promise<BuildAlkaneTransferResult> {
   const {
     alkaneId, amount, senderTaprootAddress, senderPaymentAddress,
-    recipientAddress, tapInternalKeyHex, feeRate, network, networkName,
+    recipientAddress, feeRate, network, networkName,
   } = params;
 
   const [block, tx] = alkaneId.split(':').map(Number);
@@ -236,26 +236,20 @@ export async function buildAlkaneTransferPsbt(
   // -----------------------------------------------------------------------
   const psbt = new bitcoin.Psbt({ network });
 
-  const tapInternalKey = tapInternalKeyHex
-    ? Buffer.from(tapInternalKeyHex, 'hex')
-    : undefined;
-
   // Add alkane inputs (taproot, from sender)
   for (const utxo of alkaneUtxos) {
     const txHex = txHexMap.get(utxo.txid)!;
     const prevTx = bitcoin.Transaction.fromHex(txHex);
     const prevOut = prevTx.outs[utxo.vout];
 
-    const inputData: any = {
+    psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
       witnessUtxo: {
         script: Buffer.from(prevOut.script),
         value: BigInt(utxo.value),
       },
-    };
-    if (tapInternalKey) inputData.tapInternalKey = tapInternalKey;
-    psbt.addInput(inputData);
+    });
   }
 
   // Add BTC fee inputs
@@ -263,24 +257,22 @@ export async function buildAlkaneTransferPsbt(
     const txHex = txHexMap.get(utxo.txid)!;
     const prevTx = bitcoin.Transaction.fromHex(txHex);
     const prevOut = prevTx.outs[utxo.vout];
-    const fundingAddress = hasSeparatePayment ? senderPaymentAddress : senderTaprootAddress;
 
-    const inputData: any = {
+    psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
       witnessUtxo: {
         script: Buffer.from(prevOut.script),
         value: BigInt(utxo.value),
       },
-    };
-
-    // Add tapInternalKey for taproot inputs
-    if (!hasSeparatePayment && tapInternalKey) {
-      inputData.tapInternalKey = tapInternalKey;
-    }
-
-    psbt.addInput(inputData);
+    });
   }
+
+  // NOTE: tapInternalKey is intentionally omitted from the PSBT.
+  // For P2TR key-path spends, the wallet determines signing from the
+  // witnessUtxo script (OP_1 <32-byte push> = P2TR). Browser Buffer
+  // polyfills corrupt the binary serialization, so we let the wallet
+  // handle tapInternalKey internally during signing.
 
   // v0: Sender alkane change (dust — receives unedicted alkane remainder)
   psbt.addOutput({

@@ -65,27 +65,18 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
 import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { buildRemoveLiquidityProtostone, buildRemoveLiquidityInputRequirements } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 export type RemoveLiquidityTransactionData = {
   lpTokenId: string;       // LP token alkane id (e.g., "3:123")
@@ -106,123 +97,11 @@ export type RemoveLiquidityTransactionData = {
   deadlineBlocks?: number; // blocks until deadline (default 3)
 };
 
-/**
- * Convert display amount to alks (atomic units)
- * Default is 8 decimals for alkane tokens
- */
-function toAlks(amount: string, decimals: number = 8): string {
-  const bn = new BigNumber(amount);
-  return bn.multipliedBy(Math.pow(10, decimals)).integerValue(BigNumber.ROUND_FLOOR).toString();
-}
-
-/**
- * Pool operation codes
- * These are the opcodes for calling the pool contract directly
- */
-const POOL_OPCODES = {
-  Init: 0,
-  AddLiquidity: 1, // mint
-  RemoveLiquidity: 2, // burn
-  Swap: 3,
-  SimulateSwap: 4,
-};
-
-/**
- * Build protostone string for RemoveLiquidity (Burn) operation
- *
- * This calls the POOL directly with opcode 2 (RemoveLiquidity/Burn).
- * The LP token ID IS the pool ID (e.g., 2:3 is both the pool contract and its LP token).
- *
- * We use a two-protostone pattern:
- * 1. First protostone (p0): Transfer LP tokens to p1 (the pool call)
- * 2. Second protostone (p1): Call pool with RemoveLiquidity opcode 2
- *
- * Format: [lp_block:lp_tx:lpAmount:p1]:v0:v0,[pool_block,pool_tx,2,minAmount0,minAmount1,deadline]:v0:v0
- *
- * The edict [lp_block:lp_tx:lpAmount:p1] sends LP tokens to the pool call.
- * The pool call receives these tokens as incomingAlkanes and burns them.
- */
-function buildRemoveLiquidityProtostone(params: {
-  factoryId: string; // kept for signature compatibility but not used
-  lpTokenId: string; // LP token = pool ID
-  lpAmount: string;
-  minAmount0: string;
-  minAmount1: string;
-  deadline: string;
-  pointer?: string;
-  refund?: string;
-}): string {
-  const {
-    lpTokenId,
-    lpAmount,
-    minAmount0,
-    minAmount1,
-    deadline,
-    pointer = 'v0',
-    refund = 'v0',
-  } = params;
-
-  const [lpBlock, lpTx] = lpTokenId.split(':');
-
-  // First protostone: Transfer LP tokens to p1 (the pool call)
-  // Edict format: [block:tx:amount:target]
-  const edict = `[${lpBlock}:${lpTx}:${lpAmount}:p1]`;
-  // This protostone just transfers, pointer/refund go to v0 for any remaining tokens
-  const p0 = `${edict}:${pointer}:${refund}`;
-
-  // Second protostone: Call pool with RemoveLiquidity opcode (2)
-  // The pool receives LP tokens from p0's edict
-  const cellpack = [
-    lpBlock,      // pool block (= LP block)
-    lpTx,         // pool tx (= LP tx)
-    POOL_OPCODES.RemoveLiquidity, // 2
-    minAmount0,
-    minAmount1,
-    deadline,
-  ].join(',');
-  const p1 = `[${cellpack}]:${pointer}:${refund}`;
-
-  // Combine both protostones
-  return `${p0},${p1}`;
-}
-
-/**
- * Build input requirements string for RemoveLiquidity
- * Format: "lp_block:lp_tx:lpAmount"
- */
-function buildRemoveLiquidityInputRequirements(params: {
-  lpTokenId: string;
-  lpAmount: string;
-}): string {
-  const { lpTokenId, lpAmount } = params;
-  const [block, tx] = lpTokenId.split(':');
-  return `${block}:${tx}:${lpAmount}`;
-}
-
 export function useRemoveLiquidityMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const { ALKANE_FACTORY_ID } = getConfig(network);
-
-  // Get bitcoin network for PSBT parsing
-  const getBitcoinNetwork = () => {
-    switch (network) {
-      case 'mainnet':
-        return bitcoin.networks.bitcoin;
-      case 'testnet':
-      case 'signet':
-        return bitcoin.networks.testnet;
-      case 'regtest':
-      case 'regtest-local':
-      case 'subfrost-regtest':
-      case 'oylnet':
-        return bitcoin.networks.regtest;
-      default:
-        return bitcoin.networks.bitcoin;
-    }
-  };
 
   return useMutation({
     mutationFn: async (data: RemoveLiquidityTransactionData) => {
@@ -264,7 +143,6 @@ export function useRemoveLiquidityMutation() {
       // Build protostone - calls pool directly with opcode 2
       // Uses two-protostone pattern: p0 transfers LP tokens to p1 (pool call)
       const protostone = buildRemoveLiquidityProtostone({
-        factoryId: ALKANE_FACTORY_ID, // not used, kept for compatibility
         lpTokenId: data.lpTokenId,
         lpAmount: lpAmountAlks,
         minAmount0: minAmount0Alks,
@@ -290,7 +168,7 @@ export function useRemoveLiquidityMutation() {
       console.log('[RemoveLiquidity] protostone:', protostone);
       console.log('[RemoveLiquidity] feeRate:', data.feeRate);
 
-      const btcNetwork = getBitcoinNetwork();
+      const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
 
@@ -329,21 +207,7 @@ export function useRemoveLiquidityMutation() {
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
-          let psbtBase64: string;
-          if (readyToSign.psbt instanceof Uint8Array) {
-            psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-          } else if (typeof readyToSign.psbt === 'string') {
-            psbtBase64 = readyToSign.psbt;
-          } else if (typeof readyToSign.psbt === 'object') {
-            const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
-            const bytes = new Uint8Array(keys.length);
-            for (let i = 0; i < keys.length; i++) {
-              bytes[i] = readyToSign.psbt[keys[i]];
-            }
-            psbtBase64 = uint8ArrayToBase64(bytes);
-          } else {
-            throw new Error('Unexpected PSBT format');
-          }
+          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
           // Patch PSBT: replace dummy wallet outputs with real addresses,
           // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)

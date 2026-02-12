@@ -16,6 +16,8 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { injectRedeemScripts } from '@/lib/psbt-patching';
 import { buildAlkaneTransferPsbt } from '@/lib/alkanes/buildAlkaneTransferPsbt';
+import { buildTransferProtostone } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -38,15 +40,6 @@ interface UTXO {
   runes?: any;
   inscriptions?: any[];
   frozen?: boolean;
-}
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
 }
 
 /**
@@ -122,28 +115,6 @@ function detectAddressType(address: string): AddressTypeInfo {
  * and P2SH-P2WPKH redeemScript injection with pattern-based matching.
  * First mainnet tx with this fix: f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2
  */
-/**
- * Build an edict-based protostone for alkane token transfers.
- *
- * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
- * The edict sends the exact `amount` of alkane `alkaneId` to output v1 (recipient).
- * Pointer v0 receives any unedicted remainder (sender change via p2tr:0).
- * RefundPointer v0 handles failure refunds to the same change output.
- *
- * Output ordering follows SDK convention (same as OYL SDK token.ts):
- *   v0 = sender change (p2tr:0)  — SDK auto-edict also sends excess here
- *   v1 = recipient               — edict sends exact amount here
- *
- * Pattern: [block:tx:amount:v1]:v0:v0
- */
-function buildTransferProtostone(params: {
-  alkaneId: string; // e.g., "2:0" (DIESEL), "32:0" (frBTC)
-  amount: string;   // base units to transfer
-}): string {
-  const [block, tx] = params.alkaneId.split(':');
-  return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
-}
-
 /**
  * Map a Bitcoin address to a symbolic SDK reference to avoid LegacyAddressTooLong.
  * The WASM SDK tries base58 parsing first; bech32/bech32m addresses (bc1p, bc1q)
@@ -563,23 +534,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         }
 
         // Determine Bitcoin network
-        let btcNetwork: bitcoin.Network;
-        switch (network) {
-          case 'mainnet':
-            btcNetwork = bitcoin.networks.bitcoin;
-            break;
-          case 'testnet':
-          case 'signet':
-            btcNetwork = bitcoin.networks.testnet;
-            break;
-          case 'regtest':
-          case 'regtest-local':
-          case 'subfrost-regtest':
-          case 'oylnet':
-          default:
-            btcNetwork = bitcoin.networks.regtest;
-            break;
-        }
+        const btcNetwork = getBitcoinNetwork(network);
 
         // Create PSBT
         const psbt = new bitcoin.Psbt({ network: btcNetwork });
@@ -836,23 +791,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
       }
 
       // Determine Bitcoin network for PSBT operations
-      let btcNetwork: bitcoin.Network;
-      switch (network) {
-        case 'mainnet':
-          btcNetwork = bitcoin.networks.bitcoin;
-          break;
-        case 'testnet':
-        case 'signet':
-          btcNetwork = bitcoin.networks.testnet;
-          break;
-        case 'regtest':
-        case 'regtest-local':
-        case 'subfrost-regtest':
-        case 'oylnet':
-        default:
-          btcNetwork = bitcoin.networks.regtest;
-          break;
-      }
+      const btcNetwork = getBitcoinNetwork(network);
 
       // Determine wallet mode
       const hasBothAddresses = !!btcSendAddress && !!alkaneSendAddress && btcSendAddress !== alkaneSendAddress;
