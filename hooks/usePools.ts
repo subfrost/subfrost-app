@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useWallet } from '@/context/WalletContext';
-import { getConfig, SUBFROST_API_URLS } from '@/utils/getConfig';
+import { getConfig } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { queryKeys } from '@/queries/keys';
@@ -55,17 +55,26 @@ function getTokenIconUrl(tokenId: string, _network: string): string {
 /**
  * Get token symbol from known tokens or extract from name
  */
+const numericOnlyPattern = /^\d+$/;
+
 function getTokenSymbol(tokenId: string, rawName?: string, tokenMetaMap?: Map<string, { name: string; symbol: string }>): string {
   const known = KNOWN_TOKENS[tokenId];
   if (known) return known.symbol;
 
   // Check espo-backed token metadata (proper names from data API)
+  // Skip numeric-only values — prefer rawName (from poolName) which is authoritative
   const meta = tokenMetaMap?.get(tokenId);
-  if (meta?.symbol) return meta.symbol;
+  if (meta?.symbol && !numericOnlyPattern.test(meta.symbol)) return meta.symbol;
+  if (meta?.name && !numericOnlyPattern.test(meta.name)) return meta.name;
 
+  // rawName is extracted from the pool's poolName field (e.g., "ALKAMIST / frBTC LP" → "ALKAMIST")
   if (rawName) {
     return rawName.replace('SUBFROST BTC', 'frBTC').trim();
   }
+
+  // Accept numeric meta values only as last resort before ID fallback
+  if (meta?.symbol) return meta.symbol;
+  if (meta?.name) return meta.name;
 
   return tokenId.split(':')[1] || 'UNK';
 }
@@ -79,38 +88,36 @@ function getTokenName(tokenId: string, rawName?: string, tokenMetaMap?: Map<stri
   if (known) return known.name;
 
   // Check espo-backed token metadata (proper names from data API)
+  // Skip numeric-only values — prefer rawName (from poolName) which is authoritative
   const meta = tokenMetaMap?.get(tokenId);
-  if (meta?.name) return meta.name;
+  if (meta?.name && !numericOnlyPattern.test(meta.name)) return meta.name;
+  if (meta?.symbol && !numericOnlyPattern.test(meta.symbol)) return meta.symbol;
 
+  // rawName is extracted from the pool's poolName field
   if (rawName) {
     return rawName.replace('SUBFROST BTC', 'frBTC').trim();
   }
+
+  // Accept numeric meta values only as last resort
+  if (meta?.name) return meta.name;
+  if (meta?.symbol) return meta.symbol;
 
   return getTokenSymbol(tokenId, rawName, tokenMetaMap);
 }
 
 /**
- * Fetch token metadata from the data API (espo-backed, direct call).
- * Uses /get-alkanes for bulk fetch (top 500 tokens by default),
- * then /get-alkane-details for any specific tokens not in the bulk set.
- * Returns a map from alkaneId -> { name, symbol }.
+ * Fetch token metadata via the /api/token-names proxy (avoids CORS).
+ * The proxy calls /get-alkanes on the server and returns { names: { alkaneId: { name, symbol } } }.
  */
 async function fetchTokenMetadata(network: string): Promise<Map<string, { name: string; symbol: string }>> {
   try {
-    const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
-    const resp = await fetch(`${baseUrl}/get-alkanes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: 500, offset: 0 }),
-    });
+    const resp = await fetch(`/api/token-names?network=${encodeURIComponent(network)}&limit=500`);
     if (!resp.ok) return new Map();
     const data = await resp.json();
+    const names: Record<string, { name: string; symbol: string }> = data?.names || {};
     const map = new Map<string, { name: string; symbol: string }>();
-    for (const token of data?.data?.tokens || []) {
-      const alkaneId = `${token.id?.block || 0}:${token.id?.tx || 0}`;
-      if (alkaneId && (token.name || token.symbol)) {
-        map.set(alkaneId, { name: token.name || '', symbol: token.symbol || '' });
-      }
+    for (const [alkaneId, entry] of Object.entries(names)) {
+      map.set(alkaneId, entry as { name: string; symbol: string });
     }
     return map;
   } catch {
@@ -120,7 +127,7 @@ async function fetchTokenMetadata(network: string): Promise<Map<string, { name: 
 
 /**
  * Fetch individual token metadata for tokens missing from the bulk set.
- * Called after pool items are built to fill in any remaining numeric-only names.
+ * Uses /api/token-details proxy to avoid CORS issues.
  */
 async function fetchMissingTokenMetadata(
   missingIds: string[],
@@ -128,24 +135,19 @@ async function fetchMissingTokenMetadata(
   metaMap: Map<string, { name: string; symbol: string }>,
 ): Promise<void> {
   if (missingIds.length === 0) return;
-  const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
-
-  await Promise.all(missingIds.map(async (alkaneId) => {
-    try {
-      const [block, tx] = alkaneId.split(':');
-      const resp = await fetch(`${baseUrl}/get-alkane-details`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alkaneId: { block, tx } }),
-      });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      const d = data?.data;
-      if (d?.name || d?.symbol) {
-        metaMap.set(alkaneId, { name: d.name || '', symbol: d.symbol || '' });
-      }
-    } catch { /* ignore individual failures */ }
-  }));
+  try {
+    const resp = await fetch('/api/token-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alkaneIds: missingIds, network }),
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const names: Record<string, { name: string; symbol: string }> = data?.names || {};
+    for (const [alkaneId, entry] of Object.entries(names)) {
+      metaMap.set(alkaneId, entry as { name: string; symbol: string });
+    }
+  } catch { /* ignore failures */ }
 }
 
 // ============================================================================
@@ -183,11 +185,11 @@ async function fetchPoolsFromDataApi(
 
     if (!poolId || !token0Id || !token1Id) continue;
 
-    // Extract token names from pool name (e.g., "DIESEL / frBTC LP")
+    // Extract token names from pool name (e.g., "DIESEL / bUSD" or "DIESEL / frBTC LP")
     let token0NameFromPool = '';
     let token1NameFromPool = '';
     if (p.poolName) {
-      const match = p.poolName.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+      const match = p.poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
       if (match) {
         token0NameFromPool = match[1].trim().replace('SUBFROST BTC', 'frBTC');
         token1NameFromPool = match[2].trim().replace('SUBFROST BTC', 'frBTC');
@@ -255,11 +257,14 @@ async function fetchPoolsFromSDKFallback(
     let token0Symbol = getTokenSymbol(token0Id, d.token_a_name, tokenMetaMap);
     let token1Symbol = getTokenSymbol(token1Id, d.token_b_name, tokenMetaMap);
 
-    if ((!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') && d.pool_name) {
-      const match = d.pool_name.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
+    // Use pool_name to fix numeric-only or missing symbols
+    const needsT0Fix = !token0Symbol || token0Symbol === 'UNK' || numericOnlyPattern.test(token0Symbol);
+    const needsT1Fix = !token1Symbol || token1Symbol === 'UNK' || numericOnlyPattern.test(token1Symbol);
+    if ((needsT0Fix || needsT1Fix) && d.pool_name) {
+      const match = d.pool_name.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
       if (match) {
-        if (!token0Symbol || token0Symbol === 'UNK') token0Symbol = match[1].trim().replace('SUBFROST BTC', 'frBTC');
-        if (!token1Symbol || token1Symbol === 'UNK') token1Symbol = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+        if (needsT0Fix) token0Symbol = match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        if (needsT1Fix) token1Symbol = match[2].trim().replace('SUBFROST BTC', 'frBTC');
       }
     }
 
@@ -337,15 +342,23 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
 
-      // Second pass: find pool tokens with numeric-only names (missing from bulk fetch)
-      // and fetch their metadata individually from the data API
+      // Second pass: find pool tokens with numeric-only names and fetch metadata individually.
+      // Check for *useful* metadata (non-empty, non-numeric name/symbol), not just map presence,
+      // because the bulk /get-alkanes fetch may return entries with empty symbols.
       const numericNamePattern = /^\d+$/;
+      const metaHasGoodName = (id: string): boolean => {
+        const meta = tokenMetaMap.get(id);
+        if (!meta) return false;
+        return (!!meta.symbol && !numericNamePattern.test(meta.symbol)) ||
+               (!!meta.name && !numericNamePattern.test(meta.name));
+      };
+
       const missingIds = new Set<string>();
       for (const item of items) {
-        if (numericNamePattern.test(item.token0.symbol) && !tokenMetaMap.has(item.token0.id)) {
+        if (numericNamePattern.test(item.token0.symbol) && !metaHasGoodName(item.token0.id)) {
           missingIds.add(item.token0.id);
         }
-        if (numericNamePattern.test(item.token1.symbol) && !tokenMetaMap.has(item.token1.id)) {
+        if (numericNamePattern.test(item.token1.symbol) && !metaHasGoodName(item.token1.id)) {
           missingIds.add(item.token1.id);
         }
       }
@@ -353,14 +366,15 @@ export function usePools(params: UsePoolsParams = {}) {
         console.log('[usePools] Fetching metadata for', missingIds.size, 'tokens with numeric names:', [...missingIds]);
         await fetchMissingTokenMetadata([...missingIds], network, tokenMetaMap);
         // Re-apply proper names from the updated metadata map
+        // Use name as fallback for symbol (and vice versa) when one is empty
         items = items.map(item => {
           const t0Meta = tokenMetaMap.get(item.token0.id);
           const t1Meta = tokenMetaMap.get(item.token1.id);
           const token0 = t0Meta && numericNamePattern.test(item.token0.symbol)
-            ? { ...item.token0, symbol: t0Meta.symbol || item.token0.symbol, name: t0Meta.name || item.token0.name }
+            ? { ...item.token0, symbol: t0Meta.symbol || t0Meta.name || item.token0.symbol, name: t0Meta.name || t0Meta.symbol || item.token0.name }
             : item.token0;
           const token1 = t1Meta && numericNamePattern.test(item.token1.symbol)
-            ? { ...item.token1, symbol: t1Meta.symbol || item.token1.symbol, name: t1Meta.name || item.token1.name }
+            ? { ...item.token1, symbol: t1Meta.symbol || t1Meta.name || item.token1.symbol, name: t1Meta.name || t1Meta.symbol || item.token1.name }
             : item.token1;
           return {
             ...item,

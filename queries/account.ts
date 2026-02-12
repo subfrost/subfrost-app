@@ -436,7 +436,7 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
               // Use metadata from the data API response, fall back to known tokens, then raw ID
               const knownToken = KNOWN_TOKENS_SELL[alkaneIdStr];
               const tokenInfo = {
-                symbol: entry.symbol || knownToken?.symbol || alkaneIdStr.split(':')[1] || '',
+                symbol: entry.symbol || knownToken?.symbol || entry.name || alkaneIdStr.split(':')[1] || '',
                 name: entry.name || knownToken?.name || entry.symbol || alkaneIdStr,
                 decimals: knownToken?.decimals ?? 8,
               };
