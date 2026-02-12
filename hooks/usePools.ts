@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, SUBFROST_API_URLS } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { queryKeys } from '@/queries/keys';
@@ -55,9 +55,13 @@ function getTokenIconUrl(tokenId: string, _network: string): string {
 /**
  * Get token symbol from known tokens or extract from name
  */
-function getTokenSymbol(tokenId: string, rawName?: string): string {
+function getTokenSymbol(tokenId: string, rawName?: string, tokenMetaMap?: Map<string, { name: string; symbol: string }>): string {
   const known = KNOWN_TOKENS[tokenId];
   if (known) return known.symbol;
+
+  // Check espo-backed token metadata (proper names from data API)
+  const meta = tokenMetaMap?.get(tokenId);
+  if (meta?.symbol) return meta.symbol;
 
   if (rawName) {
     return rawName.replace('SUBFROST BTC', 'frBTC').trim();
@@ -70,15 +74,78 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
  * Get token display name from known tokens (falls back to symbol)
  * Used for pair labels in markets grid (e.g., "METHANE" instead of "CH4")
  */
-function getTokenName(tokenId: string, rawName?: string): string {
+function getTokenName(tokenId: string, rawName?: string, tokenMetaMap?: Map<string, { name: string; symbol: string }>): string {
   const known = KNOWN_TOKENS[tokenId];
   if (known) return known.name;
+
+  // Check espo-backed token metadata (proper names from data API)
+  const meta = tokenMetaMap?.get(tokenId);
+  if (meta?.name) return meta.name;
 
   if (rawName) {
     return rawName.replace('SUBFROST BTC', 'frBTC').trim();
   }
 
-  return getTokenSymbol(tokenId, rawName);
+  return getTokenSymbol(tokenId, rawName, tokenMetaMap);
+}
+
+/**
+ * Fetch token metadata from the data API (espo-backed, direct call).
+ * Uses /get-alkanes for bulk fetch (top 500 tokens by default),
+ * then /get-alkane-details for any specific tokens not in the bulk set.
+ * Returns a map from alkaneId -> { name, symbol }.
+ */
+async function fetchTokenMetadata(network: string): Promise<Map<string, { name: string; symbol: string }>> {
+  try {
+    const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+    const resp = await fetch(`${baseUrl}/get-alkanes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 500, offset: 0 }),
+    });
+    if (!resp.ok) return new Map();
+    const data = await resp.json();
+    const map = new Map<string, { name: string; symbol: string }>();
+    for (const token of data?.data?.tokens || []) {
+      const alkaneId = `${token.id?.block || 0}:${token.id?.tx || 0}`;
+      if (alkaneId && (token.name || token.symbol)) {
+        map.set(alkaneId, { name: token.name || '', symbol: token.symbol || '' });
+      }
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * Fetch individual token metadata for tokens missing from the bulk set.
+ * Called after pool items are built to fill in any remaining numeric-only names.
+ */
+async function fetchMissingTokenMetadata(
+  missingIds: string[],
+  network: string,
+  metaMap: Map<string, { name: string; symbol: string }>,
+): Promise<void> {
+  if (missingIds.length === 0) return;
+  const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+
+  await Promise.all(missingIds.map(async (alkaneId) => {
+    try {
+      const [block, tx] = alkaneId.split(':');
+      const resp = await fetch(`${baseUrl}/get-alkane-details`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alkaneId: { block, tx } }),
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const d = data?.data;
+      if (d?.name || d?.symbol) {
+        metaMap.set(alkaneId, { name: d.name || '', symbol: d.symbol || '' });
+      }
+    } catch { /* ignore individual failures */ }
+  }));
 }
 
 // ============================================================================
@@ -89,6 +156,7 @@ async function fetchPoolsFromDataApi(
   provider: any,
   factoryId: string,
   network: string,
+  tokenMetaMap?: Map<string, { name: string; symbol: string }>,
 ): Promise<PoolsListItem[]> {
   const result = await Promise.race([
     provider.dataApiGetAllPoolsDetails(factoryId),
@@ -126,13 +194,13 @@ async function fetchPoolsFromDataApi(
       }
     }
 
-    const token0Symbol = getTokenSymbol(token0Id, token0NameFromPool);
-    const token1Symbol = getTokenSymbol(token1Id, token1NameFromPool);
+    const token0Symbol = getTokenSymbol(token0Id, token0NameFromPool, tokenMetaMap);
+    const token1Symbol = getTokenSymbol(token1Id, token1NameFromPool, tokenMetaMap);
 
     if (!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') continue;
 
-    const token0Name = getTokenName(token0Id, token0NameFromPool);
-    const token1Name = getTokenName(token1Id, token1NameFromPool);
+    const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
+    const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
 
     items.push({
       id: poolId,
@@ -163,6 +231,7 @@ async function fetchPoolsFromSDKFallback(
   provider: any,
   factoryId: string,
   network: string,
+  tokenMetaMap?: Map<string, { name: string; symbol: string }>,
 ): Promise<PoolsListItem[]> {
   const rpcResult = await Promise.race([
     provider.alkanesGetAllPoolsWithDetails(factoryId),
@@ -183,8 +252,8 @@ async function fetchPoolsFromSDKFallback(
     const token1Id = d.token_b_block != null && d.token_b_tx != null
       ? `${d.token_b_block}:${d.token_b_tx}` : '';
 
-    let token0Symbol = getTokenSymbol(token0Id, d.token_a_name);
-    let token1Symbol = getTokenSymbol(token1Id, d.token_b_name);
+    let token0Symbol = getTokenSymbol(token0Id, d.token_a_name, tokenMetaMap);
+    let token1Symbol = getTokenSymbol(token1Id, d.token_b_name, tokenMetaMap);
 
     if ((!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') && d.pool_name) {
       const match = d.pool_name.match(/^(.+?)\s*\/\s*(.+?)\s*LP$/);
@@ -196,8 +265,8 @@ async function fetchPoolsFromSDKFallback(
 
     if (!poolId || !token0Id || !token1Id || !token0Symbol || !token1Symbol) continue;
 
-    const token0Name = getTokenName(token0Id, d.token_a_name);
-    const token1Name = getTokenName(token1Id, d.token_b_name);
+    const token0Name = getTokenName(token0Id, d.token_a_name, tokenMetaMap);
+    const token1Name = getTokenName(token1Id, d.token_b_name, tokenMetaMap);
 
     items.push({
       id: poolId,
@@ -242,22 +311,64 @@ export function usePools(params: UsePoolsParams = {}) {
         throw new Error('SDK provider not available');
       }
 
+      // Fetch token metadata in parallel with pool data (espo-backed)
+      const tokenMetaPromise = fetchTokenMetadata(network);
+
       let items: PoolsListItem[] = [];
+      let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
       // Primary: Data API (single call with pre-calculated TVL/volume/APR)
       try {
-        items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network);
+        tokenMetaMap = await tokenMetaPromise;
+        console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
+        items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
       } catch (e) {
         console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to SDK:', e);
+        // Ensure token metadata is resolved even if pool fetch failed
+        try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
 
       // Fallback: N+1 RPC simulation calls (no TVL/volume data)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network);
+          items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
           console.warn('[usePools] SDK fallback also failed:', e);
         }
+      }
+
+      // Second pass: find pool tokens with numeric-only names (missing from bulk fetch)
+      // and fetch their metadata individually from the data API
+      const numericNamePattern = /^\d+$/;
+      const missingIds = new Set<string>();
+      for (const item of items) {
+        if (numericNamePattern.test(item.token0.symbol) && !tokenMetaMap.has(item.token0.id)) {
+          missingIds.add(item.token0.id);
+        }
+        if (numericNamePattern.test(item.token1.symbol) && !tokenMetaMap.has(item.token1.id)) {
+          missingIds.add(item.token1.id);
+        }
+      }
+      if (missingIds.size > 0) {
+        console.log('[usePools] Fetching metadata for', missingIds.size, 'tokens with numeric names:', [...missingIds]);
+        await fetchMissingTokenMetadata([...missingIds], network, tokenMetaMap);
+        // Re-apply proper names from the updated metadata map
+        items = items.map(item => {
+          const t0Meta = tokenMetaMap.get(item.token0.id);
+          const t1Meta = tokenMetaMap.get(item.token1.id);
+          const token0 = t0Meta && numericNamePattern.test(item.token0.symbol)
+            ? { ...item.token0, symbol: t0Meta.symbol || item.token0.symbol, name: t0Meta.name || item.token0.name }
+            : item.token0;
+          const token1 = t1Meta && numericNamePattern.test(item.token1.symbol)
+            ? { ...item.token1, symbol: t1Meta.symbol || item.token1.symbol, name: t1Meta.name || item.token1.name }
+            : item.token1;
+          return {
+            ...item,
+            token0,
+            token1,
+            pairLabel: `${token0.name || token0.symbol} / ${token1.name || token1.symbol} LP`,
+          };
+        });
       }
 
       if (items.length === 0) {
