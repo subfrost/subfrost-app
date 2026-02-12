@@ -117,12 +117,12 @@ export default function Providers({ children }: { children: ReactNode }) {
       shallowRouting
     >
       <QueryClientProvider client={queryClient}>
-        <HeightPoller network={network} />
         <GlobalStore>
           <ModalStore>
             <ThemeProvider>
               <LanguageProvider>
                 <AlkanesSDKProvider network={network}>
+                  <HeightPoller network={network} />
                   <WalletProvider network={network}>
                     <TransactionConfirmProvider>
                       <ExchangeProvider>

@@ -36,7 +36,7 @@
     "test:e2e": "npm run test:e2e:wallet && npm run test:e2e:swap && npm run test:e2e:vault"
   },
   "dependencies": {
-    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-14fc3c8",
+    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-9e11c26",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@bprogress/next": "^3.2.12",
     "@jest/globals": "^30.2.0",

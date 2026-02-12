@@ -1,100 +1,117 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import type { PoolSummary } from "../types";
-import CandleChart from "./CandleChart";
 import { useTranslation } from '@/hooks/useTranslation';
-import { usePoolEspoCandles, type CandleTimeframe } from '@/hooks/usePoolEspoCandles';
+import { useQuery } from '@tanstack/react-query';
 
 type Props = {
   pool?: PoolSummary;
 };
 
-const TIMEFRAME_OPTIONS: { value: CandleTimeframe; label: string }[] = [
-  { value: '1h', label: '1H' },
-  { value: '4h', label: '4H' },
-  { value: '1d', label: '1D' },
-  { value: '1w', label: '1W' },
-];
+const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
 
-// Number of bars to show initially for each timeframe (user can scroll/zoom to see more)
-const INITIAL_VISIBLE_BARS: Record<CandleTimeframe, number> = {
-  '1h': 720,   // Show last 720 hours (30 days)
-  '4h': 360,   // Show last 360 4H segments (60 days)
-  '1d': 90,    // Show last 90 days
-  '1w': 18,    // Show last 18 weeks
-};
+/**
+ * Resolve the pizza.fun series ID (symbol) for a given alkane ID.
+ * Calls pizzafun.get_series_id_from_alkane_id on the Espo RPC at api.alkanode.com.
+ * The SDK's espoGetSeriesIdFromAlkaneId routes through data_api_url (subfrost.io)
+ * which doesn't support the pizzafun namespace — must call alkanode directly.
+ */
+function usePizzaFunSymbol(alkaneId?: string) {
+  return useQuery({
+    queryKey: ['pizzafun-series-id', alkaneId],
+    queryFn: async (): Promise<string | null> => {
+      if (!alkaneId) return null;
+      try {
+        const res = await fetch(ALKANODE_RPC_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'pizzafun.get_series_id_from_alkane_id',
+            params: { alkane_id: alkaneId },
+            id: 1,
+          }),
+        });
+        const data = await res.json();
+        const seriesId = data?.result?.series_id;
+        if (typeof seriesId === 'string' && seriesId) return seriesId;
+        console.warn('[PoolDetailsCard] No series_id in response for', alkaneId, data);
+        return null;
+      } catch (err) {
+        console.warn('[PoolDetailsCard] Failed to fetch series ID for', alkaneId, err);
+        return null;
+      }
+    },
+    enabled: !!alkaneId,
+    gcTime: 30 * 60_000, // Cache for 30 min — series IDs don't change
+    staleTime: 30 * 60_000,
+    retry: 2,
+  });
+}
+
+function buildIframeUrl(symbol: string): string {
+  const params = new URLSearchParams({
+    symbol,
+    timeframe: '1d',
+    type: 'mcap',
+    pool: 'all',
+    quote: 'usd',
+    metaprotocol: 'alkanes',
+    theme: 'subfrost',
+  });
+  return `https://tv.pizza.fun/?${params.toString()}`;
+}
 
 export default function PoolDetailsCard({ pool }: Props) {
   const { t } = useTranslation();
-  const [timeframe, setTimeframe] = useState<CandleTimeframe>('1d');
-  const [isTimeframeLoading, setIsTimeframeLoading] = useState(false);
 
-  const {
-    data: candles = [],
-    isLoading,
-    isFetching,
-  } = usePoolEspoCandles({
-    poolId: pool?.id,
-    timeframe,
-    enabled: !!pool,
-  });
+  // Get the series ID for the base token (token0) of the pool
+  const { data: symbol, isLoading: isSymbolLoading } = usePizzaFunSymbol(pool?.token0?.id);
 
-  const isInitialLoading = isLoading && candles.length === 0;
-
-  useEffect(() => {
-    if (isTimeframeLoading && !isFetching) {
-      setIsTimeframeLoading(false);
-    }
-  }, [isTimeframeLoading, isFetching]);
-
-  const pairLabel = pool
-    ? `${pool.token0.symbol}/${pool.token1.symbol}`
-    : undefined;
+  const iframeUrl = symbol ? buildIframeUrl(symbol) : null;
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] overflow-hidden">
       {pool ? (
-        <>
-          {/* Timeframe selector */}
-          <div className="mb-4 flex items-center justify-between">
-            <div className="text-xs font-semibold text-[color:var(--sf-text)]/60 uppercase tracking-wider">
-              {t('pool.priceChart')}
+        <div className="relative" style={{ height: 460 }}>
+          {isSymbolLoading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[color:var(--sf-primary)] border-t-transparent" />
             </div>
-            <div className="flex gap-1">
-              {TIMEFRAME_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => {
-                    if (timeframe === opt.value) return;
-                    setIsTimeframeLoading(true);
-                    setTimeframe(opt.value);
-                  }}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
-                    timeframe === opt.value
-                      ? 'bg-[color:var(--sf-primary)] text-white'
-                      : 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/60 hover:bg-[color:var(--sf-primary)]/20'
-                  }`}
+          )}
+          {iframeUrl ? (
+            <iframe
+              key={symbol}
+              src={iframeUrl}
+              className="w-full h-full border-0"
+              style={{ height: 460 }}
+              allow="clipboard-write"
+              loading="lazy"
+              title={`${pool.token0.symbol} price chart`}
+            />
+          ) : !isSymbolLoading ? (
+            <div className="flex items-center justify-center h-full bg-[color:var(--sf-primary)]/5">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <svg
+                  className="h-10 w-10 text-[color:var(--sf-text)]/20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
                 >
-                  {opt.label}
-                </button>
-              ))}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
+                  />
+                </svg>
+                <span className="text-xs text-[color:var(--sf-text)]/40">
+                  No chart data for {pool.token0.symbol}/{pool.token1.symbol}
+                </span>
+              </div>
             </div>
-          </div>
-
-          {/* Candle Chart */}
-          <CandleChart
-            data={candles}
-            height={300}
-            loading={isInitialLoading}
-            overlayLoading={isTimeframeLoading}
-            pairLabel={pairLabel}
-            onLoadMore={undefined}
-            canLoadMore={false}
-            resetKey={`${pool?.id ?? 'no-pool'}-${timeframe}`}
-            initialVisibleBars={INITIAL_VISIBLE_BARS[timeframe]}
-          />
-        </>
+          ) : null}
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[color:var(--sf-text)]/20 mb-3">

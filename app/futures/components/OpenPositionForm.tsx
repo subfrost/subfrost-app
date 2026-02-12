@@ -96,6 +96,27 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
   const activePercent = getActivePercent();
 
+  // Pre-compute className strings to work around Turbopack SWC parser bug
+  // where complex template literals with Tailwind arbitrary values cause
+  // "Unterminated regexp literal" errors.
+  const btnBase = theme === 'dark' ? 'bg-white/3' : 'bg-[color:var(--sf-surface)]';
+  const btnBaseSmall = `inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
+  const btnBaseLarge = `inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)]`;
+  const btnActiveClass = 'bg-[color:var(--sf-primary)]/20';
+  const btnInactiveClass = `${btnBase} hover:bg-white/6`;
+
+  const inputPanelClass = inputFocused
+    ? 'rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+    : 'rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]';
+
+  const lockPeriodInputClass = lockPeriodFocused
+    ? 'h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+    : 'h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]';
+
+  const buyBtnClass = isConnected && isDemoGated
+    ? 'h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
+    : 'h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]';
+
   // Calculate maximum blocks left among available contracts
   const maxBlocksLeft = contracts
     .filter((contract) => contract.remaining > 0)
@@ -303,18 +324,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
           {/* Investment Amount */}
           <div className="space-y-3">
             <div
-              className={`relative rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+              className={inputPanelClass}
               onClick={() => inputRef.current?.focus()}
             >
-              {/* Floating BTC icon */}
-              <div
-                className="absolute left-4 top-1/2 -translate-y-1/2 z-10"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" />
-              </div>
-              <div className="flex flex-col gap-1 pl-14">
-                <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('openPosition.investmentAmount')}</span>
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('openPosition.investmentAmount')}</span>
+              <div className="flex items-center gap-3 mt-1">
+                <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <TokenIcon symbol="BTC" id="btc" size="md" network="mainnet" />
+                </div>
                 <NumberField
                   ref={inputRef}
                   value={investmentAmount}
@@ -324,8 +341,9 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
                 />
-                {/* Balance and percentage buttons stacked */}
-                <div className="flex flex-col items-end gap-1">
+              </div>
+              {/* Balance and percentage buttons stacked */}
+              <div className="flex flex-col items-end gap-1 mt-1">
                   <div className="flex items-center gap-2">
                     <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                       {balanceText}
@@ -348,34 +366,33 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     <button
                       type="button"
                       onClick={() => handlePercent(0.25)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.25 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseSmall} ${activePercent === 0.25 ? btnActiveClass : btnInactiveClass}`}
                     >
                       25%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.5)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.5 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseSmall} ${activePercent === 0.5 ? btnActiveClass : btnInactiveClass}`}
                     >
                       50%
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.75)}
-                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 0.75 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseSmall} ${activePercent === 0.75 ? btnActiveClass : btnInactiveClass}`}
                     >
                       75%
                     </button>
                     <button
                       type="button"
                       onClick={handleMax}
-                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercent === 1 ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
+                      className={`${btnBaseLarge} ${activePercent === 1 ? btnActiveClass : btnInactiveClass}`}
                       disabled={btcBalance === 0}
                     >
                       Max
                     </button>
                   </div>
-                </div>
               </div>
             </div>
           </div>
@@ -393,14 +410,14 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     const minPeriod = findMinimumProfitablePeriod();
                     setSelectedBlocks(minPeriod);
                   }}
-                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  className={`${btnBaseLarge} ${btnInactiveClass}`}
                 >
                   {t('openPosition.min')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedBlocks(maxPeriod)}
-                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}
+                  className={`${btnBaseLarge} ${btnInactiveClass}`}
                 >
                   {t('openPosition.max')}
                 </button>
@@ -428,7 +445,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   onFocus={() => setLockPeriodFocused(true)}
                   onBlur={() => setLockPeriodFocused(false)}
                   style={{ outline: 'none', border: 'none' }}
-                  className={`h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${lockPeriodFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className={lockPeriodInputClass}
                 />
                 <span className="text-base text-[color:var(--sf-text)]/70">{t('openPosition.blocks')}</span>
               </div>
@@ -455,7 +472,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                 setTimeout(() => setShowBuyComingSoon(false), 1000);
               }
             }}
-            className={`h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
+            className={buyBtnClass}
           >
             {showBuyComingSoon ? (
               <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -471,17 +488,19 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
             <>
               {/* Total Yield Card */}
               <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.totalYield')}</div>
-                    <div className={`text-3xl font-bold ${aggregatedYield >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 shrink-0">
+                    <div className="text-sm sm:text-base text-[color:var(--sf-text)]/70 mb-1 whitespace-nowrap">{t('openPosition.totalYield')}</div>
+                    <div className={`text-xl sm:text-3xl font-bold ${aggregatedYield >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
                       {aggregatedYield >= 0 ? '+' : ''}{aggregatedYield.toFixed(2)}%
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-base text-[color:var(--sf-text)]/70 mb-1">{t('openPosition.totalProfit')}</div>
-                    <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
-                      {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)} BTC
+                  <div className="min-w-0 text-right">
+                    <div className="text-sm sm:text-base text-[color:var(--sf-text)]/70 mb-1 whitespace-nowrap">{t('openPosition.totalProfit')}</div>
+                    <div className={`text-xl sm:text-3xl font-bold ${totalProfit >= 0 ? 'text-[color:var(--sf-primary)]' : 'text-red-500'}`}>
+                      <span className="sm:hidden">{totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(4)}</span>
+                      <span className="hidden sm:inline">{totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(6)}</span>
+                      {' '}<span className="text-base sm:text-2xl">BTC</span>
                     </div>
                   </div>
                 </div>

@@ -180,37 +180,35 @@ export default function TokenSelectorModal({
                       key={token.symbol}
                       type="button"
                       onClick={() => {
-                        if (isSelectedInOther) {
-                          if (!showAlreadySelected) {
-                            setShowAlreadySelected(true);
-                            setTimeout(() => setShowAlreadySelected(false), 1000);
-                          }
-                        } else if (token.enabled || !isDemoGated) {
-                          onBridgeTokenSelect?.(token.symbol);
-                        } else {
+                        if (!token.enabled) {
                           if (!showComingSoon) {
                             setShowComingSoon(true);
                             setTimeout(() => setShowComingSoon(false), 1000);
                           }
+                        } else if (isSelectedInOther) {
+                          if (!showAlreadySelected) {
+                            setShowAlreadySelected(true);
+                            setTimeout(() => setShowAlreadySelected(false), 1000);
+                          }
+                        } else {
+                          onBridgeTokenSelect?.(token.symbol);
                         }
                       }}
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-                        isSelectedInOther
+                        !token.enabled
+                          ? 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
+                          : isSelectedInOther
                           ? 'bg-[color:var(--sf-primary)]/10 cursor-not-allowed'
-                          : (token.enabled || !isDemoGated)
-                          ? 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
-                          : 'bg-[color:var(--sf-input-bg)]/50 cursor-not-allowed'
+                          : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] cursor-pointer'
                       }`}
                     >
                       <img
                         src={`/tokens/${token.symbol.toLowerCase()}.svg`}
                         alt={token.symbol}
-                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled && isDemoGated && !isSelectedInOther ? 'opacity-40 grayscale' : ''}`}
+                        className={`w-5 h-5 rounded-full flex-shrink-0 ${!token.enabled ? 'opacity-40 grayscale' : ''}`}
                       />
                       <span className={`font-bold text-sm whitespace-nowrap ${
-                        isSelectedInOther
-                          ? 'text-[color:var(--sf-text)]'
-                          : token.enabled
+                        token.enabled
                           ? 'text-[color:var(--sf-text)]'
                           : 'text-[color:var(--sf-text)]/40'
                       }`}>

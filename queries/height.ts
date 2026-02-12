@@ -4,22 +4,52 @@
  * Height-based polling — the SINGLE source of query invalidation.
  *
  * HeightPoller is a headless component that:
- *   1. Polls `get_espo_height` (mainnet) or `metashrew_height` (regtest) every 10 s.
- *   2. When the height changes, invalidates ALL other queries.
+ *   1. Polls block height every 10s using SDK provider (espoGetHeight or metashrewGetHeight)
+ *   2. Falls back to raw metashrew_height RPC if SDK not yet initialized
+ *   3. When the height changes, invalidates ALL other queries.
  *
  * Every other query uses `staleTime: Infinity` and never self-refreshes.
+ *
+ * JOURNAL ENTRY (2026-02-11): Migrated from raw metashrew_height RPC to SDK
+ * espoGetHeight/dataApiGetBlockHeight with fallback. Moved HeightPoller inside
+ * AlkanesSDKProvider in providers.tsx so it can access the SDK context.
  */
 
 import { useEffect, useRef } from 'react';
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { queryKeys } from './keys';
+
+type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
 // ---------------------------------------------------------------------------
 // Query options factory
 // ---------------------------------------------------------------------------
 
-async function fetchHeight(network: string): Promise<number> {
-  // All networks use metashrew_height via the RPC proxy (subfrost endpoints)
+async function fetchHeightViaSDK(provider: WebProvider): Promise<number> {
+  // Try espoGetHeight first (Espo service), then dataApiGetBlockHeight, then metashrewGetHeight
+  try {
+    const height = await provider.espoGetHeight();
+    if (typeof height === 'number' && height > 0) return height;
+  } catch { /* fall through */ }
+
+  try {
+    const result = await provider.dataApiGetBlockHeight();
+    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+    const h = parsed?.height ?? parsed?.data?.height ?? parsed;
+    if (typeof h === 'number' && h > 0) return h;
+  } catch { /* fall through */ }
+
+  try {
+    const result = await provider.metashrewHeight();
+    const h = typeof result === 'number' ? result : parseInt(String(result), 10);
+    if (h > 0) return h;
+  } catch { /* fall through */ }
+
+  throw new Error('All SDK height methods failed');
+}
+
+async function fetchHeightViaRPC(network: string): Promise<number> {
   const networkSlug = network === 'mainnet' ? 'mainnet'
     : network === 'testnet' ? 'testnet'
     : network === 'signet' ? 'signet'
@@ -41,10 +71,20 @@ async function fetchHeight(network: string): Promise<number> {
   return typeof result === 'number' ? result : (typeof result === 'string' ? parseInt(result, 10) || 0 : 0);
 }
 
-export function espoHeightQueryOptions(network: string) {
+export function espoHeightQueryOptions(network: string, provider?: WebProvider | null) {
   return queryOptions({
     queryKey: queryKeys.height.espo(network),
-    queryFn: () => fetchHeight(network),
+    queryFn: async () => {
+      // Prefer SDK provider when available
+      if (provider) {
+        try {
+          return await fetchHeightViaSDK(provider);
+        } catch {
+          // Fall back to raw RPC
+        }
+      }
+      return fetchHeightViaRPC(network);
+    },
     // This is the ONE query that polls
     refetchInterval: 10_000,
     staleTime: 8_000,
@@ -58,8 +98,9 @@ export function espoHeightQueryOptions(network: string) {
 export function HeightPoller({ network }: { network: string }) {
   const queryClient = useQueryClient();
   const prevHeight = useRef<number | null>(null);
+  const { provider } = useAlkanesSDK();
 
-  const { data: height } = useQuery(espoHeightQueryOptions(network));
+  const { data: height } = useQuery(espoHeightQueryOptions(network, provider));
 
   useEffect(() => {
     if (height == null) return;
