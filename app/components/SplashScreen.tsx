@@ -276,7 +276,7 @@ export default function SplashScreen() {
     }
     tick();
 
-    const safetyTimer = setTimeout(() => { readyRef.current = true; }, 30000);
+    const safetyTimer = setTimeout(() => { readyRef.current = true; }, 5000);
     return () => { cancelAnimationFrame(frameRef.current); clearTimeout(safetyTimer); };
   }, [visible, fading, dismiss]);
 

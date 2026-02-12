@@ -62,33 +62,10 @@ import {
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { buildWrapSwapProtostone } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
-
-// Factory router opcode for swap
-const FACTORY_SWAP_OPCODE = 13; // SwapExactTokensForTokens
-
-// frBTC wrap opcode
-const FRBTC_WRAP_OPCODE = 77;
-
-// Hardcoded signer addresses per network (same as useWrapMutation)
-// Derived from frBTC contract [32:0] opcode 103 (GET_SIGNER).
-// If the frBTC contract is redeployed, update these. See useWrapMutation.ts header.
-const SIGNER_ADDRESSES: Record<string, string> = {
-  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqcdrpr6',
-  'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
-  'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
-  'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
-};
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 export type WrapSwapTransactionData = {
   btcAmount: string;        // BTC amount in display units (e.g., "0.5")
@@ -101,59 +78,6 @@ export type WrapSwapTransactionData = {
   deadlineBlocks?: number;  // Default 3
 };
 
-/**
- * Build combined wrap+swap protostone string
- *
- * Two protostones chained:
- * - p0: Wrap (frBTC contract) with pointer=p1 to forward frBTC to swap
- * - p1: Swap (factory contract opcode 13) receives frBTC and outputs target token
- *
- * Format: [frbtc_block,frbtc_tx,77]:p1:v0,[factory_block,factory_tx,13,path_len,...path,amount_in,min_out,deadline]:v0:v0
- */
-function buildWrapSwapProtostone(params: {
-  frbtcId: string;
-  factoryId: string;
-  buyTokenId: string;
-  frbtcAmount: string;      // Expected frBTC amount after wrap fee
-  minOutput: string;
-  deadline: string;
-}): string {
-  const { frbtcId, factoryId, buyTokenId, frbtcAmount, minOutput, deadline } = params;
-  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const [factoryBlock, factoryTx] = factoryId.split(':');
-  const [buyBlock, buyTx] = buyTokenId.split(':');
-
-  // p0: Wrap - call frBTC contract (opcode 77)
-  // pointer=p1 directs minted frBTC to next protostone (swap)
-  // refund=v0 sends any refunds to user
-  const blockNum = parseInt(frbtcBlock, 10);
-  const txNum = parseInt(frbtcTx, 10);
-  const wrapCellpack = `${blockNum},${txNum},${FRBTC_WRAP_OPCODE}`;
-  const p0 = `[${wrapCellpack}]:p1:v0`;
-
-  // p1: Swap - call factory with SwapExactTokensForTokens (opcode 13)
-  // Receives frBTC from p0 as incomingAlkanes
-  // Path: frBTC → buyToken
-  // pointer=v0 sends output tokens to user
-  const swapCellpack = [
-    factoryBlock,
-    factoryTx,
-    FACTORY_SWAP_OPCODE, // 13
-    2, // path_len
-    frbtcBlock,
-    frbtcTx,
-    buyBlock,
-    buyTx,
-    frbtcAmount,
-    minOutput,
-    deadline,
-  ].join(',');
-  const p1 = `[${swapCellpack}]:v0:v0`;
-
-  // Chain both protostones
-  return `${p0},${p1}`;
-}
-
 export function useWrapSwapMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
@@ -164,32 +88,6 @@ export function useWrapSwapMutation() {
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
   const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
-
-  // Get signer address for network
-  const getSignerAddress = (): string => {
-    const signer = SIGNER_ADDRESSES[network];
-    if (!signer) {
-      throw new Error(`No signer address configured for network: ${network}`);
-    }
-    return signer;
-  };
-
-  // Get bitcoin network for PSBT parsing
-  const getBitcoinNetwork = (): bitcoin.Network => {
-    switch (network) {
-      case 'mainnet':
-        return bitcoin.networks.bitcoin;
-      case 'testnet':
-      case 'signet':
-        return bitcoin.networks.testnet;
-      case 'regtest':
-      case 'regtest-local':
-      case 'subfrost-regtest':
-      case 'oylnet':
-      default:
-        return bitcoin.networks.regtest;
-    }
-  };
 
   return useMutation({
     mutationFn: async (data: WrapSwapTransactionData) => {
@@ -209,8 +107,8 @@ export function useWrapSwapMutation() {
       const segwitAddress = account?.nativeSegwit?.address;
       if (!taprootAddress) throw new Error('No taproot address available');
 
-      const signerAddress = getSignerAddress();
-      const btcNetwork = getBitcoinNetwork();
+      const signerAddress = getSignerAddress(network);
+      const btcNetwork = getBitcoinNetwork(network);
 
       console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, signerAddress });
 
@@ -310,21 +208,7 @@ export function useWrapSwapMutation() {
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
-          let psbtBase64: string;
-          if (readyToSign.psbt instanceof Uint8Array) {
-            psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-          } else if (typeof readyToSign.psbt === 'string') {
-            psbtBase64 = readyToSign.psbt;
-          } else if (typeof readyToSign.psbt === 'object') {
-            const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
-            const bytes = new Uint8Array(keys.length);
-            for (let i = 0; i < keys.length; i++) {
-              bytes[i] = readyToSign.psbt[keys[i]];
-            }
-            psbtBase64 = uint8ArrayToBase64(bytes);
-          } else {
-            throw new Error('Unexpected PSBT format');
-          }
+          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
           // Patch PSBT: signer at output 1, replace dummy wallet outputs,
           // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)

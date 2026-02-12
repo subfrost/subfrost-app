@@ -8,13 +8,25 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import {
+  buildSwapInputRequirements as buildInputRequirements,
+  buildWrapProtostone,
+  buildUnwrapProtostone,
+  buildTransferProtostone,
+} from '@/lib/alkanes/builders';
 
 // ==========================================
-// Protostone Building Functions (extracted from mutation hooks)
+// Protostone Building Functions
 // ==========================================
+// buildInputRequirements, buildWrapProtostone, buildUnwrapProtostone, and
+// buildTransferProtostone are imported from the shared builders layer above.
+//
+// buildSwapProtostone below is a LOCAL test-only version with a different
+// signature (generic opcode, arbitrary-length tokenPath) from the shared
+// builder (which uses hardcoded path_len=2 and FACTORY_SWAP_OPCODE=13).
 
 /**
- * Build protostone string for AMM swap operations
+ * Build protostone string for AMM swap operations (test-only generic version)
  * Format: [factory_block,factory_tx,opcode,path_len,...path_tokens,amount,limit,deadline]:pointer:refund
  */
 function buildSwapProtostone(params: {
@@ -44,94 +56,6 @@ function buildSwapProtostone(params: {
   ].join(',');
 
   return `[${cellpack}]:${pointer}:${refund}`;
-}
-
-/**
- * Build input requirements string for alkanes execute
- * Format: "B:amount" for bitcoin, "block:tx:amount" for alkanes
- */
-function buildInputRequirements(params: {
-  bitcoinAmount?: string;
-  alkaneInputs?: Array<{ alkaneId: string; amount: string }>;
-}): string {
-  const parts: string[] = [];
-
-  if (params.bitcoinAmount && params.bitcoinAmount !== '0') {
-    parts.push(`B:${params.bitcoinAmount}`);
-  }
-
-  if (params.alkaneInputs) {
-    for (const input of params.alkaneInputs) {
-      const [block, tx] = input.alkaneId.split(':');
-      parts.push(`${block}:${tx}:${input.amount}`);
-    }
-  }
-
-  return parts.join(',');
-}
-
-// frBTC wrap opcode (exchange BTC for frBTC)
-const FRBTC_WRAP_OPCODE = 77;
-
-// frBTC unwrap opcode (exchange frBTC for BTC)
-const FRBTC_UNWRAP_OPCODE = 78;
-
-/**
- * Build protostone string for BTC -> frBTC wrap operation
- * Format: [frbtc_block,frbtc_tx,opcode(77)]:pointer:refund
- */
-function buildWrapProtostone(params: {
-  frbtcId: string;
-  pointer?: string;
-  refund?: string;
-}): string {
-  const { frbtcId, pointer = 'v0', refund = 'v0' } = params;
-  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-
-  // Build cellpack: [frbtc_block, frbtc_tx, opcode(77)]
-  // Convert block/tx to numbers for proper protobuf encoding
-  const blockNum = parseInt(frbtcBlock, 10);
-  const txNum = parseInt(frbtcTx, 10);
-  const cellpack = `${blockNum},${txNum},${FRBTC_WRAP_OPCODE}`;
-
-  return `[${cellpack}]:${pointer}:${refund}`;
-}
-
-/**
- * Build protostone string for frBTC -> BTC unwrap operation
- * Format: [frbtc_block,frbtc_tx,opcode(78)]:pointer:refund
- */
-function buildUnwrapProtostone(params: {
-  frbtcId: string;
-  pointer?: string;
-  refund?: string;
-}): string {
-  const { frbtcId, pointer = 'v0', refund = 'v0' } = params;
-  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-
-  // Build cellpack: [frbtc_block, frbtc_tx, opcode(78)]
-  const cellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE].join(',');
-
-  return `[${cellpack}]:${pointer}:${refund}`;
-}
-
-/**
- * Build an edict-based protostone for alkane token transfers.
- *
- * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
- * The edict sends the exact `amount` to output v1 (recipient).
- * Pointer v0 = sender change (matches SDK auto-edict convention).
- * RefundPointer v0 = failure refund to sender.
- *
- * Output ordering (SDK convention): v0 = sender change, v1 = recipient
- * Pattern: [block:tx:amount:v1]:v0:v0
- */
-function buildTransferProtostone(params: {
-  alkaneId: string;
-  amount: string;
-}): string {
-  const [block, tx] = params.alkaneId.split(':');
-  return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
 }
 
 /**
@@ -378,22 +302,13 @@ describe('buildInputRequirements', () => {
 describe('buildWrapProtostone', () => {
   const FRBTC_ID = '32:0';
 
-  it('should build correct wrap protostone with default pointers', () => {
+  it('should build correct wrap protostone with hardcoded v1:v1 pointers', () => {
     const protostone = buildWrapProtostone({
       frbtcId: FRBTC_ID,
     });
 
-    expect(protostone).toBe('[32,0,77]:v0:v0');
-  });
-
-  it('should build correct wrap protostone with custom pointers', () => {
-    const protostone = buildWrapProtostone({
-      frbtcId: FRBTC_ID,
-      pointer: 'v1',
-      refund: 'v2',
-    });
-
-    expect(protostone).toBe('[32,0,77]:v1:v2');
+    // Shared builder always uses v1:v1 (minted frBTC goes to user output v1)
+    expect(protostone).toBe('[32,0,77]:v1:v1');
   });
 
   it('should use opcode 77 for wrap', () => {
@@ -409,7 +324,7 @@ describe('buildWrapProtostone', () => {
       frbtcId: '100:5',
     });
 
-    expect(protostone).toBe('[100,5,77]:v0:v0');
+    expect(protostone).toBe('[100,5,77]:v1:v1');
   });
 });
 
@@ -425,7 +340,8 @@ describe('buildUnwrapProtostone', () => {
       frbtcId: FRBTC_ID,
     });
 
-    expect(protostone).toBe('[32,0,78]:v0:v0');
+    // Shared builder defaults to v1:v1
+    expect(protostone).toBe('[32,0,78]:v1:v1');
   });
 
   it('should build correct unwrap protostone with custom pointers', () => {
@@ -644,7 +560,7 @@ describe('Integration: Transaction Building', () => {
         bitcoinAmount: WRAP_AMOUNT,
       });
 
-      expect(protostone).toBe('[32,0,77]:v0:v0');
+      expect(protostone).toBe('[32,0,77]:v1:v1');
       expect(inputRequirements).toBe('B:100000000');
     });
   });
@@ -664,7 +580,7 @@ describe('Integration: Transaction Building', () => {
         alkaneInputs: [{ alkaneId: FRBTC_ID, amount: UNWRAP_AMOUNT }],
       });
 
-      expect(protostone).toBe('[32,0,78]:v0:v0');
+      expect(protostone).toBe('[32,0,78]:v1:v1');
       expect(inputRequirements).toBe('32:0:100000000');
     });
   });
