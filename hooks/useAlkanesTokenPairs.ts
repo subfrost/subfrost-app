@@ -43,20 +43,57 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
 function normalizePoolArray(raw: any): any[] {
   if (!raw) return [];
   const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return parsed?.pools || parsed?.data || (Array.isArray(parsed) ? parsed : []);
+  // Handle: {pools: [...]}, {data: {pools: [...]}}, {data: [...]}, or raw array
+  return parsed?.pools
+    || parsed?.data?.pools
+    || (Array.isArray(parsed?.data) ? parsed.data : null)
+    || (Array.isArray(parsed) ? parsed : []);
 }
 
+/**
+ * Normalize pool data from any format into a flat row.
+ *
+ * Supported formats:
+ *  - RPC (alkanesGetAllPoolsWithDetails): { pool_id_block, pool_id_tx, details: { token_a_block, ... } }
+ *  - Data API get-all-token-pairs: { poolId: {block,tx}, token0: {alkaneId: {block,tx}, token0Amount}, ... }
+ *  - Data API get-all-pools-details: { poolId: {block,tx}, token0: {block,tx}, token0Amount, ... }
+ */
 function toPoolRow(p: any): any {
+  // Pool ID
+  const poolBlock = p.pool_block_id ?? p.pool_id_block ?? p.poolId?.block ?? 0;
+  const poolTx = p.pool_tx_id ?? p.pool_id_tx ?? p.poolId?.tx ?? 0;
+
+  // Token 0 ID (RPC → DataAPI pairs → DataAPI pools)
+  const t0Block = p.token0_block_id ?? p.details?.token_a_block
+    ?? p.token0?.alkaneId?.block ?? p.token0?.block ?? 0;
+  const t0Tx = p.token0_tx_id ?? p.details?.token_a_tx
+    ?? p.token0?.alkaneId?.tx ?? p.token0?.tx ?? 0;
+
+  // Token 1 ID
+  const t1Block = p.token1_block_id ?? p.details?.token_b_block
+    ?? p.token1?.alkaneId?.block ?? p.token1?.block ?? 0;
+  const t1Tx = p.token1_tx_id ?? p.details?.token_b_tx
+    ?? p.token1?.alkaneId?.tx ?? p.token1?.tx ?? 0;
+
+  // Reserve amounts
+  const t0Amount = p.token0_amount ?? p.details?.reserve_a
+    ?? p.reserve0 ?? p.token0Amount ?? p.token0?.token0Amount ?? '0';
+  const t1Amount = p.token1_amount ?? p.details?.reserve_b
+    ?? p.reserve1 ?? p.token1Amount ?? p.token1?.token1Amount ?? '0';
+
+  // Pool name
+  const poolName = p.pool_name ?? p.details?.pool_name ?? p.poolName ?? '';
+
   return {
-    pool_block_id: p.pool_block_id ?? p.pool_id_block ?? 0,
-    pool_tx_id: p.pool_tx_id ?? p.pool_id_tx ?? 0,
-    token0_block_id: p.token0_block_id ?? p.details?.token_a_block ?? 0,
-    token0_tx_id: p.token0_tx_id ?? p.details?.token_a_tx ?? 0,
-    token1_block_id: p.token1_block_id ?? p.details?.token_b_block ?? 0,
-    token1_tx_id: p.token1_tx_id ?? p.details?.token_b_tx ?? 0,
-    token0_amount: p.token0_amount ?? p.details?.reserve_a ?? '0',
-    token1_amount: p.token1_amount ?? p.details?.reserve_b ?? '0',
-    pool_name: p.pool_name ?? p.details?.pool_name ?? '',
+    pool_block_id: poolBlock,
+    pool_tx_id: poolTx,
+    token0_block_id: t0Block,
+    token0_tx_id: t0Tx,
+    token1_block_id: t1Block,
+    token1_tx_id: t1Tx,
+    token0_amount: t0Amount,
+    token1_amount: t1Amount,
+    pool_name: poolName,
   };
 }
 
@@ -127,9 +164,10 @@ async function fetchPoolsFromSDK(
 
   const items: AlkanesTokenPair[] = [];
   for (const pool of poolsArray) {
-    const token0Id = pool.token0_block_id && pool.token0_tx_id
+    // Use != null to allow "0" as a valid value (e.g., DIESEL is 2:0)
+    const token0Id = pool.token0_block_id != null && pool.token0_tx_id != null
       ? `${pool.token0_block_id}:${pool.token0_tx_id}` : '';
-    const token1Id = pool.token1_block_id && pool.token1_tx_id
+    const token1Id = pool.token1_block_id != null && pool.token1_tx_id != null
       ? `${pool.token1_block_id}:${pool.token1_tx_id}` : '';
 
     let token0Name = '';
@@ -143,8 +181,8 @@ async function fetchPoolsFromSDK(
       }
     }
 
-    const poolIdBlock = pool.pool_block_id || 0;
-    const poolIdTx = pool.pool_tx_id || 0;
+    const poolIdBlock = pool.pool_block_id ?? 0;
+    const poolIdTx = pool.pool_tx_id ?? 0;
 
     if (!token0Id || !token1Id) continue;
 
