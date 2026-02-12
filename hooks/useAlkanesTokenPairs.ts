@@ -2,12 +2,13 @@
  * useAlkanesTokenPairs - Find pools containing a specific token
  *
  * Priority order for pool data:
- * 1. dataApiGetTokenPairs — single REST call for token-specific pairs (fastest)
- * 2. dataApiGetAllTokenPairs — single REST call for all pairs
- * 3. alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (slowest, always works)
+ * 1. dataApiGetAllTokenPairs — single REST call for all pairs (fastest)
+ * 2. dataApiGetAllPoolsDetails — single REST call for all pools
+ * No simulate fallback (N+1 RPC calls caused 15-60s delays per call).
  *
- * JOURNAL ENTRY (2026-02-11): Added dataApi methods as preferred sources over
- * alkanes_simulate. Previously only used alkanesGetAllPoolsWithDetails.
+ * JOURNAL ENTRY (2026-02-11): Added dataApi methods as preferred sources.
+ * JOURNAL ENTRY (2026-02-12): Fixed response parsing — backend returns
+ * { data: { pools: [...] } } with camelCase nested fields (poolId.block, token0.block).
  */
 import { useQuery } from '@tanstack/react-query';
 import type { AlkanesTokenPairsResult } from '@/lib/api-provider/apiclient/types';
@@ -37,26 +38,30 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
 }
 
 // ============================================================================
-// SDK pool fetch — prefers dataApi/Espo, falls back to alkanes_simulate
+// SDK pool fetch — REST-only via dataApi
 // ============================================================================
 
 function normalizePoolArray(raw: any): any[] {
   if (!raw) return [];
   const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return parsed?.pools || parsed?.data || (Array.isArray(parsed) ? parsed : []);
+  // Backend returns { data: { pools: [...] } }; WASM may also return { pools: [...] } or raw array
+  const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed) ? parsed : []);
+  return Array.isArray(pools) ? pools : [];
 }
 
 function toPoolRow(p: any): any {
+  // Handle data API camelCase format (poolId: {block,tx}, token0: {block,tx})
+  // and flat snake_case format (pool_block_id, token0_block_id)
   return {
-    pool_block_id: p.pool_block_id ?? p.pool_id_block ?? 0,
-    pool_tx_id: p.pool_tx_id ?? p.pool_id_tx ?? 0,
-    token0_block_id: p.token0_block_id ?? p.details?.token_a_block ?? 0,
-    token0_tx_id: p.token0_tx_id ?? p.details?.token_a_tx ?? 0,
-    token1_block_id: p.token1_block_id ?? p.details?.token_b_block ?? 0,
-    token1_tx_id: p.token1_tx_id ?? p.details?.token_b_tx ?? 0,
-    token0_amount: p.token0_amount ?? p.details?.reserve_a ?? '0',
-    token1_amount: p.token1_amount ?? p.details?.reserve_b ?? '0',
-    pool_name: p.pool_name ?? p.details?.pool_name ?? '',
+    pool_block_id: Number(p.poolId?.block ?? p.pool_block_id ?? p.pool_id_block ?? 0),
+    pool_tx_id: Number(p.poolId?.tx ?? p.pool_tx_id ?? p.pool_id_tx ?? 0),
+    token0_block_id: Number(p.token0?.block ?? p.token0_block_id ?? p.details?.token_a_block ?? 0),
+    token0_tx_id: Number(p.token0?.tx ?? p.token0_tx_id ?? p.details?.token_a_tx ?? 0),
+    token1_block_id: Number(p.token1?.block ?? p.token1_block_id ?? p.details?.token_b_block ?? 0),
+    token1_tx_id: Number(p.token1?.tx ?? p.token1_tx_id ?? p.details?.token_b_tx ?? 0),
+    token0_amount: p.token0Amount ?? p.token0_amount ?? p.details?.reserve_a ?? '0',
+    token1_amount: p.token1Amount ?? p.token1_amount ?? p.details?.reserve_b ?? '0',
+    pool_name: p.poolName ?? p.pool_name ?? p.details?.pool_name ?? '',
   };
 }
 
@@ -70,26 +75,27 @@ async function fetchPoolsFromSDK(
       new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)),
     ]);
 
+  // Two REST-only tiers — no simulate fallback (avoids N+1 RPC calls that
+  // flood the backend and cause 15-60s delays per call).
+  // React Query's built-in retry handles transient failures.
   let poolsArray: any[] = [];
 
   // Method 1: dataApiGetAllTokenPairs — single REST call (preferred)
-  if (poolsArray.length === 0) {
-    try {
-      const result = await withTimeout(provider.dataApiGetAllTokenPairs(factoryId), 15000, 'dataApiGetAllTokenPairs');
-      const pools = normalizePoolArray(result);
-      if (pools.length > 0) {
-        poolsArray = pools.map(toPoolRow);
-        console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs returned', poolsArray.length, 'pools');
-      }
-    } catch (e) {
-      console.warn('[useAlkanesTokenPairs] dataApiGetAllTokenPairs failed:', e);
+  try {
+    const result = await withTimeout(provider.dataApiGetAllTokenPairs(factoryId), 30000, 'dataApiGetAllTokenPairs');
+    const pools = normalizePoolArray(result);
+    if (pools.length > 0) {
+      poolsArray = pools.map(toPoolRow);
+      console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs returned', poolsArray.length, 'pools');
     }
+  } catch (e) {
+    console.warn('[useAlkanesTokenPairs] dataApiGetAllTokenPairs failed:', e);
   }
 
   // Method 2: dataApiGetAllPoolsDetails — single REST call
   if (poolsArray.length === 0) {
     try {
-      const result = await withTimeout(provider.dataApiGetAllPoolsDetails(factoryId), 15000, 'dataApiGetAllPoolsDetails');
+      const result = await withTimeout(provider.dataApiGetAllPoolsDetails(factoryId), 30000, 'dataApiGetAllPoolsDetails');
       const pools = normalizePoolArray(result);
       if (pools.length > 0) {
         poolsArray = pools.map(toPoolRow);
@@ -100,30 +106,9 @@ async function fetchPoolsFromSDK(
     }
   }
 
-  // Method 3: alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (fallback)
   if (poolsArray.length === 0) {
-    try {
-      const rpcResult = await withTimeout(provider.alkanesGetAllPoolsWithDetails(factoryId), 30000, 'alkanesGetAllPoolsWithDetails');
-      const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-      const rpcPools = parsed?.pools || [];
-      poolsArray = rpcPools.map((p: any) => ({
-        pool_block_id: p.pool_id_block,
-        pool_tx_id: p.pool_id_tx,
-        token0_block_id: p.details?.token_a_block,
-        token0_tx_id: p.details?.token_a_tx,
-        token1_block_id: p.details?.token_b_block,
-        token1_tx_id: p.details?.token_b_tx,
-        token0_amount: p.details?.reserve_a || '0',
-        token1_amount: p.details?.reserve_b || '0',
-        pool_name: p.details?.pool_name || '',
-      }));
-      console.log('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails returned', poolsArray.length, 'pools');
-    } catch (e) {
-      console.warn('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails failed:', e);
-    }
+    throw new Error('Failed to fetch token pairs from data API');
   }
-
-  if (poolsArray.length === 0) return [];
 
   const items: AlkanesTokenPair[] = [];
   for (const pool of poolsArray) {

@@ -47,7 +47,8 @@ function mapToObject(value: any): any {
   return value;
 }
 
-// Hook to fetch pool metadata via SDK's alkanesGetAllPoolsWithDetails
+// Hook to fetch pool metadata — prefers dataApiGetAllPoolsDetails (single REST call)
+// over alkanesGetAllPoolsWithDetails (N+1 simulate calls)
 function usePoolsMetadata(network: string, poolIds: string[]) {
   const { ALKANE_FACTORY_ID } = getConfig(network);
   const { provider } = useAlkanesSDK();
@@ -58,51 +59,32 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
     queryFn: async (): Promise<Record<string, PoolMetadata>> => {
       const poolMap: Record<string, PoolMetadata> = {};
 
-      try {
-        const rpcResult = await Promise.race([
-          provider!.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
-        ]);
-        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-        const pools = parsed?.pools || [];
+      // Single REST call — no simulate fallback (avoids N+1 RPC calls).
+      // React Query's built-in retry handles transient failures.
+      const result = await Promise.race([
+        provider!.dataApiGetAllPoolsDetails(ALKANE_FACTORY_ID),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000)),
+      ]);
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+      // Backend returns { data: { pools: [...] } } with camelCase fields
+      const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed) ? parsed : []);
 
+      if (Array.isArray(pools)) {
         for (const p of pools) {
-          const poolId = `${p.pool_id_block}:${p.pool_id_tx}`;
-          if (!poolIds.includes(poolId)) continue;
-          const d = p.details || {};
+          // Handle data API format (poolId.block, token0.block) and RPC format (pool_id_block, details.token_a_block)
+          const pBlock = String(p.poolId?.block ?? p.pool_id_block ?? '');
+          const pTx = String(p.poolId?.tx ?? p.pool_id_tx ?? '');
+          const poolId = pBlock && pTx ? `${pBlock}:${pTx}` : '';
+          if (!poolId || !poolIds.includes(poolId)) continue;
           poolMap[poolId] = {
-            token0BlockId: String(d.token_a_block ?? ''),
-            token0TxId: String(d.token_a_tx ?? ''),
-            token1BlockId: String(d.token_b_block ?? ''),
-            token1TxId: String(d.token_b_tx ?? ''),
-            poolName: d.pool_name || '',
+            token0BlockId: String(p.token0?.block ?? p.details?.token_a_block ?? ''),
+            token0TxId: String(p.token0?.tx ?? p.details?.token_a_tx ?? ''),
+            token1BlockId: String(p.token1?.block ?? p.details?.token_b_block ?? ''),
+            token1TxId: String(p.token1?.tx ?? p.details?.token_b_tx ?? ''),
+            poolName: p.poolName ?? p.details?.pool_name ?? '',
           };
         }
-      } catch (e) {
-        console.warn('[usePoolsMetadata] SDK fetch failed:', e);
-      }
-
-      // For any pools still missing, try individual ammGetPoolDetails
-      const missing = poolIds.filter(id => !poolMap[id]);
-      if (missing.length > 0 && provider) {
-        await Promise.all(missing.map(async (poolId) => {
-          try {
-            const details = await Promise.race([
-              provider!.ammGetPoolDetails(poolId),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-            ]);
-            const parsed = typeof details === 'string' ? JSON.parse(details) : details;
-            if (parsed?.token_a_block != null) {
-              poolMap[poolId] = {
-                token0BlockId: String(parsed.token_a_block),
-                token0TxId: String(parsed.token_a_tx),
-                token1BlockId: String(parsed.token_b_block),
-                token1TxId: String(parsed.token_b_tx),
-                poolName: parsed.pool_name || '',
-              };
-            }
-          } catch { /* skip */ }
-        }));
+        console.log('[usePoolsMetadata] dataApiGetAllPoolsDetails matched', Object.keys(poolMap).length, 'of', poolIds.length, 'pools');
       }
 
       return poolMap;
