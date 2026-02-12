@@ -27,6 +27,40 @@ type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 // Re-export types from useEnrichedWalletData for backward compat
 export type { AlkaneAsset, EnrichedUTXO, WalletBalances } from '@/hooks/useEnrichedWalletData';
 
+/**
+ * Fetch token names for unknown tokens via SDK's alkanesReflect.
+ * Returns a map of tokenId → { name, symbol }.
+ */
+async function fetchUnknownTokenNames(
+  tokenIds: string[],
+  provider: any
+): Promise<Record<string, { name: string; symbol: string }>> {
+  if (tokenIds.length === 0 || !provider) return {};
+
+  const map: Record<string, { name: string; symbol: string }> = {};
+
+  await Promise.all(
+    tokenIds.map(async (tokenId) => {
+      try {
+        const reflection = await Promise.race([
+          provider.alkanesReflect(tokenId),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ]);
+        const parsed = typeof reflection === 'string' ? JSON.parse(reflection) : reflection;
+        const name = (parsed?.name || '').replace('SUBFROST BTC', 'frBTC').trim();
+        const symbol = (parsed?.symbol || '').trim();
+        if (name || symbol) {
+          map[tokenId] = { name, symbol };
+        }
+      } catch {
+        // Skip tokens that fail — name will fall back to "Token X:Y"
+      }
+    })
+  );
+
+  return map;
+}
+
 // Helper to recursively convert Map to plain object
 function mapToObject(value: any): any {
   if (value instanceof Map) {
@@ -315,6 +349,26 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         }
       });
       await Promise.all(alkaneBalancePromises);
+
+      // Enrich unknown tokens with names via SDK reflect
+      const unknownTokenIds = Array.from(alkaneMap.entries())
+        .filter(([id]) => !KNOWN_TOKENS[id])
+        .map(([id]) => id);
+
+      if (unknownTokenIds.length > 0) {
+        try {
+          const nameMap = await fetchUnknownTokenNames(unknownTokenIds, provider);
+          for (const [id, info] of Object.entries(nameMap)) {
+            const existing = alkaneMap.get(id);
+            if (existing) {
+              if (info.name) existing.name = info.name;
+              if (info.symbol) existing.symbol = info.symbol;
+            }
+          }
+        } catch (error) {
+          console.warn('[BALANCE] Failed to enrich token names:', error);
+        }
+      }
 
       return {
         balances: {
