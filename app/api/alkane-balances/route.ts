@@ -21,6 +21,7 @@
 
 import { NextResponse } from 'next/server';
 import { cache } from '@/lib/db/redis';
+import { batchRpcServer } from '@/lib/rpc-batch';
 
 const RPC_ENDPOINTS: Record<string, string> = {
   mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
@@ -57,33 +58,53 @@ async function rpcCall(endpoint: string, method: string, params: any[]): Promise
   return response.json();
 }
 
-async function getOutpointBalances(
-  endpoint: string,
-  txid: string,
-  vout: number,
-): Promise<OutpointBalance[]> {
-  const cacheKey = `alkane-bal:${txid}:${vout}`;
-
-  // Check Redis cache first
-  const cached = await cache.get<OutpointBalance[]>(cacheKey);
-  if (cached !== null) {
-    return cached;
-  }
-
-  // Cache miss — fetch from RPC
-  const data = await rpcCall(endpoint, 'alkanes_protorunesbyoutpoint', [txid, vout]);
-  const balances = data?.result?.balance_sheet?.cached?.balances || [];
-
-  const parsed: OutpointBalance[] = balances.map((b: any) => ({
+function parseBalances(result: any): OutpointBalance[] {
+  const balances = result?.balance_sheet?.cached?.balances || [];
+  return balances.map((b: any) => ({
     block: Number(b.block),
     tx: Number(b.tx),
     amount: String(b.amount || '0'),
   }));
+}
 
-  // Cache permanently (no TTL) — outpoint balances are immutable
-  await cache.set(cacheKey, parsed);
+/**
+ * Fetch outpoint balances for a batch of UTXOs, using Redis cache and
+ * a single JSON-RPC batch call for all cache misses.
+ */
+async function getOutpointBalancesBatch(
+  endpoint: string,
+  utxos: { txid: string; vout: number }[],
+): Promise<OutpointBalance[][]> {
+  // 1. Check Redis cache for all outpoints in parallel
+  const cacheResults = await Promise.all(
+    utxos.map((utxo) => cache.get<OutpointBalance[]>(`alkane-bal:${utxo.txid}:${utxo.vout}`)),
+  );
 
-  return parsed;
+  // 2. Collect cache misses
+  const missIndices: number[] = [];
+  for (let i = 0; i < cacheResults.length; i++) {
+    if (cacheResults[i] === null) missIndices.push(i);
+  }
+
+  // 3. Batch-fetch all cache misses in a single JSON-RPC call
+  if (missIndices.length > 0) {
+    const calls = missIndices.map((idx) => ({
+      method: 'alkanes_protorunesbyoutpoint',
+      params: [utxos[idx].txid, utxos[idx].vout],
+    }));
+    const rpcResults = await batchRpcServer(endpoint, calls);
+
+    // 4. Parse results and cache permanently
+    await Promise.all(
+      missIndices.map(async (idx, j) => {
+        const parsed = parseBalances(rpcResults[j]);
+        cacheResults[idx] = parsed;
+        await cache.set(`alkane-bal:${utxos[idx].txid}:${utxos[idx].vout}`, parsed);
+      }),
+    );
+  }
+
+  return cacheResults.map((r) => r || []);
 }
 
 export async function GET(request: Request) {
@@ -106,15 +127,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ balances: [] });
     }
 
-    // 2. Fetch outpoint balances in parallel batches
+    // 2. Fetch outpoint balances in batched chunks (single RPC call per chunk for cache misses)
     const allOutpointBalances: OutpointBalance[][] = [];
 
     for (let i = 0; i < utxos.length; i += BATCH_SIZE) {
-      const batch = utxos.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map((utxo) => getOutpointBalances(endpoint, utxo.txid, utxo.vout)),
-      );
-      allOutpointBalances.push(...batchResults);
+      const chunk = utxos.slice(i, i + BATCH_SIZE);
+      const chunkResults = await getOutpointBalancesBatch(endpoint, chunk);
+      allOutpointBalances.push(...chunkResults);
     }
 
     // 3. Aggregate balance sheets into a single token map

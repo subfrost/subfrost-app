@@ -583,29 +583,37 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         // Create PSBT
         const psbt = new bitcoin.Psbt({ network: btcNetwork });
 
-        // Add inputs from selected UTXOs (now verified to exist in fresh data)
-        let totalInputValue = 0;
-        for (const utxoKey of Array.from(selectedUtxos)) {
+        // Parse selected UTXOs and verify they exist in fresh data
+        const selectedUtxoParsed = Array.from(selectedUtxos).map((utxoKey) => {
           const [txid, voutStr] = utxoKey.split(':');
           const vout = parseInt(voutStr);
-
-          // Use fresh UTXO data
           const freshUtxo = freshUtxos.find(u => u.txid === txid && u.vout === vout);
           if (!freshUtxo) {
             throw new Error(`UTXO not found in fresh data: ${utxoKey}`);
           }
+          return { txid, vout, freshUtxo };
+        });
 
-          // Fetch transaction hex for witness UTXO via local API proxy (avoids CORS)
-          const txHexUrl = `/api/esplora/tx/${txid}/hex?network=${network}`;
-          console.log('[SendModal] Fetching tx hex from:', txHexUrl);
+        // Fetch all transaction hexes in parallel (batched)
+        const uniqueTxids = [...new Set(selectedUtxoParsed.map(u => u.txid))];
+        console.log(`[SendModal] Fetching ${uniqueTxids.length} tx hexes in parallel...`);
+        const txHexEntries = await Promise.all(
+          uniqueTxids.map(async (txid) => {
+            const txHexUrl = `/api/esplora/tx/${txid}/hex?network=${network}`;
+            const txHexResponse = await fetch(txHexUrl);
+            if (!txHexResponse.ok) {
+              throw new Error(`Failed to fetch transaction ${txid}: ${txHexResponse.statusText}`);
+            }
+            const txHex = await txHexResponse.text();
+            return [txid, bitcoin.Transaction.fromHex(txHex)] as const;
+          }),
+        );
+        const txMap = new Map(txHexEntries);
 
-          const txHexResponse = await fetch(txHexUrl);
-          if (!txHexResponse.ok) {
-            throw new Error(`Failed to fetch transaction ${txid}: ${txHexResponse.statusText}`);
-          }
-          const txHex = await txHexResponse.text();
-          const tx = bitcoin.Transaction.fromHex(txHex);
-
+        // Add inputs from selected UTXOs
+        let totalInputValue = 0;
+        for (const { txid, vout, freshUtxo } of selectedUtxoParsed) {
+          const tx = txMap.get(txid)!;
           psbt.addInput({
             hash: txid,
             index: vout,

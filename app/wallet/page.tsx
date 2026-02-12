@@ -20,7 +20,7 @@ import SendModal from './components/SendModal';
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected, address, paymentAddress, network } = useWallet() as any;
+  const { connected, isConnected, isInitializing, address, paymentAddress, network } = useWallet() as any;
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,7 +58,14 @@ export default function WalletDashboardPage() {
 
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
-  // Redirect if not connected
+  // Wait for wallet context to finish hydrating before deciding to redirect.
+  // On direct page load, isConnected starts false until localStorage/sessionStorage
+  // state is restored. Without this guard, the page redirects to "/" immediately.
+  if (isInitializing) {
+    return null;
+  }
+
+  // Redirect if not connected (after hydration is complete)
   if (!walletConnected) {
     router.push('/');
     return null;

@@ -78,24 +78,38 @@ export function useDynamicPools(options?: {
         try {
           const dataApiResult = await withTimeout(provider!.dataApiGetAllPoolsDetails(factoryId), 15000, 'dataApiGetAllPoolsDetails');
           const parsed = typeof dataApiResult === 'string' ? JSON.parse(dataApiResult) : dataApiResult;
-          const pools = parsed?.pools || parsed?.data || (Array.isArray(parsed) ? parsed : []);
-          if (pools.length > 0) {
-            rawPools = pools.map((p: any) => ({
-              pool_id_block: p.pool_block_id ?? p.pool_id_block ?? 0,
-              pool_id_tx: p.pool_tx_id ?? p.pool_id_tx ?? 0,
-              pool_id: p.pool_id || `${p.pool_block_id ?? p.pool_id_block ?? 0}:${p.pool_tx_id ?? p.pool_id_tx ?? 0}`,
-              details: {
-                token_a_block: p.token0_block_id ?? p.details?.token_a_block ?? 0,
-                token_a_tx: p.token0_tx_id ?? p.details?.token_a_tx ?? 0,
-                token_b_block: p.token1_block_id ?? p.details?.token_b_block ?? 0,
-                token_b_tx: p.token1_tx_id ?? p.details?.token_b_tx ?? 0,
-                token_a_name: p.token0_name ?? p.details?.token_a_name ?? '',
-                token_b_name: p.token1_name ?? p.details?.token_b_name ?? '',
-                reserve_a: p.token0_amount ?? p.details?.reserve_a ?? '0',
-                reserve_b: p.token1_amount ?? p.details?.reserve_b ?? '0',
-                pool_name: p.pool_name ?? p.details?.pool_name ?? '',
-              },
-            }));
+          // Handle {pools: [...]}, {data: {pools: [...]}}, {data: [...]}, or raw array
+          const pools = parsed?.pools
+            || parsed?.data?.pools
+            || (Array.isArray(parsed?.data) ? parsed.data : null)
+            || (Array.isArray(parsed) ? parsed : []);
+          if (Array.isArray(pools) && pools.length > 0) {
+            rawPools = pools.map((p: any) => {
+              // Pool ID: handle poolId.block/tx (data API) and flat fields (RPC)
+              const pBlock = p.pool_block_id ?? p.pool_id_block ?? p.poolId?.block ?? 0;
+              const pTx = p.pool_tx_id ?? p.pool_id_tx ?? p.poolId?.tx ?? 0;
+              // Token IDs: handle token0.block/tx, token0.alkaneId.block/tx (data API)
+              const t0Block = p.token0_block_id ?? p.details?.token_a_block ?? p.token0?.alkaneId?.block ?? p.token0?.block ?? 0;
+              const t0Tx = p.token0_tx_id ?? p.details?.token_a_tx ?? p.token0?.alkaneId?.tx ?? p.token0?.tx ?? 0;
+              const t1Block = p.token1_block_id ?? p.details?.token_b_block ?? p.token1?.alkaneId?.block ?? p.token1?.block ?? 0;
+              const t1Tx = p.token1_tx_id ?? p.details?.token_b_tx ?? p.token1?.alkaneId?.tx ?? p.token1?.tx ?? 0;
+              return {
+                pool_id_block: pBlock,
+                pool_id_tx: pTx,
+                pool_id: p.pool_id || `${pBlock}:${pTx}`,
+                details: {
+                  token_a_block: t0Block,
+                  token_a_tx: t0Tx,
+                  token_b_block: t1Block,
+                  token_b_tx: t1Tx,
+                  token_a_name: p.token0_name ?? p.token0?.name ?? p.details?.token_a_name ?? '',
+                  token_b_name: p.token1_name ?? p.token1?.name ?? p.details?.token_b_name ?? '',
+                  reserve_a: p.token0_amount ?? p.reserve0 ?? p.token0?.token0Amount ?? p.details?.reserve_a ?? '0',
+                  reserve_b: p.token1_amount ?? p.reserve1 ?? p.token1?.token1Amount ?? p.details?.reserve_b ?? '0',
+                  pool_name: p.pool_name ?? p.poolName ?? p.details?.pool_name ?? '',
+                },
+              };
+            });
             console.log('[useDynamicPools] dataApiGetAllPoolsDetails returned', rawPools.length, 'pools');
           }
         } catch (e) {
@@ -108,24 +122,35 @@ export function useDynamicPools(options?: {
         try {
           const espoResult = await withTimeout(provider!.espoGetPools(), 15000, 'espoGetPools');
           const parsed = typeof espoResult === 'string' ? JSON.parse(espoResult) : espoResult;
-          const pools = parsed?.pools || parsed?.data || (Array.isArray(parsed) ? parsed : []);
-          if (pools.length > 0) {
-            rawPools = pools.map((p: any) => ({
-              pool_id_block: p.pool_block_id ?? p.pool_id_block ?? 0,
-              pool_id_tx: p.pool_tx_id ?? p.pool_id_tx ?? 0,
-              pool_id: p.pool_id || `${p.pool_block_id ?? p.pool_id_block ?? 0}:${p.pool_tx_id ?? p.pool_id_tx ?? 0}`,
-              details: {
-                token_a_block: p.token0_block_id ?? p.details?.token_a_block ?? 0,
-                token_a_tx: p.token0_tx_id ?? p.details?.token_a_tx ?? 0,
-                token_b_block: p.token1_block_id ?? p.details?.token_b_block ?? 0,
-                token_b_tx: p.token1_tx_id ?? p.details?.token_b_tx ?? 0,
-                token_a_name: p.token0_name ?? p.details?.token_a_name ?? '',
-                token_b_name: p.token1_name ?? p.details?.token_b_name ?? '',
-                reserve_a: p.token0_amount ?? p.details?.reserve_a ?? '0',
-                reserve_b: p.token1_amount ?? p.details?.reserve_b ?? '0',
-                pool_name: p.pool_name ?? p.details?.pool_name ?? '',
-              },
-            }));
+          const pools = parsed?.pools
+            || parsed?.data?.pools
+            || (Array.isArray(parsed?.data) ? parsed.data : null)
+            || (Array.isArray(parsed) ? parsed : []);
+          if (Array.isArray(pools) && pools.length > 0) {
+            rawPools = pools.map((p: any) => {
+              const pBlock = p.pool_block_id ?? p.pool_id_block ?? p.poolId?.block ?? 0;
+              const pTx = p.pool_tx_id ?? p.pool_id_tx ?? p.poolId?.tx ?? 0;
+              const t0Block = p.token0_block_id ?? p.details?.token_a_block ?? p.token0?.alkaneId?.block ?? p.token0?.block ?? 0;
+              const t0Tx = p.token0_tx_id ?? p.details?.token_a_tx ?? p.token0?.alkaneId?.tx ?? p.token0?.tx ?? 0;
+              const t1Block = p.token1_block_id ?? p.details?.token_b_block ?? p.token1?.alkaneId?.block ?? p.token1?.block ?? 0;
+              const t1Tx = p.token1_tx_id ?? p.details?.token_b_tx ?? p.token1?.alkaneId?.tx ?? p.token1?.tx ?? 0;
+              return {
+                pool_id_block: pBlock,
+                pool_id_tx: pTx,
+                pool_id: p.pool_id || `${pBlock}:${pTx}`,
+                details: {
+                  token_a_block: t0Block,
+                  token_a_tx: t0Tx,
+                  token_b_block: t1Block,
+                  token_b_tx: t1Tx,
+                  token_a_name: p.token0_name ?? p.token0?.name ?? p.details?.token_a_name ?? '',
+                  token_b_name: p.token1_name ?? p.token1?.name ?? p.details?.token_b_name ?? '',
+                  reserve_a: p.token0_amount ?? p.reserve0 ?? p.token0?.token0Amount ?? p.details?.reserve_a ?? '0',
+                  reserve_b: p.token1_amount ?? p.reserve1 ?? p.token1?.token1Amount ?? p.details?.reserve_b ?? '0',
+                  pool_name: p.pool_name ?? p.poolName ?? p.details?.pool_name ?? '',
+                },
+              };
+            });
             console.log('[useDynamicPools] espoGetPools returned', rawPools.length, 'pools');
           }
         } catch (e) {

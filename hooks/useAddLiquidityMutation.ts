@@ -290,37 +290,32 @@ async function discoverAlkaneUtxos(
     return [];
   }
 
-  // 3. Check each dust UTXO for alkane balances (in parallel)
-  const checks = dustUtxos.map(async (utxo: any) => {
+  // 3. Check all dust UTXOs for alkane balances via a single JSON-RPC batch
+  const { batchRpcClient } = await import('@/lib/rpc-batch');
+  const batchCalls = dustUtxos.map((utxo: any) => ({
+    method: 'alkanes_protorunesbyoutpoint',
+    params: [utxo.txid, utxo.vout],
+  }));
+  const batchResults = await batchRpcClient(batchCalls);
+
+  type AlkaneUtxo = { txid: string; vout: number; value: number; alkanes: { block: number; tx: number; amount: number }[] };
+  const alkaneUtxos: AlkaneUtxo[] = [];
+  for (let i = 0; i < dustUtxos.length; i++) {
+    const utxo = dustUtxos[i];
     try {
-      const resp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'alkanes_protorunesbyoutpoint',
-          params: [utxo.txid, utxo.vout],
-          id: 1,
-        }),
-      });
-      const data = await resp.json();
-      const balances = data?.result?.balance_sheet?.cached?.balances || [];
+      const balances = batchResults[i]?.balance_sheet?.cached?.balances || [];
       if (balances.length > 0) {
-        return {
+        alkaneUtxos.push({
           txid: utxo.txid as string,
           vout: utxo.vout as number,
           value: utxo.value as number,
           alkanes: balances.map((b: any) => ({ block: Number(b.block), tx: Number(b.tx), amount: Number(b.amount) })),
-        };
+        });
       }
     } catch (e) {
       console.warn(`[AddLiquidity] Failed to check outpoint ${utxo.txid}:${utxo.vout}:`, e);
     }
-    return null;
-  });
-
-  const results = await Promise.all(checks);
-  const alkaneUtxos = results.filter((r): r is NonNullable<typeof r> => r !== null);
+  }
 
   console.log(`[AddLiquidity] Found ${alkaneUtxos.length} alkane-bearing UTXOs:`,
     alkaneUtxos.map(u => `${u.txid.slice(0, 8)}:${u.vout} -> ${u.alkanes.map((a: { block: number; tx: number; amount: number }) => `[${a.block}:${a.tx}]=${a.amount}`).join(', ')}`));
