@@ -1416,9 +1416,9 @@ export default function SwapShell() {
         )}
       </Suspense>
 
-      <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
-        {/* Left Column: Swap/LP Module */}
-        <div className="flex flex-col min-h-0">
+      <div className="flex flex-col lg:grid lg:grid-cols-5 xl:grid-cols-3 gap-6">
+        {/* Left Column: Swap/LP Module (2/5 on lg, 1/3 on xl) */}
+        <div className="flex flex-col min-h-0 lg:col-span-2 xl:col-span-1">
           {/* Swap/Liquidity Tabs */}
           <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
@@ -1578,19 +1578,10 @@ export default function SwapShell() {
             </div>
           )}
 
-          {/* My Wallet Swaps - desktop only, under swap modal */}
-          <div className="hidden lg:block mt-8">
-            <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-              <MyWalletSwaps />
-            </Suspense>
-          </div>
         </div>
 
-        {/* Right Column: TVL and Markets */}
-        <Suspense fallback={<MarketsSkeleton />}>
-        <div className="flex flex-col gap-4">
-          {/* Desktop-only Chart - hidden on mobile where it appears above swap form */}
-          <div className="hidden lg:block">
+        {/* Right Column: Chart (2/3 width on lg) */}
+        <div className="hidden lg:flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
           <PoolDetailsCard
             pool={selectedTab === 'lp' && poolToken0 && poolToken1
               ? markets.find(p => {
@@ -1613,7 +1604,17 @@ export default function SwapShell() {
               : selectedPool
             }
           />
-          </div>
+        </div>
+      </div>
+
+      {/* My Wallet Activity + Markets Grid - 50/50 on lg */}
+      <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6">
+        <div className="hidden lg:block">
+          <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
+            <MyWalletSwaps />
+          </Suspense>
+        </div>
+        <Suspense fallback={<MarketsSkeleton />}>
           <MarketsGrid
             pools={markets}
             onSelect={handleSelectPool}
@@ -1621,7 +1622,6 @@ export default function SwapShell() {
             onVolumePeriodChange={setVolumePeriod}
             selectedPoolId={selectedPool?.id}
           />
-        </div>
         </Suspense>
       </div>
 
