@@ -16,6 +16,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { batchRpcClient } from '@/lib/rpc-batch';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -104,41 +105,20 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         return null;
       };
 
-      const fetchMempoolSpent = async (address: string): Promise<number> => {
-        try {
-          const response = await fetch('/api/rpc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::txs:mempool',
-              params: [address],
-              id: 1,
-            }),
-          });
-          const json = await response.json();
-          const txs = json.result;
-          if (!Array.isArray(txs)) return 0;
-
-          // Build set of mempool txids to distinguish confirmed vs unconfirmed parents
-          const mempoolTxids = new Set(txs.map((tx: any) => tx.txid));
-
-          let spent = 0;
-          for (const tx of txs) {
-            for (const vin of (tx.vin || [])) {
-              if (vin.prevout?.scriptpubkey_address === address) {
-                // Only count if parent tx is NOT a mempool tx (i.e., parent is confirmed)
-                if (!mempoolTxids.has(vin.txid)) {
-                  spent += vin.prevout.value;
-                }
+      const computeMempoolSpent = (txs: any[], address: string): number => {
+        if (!Array.isArray(txs)) return 0;
+        const mempoolTxids = new Set(txs.map((tx: any) => tx.txid));
+        let spent = 0;
+        for (const tx of txs) {
+          for (const vin of (tx.vin || [])) {
+            if (vin.prevout?.scriptpubkey_address === address) {
+              if (!mempoolTxids.has(vin.txid)) {
+                spent += vin.prevout.value;
               }
             }
           }
-          return spent;
-        } catch (err) {
-          console.error(`[BALANCE] mempool spent fetch failed for ${address}:`, err);
-          return 0;
         }
+        return spent;
       };
 
       const enrichedDataPromises = addresses.map(async (address) => {
@@ -257,13 +237,18 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         for (const utxo of toArray(data.pending)) processUtxo(utxo, false, false);
       }
 
-      // Fetch mempool spent amounts per address (confirmed UTXOs being spent in mempool)
-      const mempoolSpentResults = await Promise.all(
-        addresses.map(async (address) => ({
-          address,
-          spent: await withTimeout(fetchMempoolSpent(address), 10000, 0),
-        })),
+      // Fetch mempool spent amounts per address via a single batched RPC call
+      const mempoolBatchResults = await withTimeout(
+        batchRpcClient(
+          addresses.map((address) => ({ method: 'esplora_address::txs:mempool', params: [address] })),
+        ),
+        10000,
+        addresses.map(() => null),
       );
+      const mempoolSpentResults = addresses.map((address, i) => ({
+        address,
+        spent: computeMempoolSpent(mempoolBatchResults[i], address),
+      }));
 
       let pendingOutgoingP2wpkh = 0;
       let pendingOutgoingP2tr = 0;
