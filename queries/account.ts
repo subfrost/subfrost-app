@@ -80,19 +80,9 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       const fetchUtxosViaEsplora = async (address: string) => {
         try {
-          const response = await fetch('/api/rpc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::utxo',
-              params: [address],
-              id: 1,
-            }),
-          });
-          const json = await response.json();
-          if (json.result && Array.isArray(json.result)) {
-            return json.result.map((utxo: any) => ({
+          const result = await provider.esploraGetAddressUtxo(address);
+          if (result && Array.isArray(result)) {
+            return result.map((utxo: any) => ({
               outpoint: `${utxo.txid}:${utxo.vout}`,
               value: utxo.value,
               height: utxo.status?.block_height || 0,
@@ -106,18 +96,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       const fetchMempoolSpent = async (address: string): Promise<number> => {
         try {
-          const response = await fetch('/api/rpc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::txs:mempool',
-              params: [address],
-              id: 1,
-            }),
-          });
-          const json = await response.json();
-          const txs = json.result;
+          const txs = await provider.esploraGetAddressTxsMempool(address);
           if (!Array.isArray(txs)) return 0;
 
           // Build set of mempool txids to distinguish confirmed vs unconfirmed parents
@@ -274,24 +253,22 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         pendingOutgoingTotal += spent;
       }
 
-      // Fetch alkane balances via data API (get-alkanes-by-address, espo-backed)
+      // Fetch alkane balances via SDK WebProvider (dataApiGetAlkanesByAddress)
       const alkaneBalancePromises = addresses.map(async (address) => {
         try {
-          const resp = await withTimeout(
-            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
+          const rawResult = await withTimeout(
+            provider.dataApiGetAlkanesByAddress(address),
             15000,
             null,
           );
-          if (!resp) return;
-          const data = await resp.json();
-          const balances: {
-            alkaneId: string; balance: string;
-            name?: string; symbol?: string;
-            priceUsd?: number; priceInSatoshi?: number;
-            tokenImage?: string;
-          }[] = data?.balances || [];
-          for (const entry of balances) {
-            const alkaneIdStr = entry.alkaneId;
+          if (!rawResult) return;
+          const parsed = typeof rawResult === 'string' ? JSON.parse(rawResult) : rawResult;
+          const items: any[] = parsed?.data || parsed || [];
+          for (const entry of items) {
+            const alkaneIdStr = entry.alkaneId
+              ? `${entry.alkaneId?.block || 0}:${entry.alkaneId?.tx || 0}`
+              : '';
+            if (!alkaneIdStr) continue;
             const amountStr = String(entry.balance || '0');
             // Use API-provided metadata, fall back to KNOWN_TOKENS, then defaults
             const knownInfo = KNOWN_TOKENS[alkaneIdStr];
@@ -307,7 +284,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
                 decimals,
                 logo: entry.tokenImage || undefined,
                 priceUsd: entry.priceUsd || undefined,
-                priceInSatoshi: entry.priceInSatoshi || undefined,
+                priceInSatoshi: entry.priceInSatoshi ? Number(entry.priceInSatoshi) : undefined,
               });
             } else {
               const existing = alkaneMap.get(alkaneIdStr)!;
@@ -322,12 +299,12 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
               }
               if (!existing.symbol && symbol) existing.symbol = symbol;
               if (!existing.priceUsd && entry.priceUsd) existing.priceUsd = entry.priceUsd;
-              if (!existing.priceInSatoshi && entry.priceInSatoshi) existing.priceInSatoshi = entry.priceInSatoshi;
+              if (!existing.priceInSatoshi && entry.priceInSatoshi) existing.priceInSatoshi = Number(entry.priceInSatoshi);
               if (!existing.logo && entry.tokenImage) existing.logo = entry.tokenImage;
             }
           }
         } catch (error) {
-          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
+          console.error(`[BALANCE] dataApiGetAlkanesByAddress failed for ${address}:`, error);
         }
       });
       await Promise.all(alkaneBalancePromises);
@@ -422,16 +399,18 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
           addresses.push(deps.walletAddress);
         }
 
+        const provider = deps.provider!;
         const sellBalancePromises = addresses.map(async (address) => {
           try {
-            const resp = await fetch(
-              `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
-            );
-            const data = await resp.json();
-            const balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = data?.balances || [];
+            const rawResult = await provider.dataApiGetAlkanesByAddress(address);
+            const parsed = typeof rawResult === 'string' ? JSON.parse(rawResult) : rawResult;
+            const items: any[] = parsed?.data || parsed || [];
 
-            for (const entry of balances) {
-              const alkaneIdStr = entry.alkaneId;
+            for (const entry of items) {
+              const alkaneIdStr = entry.alkaneId
+                ? `${entry.alkaneId?.block || 0}:${entry.alkaneId?.tx || 0}`
+                : '';
+              if (!alkaneIdStr) continue;
               const balance = String(entry.balance || '0');
               // Use metadata from the data API response, fall back to known tokens, then raw ID
               const knownToken = KNOWN_TOKENS_SELL[alkaneIdStr];
@@ -467,7 +446,7 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
               }
             }
           } catch (error) {
-            console.error(`[sellableCurrencies] alkane-balances API failed for ${address}:`, error);
+            console.error(`[sellableCurrencies] dataApiGetAlkanesByAddress failed for ${address}:`, error);
           }
         });
         await Promise.all(sellBalancePromises);

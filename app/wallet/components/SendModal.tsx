@@ -804,7 +804,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         : `Dual-address`);
 
       // Build PSBT in pure JS (bypasses WASM/metashrew entirely)
+      if (!provider) {
+        throw new Error('SDK provider not initialized');
+      }
+
       const { psbtBase64: rawPsbtBase64, estimatedFee } = await buildAlkaneTransferPsbt({
+        provider,
         alkaneId: selectedAlkaneId,
         amount: amountBaseUnits,
         senderTaprootAddress: alkaneSendAddress,
@@ -814,7 +819,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         paymentPubkeyHex: account?.nativeSegwit?.pubkey,
         feeRate,
         network: btcNetwork,
-        networkName: network,
       });
 
       console.log('[SendModal] Built PSBT (JS), estimated fee:', estimatedFee, 'sats');

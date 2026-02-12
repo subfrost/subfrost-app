@@ -1,33 +1,32 @@
 /**
  * useTokenNames — Independent React Query that fetches token metadata
- * via the /api/token-names proxy (which calls /get-alkanes on the server).
- *
- * This avoids CORS issues that occur when fetching directly from
- * mainnet.subfrost.io in the browser.
+ * via the SDK WebProvider's dataApiGetAlkanes method.
  *
  * Returns a Map<alkaneId, { name, symbol }> covering the top 500 tokens.
  */
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 
 export type TokenNameEntry = { name: string; symbol: string };
 
 async function fetchTokenNames(
-  network: string,
+  provider: any,
 ): Promise<Map<string, TokenNameEntry>> {
   const map = new Map<string, TokenNameEntry>();
 
   try {
-    const resp = await fetch(`/api/token-names?network=${encodeURIComponent(network)}&limit=500`);
-    if (!resp.ok) {
-      console.warn(`[useTokenNames] /api/token-names failed: ${resp.status}`);
-      return map;
-    }
-    const data = await resp.json();
-    const names: Record<string, { name: string; symbol: string }> = data?.names || {};
+    const result = await provider.dataApiGetAlkanes(BigInt(1), BigInt(500));
+    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+    const tokens: any[] = parsed?.data?.tokens || parsed?.tokens || [];
 
-    for (const [alkaneId, entry] of Object.entries(names)) {
-      map.set(alkaneId, entry as TokenNameEntry);
+    for (const token of tokens) {
+      const alkaneId = token.id
+        ? `${token.id.block || 0}:${token.id.tx || 0}`
+        : '';
+      if (alkaneId && (token.name || token.symbol)) {
+        map.set(alkaneId, { name: token.name || '', symbol: token.symbol || '' });
+      }
     }
 
     console.log(`[useTokenNames] Loaded ${map.size} token names`);
@@ -40,13 +39,14 @@ async function fetchTokenNames(
 
 export function useTokenNames() {
   const { network } = useWallet();
+  const { provider } = useAlkanesSDK();
 
   return useQuery({
     queryKey: ['tokenNames', network],
     staleTime: 5 * 60 * 1000, // 5 min — names rarely change
     gcTime: 30 * 60 * 1000, // keep in cache 30 min
-    enabled: !!network,
-    queryFn: () => fetchTokenNames(network),
+    enabled: !!network && !!provider,
+    queryFn: () => fetchTokenNames(provider),
   });
 }
 

@@ -555,51 +555,20 @@ class AlkanesClient {
   async getPoolReserves(pool: PoolConfig, _blockTag: string = 'latest'): Promise<PoolReserves | null> {
     try {
       const provider = await this.ensureProvider();
-
-      // Method 1: dataApi.getReserves — single REST call (preferred)
-      try {
-        const result = await provider.dataApi.getReserves(pool.id);
-        if (result) {
-          const data = typeof result === 'string' ? JSON.parse(result) : result;
-          const r0 = data?.reserve0 ?? data?.token0_amount ?? data?.data?.token0_amount;
-          const r1 = data?.reserve1 ?? data?.token1_amount ?? data?.data?.token1_amount;
-          const ts = data?.totalSupply ?? data?.token_supply ?? data?.data?.token_supply;
-          if (r0 !== undefined && r1 !== undefined) {
-            return {
-              reserve0: BigInt(String(r0 || '0')),
-              reserve1: BigInt(String(r1 || '0')),
-              totalSupply: BigInt(String(ts || '0')),
-            };
-          }
+      const result = await provider.dataApi.getReserves(pool.id);
+      if (result) {
+        const data = typeof result === 'string' ? JSON.parse(result) : result;
+        const r0 = data?.reserve0 ?? data?.token0_amount ?? data?.data?.token0_amount;
+        const r1 = data?.reserve1 ?? data?.token1_amount ?? data?.data?.token1_amount;
+        const ts = data?.totalSupply ?? data?.token_supply ?? data?.data?.token_supply;
+        if (r0 !== undefined && r1 !== undefined) {
+          return {
+            reserve0: BigInt(String(r0 || '0')),
+            reserve1: BigInt(String(r1 || '0')),
+            totalSupply: BigInt(String(ts || '0')),
+          };
         }
-      } catch {
-        // fall through to direct REST
       }
-
-      // Method 2: Direct REST to /get-pool-details (fallback)
-      // JOURNAL ENTRY (2026-02-11): Kept as fallback. SDK dataApi.getReserves is preferred.
-      const baseUrl = this.networkConfig.url;
-      const response = await fetch(`${baseUrl}/get-pool-details`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          poolId: {
-            block: String(pool.alkaneId.block),
-            tx: String(pool.alkaneId.tx),
-          },
-        }),
-      });
-      const result = await response.json();
-
-      if (result?.statusCode === 200 && result?.data) {
-        const data = result.data;
-        return {
-          reserve0: BigInt(data.token0_amount || '0'),
-          reserve1: BigInt(data.token1_amount || '0'),
-          totalSupply: BigInt(data.token_supply || '0'),
-        };
-      }
-
       console.warn(`[AlkanesClient] Unexpected pool details response for ${pool.id}:`, JSON.stringify(result));
       return null;
     } catch (error) {
@@ -633,7 +602,7 @@ class AlkanesClient {
     const provider = await this.ensureProvider();
 
     // Method 1: espo.getCirculatingSupply — structured response (preferred)
-    // Note: method exists at runtime but may not be in installed type declarations
+    // Note: type added in PR #246 (kungfuflex/alkanes-rs), pending merge
     try {
       const result = await (provider.espo as any).getCirculatingSupply('2:0');
       if (result != null) {
@@ -689,8 +658,6 @@ class AlkanesClient {
   // ==========================================================================
 
   async getBitcoinPrice(): Promise<number> {
-    // Method 1: SDK dataApi.getBitcoinPrice (preferred)
-    // JOURNAL ENTRY (2026-02-11): Try SDK first, fall back to direct REST.
     try {
       const provider = await this.ensureProvider();
       const result = await provider.dataApi.getBitcoinPrice();
@@ -702,27 +669,10 @@ class AlkanesClient {
           return price;
         }
       }
-    } catch {
-      // fall through to direct REST
-    }
-
-    // Method 2: Direct REST (fallback)
-    try {
-      const response = await fetch('https://mainnet.subfrost.io/v4/subfrost/get-bitcoin-price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const result = await response.json();
-      const price = result?.data?.bitcoin?.usd;
-      if (typeof price === 'number' && price > 0) {
-        return price;
-      }
       console.warn('[AlkanesClient] Unexpected BTC price response:', JSON.stringify(result));
     } catch (error) {
       console.error('[AlkanesClient] getBitcoinPrice failed:', error);
     }
-
     return 0;
   }
 }

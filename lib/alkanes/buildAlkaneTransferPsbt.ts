@@ -5,21 +5,25 @@
  * metashrew `protorunes_by_address` for UTXO discovery (now defunct).
  *
  * Instead uses:
- *   - esplora (`esplora_address::utxo`) for UTXO discovery
+ *   - SDK WebProvider (`esploraGetAddressUtxo`, `esploraGetTxHex`) for UTXO/tx discovery
  *   - SDK JS exports (`ProtoStone`, `encodeRunestoneProtostone`) for protostone encoding
  *   - bitcoinjs-lib for PSBT construction with real addresses (no dummy wallet)
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-// @ts-expect-error - ProtoStone and encodeRunestoneProtostone are in dist/index.js but not in index.d.ts
+// @ts-expect-error - Types added in PR #246 (kungfuflex/alkanes-rs), pending merge
 import { ProtoStone, encodeRunestoneProtostone } from '@alkanes/ts-sdk';
+import type * as alkWasm from '@alkanes/ts-sdk/wasm';
+
+type WebProvider = InstanceType<typeof alkWasm.WebProvider>;
 
 const DUST_VALUE = 546;
 const PROTOCOL_TAG_ALKANES = 1n;
 
 export interface BuildAlkaneTransferParams {
-  alkaneId: string;           // e.g., "2:0"
-  amount: bigint;             // base units to transfer
+  provider: WebProvider;         // SDK WASM provider for esplora calls
+  alkaneId: string;              // e.g., "2:0"
+  amount: bigint;                // base units to transfer
   senderTaprootAddress: string;
   senderPaymentAddress?: string; // segwit address for BTC fee funding (dual-address wallets)
   recipientAddress: string;
@@ -27,7 +31,6 @@ export interface BuildAlkaneTransferParams {
   paymentPubkeyHex?: string;     // compressed pubkey for P2SH-P2WPKH
   feeRate: number;               // sat/vB
   network: bitcoin.Network;
-  networkName: string;           // for RPC proxy routing
 }
 
 export interface BuildAlkaneTransferResult {
@@ -43,24 +46,14 @@ interface SimpleUtxo {
 }
 
 /**
- * Fetch UTXOs for an address via esplora (espo-backed, not metashrew).
+ * Fetch UTXOs for an address via SDK WebProvider (esplora-backed).
  */
-async function fetchUtxos(address: string): Promise<SimpleUtxo[]> {
-  const resp = await fetch('/api/rpc', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'esplora_address::utxo',
-      params: [address],
-      id: 1,
-    }),
-  });
-  const json = await resp.json();
-  if (!json.result || !Array.isArray(json.result)) {
-    throw new Error('Failed to fetch UTXOs via esplora');
+async function fetchUtxos(provider: WebProvider, address: string): Promise<SimpleUtxo[]> {
+  const result = await provider.esploraGetAddressUtxo(address);
+  if (!result || !Array.isArray(result)) {
+    throw new Error('Failed to fetch UTXOs via SDK esplora');
   }
-  return json.result.map((u: any) => ({
+  return result.map((u: any) => ({
     txid: u.txid,
     vout: u.vout,
     value: u.value,
@@ -71,10 +64,12 @@ async function fetchUtxos(address: string): Promise<SimpleUtxo[]> {
 /**
  * Fetch raw transaction hex for a txid (needed for witnessUtxo).
  */
-async function fetchTxHex(txid: string, networkName: string): Promise<string> {
-  const resp = await fetch(`/api/esplora/tx/${txid}/hex?network=${encodeURIComponent(networkName)}`);
-  if (!resp.ok) throw new Error(`Failed to fetch tx hex for ${txid}`);
-  return resp.text();
+async function fetchTxHex(provider: WebProvider, txid: string): Promise<string> {
+  const hex = await provider.esploraGetTxHex(txid);
+  if (!hex || typeof hex !== 'string') {
+    throw new Error(`Failed to fetch tx hex for ${txid}`);
+  }
+  return hex;
 }
 
 /**
@@ -121,8 +116,8 @@ export async function buildAlkaneTransferPsbt(
   params: BuildAlkaneTransferParams,
 ): Promise<BuildAlkaneTransferResult> {
   const {
-    alkaneId, amount, senderTaprootAddress, senderPaymentAddress,
-    recipientAddress, feeRate, network, networkName,
+    provider, alkaneId, amount, senderTaprootAddress, senderPaymentAddress,
+    recipientAddress, feeRate, network,
   } = params;
 
   const [block, tx] = alkaneId.split(':').map(Number);
@@ -149,7 +144,7 @@ export async function buildAlkaneTransferPsbt(
   // -----------------------------------------------------------------------
   // 2. Discover UTXOs
   // -----------------------------------------------------------------------
-  const taprootUtxos = await fetchUtxos(senderTaprootAddress);
+  const taprootUtxos = await fetchUtxos(provider, senderTaprootAddress);
 
   // Alkane UTXOs are dust-value outputs on the taproot address.
   // Include ALL dust UTXOs as inputs — the edict handles distribution.
@@ -165,7 +160,7 @@ export async function buildAlkaneTransferPsbt(
   const hasSeparatePayment = senderPaymentAddress && senderPaymentAddress !== senderTaprootAddress;
   let btcUtxos: SimpleUtxo[];
   if (hasSeparatePayment) {
-    btcUtxos = await fetchUtxos(senderPaymentAddress);
+    btcUtxos = await fetchUtxos(provider, senderPaymentAddress);
   } else {
     // Single-address: use non-dust UTXOs from the taproot address
     btcUtxos = taprootUtxos.filter(u => u.value > 1000);
@@ -227,7 +222,7 @@ export async function buildAlkaneTransferPsbt(
   const uniqueTxids = [...new Set(allInputUtxos.map(u => u.txid))];
   const txHexMap = new Map<string, string>();
   await Promise.all(uniqueTxids.map(async (txid) => {
-    const hex = await fetchTxHex(txid, networkName);
+    const hex = await fetchTxHex(provider, txid);
     txHexMap.set(txid, hex);
   }));
 
