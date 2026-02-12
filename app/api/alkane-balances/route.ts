@@ -13,16 +13,7 @@
  */
 
 import { NextResponse } from 'next/server';
-
-const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
-  'regtest-local': 'http://localhost:18888',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-};
+import { SUBFROST_API_URLS } from '@/utils/getConfig';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -33,7 +24,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'address parameter is required' }, { status: 400 });
   }
 
-  const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
+  const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
 
   try {
     const response = await fetch(`${baseUrl}/get-alkanes-by-address`, {

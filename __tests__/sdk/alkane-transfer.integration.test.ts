@@ -30,8 +30,8 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import * as bitcoin from 'bitcoinjs-lib';
 import { createTestSigner, TEST_MNEMONIC, type TestSignerResult } from './test-utils/createTestSigner';
+import { signAndBroadcast } from './test-utils/signAndBroadcast';
 import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -56,59 +56,6 @@ const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function mineBlocks(provider: WebProvider, count: number) {
   // Use a burn address so mined coinbase doesn't pollute test wallet UTXOs
   await provider.bitcoindGenerateToAddress(count, 'bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdku202t');
-}
-
-// ---------------------------------------------------------------------------
-// signAndBroadcast — signs a PSBT returned by alkanesExecuteTyped, broadcasts,
-// mines a block, and returns the txid.
-// ---------------------------------------------------------------------------
-
-async function signAndBroadcast(
-  provider: WebProvider,
-  result: any,
-  signerResult: TestSignerResult,
-  walletAddress: string,
-): Promise<string> {
-  // If the SDK already broadcast (auto-confirm mode), just return the txid
-  if (result?.txid || result?.reveal_txid) {
-    return result.txid || result.reveal_txid;
-  }
-
-  if (!result?.readyToSign) {
-    throw new Error('No readyToSign or txid in result');
-  }
-
-  const readyToSign = result.readyToSign;
-
-  // Convert PSBT to hex for signAllInputs
-  let psbtBytes: Uint8Array;
-  if (readyToSign.psbt instanceof Uint8Array) {
-    psbtBytes = readyToSign.psbt;
-  } else if (typeof readyToSign.psbt === 'object') {
-    const keys = Object.keys(readyToSign.psbt).map(Number).sort((a: number, b: number) => a - b);
-    psbtBytes = new Uint8Array(keys.length);
-    for (let i = 0; i < keys.length; i++) {
-      psbtBytes[i] = readyToSign.psbt[keys[i]];
-    }
-  } else {
-    throw new Error('Unexpected PSBT format');
-  }
-
-  const rawPsbtHex = Buffer.from(psbtBytes).toString('hex');
-  const { signedHexPsbt } = await signerResult.signer.signAllInputs({ rawPsbtHex });
-
-  // signAllInputs already finalizes — extract and broadcast
-  const signedPsbt = bitcoin.Psbt.fromHex(signedHexPsbt, { network: bitcoin.networks.regtest });
-  const tx = signedPsbt.extractTransaction();
-  const txHex = tx.toHex();
-  const txid = tx.getId();
-
-  const broadcastTxid = await provider.broadcastTransaction(txHex);
-
-  // Mine a block to confirm
-  await provider.bitcoindGenerateToAddress(1, walletAddress);
-
-  return broadcastTxid || txid;
 }
 
 // ---------------------------------------------------------------------------

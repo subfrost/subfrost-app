@@ -106,18 +106,21 @@ function getTokenName(tokenId: string, rawName?: string, tokenMetaMap?: Map<stri
 }
 
 /**
- * Fetch token metadata via the /api/token-names proxy (avoids CORS).
- * The proxy calls /get-alkanes on the server and returns { names: { alkaneId: { name, symbol } } }.
+ * Fetch token metadata via SDK WebProvider's dataApiGetAlkanes method.
  */
-async function fetchTokenMetadata(network: string): Promise<Map<string, { name: string; symbol: string }>> {
+async function fetchTokenMetadata(provider: any): Promise<Map<string, { name: string; symbol: string }>> {
   try {
-    const resp = await fetch(`/api/token-names?network=${encodeURIComponent(network)}&limit=500`);
-    if (!resp.ok) return new Map();
-    const data = await resp.json();
-    const names: Record<string, { name: string; symbol: string }> = data?.names || {};
+    const result = await provider.dataApiGetAlkanes(BigInt(1), BigInt(500));
+    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+    const tokens: any[] = parsed?.data?.tokens || parsed?.tokens || [];
     const map = new Map<string, { name: string; symbol: string }>();
-    for (const [alkaneId, entry] of Object.entries(names)) {
-      map.set(alkaneId, entry as { name: string; symbol: string });
+    for (const token of tokens) {
+      const alkaneId = token.id
+        ? `${token.id.block || 0}:${token.id.tx || 0}`
+        : '';
+      if (alkaneId && (token.name || token.symbol)) {
+        map.set(alkaneId, { name: token.name || '', symbol: token.symbol || '' });
+      }
     }
     return map;
   } catch {
@@ -127,27 +130,24 @@ async function fetchTokenMetadata(network: string): Promise<Map<string, { name: 
 
 /**
  * Fetch individual token metadata for tokens missing from the bulk set.
- * Uses /api/token-details proxy to avoid CORS issues.
+ * Uses SDK WebProvider's dataApiGetAlkaneDetails method.
  */
 async function fetchMissingTokenMetadata(
+  provider: any,
   missingIds: string[],
-  network: string,
   metaMap: Map<string, { name: string; symbol: string }>,
 ): Promise<void> {
   if (missingIds.length === 0) return;
-  try {
-    const resp = await fetch('/api/token-details', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ alkaneIds: missingIds, network }),
-    });
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const names: Record<string, { name: string; symbol: string }> = data?.names || {};
-    for (const [alkaneId, entry] of Object.entries(names)) {
-      metaMap.set(alkaneId, entry as { name: string; symbol: string });
-    }
-  } catch { /* ignore failures */ }
+  await Promise.all(missingIds.slice(0, 50).map(async (alkaneId) => {
+    try {
+      const result = await provider.dataApiGetAlkaneDetails(alkaneId);
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+      const d = parsed?.data || parsed;
+      if (d?.name || d?.symbol) {
+        metaMap.set(alkaneId, { name: d.name || '', symbol: d.symbol || '' });
+      }
+    } catch { /* ignore individual failures */ }
+  }));
 }
 
 // ============================================================================
@@ -317,7 +317,7 @@ export function usePools(params: UsePoolsParams = {}) {
       }
 
       // Fetch token metadata in parallel with pool data (espo-backed)
-      const tokenMetaPromise = fetchTokenMetadata(network);
+      const tokenMetaPromise = fetchTokenMetadata(provider);
 
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
@@ -364,7 +364,7 @@ export function usePools(params: UsePoolsParams = {}) {
       }
       if (missingIds.size > 0) {
         console.log('[usePools] Fetching metadata for', missingIds.size, 'tokens with numeric names:', [...missingIds]);
-        await fetchMissingTokenMetadata([...missingIds], network, tokenMetaMap);
+        await fetchMissingTokenMetadata(provider, [...missingIds], tokenMetaMap);
         // Re-apply proper names from the updated metadata map
         // Use name as fallback for symbol (and vice versa) when one is empty
         items = items.map(item => {
