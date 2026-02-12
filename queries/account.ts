@@ -42,6 +42,91 @@ function mapToObject(value: any): any {
   return value;
 }
 
+// ---------------------------------------------------------------------------
+// Alkane balance fetcher — server-side route with SDK fallback
+// ---------------------------------------------------------------------------
+
+interface AlkaneBalanceEntry {
+  alkaneId: string;
+  balance: string;
+  name?: string;
+  symbol?: string;
+}
+
+/**
+ * Fetch metadata for an alkane token via Espo.
+ * Returns name/symbol/decimals or null on failure.
+ * Results are cached in-memory for the session.
+ */
+const alkaneInfoCache = new Map<string, { name: string; symbol: string; decimals: number }>();
+
+async function fetchAlkaneMetadata(
+  provider: WebProvider,
+  alkaneId: string,
+): Promise<{ name: string; symbol: string; decimals: number } | null> {
+  // Check KNOWN_TOKENS first
+  if (KNOWN_TOKENS[alkaneId]) return KNOWN_TOKENS[alkaneId];
+
+  // Check session cache
+  if (alkaneInfoCache.has(alkaneId)) return alkaneInfoCache.get(alkaneId)!;
+
+  try {
+    const raw = await provider.espoGetAlkaneInfo(alkaneId);
+    const info = raw instanceof Map ? mapToObject(raw) : raw;
+    if (info && (info.name || info.symbol)) {
+      const metadata = {
+        name: info.name || `Token ${alkaneId}`,
+        symbol: info.symbol || '',
+        decimals: typeof info.decimals === 'number' ? info.decimals : 8,
+      };
+      alkaneInfoCache.set(alkaneId, metadata);
+      return metadata;
+    }
+  } catch (err) {
+    console.warn(`[BALANCE] espoGetAlkaneInfo failed for ${alkaneId}:`, err);
+  }
+  return null;
+}
+
+/**
+ * Fetch alkane token balances for an address via Espo indexer.
+ *
+ * Uses essentials.get_address_balances (espoGetAddressBalances) which is fast
+ * and independent of metashrew. Metadata enriched via espoGetAlkaneInfo.
+ */
+async function fetchAlkaneBalancesForAddress(
+  address: string,
+  _network: string,
+  provider: WebProvider | null,
+  timeoutMs: number = 15000,
+): Promise<AlkaneBalanceEntry[]> {
+  if (!provider) return [];
+
+  const raw = await Promise.race([
+    provider.espoGetAddressBalances(address, false),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+  if (!raw) return [];
+
+  const result = raw instanceof Map ? mapToObject(raw) : raw;
+  const balances: Record<string, string> = result?.balances || {};
+  const alkaneIds = Object.keys(balances);
+
+  if (alkaneIds.length === 0) return [];
+
+  // Enrich with metadata (parallel, best-effort)
+  const metadataResults = await Promise.all(
+    alkaneIds.map((id) => fetchAlkaneMetadata(provider, id)),
+  );
+
+  return alkaneIds.map((alkaneId, i) => ({
+    alkaneId,
+    balance: String(balances[alkaneId] || '0'),
+    name: metadataResults[i]?.name,
+    symbol: metadataResults[i]?.symbol,
+  }));
+}
+
 interface EnrichedWalletDeps {
   provider: WebProvider | null;
   isInitialized: boolean;
@@ -189,21 +274,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           })),
         ),
         Promise.all(
-          addresses.map(async (address) => {
-            try {
-              const resp = await withTimeout(
-                fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
-                15000,
-                null,
-              );
-              if (!resp) return [];
-              const data = await resp.json();
-              return (data?.balances || []) as { alkaneId: string; balance: string }[];
-            } catch (error) {
-              console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
-              return [];
-            }
-          }),
+          addresses.map((address) => fetchAlkaneBalancesForAddress(address, deps.network, provider)),
         ),
       ]);
 
@@ -300,16 +371,17 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         for (const entry of balances) {
           const alkaneIdStr = entry.alkaneId;
           const amountStr = String(entry.balance || '0');
+          // Prefer name/symbol from SDK fallback, then KNOWN_TOKENS, then generic
           const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-            symbol: '',
-            name: `Token ${alkaneIdStr}`,
+            symbol: entry.symbol || '',
+            name: entry.name || `Token ${alkaneIdStr}`,
             decimals: 8,
           };
           if (!alkaneMap.has(alkaneIdStr)) {
             alkaneMap.set(alkaneIdStr, {
               alkaneId: alkaneIdStr,
-              name: tokenInfo.name,
-              symbol: tokenInfo.symbol,
+              name: entry.name || tokenInfo.name,
+              symbol: entry.symbol || tokenInfo.symbol,
               balance: amountStr,
               decimals: tokenInfo.decimals,
             });
@@ -320,6 +392,9 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
             } catch {
               existing.balance = String(Number(existing.balance) + Number(amountStr));
             }
+            // Update name/symbol if SDK provided them and we only had generic names
+            if (entry.name && existing.name.startsWith('Token ')) existing.name = entry.name;
+            if (entry.symbol && !existing.symbol) existing.symbol = entry.symbol;
           }
         }
       }
@@ -416,18 +491,14 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
         const sellBalancePromises = addresses.map(async (address) => {
           try {
-            const resp = await fetch(
-              `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
-            );
-            const data = await resp.json();
-            const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
+            const balances = await fetchAlkaneBalancesForAddress(address, deps.network, deps.provider);
 
             for (const entry of balances) {
               const alkaneIdStr = entry.alkaneId;
               const balance = String(entry.balance || '0');
               const tokenInfo = KNOWN_TOKENS_SELL[alkaneIdStr] || {
-                symbol: alkaneIdStr.split(':')[1] || '',
-                name: `Token ${alkaneIdStr}`,
+                symbol: entry.symbol || alkaneIdStr.split(':')[1] || '',
+                name: entry.name || `Token ${alkaneIdStr}`,
                 decimals: 8,
               };
 
