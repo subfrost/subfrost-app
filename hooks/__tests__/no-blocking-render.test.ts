@@ -49,19 +49,6 @@ describe('No blocking render patterns', () => {
     expect(sdkContextSrc).toContain('{children}');
   });
 
-  it('ExchangeProvider does not block children rendering', () => {
-    const exchangeContextSrc = fs.readFileSync(
-      path.resolve(__dirname, '../../context/ExchangeContext.tsx'),
-      'utf-8'
-    );
-
-    // Verify no blocking pattern
-    const hasBlockingReturn = /if\s*\(poolsLoading\)\s*return\s+null/m.test(exchangeContextSrc);
-    expect(hasBlockingReturn, 'ExchangeProvider should not block rendering on poolsLoading').toBe(false);
-
-    expect(exchangeContextSrc).toContain('{children}');
-  });
-
   it('WalletProvider auto-reconnect uses cached addresses without prompting extension', () => {
     const walletContextSrc = fs.readFileSync(
       path.resolve(__dirname, '../../context/WalletContext.tsx'),
@@ -134,7 +121,6 @@ describe('Xverse wallet uses current API', () => {
 
 describe('No direct fetch calls to external URLs', () => {
   const hookFiles = [
-    'hooks/useDynamicPools.ts',
     'hooks/usePools.ts',
     'hooks/useAlkanesTokenPairs.ts',
     'hooks/useAmmHistory.ts',
@@ -201,7 +187,7 @@ describe('Pool data processing logic', () => {
       },
     ];
 
-    // Replicate the processing logic from useDynamicPools.ts
+    // Replicate the SDK pool data processing logic
     const pools = rawPools.map((p) => {
       const details = p.details || {};
       const poolIdBlock = p.pool_id_block ?? 0;
