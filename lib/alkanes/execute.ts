@@ -44,6 +44,14 @@ export async function alkanesExecuteTyped(
   // lock_alkanes prevents spending alkane UTXOs as plain BTC
   options.lock_alkanes = true;
 
+  // ordinals_strategy: 'preserve' builds a split tx to protect inscribed UTXOs.
+  // The split PSBT is returned in readyToSign.split_psbt for browser wallets.
+  options.ordinals_strategy = params.ordinalsStrategy ?? 'preserve';
+
+  // mempool_indexer: enables inscription detection for UTXOs in the mempool.
+  // Required for the WASM to properly identify inscribed UTXOs and build split txs.
+  options.mempool_indexer = true;
+
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
   if (params.autoConfirm !== undefined) options.auto_confirm = params.autoConfirm;

@@ -86,7 +86,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 import { buildSwapProtostone, buildSwapInputRequirements } from '@/lib/alkanes/builders';
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
-import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -325,6 +325,32 @@ export function useSwapMutation() {
         if (result?.readyToSign) {
           console.log('[useSwapMutation] Got readyToSign state, signing transaction...');
           const readyToSign = result.readyToSign;
+
+          // Diagnostic: log all keys on readyToSign to check split_psbt presence
+          console.log('[useSwapMutation] readyToSign keys:', Object.keys(readyToSign));
+          console.log('[useSwapMutation] split_psbt present?', !!readyToSign.split_psbt);
+          console.log('[useSwapMutation] split_fee:', readyToSign.split_fee);
+          console.log('[useSwapMutation] analysis:', readyToSign.analysis);
+          console.log('[useSwapMutation] inspection_result:', readyToSign.inspection_result);
+
+          // Handle split PSBT if present (ordinals_strategy: 'preserve').
+          // The WASM builds a split tx that separates inscriptions from BTC in
+          // inscribed UTXOs. Must be signed and broadcast BEFORE the main tx.
+          if (readyToSign.split_psbt) {
+            console.log('[useSwapMutation] Split PSBT detected — signing split tx to protect inscriptions...');
+            await signAndBroadcastSplitPsbt({
+              splitPsbt: readyToSign.split_psbt,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+              signTaprootPsbt,
+              signSegwitPsbt,
+              broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+              patchPsbtForBrowserWallet,
+            });
+          }
 
           // The PSBT comes as Uint8Array from serde_wasm_bindgen (or as object with indices)
           let psbtBase64 = extractPsbtBase64(readyToSign.psbt);

@@ -57,7 +57,7 @@ import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
-import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
 
 bitcoin.initEccLib(ecc);
@@ -162,6 +162,23 @@ export function useWrapMutation() {
         // Check if we got a readyToSign state (auto_confirm: false path)
         if (result?.readyToSign) {
           const readyToSign = result.readyToSign;
+
+          // Handle split PSBT if present (ordinals_strategy: 'preserve')
+          if (readyToSign.split_psbt) {
+            console.log('[WRAP] Split PSBT detected — protecting inscriptions...');
+            await signAndBroadcastSplitPsbt({
+              splitPsbt: readyToSign.split_psbt,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress: userTaprootAddress,
+              segwitAddress: userSegwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+              signTaprootPsbt,
+              signSegwitPsbt,
+              broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+              patchPsbtForBrowserWallet,
+            });
+          }
 
           // Extract PSBT as base64 from whatever format the WASM SDK returned
           let psbtBase64 = extractPsbtBase64(readyToSign.psbt);

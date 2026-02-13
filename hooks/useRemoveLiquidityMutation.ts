@@ -74,7 +74,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 import { buildRemoveLiquidityProtostone, buildRemoveLiquidityInputRequirements } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, toAlks, extractPsbtBase64, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -205,6 +205,23 @@ export function useRemoveLiquidityMutation() {
         if (result?.readyToSign) {
           console.log('[RemoveLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
+
+          // Handle split PSBT if present (ordinals_strategy: 'preserve')
+          if (readyToSign.split_psbt) {
+            console.log('[RemoveLiquidity] Split PSBT detected — protecting inscriptions...');
+            await signAndBroadcastSplitPsbt({
+              splitPsbt: readyToSign.split_psbt,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+              signTaprootPsbt,
+              signSegwitPsbt,
+              broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+              patchPsbtForBrowserWallet,
+            });
+          }
 
           // Convert PSBT to base64
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);

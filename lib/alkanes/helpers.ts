@@ -101,3 +101,71 @@ export function extractPsbtBase64(psbt: unknown): string {
   }
   throw new Error('Unexpected PSBT format: ' + typeof psbt);
 }
+
+/**
+ * Sign and broadcast a split PSBT that protects inscribed UTXOs.
+ *
+ * When ordinals_strategy is 'preserve', the WASM returns a split_psbt alongside
+ * the main psbt. The split tx separates inscriptions from BTC so the main tx
+ * can safely spend the resulting clean UTXOs.
+ *
+ * Must be called BEFORE signing/broadcasting the main transaction.
+ */
+export async function signAndBroadcastSplitPsbt(params: {
+  splitPsbt: unknown;
+  network: bitcoin.Network;
+  isBrowserWallet: boolean;
+  taprootAddress?: string;
+  segwitAddress?: string;
+  paymentPubkeyHex?: string;
+  signTaprootPsbt: (psbtBase64: string) => Promise<string>;
+  signSegwitPsbt: (psbtBase64: string) => Promise<string>;
+  broadcastTransaction: (txHex: string) => Promise<string>;
+  patchPsbtForBrowserWallet: (params: any) => any;
+}): Promise<string> {
+  const {
+    splitPsbt,
+    network,
+    isBrowserWallet,
+    taprootAddress,
+    segwitAddress,
+    paymentPubkeyHex,
+    signTaprootPsbt,
+    signSegwitPsbt,
+    broadcastTransaction,
+    patchPsbtForBrowserWallet: patchFn,
+  } = params;
+
+  let splitBase64 = extractPsbtBase64(splitPsbt);
+
+  if (isBrowserWallet) {
+    const patched = patchFn({
+      psbtBase64: splitBase64,
+      network,
+      isBrowserWallet,
+      taprootAddress,
+      segwitAddress,
+      paymentPubkeyHex,
+    });
+    splitBase64 = patched.psbtBase64;
+  }
+
+  let signedBase64: string;
+  if (isBrowserWallet) {
+    signedBase64 = await signTaprootPsbt(splitBase64);
+  } else {
+    signedBase64 = await signSegwitPsbt(splitBase64);
+    signedBase64 = await signTaprootPsbt(signedBase64);
+  }
+
+  const signedPsbt = bitcoin.Psbt.fromBase64(signedBase64, { network });
+  signedPsbt.finalizeAllInputs();
+  const tx = signedPsbt.extractTransaction();
+  const txHex = tx.toHex();
+  const txid = tx.getId();
+
+  console.log('[signAndBroadcastSplitPsbt] Broadcasting split tx:', txid);
+  await broadcastTransaction(txHex);
+  console.log('[signAndBroadcastSplitPsbt] Split tx broadcast — inscriptions protected');
+  return txid;
+}

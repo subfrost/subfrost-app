@@ -41,6 +41,8 @@ export async function alkanesExecuteTyped(
     change_address: params.changeAddress ?? 'p2wpkh:0',
     alkanes_change_address: params.alkanesChangeAddress ?? 'p2tr:0',
     lock_alkanes: true,
+    ordinals_strategy: params.ordinalsStrategy ?? 'preserve',
+    mempool_indexer: true,
   };
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;

@@ -689,6 +689,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         fee_rate: feeRate,
         from: [btcSendAddress],
         lock_alkanes: true,
+        ordinals_strategy: 'preserve',
         auto_confirm: true,
       };
 

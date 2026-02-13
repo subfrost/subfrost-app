@@ -59,7 +59,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 import { buildSwapUnwrapProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -187,6 +187,23 @@ export function useSwapUnwrapMutation() {
         if (result?.readyToSign) {
           console.log('[SwapUnwrap] Got readyToSign state, signing...');
           const readyToSign = result.readyToSign;
+
+          // Handle split PSBT if present (ordinals_strategy: 'preserve')
+          if (readyToSign.split_psbt) {
+            console.log('[SwapUnwrap] Split PSBT detected — protecting inscriptions...');
+            await signAndBroadcastSplitPsbt({
+              splitPsbt: readyToSign.split_psbt,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+              signTaprootPsbt,
+              signSegwitPsbt,
+              broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+              patchPsbtForBrowserWallet,
+            });
+          }
 
           // Convert PSBT to base64
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);

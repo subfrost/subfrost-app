@@ -20,4 +20,9 @@ export interface AlkanesExecuteTypedParams {
   mineEnabled?: boolean;
   autoConfirm?: boolean;
   rawOutput?: boolean;
+  /** Controls how inscribed UTXOs are handled during coin selection.
+   * - 'preserve': builds a split tx to separate inscriptions before spending (default)
+   * - 'exclude': errors if selected UTXOs contain inscriptions
+   * - 'burn': spends inscribed UTXOs without protection */
+  ordinalsStrategy?: 'preserve' | 'exclude' | 'burn';
 }

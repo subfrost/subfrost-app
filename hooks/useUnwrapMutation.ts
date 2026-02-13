@@ -15,7 +15,7 @@ import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, extractPsbtBase64, toAlks } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, extractPsbtBase64, toAlks, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -109,6 +109,23 @@ export function useUnwrapMutation() {
       if (result?.readyToSign) {
         console.log('[useUnwrapMutation] Got readyToSign, signing PSBT...');
         const readyToSign = result.readyToSign;
+
+        // Handle split PSBT if present (ordinals_strategy: 'preserve')
+        if (readyToSign.split_psbt) {
+          console.log('[useUnwrapMutation] Split PSBT detected — protecting inscriptions...');
+          await signAndBroadcastSplitPsbt({
+            splitPsbt: readyToSign.split_psbt,
+            network: btcNetwork,
+            isBrowserWallet,
+            taprootAddress,
+            segwitAddress,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            signTaprootPsbt,
+            signSegwitPsbt,
+            broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+            patchPsbtForBrowserWallet,
+          });
+        }
 
         // Convert PSBT to base64
         let psbtBase64 = extractPsbtBase64(readyToSign.psbt);
