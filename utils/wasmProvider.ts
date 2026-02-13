@@ -7,6 +7,7 @@
  */
 
 import type { Network } from '@/utils/constants';
+import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
 // Network URL mapping (duplicated from context to avoid circular deps)
 const NETWORK_URLS: Record<Network, string> = {

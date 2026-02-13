@@ -8,6 +8,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
+import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
 // Re-export the premium type so hooks can use it
 export type FrbtcPremiumData = {
@@ -113,7 +114,7 @@ export function frbtcPremiumQueryOptions(
         const contractId = `${frbtcId.block}:${frbtcId.tx}`;
         const context = JSON.stringify({
           alkanes: [],
-          calldata: [104],
+          calldata: encodeSimulateCalldata(contractId, [104]),
           height: 1000000,
           txindex: 0,
           pointer: 0,

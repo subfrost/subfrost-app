@@ -47,6 +47,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 import { buildCreateNewPoolProtostone, buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
 bitcoin.initEccLib(ecc);
 
@@ -82,7 +83,7 @@ async function findPoolId(
   try {
     const context = JSON.stringify({
       alkanes: [],
-      calldata: [2, t0Block, t0Tx, t1Block, t1Tx], // opcode 2 = FindPoolId
+      calldata: encodeSimulateCalldata(factoryId, [2, t0Block, t0Tx, t1Block, t1Tx]), // opcode 2 = FindPoolId
       height: 1000000,
       txindex: 0,
       pointer: 0,
