@@ -5,7 +5,7 @@
  *
  * HeightPoller is a headless component that:
  *   1. Polls block height every 10s using SDK provider (espoGetHeight or metashrewGetHeight)
- *   2. Falls back to raw metashrew_height RPC if SDK not yet initialized
+ *   2. Falls back to esplora blocks/tip/height if SDK not yet initialized
  *   3. When the height changes, invalidates ALL other queries.
  *
  * Every other query uses `staleTime: Infinity` and never self-refreshes.
@@ -49,26 +49,18 @@ async function fetchHeightViaSDK(provider: WebProvider): Promise<number> {
   throw new Error('All SDK height methods failed');
 }
 
-async function fetchHeightViaRPC(network: string): Promise<number> {
-  const networkSlug = network === 'mainnet' ? 'mainnet'
-    : network === 'testnet' ? 'testnet'
-    : network === 'signet' ? 'signet'
-    : network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' ? 'regtest'
-    : 'mainnet';
-
-  const res = await fetch(`/api/rpc/${networkSlug}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'metashrew_height',
-      params: [],
-      id: 1,
-    }),
-  });
-  const json = await res.json();
-  const result = json.result;
-  return typeof result === 'number' ? result : (typeof result === 'string' ? parseInt(result, 10) || 0 : 0);
+/**
+ * Bootstrap-only fallback: fetches block tip height via esplora proxy BEFORE SDK
+ * initializes. This is the ONE acceptable non-SDK fetch in the app — it fires only
+ * during the brief window before WebProvider is ready.
+ */
+async function fetchHeightViaEsplora(network: string): Promise<number> {
+  const res = await fetch(`/api/esplora/blocks/tip/height?network=${encodeURIComponent(network)}`);
+  if (!res.ok) throw new Error(`Esplora tip height failed: ${res.status}`);
+  const text = await res.text();
+  const height = parseInt(text, 10);
+  if (isNaN(height) || height <= 0) throw new Error(`Invalid height: ${text}`);
+  return height;
 }
 
 export function espoHeightQueryOptions(network: string, provider?: WebProvider | null) {
@@ -83,7 +75,7 @@ export function espoHeightQueryOptions(network: string, provider?: WebProvider |
           // Fall back to raw RPC
         }
       }
-      return fetchHeightViaRPC(network);
+      return fetchHeightViaEsplora(network);
     },
     // This is the ONE query that polls
     refetchInterval: 10_000,

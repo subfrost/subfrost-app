@@ -365,6 +365,46 @@ export function patchPsbtForBrowserWallet(params: PatchPsbtParams): {
 }
 
 // ---------------------------------------------------------------------------
+// tapInternalKey patching
+// ---------------------------------------------------------------------------
+
+/**
+ * Patch tapInternalKey on PSBT inputs from the dummy wallet's key to the
+ * user's actual x-only public key.
+ *
+ * The SDK's WASM (execute.rs:1764) sets tap_internal_key from the dummy
+ * wallet's key pair (AlkanesSDKContext's walletCreate()). ALL browser wallets
+ * need the user's actual x-only public key here:
+ *   - UniSat: auto-detects signable inputs by deriving P2TR from tapInternalKey;
+ *     if it doesn't match, all inputs are silently skipped → infinite spinner
+ *   - Xverse: validates tapInternalKey → "No taproot scripts signed" error
+ *
+ * Accepts either a 32-byte x-only hex or a 33-byte compressed pubkey hex
+ * (02/03 prefix will be stripped automatically).
+ *
+ * @returns number of inputs patched (for logging)
+ */
+export function patchTapInternalKeys(
+  psbt: bitcoin.Psbt,
+  pubkeyHex: string,
+): number {
+  let xOnlyBuf = Buffer.from(pubkeyHex, 'hex');
+  // Strip 02/03 prefix from compressed pubkey to get 32-byte x-only key
+  if (xOnlyBuf.length === 33 && (xOnlyBuf[0] === 0x02 || xOnlyBuf[0] === 0x03)) {
+    xOnlyBuf = xOnlyBuf.slice(1);
+  }
+
+  let patched = 0;
+  for (let i = 0; i < psbt.data.inputs.length; i++) {
+    if (psbt.data.inputs[i].tapInternalKey) {
+      psbt.data.inputs[i].tapInternalKey = xOnlyBuf;
+      patched++;
+    }
+  }
+  return patched;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

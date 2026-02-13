@@ -87,7 +87,7 @@ export default function TrendingPairs() {
           <Link href="/swap" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">{t('trending.viewAll')}</Link>
         </div>
       </div>
-      <div className="p-4">
+      <div className="p-3">
         <div className="grid grid-cols-1 gap-3">
           {pairs.map((p) => (
             <Link

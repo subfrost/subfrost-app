@@ -20,32 +20,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-
-// All RPC endpoints point to subfrost infrastructure
-const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
-  'regtest-local': 'http://localhost:18888',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-};
+import { SUBFROST_API_URLS } from '@/utils/getConfig';
 
 // Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path
-const BATCH_RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
-  testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
-  signet: 'https://signet.subfrost.io/v4/jsonrpc',
-  regtest: 'https://regtest.subfrost.io/v4/jsonrpc',
-  'regtest-local': 'http://localhost:18888',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/jsonrpc',
-  oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
-};
+const BATCH_RPC_ENDPOINTS: Record<string, string> = Object.fromEntries(
+  Object.entries(SUBFROST_API_URLS).map(([network, url]) => [
+    network,
+    url.replace('/v4/subfrost', '/v4/jsonrpc'),
+  ]),
+);
 
 function pickEndpoint(body: any, network: string) {
   const isBatch = Array.isArray(body);
-  const single = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
+  const single = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.regtest;
   const batch = BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
   return isBatch ? batch : single;
 }
@@ -68,7 +55,7 @@ export async function POST(
 
       if (restPath.length > 0) {
         // REST sub-path: forward to backend base URL + rest path
-        const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
+        const baseUrl = (SUBFROST_API_URLS[network] || SUBFROST_API_URLS.regtest).replace(/\/$/, '');
         targetUrl = `${baseUrl}/${restPath.join('/')}`;
       } else {
         // Plain JSON-RPC

@@ -14,65 +14,15 @@ import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
+import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork, extractPsbtBase64, toAlks, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 export type UnwrapTransactionBaseData = {
   amount: string; // display units (frBTC)
   feeRate: number; // sats/vB
 };
-
-// frBTC unwrap opcode (exchange frBTC for BTC)
-const FRBTC_UNWRAP_OPCODE = 78;
-
-const toAlks = (amount: string): string => {
-  if (!amount) return '0';
-  const parts = amount.split('.');
-  const whole = parts[0] || '0';
-  const frac = (parts[1] || '').padEnd(8, '0').slice(0, 8);
-  const normalizedWhole = whole.replace(/^0+(\d)/, '$1');
-  return `${normalizedWhole || '0'}${frac ? frac.padStart(8, '0') : '00000000'}`;
-};
-
-/**
- * Build protostone string for frBTC -> BTC unwrap operation
- * Format: [frbtc_block,frbtc_tx,opcode(78)]:pointer:refund
- * Opcode 78 is the unwrap opcode for frBTC contract
- */
-function buildUnwrapProtostone(params: {
-  frbtcId: string;
-  pointer?: string;
-  refund?: string;
-}): string {
-  const { frbtcId, pointer = 'v1', refund = 'v1' } = params;
-  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-
-  // Build cellpack: [frbtc_block, frbtc_tx, opcode(78)]
-  const cellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE].join(',');
-
-  return `[${cellpack}]:${pointer}:${refund}`;
-}
-
-/**
- * Build input requirements string for unwrap
- * Format: "block:tx:amount" for the frBTC being unwrapped
- */
-function buildUnwrapInputRequirements(params: {
-  frbtcId: string;
-  amount: string;
-}): string {
-  const [block, tx] = params.frbtcId.split(':');
-  return `${block}:${tx}:${params.amount}`;
-}
 
 export function useUnwrapMutation() {
   const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType } = useWallet();
@@ -116,24 +66,7 @@ export function useUnwrapMutation() {
       if (!recipientAddress) throw new Error('No recipient address available');
 
       // Determine btcNetwork for PSBT operations
-      // Must match network detection in other mutation hooks
-      let btcNetwork: bitcoin.Network;
-      switch (network) {
-        case 'mainnet':
-          btcNetwork = bitcoin.networks.bitcoin;
-          break;
-        case 'testnet':
-        case 'signet':
-          btcNetwork = bitcoin.networks.testnet;
-          break;
-        case 'regtest':
-        case 'regtest-local':
-        case 'subfrost-regtest':
-        case 'oylnet':
-        default:
-          btcNetwork = bitcoin.networks.regtest;
-          break;
-      }
+      const btcNetwork = getBitcoinNetwork(network);
 
       console.log('[useUnwrapMutation] Executing unwrap:', {
         amount: unwrapAmount,
@@ -177,22 +110,25 @@ export function useUnwrapMutation() {
         console.log('[useUnwrapMutation] Got readyToSign, signing PSBT...');
         const readyToSign = result.readyToSign;
 
-        // Convert PSBT to base64
-        let psbtBase64: string;
-        if (readyToSign.psbt instanceof Uint8Array) {
-          psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-        } else if (typeof readyToSign.psbt === 'string') {
-          psbtBase64 = readyToSign.psbt;
-        } else if (typeof readyToSign.psbt === 'object') {
-          const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
-          const bytes = new Uint8Array(keys.length);
-          for (let i = 0; i < keys.length; i++) {
-            bytes[i] = readyToSign.psbt[keys[i]];
-          }
-          psbtBase64 = uint8ArrayToBase64(bytes);
-        } else {
-          throw new Error('Unexpected PSBT format');
+        // Handle split PSBT if present (ordinals_strategy: 'preserve')
+        if (readyToSign.split_psbt) {
+          console.log('[useUnwrapMutation] Split PSBT detected — protecting inscriptions...');
+          await signAndBroadcastSplitPsbt({
+            splitPsbt: readyToSign.split_psbt,
+            network: btcNetwork,
+            isBrowserWallet,
+            taprootAddress,
+            segwitAddress,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            signTaprootPsbt,
+            signSegwitPsbt,
+            broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+            patchPsbtForBrowserWallet,
+          });
         }
+
+        // Convert PSBT to base64
+        let psbtBase64 = extractPsbtBase64(readyToSign.psbt);
 
         // Patch PSBT: replace dummy wallet outputs with real addresses,
         // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)

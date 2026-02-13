@@ -43,20 +43,20 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
 function normalizePoolArray(raw: any): any[] {
   if (!raw) return [];
   const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return parsed?.pools || parsed?.data || (Array.isArray(parsed) ? parsed : []);
+  return parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : null) || (Array.isArray(parsed) ? parsed : []);
 }
 
 function toPoolRow(p: any): any {
   return {
-    pool_block_id: p.pool_block_id ?? p.pool_id_block ?? 0,
-    pool_tx_id: p.pool_tx_id ?? p.pool_id_tx ?? 0,
-    token0_block_id: p.token0_block_id ?? p.details?.token_a_block ?? 0,
-    token0_tx_id: p.token0_tx_id ?? p.details?.token_a_tx ?? 0,
-    token1_block_id: p.token1_block_id ?? p.details?.token_b_block ?? 0,
-    token1_tx_id: p.token1_tx_id ?? p.details?.token_b_tx ?? 0,
-    token0_amount: p.token0_amount ?? p.details?.reserve_a ?? '0',
-    token1_amount: p.token1_amount ?? p.details?.reserve_b ?? '0',
-    pool_name: p.pool_name ?? p.details?.pool_name ?? '',
+    pool_block_id: p.pool_block_id ?? p.pool_id_block ?? p.poolId?.block ?? 0,
+    pool_tx_id: p.pool_tx_id ?? p.pool_id_tx ?? p.poolId?.tx ?? 0,
+    token0_block_id: p.token0_block_id ?? p.details?.token_a_block ?? p.token0?.block ?? 0,
+    token0_tx_id: p.token0_tx_id ?? p.details?.token_a_tx ?? p.token0?.tx ?? 0,
+    token1_block_id: p.token1_block_id ?? p.details?.token_b_block ?? p.token1?.block ?? 0,
+    token1_tx_id: p.token1_tx_id ?? p.details?.token_b_tx ?? p.token1?.tx ?? 0,
+    token0_amount: p.token0_amount ?? p.token0Amount ?? p.details?.reserve_a ?? '0',
+    token1_amount: p.token1_amount ?? p.token1Amount ?? p.details?.reserve_b ?? '0',
+    pool_name: p.pool_name ?? p.poolName ?? p.details?.pool_name ?? '',
   };
 }
 

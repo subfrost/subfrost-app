@@ -25,6 +25,7 @@ import {
   JsWalletAdapter,
 } from '@alkanes/ts-sdk';
 import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/constants/wallets';
+import { patchTapInternalKeys } from '@/lib/psbt-patching';
 
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
@@ -1296,12 +1297,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
       if (taprootPubKey) {
         const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
-        const xOnlyBuf = Buffer.from(xOnlyHex, 'hex');
-        for (let i = 0; i < psbt.data.inputs.length; i++) {
-          if (psbt.data.inputs[i].tapInternalKey) {
-            psbt.data.inputs[i].tapInternalKey = xOnlyBuf;
-          }
-        }
+        patchTapInternalKeys(psbt, xOnlyHex);
       }
       const psbtHex = psbt.toHex();
 
@@ -1378,15 +1374,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
       if (taprootPubKey) {
         const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
-        const xOnlyBuf = Buffer.from(xOnlyHex, 'hex');
-        let patchedCount = 0;
-        for (let i = 0; i < psbt.data.inputs.length; i++) {
-          const input = psbt.data.inputs[i];
-          if (input.tapInternalKey) {
-            input.tapInternalKey = xOnlyBuf;
-            patchedCount++;
-          }
-        }
+        const patchedCount = patchTapInternalKeys(psbt, xOnlyHex);
         if (patchedCount > 0) {
           console.log(`[WalletContext] Patched tapInternalKey on ${patchedCount} input(s) to user x-only: ${xOnlyHex}`);
         }

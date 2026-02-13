@@ -57,60 +57,15 @@ import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
+import { buildWrapProtostone } from '@/lib/alkanes/builders';
 
 bitcoin.initEccLib(ecc);
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 export type WrapTransactionBaseData = {
   amount: string; // display units (BTC)
   feeRate: number; // sats/vB
 };
-
-// frBTC wrap opcode (exchange BTC for frBTC)
-const FRBTC_WRAP_OPCODE = 77;
-
-// Signer addresses per network - fetched from frBTC contract opcode 103 (GET_SIGNER)
-// The CLI derives this dynamically via get_subfrost_address().
-// Must match the address the frBTC contract expects BTC to be sent to.
-const SIGNER_ADDRESSES: Record<string, string> = {
-  'mainnet': 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqcdrpr6',
-  'regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
-  'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
-  'oylnet': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
-};
-
-function getSignerAddress(network: string): string {
-  const signer = SIGNER_ADDRESSES[network];
-  if (!signer) {
-    throw new Error(`No signer address configured for network: ${network}`);
-  }
-  return signer;
-}
-
-/**
- * Build protostone string for BTC -> frBTC wrap operation
- * Format: [cellpack]:pointer:refund
- *
- * Output ordering matches CLI wrap_btc.rs:
- *   - Output 0 (v0): signer address (receives BTC via B:amount:v0)
- *   - Output 1 (v1): user address (receives minted frBTC via pointer=v1)
- */
-function buildWrapProtostone(params: {
-  frbtcId: string;
-}): string {
-  const [frbtcBlock, frbtcTx] = params.frbtcId.split(':');
-  const cellpack = `${frbtcBlock},${frbtcTx},${FRBTC_WRAP_OPCODE}`;
-  // pointer=v1 (user at output 1), refund=v1 (user at output 1)
-  return `[${cellpack}]:v1:v1`;
-}
 
 export function useWrapMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
@@ -118,24 +73,6 @@ export function useWrapMutation() {
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID } = getConfig(network);
-
-  // Get bitcoin network for PSBT parsing
-  const getBitcoinNetwork = () => {
-    switch (network) {
-      case 'mainnet':
-        return bitcoin.networks.bitcoin;
-      case 'testnet':
-      case 'signet':
-        return bitcoin.networks.testnet;
-      case 'regtest':
-      case 'regtest-local':
-      case 'subfrost-regtest':
-      case 'oylnet':
-        return bitcoin.networks.regtest;
-      default:
-        return bitcoin.networks.bitcoin;
-    }
-  };
 
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
@@ -167,7 +104,7 @@ export function useWrapMutation() {
       if (!userTaprootAddress) throw new Error('No taproot address available');
 
       // Get bitcoin network for PSBT parsing
-      const btcNetwork = getBitcoinNetwork();
+      const btcNetwork = getBitcoinNetwork(network);
 
       // Get the signer address for this network
       const signerAddress = getSignerAddress(network);
@@ -226,15 +163,25 @@ export function useWrapMutation() {
         if (result?.readyToSign) {
           const readyToSign = result.readyToSign;
 
-          // The PSBT comes as Uint8Array from serde_wasm_bindgen
-          let psbtBase64: string;
-          if (readyToSign.psbt instanceof Uint8Array) {
-            psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-          } else if (typeof readyToSign.psbt === 'string') {
-            psbtBase64 = readyToSign.psbt;
-          } else {
-            throw new Error('Unexpected PSBT format');
+          // Handle split PSBT if present (ordinals_strategy: 'preserve')
+          if (readyToSign.split_psbt) {
+            console.log('[WRAP] Split PSBT detected — protecting inscriptions...');
+            await signAndBroadcastSplitPsbt({
+              splitPsbt: readyToSign.split_psbt,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress: userTaprootAddress,
+              segwitAddress: userSegwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+              signTaprootPsbt,
+              signSegwitPsbt,
+              broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+              patchPsbtForBrowserWallet,
+            });
           }
+
+          // Extract PSBT as base64 from whatever format the WASM SDK returned
+          let psbtBase64 = extractPsbtBase64(readyToSign.psbt);
 
           // Patch PSBT: signer at output 0, replace dummy wallet outputs,
           // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)

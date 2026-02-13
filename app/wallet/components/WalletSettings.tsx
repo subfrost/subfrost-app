@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X } from 'lucide-react';
+import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X, Gem, Coins } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -486,6 +486,54 @@ export default function WalletSettings() {
               )}
             </div>
           </div>
+
+        {/* Asset Protection */}
+        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Shield size={24} className="text-[color:var(--sf-primary)]" />
+            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Asset Protection</h3>
+          </div>
+
+          <p className="text-sm text-[color:var(--sf-text)]/60 mb-4">
+            When enabled, UTXOs containing these assets are treated as non-spendable and will not be used to pay transaction fees.
+          </p>
+
+          <div className="space-y-3">
+            {/* Protect Ordinals */}
+            <label className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] opacity-50 cursor-not-allowed">
+              <div className="flex items-center gap-3">
+                <Gem size={18} className="text-[color:var(--sf-text)]/40" />
+                <div>
+                  <div className="text-sm font-medium text-[color:var(--sf-text)]">Protect Ordinals</div>
+                  <div className="text-xs text-[color:var(--sf-text)]/40">Prevent inscribed UTXOs from being spent as fees</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/30 bg-[color:var(--sf-text)]/5 px-2 py-0.5 rounded-full">Coming Soon</span>
+                <div className="relative w-10 h-5 rounded-full bg-[color:var(--sf-primary)]/30">
+                  <div className="absolute right-0.5 top-0.5 w-4 h-4 rounded-full bg-[color:var(--sf-primary)]/50" />
+                </div>
+              </div>
+            </label>
+
+            {/* Protect Runes */}
+            <label className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] opacity-50 cursor-not-allowed">
+              <div className="flex items-center gap-3">
+                <Coins size={18} className="text-[color:var(--sf-text)]/40" />
+                <div>
+                  <div className="text-sm font-medium text-[color:var(--sf-text)]">Protect Runes</div>
+                  <div className="text-xs text-[color:var(--sf-text)]/40">Prevent runic UTXOs from being spent as fees</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/30 bg-[color:var(--sf-text)]/5 px-2 py-0.5 rounded-full">Coming Soon</span>
+                <div className="relative w-10 h-5 rounded-full bg-[color:var(--sf-primary)]/30">
+                  <div className="absolute right-0.5 top-0.5 w-4 h-4 rounded-full bg-[color:var(--sf-primary)]/50" />
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
 
         {/* Security & Backup */}
         {wallet && (

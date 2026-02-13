@@ -35,7 +35,6 @@
  * @see constants/index.ts - FACTORY_OPCODES documentation
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
@@ -46,30 +45,10 @@ import { FACTORY_OPCODES } from '@/constants';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { buildCreateNewPoolProtostone, buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork, toAlks, extractPsbtBase64, signAndBroadcastSplitPsbt } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-/**
- * Pool operation codes (NOT factory opcodes!)
- * These are the opcodes for calling the pool contract directly.
- * Same definitions as in useSwapMutation.ts.
- */
-const POOL_OPCODES = {
-  Init: 0,
-  AddLiquidity: 1, // mint LP tokens
-  RemoveLiquidity: 2, // burn LP tokens
-  Swap: 3,
-  SimulateSwap: 4,
-};
 
 export type AddLiquidityTransactionData = {
   token0Id: string;      // alkane id (e.g., "2:0" for DIESEL)
@@ -85,118 +64,6 @@ export type AddLiquidityTransactionData = {
   deadlineBlocks?: number; // default 3
   poolId?: { block: string | number; tx: string | number }; // Pool to add liquidity to
 };
-
-/**
- * Convert display amount to alks (atomic units)
- * Default is 8 decimals for alkane tokens
- */
-function toAlks(amount: string, decimals: number = 8): string {
-  const bn = new BigNumber(amount);
-  return bn.multipliedBy(Math.pow(10, decimals)).integerValue(BigNumber.ROUND_FLOOR).toString();
-}
-
-/**
- * Build protostone string for CreateNewPool (opcode 1)
- *
- * Two-protostone pattern (proven working in tx a29d0307, block 1470):
- * - p0: Both edicts transferring token0 and token1 to p1
- * - p1: Cellpack calling factory with opcode 1 (CreateNewPool)
- *
- * Both edicts are in p0, targeting p1 (the cellpack). The factory receives
- * both tokens as `incomingAlkanes`.
- *
- * No minLP or deadline args — the factory handles initial liquidity directly.
- * Matches CLI: alkanes-cli alkanes init-pool
- */
-function buildCreateNewPoolProtostone(params: {
-  factoryId: string;
-  token0Id: string;
-  token1Id: string;
-  amount0: string;
-  amount1: string;
-}): string {
-  const [factoryBlock, factoryTx] = params.factoryId.split(':');
-  const [token0Block, token0Tx] = params.token0Id.split(':');
-  const [token1Block, token1Tx] = params.token1Id.split(':');
-
-  // p0: Two edicts transferring both tokens to p1 (the cellpack)
-  const edict0 = `[${token0Block}:${token0Tx}:${params.amount0}:p1]`;
-  const edict1 = `[${token1Block}:${token1Tx}:${params.amount1}:p1]`;
-  const p0 = `${edict0}:${edict1}:v0:v0`;
-
-  // p1: Cellpack calling factory opcode 1 (CreateNewPool)
-  // Receives tokens from p0 edicts as incomingAlkanes
-  const cellpack = [
-    factoryBlock, factoryTx,
-    FACTORY_OPCODES.CreateNewPool, // '1'
-    token0Block, token0Tx,
-    token1Block, token1Tx,
-    params.amount0, params.amount1,
-  ].join(',');
-  const p1 = `[${cellpack}]:v0:v0`;
-
-  return `${p0},${p1}`;
-}
-
-/**
- * Build protostone string for AddLiquidity to existing pool
- *
- * Calls the POOL contract directly with opcode 1 (AddLiquidity).
- *
- * Two-protostone pattern (proven working for CreateNewPool in tx a29d0307):
- * - p0: Both edicts transferring token0 and token1 to p1
- * - p1: Cellpack calling pool directly with opcode 1 (AddLiquidity)
- *
- * Both edicts are in p0, targeting p1 (the cellpack). The pool receives
- * both tokens as `incomingAlkanes`.
- *
- * The pool's AddLiquidity (opcode 1) expects exactly 2 incoming alkane tokens.
- */
-function buildAddLiquidityToPoolProtostone(params: {
-  poolId: { block: string | number; tx: string | number };
-  token0Id: string;
-  token1Id: string;
-  amount0: string;
-  amount1: string;
-}): string {
-  const poolBlock = params.poolId.block.toString();
-  const poolTx = params.poolId.tx.toString();
-  const [token0Block, token0Tx] = params.token0Id.split(':');
-  const [token1Block, token1Tx] = params.token1Id.split(':');
-
-  // p0: Two edicts transferring both tokens to p1 (the cellpack)
-  const edict0 = `[${token0Block}:${token0Tx}:${params.amount0}:p1]`;
-  const edict1 = `[${token1Block}:${token1Tx}:${params.amount1}:p1]`;
-  const p0 = `${edict0}:${edict1}:v0:v0`;
-
-  // p1: Cellpack calling pool directly with opcode 1 (AddLiquidity)
-  // Pool receives tokens from p0 edicts as incomingAlkanes
-  const cellpack = [
-    poolBlock, poolTx,
-    POOL_OPCODES.AddLiquidity, // 1
-  ].join(',');
-  const p1 = `[${cellpack}]:v0:v0`;
-
-  return `${p0},${p1}`;
-}
-
-/**
- * Build input requirements string for AddLiquidity
- * Format: "block0:tx0:amount0,block1:tx1:amount1"
- */
-function buildAddLiquidityInputRequirements(params: {
-  token0Id: string;
-  token1Id: string;
-  amount0: string;
-  amount1: string;
-}): string {
-  const { token0Id, token1Id, amount0, amount1 } = params;
-
-  const [block0, tx0] = token0Id.split(':');
-  const [block1, tx1] = token1Id.split(':');
-
-  return `${block0}:${tx0}:${amount0},${block1}:${tx1}:${amount1}`;
-}
 
 /**
  * Check if a pool exists for the given token pair via factory opcode 2 (FindPoolId).
@@ -402,24 +269,6 @@ export function useAddLiquidityMutation() {
   const ALKANE_FACTORY_ID = config.ALKANE_FACTORY_ID;
   const defaultPoolId = 'DEFAULT_POOL_ID' in config ? (config as any).DEFAULT_POOL_ID as string : undefined;
 
-  // Get bitcoin network for PSBT parsing
-  const getBitcoinNetwork = () => {
-    switch (network) {
-      case 'mainnet':
-        return bitcoin.networks.bitcoin;
-      case 'testnet':
-      case 'signet':
-        return bitcoin.networks.testnet;
-      case 'regtest':
-      case 'regtest-local':
-      case 'subfrost-regtest':
-      case 'oylnet':
-        return bitcoin.networks.regtest;
-      default:
-        return bitcoin.networks.bitcoin;
-    }
-  };
-
   return useMutation({
     mutationFn: async (data: AddLiquidityTransactionData) => {
       console.log('[AddLiquidity] ═══════════════════════════════════════════');
@@ -511,7 +360,7 @@ export function useAddLiquidityMutation() {
       console.log('[AddLiquidity] protostone:', protostone);
       console.log('[AddLiquidity] feeRate:', data.feeRate);
 
-      const btcNetwork = getBitcoinNetwork();
+      const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
 
@@ -549,22 +398,25 @@ export function useAddLiquidityMutation() {
           console.log('[AddLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
-          // Convert PSBT to base64
-          let psbtBase64: string;
-          if (readyToSign.psbt instanceof Uint8Array) {
-            psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-          } else if (typeof readyToSign.psbt === 'string') {
-            psbtBase64 = readyToSign.psbt;
-          } else if (typeof readyToSign.psbt === 'object') {
-            const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
-            const bytes = new Uint8Array(keys.length);
-            for (let i = 0; i < keys.length; i++) {
-              bytes[i] = readyToSign.psbt[keys[i]];
-            }
-            psbtBase64 = uint8ArrayToBase64(bytes);
-          } else {
-            throw new Error('Unexpected PSBT format');
+          // Handle split PSBT if present (ordinals_strategy: 'preserve')
+          if (readyToSign.split_psbt) {
+            console.log('[AddLiquidity] Split PSBT detected — protecting inscriptions...');
+            await signAndBroadcastSplitPsbt({
+              splitPsbt: readyToSign.split_psbt,
+              network: btcNetwork,
+              isBrowserWallet,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+              signTaprootPsbt,
+              signSegwitPsbt,
+              broadcastTransaction: (txHex: string) => provider.broadcastTransaction(txHex),
+              patchPsbtForBrowserWallet,
+            });
           }
+
+          // Convert PSBT to base64
+          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
           // === Alkane UTXO Injection ===
           // The SDK's internal protorunesbyaddress is broken (returns 0x on regtest),
