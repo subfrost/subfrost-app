@@ -36,7 +36,6 @@
     "test:e2e": "npm run test:e2e:wallet && npm run test:e2e:swap && npm run test:e2e:vault"
   },
   "dependencies": {
-    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.4-9e11c26",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@bprogress/next": "^3.2.12",
     "@jest/globals": "^30.2.0",
@@ -61,6 +60,7 @@
     "varuint-bitcoin": "^2.0.0"
   },
   "devDependencies": {
+    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk",
     "@noble/curves": "^2.0.1",
     "@playwright/experimental-ct-react": "^1.56.1",
     "@playwright/test": "^1.56.1",
