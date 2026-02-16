@@ -9,7 +9,6 @@ import { GlobalStore } from '@/stores/global';
 import { ModalStore } from '@/stores/modals';
 import { WalletProvider } from '@/context/WalletContext';
 import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
-import { ExchangeProvider } from '@/context/ExchangeContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
 import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
@@ -125,9 +124,7 @@ export default function Providers({ children }: { children: ReactNode }) {
                   <HeightPoller network={network} />
                   <WalletProvider network={network}>
                     <TransactionConfirmProvider>
-                      <ExchangeProvider>
-                        {children}
-                      </ExchangeProvider>
+                      {children}
                       <TransactionConfirmModal />
                     </TransactionConfirmProvider>
                   </WalletProvider>

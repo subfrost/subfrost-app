@@ -3,6 +3,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
 import BigNumber from 'bignumber.js';
+import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
 interface VaultStats {
   tvl: string; // Total Value Locked in base units
@@ -48,7 +49,7 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
             // Based on alkanes.proto MessageContextParcel definition
             const context = JSON.stringify({
               alkanes: [],     // Required field: array of AlkaneTransfer (empty for read-only)
-              calldata: [4],   // Opcode 4 as byte array
+              calldata: encodeSimulateCalldata(contractId, [4]),   // Opcode 4 = GetVeDieselBalance
               height: 1000000,
               txindex: 0,
               pointer: 0,

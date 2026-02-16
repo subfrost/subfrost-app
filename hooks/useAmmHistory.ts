@@ -2,11 +2,16 @@
  * useAmmHistory — Infinite-scroll AMM transaction history
  *
  * Primary: SDK DataApi calls (dataApiGetAllAmmTxHistory / dataApiGetAllAddressAmmTxHistory)
- * Pool metadata enrichment for mint/burn/creation txs uses alkanesGetAllPoolsWithDetails.
+ * Pool metadata enrichment uses dataApiGetAllPoolsDetails (single REST call),
+ * with per-pool ammGetPoolDetails as fallback for any missing pools.
  *
  * JOURNAL ENTRY (2026-02-10):
  * Replaced raw fetch to /api/rpc/{slug}/get-all-amm-tx-history with SDK
  * DataApi methods. Removed networkToSlug helper since SDK handles routing.
+ *
+ * JOURNAL ENTRY (2026-02-12):
+ * Replaced alkanesGetAllPoolsWithDetails (N+1 simulate calls) with
+ * dataApiGetAllPoolsDetails (single REST call) for pool metadata enrichment.
  */
 'use client';
 
@@ -47,7 +52,7 @@ function mapToObject(value: any): any {
   return value;
 }
 
-// Hook to fetch pool metadata via SDK's alkanesGetAllPoolsWithDetails
+// Hook to fetch pool metadata via dataApiGetAllPoolsDetails (single REST call)
 function usePoolsMetadata(network: string, poolIds: string[]) {
   const { ALKANE_FACTORY_ID } = getConfig(network);
   const { provider } = useAlkanesSDK();
@@ -58,31 +63,36 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
     queryFn: async (): Promise<Record<string, PoolMetadata>> => {
       const poolMap: Record<string, PoolMetadata> = {};
 
+      // Primary: dataApiGetAllPoolsDetails — single REST call
       try {
-        const rpcResult = await Promise.race([
-          provider!.alkanesGetAllPoolsWithDetails(ALKANE_FACTORY_ID),
+        const result = await Promise.race([
+          provider!.dataApiGetAllPoolsDetails(ALKANE_FACTORY_ID),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
         ]);
-        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
-        const pools = parsed?.pools || [];
+        const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+        const pools = parsed?.pools || parsed?.data?.pools || [];
 
         for (const p of pools) {
-          const poolId = `${p.pool_id_block}:${p.pool_id_tx}`;
+          const poolId = p.poolId
+            ? `${p.poolId.block}:${p.poolId.tx}`
+            : `${p.pool_id_block}:${p.pool_id_tx}`;
           if (!poolIds.includes(poolId)) continue;
+
+          // dataApi format uses poolId/token0/token1; RPC format uses details.*
           const d = p.details || {};
           poolMap[poolId] = {
-            token0BlockId: String(d.token_a_block ?? ''),
-            token0TxId: String(d.token_a_tx ?? ''),
-            token1BlockId: String(d.token_b_block ?? ''),
-            token1TxId: String(d.token_b_tx ?? ''),
-            poolName: d.pool_name || '',
+            token0BlockId: String(p.token0?.block ?? d.token_a_block ?? ''),
+            token0TxId: String(p.token0?.tx ?? d.token_a_tx ?? ''),
+            token1BlockId: String(p.token1?.block ?? d.token_b_block ?? ''),
+            token1TxId: String(p.token1?.tx ?? d.token_b_tx ?? ''),
+            poolName: p.poolName ?? d.pool_name ?? '',
           };
         }
       } catch (e) {
-        console.warn('[usePoolsMetadata] SDK fetch failed:', e);
+        console.warn('[usePoolsMetadata] dataApiGetAllPoolsDetails failed:', e);
       }
 
-      // For any pools still missing, try individual ammGetPoolDetails
+      // Fallback: per-pool ammGetPoolDetails (single simulate each) for any missing
       const missing = poolIds.filter(id => !poolMap[id]);
       if (missing.length > 0 && provider) {
         await Promise.all(missing.map(async (poolId) => {

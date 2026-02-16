@@ -533,7 +533,7 @@ function NftCard({ alkane, isExpanded, network, onToggle, onSend, t }: {
         ) : (
           <>
             <div className="font-medium text-[color:var(--sf-text)] text-xs truncate">{alkane.name}</div>
-            <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">{alkane.alkaneId}</div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">{alkane.symbol ? `${alkane.symbol} · ` : ''}{alkane.alkaneId}</div>
           </>
         )}
       </div>

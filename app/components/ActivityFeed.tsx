@@ -356,7 +356,7 @@ export default function ActivityFeed({
                   {t("activity.myWallet")}
                 </span>
                 <div
-                  className={`h-4 w-4 rounded border flex items-center justify-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                     myWalletOnly
                       ? "bg-[color:var(--sf-primary)] border-[color:var(--sf-primary)]"
                       : "border-[color:var(--sf-text)]/30 group-hover:border-[color:var(--sf-primary)]/60"

@@ -14,7 +14,10 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { patchPsbtForBrowserWallet, injectRedeemScripts } from '@/lib/psbt-patching';
+import { injectRedeemScripts } from '@/lib/psbt-patching';
+import { buildAlkaneTransferPsbt } from '@/lib/alkanes/buildAlkaneTransferPsbt';
+import { buildTransferProtostone } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -37,15 +40,6 @@ interface UTXO {
   runes?: any;
   inscriptions?: any[];
   frozen?: boolean;
-}
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
 }
 
 /**
@@ -121,28 +115,6 @@ function detectAddressType(address: string): AddressTypeInfo {
  * and P2SH-P2WPKH redeemScript injection with pattern-based matching.
  * First mainnet tx with this fix: f9e7eaf2c548647f99f5a1b72ef37fed5771191b9f30adab2
  */
-/**
- * Build an edict-based protostone for alkane token transfers.
- *
- * Uses a pure edict (colon-separated values) — NOT a cellpack (comma-separated).
- * The edict sends the exact `amount` of alkane `alkaneId` to output v1 (recipient).
- * Pointer v0 receives any unedicted remainder (sender change via p2tr:0).
- * RefundPointer v0 handles failure refunds to the same change output.
- *
- * Output ordering follows SDK convention (same as OYL SDK token.ts):
- *   v0 = sender change (p2tr:0)  — SDK auto-edict also sends excess here
- *   v1 = recipient               — edict sends exact amount here
- *
- * Pattern: [block:tx:amount:v1]:v0:v0
- */
-function buildTransferProtostone(params: {
-  alkaneId: string; // e.g., "2:0" (DIESEL), "32:0" (frBTC)
-  amount: string;   // base units to transfer
-}): string {
-  const [block, tx] = params.alkaneId.split(':');
-  return `[${block}:${tx}:${params.amount}:v1]:v0:v0`;
-}
-
 /**
  * Map a Bitcoin address to a symbolic SDK reference to avoid LegacyAddressTooLong.
  * The WASM SDK tries base58 parsing first; bech32/bech32m addresses (bc1p, bc1q)
@@ -562,23 +534,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         }
 
         // Determine Bitcoin network
-        let btcNetwork: bitcoin.Network;
-        switch (network) {
-          case 'mainnet':
-            btcNetwork = bitcoin.networks.bitcoin;
-            break;
-          case 'testnet':
-          case 'signet':
-            btcNetwork = bitcoin.networks.testnet;
-            break;
-          case 'regtest':
-          case 'regtest-local':
-          case 'subfrost-regtest':
-          case 'oylnet':
-          default:
-            btcNetwork = bitcoin.networks.regtest;
-            break;
-        }
+        const btcNetwork = getBitcoinNetwork(network);
 
         // Create PSBT
         const psbt = new bitcoin.Psbt({ network: btcNetwork });
@@ -834,235 +790,95 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
         console.log('[SendModal] User approved transaction');
       }
 
-      // Build input requirements: alkaneId:amount (tells WASM which alkane UTXOs to select)
-      const inputRequirements = `${selectedAlkaneId}:${amountBaseUnits.toString()}`;
-
-      // Build edict protostone for alkane transfer.
-      // The edict sends exact `amount` to v0 (recipient). Unedicted remainder
-      // goes to v1 (sender change via pointer). No contract call needed.
-      const protostone = buildTransferProtostone({
-        alkaneId: selectedAlkaneId,
-        amount: amountBaseUnits.toString(),
-      });
-
-      console.log('[SendModal] Protostone:', protostone);
-      console.log('[SendModal] Input requirements:', inputRequirements);
-
       // Determine Bitcoin network for PSBT operations
-      let btcNetwork: bitcoin.Network;
-      switch (network) {
-        case 'mainnet':
-          btcNetwork = bitcoin.networks.bitcoin;
-          break;
-        case 'testnet':
-        case 'signet':
-          btcNetwork = bitcoin.networks.testnet;
-          break;
-        case 'regtest':
-        case 'regtest-local':
-        case 'subfrost-regtest':
-        case 'oylnet':
-        default:
-          btcNetwork = bitcoin.networks.regtest;
-          break;
-      }
+      const btcNetwork = getBitcoinNetwork(network);
 
-      // Determine wallet mode based on available addresses
-      // - Dual-address: wallet provides both SegWit (paymentAddress) and Taproot (address)
-      // - Single-address: wallet only provides one address type (could be any type)
+      // Determine wallet mode
       const hasBothAddresses = !!btcSendAddress && !!alkaneSendAddress && btcSendAddress !== alkaneSendAddress;
       const isSingleAddressMode = !hasBothAddresses;
-
-      // Detect address types for proper SDK references and signing
       const primaryAddress = alkaneSendAddress || btcSendAddress;
       const primaryAddressType = detectAddressType(primaryAddress);
-      const secondaryAddressType = btcSendAddress ? detectAddressType(btcSendAddress) : null;
-
-      // Build from addresses array based on wallet mode
-      const fromAddresses: string[] = [];
-      if (hasBothAddresses) {
-        // Dual-address mode: use both addresses
-        fromAddresses.push(btcSendAddress); // Usually SegWit for fees
-        fromAddresses.push(alkaneSendAddress); // Usually Taproot for alkanes
-      } else {
-        // Single-address mode: only use the available address
-        fromAddresses.push(primaryAddress);
-      }
-
-      // Determine change address based on wallet mode
-      const btcChangeAddress = hasBothAddresses ? btcSendAddress : primaryAddress;
 
       console.log('[SendModal] Wallet mode:', isSingleAddressMode
         ? `Single-address (${primaryAddressType.type})`
-        : `Dual-address (${secondaryAddressType?.type} + ${primaryAddressType.type})`);
-      console.log('[SendModal] From addresses:', fromAddresses);
-      console.log('[SendModal] BTC change address:', btcChangeAddress);
-      console.log('[SendModal] Alkanes change address:', alkaneSendAddress);
-      console.log('[SendModal] Recipient (toAddresses[1] = v1):', recipientAddress);
+        : `Dual-address`);
 
-      // Execute the alkane transfer
-      // toAddresses maps to vN outputs in the protostone (SDK convention):
-      // - v0 = sender change (p2tr:0) — SDK auto-edict sends excess alkanes here
-      // - v1 = recipient (edict sends exact amount here)
-      //
-      // This matches the OYL SDK token.ts convention where output 0 = change,
-      // output 1 = recipient. The SDK's auto-edict from inputRequirements always
-      // routes alkane change to output 0, so the sender MUST be at v0.
-      //
-      // Use symbolic addresses for toAddresses to avoid LegacyAddressTooLong.
-      // fromAddresses use actual addresses (opaque strings for esplora UTXO lookup).
-      // Outputs are patched to actual scriptPubKeys after the PSBT is returned.
-      const result = await alkaneProvider.alkanesExecuteTyped({
-        inputRequirements,
-        protostones: protostone,
+      // Build PSBT in pure JS (bypasses WASM/metashrew entirely)
+      const { psbtBase64: rawPsbtBase64, estimatedFee } = await buildAlkaneTransferPsbt({
+        alkaneId: selectedAlkaneId,
+        amount: amountBaseUnits,
+        senderTaprootAddress: alkaneSendAddress,
+        senderPaymentAddress: hasBothAddresses ? btcSendAddress : undefined,
+        recipientAddress: normalizedRecipientAddress,
+        tapInternalKeyHex: account?.taproot?.pubKeyXOnly,
+        paymentPubkeyHex: account?.nativeSegwit?.pubkey,
         feeRate,
-        autoConfirm: false, // We handle signing manually
-        fromAddresses,
-        toAddresses: ['p2tr:0', addressToSymbolic(normalizedRecipientAddress)],
-        changeAddress: addressToSymbolic(btcChangeAddress),
-        alkanesChangeAddress: 'p2tr:0',
+        network: btcNetwork,
+        networkName: network,
       });
 
-      console.log('[SendModal] Execute result:', JSON.stringify(result, null, 2));
+      console.log('[SendModal] Built PSBT (JS), estimated fee:', estimatedFee, 'sats');
 
-      // Check if we got a readyToSign state (need to sign PSBT manually)
-      if (result?.readyToSign) {
-        console.log('[SendModal] Got readyToSign state, signing transaction...');
-        const readyToSign = result.readyToSign;
-
-        // Convert PSBT to base64
-        let psbtBase64: string;
-        if (readyToSign.psbt instanceof Uint8Array) {
-          psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-        } else if (typeof readyToSign.psbt === 'string') {
-          psbtBase64 = readyToSign.psbt;
-        } else if (typeof readyToSign.psbt === 'object') {
-          // PSBT came back as object with numeric keys
-          const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
-          const bytes = new Uint8Array(keys.length);
-          for (let i = 0; i < keys.length; i++) {
-            bytes[i] = readyToSign.psbt[keys[i]];
-          }
-          psbtBase64 = uint8ArrayToBase64(bytes);
-        } else {
-          throw new Error('Unexpected PSBT format: ' + typeof readyToSign.psbt);
+      // Inject redeemScripts for P2SH-P2WPKH wallets (Xverse) if needed
+      let psbtBase64 = rawPsbtBase64;
+      if (btcSendAddress && account?.nativeSegwit?.pubkey &&
+          (btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2'))) {
+        const psbtObj = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+        const patched = injectRedeemScripts(psbtObj, {
+          paymentAddress: btcSendAddress,
+          pubkeyHex: account.nativeSegwit.pubkey,
+          network: btcNetwork,
+        });
+        if (patched > 0) {
+          console.log('[SendModal] Injected redeemScript into', patched, 'P2SH inputs');
         }
+        psbtBase64 = psbtObj.toBase64();
+      }
 
-        console.log('[SendModal] PSBT base64 length:', psbtBase64.length);
+      const isBrowserWallet = walletType === 'browser';
 
-        const isBrowserWallet = walletType === 'browser';
-
-        // Patch PSBT: recipient at output 1 (v1), sender change at output 0 (v0).
-        // Replace dummy wallet outputs, inject redeemScript for P2SH-P2WPKH wallets.
-        // See lib/psbt-patching.ts for details.
-        //
-        // fixedOutputs pins the recipient address at output 1 so browser wallet
-        // patching doesn't overwrite it with the sender's scriptPubKey.
-        {
-          const result = patchPsbtForBrowserWallet({
-            psbtBase64,
-            network: btcNetwork,
-            isBrowserWallet,
-            taprootAddress: alkaneSendAddress,
-            segwitAddress: btcSendAddress || undefined,
-            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
-            fixedOutputs: { 1: normalizedRecipientAddress },
-          });
-          psbtBase64 = result.psbtBase64;
-          if (result.inputsPatched > 0) {
-            console.log('[SendModal] Alkane send: patched', result.inputsPatched, 'P2SH inputs with redeemScript');
-          }
-          console.log('[SendModal] Patched PSBT (recipient + browser wallet:', isBrowserWallet, ')');
-        }
-
-        // Sign the PSBT
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          // Browser wallets sign ALL input types (P2TR, P2WPKH, P2SH) in one call.
-          // Always use signTaprootPsbt which has the Xverse direct-call bypass.
-          console.log('[SendModal] Browser wallet: signing all inputs in single call...');
+      // Sign the PSBT
+      let signedPsbtBase64: string;
+      if (isBrowserWallet) {
+        console.log('[SendModal] Browser wallet: signing all inputs in single call...');
+        signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+      } else if (isSingleAddressMode) {
+        console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
+        if (primaryAddressType.signingMethod === 'taproot') {
           signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-        } else if (isSingleAddressMode) {
-          // Keystore single-address mode
-          console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
-          if (primaryAddressType.signingMethod === 'taproot') {
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          }
         } else {
-          // Keystore dual-address mode: sign with both keys sequentially
-          console.log('[SendModal] Keystore: signing with both keys...');
           signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
         }
-
-        // Show broadcasting spinner now that signing is complete
-        setStep('broadcasting');
-
-        // Parse the signed PSBT, finalize, and extract the raw transaction
-        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-
-        // Finalize all inputs
-        console.log('[SendModal] Finalizing PSBT...');
-        signedPsbt.finalizeAllInputs();
-
-        // Extract the raw transaction
-        const tx = signedPsbt.extractTransaction();
-        const txHex = tx.toHex();
-        const computedTxid = tx.getId();
-
-        console.log('[SendModal] Transaction ID:', computedTxid);
-        console.log('[SendModal] Transaction hex length:', txHex.length);
-
-        // Broadcast the transaction
-        console.log('[SendModal] Broadcasting transaction...');
-        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
-        console.log('[SendModal] Transaction broadcast successful');
-        console.log('[SendModal] Broadcast returned txid:', broadcastTxid);
-
-        setTxid(broadcastTxid || computedTxid);
-        setStep('success');
-
-        // Refresh wallet data
-        setTimeout(() => {
-          refresh();
-        }, 1000);
-
-        return;
+      } else {
+        console.log('[SendModal] Keystore: signing with both keys...');
+        signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
       }
 
-      // Check if SDK auto-completed the transaction
-      if (result?.txid || result?.reveal_txid) {
-        const txId = result.txid || result.reveal_txid;
-        console.log('[SendModal] Transaction auto-completed, txid:', txId);
-        setTxid(txId);
-        setStep('success');
+      // Show broadcasting spinner now that signing is complete
+      setStep('broadcasting');
 
-        setTimeout(() => {
-          refresh();
-        }, 1000);
+      // Parse the signed PSBT, finalize, and extract the raw transaction
+      const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+      signedPsbt.finalizeAllInputs();
 
-        return;
-      }
+      const tx = signedPsbt.extractTransaction();
+      const txHex = tx.toHex();
+      const computedTxid = tx.getId();
 
-      // Check if execution completed directly
-      if (result?.complete) {
-        const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-        console.log('[SendModal] Execution complete, txid:', txId);
-        setTxid(txId);
-        setStep('success');
+      console.log('[SendModal] Transaction ID:', computedTxid);
 
-        setTimeout(() => {
-          refresh();
-        }, 1000);
+      // Broadcast the transaction
+      console.log('[SendModal] Broadcasting transaction...');
+      const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
+      console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
 
-        return;
-      }
+      setTxid(broadcastTxid || computedTxid);
+      setStep('success');
 
-      // No txid found
-      console.error('[SendModal] No txid found in result:', result);
-      throw new Error(t('send.alkaneTxNoId'));
+      setTimeout(() => {
+        refresh();
+      }, 1000);
 
     } catch (err: any) {
       console.error('[SendModal] Alkane transfer failed:', err);
