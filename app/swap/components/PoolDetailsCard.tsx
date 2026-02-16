@@ -49,17 +49,31 @@ function usePizzaFunSymbol(alkaneId?: string) {
   });
 }
 
-function buildIframeUrl(symbol: string): string {
+// frBTC alkane ID is 32:0 on all networks (genesis alkane)
+const FRBTC_ID = '32:0';
+
+function buildIframeUrl(symbol: string, quote: 'usd' | 'btc'): string {
   const params = new URLSearchParams({
     symbol,
     timeframe: '1d',
     type: 'mcap',
     pool: 'all',
-    quote: 'usd',
+    quote,
     metaprotocol: 'alkanes',
     theme: 'subfrost',
   });
   return `https://tv.pizza.fun/?${params.toString()}`;
+}
+
+/**
+ * Determine chart quote currency from the pool's pair:
+ *  - /frBTC pairs → 'btc' (TOKEN/BTC)
+ *  - /bUSD pairs  → 'usd' (TOKEN/USD)
+ *  - other        → 'usd' (default)
+ */
+function getQuoteForPool(pool: PoolSummary): 'usd' | 'btc' {
+  if (pool.token1?.id === FRBTC_ID || pool.token0?.id === FRBTC_ID) return 'btc';
+  return 'usd';
 }
 
 export default function PoolDetailsCard({ pool }: Props) {
@@ -68,7 +82,9 @@ export default function PoolDetailsCard({ pool }: Props) {
   // Get the series ID for the base token (token0) of the pool
   const { data: symbol, isLoading: isSymbolLoading } = usePizzaFunSymbol(pool?.token0?.id);
 
-  const iframeUrl = symbol ? buildIframeUrl(symbol) : null;
+  // Chart quote: 'btc' for frBTC pairs, 'usd' for everything else
+  const quote = pool ? getQuoteForPool(pool) : 'usd';
+  const iframeUrl = symbol ? buildIframeUrl(symbol, quote) : null;
 
   return (
     <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] overflow-hidden">
@@ -81,7 +97,7 @@ export default function PoolDetailsCard({ pool }: Props) {
           )}
           {iframeUrl ? (
             <iframe
-              key={symbol}
+              key={`${symbol}-${quote}`}
               src={iframeUrl}
               className="w-full h-full border-0"
               allow="clipboard-write"
