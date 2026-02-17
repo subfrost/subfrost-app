@@ -321,9 +321,6 @@ export default function SwapInputs({
               {/* Balance + Percentage Buttons (hidden for bridge tokens) */}
               {!isFromBridgeToken && (
                 <div className="flex flex-col items-end gap-1">
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                    {resolvedFromBalanceText}
-                  </div>
                   <div
                     className="flex items-center justify-between w-full"
                     onClick={(e) => e.stopPropagation()}
@@ -413,6 +410,9 @@ export default function SwapInputs({
                       {t("swap.max")}
                     </button>
                     </div>
+                  </div>
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                    {resolvedFromBalanceText}
                   </div>
                 </div>
               )}
