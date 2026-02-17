@@ -153,6 +153,7 @@ const zh: Record<string, string> = {
   'success.unwrap': '\u89e3\u5305\u88c5',
   'success.addLiquidity': '\u6dfb\u52a0\u6d41\u52a8\u6027',
   'success.removeLiquidity': '\u79fb\u9664\u6d41\u52a8\u6027',
+  'success.send': '\u53d1\u9001',
   'success.submitted': '{operation} \u5df2\u63d0\u4ea4',
   'success.transactionId': '\u4ea4\u6613 ID\uff1a',
 

@@ -153,6 +153,7 @@ const en: Record<string, string> = {
   'success.unwrap': 'Unwrap',
   'success.addLiquidity': 'Add Liquidity',
   'success.removeLiquidity': 'Remove Liquidity',
+  'success.send': 'Send',
   'success.submitted': '{operation} Submitted',
   'success.transactionId': 'Transaction ID:',
 

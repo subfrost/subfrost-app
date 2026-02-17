@@ -29,6 +29,7 @@ interface SendModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialAlkane?: AlkaneAsset | null;
+  onSuccess?: (txid: string) => void;
 }
 
 interface UTXO {
@@ -128,7 +129,7 @@ function addressToSymbolic(address: string): string {
   return address;
 }
 
-export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
+export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }: SendModalProps) {
   const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
   // Address strategy:
   // - BTC sends: SegWit (paymentAddress) preferred for both send and change.
@@ -638,6 +639,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
         setTxid(broadcastTxid || computedTxid);
         setStep('success');
+        onSuccess?.(broadcastTxid || computedTxid);
 
         setTimeout(() => {
           refresh();
@@ -704,6 +706,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       setTxid(txidResult);
       setStep('success');
+      onSuccess?.(txidResult);
 
       // Refresh wallet data
       setTimeout(() => {
@@ -875,6 +878,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
 
       setTxid(broadcastTxid || computedTxid);
       setStep('success');
+      onSuccess?.(broadcastTxid || computedTxid);
 
       setTimeout(() => {
         refresh();

@@ -5,7 +5,7 @@ import { Minus, Send } from "lucide-react";
 import Link from "next/link";
 import { useTranslation } from '@/hooks/useTranslation';
 
-export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity';
+export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity' | 'send';
 
 type Props = {
   txId: string;
@@ -25,6 +25,7 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
     unwrap: t('success.unwrap'),
     addLiquidity: t('success.addLiquidity'),
     removeLiquidity: t('success.removeLiquidity'),
+    send: t('success.send'),
   };
 
   const operationLabel = OPERATION_LABELS[operationType];
