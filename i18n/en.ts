@@ -308,6 +308,11 @@ const en: Record<string, string> = {
   'settings.passwordRequired': 'Password is required',
   'settings.noKeystore': 'No keystore found',
   'settings.invalidPassword': 'Invalid password or decryption failed',
+  'settings.advancedOptions': 'Advanced Options',
+  'settings.ignoreOrdinals': 'Ignore Ordinals',
+  'settings.ignoreRunes': 'Ignore Runes',
+  'settings.ignoreOrdinalsDescription': 'Treat all UTXOs as spendable, ignoring any inscriptions. This will be disabled once inscription detection is supported.',
+  'settings.ignoreRunesDescription': 'Treat all UTXOs as spendable, ignoring any runes. This will be disabled once rune detection is supported.',
 
   // Vaults
   'vaults.title': 'DeFi Vaults',
