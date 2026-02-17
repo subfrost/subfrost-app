@@ -12,8 +12,10 @@ import { AlkanesSDKProvider } from '@/context/AlkanesSDKContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
 import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
 import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
+import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
 
 // Define Network type locally
 import type { Network } from '@/utils/constants';
@@ -124,8 +126,11 @@ export default function Providers({ children }: { children: ReactNode }) {
                   <HeightPoller network={network} />
                   <WalletProvider network={network}>
                     <TransactionConfirmProvider>
-                      {children}
-                      <TransactionConfirmModal />
+                      <NotificationProvider>
+                        {children}
+                        <TransactionConfirmModal />
+                        <GlobalNotificationArea />
+                      </NotificationProvider>
                     </TransactionConfirmProvider>
                   </WalletProvider>
                 </AlkanesSDKProvider>

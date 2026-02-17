@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Minus, Send } from "lucide-react";
 import Link from "next/link";
 import { useTranslation } from '@/hooks/useTranslation';
+import { useTxConfirmed } from '@/hooks/useTxConfirmed';
 
 export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity' | 'send';
 
@@ -11,13 +12,24 @@ type Props = {
   txId: string;
   onClose: () => void;
   operationType?: OperationType;
+  autoCloseAfterConfirmed?: boolean;
+  onAutoClose?: () => void;
 };
 
-export default function SwapSuccessNotification({ txId, onClose, operationType = 'swap' }: Props) {
+export default function SwapSuccessNotification({
+  txId,
+  onClose,
+  operationType = 'swap',
+  autoCloseAfterConfirmed = false,
+  onAutoClose,
+}: Props) {
   const { t } = useTranslation();
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const confirmed = useTxConfirmed(autoCloseAfterConfirmed ? txId : undefined);
 
   const OPERATION_LABELS: Record<OperationType, string> = {
     swap: t('success.swap'),
@@ -48,7 +60,25 @@ export default function SwapSuccessNotification({ txId, onClose, operationType =
     };
   }, []);
 
+  // Auto-dismiss 60s after tx confirms
+  useEffect(() => {
+    if (!autoCloseAfterConfirmed || !confirmed) return;
+
+    autoCloseTimerRef.current = setTimeout(() => {
+      if (onAutoClose) {
+        onAutoClose();
+      } else {
+        onClose();
+      }
+    }, 60_000);
+
+    return () => {
+      if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
+    };
+  }, [autoCloseAfterConfirmed, confirmed, onAutoClose, onClose]);
+
   const handleDismiss = () => {
+    if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
     setIsVisible(false);
     setTimeout(onClose, 300);
   };

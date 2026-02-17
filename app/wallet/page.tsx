@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -16,7 +16,7 @@ import WalletSettings from './components/WalletSettings';
 import RegtestControls from './components/RegtestControls';
 import ReceiveModal from './components/ReceiveModal';
 import SendModal from './components/SendModal';
-const SwapSuccessNotification = lazy(() => import('@/app/components/SwapSuccessNotification'));
+import { useNotification } from '@/context/NotificationContext';
 
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
@@ -40,7 +40,7 @@ export default function WalletDashboardPage() {
   const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [txRefreshing, setTxRefreshing] = useState(false);
-  const [sendSuccessTxId, setSendSuccessTxId] = useState('');
+  const { showNotification } = useNotification();
   const txHistoryRef = useRef<TransactionHistoryHandle>(null);
 
   const handleUtxoClick = useCallback(() => {
@@ -241,21 +241,12 @@ export default function WalletDashboardPage() {
         isOpen={showSendModal}
         onClose={() => { setShowSendModal(false); setSendAlkane(null); }}
         initialAlkane={sendAlkane}
-        onSuccess={(txid) => setSendSuccessTxId(txid)}
+        onSuccess={(txid) => showNotification(txid, 'send')}
       />
       <ReceiveModal
         isOpen={showReceiveModal}
         onClose={() => setShowReceiveModal(false)}
       />
-      {sendSuccessTxId && (
-        <Suspense fallback={null}>
-          <SwapSuccessNotification
-            txId={sendSuccessTxId}
-            onClose={() => setSendSuccessTxId('')}
-            operationType="send"
-          />
-        </Suspense>
-      )}
     </div>
   );
 }
