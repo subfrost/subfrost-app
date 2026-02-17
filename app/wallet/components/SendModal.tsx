@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
 import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins, ExternalLink } from 'lucide-react';
+import { useTheme } from '@/context/ThemeContext';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
@@ -130,6 +131,7 @@ function addressToSymbolic(address: string): string {
 
 export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalProps) {
   const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
+  const { theme } = useTheme();
   // Address strategy:
   // - BTC sends: SegWit (paymentAddress) preferred for both send and change.
   //   For browser extension wallets that only expose a taproot address (e.g. Unisat
@@ -159,6 +161,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [activePercent, setActivePercent] = useState<number | null>(null);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
   const [isProcessing, setIsProcessing] = useState(false);
   const selectedAlkaneRef = useRef<HTMLButtonElement>(null);
@@ -968,12 +971,49 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
             type="number"
             step="0.00000001"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => { setAmount(e.target.value); setActivePercent(null); }}
             placeholder="0.00000000"
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           />
-          <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-            {t('send.available')} {(availableUtxos.reduce((sum, u) => sum + u.value, 0) / 100000000).toFixed(8)} BTC
+          <div className="mt-1 flex items-center justify-between">
+            <div className="text-xs text-[color:var(--sf-text)]/60">
+              {t('send.available')} {(availableUtxos.reduce((sum, u) => sum + u.value, 0) / 100000000).toFixed(8)} BTC
+            </div>
+            <div className="flex items-center gap-1.5">
+              {[0.25, 0.5, 0.75].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => {
+                    const totalSats = availableUtxos.reduce((sum, u) => sum + u.value, 0);
+                    setAmount((totalSats * pct / 100000000).toFixed(8));
+                    setActivePercent(pct);
+                  }}
+                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                    activePercent === pct
+                      ? "bg-[color:var(--sf-primary)]/20"
+                      : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                  }`}
+                >
+                  {pct * 100}%
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const totalSats = availableUtxos.reduce((sum, u) => sum + u.value, 0);
+                  setAmount((totalSats / 100000000).toFixed(8));
+                  setActivePercent(1);
+                }}
+                className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                  activePercent === 1
+                    ? "bg-[color:var(--sf-primary)]/20"
+                    : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                }`}
+              >
+                MAX
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1227,14 +1267,51 @@ export default function SendModal({ isOpen, onClose, initialAlkane }: SendModalP
                 type="number"
                 step="any"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => { setAmount(e.target.value); setActivePercent(null); }}
                 placeholder="0"
                 disabled={!selected}
                 className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
               {selected && (
-                <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.name}
+                <div className="mt-1 flex items-center justify-between">
+                  <div className="text-xs text-[color:var(--sf-text)]/60">
+                    {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.name}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {[0.25, 0.5, 0.75].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => {
+                          const raw = parseFloat(selected.balance) / Math.pow(10, selected.decimals || 8);
+                          setAmount((raw * pct).toString());
+                          setActivePercent(pct);
+                        }}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                          activePercent === pct
+                            ? "bg-[color:var(--sf-primary)]/20"
+                            : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                        }`}
+                      >
+                        {pct * 100}%
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const raw = parseFloat(selected.balance) / Math.pow(10, selected.decimals || 8);
+                        setAmount(raw.toString());
+                        setActivePercent(1);
+                      }}
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                        activePercent === 1
+                          ? "bg-[color:var(--sf-primary)]/20"
+                          : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                      }`}
+                    >
+                      MAX
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
