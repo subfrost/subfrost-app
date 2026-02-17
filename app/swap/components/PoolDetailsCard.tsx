@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 
 type Props = {
   pool?: PoolSummary;
+  /** Override which token's symbol to show on the chart. When omitted, uses pool.token0. */
+  chartTokenId?: string;
 };
 
 const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
@@ -76,11 +78,17 @@ function getQuoteForPool(pool: PoolSummary): 'usd' | 'btc' {
   return 'usd';
 }
 
-export default function PoolDetailsCard({ pool }: Props) {
+export default function PoolDetailsCard({ pool, chartTokenId }: Props) {
   const { t } = useTranslation();
 
-  // Get the series ID for the base token (token0) of the pool
-  const { data: symbol, isLoading: isSymbolLoading } = usePizzaFunSymbol(pool?.token0?.id);
+  // Use chartTokenId if provided and valid, otherwise fall back to token0
+  const resolvedChartTokenId = pool
+    ? (chartTokenId && (chartTokenId === pool.token0?.id || chartTokenId === pool.token1?.id)
+        ? chartTokenId
+        : pool.token0?.id)
+    : undefined;
+
+  const { data: symbol, isLoading: isSymbolLoading } = usePizzaFunSymbol(resolvedChartTokenId);
 
   // Chart quote: 'btc' for frBTC pairs, 'usd' for everything else
   const quote = pool ? getQuoteForPool(pool) : 'usd';

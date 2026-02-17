@@ -1435,6 +1435,48 @@ export default function SwapShell() {
     }
   };
 
+  // Compute the pool and chart token for the Espo chart.
+  // For frBTC pairs → chart shows the non-frBTC token with quote=btc
+  // For bUSD pairs → chart shows the non-bUSD token with quote=usd
+  // For TOKEN/TOKEN pairs → chart shows the "to" token with quote=usd
+  const chartPool = useMemo(() => {
+    if (selectedTab === 'lp' && poolToken0 && poolToken1) {
+      const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
+      const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
+      return markets.find(p =>
+        (p.token0.id === token0Id && p.token1.id === token1Id) ||
+        (p.token0.id === token1Id && p.token1.id === token0Id)
+      );
+    }
+    if (selectedTab === 'swap' && fromToken && toToken) {
+      const fromId = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
+      const toId = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+      return markets.find(p =>
+        (p.token0.id === fromId && p.token1.id === toId) ||
+        (p.token0.id === toId && p.token1.id === fromId)
+      );
+    }
+    return selectedPool;
+  }, [selectedTab, poolToken0, poolToken1, fromToken, toToken, markets, selectedPool, FRBTC_ALKANE_ID]);
+
+  const chartTokenId = useMemo(() => {
+    if (!chartPool) return undefined;
+    const t0 = chartPool.token0?.id;
+    const t1 = chartPool.token1?.id;
+    // frBTC pairs: show the non-frBTC token
+    if (t0 === FRBTC_ALKANE_ID) return t1;
+    if (t1 === FRBTC_ALKANE_ID) return t0;
+    // bUSD pairs: show the non-bUSD token
+    if (t0 === BUSD_ALKANE_ID) return t1;
+    if (t1 === BUSD_ALKANE_ID) return t0;
+    // TOKEN/TOKEN: show the "to" token (the token user is swapping into)
+    if (selectedTab === 'swap' && toToken) {
+      const toId = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+      if (toId === t0 || toId === t1) return toId;
+    }
+    return t0;
+  }, [chartPool, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, selectedTab, toToken]);
+
   return (
     <div className="flex w-full flex-col gap-8 h-full">
       <Suspense fallback={null}>
@@ -1583,28 +1625,7 @@ export default function SwapShell() {
           {showMobileChart && (
             <div className="lg:hidden mt-4">
               <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-                <PoolDetailsCard
-                  pool={selectedTab === 'lp' && poolToken0 && poolToken1
-                    ? markets.find(p => {
-                        const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
-                        const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
-                        return (
-                          (p.token0.id === token0Id && p.token1.id === token1Id) ||
-                          (p.token0.id === token1Id && p.token1.id === token0Id)
-                        );
-                      })
-                    : selectedTab === 'swap' && fromToken && toToken
-                    ? markets.find(p => {
-                        const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
-                        const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
-                        return (
-                          (p.token0.id === from0Id && p.token1.id === to1Id) ||
-                          (p.token0.id === to1Id && p.token1.id === from0Id)
-                        );
-                      })
-                    : selectedPool
-                  }
-                />
+                <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} />
               </Suspense>
             </div>
           )}
@@ -1613,28 +1634,7 @@ export default function SwapShell() {
 
         {/* Right Column: Chart (2/3 width on lg) */}
         <div className="hidden lg:flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
-          <PoolDetailsCard
-            pool={selectedTab === 'lp' && poolToken0 && poolToken1
-              ? markets.find(p => {
-                  const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
-                  const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
-                  return (
-                    (p.token0.id === token0Id && p.token1.id === token1Id) ||
-                    (p.token0.id === token1Id && p.token1.id === token0Id)
-                  );
-                })
-              : selectedTab === 'swap' && fromToken && toToken
-              ? markets.find(p => {
-                  const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
-                  const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
-                  return (
-                    (p.token0.id === from0Id && p.token1.id === to1Id) ||
-                    (p.token0.id === to1Id && p.token1.id === from0Id)
-                  );
-                })
-              : selectedPool
-            }
-          />
+          <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} />
         </div>
       </div>
 
