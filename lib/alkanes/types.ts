@@ -20,4 +20,10 @@ export interface AlkanesExecuteTypedParams {
   mineEnabled?: boolean;
   autoConfirm?: boolean;
   rawOutput?: boolean;
+  /** Controls handling of UTXOs that may contain ordinal inscriptions.
+   *  - 'exclude': refuse to spend inscribed UTXOs (default SDK behavior)
+   *  - 'preserve': split inscribed UTXOs to protect inscriptions
+   *  - 'burn': spend inscribed UTXOs without protection (destroys inscriptions)
+   */
+  ordinalsStrategy?: 'exclude' | 'preserve' | 'burn';
 }

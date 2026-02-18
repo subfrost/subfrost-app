@@ -300,6 +300,7 @@ export function useSwapMutation() {
           toAddresses: ['p2tr:0'],
           changeAddress: 'p2wpkh:0',
           alkanesChangeAddress: 'p2tr:0',
+          ordinalsStrategy: 'burn',
         });
 
         console.log('[useSwapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
