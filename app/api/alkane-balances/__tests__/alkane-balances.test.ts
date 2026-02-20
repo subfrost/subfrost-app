@@ -1,7 +1,7 @@
 /**
  * Alkane Balance API Tests
  *
- * Tests the get-alkanes-by-address REST proxy flow.
+ * Tests the alkanes_protorunesbyaddress RPC aggregation flow.
  *
  * Run with: pnpm test app/api/alkane-balances/__tests__/alkane-balances.test.ts
  */
@@ -23,11 +23,11 @@ function createRequest(params: Record<string, string>): Request {
   return new Request(url.toString(), { method: 'GET' });
 }
 
-// Helper: build a data API response
-function dataApiResponse(items: any[]) {
+// Helper: build an RPC response with outpoints
+function rpcResponse(outpoints: any[]) {
   return {
     ok: true,
-    json: async () => ({ statusCode: 200, data: items }),
+    json: async () => ({ jsonrpc: '2.0', id: 1, result: { outpoints } }),
   };
 }
 
@@ -46,7 +46,7 @@ describe('GET /api/alkane-balances', () => {
   });
 
   it('returns empty balances when address has no alkanes', async () => {
-    mockFetch.mockResolvedValueOnce(dataApiResponse([]));
+    mockFetch.mockResolvedValueOnce(rpcResponse([]));
 
     const request = createRequest({ address: 'bc1ptest', network: 'mainnet' });
     const response = await GET(request as any);
@@ -56,26 +56,27 @@ describe('GET /api/alkane-balances', () => {
     expect(data.balances).toEqual([]);
   });
 
-  it('maps alkane balances with metadata', async () => {
+  it('aggregates alkane balances across outpoints', async () => {
     mockFetch.mockResolvedValueOnce(
-      dataApiResponse([
+      rpcResponse([
         {
-          alkaneId: { block: 2, tx: 0 },
-          balance: '5000',
-          name: 'DIESEL',
-          symbol: 'DSL',
-          priceUsd: 0.01,
-          priceInSatoshi: '100',
-          tokenImage: 'https://example.com/diesel.png',
+          balance_sheet: {
+            cached: {
+              balances: [
+                { block: 2, tx: 0, amount: '3000' },
+                { block: 32, tx: 0, amount: '1000' },
+              ],
+            },
+          },
         },
         {
-          alkaneId: { block: 32, tx: 0 },
-          balance: '1000',
-          name: 'frBTC',
-          symbol: 'frBTC',
-          priceUsd: 90000,
-          priceInSatoshi: '100000000',
-          tokenImage: 'https://example.com/frbtc.png',
+          balance_sheet: {
+            cached: {
+              balances: [
+                { block: 2, tx: 0, amount: '2000' },
+              ],
+            },
+          },
         },
       ]),
     );
@@ -89,20 +90,19 @@ describe('GET /api/alkane-balances', () => {
 
     const diesel = data.balances.find((b: any) => b.alkaneId === '2:0');
     const frbtc = data.balances.find((b: any) => b.alkaneId === '32:0');
-    expect(diesel.balance).toBe('5000');
-    expect(diesel.name).toBe('DIESEL');
-    expect(diesel.symbol).toBe('DSL');
+    expect(diesel.balance).toBe('5000'); // 3000 + 2000
     expect(frbtc.balance).toBe('1000');
-    expect(frbtc.name).toBe('frBTC');
   });
 
   it('handles missing metadata fields gracefully', async () => {
     mockFetch.mockResolvedValueOnce(
-      dataApiResponse([
+      rpcResponse([
         {
-          alkaneId: { block: 2, tx: 0 },
-          balance: '42',
-          // no name, symbol, price, or image
+          balance_sheet: {
+            cached: {
+              balances: [{ block: 2, tx: 0, amount: '42' }],
+            },
+          },
         },
       ]),
     );
@@ -136,7 +136,7 @@ describe('GET /api/alkane-balances', () => {
     expect(data.error).toBe('Network error');
   });
 
-  it('handles non-ok response from data API', async () => {
+  it('handles non-ok response from RPC', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 502,
@@ -147,42 +147,58 @@ describe('GET /api/alkane-balances', () => {
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toBe('Data API failed: 502');
+    expect(data.error).toBe('RPC failed: 502');
   });
 
   it('uses correct endpoint per network', async () => {
-    mockFetch.mockResolvedValueOnce(dataApiResponse([]));
+    mockFetch.mockResolvedValueOnce(rpcResponse([]));
 
     const request = createRequest({ address: 'bc1ptest', network: 'regtest' });
     await GET(request as any);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://regtest.subfrost.io/v4/subfrost/get-alkanes-by-address',
-      expect.objectContaining({
+      'https://regtest.subfrost.io/v4/subfrost',
+      {
         method: 'POST',
-        body: JSON.stringify({ address: 'bc1ptest' }),
-      }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'alkanes_protorunesbyaddress',
+          params: [{ address: 'bc1ptest', protocolTag: '1' }],
+        }),
+      },
     );
   });
 
   it('defaults to mainnet when network param is missing', async () => {
-    mockFetch.mockResolvedValueOnce(dataApiResponse([]));
+    mockFetch.mockResolvedValueOnce(rpcResponse([]));
 
     const request = createRequest({ address: 'bc1ptest' });
     await GET(request as any);
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://mainnet.subfrost.io/v4/subfrost/get-alkanes-by-address',
-      expect.any(Object),
+      'https://mainnet.subfrost.io/v4/subfrost',
+      expect.objectContaining({
+        method: 'POST',
+      }),
     );
   });
 
   it('makes only one fetch call per request', async () => {
     mockFetch.mockResolvedValueOnce(
-      dataApiResponse([
-        { alkaneId: { block: 2, tx: 0 }, balance: '100' },
-        { alkaneId: { block: 32, tx: 0 }, balance: '200' },
-        { alkaneId: { block: 2, tx: 5 }, balance: '300' },
+      rpcResponse([
+        {
+          balance_sheet: {
+            cached: {
+              balances: [
+                { block: 2, tx: 0, amount: '100' },
+                { block: 32, tx: 0, amount: '200' },
+                { block: 2, tx: 5, amount: '300' },
+              ],
+            },
+          },
+        },
       ]),
     );
 
