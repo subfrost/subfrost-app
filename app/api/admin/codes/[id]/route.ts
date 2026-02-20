@@ -4,15 +4,16 @@
  * DELETE /api/admin/codes/[id] — Delete code (cascades to redemptions)
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAuth } from '@/lib/admin-auth';
+import { requireAdminPermission } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS } from '@/lib/admin-permissions';
 import { prisma } from '@/lib/db/prisma';
 import { cache } from '@/lib/db/redis';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.CODES_READ);
+  if (error) return error;
 
   try {
     const { id } = await context.params;
@@ -39,8 +40,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.CODES_EDIT);
+  if (error) return error;
 
   try {
     const { id } = await context.params;
@@ -69,8 +70,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.CODES_EDIT);
+  if (error) return error;
 
   try {
     const { id } = await context.params;

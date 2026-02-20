@@ -3,13 +3,14 @@
  * POST /api/admin/codes — Create a single code
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAuth } from '@/lib/admin-auth';
+import { requireAdminPermission } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS } from '@/lib/admin-permissions';
 import { prisma } from '@/lib/db/prisma';
 import { cache } from '@/lib/db/redis';
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.CODES_READ);
+  if (error) return error;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -55,8 +56,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.CODES_EDIT);
+  if (error) return error;
 
   try {
     const body = await request.json();

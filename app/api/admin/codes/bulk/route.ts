@@ -6,7 +6,8 @@
  * Generates codes in the format PREFIX-XXXXX (5 random alphanumeric chars).
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAuth } from '@/lib/admin-auth';
+import { requireAdminPermission } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS } from '@/lib/admin-permissions';
 import { prisma } from '@/lib/db/prisma';
 import { cache } from '@/lib/db/redis';
 import crypto from 'crypto';
@@ -16,8 +17,8 @@ function generateSuffix(): string {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.BULK_CREATE);
+  if (error) return error;
 
   try {
     const body = await request.json();
