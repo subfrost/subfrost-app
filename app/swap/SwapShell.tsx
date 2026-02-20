@@ -260,12 +260,21 @@ export default function SwapShell() {
     }
   }, [topVolumePool, isLoadingPools, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged]);
 
-  // Default LP tokens: Select Token / BTC
+  // Default LP tokens: frBTC / DIESEL (or bUSD on mainnet)
+  // Initialize both poolToken0 and poolToken1 with default values when entering LP tab
   useEffect(() => {
-    if (!poolToken1 && selectedTab === 'lp') {
-      setPoolToken1({ id: 'btc', symbol: 'BTC', name: 'BTC' });
+    if (selectedTab === 'lp') {
+      // Set default token0 to frBTC if not already set
+      if (!poolToken0 && FRBTC_ALKANE_ID) {
+        setPoolToken0({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
+      }
+      // Set default token1 to DIESEL/bUSD if not already set
+      if (!poolToken1 && BUSD_ALKANE_ID) {
+        const symbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
+        setPoolToken1({ id: BUSD_ALKANE_ID, symbol, name: symbol });
+      }
     }
-  }, [poolToken1, selectedTab]);
+  }, [selectedTab, poolToken0, poolToken1, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
 
   // Allow all tokens - no filtering
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)

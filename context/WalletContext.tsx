@@ -1456,8 +1456,13 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         throw new Error(`Xverse signing failed: ${errDetail}`);
       }
 
-      // For other browser wallets (OYL, OKX, Unisat, etc.): use SDK adapter
-      // Pass the patched PSBT (with corrected tapInternalKey) as hex
+      // For all browser wallets (OYL, OKX, Unisat, etc.): use SDK adapter
+      // JOURNAL ENTRY (2026-02-20): Direct window.oyl.signPsbt() calls fail with validation errors.
+      // The SDK adapter (walletAdapter.signPsbt) works correctly for all wallets including OYL.
+      // Successful DIESEL minting proved the SDK adapter path works.
+      // Pass the patched PSBT (with corrected tapInternalKey) as HEX
+      // JOURNAL ENTRY (2026-02-20): The SDK's walletAdapter.signPsbt() expects HEX format,
+      // not base64. It validates the input is valid hex before calling the wallet extension.
       const patchedPsbtHex = psbt.toHex();
       const walletId = browserWallet?.info?.id || 'unknown';
       console.log(`[WalletContext] Signing PSBT with SDK adapter (${walletId})`);
@@ -1469,7 +1474,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         throw new Error(`${walletId} signing failed: ${e?.message || e}`);
       }
 
-      // Convert signed hex back to base64
+      // Wallet adapter returns hex, convert to base64 for return
       const signedBuffer = Buffer.from(signedHex, 'hex');
       return signedBuffer.toString('base64');
     }
