@@ -5,7 +5,8 @@
  * total users, recent 10 redemptions, top 10 codes by redemption count.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAuth } from '@/lib/admin-auth';
+import { requireAdminPermission } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS } from '@/lib/admin-permissions';
 import { prisma } from '@/lib/db/prisma';
 import { cache } from '@/lib/db/redis';
 
@@ -13,8 +14,8 @@ const CACHE_KEY = 'admin:stats';
 const CACHE_TTL = 30;
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.STATS_READ);
+  if (error) return error;
 
   try {
     const cached = await cache.get(CACHE_KEY);

@@ -114,6 +114,52 @@ model TransactionLog {
   @@map("transaction_logs")
 }
 
+// Admin users with role-based permissions
+model AdminUser {
+  id            String    @id @default(cuid())
+  username      String    @unique
+  passwordHash  String    @map("password_hash")
+  displayName   String?   @map("display_name")
+  isActive      Boolean   @default(true) @map("is_active")
+  permissions   String[]  // e.g. ["codes.read", "fuel.edit", "iam.owner"]
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  sessions      AdminSession[]
+
+  @@map("admin_users")
+}
+
+// Admin sessions (token-based, 24h expiry)
+model AdminSession {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  adminUserId   String    @map("admin_user_id")
+  expiresAt     DateTime  @map("expires_at")
+  ipAddress     String?   @map("ip_address")
+  userAgent     String?   @map("user_agent")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  adminUser     AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([expiresAt])
+  @@map("admin_sessions")
+}
+
+// FUEL allocations (DB-managed, replaces hardcoded data/fuelAllocations.ts)
+model FuelAllocation {
+  id        String   @id @default(cuid())
+  address   String   @unique
+  amount    Int
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("fuel_allocations")
+}
+
 // Invite codes for gated/tracked access
 model InviteCode {
   id          String    @id @default(cuid())

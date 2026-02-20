@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import FUEL_ALLOCATIONS from '@/data/fuelAllocations';
 
 export interface FuelAllocation {
   isEligible: boolean;
@@ -9,27 +8,58 @@ export interface FuelAllocation {
 
 /**
  * Checks whether the connected wallet's taproot or payment address
- * appears in the FUEL allocation table and returns the allocation.
+ * has a FUEL allocation via the /api/fuel endpoint.
  */
 export function useFuelAllocation(): FuelAllocation {
   const { address, paymentAddress, isConnected } = useWallet();
+  const [allocation, setAllocation] = useState<FuelAllocation>({ isEligible: false, amount: 0 });
 
-  return useMemo(() => {
+  useEffect(() => {
     if (!isConnected) {
-      return { isEligible: false, amount: 0 };
+      setAllocation({ isEligible: false, amount: 0 });
+      return;
     }
 
-    // Check taproot address first, then payment (segwit) address
-    const taprootAlloc = address ? FUEL_ALLOCATIONS[address] : undefined;
-    if (taprootAlloc !== undefined) {
-      return { isEligible: true, amount: taprootAlloc };
+    let cancelled = false;
+
+    async function check(addr: string): Promise<number> {
+      try {
+        const res = await fetch(`/api/fuel?address=${encodeURIComponent(addr)}`);
+        if (!res.ok) return 0;
+        const data = await res.json();
+        return data.amount ?? 0;
+      } catch {
+        return 0;
+      }
     }
 
-    const paymentAlloc = paymentAddress ? FUEL_ALLOCATIONS[paymentAddress] : undefined;
-    if (paymentAlloc !== undefined) {
-      return { isEligible: true, amount: paymentAlloc };
-    }
+    (async () => {
+      // Check taproot first, then payment address
+      if (address) {
+        const amount = await check(address);
+        if (cancelled) return;
+        if (amount > 0) {
+          setAllocation({ isEligible: true, amount });
+          return;
+        }
+      }
 
-    return { isEligible: false, amount: 0 };
+      if (paymentAddress && paymentAddress !== address) {
+        const amount = await check(paymentAddress);
+        if (cancelled) return;
+        if (amount > 0) {
+          setAllocation({ isEligible: true, amount });
+          return;
+        }
+      }
+
+      if (!cancelled) {
+        setAllocation({ isEligible: false, amount: 0 });
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [address, paymentAddress, isConnected]);
+
+  return allocation;
 }
