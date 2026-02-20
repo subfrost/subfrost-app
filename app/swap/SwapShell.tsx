@@ -689,7 +689,11 @@ export default function SwapShell() {
 
       try {
         console.log('[SWAP] BTC →', toToken.symbol, ': Step 1/2 — Wrapping BTC to frBTC');
-        const btcAmount = direction === 'sell' ? fromAmount : toAmount;
+        // fromAmount is always BTC here (it's the "from" token in BTC→Token swaps).
+        // When direction='sell', user typed the BTC amount directly.
+        // When direction='buy', user typed the target token amount and fromAmount
+        // was back-calculated from the quote (via quote.displaySellAmount).
+        const btcAmount = fromAmount;
 
         // Step 1: Wrap BTC → frBTC
         const wrapRes = await wrapMutation.mutateAsync({
