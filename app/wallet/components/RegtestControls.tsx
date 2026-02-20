@@ -44,29 +44,49 @@ export default function RegtestControls() {
   const mineBlocks = async (count: number) => {
     setMining(true);
     try {
-      // Get SegWit address (p2wpkh) for mining rewards
-      const address = account?.nativeSegwit?.address;
+      // Get Taproot address (p2tr) for mining rewards
+      // Use taproot so the funds are immediately available for DIESEL minting
+      const address = account?.taproot?.address || account?.nativeSegwit?.address;
       if (!address) {
-        throw new Error('No SegWit address available. Please connect wallet first.');
+        throw new Error('No address available. Please connect wallet first.');
       }
 
-      // Use the API route which bypasses WASM issues
-      const response = await fetch('/api/regtest/mine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blocks: count, address }),
-      });
+      // JOURNAL ENTRY (2026-02-19):
+      // Backend only mines 1 block per API call, regardless of requested count.
+      // Loop until we've mined the requested number of blocks.
+      let totalMined = 0;
+      while (totalMined < count) {
+        const remaining = count - totalMined;
+        showMessage(`⛏️ Mining block ${totalMined + 1}/${count}...`, 60000);
 
-      const result = await response.json();
+        // Use the API route which bypasses WASM issues
+        const response = await fetch('/api/regtest/mine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ blocks: remaining, address }),
+        });
 
-      if (!response.ok || result.error) {
-        throw new Error(result.error || 'Failed to mine blocks');
+        const result = await response.json();
+
+        if (!response.ok || result.error) {
+          throw new Error(result.error || 'Failed to mine blocks');
+        }
+
+        // Backend returns count of how many blocks were actually mined
+        const minedCount = result.count || result.blocks?.length || 1;
+        totalMined += minedCount;
+
+        console.log(`[RegtestControls] Mined ${minedCount} blocks (${totalMined}/${count} total):`, result);
+
+        // Small delay between mining calls to allow indexer to process
+        if (totalMined < count) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
-      console.log('[RegtestControls] Mined blocks:', result);
-      showMessage(`✅ Mined ${count} block(s) successfully! Refreshing...`);
+      showMessage(`✅ Mined ${totalMined} block(s) successfully! Refreshing...`);
 
-      // Wait briefly for indexer to start processing
+      // Wait briefly for indexer to finish processing all blocks
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Invalidate queries but don't wait for refetch to complete (fire and forget)
@@ -75,7 +95,7 @@ export default function RegtestControls() {
         console.warn('[RegtestControls] Query invalidation error (non-fatal):', err);
       });
 
-      showMessage(`✅ Mined ${count} block(s)!`);
+      showMessage(`✅ Mined ${totalMined} block(s)!`);
     } catch (error) {
       console.error('Mining error:', error);
       showMessage(`❌ Failed to mine blocks: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);

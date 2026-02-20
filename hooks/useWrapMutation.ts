@@ -342,6 +342,11 @@ export function useWrapMutation() {
           // signTaprootPsbt once (it patches tapInternalKey and signs all inputs).
           console.log('[WRAP] Signing PSBT...');
 
+          // Log PSBT details for debugging wallet signing issues
+          const tempPsbtForCheck = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const inputCount = tempPsbtForCheck.data.inputs.length;
+          console.log(`[WRAP] PSBT has ${inputCount} inputs, ${tempPsbtForCheck.txOutputs.length} outputs`);
+
           let signedPsbtBase64: string;
           if (walletType === 'browser') {
             // Browser wallets (OYL, Xverse, Unisat, etc.) sign all inputs in one call
@@ -389,9 +394,10 @@ export function useWrapMutation() {
                 for (let i = 0; i < signedPsbt.data.inputs.length; i++) {
                   const input = signedPsbt.data.inputs[i];
                   if (input.tapKeySig) {
+                    const tapKeySig = input.tapKeySig; // Capture for closure
                     signedPsbt.finalizeInput(i, () => {
                       return {
-                        finalScriptWitness: bitcoin.script.compile([input.tapKeySig!]),
+                        finalScriptWitness: bitcoin.script.compile([tapKeySig]),
                       };
                     });
                   }

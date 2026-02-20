@@ -386,58 +386,41 @@ export default function WalletSettings() {
                 <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
                   {t('wallet.selectNetwork')}
                 </label>
-                {isBrowserWallet ? (
-                  // Browser wallet - show detected network (read-only)
-                  <div className="relative">
-                    <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/40 pointer-events-none" />
-                    {browserWalletNetwork?.isRecognized ? (
-                      <div className="w-full rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-text)]/60 cursor-not-allowed">
-                        {getNetworkDisplayName(browserWalletNetwork.network, browserWalletNetwork.isRecognized)}
-                      </div>
-                    ) : (
-                      <div className="w-full rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-info-yellow-text)] flex items-center gap-2">
-                        <AlertTriangle size={18} className="text-[color:var(--sf-info-yellow-text)]" />
-                        Unrecognized Network from Browser Extension Wallet
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  // Keystore wallet - allow network selection (custom dropdown)
-                  <div className="relative" ref={networkDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setNetworkDropdownOpen((v) => !v)}
-                      className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                    >
-                      <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? t('wallet.selectNetwork')}</span>
-                      <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {networkDropdownOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                        {NETWORK_OPTIONS.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => {
-                              setNetwork(option.value);
-                              setNetworkDropdownOpen(false);
-                            }}
-                            className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                              network === option.value
-                                ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Network selection dropdown - now available for all wallet types */}
+                <div className="relative" ref={networkDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setNetworkDropdownOpen((v) => !v)}
+                    className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                  >
+                    <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? t('wallet.selectNetwork')}</span>
+                    <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {networkDropdownOpen && (
+                    <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                      {NETWORK_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setNetwork(option.value);
+                            setNetworkDropdownOpen(false);
+                          }}
+                          className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                            network === option.value
+                              ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                              : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {!isBrowserWallet && network === 'custom' && (
+              {network === 'custom' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
@@ -467,15 +450,8 @@ export default function WalletSettings() {
                 </>
               )}
 
-              {/* Browser wallet info message - shown instead of save button */}
-              {isBrowserWallet && (
-                <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-                  Network Configuration is only available for keystore wallets. Please navigate to your browser extension wallet to change the network.
-                </div>
-              )}
-
-              {/* Save Settings Button - appears when network is changed (only for keystore wallets) */}
-              {!isBrowserWallet && hasNetworkChanges && (
+              {/* Save Settings Button - appears when network is changed (available for all wallet types) */}
+              {hasNetworkChanges && (
                 <button
                   onClick={handleSave}
                   className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"

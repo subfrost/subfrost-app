@@ -8,6 +8,13 @@
  * LOCAL TESTING SUPPORT:
  * Includes RPC logging via @/lib/rpcLogger for debugging WASM SDK calls.
  * Enable verbose logging in browser console: rpcDebug.enable()
+ *
+ * SDK UPDATE (2026-02-20):
+ * Updated @alkanes/ts-sdk from develop branch. The SDK now includes:
+ * - WasmBrowserWalletProvider: New class for wrapping browser wallets
+ * - JsWalletAdapter interface: For creating custom wallet adapters
+ * - alkanesExecuteFull: Handles complete execution flow internally
+ * Current implementation continues to use alkanesExecuteWithStrings (still available).
  */
 
 import { logWasmCall, logWasmResult, logWasmError } from '@/lib/rpcLogger';

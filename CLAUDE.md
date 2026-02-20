@@ -680,3 +680,30 @@ alkanes: [{id: {block: sell_block, tx: sell_tx}, value: amount_in}]
 - `--features regtest` flag missing in metashrew build
 - Genesis contracts (DIESEL, frBTC) not deployed
 - **Lesson:** Check docker-entrypoint.sh in metashrew-regtest image
+
+### 2026-02-20: OYL Wallet "Invalid PSBT hex" Error (INVESTIGATION IN PROGRESS)
+
+**Symptom:** Wrap transactions fail with "Invalid PSBT hex" error from OYL wallet when the user has many UTXOs (155 in reported case). The SDK creates a PSBT with 28 inputs. OYL wallet popup may appear twice (double signature request).
+
+**Current state of investigation:**
+1. Error originates from `window.oyl.signPsbt()` call in the SDK's `OylAdapter`
+2. The SDK's `OylAdapter` passes PSBT in **hex** format to OYL wallet
+3. Other wallets like Xverse expect **base64** format (per [sats-connect docs](https://docs.xverse.app/sats-connect/bitcoin-methods/signpsbt))
+4. No documentation found for OYL's expected PSBT format
+5. Could be: format mismatch (hex vs base64), PSBT size limit, or validation issue
+
+**Files involved:**
+- `hooks/useWrapMutation.ts` — calls `signTaprootPsbt()` for browser wallets
+- `context/WalletContext.tsx:1354-1480` — `signTaprootPsbt` patches tapInternalKey and calls `walletAdapter.signPsbt()`
+- SDK's `OylAdapter` in `node_modules/@alkanes/ts-sdk/dist/index.js` — passes hex to `window.oyl.signPsbt()`
+
+**Next steps to try:**
+1. Check if OYL wallet expects base64 instead of hex (try converting format)
+2. Test with a transaction that has fewer inputs to rule out size limits
+3. Check OYL wallet extension source code or contact OYL team for API docs
+4. Add detailed logging to capture exact PSBT hex being sent to wallet
+5. Consider calling `window.oyl.signPsbt()` directly (bypassing SDK adapter) with base64 format
+
+**Double signature issue:** Likely a symptom of the first request failing — OYL may show a popup that gets stuck or retries internally.
+
+**Workaround (not implemented):** User can consolidate UTXOs by sending BTC to themselves first, reducing the number of inputs needed.
