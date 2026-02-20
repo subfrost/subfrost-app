@@ -359,14 +359,15 @@ export function useWrapMutation() {
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
           console.log('[WRAP] Signed PSBT inputs:', signedPsbt.data.inputs.length);
           console.log('[WRAP] Input 0 full data:', signedPsbt.data.inputs[0]);
+          const inp0 = signedPsbt.data.inputs[0];
           console.log('[WRAP] Input 0 signature fields:', {
-            tapKeySig: signedPsbt.data.inputs[0]?.tapKeySig?.toString('hex'),
-            tapScriptSig: signedPsbt.data.inputs[0]?.tapScriptSig?.length,
-            partialSig: signedPsbt.data.inputs[0]?.partialSig?.length,
-            finalScriptWitness: signedPsbt.data.inputs[0]?.finalScriptWitness?.toString('hex'),
-            finalScriptSig: signedPsbt.data.inputs[0]?.finalScriptSig?.toString('hex'),
-            witnessUtxo: !!signedPsbt.data.inputs[0]?.witnessUtxo,
-            tapInternalKey: signedPsbt.data.inputs[0]?.tapInternalKey?.toString('hex'),
+            tapKeySig: inp0?.tapKeySig ? Buffer.from(inp0.tapKeySig).toString('hex') : undefined,
+            tapScriptSig: inp0?.tapScriptSig?.length,
+            partialSig: inp0?.partialSig?.length,
+            finalScriptWitness: inp0?.finalScriptWitness ? Buffer.from(inp0.finalScriptWitness).toString('hex') : undefined,
+            finalScriptSig: inp0?.finalScriptSig ? Buffer.from(inp0.finalScriptSig).toString('hex') : undefined,
+            witnessUtxo: !!inp0?.witnessUtxo,
+            tapInternalKey: inp0?.tapInternalKey ? Buffer.from(inp0.tapInternalKey).toString('hex') : undefined,
           });
 
           // Check if OYL already finalized the PSBT
@@ -390,7 +391,7 @@ export function useWrapMutation() {
                   if (input.tapKeySig) {
                     signedPsbt.finalizeInput(i, () => {
                       return {
-                        finalScriptWitness: bitcoin.script.compile([input.tapKeySig]),
+                        finalScriptWitness: bitcoin.script.compile([input.tapKeySig!]),
                       };
                     });
                   }

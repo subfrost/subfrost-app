@@ -5,19 +5,6 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get('x-admin-token');
     if (!token) {
-      // Legacy secret check
-      const secret = request.headers.get('x-admin-secret');
-      const expected = process.env.ADMIN_SECRET;
-      if (expected && secret && secret === expected) {
-        return NextResponse.json({
-          user: {
-            id: '__legacy__',
-            username: 'admin',
-            displayName: 'Legacy Admin',
-            permissions: ['iam.owner'],
-          },
-        });
-      }
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 

@@ -35,15 +35,7 @@ export default function AdminPage() {
     const token = getAdminToken();
     if (!token) return;
 
-    const headers: Record<string, string> = {};
-    // Detect if it's a legacy secret
-    if (!sessionStorage.getItem('admin-token') && sessionStorage.getItem('admin-secret')) {
-      headers['x-admin-secret'] = token;
-    } else {
-      headers['x-admin-token'] = token;
-    }
-
-    fetch('/api/admin/auth/me', { headers })
+    fetch('/api/admin/auth/me', { headers: { 'x-admin-token': token } })
       .then(async (res) => {
         if (res.ok) {
           const data = await res.json();

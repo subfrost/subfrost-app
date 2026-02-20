@@ -3,12 +3,10 @@
  *
  * Auth flow:
  * 1. Check `x-admin-token` header for a valid AdminSession token
- * 2. If no token, fall back to `x-admin-secret` (legacy shared secret, grants all permissions)
- * 3. Verify the user has the required permission (or is iam.owner)
+ * 2. Verify the user has the required permission (or is iam.owner)
  *
  * JOURNAL 2026-02-20: Replaced single requireAdminAuth() with requireAdminPermission()
- * that returns the authenticated AdminUser for audit logging. Legacy ADMIN_SECRET still
- * works as a fallback for backward compat but grants iam.owner equivalent.
+ * that returns the authenticated AdminUser for audit logging.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
@@ -71,21 +69,6 @@ export async function requireAdminPermission(
         username: session.adminUser.username,
         displayName: session.adminUser.displayName,
         permissions: session.adminUser.permissions,
-      },
-    };
-  }
-
-  // 2. Legacy fallback: x-admin-secret grants iam.owner equivalent
-  const secret = request.headers.get('x-admin-secret');
-  const expected = process.env.ADMIN_SECRET;
-
-  if (expected && secret && secret === expected) {
-    return {
-      user: {
-        id: '__legacy__',
-        username: 'admin',
-        displayName: 'Legacy Admin',
-        permissions: ['iam.owner'],
       },
     };
   }
