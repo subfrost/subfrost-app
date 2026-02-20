@@ -122,7 +122,7 @@ export async function buildAlkaneTransferPsbt(
 ): Promise<BuildAlkaneTransferResult> {
   const {
     alkaneId, amount, senderTaprootAddress, senderPaymentAddress,
-    recipientAddress, feeRate, network, networkName,
+    recipientAddress, tapInternalKeyHex, feeRate, network, networkName,
   } = params;
 
   const [block, tx] = alkaneId.split(':').map(Number);
@@ -236,6 +236,12 @@ export async function buildAlkaneTransferPsbt(
   // -----------------------------------------------------------------------
   const psbt = new bitcoin.Psbt({ network });
 
+  // Parse tapInternalKey for P2TR inputs (BIP-174 standard field).
+  // Wallets use this to identify which inputs belong to the connected account.
+  const tapInternalKey = tapInternalKeyHex
+    ? Buffer.from(tapInternalKeyHex.length === 66 ? tapInternalKeyHex.slice(2) : tapInternalKeyHex, 'hex')
+    : undefined;
+
   // Add alkane inputs (taproot, from sender)
   for (const utxo of alkaneUtxos) {
     const txHex = txHexMap.get(utxo.txid)!;
@@ -249,6 +255,7 @@ export async function buildAlkaneTransferPsbt(
         script: Buffer.from(prevOut.script),
         value: BigInt(utxo.value),
       },
+      ...(tapInternalKey ? { tapInternalKey } : {}),
     });
   }
 
@@ -257,22 +264,21 @@ export async function buildAlkaneTransferPsbt(
     const txHex = txHexMap.get(utxo.txid)!;
     const prevTx = bitcoin.Transaction.fromHex(txHex);
     const prevOut = prevTx.outs[utxo.vout];
+    const script = Buffer.from(prevOut.script);
+
+    // Detect P2TR outputs: OP_1 (0x51) + OP_DATA_32 (0x20) + 32 bytes = 34 bytes
+    const isP2TR = script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
 
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
       witnessUtxo: {
-        script: Buffer.from(prevOut.script),
+        script,
         value: BigInt(utxo.value),
       },
+      ...(isP2TR && tapInternalKey ? { tapInternalKey } : {}),
     });
   }
-
-  // NOTE: tapInternalKey is intentionally omitted from the PSBT.
-  // For P2TR key-path spends, the wallet determines signing from the
-  // witnessUtxo script (OP_1 <32-byte push> = P2TR). Browser Buffer
-  // polyfills corrupt the binary serialization, so we let the wallet
-  // handle tapInternalKey internally during signing.
 
   // v0: Sender alkane change (dust — receives unedicted alkane remainder)
   psbt.addOutput({
