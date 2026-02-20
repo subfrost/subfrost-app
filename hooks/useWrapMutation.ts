@@ -295,11 +295,29 @@ export function useWrapMutation() {
           // - ~/.claude/plans/stateless-roaming-tide.md: Complete investigation
           // - ~/.claude/plans/WRAP_BUG_INVESTIGATION_COMPLETE.md: Full timeline
           // ============================================================================
-          console.log('[WRAP] Using PSBT from SDK (addresses already correct, no patching needed)');
+          console.log('[WRAP] Using PSBT from SDK (output addresses already correct, no output patching needed)');
 
-          // DIAGNOSTIC: Log PSBT outputs AFTER patching
-          // Investigation (2026-02-20): Check if patching corrupts the correct addresses from WASM
-          console.log('[DIAGNOSTIC] AFTER patching:');
+          // INPUT-ONLY patching: fix witnessUtxo.script on inputs where the SDK's
+          // dummy wallet uses P2SH-P2WPKH (BIP49) but the user has native P2WPKH (BIP84).
+          // This does NOT touch outputs (which the SDK sets correctly).
+          // Without this, finalizeAllInputs() fails with "inputType: sh without redeemScript"
+          // because it sees a P2SH witnessUtxo.script but no redeemScript.
+          if (isBrowserWallet) {
+            const { patchInputWitnessScripts } = await import('@/lib/psbt-patching');
+            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            const inputsPatched = patchInputWitnessScripts(tempPsbt, {
+              taprootAddress: userTaprootAddress,
+              segwitAddress: userSegwitAddress,
+              network: btcNetwork,
+            });
+            if (inputsPatched > 0) {
+              console.log(`[WRAP] Patched witnessUtxo.script on ${inputsPatched} input(s) (P2SH→P2WPKH)`);
+              psbtBase64 = tempPsbt.toBase64();
+            }
+          }
+
+          // DIAGNOSTIC: Log PSBT outputs after input patching (outputs should be unchanged)
+          console.log('[DIAGNOSTIC] AFTER input patching:');
           {
             const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
             tempPsbt.txOutputs.forEach((out, idx) => {

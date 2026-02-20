@@ -297,9 +297,9 @@ export function useSwapMutation() {
           feeRate: swapData.feeRate,
           autoConfirm: false,
           fromAddresses,
-          toAddresses: ['p2tr:0'],
-          changeAddress: 'p2wpkh:0',
-          alkanesChangeAddress: 'p2tr:0',
+          toAddresses: isBrowserWallet ? [taprootAddress] : ['p2tr:0'],
+          changeAddress: isBrowserWallet ? (segwitAddress || 'p2wpkh:0') : 'p2wpkh:0',
+          alkanesChangeAddress: isBrowserWallet ? taprootAddress : 'p2tr:0',
           ordinalsStrategy: 'burn',
         });
 

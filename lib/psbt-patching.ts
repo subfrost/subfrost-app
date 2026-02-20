@@ -55,6 +55,11 @@ function isP2WPKH(script: Buffer): boolean {
   return script[0] === 0x00 && script.length === 22;
 }
 
+/** P2SH: OP_HASH160 <20-byte script hash> OP_EQUAL → [0xa9, 0x14, ...20 bytes, 0x87] = 23 bytes */
+function isP2SH(script: Buffer): boolean {
+  return script.length === 23 && script[0] === 0xa9 && script[1] === 0x14 && script[22] === 0x87;
+}
+
 // ---------------------------------------------------------------------------
 // Output patching
 // ---------------------------------------------------------------------------
@@ -179,6 +184,14 @@ export function patchInputWitnessScripts(
       } else if (isP2WPKH(script) && segwitScript) {
         input.witnessUtxo = { ...input.witnessUtxo, script: segwitScript };
         patched++;
+      } else if (isP2SH(script) && segwitScript && isP2WPKH(Buffer.from(segwitScript))) {
+        // Dummy wallet uses P2SH-P2WPKH (BIP49) but user has native P2WPKH (BIP84).
+        // Replace the P2SH script with the user's native P2WPKH script so
+        // finalizeAllInputs() can classify the input correctly.
+        // For Xverse (P2SH-P2WPKH users), segwitScript is P2SH, so this
+        // branch is skipped — those inputs go through injectRedeemScripts instead.
+        input.witnessUtxo = { ...input.witnessUtxo, script: segwitScript };
+        patched++;
       }
       continue;
     }
@@ -195,6 +208,8 @@ export function patchInputWitnessScripts(
         if (isP2TR(prevScript)) {
           newScript = taprootScript;
         } else if (isP2WPKH(prevScript) && segwitScript) {
+          newScript = segwitScript;
+        } else if (isP2SH(prevScript) && segwitScript && isP2WPKH(Buffer.from(segwitScript))) {
           newScript = segwitScript;
         }
         if (newScript) {
