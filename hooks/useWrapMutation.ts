@@ -230,17 +230,44 @@ export function useWrapMutation() {
           // If outputs ever show BOTH going to same address, PSBT corruption has returned.
           // Reference: ~/.claude/CLAUDE.md "CRITICAL: PSBT Patching Removed"
           // ============================================================================
-          console.log('[DIAGNOSTIC] BEFORE patching:');
-          {
-            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            tempPsbt.txOutputs.forEach((out, idx) => {
+          // Helper to classify script type from raw bytes
+          const classifyScript = (script: Uint8Array | Buffer): string => {
+            const s = Buffer.from(script);
+            if (s.length === 34 && s[0] === 0x51 && s[1] === 0x20) return 'P2TR';
+            if (s.length === 22 && s[0] === 0x00 && s[1] === 0x14) return 'P2WPKH';
+            if (s.length === 23 && s[0] === 0xa9 && s[1] === 0x14 && s[22] === 0x87) return 'P2SH';
+            if (s.length === 34 && s[0] === 0x00 && s[1] === 0x20) return 'P2WSH';
+            if (s.length > 0 && s[0] === 0x6a) return 'OP_RETURN';
+            return `UNKNOWN(len=${s.length},op=${s[0]?.toString(16)})`;
+          };
+
+          // Log per-input details for debugging
+          const logInputDetails = (psbt: bitcoin.Psbt, label: string) => {
+            console.log(`[WRAP-DIAG] === ${label} — ${psbt.data.inputs.length} inputs, ${psbt.txOutputs.length} outputs ===`);
+            psbt.data.inputs.forEach((input, idx) => {
+              const witnessScript = input.witnessUtxo?.script;
+              const scriptHex = witnessScript ? Buffer.from(witnessScript).toString('hex') : 'NONE';
+              const scriptType = witnessScript ? classifyScript(witnessScript) : 'NO_WITNESS_UTXO';
+              const hasNonWitness = !!input.nonWitnessUtxo;
+              const hasRedeemScript = !!input.redeemScript;
+              const hasTapInternalKey = !!input.tapInternalKey;
+              const tapKeyHex = input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'NONE';
+              console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex} nonWitnessUtxo=${hasNonWitness} redeemScript=${hasRedeemScript} tapInternalKey=${tapKeyHex}`);
+            });
+            psbt.txOutputs.forEach((out, idx) => {
               try {
                 const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
                 console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
-              } catch (e) {
-                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or invalid]`);
+              } catch {
+                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or non-standard]`);
               }
             });
+          };
+
+          console.log('[DIAGNOSTIC] BEFORE patching:');
+          {
+            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            logInputDetails(tempPsbt, 'BEFORE PATCHING');
           }
 
           // ============================================================================
@@ -297,13 +324,13 @@ export function useWrapMutation() {
           // ============================================================================
           console.log('[WRAP] Using PSBT from SDK (output addresses already correct, no output patching needed)');
 
-          // INPUT-ONLY patching: fix witnessUtxo.script on inputs where the SDK's
-          // dummy wallet uses P2SH-P2WPKH (BIP49) but the user has native P2WPKH (BIP84).
-          // This does NOT touch outputs (which the SDK sets correctly).
-          // Without this, finalizeAllInputs() fails with "inputType: sh without redeemScript"
-          // because it sees a P2SH witnessUtxo.script but no redeemScript.
+          // INPUT-ONLY patching (no output patching — SDK outputs are correct):
+          // 1. patchInputWitnessScripts: fix witnessUtxo.script where SDK dummy wallet
+          //    uses P2SH but user has native P2WPKH (converts P2SH→P2WPKH)
+          // 2. injectRedeemScripts: for P2SH-P2WPKH wallets (Xverse), inject the
+          //    redeemScript so the wallet knows the inner P2WPKH script
           if (isBrowserWallet) {
-            const { patchInputWitnessScripts } = await import('@/lib/psbt-patching');
+            const { patchInputWitnessScripts, injectRedeemScripts } = await import('@/lib/psbt-patching');
             const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
             const inputsPatched = patchInputWitnessScripts(tempPsbt, {
               taprootAddress: userTaprootAddress,
@@ -311,23 +338,30 @@ export function useWrapMutation() {
               network: btcNetwork,
             });
             if (inputsPatched > 0) {
-              console.log(`[WRAP] Patched witnessUtxo.script on ${inputsPatched} input(s) (P2SH→P2WPKH)`);
-              psbtBase64 = tempPsbt.toBase64();
+              console.log(`[WRAP] Patched witnessUtxo.script on ${inputsPatched} input(s)`);
             }
+
+            // Inject redeemScript for P2SH-P2WPKH wallets (Xverse: address starts with '3')
+            const paymentPubkeyHex = account?.nativeSegwit?.pubkey;
+            if (paymentPubkeyHex && userSegwitAddress) {
+              const redeemScriptsInjected = injectRedeemScripts(tempPsbt, {
+                paymentAddress: userSegwitAddress,
+                pubkeyHex: paymentPubkeyHex,
+                network: btcNetwork,
+              });
+              if (redeemScriptsInjected > 0) {
+                console.log(`[WRAP] Injected redeemScript on ${redeemScriptsInjected} P2SH-P2WPKH input(s)`);
+              }
+            }
+
+            psbtBase64 = tempPsbt.toBase64();
           }
 
-          // DIAGNOSTIC: Log PSBT outputs after input patching (outputs should be unchanged)
+          // DIAGNOSTIC: Log PSBT details after input patching
           console.log('[DIAGNOSTIC] AFTER input patching:');
           {
             const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            tempPsbt.txOutputs.forEach((out, idx) => {
-              try {
-                const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
-              } catch (e) {
-                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or invalid]`);
-              }
-            });
+            logInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
           // For keystore wallets, request user confirmation before signing
@@ -380,17 +414,20 @@ export function useWrapMutation() {
           // (with finalScriptWitness already set) instead of adding intermediate signature fields.
           // Check if already finalized before attempting finalization.
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-          console.log('[WRAP] Signed PSBT inputs:', signedPsbt.data.inputs.length);
-          console.log('[WRAP] Input 0 full data:', signedPsbt.data.inputs[0]);
-          const inp0 = signedPsbt.data.inputs[0];
-          console.log('[WRAP] Input 0 signature fields:', {
-            tapKeySig: inp0?.tapKeySig ? Buffer.from(inp0.tapKeySig).toString('hex') : undefined,
-            tapScriptSig: inp0?.tapScriptSig?.length,
-            partialSig: inp0?.partialSig?.length,
-            finalScriptWitness: inp0?.finalScriptWitness ? Buffer.from(inp0.finalScriptWitness).toString('hex') : undefined,
-            finalScriptSig: inp0?.finalScriptSig ? Buffer.from(inp0.finalScriptSig).toString('hex') : undefined,
-            witnessUtxo: !!inp0?.witnessUtxo,
-            tapInternalKey: inp0?.tapInternalKey ? Buffer.from(inp0.tapInternalKey).toString('hex') : undefined,
+          console.log(`[WRAP-DIAG] === AFTER SIGNING — ${signedPsbt.data.inputs.length} inputs ===`);
+          signedPsbt.data.inputs.forEach((inp, idx) => {
+            const witnessScript = inp.witnessUtxo?.script;
+            const scriptType = witnessScript ? classifyScript(witnessScript) : 'NO_WITNESS_UTXO';
+            const scriptHex = witnessScript ? Buffer.from(witnessScript).toString('hex') : 'NONE';
+            console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex}`, {
+              tapKeySig: inp.tapKeySig ? `${Buffer.from(inp.tapKeySig).length}B` : undefined,
+              tapScriptSig: inp.tapScriptSig?.length || undefined,
+              partialSig: inp.partialSig?.length || undefined,
+              finalScriptWitness: inp.finalScriptWitness ? `${Buffer.from(inp.finalScriptWitness).length}B` : undefined,
+              finalScriptSig: inp.finalScriptSig ? `${Buffer.from(inp.finalScriptSig).length}B` : undefined,
+              redeemScript: inp.redeemScript ? `${Buffer.from(inp.redeemScript).length}B` : undefined,
+              tapInternalKey: inp.tapInternalKey ? Buffer.from(inp.tapInternalKey).toString('hex') : undefined,
+            });
           });
 
           // Check if OYL already finalized the PSBT
@@ -406,6 +443,14 @@ export function useWrapMutation() {
               signedPsbt.finalizeAllInputs();
             } catch (e: any) {
               console.error('[WRAP] Finalization error:', e.message);
+              // Dump per-input state to diagnose which input failed
+              console.error('[WRAP-DIAG] === FINALIZATION FAILURE DUMP ===');
+              signedPsbt.data.inputs.forEach((inp, idx) => {
+                const ws = inp.witnessUtxo?.script;
+                const sType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
+                const sHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
+                console.error(`  Input ${idx}: type=${sType} script=${sHex} redeemScript=${inp.redeemScript ? Buffer.from(inp.redeemScript).toString('hex') : 'NONE'} tapKeySig=${!!inp.tapKeySig} partialSig=${inp.partialSig?.length || 0} finalScriptWitness=${!!inp.finalScriptWitness}`);
+              });
               // Try manual finalization for taproot key-path spend
               if (signedPsbt.data.inputs[0]?.tapKeySig) {
                 console.log('[WRAP] Attempting manual finalization for taproot key-path spend');

@@ -331,6 +331,40 @@ export function useSwapMutation() {
           let psbtBase64 = extractPsbtBase64(readyToSign.psbt);
           console.log('[useSwapMutation] PSBT base64 length:', psbtBase64.length);
 
+          // Helper to classify script type from raw bytes
+          const classifyScript = (script: Uint8Array | Buffer): string => {
+            const s = Buffer.from(script);
+            if (s.length === 34 && s[0] === 0x51 && s[1] === 0x20) return 'P2TR';
+            if (s.length === 22 && s[0] === 0x00 && s[1] === 0x14) return 'P2WPKH';
+            if (s.length === 23 && s[0] === 0xa9 && s[1] === 0x14 && s[22] === 0x87) return 'P2SH';
+            if (s.length === 34 && s[0] === 0x00 && s[1] === 0x20) return 'P2WSH';
+            return `UNKNOWN(len=${s.length},op=${s[0]?.toString(16)})`;
+          };
+
+          const logSwapInputDetails = (psbt: bitcoin.Psbt, label: string) => {
+            console.log(`[SWAP-DIAG] === ${label} — ${psbt.data.inputs.length} inputs, ${psbt.txOutputs.length} outputs ===`);
+            psbt.data.inputs.forEach((input, idx) => {
+              const ws = input.witnessUtxo?.script;
+              const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
+              const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
+              console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex} nonWitnessUtxo=${!!input.nonWitnessUtxo} redeemScript=${!!input.redeemScript} tapInternalKey=${input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'NONE'}`);
+            });
+            psbt.txOutputs.forEach((out, idx) => {
+              try {
+                const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
+                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
+              } catch {
+                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or non-standard]`);
+              }
+            });
+          };
+
+          // DIAGNOSTIC: Log PSBT state before patching
+          {
+            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            logSwapInputDetails(tempPsbt, 'BEFORE PATCHING');
+          }
+
           // Patch PSBT: replace dummy wallet outputs with real addresses,
           // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
           if (isBrowserWallet) {
@@ -347,6 +381,12 @@ export function useSwapMutation() {
               console.log('[useSwapMutation] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
             }
             console.log('[useSwapMutation] Patched PSBT outputs for browser wallet');
+          }
+
+          // DIAGNOSTIC: Log PSBT state after patching
+          {
+            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            logSwapInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
           // For keystore wallets, request user confirmation before signing
@@ -388,9 +428,47 @@ export function useSwapMutation() {
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
 
+          // DIAGNOSTIC: Log per-input state after signing
+          console.log(`[SWAP-DIAG] === AFTER SIGNING — ${signedPsbt.data.inputs.length} inputs ===`);
+          signedPsbt.data.inputs.forEach((inp, idx) => {
+            const ws = inp.witnessUtxo?.script;
+            const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
+            const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
+            console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex}`, {
+              tapKeySig: inp.tapKeySig ? `${Buffer.from(inp.tapKeySig).length}B` : undefined,
+              partialSig: inp.partialSig?.length || undefined,
+              finalScriptWitness: inp.finalScriptWitness ? `${Buffer.from(inp.finalScriptWitness).length}B` : undefined,
+              finalScriptSig: inp.finalScriptSig ? `${Buffer.from(inp.finalScriptSig).length}B` : undefined,
+              redeemScript: inp.redeemScript ? `${Buffer.from(inp.redeemScript).length}B` : undefined,
+              tapInternalKey: inp.tapInternalKey ? Buffer.from(inp.tapInternalKey).toString('hex') : undefined,
+            });
+          });
+
+          // Check if already finalized by the wallet
+          const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+            input.finalScriptWitness || input.finalScriptSig
+          );
+
           // Finalize all inputs
-          console.log('[useSwapMutation] Finalizing PSBT...');
-          signedPsbt.finalizeAllInputs();
+          if (alreadyFinalized) {
+            console.log('[useSwapMutation] PSBT already finalized by wallet, skipping finalization');
+          } else {
+            console.log('[useSwapMutation] Finalizing PSBT...');
+            try {
+              signedPsbt.finalizeAllInputs();
+            } catch (e: any) {
+              console.error('[useSwapMutation] Finalization error:', e.message);
+              // Dump per-input state for debugging
+              console.error('[SWAP-DIAG] === FINALIZATION FAILURE DUMP ===');
+              signedPsbt.data.inputs.forEach((inp, idx) => {
+                const ws = inp.witnessUtxo?.script;
+                const sType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
+                const sHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
+                console.error(`  Input ${idx}: type=${sType} script=${sHex} redeemScript=${inp.redeemScript ? Buffer.from(inp.redeemScript).toString('hex') : 'NONE'} tapKeySig=${!!inp.tapKeySig} partialSig=${inp.partialSig?.length || 0} finalScriptWitness=${!!inp.finalScriptWitness}`);
+              });
+              throw e;
+            }
+          }
 
           // Extract the raw transaction
           const tx = signedPsbt.extractTransaction();

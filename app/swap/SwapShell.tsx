@@ -720,11 +720,12 @@ export default function SwapShell() {
         }
         console.log('[SWAP] Step 1 complete — wrap txid:', wrapRes.transactionId);
 
-        // Mine a block and wait for esplora to index it (regtest only).
-        // The swap step needs fresh UTXO data — if we proceed too early,
-        // the SDK will try to spend UTXOs that the wrap tx already consumed,
-        // causing "bad-txns-inputs-missingorspent" on broadcast.
+        // Wait for wrap tx to confirm before proceeding to step 2.
+        // The swap step needs confirmed frBTC UTXOs — if we proceed before
+        // the wrap tx is mined, the SDK won't find enough frBTC balance.
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
+
+        // On regtest, mine a block to trigger confirmation
         if (isRegtest && address) {
           console.log('[SWAP] Mining block to confirm wrap transaction...');
           try {
@@ -733,37 +734,54 @@ export default function SwapShell() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ blocks: 1, address }),
             });
-            // Poll esplora until the wrap tx is confirmed (indexer lag can be 3-15s)
-            const wrapTxId = wrapRes.transactionId;
-            const maxPollAttempts = 20;
-            for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              try {
-                const txResp = await fetch('/api/rpc', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'esplora_tx',
-                    params: [wrapTxId],
-                    id: 1,
-                  }),
-                });
-                const txData = await txResp.json();
-                if (txData?.result?.status?.confirmed) {
-                  console.log(`[SWAP] Wrap tx confirmed after ${(attempt + 1) * 1.5}s`);
-                  // Extra wait for esplora UTXO index to update after tx confirmation
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  break;
-                }
-                console.log(`[SWAP] Polling wrap tx... attempt ${attempt + 1}/${maxPollAttempts}`);
-              } catch {
-                // Polling error — keep retrying
-              }
-            }
           } catch (mineErr) {
             console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
           }
+        }
+
+        // Poll esplora until the wrap tx is confirmed (all networks)
+        console.log('[SWAP] Waiting for wrap tx confirmation before swap step...');
+        showNotification(wrapRes.transactionId, 'wrap');
+
+        const wrapTxId = wrapRes.transactionId;
+        const pollInterval = isRegtest ? 1500 : 15000;   // 1.5s regtest, 15s mainnet
+        const maxPollAttempts = isRegtest ? 20 : 120;     // 30s regtest, ~30min mainnet
+        let wrapConfirmed = false;
+
+        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          try {
+            const txResp = await fetch(`/api/rpc/${encodeURIComponent(network)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'esplora_tx',
+                params: [wrapTxId],
+                id: 1,
+              }),
+            });
+            const txData = await txResp.json();
+            if (txData?.result?.status?.confirmed) {
+              const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
+              console.log(`[SWAP] Wrap tx confirmed after ${elapsedSec}s`);
+              // Extra wait for esplora UTXO index to update
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              wrapConfirmed = true;
+              break;
+            }
+            const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
+            console.log(`[SWAP] Polling wrap tx... attempt ${attempt + 1}/${maxPollAttempts} (${elapsed}s elapsed)`);
+          } catch {
+            // Polling error — keep retrying
+          }
+        }
+
+        if (!wrapConfirmed) {
+          throw new Error(
+            `Wrap tx broadcast successfully (${wrapTxId}) but did not confirm within ${Math.round(maxPollAttempts * pollInterval / 60000)} minutes. ` +
+            `Your BTC has been wrapped — once confirmed, swap frBTC → ${toToken.symbol} manually.`
+          );
         }
 
         // Step 2: Swap frBTC → Target token
