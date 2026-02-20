@@ -689,6 +689,11 @@ export default function SwapShell() {
 
       try {
         console.log('[SWAP] BTC →', toToken.symbol, ': Step 1/2 — Wrapping BTC to frBTC');
+        console.log('[SWAP] DEBUG: direction =', direction);
+        console.log('[SWAP] DEBUG: fromAmount =', fromAmount, '(should be BTC display units)');
+        console.log('[SWAP] DEBUG: toAmount =', toAmount);
+        console.log('[SWAP] DEBUG: quote.displaySellAmount =', quote?.displaySellAmount);
+        console.log('[SWAP] DEBUG: quote.sellAmount =', quote?.sellAmount);
         // fromAmount is always BTC here (it's the "from" token in BTC→Token swaps).
         // When direction='sell', user typed the BTC amount directly.
         // When direction='buy', user typed the target token amount and fromAmount
