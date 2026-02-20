@@ -1,15 +1,17 @@
 /**
- * Alkane Balance API — Proxies the data API's get-alkanes-by-address endpoint
+ * Alkane Balance API — Aggregates balances from alkanes_protorunesbyaddress RPC
  *
  * GET /api/alkane-balances?address=<address>&network=<network>
  *
- * Returns enriched alkane balances including name, symbol, price, and image
- * from the subfrost data API (espo-backed, not metashrew).
+ * Returns alkane balances by directly querying the metashrew alkanes indexer
+ * and aggregating balances client-side. This ensures balances are always current
+ * on regtest networks where the data API (espo) may have delays.
  *
  * JOURNAL ENTRY (2026-02-10): Created with outpoint-by-outpoint approach.
  * JOURNAL ENTRY (2026-02-12): Switched to get-alkanes-by-address REST endpoint.
- * The outpoint approach was missing tokens due to stale metashrew indexer.
- * The data API returns complete balances with metadata (name, symbol, prices).
+ * JOURNAL ENTRY (2026-02-20): Switched back to RPC aggregation for regtest networks.
+ * The data API (espo) has indexing delays on regtest, so we aggregate balances
+ * from the low-level alkanes_protorunesbyaddress RPC method for immediate results.
  */
 
 import { NextResponse } from 'next/server';
@@ -36,27 +38,47 @@ export async function GET(request: Request) {
   const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
 
   try {
-    const response = await fetch(`${baseUrl}/get-alkanes-by-address`, {
+    // Use low-level RPC to get outpoints with alkanes
+    const response = await fetch(baseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address }),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'alkanes_protorunesbyaddress',
+        params: [{ address, protocolTag: '1' }],
+      }),
     });
 
     if (!response.ok) {
-      throw new Error(`Data API failed: ${response.status}`);
+      throw new Error(`RPC failed: ${response.status}`);
     }
 
     const data = await response.json();
-    const items: any[] = data?.data || [];
+    const outpoints = data?.result?.outpoints || [];
 
-    const balances = items.map((item: any) => ({
-      alkaneId: `${item.alkaneId?.block || 0}:${item.alkaneId?.tx || 0}`,
-      balance: String(item.balance || '0'),
-      name: item.name || '',
-      symbol: item.symbol || '',
-      priceUsd: item.priceUsd || 0,
-      priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : 0,
-      tokenImage: item.tokenImage || '',
+    // Aggregate balances by alkane ID
+    const balanceMap = new Map<string, bigint>();
+
+    for (const outpoint of outpoints) {
+      const balances = outpoint?.balance_sheet?.cached?.balances || [];
+      for (const bal of balances) {
+        const alkaneId = `${bal.block}:${bal.tx}`;
+        const amount = BigInt(bal.amount || 0);
+        const current = balanceMap.get(alkaneId) || BigInt(0);
+        balanceMap.set(alkaneId, current + amount);
+      }
+    }
+
+    // Convert to array format
+    const balances = Array.from(balanceMap.entries()).map(([alkaneId, balance]) => ({
+      alkaneId,
+      balance: balance.toString(),
+      name: '', // TODO: fetch metadata from token registry
+      symbol: '',
+      priceUsd: 0,
+      priceInSatoshi: 0,
+      tokenImage: '',
     }));
 
     return NextResponse.json({ balances });

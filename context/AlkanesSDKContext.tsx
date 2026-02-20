@@ -194,17 +194,22 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
         console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
 
-        // Pre-load a dummy wallet so walletIsLoaded() returns true.
-        // Extension wallets (Xverse, Oyl) never share their mnemonic, so
-        // walletLoadMnemonic is never called for them. Without this, the SDK's
-        // alkanesExecuteWithStrings rejects with "Wallet not loaded" before it
-        // even attempts UTXO discovery. The dummy wallet satisfies the check;
-        // real addresses are passed via fromAddresses/toAddresses options, and
-        // autoConfirm:false prevents internal signing.
-        // For keystore wallets, loadWallet(mnemonic) overwrites this immediately.
+        // JOURNAL ENTRY (2026-02-20): Dummy wallet is required - SDK throws "Wallet not loaded"
+        // without it. However, the dummy wallet causes address resolution issues: the SDK
+        // resolves ALL addresses (including explicit Bitcoin addresses in toAddresses) to
+        // the dummy wallet's addresses, causing funds to be sent to the wrong addresses.
+        //
+        // The root issue is that the SDK's alkanesExecuteWithStrings internally resolves
+        // addresses based on the loaded wallet, even when actual Bitcoin addresses are provided.
+        //
+        // Next steps to investigate:
+        // 1. Check if there's an SDK option to disable address resolution
+        // 2. Check if we can load a wallet from the browser wallet's public keys only
+        // 3. Consider using raw PSBT building instead of the SDK's execution methods
         try {
           providerInstance.walletCreate();
-          console.log('[AlkanesSDK] Dummy wallet loaded (for extension wallet compatibility)');
+          setIsWalletLoaded(true);
+          console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
         } catch (e) {
           console.warn('[AlkanesSDK] walletCreate failed (non-fatal):', e);
         }

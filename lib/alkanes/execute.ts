@@ -6,6 +6,18 @@
  *
  * NOTE: This file uses relative imports only (no @/ alias) so it works in
  * both Next.js and vitest without path resolution issues.
+ *
+ * **CRITICAL: THIS IS THE ACTUAL CODE PATH FOR FRONTEND WRAP/SWAP OPERATIONS**
+ * Despite the existence of alkanesExecuteFull in the SDK, the frontend uses this older
+ * alkanesExecuteWithStrings path. Call chain:
+ *   useWrapMutation.ts → this file (line 62) → WASM alkanes_execute_with_strings_js → Rust execute()
+ *
+ * **WRAP TRANSACTION BUG INVESTIGATION (2026-02-20)**
+ * Bug: Both outputs go to user address instead of [signer, user]
+ * Frontend logs (line 56) show CORRECT addresses being passed: ['bcrt1p466...', 'bcrt1pvu3...']
+ * WASM diagnostic logs at provider.rs:674-679 will show if addresses survive TypeScript→WASM boundary
+ * If WASM logs show wrong addresses, bug is in this file or SDK serialization
+ * If WASM logs show correct addresses, bug is in Rust create_outputs() (execute.rs:1278)
  */
 
 import { parseMaxVoutFromProtostones } from './helpers';
