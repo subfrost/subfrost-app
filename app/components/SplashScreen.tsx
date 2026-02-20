@@ -55,7 +55,7 @@ export default function SplashScreen() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const readyRef = useRef(false);
-  const startRef = useRef(performance.now());
+  const startRef = useRef(0);
   const frameRef = useRef<number>(0);
   /** Milestone-driven progress ceiling (0–100), read by the animation loop */
   const milestonePRef = useRef(0);
@@ -63,6 +63,11 @@ export default function SplashScreen() {
   // ---------------------------------------------------------------------------
   // Milestone tracking
   // ---------------------------------------------------------------------------
+
+  // Capture start time on mount (avoids impure call during render)
+  useEffect(() => {
+    startRef.current = performance.now();
+  }, []);
 
   // Milestone 1: SDK WASM initialization (tracked via isInitialized prop)
 
