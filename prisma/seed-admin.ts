@@ -1,8 +1,14 @@
 /**
  * Seed script: creates initial admin user and migrates hardcoded FUEL allocations.
  *
- * Usage: source ~/.bestaryenv && npx tsx prisma/seed-admin.ts
- * Or: DATABASE_URL="..." npx tsx prisma/seed-admin.ts
+ * Usage:
+ *   ADMIN_SEED_PASSWORD="yourpassword" DATABASE_URL="..." npx tsx prisma/seed-admin.ts
+ *
+ * Environment variables:
+ *   DATABASE_URL          — PostgreSQL connection string (required)
+ *   ADMIN_SEED_USERNAME   — Admin username (default: "gabe")
+ *   ADMIN_SEED_PASSWORD   — Admin password (required, min 8 chars)
+ *   ADMIN_SEED_DISPLAY    — Display name (default: username)
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -10,9 +16,15 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  // 1. Create "gabe" admin user with iam.owner
-  const username = 'gabe';
-  const password = 'SubFr0st!Adm1n2026';
+  // 1. Create admin user with iam.owner
+  const username = (process.env.ADMIN_SEED_USERNAME || 'gabe').trim().toLowerCase();
+  const password = process.env.ADMIN_SEED_PASSWORD;
+  const displayName = process.env.ADMIN_SEED_DISPLAY || username.charAt(0).toUpperCase() + username.slice(1);
+
+  if (!password || password.length < 8) {
+    console.error('Error: ADMIN_SEED_PASSWORD env var is required (min 8 characters)');
+    process.exit(1);
+  }
 
   const existing = await prisma.adminUser.findUnique({ where: { username } });
   if (existing) {
@@ -23,12 +35,11 @@ async function main() {
       data: {
         username,
         passwordHash,
-        displayName: 'Gabe',
+        displayName,
         permissions: ['iam.owner'],
       },
     });
     console.log(`Created admin user "${username}" (id=${user.id}) with iam.owner`);
-    console.log(`Password: ${password}`);
   }
 
   // 2. Migrate hardcoded FUEL allocations
