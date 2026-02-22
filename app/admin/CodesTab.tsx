@@ -53,6 +53,31 @@ interface Pagination {
   totalPages: number;
 }
 
+type SortField = 'code' | 'redemptions' | 'children' | 'parent';
+type SortDir = 'asc' | 'desc';
+
+function sortCodes(codes: Code[], field: SortField | null, dir: SortDir): Code[] {
+  if (!field) return codes;
+  return [...codes].sort((a, b) => {
+    let cmp = 0;
+    switch (field) {
+      case 'code':
+        cmp = a.code.localeCompare(b.code);
+        break;
+      case 'redemptions':
+        cmp = a._count.redemptions - b._count.redemptions;
+        break;
+      case 'children':
+        cmp = a._count.childCodes - b._count.childCodes;
+        break;
+      case 'parent':
+        cmp = (a.parentCode?.code || '').localeCompare(b.parentCode?.code || '');
+        break;
+    }
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
+
 export default function CodesTab() {
   const adminFetch = useAdminFetch();
   const [codes, setCodes] = useState<Code[]>([]);
@@ -62,6 +87,24 @@ export default function CodesTab() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingCode, setEditingCode] = useState<Code | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir(field === 'code' || field === 'parent' ? 'asc' : 'desc');
+    }
+  };
+
+  const sortedCodes = sortCodes(codes, sortField, sortDir);
+
+  const SortIndicator = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <span className="ml-1 text-[color:var(--sf-muted)]/40">&uarr;&darr;</span>;
+    return <span className="ml-1">{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>;
+  };
 
   const fetchCodes = useCallback(async (page = 1) => {
     try {
@@ -147,18 +190,18 @@ export default function CodesTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[color:var(--sf-row-border)] text-left text-xs text-[color:var(--sf-muted)]">
-                <th className="px-4 py-3">Code</th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('code')}>Code<SortIndicator field="code" /></th>
                 <th className="px-4 py-3">Owner</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Redemptions</th>
-                <th className="px-4 py-3">Children</th>
-                <th className="px-4 py-3">Parent</th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('redemptions')}>Redemptions<SortIndicator field="redemptions" /></th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('children')}>Children<SortIndicator field="children" /></th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('parent')}>Parent<SortIndicator field="parent" /></th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--sf-row-border)]">
-              {codes.map((code) => (
+              {sortedCodes.map((code) => (
                 <tr key={code.id}>
                   <td className="px-4 py-3 font-mono text-[color:var(--sf-text)]">{code.code}</td>
                   <td className="px-4 py-3 text-[color:var(--sf-text)]">

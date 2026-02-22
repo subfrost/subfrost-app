@@ -95,13 +95,27 @@ export default function FuelTab() {
     }
   };
 
-  const filtered = search
-    ? allocations.filter(
-        (a) =>
-          a.address.toLowerCase().includes(search.toLowerCase()) ||
-          a.note?.toLowerCase().includes(search.toLowerCase())
-      )
-    : allocations;
+  const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
+
+  const toggleAmountSort = () => {
+    setAmountSort((s) => (s === 'desc' ? 'asc' : 'desc'));
+  };
+
+  const filtered = (() => {
+    let list = search
+      ? allocations.filter(
+          (a) =>
+            a.address.toLowerCase().includes(search.toLowerCase()) ||
+            a.note?.toLowerCase().includes(search.toLowerCase())
+        )
+      : allocations;
+    if (amountSort) {
+      list = [...list].sort((a, b) =>
+        amountSort === 'asc' ? a.amount - b.amount : b.amount - a.amount
+      );
+    }
+    return list;
+  })();
 
   if (loading) return <div className="text-[color:var(--sf-muted)]">Loading...</div>;
 
@@ -216,7 +230,17 @@ export default function FuelTab() {
           <thead>
             <tr className="border-b border-[color:var(--sf-glass-border)]">
               <th className="p-3 text-left text-xs font-medium text-[color:var(--sf-muted)]">Address</th>
-              <th className="p-3 text-right text-xs font-medium text-[color:var(--sf-muted)]">Amount</th>
+              <th
+                className="p-3 text-right text-xs font-medium text-[color:var(--sf-muted)] cursor-pointer select-none hover:text-[color:var(--sf-text)]"
+                onClick={toggleAmountSort}
+              >
+                Amount
+                {amountSort === null ? (
+                  <span className="ml-1 opacity-40">&uarr;&darr;</span>
+                ) : (
+                  <span className="ml-1">{amountSort === 'asc' ? '\u2191' : '\u2193'}</span>
+                )}
+              </th>
               <th className="p-3 text-left text-xs font-medium text-[color:var(--sf-muted)]">Note</th>
               <th className="p-3 text-left text-xs font-medium text-[color:var(--sf-muted)]">Updated</th>
               <th className="p-3 text-right text-xs font-medium text-[color:var(--sf-muted)]">Actions</th>

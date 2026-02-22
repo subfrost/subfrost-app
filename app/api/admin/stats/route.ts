@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const cached = await cache.get(CACHE_KEY);
     if (cached) return NextResponse.json(cached);
 
-    const [totalCodes, activeCodes, totalRedemptions, totalUsers, recentRedemptions, topCodes] =
+    const [totalCodes, activeCodes, totalRedemptions, totalUsers, recentRedemptions, topCodes, allRedemptionDates] =
       await Promise.all([
         prisma.inviteCode.count(),
         prisma.inviteCode.count({ where: { isActive: true } }),
@@ -43,7 +43,21 @@ export async function GET(request: NextRequest) {
             _count: { select: { redemptions: true } },
           },
         }),
+        prisma.inviteCodeRedemption.findMany({
+          orderBy: { redeemedAt: 'asc' },
+          select: { redeemedAt: true },
+        }),
       ]);
+
+    // Build daily redemption counts for cumulative graph
+    const dailyCounts: Record<string, number> = {};
+    for (const r of allRedemptionDates) {
+      const day = r.redeemedAt.toISOString().slice(0, 10);
+      dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+    }
+    const redemptionsByDay = Object.entries(dailyCounts)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => ({ date, count }));
 
     const stats = {
       totalCodes,
@@ -53,6 +67,7 @@ export async function GET(request: NextRequest) {
       totalUsers,
       recentRedemptions,
       topCodes,
+      redemptionsByDay,
     };
 
     await cache.set(CACHE_KEY, stats, CACHE_TTL);
