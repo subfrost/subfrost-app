@@ -56,28 +56,6 @@ interface Pagination {
 type SortField = 'code' | 'redemptions' | 'children' | 'parent';
 type SortDir = 'asc' | 'desc';
 
-function sortCodes(codes: Code[], field: SortField | null, dir: SortDir): Code[] {
-  if (!field) return codes;
-  return [...codes].sort((a, b) => {
-    let cmp = 0;
-    switch (field) {
-      case 'code':
-        cmp = a.code.localeCompare(b.code);
-        break;
-      case 'redemptions':
-        cmp = a._count.redemptions - b._count.redemptions;
-        break;
-      case 'children':
-        cmp = a._count.childCodes - b._count.childCodes;
-        break;
-      case 'parent':
-        cmp = (a.parentCode?.code || '').localeCompare(b.parentCode?.code || '');
-        break;
-    }
-    return dir === 'asc' ? cmp : -cmp;
-  });
-}
-
 export default function CodesTab() {
   const adminFetch = useAdminFetch();
   const [codes, setCodes] = useState<Code[]>([]);
@@ -92,14 +70,13 @@ export default function CodesTab() {
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      const newDir = sortDir === 'asc' ? 'desc' : 'asc';
+      setSortDir(newDir);
     } else {
       setSortField(field);
       setSortDir(field === 'code' || field === 'parent' ? 'asc' : 'desc');
     }
   };
-
-  const sortedCodes = sortCodes(codes, sortField, sortDir);
 
   const SortIndicator = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <span className="ml-1 text-[color:var(--sf-muted)]/40">&uarr;&darr;</span>;
@@ -111,6 +88,10 @@ export default function CodesTab() {
       setLoading(true);
       const params = new URLSearchParams({ page: String(page), limit: '25', status: statusFilter });
       if (search) params.set('search', search);
+      if (sortField) {
+        params.set('sortBy', sortField);
+        params.set('sortDir', sortDir);
+      }
       const res = await adminFetch(`/api/admin/codes?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
@@ -121,7 +102,7 @@ export default function CodesTab() {
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, search, statusFilter]);
+  }, [adminFetch, search, statusFilter, sortField, sortDir]);
 
   useEffect(() => { fetchCodes(); }, [fetchCodes]);
 
@@ -201,7 +182,7 @@ export default function CodesTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--sf-row-border)]">
-              {sortedCodes.map((code) => (
+              {codes.map((code) => (
                 <tr key={code.id}>
                   <td className="px-4 py-3 font-mono text-[color:var(--sf-text)]">{code.code}</td>
                   <td className="px-4 py-3 text-[color:var(--sf-text)]">

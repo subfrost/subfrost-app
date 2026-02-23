@@ -31,12 +31,33 @@ export async function GET(request: NextRequest) {
     if (status === 'active') where.isActive = true;
     if (status === 'inactive') where.isActive = false;
 
+    const sortBy = searchParams.get('sortBy') || '';
+    const sortDir = searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc';
+
+    let orderBy: Record<string, unknown>;
+    switch (sortBy) {
+      case 'code':
+        orderBy = { code: sortDir };
+        break;
+      case 'redemptions':
+        orderBy = { redemptions: { _count: sortDir } };
+        break;
+      case 'children':
+        orderBy = { childCodes: { _count: sortDir } };
+        break;
+      case 'parent':
+        orderBy = { parentCode: { code: sortDir } };
+        break;
+      default:
+        orderBy = { createdAt: 'desc' };
+    }
+
     const [codes, total] = await Promise.all([
       prisma.inviteCode.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
           _count: { select: { redemptions: true, childCodes: true } },
           parentCode: { select: { id: true, code: true } },

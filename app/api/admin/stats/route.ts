@@ -2,7 +2,8 @@
  * GET /api/admin/stats
  *
  * Dashboard statistics: total/active/inactive codes, total redemptions,
- * total users, recent 10 redemptions, top 10 codes by redemption count.
+ * total users, recent 10 redemptions, top 10 parent codes by redemption count
+ * (aggregating own + child code redemptions).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminPermission } from '@/lib/admin-auth';
@@ -32,15 +33,20 @@ export async function GET(request: NextRequest) {
           orderBy: { redeemedAt: 'desc' },
           include: { inviteCode: { select: { code: true } } },
         }),
+        // Fetch all parent codes (no parentCodeId) with their own + children's redemption counts
         prisma.inviteCode.findMany({
-          take: 10,
-          orderBy: { redemptions: { _count: 'desc' } },
+          where: { parentCodeId: null },
           select: {
             id: true,
             code: true,
             description: true,
             isActive: true,
             _count: { select: { redemptions: true } },
+            childCodes: {
+              select: {
+                _count: { select: { redemptions: true } },
+              },
+            },
           },
         }),
         prisma.inviteCodeRedemption.findMany({
@@ -59,6 +65,24 @@ export async function GET(request: NextRequest) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
 
+    // Aggregate parent + child redemptions, sort by total, take top 10
+    const topParents = topCodes
+      .map((parent) => {
+        const childRedemptions = parent.childCodes.reduce(
+          (sum, child) => sum + child._count.redemptions,
+          0,
+        );
+        return {
+          id: parent.id,
+          code: parent.code,
+          description: parent.description,
+          isActive: parent.isActive,
+          totalRedemptions: parent._count.redemptions + childRedemptions,
+        };
+      })
+      .sort((a, b) => b.totalRedemptions - a.totalRedemptions)
+      .slice(0, 10);
+
     const stats = {
       totalCodes,
       activeCodes,
@@ -66,7 +90,7 @@ export async function GET(request: NextRequest) {
       totalRedemptions,
       totalUsers,
       recentRedemptions,
-      topCodes,
+      topParents,
       redemptionsByDay,
     };
 

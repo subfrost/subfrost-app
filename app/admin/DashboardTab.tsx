@@ -19,12 +19,12 @@ interface Stats {
     date: string;
     count: number;
   }>;
-  topCodes: Array<{
+  topParents: Array<{
     id: string;
     code: string;
     description: string | null;
     isActive: boolean;
-    _count: { redemptions: number };
+    totalRedemptions: number;
   }>;
 }
 
@@ -264,16 +264,16 @@ export default function DashboardTab() {
           )}
         </div>
 
-        {/* Top codes */}
+        {/* Top parents */}
         <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
           <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-            Top Codes by Redemptions
+            Top Parents by Redemptions
           </h3>
-          {stats.topCodes.length === 0 ? (
+          {stats.topParents.length === 0 ? (
             <div className="text-sm text-[color:var(--sf-muted)]">No codes yet</div>
           ) : (
             <div className="space-y-3">
-              {stats.topCodes.map((c) => (
+              {stats.topParents.map((c) => (
                 <div key={c.id} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[color:var(--sf-text)]">{c.code}</span>
@@ -288,7 +288,7 @@ export default function DashboardTab() {
                     </span>
                   </div>
                   <span className="font-medium text-[color:var(--sf-text)]">
-                    {c._count.redemptions}
+                    {c.totalRedemptions}
                   </span>
                 </div>
               ))}
