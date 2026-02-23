@@ -183,8 +183,11 @@ export function useWrapMutation() {
           feeRate: wrapData.feeRate,
           fromAddresses,
           // For browser wallets, use actual addresses instead of symbolic to prevent
-          // SDK from resolving to dummy wallet addresses
-          changeAddress: isBrowserWallet ? (userSegwitAddress || 'p2wpkh:0') : 'p2wpkh:0',
+          // SDK from resolving to dummy wallet addresses.
+          // CRITICAL (2026-02-23): Fall back to taproot when no segwit address
+          // (UniSat taproot-only). Previously fell back to 'p2wpkh:0' which resolves
+          // to the dummy wallet — BTC change permanently lost.
+          changeAddress: isBrowserWallet ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
           alkanesChangeAddress: isBrowserWallet ? userTaprootAddress : 'p2tr:0',
           autoConfirm: false,
           traceEnabled: true, // DIAGNOSTIC: Enable to trace address resolution flow

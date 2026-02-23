@@ -85,6 +85,14 @@ export interface OutputPatchConfig {
  *
  * fixedOutputs are always applied (even for keystore wallets) and are
  * excluded from the browser-wallet sweep.
+ *
+ * JOURNAL (2026-02-23): CRITICAL FIX — P2WPKH outputs now fall back to
+ * taprootAddress when segwitAddress is not available. Previously, P2WPKH
+ * outputs were silently skipped when segwitScript was null. This caused
+ * BTC change to go to the dummy wallet's P2WPKH address (from walletCreate()
+ * in AlkanesSDKContext) for taproot-only wallets like UniSat. The dummy
+ * wallet's mnemonic is never stored, so BTC sent there is permanently lost.
+ * Mainnet loss: tx 410fda24...545bc3, 103,817 sats to bc1q8jq4579...
  */
 export function patchOutputs(
   psbt: bitcoin.Psbt,
@@ -120,8 +128,12 @@ export function patchOutputs(
       if (isOpReturn(script)) continue;
       if (isP2TR(script)) {
         outs[i].script = taprootScript;
-      } else if (isP2WPKH(script) && segwitScript) {
-        outs[i].script = segwitScript;
+      } else if (isP2WPKH(script)) {
+        // Use segwit address if available, otherwise fall back to taproot.
+        // Taproot-only wallets (UniSat) have no segwit address — without
+        // this fallback, the dummy wallet's P2WPKH address is kept and
+        // BTC change is permanently lost.
+        outs[i].script = segwitScript ?? taprootScript;
       }
     }
   }

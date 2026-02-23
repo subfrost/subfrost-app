@@ -215,6 +215,36 @@ describe('patchOutputs', () => {
     expect(getOutputScript(psbt, 2)[0]).toBe(0x6a);
   });
 
+  it('falls back P2WPKH outputs to taproot when no segwit address (UniSat fix)', () => {
+    // This test verifies the fix for mainnet tx 410fda24...545bc3 where
+    // 103,817 sats of BTC change went to the dummy wallet's P2WPKH address
+    // because UniSat (taproot-only) had no segwit address for patching.
+    const psbt = new bitcoin.Psbt({ network: REGTEST });
+    // P2TR output (alkane change)
+    psbt.addOutput({ script: KEYS.dummyTaprootScript, value: BigInt(546) });
+    // P2WPKH output (BTC change — this was the lost output)
+    psbt.addOutput({ script: KEYS.dummySegwitScript, value: BigInt(103817) });
+    // OP_RETURN (protostone)
+    psbt.addOutput({ script: makeOpReturn(Buffer.from('protostone')), value: BigInt(0) });
+
+    patchOutputs(
+      psbt,
+      {
+        taprootAddress: KEYS.taprootAddress,
+        // NO segwitAddress — simulates UniSat taproot-only wallet
+        network: REGTEST,
+      },
+      true,
+    );
+
+    // P2TR output → user taproot (as before)
+    expect(getOutputScript(psbt, 0).equals(Buffer.from(KEYS.taprootScript))).toBe(true);
+    // P2WPKH output → MUST fall back to user taproot (not stay as dummy!)
+    expect(getOutputScript(psbt, 1).equals(Buffer.from(KEYS.taprootScript))).toBe(true);
+    // OP_RETURN preserved
+    expect(getOutputScript(psbt, 2)[0]).toBe(0x6a);
+  });
+
   it('does not modify outputs when isBrowserWallet=false and no fixedOutputs', () => {
     const psbt = new bitcoin.Psbt({ network: REGTEST });
     psbt.addOutput({ script: KEYS.dummyTaprootScript, value: BigInt(50000) });
@@ -698,6 +728,55 @@ describe('patchPsbtForBrowserWallet', () => {
 
     // output 1: user taproot (swept)
     expect(getOutputScript(patched, 1).equals(Buffer.from(KEYS.taprootScript))).toBe(true);
+  });
+
+  it('redirects P2WPKH change to taproot for UniSat (no segwit address)', () => {
+    // End-to-end test for the UniSat BTC loss bug fix
+    const psbt = new bitcoin.Psbt({ network: REGTEST });
+
+    // P2TR input (alkane UTXO)
+    psbt.addInput({
+      hash: Buffer.alloc(32, 0xf1),
+      index: 0,
+      witnessUtxo: { script: KEYS.dummyTaprootScript, value: BigInt(546) },
+      tapInternalKey: KEYS.dummyXOnly,
+    });
+    // P2TR input (BTC for fees)
+    psbt.addInput({
+      hash: Buffer.alloc(32, 0xf2),
+      index: 0,
+      witnessUtxo: { script: KEYS.dummyTaprootScript, value: BigInt(104293) },
+      tapInternalKey: KEYS.dummyXOnly,
+    });
+
+    // Output 0: P2TR alkane output (546 sats)
+    psbt.addOutput({ script: KEYS.dummyTaprootScript, value: BigInt(546) });
+    // Output 1: P2WPKH BTC change (this was the lost output)
+    psbt.addOutput({ script: KEYS.dummySegwitScript, value: BigInt(103817) });
+    // Output 2: OP_RETURN
+    psbt.addOutput({ script: makeOpReturn(Buffer.from('protostone')), value: BigInt(0) });
+
+    const result = patchPsbtForBrowserWallet({
+      psbtBase64: psbt.toBase64(),
+      network: REGTEST,
+      isBrowserWallet: true,
+      taprootAddress: KEYS.taprootAddress,
+      // NO segwitAddress — UniSat taproot-only
+      // NO paymentPubkeyHex — UniSat doesn't provide segwit pubkey
+    });
+
+    const patched = bitcoin.Psbt.fromBase64(result.psbtBase64, { network: REGTEST });
+
+    // P2TR output → user taproot
+    expect(getOutputScript(patched, 0).equals(Buffer.from(KEYS.taprootScript))).toBe(true);
+    // P2WPKH change → MUST go to user taproot (not dummy wallet!)
+    expect(getOutputScript(patched, 1).equals(Buffer.from(KEYS.taprootScript))).toBe(true);
+    // OP_RETURN preserved
+    expect(getOutputScript(patched, 2)[0]).toBe(0x6a);
+
+    // Input witnessUtxo scripts patched to user's taproot
+    expect(Buffer.from(patched.data.inputs[0].witnessUtxo!.script).equals(Buffer.from(KEYS.taprootScript))).toBe(true);
+    expect(Buffer.from(patched.data.inputs[1].witnessUtxo!.script).equals(Buffer.from(KEYS.taprootScript))).toBe(true);
   });
 
   it('skips input patching when isBrowserWallet=false', () => {
