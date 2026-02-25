@@ -176,11 +176,12 @@ async function fetchPoolsFromDataApi(
     const poolId = p.poolId
       ? `${p.poolId.block}:${p.poolId.tx}`
       : '';
+    // get-all-pools-details: token0.block; get-all-token-pairs: token0.alkaneId.block
     const token0Id = p.token0
-      ? `${p.token0.block}:${p.token0.tx}`
+      ? `${p.token0.alkaneId?.block ?? p.token0.block}:${p.token0.alkaneId?.tx ?? p.token0.tx}`
       : '';
     const token1Id = p.token1
-      ? `${p.token1.block}:${p.token1.tx}`
+      ? `${p.token1.alkaneId?.block ?? p.token1.block}:${p.token1.alkaneId?.tx ?? p.token1.tx}`
       : '';
 
     if (!poolId || !token0Id || !token1Id) continue;
@@ -216,8 +217,8 @@ async function fetchPoolsFromDataApi(
       vol7dUsd: p.poolVolume7dInUsd ?? 0,
       vol30dUsd: p.poolVolume30dInUsd ?? 0,
       apr: p.poolApr ?? 0,
-      token0Amount: p.token0Amount || '0',
-      token1Amount: p.token1Amount || '0',
+      token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
+      token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
       lpTotalSupply: p.tokenSupply || undefined,
     });
   }

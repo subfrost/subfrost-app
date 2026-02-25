@@ -46,16 +46,20 @@ function normalizePoolArray(raw: any): any[] {
   return parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : null) || (Array.isArray(parsed) ? parsed : []);
 }
 
+// Normalize pool data from multiple API response formats into a flat schema.
+// get-all-token-pairs nests token IDs under alkaneId: token0.alkaneId.block
+// get-all-pools-details has them flat: token0.block
+// RPC fallback uses details.token_a_block
 function toPoolRow(p: any): any {
   return {
     pool_block_id: p.pool_block_id ?? p.pool_id_block ?? p.poolId?.block ?? 0,
     pool_tx_id: p.pool_tx_id ?? p.pool_id_tx ?? p.poolId?.tx ?? 0,
-    token0_block_id: p.token0_block_id ?? p.details?.token_a_block ?? p.token0?.block ?? 0,
-    token0_tx_id: p.token0_tx_id ?? p.details?.token_a_tx ?? p.token0?.tx ?? 0,
-    token1_block_id: p.token1_block_id ?? p.details?.token_b_block ?? p.token1?.block ?? 0,
-    token1_tx_id: p.token1_tx_id ?? p.details?.token_b_tx ?? p.token1?.tx ?? 0,
-    token0_amount: p.token0_amount ?? p.token0Amount ?? p.details?.reserve_a ?? '0',
-    token1_amount: p.token1_amount ?? p.token1Amount ?? p.details?.reserve_b ?? '0',
+    token0_block_id: p.token0_block_id ?? p.details?.token_a_block ?? p.token0?.alkaneId?.block ?? p.token0?.block ?? 0,
+    token0_tx_id: p.token0_tx_id ?? p.details?.token_a_tx ?? p.token0?.alkaneId?.tx ?? p.token0?.tx ?? 0,
+    token1_block_id: p.token1_block_id ?? p.details?.token_b_block ?? p.token1?.alkaneId?.block ?? p.token1?.block ?? 0,
+    token1_tx_id: p.token1_tx_id ?? p.details?.token_b_tx ?? p.token1?.alkaneId?.tx ?? p.token1?.tx ?? 0,
+    token0_amount: p.token0_amount ?? p.token0Amount ?? p.reserve0 ?? p.token0?.token0Amount ?? p.details?.reserve_a ?? '0',
+    token1_amount: p.token1_amount ?? p.token1Amount ?? p.reserve1 ?? p.token1?.token1Amount ?? p.details?.reserve_b ?? '0',
     pool_name: p.pool_name ?? p.poolName ?? p.details?.pool_name ?? '',
   };
 }

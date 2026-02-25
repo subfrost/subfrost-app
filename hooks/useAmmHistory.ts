@@ -81,10 +81,10 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
           // dataApi format uses poolId/token0/token1; RPC format uses details.*
           const d = p.details || {};
           poolMap[poolId] = {
-            token0BlockId: String(p.token0?.block ?? d.token_a_block ?? ''),
-            token0TxId: String(p.token0?.tx ?? d.token_a_tx ?? ''),
-            token1BlockId: String(p.token1?.block ?? d.token_b_block ?? ''),
-            token1TxId: String(p.token1?.tx ?? d.token_b_tx ?? ''),
+            token0BlockId: String(p.token0?.alkaneId?.block ?? p.token0?.block ?? d.token_a_block ?? ''),
+            token0TxId: String(p.token0?.alkaneId?.tx ?? p.token0?.tx ?? d.token_a_tx ?? ''),
+            token1BlockId: String(p.token1?.alkaneId?.block ?? p.token1?.block ?? d.token_b_block ?? ''),
+            token1TxId: String(p.token1?.alkaneId?.tx ?? p.token1?.tx ?? d.token_b_tx ?? ''),
             poolName: p.poolName ?? d.pool_name ?? '',
           };
         }
