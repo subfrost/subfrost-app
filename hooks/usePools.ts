@@ -227,24 +227,28 @@ async function fetchPoolsFromDataApi(
 }
 
 // ============================================================================
-// Token pairs API fallback (single call via dataApiGetAllTokenPairs)
-// get-all-token-pairs works even when get-all-pools-details is broken
+// Token pairs REST fallback (direct fetch, bypasses WASM SDK deserialization)
+// The SDK's dataApiGetAllTokenPairs discards the response during WASM parsing,
+// so we call the REST endpoint directly via fetch.
 // ============================================================================
 
-async function fetchPoolsFromTokenPairsApi(
-  provider: any,
+async function fetchPoolsFromTokenPairsRest(
   factoryId: string,
   network: string,
   tokenMetaMap?: Map<string, { name: string; symbol: string }>,
 ): Promise<PoolsListItem[]> {
-  const result = await Promise.race([
-    provider.dataApiGetAllTokenPairs(factoryId),
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dataApiGetAllTokenPairs timeout (15s)')), 15000)),
-  ]);
-  const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-  const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : null) || (Array.isArray(parsed) ? parsed : []);
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const proxyUrl = `/api/rpc/${encodeURIComponent(network)}/get-all-token-pairs`;
+  const resp = await fetch(proxyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ factoryId: { block: factoryBlock, tx: factoryTx } }),
+  });
+  if (!resp.ok) throw new Error(`get-all-token-pairs HTTP ${resp.status}`);
+  const json = await resp.json();
+  const pools: any[] = json?.data?.pools || (Array.isArray(json?.data) ? json.data : null) || json?.pools || [];
 
-  console.log('[usePools] dataApiGetAllTokenPairs returned', pools.length, 'pools');
+  console.log('[usePools] get-all-token-pairs REST returned', pools.length, 'pools');
 
   const items: PoolsListItem[] = [];
 
@@ -271,7 +275,6 @@ async function fetchPoolsFromTokenPairsApi(
       }
     }
 
-    // Token names from the response (get-all-token-pairs includes name/symbol in token objects)
     const t0Name = token0NameFromPool || p.token0?.name || p.token0?.symbol || '';
     const t1Name = token1NameFromPool || p.token1?.name || p.token1?.symbol || '';
 
@@ -412,12 +415,12 @@ export function usePools(params: UsePoolsParams = {}) {
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
 
-      // Fallback 1: dataApiGetAllTokenPairs (single REST call, has TVL/volume)
+      // Fallback 1: get-all-token-pairs REST (single call, bypasses WASM SDK)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
-          console.warn('[usePools] dataApiGetAllTokenPairs failed:', e);
+          console.warn('[usePools] get-all-token-pairs REST failed:', e);
         }
       }
 
