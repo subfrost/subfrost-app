@@ -18,7 +18,7 @@ import puppeteer, { type Page, type Browser, type ConsoleMessage } from 'puppete
 import { mkdirSync } from 'fs';
 
 const BASE_URL = process.env.E2E_BASE_URL || 'https://staging-app.subfrost.io';
-const ADMIN_SECRET = process.env.ADMIN_SECRET || '9UgyvbhU8P9vvU4GDanmoXm8ddSPLKkzWzG9MxaI';
+const ADMIN_SECRET = process.env.ADMIN_SECRET || (() => { throw new Error('ADMIN_SECRET env var is required'); })();
 const INVITE_CODE = process.env.INVITE_CODE || 'ALKANESCHINA';
 const SCREENSHOT_DIR = 'screenshots';
 

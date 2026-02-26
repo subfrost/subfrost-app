@@ -1,26 +1,20 @@
 /**
- * Alkane Balance API — Fast server-side parallel protorunesbyoutpoint with Redis cache
+ * Alkane Balance API — Aggregates balances from alkanes_protorunesbyaddress RPC
  *
  * GET /api/alkane-balances?address=<address>&network=<network>
  *
- * Flow:
- * 1. esplora_address::utxo(address) → get all UTXOs
- * 2. For each outpoint, check Redis: `alkane-bal:{txid}:{vout}`
- *    - Cache HIT → use cached balance sheet (no RPC call)
- *    - Cache MISS → alkanes_protorunesbyoutpoint(txid, vout) → cache permanently
- * 3. Aggregate all balance sheets → return alkane token map
+ * Returns alkane balances by directly querying the metashrew alkanes indexer
+ * and aggregating balances client-side. This ensures balances are always current
+ * on regtest networks where the data API (espo) may have delays.
  *
- * Why this is fast:
- * - Parallel outpoint lookups: many small protorunesbyoutpoint calls vs one protorunesbyaddress
- * - Immutable cache: outpoint balance sheets never change (UTXO content is fixed)
- * - Server-side: RPC calls happen server→server, no CORS or browser overhead
- *
- * JOURNAL ENTRY (2026-02-10): Created to replace slow dataApiGetAlkanesByAddress
- * which internally calls protorunesbyaddress (single large metashrew_view call).
+ * JOURNAL ENTRY (2026-02-10): Created with outpoint-by-outpoint approach.
+ * JOURNAL ENTRY (2026-02-12): Switched to get-alkanes-by-address REST endpoint.
+ * JOURNAL ENTRY (2026-02-20): Switched back to RPC aggregation for regtest networks.
+ * The data API (espo) has indexing delays on regtest, so we aggregate balances
+ * from the low-level alkanes_protorunesbyaddress RPC method for immediate results.
  */
 
 import { NextResponse } from 'next/server';
-import { cache } from '@/lib/db/redis';
 
 const RPC_ENDPOINTS: Record<string, string> = {
   mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
@@ -32,60 +26,6 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
 };
 
-interface OutpointBalance {
-  block: number;
-  tx: number;
-  amount: string;
-}
-
-const BATCH_SIZE = 30;
-
-async function rpcCall(endpoint: string, method: string, params: any[]): Promise<any> {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method,
-      params,
-      id: 1,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`RPC ${method} failed: ${response.status}`);
-  }
-  return response.json();
-}
-
-async function getOutpointBalances(
-  endpoint: string,
-  txid: string,
-  vout: number,
-): Promise<OutpointBalance[]> {
-  const cacheKey = `alkane-bal:${txid}:${vout}`;
-
-  // Check Redis cache first
-  const cached = await cache.get<OutpointBalance[]>(cacheKey);
-  if (cached !== null) {
-    return cached;
-  }
-
-  // Cache miss — fetch from RPC
-  const data = await rpcCall(endpoint, 'alkanes_protorunesbyoutpoint', [txid, vout]);
-  const balances = data?.result?.balance_sheet?.cached?.balances || [];
-
-  const parsed: OutpointBalance[] = balances.map((b: any) => ({
-    block: Number(b.block),
-    tx: Number(b.tx),
-    amount: String(b.amount || '0'),
-  }));
-
-  // Cache permanently (no TTL) — outpoint balances are immutable
-  await cache.set(cacheKey, parsed);
-
-  return parsed;
-}
-
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const address = url.searchParams.get('address');
@@ -95,47 +35,50 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'address parameter is required' }, { status: 400 });
   }
 
-  const endpoint = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
+  const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
 
   try {
-    // 1. Get all UTXOs for the address via esplora
-    const utxoData = await rpcCall(endpoint, 'esplora_address::utxo', [address]);
-    const utxos: { txid: string; vout: number; value: number }[] = utxoData?.result || [];
+    // Use low-level RPC to get outpoints with alkanes
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'alkanes_protorunesbyaddress',
+        params: [{ address, protocolTag: '1' }],
+      }),
+    });
 
-    if (utxos.length === 0) {
-      return NextResponse.json({ balances: [] });
+    if (!response.ok) {
+      throw new Error(`RPC failed: ${response.status}`);
     }
 
-    // 2. Fetch outpoint balances in parallel batches
-    const allOutpointBalances: OutpointBalance[][] = [];
+    const data = await response.json();
+    const outpoints = data?.result?.outpoints || [];
 
-    for (let i = 0; i < utxos.length; i += BATCH_SIZE) {
-      const batch = utxos.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map((utxo) => getOutpointBalances(endpoint, utxo.txid, utxo.vout)),
-      );
-      allOutpointBalances.push(...batchResults);
-    }
+    // Aggregate balances by alkane ID
+    const balanceMap = new Map<string, bigint>();
 
-    // 3. Aggregate balance sheets into a single token map
-    const tokenMap = new Map<string, string>();
-
-    for (const balances of allOutpointBalances) {
+    for (const outpoint of outpoints) {
+      const balances = outpoint?.balance_sheet?.cached?.balances || [];
       for (const bal of balances) {
         const alkaneId = `${bal.block}:${bal.tx}`;
-        const existing = tokenMap.get(alkaneId) || '0';
-        try {
-          tokenMap.set(alkaneId, (BigInt(existing) + BigInt(bal.amount)).toString());
-        } catch {
-          tokenMap.set(alkaneId, String(Number(existing) + Number(bal.amount)));
-        }
+        const amount = BigInt(bal.amount || 0);
+        const current = balanceMap.get(alkaneId) || BigInt(0);
+        balanceMap.set(alkaneId, current + amount);
       }
     }
 
-    // 4. Return aggregated balances
-    const balances = Array.from(tokenMap.entries()).map(([alkaneId, balance]) => ({
+    // Convert to array format
+    const balances = Array.from(balanceMap.entries()).map(([alkaneId, balance]) => ({
       alkaneId,
-      balance,
+      balance: balance.toString(),
+      name: '', // TODO: fetch metadata from token registry
+      symbol: '',
+      priceUsd: 0,
+      priceInSatoshi: 0,
+      tokenImage: '',
     }));
 
     return NextResponse.json({ balances });

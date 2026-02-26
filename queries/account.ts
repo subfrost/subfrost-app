@@ -274,7 +274,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         pendingOutgoingTotal += spent;
       }
 
-      // Fetch alkane balances via server-side parallel protorunesbyoutpoint + Redis cache
+      // Fetch alkane balances via data API (get-alkanes-by-address, espo-backed)
       const alkaneBalancePromises = addresses.map(async (address) => {
         try {
           const resp = await withTimeout(
@@ -284,22 +284,30 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           );
           if (!resp) return;
           const data = await resp.json();
-          const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
+          const balances: {
+            alkaneId: string; balance: string;
+            name?: string; symbol?: string;
+            priceUsd?: number; priceInSatoshi?: number;
+            tokenImage?: string;
+          }[] = data?.balances || [];
           for (const entry of balances) {
             const alkaneIdStr = entry.alkaneId;
             const amountStr = String(entry.balance || '0');
-            const tokenInfo = KNOWN_TOKENS[alkaneIdStr] || {
-              symbol: '',
-              name: `Token ${alkaneIdStr}`,
-              decimals: 8,
-            };
+            // Use API-provided metadata, fall back to KNOWN_TOKENS, then defaults
+            const knownInfo = KNOWN_TOKENS[alkaneIdStr];
+            const name = entry.name || knownInfo?.name || `Token ${alkaneIdStr}`;
+            const symbol = entry.symbol || knownInfo?.symbol || '';
+            const decimals = knownInfo?.decimals ?? 8;
             if (!alkaneMap.has(alkaneIdStr)) {
               alkaneMap.set(alkaneIdStr, {
                 alkaneId: alkaneIdStr,
-                name: tokenInfo.name,
-                symbol: tokenInfo.symbol,
+                name,
+                symbol,
                 balance: amountStr,
-                decimals: tokenInfo.decimals,
+                decimals,
+                logo: entry.tokenImage || undefined,
+                priceUsd: entry.priceUsd || undefined,
+                priceInSatoshi: entry.priceInSatoshi || undefined,
               });
             } else {
               const existing = alkaneMap.get(alkaneIdStr)!;
@@ -308,6 +316,14 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
               } catch {
                 existing.balance = String(Number(existing.balance) + Number(amountStr));
               }
+              // Merge metadata if the existing entry has no name/symbol yet
+              if (!existing.name || existing.name.startsWith('Token ')) {
+                if (name && !name.startsWith('Token ')) existing.name = name;
+              }
+              if (!existing.symbol && symbol) existing.symbol = symbol;
+              if (!existing.priceUsd && entry.priceUsd) existing.priceUsd = entry.priceUsd;
+              if (!existing.priceInSatoshi && entry.priceInSatoshi) existing.priceInSatoshi = entry.priceInSatoshi;
+              if (!existing.logo && entry.tokenImage) existing.logo = entry.tokenImage;
             }
           }
         } catch (error) {
@@ -412,15 +428,17 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
               `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
             );
             const data = await resp.json();
-            const balances: { alkaneId: string; balance: string }[] = data?.balances || [];
+            const balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = data?.balances || [];
 
             for (const entry of balances) {
               const alkaneIdStr = entry.alkaneId;
               const balance = String(entry.balance || '0');
-              const tokenInfo = KNOWN_TOKENS_SELL[alkaneIdStr] || {
-                symbol: alkaneIdStr.split(':')[1] || '',
-                name: `Token ${alkaneIdStr}`,
-                decimals: 8,
+              // Use metadata from the data API response, fall back to known tokens, then raw ID
+              const knownToken = KNOWN_TOKENS_SELL[alkaneIdStr];
+              const tokenInfo = {
+                symbol: entry.symbol || knownToken?.symbol || entry.name || alkaneIdStr.split(':')[1] || '',
+                name: entry.name || knownToken?.name || entry.symbol || alkaneIdStr,
+                decimals: knownToken?.decimals ?? 8,
               };
 
               if (deps.tokensWithPools && !deps.tokensWithPools.some((p) => p.id === alkaneIdStr)) {

@@ -3,13 +3,14 @@
  * POST /api/admin/codes — Create a single code
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAuth } from '@/lib/admin-auth';
+import { requireAdminPermission } from '@/lib/admin-auth';
+import { ADMIN_PERMISSIONS } from '@/lib/admin-permissions';
 import { prisma } from '@/lib/db/prisma';
 import { cache } from '@/lib/db/redis';
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.CODES_READ);
+  if (error) return error;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -30,12 +31,33 @@ export async function GET(request: NextRequest) {
     if (status === 'active') where.isActive = true;
     if (status === 'inactive') where.isActive = false;
 
+    const sortBy = searchParams.get('sortBy') || '';
+    const sortDir = searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc';
+
+    let orderBy: Record<string, unknown>;
+    switch (sortBy) {
+      case 'code':
+        orderBy = { code: sortDir };
+        break;
+      case 'redemptions':
+        orderBy = { redemptions: { _count: sortDir } };
+        break;
+      case 'children':
+        orderBy = { childCodes: { _count: sortDir } };
+        break;
+      case 'parent':
+        orderBy = { parentCode: { code: sortDir } };
+        break;
+      default:
+        orderBy = { createdAt: 'desc' };
+    }
+
     const [codes, total] = await Promise.all([
       prisma.inviteCode.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
           _count: { select: { redemptions: true, childCodes: true } },
           parentCode: { select: { id: true, code: true } },
@@ -55,8 +77,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const { error } = await requireAdminPermission(request, ADMIN_PERMISSIONS.CODES_EDIT);
+  if (error) return error;
 
   try {
     const body = await request.json();

@@ -55,6 +55,11 @@ function isP2WPKH(script: Buffer): boolean {
   return script[0] === 0x00 && script.length === 22;
 }
 
+/** P2SH: OP_HASH160 <20-byte script hash> OP_EQUAL → [0xa9, 0x14, ...20 bytes, 0x87] = 23 bytes */
+function isP2SH(script: Buffer): boolean {
+  return script.length === 23 && script[0] === 0xa9 && script[1] === 0x14 && script[22] === 0x87;
+}
+
 // ---------------------------------------------------------------------------
 // Output patching
 // ---------------------------------------------------------------------------
@@ -80,6 +85,14 @@ export interface OutputPatchConfig {
  *
  * fixedOutputs are always applied (even for keystore wallets) and are
  * excluded from the browser-wallet sweep.
+ *
+ * JOURNAL (2026-02-23): CRITICAL FIX — P2WPKH outputs now fall back to
+ * taprootAddress when segwitAddress is not available. Previously, P2WPKH
+ * outputs were silently skipped when segwitScript was null. This caused
+ * BTC change to go to the dummy wallet's P2WPKH address (from walletCreate()
+ * in AlkanesSDKContext) for taproot-only wallets like UniSat. The dummy
+ * wallet's mnemonic is never stored, so BTC sent there is permanently lost.
+ * Mainnet loss: tx 410fda24...545bc3, 103,817 sats to bc1q8jq4579...
  */
 export function patchOutputs(
   psbt: bitcoin.Psbt,
@@ -115,8 +128,12 @@ export function patchOutputs(
       if (isOpReturn(script)) continue;
       if (isP2TR(script)) {
         outs[i].script = taprootScript;
-      } else if (isP2WPKH(script) && segwitScript) {
-        outs[i].script = segwitScript;
+      } else if (isP2WPKH(script)) {
+        // Use segwit address if available, otherwise fall back to taproot.
+        // Taproot-only wallets (UniSat) have no segwit address — without
+        // this fallback, the dummy wallet's P2WPKH address is kept and
+        // BTC change is permanently lost.
+        outs[i].script = segwitScript ?? taprootScript;
       }
     }
   }
@@ -179,6 +196,14 @@ export function patchInputWitnessScripts(
       } else if (isP2WPKH(script) && segwitScript) {
         input.witnessUtxo = { ...input.witnessUtxo, script: segwitScript };
         patched++;
+      } else if (isP2SH(script) && segwitScript && isP2WPKH(Buffer.from(segwitScript))) {
+        // Dummy wallet uses P2SH-P2WPKH (BIP49) but user has native P2WPKH (BIP84).
+        // Replace the P2SH script with the user's native P2WPKH script so
+        // finalizeAllInputs() can classify the input correctly.
+        // For Xverse (P2SH-P2WPKH users), segwitScript is P2SH, so this
+        // branch is skipped — those inputs go through injectRedeemScripts instead.
+        input.witnessUtxo = { ...input.witnessUtxo, script: segwitScript };
+        patched++;
       }
       continue;
     }
@@ -195,6 +220,8 @@ export function patchInputWitnessScripts(
         if (isP2TR(prevScript)) {
           newScript = taprootScript;
         } else if (isP2WPKH(prevScript) && segwitScript) {
+          newScript = segwitScript;
+        } else if (isP2SH(prevScript) && segwitScript && isP2WPKH(Buffer.from(segwitScript))) {
           newScript = segwitScript;
         }
         if (newScript) {
@@ -362,6 +389,46 @@ export function patchPsbtForBrowserWallet(params: PatchPsbtParams): {
   }
 
   return { psbtBase64: psbt.toBase64(), inputsPatched };
+}
+
+// ---------------------------------------------------------------------------
+// tapInternalKey patching
+// ---------------------------------------------------------------------------
+
+/**
+ * Patch tapInternalKey on PSBT inputs from the dummy wallet's key to the
+ * user's actual x-only public key.
+ *
+ * The SDK's WASM (execute.rs:1764) sets tap_internal_key from the dummy
+ * wallet's key pair (AlkanesSDKContext's walletCreate()). ALL browser wallets
+ * need the user's actual x-only public key here:
+ *   - UniSat: auto-detects signable inputs by deriving P2TR from tapInternalKey;
+ *     if it doesn't match, all inputs are silently skipped → infinite spinner
+ *   - Xverse: validates tapInternalKey → "No taproot scripts signed" error
+ *
+ * Accepts either a 32-byte x-only hex or a 33-byte compressed pubkey hex
+ * (02/03 prefix will be stripped automatically).
+ *
+ * @returns number of inputs patched (for logging)
+ */
+export function patchTapInternalKeys(
+  psbt: bitcoin.Psbt,
+  pubkeyHex: string,
+): number {
+  let xOnlyBuf = Buffer.from(pubkeyHex, 'hex');
+  // Strip 02/03 prefix from compressed pubkey to get 32-byte x-only key
+  if (xOnlyBuf.length === 33 && (xOnlyBuf[0] === 0x02 || xOnlyBuf[0] === 0x03)) {
+    xOnlyBuf = xOnlyBuf.slice(1);
+  }
+
+  let patched = 0;
+  for (let i = 0; i < psbt.data.inputs.length; i++) {
+    if (psbt.data.inputs[i].tapInternalKey) {
+      psbt.data.inputs[i].tapInternalKey = xOnlyBuf;
+      patched++;
+    }
+  }
+  return patched;
 }
 
 // ---------------------------------------------------------------------------

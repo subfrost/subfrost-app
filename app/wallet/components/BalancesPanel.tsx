@@ -12,7 +12,7 @@ export default function BalancesPanel() {
   const { t } = useTranslation();
   const fuelAllocation = useFuelAllocation();
   const isDemoGated = useDemoGate();
-  const [inscriptionFilter, setInscriptionFilter] = useState<'brc20' | 'ordinals'>('brc20');
+  const [inscriptionFilter, setInscriptionFilter] = useState<'brc20' | 'runes' | 'ordinals'>('brc20');
 
   return (
     <div className="space-y-6">
@@ -25,9 +25,9 @@ export default function BalancesPanel() {
           <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('balances.inscriptionAssets')}</h3>
         </div>
 
-        {/* BRC20 Tokens / Ordinals tabs */}
+        {/* BRC20 / Runes / Ordinals tabs */}
         <div className="flex gap-4 mb-4 border-b border-[color:var(--sf-outline)]">
-          {(['brc20', 'ordinals'] as const).map((tab) => (
+          {(['brc20', 'runes', 'ordinals'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setInscriptionFilter(tab)}
@@ -37,13 +37,15 @@ export default function BalancesPanel() {
                   : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
               }`}
             >
-              {tab === 'brc20' ? t('balances.tabBrc20') : t('balances.tabOrdinals')}
+              {tab === 'brc20' ? t('balances.tabBrc20') : tab === 'runes' ? t('balances.tabRunes') : t('balances.tabOrdinals')}
             </button>
           ))}
         </div>
 
         <div className="text-center py-2 text-[color:var(--sf-text)]/60">
-          <span className="text-sm font-medium">{!isDemoGated ? t('balances.tabBrc20') : t('balances.comingSoon')}</span>
+          <span className="text-sm font-medium">
+            {inscriptionFilter === 'brc20' ? t('balances.brc20ComingSoon') : inscriptionFilter === 'runes' ? t('balances.runesComingSoon') : t('balances.ordinalsComingSoon')}
+          </span>
         </div>
       </div>
 

@@ -50,3 +50,6 @@ yarn.lock
 
 # SDK tarballs (temporary downloads during development)
 *.tgz
+
+# CLI data files (may contain addresses/secrets)
+bin/*.json

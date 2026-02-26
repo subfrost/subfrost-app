@@ -111,8 +111,11 @@ export function HeightPoller({ network }: { network: string }) {
       return;
     }
 
-    // Height changed → invalidate everything EXCEPT the height query itself
-    if (height !== prevHeight.current) {
+    // Height increased → invalidate everything EXCEPT height and slow-changing queries.
+    // Only react to increases — Espo load-balances across nodes at different sync
+    // heights, causing oscillation (e.g. 870001 → 870000 → 870001) that would
+    // otherwise trigger spurious invalidations every poll cycle.
+    if (height > prevHeight.current) {
       console.log(
         `[HeightPoller] Height changed ${prevHeight.current} → ${height}, invalidating queries`,
       );
@@ -121,8 +124,13 @@ export function HeightPoller({ network }: { network: string }) {
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
+          if (!Array.isArray(key)) return true;
           // Don't invalidate the height query itself
-          return !(Array.isArray(key) && key[0] === 'height');
+          if (key[0] === 'height') return false;
+          // frBTC premium is a contract config that rarely changes — no need
+          // to re-simulate on every block.
+          if (key[0] === 'frbtc-premium') return false;
+          return true;
         },
       });
     }

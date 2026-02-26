@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect, useRef, lazy, Suspense } from "react";
 import type { PoolSummary, TokenMeta } from "./types";
 import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import type { LPPosition } from "./components/LiquidityInputs";
-import type { OperationType } from "@/app/components/SwapSuccessNotification";
+import { useNotification } from "@/context/NotificationContext";
 
 // Critical path imports - needed immediately
 import SwapHeaderTabs from "./components/SwapHeaderTabs";
@@ -28,6 +28,7 @@ import { useSwapUnwrapMutation } from "@/hooks/useSwapUnwrapMutation";
 import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
 import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
+import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
@@ -41,7 +42,6 @@ const SwapSummary = lazy(() => import("./components/SwapSummary"));
 const TransactionSettingsModal = lazy(() => import("@/app/components/TransactionSettingsModal"));
 const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModal"));
 const LPPositionSelectorModal = lazy(() => import("./components/LPPositionSelectorModal"));
-const SwapSuccessNotification = lazy(() => import("@/app/components/SwapSuccessNotification"));
 const MyWalletSwaps = lazy(() => import("./components/MyWalletSwaps"));
 
 // Loading skeleton for swap form
@@ -133,17 +133,10 @@ export default function SwapShell() {
   // LP positions from wallet (real data from useLPPositions hook)
   const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
 
-  // Debug: log LP positions when they change
-  useEffect(() => {
-    console.log('[SwapShell] LP positions updated:', lpPositions);
-    console.log('[SwapShell] LP positions loading:', isLoadingLPPositions);
-  }, [lpPositions, isLoadingLPPositions]);
-
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
   const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
-  const [successTxId, setSuccessTxId] = useState<string | null>(null);
-  const [successOperationType, setSuccessOperationType] = useState<OperationType>('swap');
+  const { showNotification } = useNotification();
   const { data: btcPrice } = useBtcPrice();
 
   const sellId = fromToken?.id ?? '';
@@ -176,23 +169,32 @@ export default function SwapShell() {
     return map;
   }, [userCurrencies]);
 
+  // Independent token name source — fetches from /get-alkanes bulk API.
+  // Loads independently of usePools, ensuring names are available even if pools fail.
+  const { data: tokenNamesMap } = useTokenNames();
+
   // Build a map from tokenId to token metadata from pools data (has correct symbols)
+  // Enriches numeric-named tokens using the standalone tokenNamesMap (most reliable source)
   const poolTokenMap = useMemo(() => {
     const map = new Map<string, TokenMeta>();
-    console.log('[SwapShell] Building poolTokenMap from', markets.length, 'markets');
     markets.forEach((pool) => {
-      if (!map.has(pool.token0.id)) {
-        map.set(pool.token0.id, pool.token0);
-        console.log('[SwapShell] Added token to map:', pool.token0.id, pool.token0.symbol);
-      }
-      if (!map.has(pool.token1.id)) {
-        map.set(pool.token1.id, pool.token1);
-        console.log('[SwapShell] Added token to map:', pool.token1.id, pool.token1.symbol);
-      }
+      if (!map.has(pool.token0.id)) map.set(pool.token0.id, pool.token0);
+      if (!map.has(pool.token1.id)) map.set(pool.token1.id, pool.token1);
     });
-    console.log('[SwapShell] poolTokenMap has', map.size, 'tokens:', Array.from(map.keys()));
+
+    // Enrich tokens that still have numeric-only names
+    const numericOnly = /^\d+$/;
+    for (const [id, token] of map) {
+      if (numericOnly.test(token.symbol) || (token.name && numericOnly.test(token.name))) {
+        const resolved = resolveTokenDisplay(id, token.symbol, token.name, tokenNamesMap, idToUserCurrency);
+        if (resolved.symbol !== token.symbol || resolved.name !== token.name) {
+          map.set(id, { ...token, symbol: resolved.symbol, name: resolved.name });
+        }
+      }
+    }
+
     return map;
-  }, [markets]);
+  }, [markets, idToUserCurrency, tokenNamesMap]);
 
   // Find the trending pool for defaults: 24H Vol > 30D Vol > TVL
   // This matches the algorithm used by TrendingPairs component
@@ -258,12 +260,21 @@ export default function SwapShell() {
     }
   }, [topVolumePool, isLoadingPools, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged]);
 
-  // Default LP tokens: Select Token / BTC
+  // Default LP tokens: frBTC / DIESEL (or bUSD on mainnet)
+  // Initialize both poolToken0 and poolToken1 with default values when entering LP tab
   useEffect(() => {
-    if (!poolToken1 && selectedTab === 'lp') {
-      setPoolToken1({ id: 'btc', symbol: 'BTC', name: 'BTC' });
+    if (selectedTab === 'lp') {
+      // Set default token0 to frBTC if not already set
+      if (!poolToken0 && FRBTC_ALKANE_ID) {
+        setPoolToken0({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
+      }
+      // Set default token1 to DIESEL/bUSD if not already set
+      if (!poolToken1 && BUSD_ALKANE_ID) {
+        const symbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
+        setPoolToken1({ id: BUSD_ALKANE_ID, symbol, name: symbol });
+      }
     }
-  }, [poolToken1, selectedTab]);
+  }, [selectedTab, poolToken0, poolToken1, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
 
   // Allow all tokens - no filtering
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
@@ -343,13 +354,15 @@ export default function SwapShell() {
 
     // Also add tokens from user's wallet that aren't in pools yet
     userCurrencies.forEach((currency: any) => {
-      const symbol = currency.symbol || currency.name || currency.id;
-      if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
+      const rawSym = currency.symbol || currency.name || currency.id;
+      if (!seen.has(currency.id) && shouldShowToken(currency.id, rawSym)) {
         seen.add(currency.id);
+        // Resolve name now using tokenNamesMap (avoids showing numeric IDs)
+        const resolved = resolveTokenDisplay(currency.id, rawSym, currency.name || currency.symbol || currency.id, tokenNamesMap);
         opts.push({
           id: currency.id,
-          symbol,
-          name: currency.name || currency.symbol || currency.id,
+          symbol: resolved.symbol,
+          name: resolved.name,
           iconUrl: currency.iconUrl,
           isAvailable: true,
         });
@@ -357,7 +370,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, network, toToken, baseTokenIds]);
+  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, tokenNamesMap, network, toToken, baseTokenIds]);
 
   // Build TO options - show all tokens with pools (no alt-to-alt restriction)
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -453,13 +466,14 @@ export default function SwapShell() {
 
     // Also add tokens from user's wallet that have pools with FROM token
     userCurrencies.forEach((currency: any) => {
-      const symbol = currency.symbol || currency.name || currency.id;
-      if (!seen.has(currency.id) && shouldShowToken(currency.id, symbol)) {
+      const rawSym = currency.symbol || currency.name || currency.id;
+      if (!seen.has(currency.id) && shouldShowToken(currency.id, rawSym)) {
         seen.add(currency.id);
+        const resolved = resolveTokenDisplay(currency.id, rawSym, currency.name || currency.symbol || currency.id, tokenNamesMap);
         opts.push({
           id: currency.id,
-          symbol,
-          name: currency.name || currency.symbol || currency.id,
+          symbol: resolved.symbol,
+          name: resolved.name,
           iconUrl: currency.iconUrl,
           isAvailable: true,
         });
@@ -467,7 +481,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, baseTokenIds, markets, network]);
+  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, tokenNamesMap, baseTokenIds, markets, network]);
 
   // Balances - use useEnrichedWalletData for all balances (BTC and alkanes)
   // This is the same data source used by the Header for consistency
@@ -482,6 +496,20 @@ export default function SwapShell() {
     if (walletBalances?.alkanes) {
       for (const alkane of walletBalances.alkanes) {
         map.set(alkane.alkaneId, alkane.balance);
+      }
+    }
+    return map;
+  }, [walletBalances?.alkanes]);
+
+  // Build a map from alkane ID to authoritative name/symbol from wallet data.
+  // This is the same data source used by the wallet balance panel (proven working).
+  const walletAlkaneNames = useMemo(() => {
+    const map = new Map<string, { name: string; symbol: string }>();
+    if (walletBalances?.alkanes) {
+      for (const alkane of walletBalances.alkanes) {
+        if (alkane.name || alkane.symbol) {
+          map.set(alkane.alkaneId, { name: alkane.name || '', symbol: alkane.symbol || '' });
+        }
       }
     }
     return map;
@@ -626,8 +654,7 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          setSuccessOperationType('wrap');
-          setSuccessTxId(res.transactionId);
+          showNotification(res.transactionId, 'wrap');
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -642,8 +669,7 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          setSuccessOperationType('unwrap');
-          setSuccessTxId(res.transactionId);
+          showNotification(res.transactionId, 'unwrap');
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -672,7 +698,16 @@ export default function SwapShell() {
 
       try {
         console.log('[SWAP] BTC →', toToken.symbol, ': Step 1/2 — Wrapping BTC to frBTC');
-        const btcAmount = direction === 'sell' ? fromAmount : toAmount;
+        console.log('[SWAP] DEBUG: direction =', direction);
+        console.log('[SWAP] DEBUG: fromAmount =', fromAmount, '(should be BTC display units)');
+        console.log('[SWAP] DEBUG: toAmount =', toAmount);
+        console.log('[SWAP] DEBUG: quote.displaySellAmount =', quote?.displaySellAmount);
+        console.log('[SWAP] DEBUG: quote.sellAmount =', quote?.sellAmount);
+        // fromAmount is always BTC here (it's the "from" token in BTC→Token swaps).
+        // When direction='sell', user typed the BTC amount directly.
+        // When direction='buy', user typed the target token amount and fromAmount
+        // was back-calculated from the quote (via quote.displaySellAmount).
+        const btcAmount = fromAmount;
 
         // Step 1: Wrap BTC → frBTC
         const wrapRes = await wrapMutation.mutateAsync({
@@ -685,11 +720,12 @@ export default function SwapShell() {
         }
         console.log('[SWAP] Step 1 complete — wrap txid:', wrapRes.transactionId);
 
-        // Mine a block and wait for esplora to index it (regtest only).
-        // The swap step needs fresh UTXO data — if we proceed too early,
-        // the SDK will try to spend UTXOs that the wrap tx already consumed,
-        // causing "bad-txns-inputs-missingorspent" on broadcast.
+        // Wait for wrap tx to confirm before proceeding to step 2.
+        // The swap step needs confirmed frBTC UTXOs — if we proceed before
+        // the wrap tx is mined, the SDK won't find enough frBTC balance.
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
+
+        // On regtest, mine a block to trigger confirmation
         if (isRegtest && address) {
           console.log('[SWAP] Mining block to confirm wrap transaction...');
           try {
@@ -698,37 +734,54 @@ export default function SwapShell() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ blocks: 1, address }),
             });
-            // Poll esplora until the wrap tx is confirmed (indexer lag can be 3-15s)
-            const wrapTxId = wrapRes.transactionId;
-            const maxPollAttempts = 20;
-            for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              try {
-                const txResp = await fetch('/api/rpc', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'esplora_tx',
-                    params: [wrapTxId],
-                    id: 1,
-                  }),
-                });
-                const txData = await txResp.json();
-                if (txData?.result?.status?.confirmed) {
-                  console.log(`[SWAP] Wrap tx confirmed after ${(attempt + 1) * 1.5}s`);
-                  // Extra wait for esplora UTXO index to update after tx confirmation
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  break;
-                }
-                console.log(`[SWAP] Polling wrap tx... attempt ${attempt + 1}/${maxPollAttempts}`);
-              } catch {
-                // Polling error — keep retrying
-              }
-            }
           } catch (mineErr) {
             console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
           }
+        }
+
+        // Poll esplora until the wrap tx is confirmed (all networks)
+        console.log('[SWAP] Waiting for wrap tx confirmation before swap step...');
+        showNotification(wrapRes.transactionId, 'wrap');
+
+        const wrapTxId = wrapRes.transactionId;
+        const pollInterval = isRegtest ? 1500 : 15000;   // 1.5s regtest, 15s mainnet
+        const maxPollAttempts = isRegtest ? 20 : 120;     // 30s regtest, ~30min mainnet
+        let wrapConfirmed = false;
+
+        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          try {
+            const txResp = await fetch(`/api/rpc/${encodeURIComponent(network)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'esplora_tx',
+                params: [wrapTxId],
+                id: 1,
+              }),
+            });
+            const txData = await txResp.json();
+            if (txData?.result?.status?.confirmed) {
+              const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
+              console.log(`[SWAP] Wrap tx confirmed after ${elapsedSec}s`);
+              // Extra wait for esplora UTXO index to update
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              wrapConfirmed = true;
+              break;
+            }
+            const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
+            console.log(`[SWAP] Polling wrap tx... attempt ${attempt + 1}/${maxPollAttempts} (${elapsed}s elapsed)`);
+          } catch {
+            // Polling error — keep retrying
+          }
+        }
+
+        if (!wrapConfirmed) {
+          throw new Error(
+            `Wrap tx broadcast successfully (${wrapTxId}) but did not confirm within ${Math.round(maxPollAttempts * pollInterval / 60000)} minutes. ` +
+            `Your BTC has been wrapped — once confirmed, swap frBTC → ${toToken.symbol} manually.`
+          );
         }
 
         // Step 2: Swap frBTC → Target token
@@ -754,8 +807,7 @@ export default function SwapShell() {
 
         if (swapRes?.success && swapRes.transactionId) {
           console.log('[SWAP] Step 2 complete — swap txid:', swapRes.transactionId);
-          setSuccessOperationType('swap');
-          setSuccessTxId(swapRes.transactionId);
+          showNotification(swapRes.transactionId, 'swap');
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -790,8 +842,7 @@ export default function SwapShell() {
 
         if (res?.success && res.transactionId) {
           console.log('[SWAP] One-click Token → BTC swap success:', res.transactionId);
-          setSuccessOperationType('swap');
-          setSuccessTxId(res.transactionId);
+          showNotification(res.transactionId, 'swap');
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -827,8 +878,7 @@ export default function SwapShell() {
     try {
       const res = await swapMutation.mutateAsync(payload as any);
       if (res?.success && res.transactionId) {
-        setSuccessOperationType('swap');
-        setSuccessTxId(res.transactionId);
+        showNotification(res.transactionId, 'swap');
       }
     } catch (e: any) {
       console.error('[SWAP] Mutation error:', e?.message);
@@ -916,8 +966,7 @@ export default function SwapShell() {
 
       if (result?.success && result.transactionId) {
         console.log('[handleAddLiquidity] Success! txid:', result.transactionId);
-        setSuccessOperationType('addLiquidity');
-        setSuccessTxId(result.transactionId);
+        showNotification(result.transactionId, 'addLiquidity');
         // Clear amounts after success
         setPoolToken0Amount('');
         setPoolToken1Amount('');
@@ -961,8 +1010,7 @@ export default function SwapShell() {
 
       if (result?.success && result.transactionId) {
         console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
-        setSuccessOperationType('removeLiquidity');
-        setSuccessTxId(result.transactionId);
+        showNotification(result.transactionId, 'removeLiquidity');
         // Clear state after success
         setRemoveAmount('');
         setSelectedLPPosition(null);
@@ -1031,45 +1079,53 @@ export default function SwapShell() {
     });
   };
 
-  // Prepare token options for modal with balances and prices
+  // Prepare token options for modal with balances and prices.
+  // resolveTokenDisplay is imported from useTokenNames — uses tokenNamesMap as primary source.
+
+  // Diagnostic: log token name data sources (runs once per data change, not every render)
+  useEffect(() => {
+    if (!tokenNamesMap || tokenNamesMap.size === 0) return;
+    console.log(`[SwapShell] tokenNamesMap loaded: ${tokenNamesMap.size} token names from /get-alkanes`);
+  }, [tokenNamesMap]);
+
   const fromTokenOptions = useMemo<TokenOption[]>(() => {
     const options = fromOptions.map((token) => {
       const currency = idToUserCurrency.get(token.id);
-      // Check if token has an allowed pool with the selected TO token
       let isAvailable = true;
       if (toToken) {
-        // Check if this pair is in the allowed list
         isAvailable = isAllowedPair(token.id, toToken.id);
       }
-      
+
+      const resolved = resolveTokenDisplay(token.id, token.symbol, token.name, tokenNamesMap, idToUserCurrency, walletAlkaneNames);
+
       return {
         id: token.id,
-        symbol: token.symbol,
-        name: token.name,
+        symbol: resolved.symbol,
+        name: resolved.name,
         iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: currency?.priceInfo?.price,
         isAvailable,
       };
     });
-    
+
     return sortTokenOptions(options);
-  }, [fromOptions, idToUserCurrency, btcBalanceSats, toToken, isAllowedPair]);
+  }, [fromOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, toToken, isAllowedPair]);
 
   const toTokenOptions = useMemo<TokenOption[]>(() => {
     const options = toOptions.map((token) => {
       const currency = idToUserCurrency.get(token.id);
-      // Check if token has an allowed pool with the selected FROM token
       let isAvailable = true;
       if (fromToken) {
-        // Check if this pair is in the allowed list
         isAvailable = isAllowedPair(token.id, fromToken.id);
       }
 
+      const resolved = resolveTokenDisplay(token.id, token.symbol, token.name, tokenNamesMap, idToUserCurrency, walletAlkaneNames);
+
       return {
         id: token.id,
-        symbol: token.symbol,
-        name: token.name,
+        symbol: resolved.symbol,
+        name: resolved.name,
         iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: currency?.priceInfo?.price,
@@ -1078,7 +1134,7 @@ export default function SwapShell() {
     });
 
     return sortTokenOptions(options);
-  }, [toOptions, idToUserCurrency, btcBalanceSats, fromToken, isAllowedPair]);
+  }, [toOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, fromToken, isAllowedPair]);
 
   // Pool token options - show all tokens that appear in any pool
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
@@ -1185,10 +1241,12 @@ export default function SwapShell() {
           isAvailable = isAllowedPair(poolToken.id, counterpartToken.id);
         }
 
+        const resolved = resolveTokenDisplay(poolToken.id, poolToken.symbol, poolToken.name, tokenNamesMap, idToUserCurrency, walletAlkaneNames);
+
         opts.push({
           id: poolToken.id,
-          symbol: poolToken.symbol,
-          name: poolToken.name,
+          symbol: resolved.symbol,
+          name: resolved.name,
           iconUrl: poolToken.iconUrl || currency?.iconUrl,
           balance: poolToken.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
           price: currency?.priceInfo?.price,
@@ -1200,15 +1258,12 @@ export default function SwapShell() {
     // Also add tokens from user's wallet that aren't in pools yet
     // This allows users to add liquidity for new token pairs
     userCurrencies.forEach((currency: any) => {
-      const symbol = currency.symbol || currency.name || currency.id;
-
       if (!seen.has(currency.id)) {
-        seen.add(currency.id);
-
         // Hide the counterpart token itself (no duplicate pairs) and BTC/frBTC from each other
-        if (counterpartId && currency.id === counterpartId) return;
-        if (counterpartId === 'btc' && currency.id === FRBTC_ALKANE_ID) return;
-        if (counterpartId === FRBTC_ALKANE_ID && currency.id === 'btc') return;
+        if (counterpartId && currency.id === counterpartId) { seen.add(currency.id); return; }
+        if (counterpartId === 'btc' && currency.id === FRBTC_ALKANE_ID) { seen.add(currency.id); return; }
+        if (counterpartId === FRBTC_ALKANE_ID && currency.id === 'btc') { seen.add(currency.id); return; }
+        seen.add(currency.id);
 
         // Check if this token can pair with the counterpart token (if selected)
         let isAvailable = true;
@@ -1216,10 +1271,14 @@ export default function SwapShell() {
           isAvailable = isAllowedPair(currency.id, counterpartToken.id);
         }
 
+        const rawSymbol = currency.symbol || currency.name || currency.id;
+        const rawName = currency.name || currency.symbol || currency.id;
+        const resolved = resolveTokenDisplay(currency.id, rawSymbol, rawName, tokenNamesMap, idToUserCurrency, walletAlkaneNames);
+
         opts.push({
           id: currency.id,
-          symbol,
-          name: currency.name || currency.symbol || currency.id,
+          symbol: resolved.symbol,
+          name: resolved.name,
           iconUrl: currency.iconUrl,
           balance: currency.balance,
           price: currency.priceInfo?.price,
@@ -1228,19 +1287,17 @@ export default function SwapShell() {
       }
     });
 
-    console.log('[poolTokenOptions] Built options:', opts.length, 'tokens');
-    console.log('[poolTokenOptions] userCurrencies count:', userCurrencies?.length || 0);
-    console.log('[poolTokenOptions] poolTokenMap size:', poolTokenMap?.size || 0);
-    console.log('[poolTokenOptions] opts:', opts.map(o => ({ id: o.id, symbol: o.symbol })));
-
     return sortTokenOptions(opts);
-  }, [markets, idToUserCurrency, userCurrencies, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, network]);
+  }, [markets, idToUserCurrency, userCurrencies, tokenNamesMap, walletAlkaneNames, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, network]);
 
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {
-      const token = fromOptions.find((t) => t.id === tokenId);
+      // Use enriched token options (with resolved names) for the state
+      const enriched = fromTokenOptions.find((t) => t.id === tokenId);
+      const token = enriched
+        ? { id: enriched.id, symbol: enriched.symbol, name: enriched.name, iconUrl: enriched.iconUrl }
+        : fromOptions.find((t) => t.id === tokenId);
       if (token) {
-        // If selecting the same token as TO, swap them
         if (toToken && toToken.id === tokenId) {
           setToToken(fromToken);
         }
@@ -1248,13 +1305,14 @@ export default function SwapShell() {
         setToAmount("");
       }
     } else if (tokenSelectorMode === 'to') {
-      const token = toOptions.find((t) => t.id === tokenId);
+      const enriched = toTokenOptions.find((t) => t.id === tokenId);
+      const token = enriched
+        ? { id: enriched.id, symbol: enriched.symbol, name: enriched.name, iconUrl: enriched.iconUrl }
+        : toOptions.find((t) => t.id === tokenId);
       if (token) {
-        // If selecting the same token as FROM, swap them
         if (fromToken && fromToken.id === tokenId) {
           setFromToken(toToken);
         }
-        console.log('[DEBUG] Setting toToken:', token);
         setToToken(token);
       }
     } else if (tokenSelectorMode === 'pool0') {
@@ -1404,21 +1462,53 @@ export default function SwapShell() {
     }
   };
 
+  // Compute the pool and chart token for the Espo chart.
+  // For frBTC pairs → chart shows the non-frBTC token with quote=btc
+  // For bUSD pairs → chart shows the non-bUSD token with quote=usd
+  // For TOKEN/TOKEN pairs → chart shows the "to" token with quote=usd
+  const chartPool = useMemo(() => {
+    if (selectedTab === 'lp' && poolToken0 && poolToken1) {
+      const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
+      const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
+      return markets.find(p =>
+        (p.token0.id === token0Id && p.token1.id === token1Id) ||
+        (p.token0.id === token1Id && p.token1.id === token0Id)
+      );
+    }
+    if (selectedTab === 'swap' && fromToken && toToken) {
+      const fromId = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
+      const toId = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+      return markets.find(p =>
+        (p.token0.id === fromId && p.token1.id === toId) ||
+        (p.token0.id === toId && p.token1.id === fromId)
+      );
+    }
+    return selectedPool;
+  }, [selectedTab, poolToken0, poolToken1, fromToken, toToken, markets, selectedPool, FRBTC_ALKANE_ID]);
+
+  const chartTokenId = useMemo(() => {
+    if (!chartPool) return undefined;
+    const t0 = chartPool.token0?.id;
+    const t1 = chartPool.token1?.id;
+    // frBTC pairs: show the non-frBTC token
+    if (t0 === FRBTC_ALKANE_ID) return t1;
+    if (t1 === FRBTC_ALKANE_ID) return t0;
+    // bUSD pairs: show the non-bUSD token
+    if (t0 === BUSD_ALKANE_ID) return t1;
+    if (t1 === BUSD_ALKANE_ID) return t0;
+    // TOKEN/TOKEN: show the "to" token (the token user is swapping into)
+    if (selectedTab === 'swap' && toToken) {
+      const toId = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
+      if (toId === t0 || toId === t1) return toId;
+    }
+    return t0;
+  }, [chartPool, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, selectedTab, toToken]);
+
   return (
     <div className="flex w-full flex-col gap-8 h-full">
-      <Suspense fallback={null}>
-        {successTxId && (
-          <SwapSuccessNotification
-            txId={successTxId}
-            onClose={() => setSuccessTxId(null)}
-            operationType={successOperationType}
-          />
-        )}
-      </Suspense>
-
-      <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
-        {/* Left Column: Swap/LP Module */}
-        <div className="flex flex-col min-h-0">
+      <div className="flex flex-col lg:grid lg:grid-cols-5 xl:grid-cols-3 gap-6">
+        {/* Left Column: Swap/LP Module (2/5 on lg, 1/3 on xl) */}
+        <div className="flex flex-col min-h-0 lg:col-span-2 xl:col-span-1">
           {/* Swap/Liquidity Tabs */}
           <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
@@ -1552,68 +1642,27 @@ export default function SwapShell() {
           {showMobileChart && (
             <div className="lg:hidden mt-4">
               <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-                <PoolDetailsCard
-                  pool={selectedTab === 'lp' && poolToken0 && poolToken1
-                    ? markets.find(p => {
-                        const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
-                        const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
-                        return (
-                          (p.token0.id === token0Id && p.token1.id === token1Id) ||
-                          (p.token0.id === token1Id && p.token1.id === token0Id)
-                        );
-                      })
-                    : selectedTab === 'swap' && fromToken && toToken
-                    ? markets.find(p => {
-                        const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
-                        const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
-                        return (
-                          (p.token0.id === from0Id && p.token1.id === to1Id) ||
-                          (p.token0.id === to1Id && p.token1.id === from0Id)
-                        );
-                      })
-                    : selectedPool
-                  }
-                />
+                <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} />
               </Suspense>
             </div>
           )}
 
-          {/* My Wallet Swaps - desktop only, under swap modal */}
-          <div className="hidden lg:block mt-8">
-            <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-              <MyWalletSwaps />
-            </Suspense>
-          </div>
         </div>
 
-        {/* Right Column: TVL and Markets */}
+        {/* Right Column: Chart (2/3 width on lg) */}
+        <div className="hidden lg:flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
+          <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} />
+        </div>
+      </div>
+
+      {/* My Wallet Activity + Markets Grid - 50/50 on lg */}
+      <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6">
+        <div className="hidden lg:block">
+          <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
+            <MyWalletSwaps />
+          </Suspense>
+        </div>
         <Suspense fallback={<MarketsSkeleton />}>
-        <div className="flex flex-col gap-4">
-          {/* Desktop-only Chart - hidden on mobile where it appears above swap form */}
-          <div className="hidden lg:block">
-          <PoolDetailsCard
-            pool={selectedTab === 'lp' && poolToken0 && poolToken1
-              ? markets.find(p => {
-                  const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
-                  const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
-                  return (
-                    (p.token0.id === token0Id && p.token1.id === token1Id) ||
-                    (p.token0.id === token1Id && p.token1.id === token0Id)
-                  );
-                })
-              : selectedTab === 'swap' && fromToken && toToken
-              ? markets.find(p => {
-                  const from0Id = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
-                  const to1Id = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
-                  return (
-                    (p.token0.id === from0Id && p.token1.id === to1Id) ||
-                    (p.token0.id === to1Id && p.token1.id === from0Id)
-                  );
-                })
-              : selectedPool
-            }
-          />
-          </div>
           <MarketsGrid
             pools={markets}
             onSelect={handleSelectPool}
@@ -1621,7 +1670,6 @@ export default function SwapShell() {
             onVolumePeriodChange={setVolumePeriod}
             selectedPoolId={selectedPool?.id}
           />
-        </div>
         </Suspense>
       </div>
 

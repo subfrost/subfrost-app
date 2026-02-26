@@ -31,7 +31,7 @@ function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
             {expanded ? '\u25BC' : '\u25B6'}
           </button>
         ) : (
-          <span className="w-5 text-center text-xs text-[color:var(--sf-muted)]">\u2022</span>
+          <span className="w-5" />
         )}
         <span className="font-mono text-sm text-[color:var(--sf-text)]">{node.code}</span>
         <span

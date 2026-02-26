@@ -16,6 +16,7 @@ import WalletSettings from './components/WalletSettings';
 import RegtestControls from './components/RegtestControls';
 import ReceiveModal from './components/ReceiveModal';
 import SendModal from './components/SendModal';
+import { useNotification } from '@/context/NotificationContext';
 
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
@@ -39,6 +40,7 @@ export default function WalletDashboardPage() {
   const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [txRefreshing, setTxRefreshing] = useState(false);
+  const { showNotification } = useNotification();
   const txHistoryRef = useRef<TransactionHistoryHandle>(null);
 
   const handleUtxoClick = useCallback(() => {
@@ -239,6 +241,7 @@ export default function WalletDashboardPage() {
         isOpen={showSendModal}
         onClose={() => { setShowSendModal(false); setSendAlkane(null); }}
         initialAlkane={sendAlkane}
+        onSuccess={(txid) => showNotification(txid, 'send')}
       />
       <ReceiveModal
         isOpen={showReceiveModal}

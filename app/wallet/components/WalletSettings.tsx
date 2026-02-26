@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X } from 'lucide-react';
+import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -386,58 +386,41 @@ export default function WalletSettings() {
                 <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
                   {t('wallet.selectNetwork')}
                 </label>
-                {isBrowserWallet ? (
-                  // Browser wallet - show detected network (read-only)
-                  <div className="relative">
-                    <ChevronDown size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--sf-text)]/40 pointer-events-none" />
-                    {browserWalletNetwork?.isRecognized ? (
-                      <div className="w-full rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-text)]/60 cursor-not-allowed">
-                        {getNetworkDisplayName(browserWalletNetwork.network, browserWalletNetwork.isRecognized)}
-                      </div>
-                    ) : (
-                      <div className="w-full rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] pl-10 pr-4 py-3 text-[color:var(--sf-info-yellow-text)] flex items-center gap-2">
-                        <AlertTriangle size={18} className="text-[color:var(--sf-info-yellow-text)]" />
-                        Unrecognized Network from Browser Extension Wallet
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  // Keystore wallet - allow network selection (custom dropdown)
-                  <div className="relative" ref={networkDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setNetworkDropdownOpen((v) => !v)}
-                      className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                    >
-                      <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? t('wallet.selectNetwork')}</span>
-                      <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {networkDropdownOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                        {NETWORK_OPTIONS.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => {
-                              setNetwork(option.value);
-                              setNetworkDropdownOpen(false);
-                            }}
-                            className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                              network === option.value
-                                ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Network selection dropdown - now available for all wallet types */}
+                <div className="relative" ref={networkDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setNetworkDropdownOpen((v) => !v)}
+                    className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                  >
+                    <span className="flex-1 text-left">{NETWORK_OPTIONS.find((o) => o.value === network)?.label ?? t('wallet.selectNetwork')}</span>
+                    <ChevronDown size={18} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${networkDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {networkDropdownOpen && (
+                    <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                      {NETWORK_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setNetwork(option.value);
+                            setNetworkDropdownOpen(false);
+                          }}
+                          className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                            network === option.value
+                              ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                              : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {!isBrowserWallet && network === 'custom' && (
+              {network === 'custom' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
@@ -467,15 +450,8 @@ export default function WalletSettings() {
                 </>
               )}
 
-              {/* Browser wallet info message - shown instead of save button */}
-              {isBrowserWallet && (
-                <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-                  Network Configuration is only available for keystore wallets. Please navigate to your browser extension wallet to change the network.
-                </div>
-              )}
-
-              {/* Save Settings Button - appears when network is changed (only for keystore wallets) */}
-              {!isBrowserWallet && hasNetworkChanges && (
+              {/* Save Settings Button - appears when network is changed (available for all wallet types) */}
+              {hasNetworkChanges && (
                 <button
                   onClick={handleSave}
                   className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
@@ -798,6 +774,45 @@ export default function WalletSettings() {
               )}
             </div>
           )}
+        </div>
+        {/* Advanced Options */}
+        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Settings size={24} className="text-[color:var(--sf-primary)]" />
+            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.advancedOptions')}</h3>
+          </div>
+
+          <div className="space-y-4">
+            {/* Ignore Ordinals */}
+            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
+              <div className="flex-1 mr-4">
+                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreOrdinals')}</div>
+                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreOrdinalsDescription')}</div>
+              </div>
+              <button
+                disabled
+                className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
+                title="Always enabled until inscription detection is supported"
+              >
+                <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
+              </button>
+            </div>
+
+            {/* Ignore Runes */}
+            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
+              <div className="flex-1 mr-4">
+                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreRunes')}</div>
+                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreRunesDescription')}</div>
+              </div>
+              <button
+                disabled
+                className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
+                title="Always enabled until rune detection is supported"
+              >
+                <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

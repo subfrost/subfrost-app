@@ -32,6 +32,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createTestSigner, TEST_MNEMONIC, type TestSignerResult } from './test-utils/createTestSigner';
+import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -108,77 +109,6 @@ async function signAndBroadcast(
   await provider.bitcoindGenerateToAddress(1, walletAddress);
 
   return broadcastTxid || txid;
-}
-
-// ---------------------------------------------------------------------------
-// alkanesExecuteTyped — inline replica of lib/alkanes/extendedProvider.ts
-// We replicate it here to avoid @/ path-alias issues in vitest.
-// ---------------------------------------------------------------------------
-
-interface AlkanesExecuteTypedParams {
-  toAddresses?: string[];
-  inputRequirements: string;
-  protostones: string;
-  feeRate?: number;
-  envelopeHex?: string;
-  fromAddresses?: string[];
-  changeAddress?: string;
-  alkanesChangeAddress?: string;
-  traceEnabled?: boolean;
-  mineEnabled?: boolean;
-  autoConfirm?: boolean;
-  rawOutput?: boolean;
-}
-
-function parseMaxVoutFromProtostones(protostones: string): number {
-  let maxVout = 0;
-  const voutMatches = protostones.matchAll(/v(\d+)/g);
-  for (const match of voutMatches) {
-    const idx = parseInt(match[1], 10);
-    if (idx > maxVout) maxVout = idx;
-  }
-  return maxVout;
-}
-
-async function alkanesExecuteTyped(
-  provider: WebProvider,
-  params: AlkanesExecuteTypedParams
-): Promise<any> {
-  const maxVout = parseMaxVoutFromProtostones(params.protostones);
-  const toAddresses = params.toAddresses ?? Array(maxVout + 1).fill('p2tr:0');
-
-  const options: Record<string, any> = {};
-  const fromAddrs = params.fromAddresses ?? ['p2wpkh:0', 'p2tr:0'];
-  options.from = fromAddrs;
-  options.from_addresses = fromAddrs;
-  options.change_address = params.changeAddress ?? 'p2wpkh:0';
-  options.alkanes_change_address = params.alkanesChangeAddress ?? 'p2tr:0';
-  options.lock_alkanes = true;
-
-  if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
-  if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
-  if (params.autoConfirm !== undefined) options.auto_confirm = params.autoConfirm;
-  if (params.rawOutput !== undefined) options.raw_output = params.rawOutput;
-
-  const toAddressesJson = JSON.stringify(toAddresses);
-  const optionsJson = JSON.stringify(options);
-
-  console.log('[alkanesExecuteTyped] to_addresses:', toAddressesJson);
-  console.log('[alkanesExecuteTyped] inputRequirements:', params.inputRequirements);
-  console.log('[alkanesExecuteTyped] protostones:', params.protostones);
-  console.log('[alkanesExecuteTyped] feeRate:', params.feeRate);
-  console.log('[alkanesExecuteTyped] options:', optionsJson);
-
-  const result = await provider.alkanesExecuteWithStrings(
-    toAddressesJson,
-    params.inputRequirements,
-    params.protostones,
-    params.feeRate ?? null,
-    params.envelopeHex ?? null,
-    optionsJson
-  );
-
-  return typeof result === 'string' ? JSON.parse(result) : result;
 }
 
 // ---------------------------------------------------------------------------

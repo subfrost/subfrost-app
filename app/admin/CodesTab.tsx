@@ -53,6 +53,9 @@ interface Pagination {
   totalPages: number;
 }
 
+type SortField = 'code' | 'redemptions' | 'children' | 'parent';
+type SortDir = 'asc' | 'desc';
+
 export default function CodesTab() {
   const adminFetch = useAdminFetch();
   const [codes, setCodes] = useState<Code[]>([]);
@@ -62,12 +65,33 @@ export default function CodesTab() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingCode, setEditingCode] = useState<Code | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      const newDir = sortDir === 'asc' ? 'desc' : 'asc';
+      setSortDir(newDir);
+    } else {
+      setSortField(field);
+      setSortDir(field === 'code' || field === 'parent' ? 'asc' : 'desc');
+    }
+  };
+
+  const SortIndicator = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <span className="ml-1 text-[color:var(--sf-muted)]/40">&uarr;&darr;</span>;
+    return <span className="ml-1">{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>;
+  };
 
   const fetchCodes = useCallback(async (page = 1) => {
     try {
       setLoading(true);
       const params = new URLSearchParams({ page: String(page), limit: '25', status: statusFilter });
       if (search) params.set('search', search);
+      if (sortField) {
+        params.set('sortBy', sortField);
+        params.set('sortDir', sortDir);
+      }
       const res = await adminFetch(`/api/admin/codes?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
@@ -78,7 +102,7 @@ export default function CodesTab() {
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, search, statusFilter]);
+  }, [adminFetch, search, statusFilter, sortField, sortDir]);
 
   useEffect(() => { fetchCodes(); }, [fetchCodes]);
 
@@ -147,13 +171,13 @@ export default function CodesTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[color:var(--sf-row-border)] text-left text-xs text-[color:var(--sf-muted)]">
-                <th className="px-4 py-3">Code</th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('code')}>Code<SortIndicator field="code" /></th>
                 <th className="px-4 py-3">Owner</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Redemptions</th>
-                <th className="px-4 py-3">Children</th>
-                <th className="px-4 py-3">Parent</th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('redemptions')}>Redemptions<SortIndicator field="redemptions" /></th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('children')}>Children<SortIndicator field="children" /></th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('parent')}>Parent<SortIndicator field="parent" /></th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>

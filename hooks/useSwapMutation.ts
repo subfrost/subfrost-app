@@ -84,23 +84,11 @@ import {
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+import { buildSwapProtostone, buildSwapInputRequirements } from '@/lib/alkanes/builders';
+import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
+import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
-
-/**
- * Factory router opcodes for swap operations.
- * The deployed pool logic is missing Swap (opcode 3), so we route through the factory.
- */
-const FACTORY_SWAP_OPCODE = 13; // SwapExactTokensForTokens
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 export type SwapTransactionBaseData = {
   sellCurrency: string; // alkane id or 'btc'
@@ -149,74 +137,6 @@ export type SwapTransactionBaseData = {
  * Factory opcode 13 format:
  *   [factory_block,factory_tx,13,path_len,sell_block,sell_tx,buy_block,buy_tx,amount_in,amount_out_min,deadline]
  */
-function buildSwapProtostone(params: {
-  factoryId: string; // e.g., "4:65498"
-  sellTokenId: string; // e.g., "2:0" for DIESEL
-  buyTokenId: string; // e.g., "32:0" for frBTC
-  sellAmount: string;
-  minOutput: string;
-  deadline: string;
-  pointer?: string;
-  refund?: string;
-}): string {
-  const {
-    factoryId,
-    sellTokenId,
-    buyTokenId,
-    sellAmount,
-    minOutput,
-    deadline,
-    pointer = 'v0',
-    refund = 'v0',
-  } = params;
-
-  const [sellBlock, sellTx] = sellTokenId.split(':');
-  const [buyBlock, buyTx] = buyTokenId.split(':');
-  const [factoryBlock, factoryTx] = factoryId.split(':');
-
-  // Single cellpack protostone: Call factory with SwapExactTokensForTokens (opcode 13)
-  // The SDK auto-generates p0 (edict) from inputRequirements, making this p1.
-  // Sell tokens arrive as incomingAlkanes via the auto-generated edict.
-  const cellpack = [
-    factoryBlock,
-    factoryTx,
-    FACTORY_SWAP_OPCODE, // 13
-    2, // path_len (always 2 for direct swap: sell → buy)
-    sellBlock,
-    sellTx,
-    buyBlock,
-    buyTx,
-    sellAmount,
-    minOutput,
-    deadline,
-  ].join(',');
-
-  return `[${cellpack}]:${pointer}:${refund}`;
-}
-
-/**
- * Build input requirements string for alkanes execute
- * Format: "B:amount" for bitcoin, "block:tx:amount" for alkanes
- */
-function buildInputRequirements(params: {
-  bitcoinAmount?: string;
-  alkaneInputs?: Array<{ alkaneId: string; amount: string }>;
-}): string {
-  const parts: string[] = [];
-
-  if (params.bitcoinAmount && params.bitcoinAmount !== '0') {
-    parts.push(`B:${params.bitcoinAmount}`);
-  }
-
-  if (params.alkaneInputs) {
-    for (const input of params.alkaneInputs) {
-      const [block, tx] = input.alkaneId.split(':');
-      parts.push(`${block}:${tx}:${input.amount}`);
-    }
-  }
-
-  return parts.join(',');
-}
 
 export function useSwapMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
@@ -348,7 +268,7 @@ export function useSwapMutation() {
 
       console.log('[useSwapMutation] Input requirements params:', JSON.stringify(inputReqParams, null, 2));
 
-      const inputRequirements = buildInputRequirements(inputReqParams);
+      const inputRequirements = buildSwapInputRequirements(inputReqParams);
       console.log('[useSwapMutation] Built inputRequirements:', inputRequirements);
 
       console.log('═══════════════════════════════════════════════════════════════');
@@ -360,25 +280,7 @@ export function useSwapMutation() {
       console.log('[useSwapMutation]   feeRate:', swapData.feeRate);
       console.log('═══════════════════════════════════════════════════════════════');
 
-      // Determine btcNetwork for PSBT operations
-      // Must match network detection in other mutation hooks (useWrapMutation, etc.)
-      let btcNetwork: bitcoin.Network;
-      switch (network) {
-        case 'mainnet':
-          btcNetwork = bitcoin.networks.bitcoin;
-          break;
-        case 'testnet':
-        case 'signet':
-          btcNetwork = bitcoin.networks.testnet;
-          break;
-        case 'regtest':
-        case 'regtest-local':
-        case 'subfrost-regtest':
-        case 'oylnet':
-        default:
-          btcNetwork = bitcoin.networks.regtest;
-          break;
-      }
+      const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
 
@@ -395,9 +297,10 @@ export function useSwapMutation() {
           feeRate: swapData.feeRate,
           autoConfirm: false,
           fromAddresses,
-          toAddresses: ['p2tr:0'],
-          changeAddress: 'p2wpkh:0',
-          alkanesChangeAddress: 'p2tr:0',
+          toAddresses: isBrowserWallet ? [taprootAddress] : ['p2tr:0'],
+          changeAddress: isBrowserWallet ? (segwitAddress || 'p2wpkh:0') : 'p2wpkh:0',
+          alkanesChangeAddress: isBrowserWallet ? taprootAddress : 'p2tr:0',
+          ordinalsStrategy: 'burn',
         });
 
         console.log('[useSwapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -425,24 +328,42 @@ export function useSwapMutation() {
           const readyToSign = result.readyToSign;
 
           // The PSBT comes as Uint8Array from serde_wasm_bindgen (or as object with indices)
-          let psbtBase64: string;
-          if (readyToSign.psbt instanceof Uint8Array) {
-            psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-          } else if (typeof readyToSign.psbt === 'string') {
-            // Already base64
-            psbtBase64 = readyToSign.psbt;
-          } else if (typeof readyToSign.psbt === 'object') {
-            // PSBT came back as object with numeric keys (e.g., {"0": 112, "1": 115, ...})
-            const keys = Object.keys(readyToSign.psbt).map(Number).sort((a, b) => a - b);
-            const bytes = new Uint8Array(keys.length);
-            for (let i = 0; i < keys.length; i++) {
-              bytes[i] = readyToSign.psbt[keys[i]];
-            }
-            psbtBase64 = uint8ArrayToBase64(bytes);
-          } else {
-            throw new Error('Unexpected PSBT format: ' + typeof readyToSign.psbt);
-          }
+          let psbtBase64 = extractPsbtBase64(readyToSign.psbt);
           console.log('[useSwapMutation] PSBT base64 length:', psbtBase64.length);
+
+          // Helper to classify script type from raw bytes
+          const classifyScript = (script: Uint8Array | Buffer): string => {
+            const s = Buffer.from(script);
+            if (s.length === 34 && s[0] === 0x51 && s[1] === 0x20) return 'P2TR';
+            if (s.length === 22 && s[0] === 0x00 && s[1] === 0x14) return 'P2WPKH';
+            if (s.length === 23 && s[0] === 0xa9 && s[1] === 0x14 && s[22] === 0x87) return 'P2SH';
+            if (s.length === 34 && s[0] === 0x00 && s[1] === 0x20) return 'P2WSH';
+            return `UNKNOWN(len=${s.length},op=${s[0]?.toString(16)})`;
+          };
+
+          const logSwapInputDetails = (psbt: bitcoin.Psbt, label: string) => {
+            console.log(`[SWAP-DIAG] === ${label} — ${psbt.data.inputs.length} inputs, ${psbt.txOutputs.length} outputs ===`);
+            psbt.data.inputs.forEach((input, idx) => {
+              const ws = input.witnessUtxo?.script;
+              const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
+              const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
+              console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex} nonWitnessUtxo=${!!input.nonWitnessUtxo} redeemScript=${!!input.redeemScript} tapInternalKey=${input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'NONE'}`);
+            });
+            psbt.txOutputs.forEach((out, idx) => {
+              try {
+                const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
+                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
+              } catch {
+                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or non-standard]`);
+              }
+            });
+          };
+
+          // DIAGNOSTIC: Log PSBT state before patching
+          {
+            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            logSwapInputDetails(tempPsbt, 'BEFORE PATCHING');
+          }
 
           // Patch PSBT: replace dummy wallet outputs with real addresses,
           // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
@@ -460,6 +381,12 @@ export function useSwapMutation() {
               console.log('[useSwapMutation] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
             }
             console.log('[useSwapMutation] Patched PSBT outputs for browser wallet');
+          }
+
+          // DIAGNOSTIC: Log PSBT state after patching
+          {
+            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+            logSwapInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
           // For keystore wallets, request user confirmation before signing
@@ -501,9 +428,47 @@ export function useSwapMutation() {
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
 
+          // DIAGNOSTIC: Log per-input state after signing
+          console.log(`[SWAP-DIAG] === AFTER SIGNING — ${signedPsbt.data.inputs.length} inputs ===`);
+          signedPsbt.data.inputs.forEach((inp, idx) => {
+            const ws = inp.witnessUtxo?.script;
+            const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
+            const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
+            console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex}`, {
+              tapKeySig: inp.tapKeySig ? `${Buffer.from(inp.tapKeySig).length}B` : undefined,
+              partialSig: inp.partialSig?.length || undefined,
+              finalScriptWitness: inp.finalScriptWitness ? `${Buffer.from(inp.finalScriptWitness).length}B` : undefined,
+              finalScriptSig: inp.finalScriptSig ? `${Buffer.from(inp.finalScriptSig).length}B` : undefined,
+              redeemScript: inp.redeemScript ? `${Buffer.from(inp.redeemScript).length}B` : undefined,
+              tapInternalKey: inp.tapInternalKey ? Buffer.from(inp.tapInternalKey).toString('hex') : undefined,
+            });
+          });
+
+          // Check if already finalized by the wallet
+          const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+            input.finalScriptWitness || input.finalScriptSig
+          );
+
           // Finalize all inputs
-          console.log('[useSwapMutation] Finalizing PSBT...');
-          signedPsbt.finalizeAllInputs();
+          if (alreadyFinalized) {
+            console.log('[useSwapMutation] PSBT already finalized by wallet, skipping finalization');
+          } else {
+            console.log('[useSwapMutation] Finalizing PSBT...');
+            try {
+              signedPsbt.finalizeAllInputs();
+            } catch (e: any) {
+              console.error('[useSwapMutation] Finalization error:', e.message);
+              // Dump per-input state for debugging
+              console.error('[SWAP-DIAG] === FINALIZATION FAILURE DUMP ===');
+              signedPsbt.data.inputs.forEach((inp, idx) => {
+                const ws = inp.witnessUtxo?.script;
+                const sType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
+                const sHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
+                console.error(`  Input ${idx}: type=${sType} script=${sHex} redeemScript=${inp.redeemScript ? Buffer.from(inp.redeemScript).toString('hex') : 'NONE'} tapKeySig=${!!inp.tapKeySig} partialSig=${inp.partialSig?.length || 0} finalScriptWitness=${!!inp.finalScriptWitness}`);
+              });
+              throw e;
+            }
+          }
 
           // Extract the raw transaction
           const tx = signedPsbt.extractTransaction();
