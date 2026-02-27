@@ -209,11 +209,8 @@ export default function BoostSection({ vault }: Props) {
                 />
               </div>
 
-              {/* Balance + Percentage Buttons stacked */}
+              {/* Percentage Buttons + Balance stacked */}
               <div className="flex flex-col items-end gap-1">
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  {t('boost.balance', { amount: userVeTokenBalanceFormatted })}
-                </div>
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
@@ -243,6 +240,9 @@ export default function BoostSection({ vault }: Props) {
                   >
                     {t('boost.max')}
                   </button>
+                </div>
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  {t('boost.balance', { amount: userVeTokenBalanceFormatted })}
                 </div>
               </div>
             </div>

@@ -342,26 +342,8 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   onBlur={() => setInputFocused(false)}
                 />
               </div>
-              {/* Balance and percentage buttons stacked */}
+              {/* Percentage buttons + Balance stacked */}
               <div className="flex flex-col items-end gap-1 mt-1">
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                      {balanceText}
-                      {balanceUsage > 0 && (
-                        <span className="ml-1.5">
-                          ({balanceUsage.toFixed(1)}%)
-                        </span>
-                      )}
-                    </div>
-                    {balanceUsage > 0 && (
-                      <div className={`w-16 h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
-                        <div
-                          className={`h-full ${getBalanceColor()} transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none`}
-                          style={{ width: `${balanceUsage}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
                   <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
@@ -392,6 +374,24 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     >
                       Max
                     </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                      {balanceText}
+                      {balanceUsage > 0 && (
+                        <span className="ml-1.5">
+                          ({balanceUsage.toFixed(1)}%)
+                        </span>
+                      )}
+                    </div>
+                    {balanceUsage > 0 && (
+                      <div className={`w-16 h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
+                        <div
+                          className={`h-full ${getBalanceColor()} transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none`}
+                          style={{ width: `${balanceUsage}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
               </div>
             </div>

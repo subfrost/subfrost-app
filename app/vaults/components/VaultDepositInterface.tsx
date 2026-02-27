@@ -287,11 +287,8 @@ export default function VaultDepositInterface({
                 />
               </div>
 
-              {/* Balance + Percentage Buttons stacked */}
+              {/* Percentage Buttons + Balance stacked */}
               <div className="flex flex-col items-end gap-1">
-                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  {t('vaultDeposit.balance')} {userBalance}
-                </div>
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
@@ -321,6 +318,9 @@ export default function VaultDepositInterface({
                   >
                     {t('swap.max')}
                   </button>
+                </div>
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  {t('vaultDeposit.balance')} {userBalance}
                 </div>
               </div>
             </div>
