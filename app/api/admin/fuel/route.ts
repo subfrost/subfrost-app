@@ -33,20 +33,22 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const address = body.address?.trim();
-    const amount = parseInt(body.amount, 10);
+    const amount = parseFloat(body.amount);
     const note = body.note?.trim() || null;
 
     if (!address) {
       return NextResponse.json({ error: 'Address is required' }, { status: 400 });
     }
     if (isNaN(amount) || amount < 0) {
-      return NextResponse.json({ error: 'Amount must be a non-negative integer' }, { status: 400 });
+      return NextResponse.json({ error: 'Amount must be a non-negative number' }, { status: 400 });
     }
+    // Round to 2 decimal places to enforce precision limit
+    const roundedAmount = Math.round(amount * 100) / 100;
 
     const allocation = await prisma.fuelAllocation.upsert({
       where: { address },
-      create: { address, amount, note },
-      update: { amount, note },
+      create: { address, amount: roundedAmount, note },
+      update: { amount: roundedAmount, note },
     });
 
     // Invalidate cached public lookup

@@ -54,7 +54,7 @@ export default function FuelTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address: formAddress,
-          amount: parseInt(formAmount, 10),
+          amount: parseFloat(formAmount),
           note: formNote || null,
         }),
       });
@@ -191,6 +191,7 @@ export default function FuelTab() {
                 onChange={(e) => setFormAmount(e.target.value)}
                 className="h-9 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)]"
                 min={0}
+                step="0.01"
                 required
               />
             </div>
