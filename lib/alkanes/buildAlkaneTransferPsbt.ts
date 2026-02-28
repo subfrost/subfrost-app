@@ -69,12 +69,13 @@ async function fetchUtxos(address: string): Promise<SimpleUtxo[]> {
 }
 
 /**
- * Fetch raw transaction hex for a txid (needed for witnessUtxo).
+ * Derive the output script for an address.
+ * For segwit/taproot addresses this is cheaper and more reliable than
+ * fetching the full raw transaction hex from esplora (which can 404 on
+ * regtest when the esplora instance is out of sync with the RPC backend).
  */
-async function fetchTxHex(txid: string, networkName: string): Promise<string> {
-  const resp = await fetch(`/api/esplora/tx/${txid}/hex?network=${encodeURIComponent(networkName)}`);
-  if (!resp.ok) throw new Error(`Failed to fetch tx hex for ${txid}`);
-  return resp.text();
+function addressToScript(address: string, network: bitcoin.Network): Buffer {
+  return Buffer.from(bitcoin.address.toOutputScript(address, network));
 }
 
 /**
@@ -122,7 +123,7 @@ export async function buildAlkaneTransferPsbt(
 ): Promise<BuildAlkaneTransferResult> {
   const {
     alkaneId, amount, senderTaprootAddress, senderPaymentAddress,
-    recipientAddress, tapInternalKeyHex, feeRate, network, networkName,
+    recipientAddress, tapInternalKeyHex, feeRate, network,
   } = params;
 
   const [block, tx] = alkaneId.split(':').map(Number);
@@ -221,18 +222,7 @@ export async function buildAlkaneTransferPsbt(
   const btcChange = totalIn - outputCost - estimatedFee;
 
   // -----------------------------------------------------------------------
-  // 4. Fetch raw transactions for witnessUtxo
-  // -----------------------------------------------------------------------
-  const allInputUtxos = [...alkaneUtxos, ...selectedBtcUtxos];
-  const uniqueTxids = [...new Set(allInputUtxos.map(u => u.txid))];
-  const txHexMap = new Map<string, string>();
-  await Promise.all(uniqueTxids.map(async (txid) => {
-    const hex = await fetchTxHex(txid, networkName);
-    txHexMap.set(txid, hex);
-  }));
-
-  // -----------------------------------------------------------------------
-  // 5. Build PSBT
+  // 4. Build PSBT
   // -----------------------------------------------------------------------
   const psbt = new bitcoin.Psbt({ network });
 
@@ -242,17 +232,22 @@ export async function buildAlkaneTransferPsbt(
     ? Buffer.from(tapInternalKeyHex.length === 66 ? tapInternalKeyHex.slice(2) : tapInternalKeyHex, 'hex')
     : undefined;
 
+  // Derive output scripts from known sender addresses instead of fetching
+  // raw tx hex from esplora. This avoids 404 errors on regtest where the
+  // esplora instance (espo.subfrost.io) may be out of sync with the RPC
+  // backend that provided the UTXOs.
+  const taprootScript = addressToScript(senderTaprootAddress, network);
+  const btcFeeAddress = hasSeparatePayment ? senderPaymentAddress : senderTaprootAddress;
+  const btcFeeScript = addressToScript(btcFeeAddress, network);
+  const btcFeeIsP2TR = btcFeeScript.length === 34 && btcFeeScript[0] === 0x51 && btcFeeScript[1] === 0x20;
+
   // Add alkane inputs (taproot, from sender)
   for (const utxo of alkaneUtxos) {
-    const txHex = txHexMap.get(utxo.txid)!;
-    const prevTx = bitcoin.Transaction.fromHex(txHex);
-    const prevOut = prevTx.outs[utxo.vout];
-
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
       witnessUtxo: {
-        script: Buffer.from(prevOut.script),
+        script: taprootScript,
         value: BigInt(utxo.value),
       },
       ...(tapInternalKey ? { tapInternalKey } : {}),
@@ -261,22 +256,14 @@ export async function buildAlkaneTransferPsbt(
 
   // Add BTC fee inputs
   for (const utxo of selectedBtcUtxos) {
-    const txHex = txHexMap.get(utxo.txid)!;
-    const prevTx = bitcoin.Transaction.fromHex(txHex);
-    const prevOut = prevTx.outs[utxo.vout];
-    const script = Buffer.from(prevOut.script);
-
-    // Detect P2TR outputs: OP_1 (0x51) + OP_DATA_32 (0x20) + 32 bytes = 34 bytes
-    const isP2TR = script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
-
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
       witnessUtxo: {
-        script,
+        script: btcFeeScript,
         value: BigInt(utxo.value),
       },
-      ...(isP2TR && tapInternalKey ? { tapInternalKey } : {}),
+      ...(btcFeeIsP2TR && tapInternalKey ? { tapInternalKey } : {}),
     });
   }
 

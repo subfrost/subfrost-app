@@ -34,7 +34,19 @@
     "test:e2e:vault": "npx tsx e2e/vault-e2e.test.ts",
     "test:e2e:swap": "npx tsx e2e/swap-e2e.test.ts",
     "test:e2e:wallet": "npx tsx e2e/wallet-e2e.test.ts",
-    "test:e2e": "npm run test:e2e:wallet && npm run test:e2e:swap && npm run test:e2e:vault"
+    "test:e2e": "npm run test:e2e:wallet && npm run test:e2e:swap && npm run test:e2e:vault",
+    "test:tier1": "INTEGRATION=true vitest run __tests__/tier1 --testTimeout=120000 --fileParallelism=false",
+    "test:tier1:swap": "INTEGRATION=true vitest run __tests__/tier1/swap-diesel-frbtc.test.ts __tests__/tier1/swap-frbtc-diesel.test.ts --testTimeout=120000 --fileParallelism=false",
+    "test:tier1:wrap": "INTEGRATION=true vitest run __tests__/tier1/wrap-btc.test.ts __tests__/tier1/unwrap-frbtc.test.ts --testTimeout=120000 --fileParallelism=false",
+    "test:tier1:send": "INTEGRATION=true vitest run __tests__/tier1/send-btc.test.ts __tests__/tier1/send-alkane.test.ts --testTimeout=120000 --fileParallelism=false",
+    "test:tier2": "TIER2=true vitest run __tests__/tier2 --testTimeout=180000",
+    "test:tier2:swap": "TIER2=true vitest run __tests__/tier2/swap-regtest.puppeteer.test.ts --testTimeout=180000",
+    "test:tier2:send": "TIER2=true vitest run __tests__/tier2/send-regtest.puppeteer.test.ts --testTimeout=180000",
+    "test:tier2:wallets": "TIER2=true vitest run __tests__/tier2/browser-wallet-connect.puppeteer.test.ts --testTimeout=180000",
+    "test:tier2:wallets:swap": "TIER2=true vitest run __tests__/tier2/browser-wallet-swap.puppeteer.test.ts --testTimeout=180000",
+    "test:tier2:wallets:send": "TIER2=true vitest run __tests__/tier2/browser-wallet-send.puppeteer.test.ts --testTimeout=180000",
+    "test:tier2:wallets:send-alkane": "TIER2=true vitest run __tests__/tier2/browser-wallet-send-alkane.puppeteer.test.ts --testTimeout=180000",
+    "test:progressive": "npm run test:tier1 && npm run test:tier2"
   },
   "dependencies": {
     "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-b86cb41",
