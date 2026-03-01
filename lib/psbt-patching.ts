@@ -1,7 +1,77 @@
 /**
  * Centralized PSBT patching for browser wallets.
  *
- * WHY THIS EXISTS:
+ * ============================================================================
+ * ⚠️⚠️⚠️ CRITICAL WARNING: READ BEFORE USING THIS MODULE ⚠️⚠️⚠️
+ * ============================================================================
+ *
+ * ## THE REAL FIX IS TO USE ACTUAL ADDRESSES, NOT PSBT PATCHING
+ *
+ * As of 2026-03-01, the CORRECT solution for browser wallet transactions is:
+ *
+ * ```typescript
+ * const isBrowserWallet = walletType === 'browser';
+ *
+ * // Pass ACTUAL addresses to SDK, not symbolic addresses
+ * const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
+ * const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
+ * const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+ *
+ * await provider.alkanesExecuteTyped({
+ *   toAddresses,
+ *   changeAddress: changeAddr,
+ *   alkanesChangeAddress: alkanesChangeAddr,
+ *   // ...
+ * });
+ * ```
+ *
+ * When you pass actual addresses to the SDK, it creates PSBTs with correct
+ * addresses. NO PATCHING NEEDED. PSBT patching is a LEGACY approach that can
+ * cause more problems than it solves.
+ *
+ * ## TOKENS LOST DUE TO ADDRESS BUGS (2026-03-01)
+ *
+ * Transaction: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
+ *
+ * A user lost 0.3 DIESEL because:
+ * 1. The mutation used symbolic addresses ('p2tr:0', 'p2wpkh:0') with browser wallet
+ * 2. Symbolic addresses resolved to SDK's DUMMY wallet, not user's addresses
+ * 3. Swap tokens went to wrong addresses (SDK dummy wallet addresses)
+ * 4. User's actual addresses received nothing
+ *
+ * User's addresses:
+ * - bc1p8gunhdgy085s6xz5tg0uuwwv5k2yndcn23qat79m0ee8e0rfcs6q3hdm5n (taproot)
+ * - bc1q0mkku72jtxzdnh5s9086mkdxy234wkqltqextr (segwit)
+ *
+ * Where tokens actually went:
+ * - bc1ppl8797s9zc55xlzg3pm8s2ufgqrdp363gsw3gccy7j2g6n057kqqjkv7pt (WRONG!)
+ * - bc1qsc9eesuu5w2elkm5lm75h4ma5u7gt0gz4z6825 (WRONG!)
+ *
+ * ## WHEN PSBT PATCHING IS STILL NEEDED
+ *
+ * PSBT patching should ONLY be used for:
+ * 1. Operations requiring fixedOutputs (e.g., wrap needs signer at specific output)
+ * 2. P2SH-P2WPKH redeemScript injection for Xverse
+ * 3. tapInternalKey patching for signing
+ *
+ * PSBT patching should NOT be used for:
+ * - General output address replacement (use actual addresses in SDK call instead)
+ * - "Fixing" dummy wallet addresses (use actual addresses in SDK call instead)
+ *
+ * ## FILES THAT WERE FIXED (2026-03-01)
+ *
+ * All these files now use actual addresses for browser wallets:
+ * - hooks/useSwapMutation.ts
+ * - hooks/useSwapUnwrapMutation.ts
+ * - hooks/useRemoveLiquidityMutation.ts
+ * - hooks/useAddLiquidityMutation.ts
+ * - hooks/useWrapSwapMutation.ts
+ * - hooks/useUnwrapMutation.ts
+ * - hooks/useWrapMutation.ts (special case: uses fixedOutputs for signer)
+ *
+ * ============================================================================
+ *
+ * WHY THIS EXISTS (LEGACY):
  * The OYL SDK's WASM builds PSBTs using a dummy wallet (walletCreate() in
  * AlkanesSDKContext). All symbolic addresses (p2tr:0, p2wpkh:0) resolve to
  * the dummy wallet's keys, so every output scriptPubKey and every input
@@ -362,6 +432,80 @@ export function patchPsbtForBrowserWallet(params: PatchPsbtParams): {
   }
 
   return { psbtBase64: psbt.toBase64(), inputsPatched };
+}
+
+// ---------------------------------------------------------------------------
+// Input-only patching (for when SDK already creates correct output addresses)
+// ---------------------------------------------------------------------------
+
+export interface PatchInputsOnlyParams {
+  psbtBase64: string;
+  network: bitcoin.Network;
+  /** User's taproot address */
+  taprootAddress: string;
+  /** User's segwit/payment address */
+  segwitAddress?: string;
+  /** Compressed public key hex for the payment address (for redeemScript) */
+  paymentPubkeyHex?: string;
+}
+
+/**
+ * Patch PSBT inputs ONLY — does NOT touch outputs.
+ *
+ * Use this when the SDK already creates correct output addresses (because you
+ * passed actual addresses to alkanesExecuteTyped, not symbolic p2tr:0).
+ *
+ * This function handles:
+ * 1. witnessUtxo.script patching for UniSat/OKX (they validate witnessUtxo consistency)
+ * 2. redeemScript injection for Xverse P2SH-P2WPKH addresses
+ *
+ * IMPORTANT: This does NOT patch outputs. Output patching was causing address
+ * corruption bugs (see header comment for TX 985436b5...).
+ *
+ * @returns patched PSBT base64 and count of inputs modified
+ */
+export function patchInputsOnly(params: PatchInputsOnlyParams): {
+  psbtBase64: string;
+  inputsPatched: number;
+} {
+  const {
+    psbtBase64,
+    network,
+    taprootAddress,
+    segwitAddress,
+    paymentPubkeyHex,
+  } = params;
+
+  const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
+
+  let totalPatched = 0;
+
+  // 1. Patch input witnessUtxo scripts (dummy → user's real scriptPubKeys)
+  // Required for UniSat/OKX which validate witnessUtxo consistency
+  const witnessPatched = patchInputWitnessScripts(psbt, {
+    taprootAddress,
+    segwitAddress,
+    network,
+  });
+  if (witnessPatched > 0) {
+    console.log(`[patchInputsOnly] Patched witnessUtxo.script on ${witnessPatched} input(s)`);
+    totalPatched += witnessPatched;
+  }
+
+  // 2. Inject redeemScripts for P2SH-P2WPKH inputs (Xverse)
+  if (paymentPubkeyHex && segwitAddress) {
+    const redeemPatched = injectRedeemScripts(psbt, {
+      paymentAddress: segwitAddress,
+      pubkeyHex: paymentPubkeyHex,
+      network,
+    });
+    if (redeemPatched > 0) {
+      console.log(`[patchInputsOnly] Injected redeemScript into ${redeemPatched} P2SH input(s)`);
+      totalPatched += redeemPatched;
+    }
+  }
+
+  return { psbtBase64: psbt.toBase64(), inputsPatched: totalPatched };
 }
 
 // ---------------------------------------------------------------------------

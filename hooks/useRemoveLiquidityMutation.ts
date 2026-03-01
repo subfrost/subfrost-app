@@ -3,6 +3,26 @@
  *
  * This hook handles removing liquidity from AMM pools by burning LP tokens.
  *
+ * ============================================================================
+ * ⚠️⚠️⚠️ CRITICAL: BROWSER WALLET OUTPUT ADDRESS BUG (2026-03-01) ⚠️⚠️⚠️
+ * ============================================================================
+ *
+ * When using browser wallets (Xverse, OYL, etc.), you MUST pass ACTUAL addresses
+ * to toAddresses/changeAddress/alkanesChangeAddress — NOT symbolic addresses like
+ * 'p2tr:0' or 'p2wpkh:0'. Symbolic addresses resolve to SDK's DUMMY wallet!
+ *
+ * See useSwapMutation.ts header comment for full documentation of this bug,
+ * including the transaction that lost user tokens:
+ * TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
+ *
+ * REQUIRED PATTERN:
+ * ```typescript
+ * const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
+ * const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
+ * const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+ * ```
+ * ============================================================================
+ *
  * ## WASM Dependency Note
  *
  * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
@@ -72,7 +92,9 @@ import { getTokenSymbol } from '@/lib/alkanes-client';
 import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
+// NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
+// Output patching was removed - see useSwapMutation.ts for why
+import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildRemoveLiquidityProtostone, buildRemoveLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 
@@ -172,11 +194,31 @@ export function useRemoveLiquidityMutation() {
 
       const isBrowserWallet = walletType === 'browser';
 
-      // For browser wallets, use actual addresses for UTXO discovery.
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      // ============================================================================
+      // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
+      // ============================================================================
+      // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
+      // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
+      // ============================================================================
       const fromAddresses = isBrowserWallet
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
+
+      const toAddresses = isBrowserWallet
+        ? [taprootAddress]
+        : ['p2tr:0'];
+
+      const changeAddr = isBrowserWallet
+        ? (segwitAddress || taprootAddress)
+        : 'p2wpkh:0';
+
+      const alkanesChangeAddr = isBrowserWallet
+        ? taprootAddress
+        : 'p2tr:0';
+
+      console.log('[RemoveLiquidity] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[RemoveLiquidity] To addresses:', toAddresses);
+      console.log('[RemoveLiquidity] Change address:', changeAddr);
 
       try {
         const result = await provider.alkanesExecuteTyped({
@@ -185,9 +227,9 @@ export function useRemoveLiquidityMutation() {
           feeRate: data.feeRate,
           autoConfirm: false,
           fromAddresses,
-          toAddresses: ['p2tr:0'],
-          changeAddress: 'p2wpkh:0',
-          alkanesChangeAddress: 'p2tr:0',
+          toAddresses,
+          changeAddress: changeAddr,
+          alkanesChangeAddress: alkanesChangeAddr,
         });
 
         console.log('[RemoveLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -209,22 +251,42 @@ export function useRemoveLiquidityMutation() {
           // Convert PSBT to base64
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
-          // Patch PSBT: replace dummy wallet outputs with real addresses,
-          // inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
+          // ============================================================================
+          // ⚠️ CRITICAL: PSBT PATCHING REMOVED - DO NOT RE-ADD ⚠️
+          // ============================================================================
+          // Date Removed: 2026-03-01 (same as useSwapMutation.ts fix)
+          // See useSwapMutation.ts:444-483 for full documentation.
+          //
+          // alkanes-rs SDK creates PSBTs with correct real addresses for browser wallets.
+          // patchPsbtForBrowserWallet was CORRUPTING these addresses.
+          // ============================================================================
+
+          console.log('[RemoveLiquidity] Using PSBT from SDK (addresses already correct, no patching needed)');
+
+          // ============================================================================
+          // Input patching for ALL browser wallet types
+          // ============================================================================
+          // Different wallets have different requirements:
+          // - Xverse: P2SH-P2WPKH (starts with '3'/'2'). Needs redeemScript injection.
+          // - UniSat/OKX: Single-address P2TR or P2WPKH. Need witnessUtxo.script patching.
+          // - OYL/Leather/Phantom: Native P2WPKH (bc1q). Need witnessUtxo.script patching.
+          //
+          // patchInputsOnly handles ALL these cases. It does NOT touch outputs (the SDK
+          // already creates correct output addresses when we pass actual addresses).
+          // ============================================================================
+          let finalPsbtBase64 = psbtBase64;
           if (isBrowserWallet) {
-            const result = patchPsbtForBrowserWallet({
+            const result = patchInputsOnly({
               psbtBase64,
               network: btcNetwork,
-              isBrowserWallet,
-              taprootAddress,
+              taprootAddress: taprootAddress!,
               segwitAddress,
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
-            psbtBase64 = result.psbtBase64;
+            finalPsbtBase64 = result.psbtBase64;
             if (result.inputsPatched > 0) {
-              console.log('[RemoveLiquidity] Patched', result.inputsPatched, 'P2SH inputs with redeemScript');
+              console.log(`[RemoveLiquidity] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
             }
-            console.log('[RemoveLiquidity] Patched PSBT outputs for browser wallet');
           }
 
           // For keystore wallets, request user confirmation before signing
@@ -259,10 +321,10 @@ export function useRemoveLiquidityMutation() {
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
             console.log('[RemoveLiquidity] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
           } else {
             console.log('[RemoveLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+            signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
 
