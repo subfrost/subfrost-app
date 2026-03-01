@@ -1011,7 +1011,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const oylProvider = (window as any).oyl;
         if (!oylProvider) throw new Error('OYL wallet not available');
 
+        // Check if already connected - if not, getAddresses() will trigger connection prompt
+        const isConnected = oylProvider.isConnected ? await oylProvider.isConnected() : false;
+        console.log('[WalletContext] OYL wallet connected status:', isConnected);
+
         // getAddresses returns all address types in one call
+        // On first call when not connected, this triggers the connection approval popup
         const addresses = await oylProvider.getAddresses();
         if (!addresses?.nativeSegwit || !addresses?.taproot) {
           throw new Error('No addresses returned from OYL');
@@ -1463,14 +1468,41 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // Pass the patched PSBT (with corrected tapInternalKey) as HEX
       // JOURNAL ENTRY (2026-02-20): The SDK's walletAdapter.signPsbt() expects HEX format,
       // not base64. It validates the input is valid hex before calling the wallet extension.
+      // JOURNAL ENTRY (2026-02-28): OYL wallet requires explicit connection check before signing.
+      // If "Site origin must be connected first" error occurs, the wallet needs to be reconnected.
       const patchedPsbtHex = psbt.toHex();
       const walletId = browserWallet?.info?.id || 'unknown';
+
+      // For OYL wallet: check connection status before signing
+      if (walletId === 'oyl') {
+        const oylProvider = (window as any).oyl;
+        if (oylProvider && oylProvider.isConnected) {
+          const isConnected = await oylProvider.isConnected();
+          if (!isConnected) {
+            console.warn('[WalletContext] OYL wallet connection lost');
+            // OYL requires manual reconnection - cannot auto-reconnect programmatically
+            throw new Error(
+              'OYL wallet connection expired. Please:\n' +
+              '1. Click "Disconnect Wallet" in the top right\n' +
+              '2. Click "Connect Wallet" and choose OYL again\n' +
+              '3. Retry your transaction'
+            );
+          }
+        }
+      }
+
       console.log(`[WalletContext] Signing PSBT with SDK adapter (${walletId})`);
       let signedHex: string;
       try {
         signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
       } catch (e: any) {
         console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, e?.message || e);
+
+        // Provide more helpful error for OYL connection issues
+        if (walletId === 'oyl' && e?.message?.includes('connected first')) {
+          throw new Error('OYL wallet connection required. Please disconnect and reconnect your wallet, then try again.');
+        }
+
         throw new Error(`${walletId} signing failed: ${e?.message || e}`);
       }
 
