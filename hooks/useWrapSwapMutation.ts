@@ -125,14 +125,21 @@ export function useWrapSwapMutation() {
       if (!provider) throw new Error('Provider not available');
 
       // Get addresses
+      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
+      // UniSat/OKX only provide one address type at a time (user-configurable).
+      // We need at least ONE address, but don't require both taproot AND segwit.
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address available');
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('No wallet address available. Please connect a wallet first.');
+      }
+      // For alkane operations, prefer taproot if available (alkanes use P2TR)
+      const primaryAddress = taprootAddress || segwitAddress;
 
       const signerAddress = getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
-      console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, signerAddress });
+      console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });
 
       // Convert BTC to sats
       const btcAmountSats = new BigNumber(data.btcAmount)
@@ -194,8 +201,9 @@ export function useWrapSwapMutation() {
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
+      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       const toAddresses = isBrowserWallet
-        ? [taprootAddress, taprootAddress]
+        ? [primaryAddress, primaryAddress]
         : ['p2tr:0', 'p2tr:0'];
 
       const changeAddr = isBrowserWallet
@@ -203,7 +211,7 @@ export function useWrapSwapMutation() {
         : 'p2wpkh:0';
 
       const alkanesChangeAddr = isBrowserWallet
-        ? taprootAddress
+        ? primaryAddress
         : 'p2tr:0';
 
       console.log('[WrapSwap] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');

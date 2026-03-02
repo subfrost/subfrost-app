@@ -415,6 +415,16 @@ See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidity
 **Cause:** Regtest blocks are mined manually, so a deadline of current_block + 3 can easily expire before the swap tx is mined.
 **Fix:** On regtest, all mutation hooks override `deadlineBlocks` to 1000 regardless of user setting.
 
+### ⚠️ Tokens/BTC sent to wrong addresses (browser wallet)
+**Cause:** Mutation hook used symbolic addresses (`p2tr:0`, `p2wpkh:0`) for browser wallet outputs. These resolve to SDK's DUMMY wallet, NOT user's wallet.
+**Fix:** Use conditional logic to pass ACTUAL addresses for browser wallets:
+```typescript
+const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
+const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
+const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+```
+**See:** `useSwapMutation.ts` header comment for full documentation. This bug caused **actual token loss** — see Historical Issues section "2026-03-01: Browser Wallet Output Address Bug".
+
 ---
 
 ## Backend Infrastructure (Cloud SQL + Redis)
@@ -681,29 +691,201 @@ alkanes: [{id: {block: sell_block, tx: sell_tx}, value: amount_in}]
 - Genesis contracts (DIESEL, frBTC) not deployed
 - **Lesson:** Check docker-entrypoint.sh in metashrew-regtest image
 
-### 2026-02-20: OYL Wallet "Invalid PSBT hex" Error (INVESTIGATION IN PROGRESS)
+### 2026-02-20: OYL Wallet "Invalid PSBT hex" Error — RESOLVED
 
 **Symptom:** Wrap transactions fail with "Invalid PSBT hex" error from OYL wallet when the user has many UTXOs (155 in reported case). The SDK creates a PSBT with 28 inputs. OYL wallet popup may appear twice (double signature request).
 
-**Current state of investigation:**
-1. Error originates from `window.oyl.signPsbt()` call in the SDK's `OylAdapter`
-2. The SDK's `OylAdapter` passes PSBT in **hex** format to OYL wallet
-3. Other wallets like Xverse expect **base64** format (per [sats-connect docs](https://docs.xverse.app/sats-connect/bitcoin-methods/signpsbt))
-4. No documentation found for OYL's expected PSBT format
-5. Could be: format mismatch (hex vs base64), PSBT size limit, or validation issue
+**Resolution (2026-03-01):** The issue was related to connection state, not PSBT format. Adding auto-reconnection logic resolved the problem. When OYL's session expires mid-operation, we now:
+1. Detect the "connected first" error
+2. Call `getAddresses()` to re-establish connection
+3. Retry the signing operation
 
-**Files involved:**
-- `hooks/useWrapMutation.ts` — calls `signTaprootPsbt()` for browser wallets
-- `context/WalletContext.tsx:1354-1480` — `signTaprootPsbt` patches tapInternalKey and calls `walletAdapter.signPsbt()`
-- SDK's `OylAdapter` in `node_modules/@alkanes/ts-sdk/dist/index.js` — passes hex to `window.oyl.signPsbt()`
+**Key insight:** OYL's `isConnected()` returning `false` does NOT indicate signing will fail. The SDK adapter handles the PSBT format correctly. Multiple signature popups are OYL's expected UX (one per input).
 
-**Next steps to try:**
-1. Check if OYL wallet expects base64 instead of hex (try converting format)
-2. Test with a transaction that has fewer inputs to rule out size limits
-3. Check OYL wallet extension source code or contact OYL team for API docs
-4. Add detailed logging to capture exact PSBT hex being sent to wallet
-5. Consider calling `window.oyl.signPsbt()` directly (bypassing SDK adapter) with base64 format
+**Files fixed:**
+- `context/WalletContext.tsx:1720-1784` — Auto-reconnection logic for OYL
+- Comprehensive debugging logs added to trace exact signing flow
 
-**Double signature issue:** Likely a symptom of the first request failing — OYL may show a popup that gets stuck or retries internally.
+**Verified working:** Transaction `0b2455ceef9c0f1fb8c09d37b08f667a656cac5e09e4d0cf01ddccc7b59aef43`
 
-**Workaround (not implemented):** User can consolidate UTXOs by sending BTC to themselves first, reducing the number of inputs needed.
+### 2026-03-01: Browser Wallet Output Address Bug — TOKEN LOSS
+
+**⚠️⚠️⚠️ CRITICAL: This bug caused actual token loss on mainnet ⚠️⚠️⚠️**
+
+**Lost transaction:** `985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9`
+
+**Symptom:** After a swap transaction, user's UI showed $2 worth of BTC but no DIESEL or frBTC, despite sending 0.3 DIESEL for a swap. Transaction confirmed on-chain but tokens went to wrong addresses.
+
+**Root cause:** All mutation hooks were using symbolic addresses (`p2tr:0`, `p2wpkh:0`) for `toAddresses`, `changeAddress`, and `alkanesChangeAddress` parameters in the SDK's `alkanesExecuteTyped()` call. For browser wallets, these symbolic addresses resolve to the SDK's DUMMY WALLET addresses — NOT the user's actual addresses.
+
+```typescript
+// THE BUG (DO NOT USE)
+await provider.alkanesExecuteTyped({
+  toAddresses: ['p2tr:0'],           // ❌ Resolves to dummy wallet!
+  changeAddress: 'p2wpkh:0',         // ❌ Resolves to dummy wallet!
+  alkanesChangeAddress: 'p2tr:0',    // ❌ Resolves to dummy wallet!
+});
+```
+
+**Evidence from lost transaction:**
+- User's taproot: `bc1p8gunhdgy085s6xz5tg0uuwwv5k2yndcn23qat79m0ee8e0rfcs6q3hdm5n`
+- User's segwit: `bc1q0mkku72jtxzdnh5s9086mkdxy234wkqltqextr`
+- Actual output 0: `bc1ppl8797s9zc55xlzg3pm8s2ufgqrdp363gsw3gccy7j2g6n057kqqjkv7pt` (SDK DUMMY!)
+- Actual output 1: `bc1qsc9eesuu5w2elkm5lm75h4ma5u7gt0gz4z6825` (SDK DUMMY!)
+
+The tokens went to addresses the user doesn't control. **Tokens are NOT recoverable.**
+
+**The fix (MANDATORY for all browser wallet transactions):**
+
+```typescript
+const isBrowserWallet = walletType === 'browser';
+
+// Output addresses: where tokens should go
+const toAddresses = isBrowserWallet
+  ? [taprootAddress]          // ✅ ACTUAL address string
+  : ['p2tr:0'];               // OK for keystore (mnemonic loaded)
+
+// Change addresses: where BTC/alkane change should go
+const changeAddr = isBrowserWallet
+  ? (segwitAddress || taprootAddress)
+  : 'p2wpkh:0';
+
+const alkanesChangeAddr = isBrowserWallet
+  ? taprootAddress
+  : 'p2tr:0';
+
+await provider.alkanesExecuteTyped({
+  toAddresses,
+  changeAddress: changeAddr,
+  alkanesChangeAddress: alkanesChangeAddr,
+  // ...
+});
+```
+
+**Files fixed (2026-03-01):**
+- `hooks/useSwapMutation.ts`
+- `hooks/useSwapUnwrapMutation.ts`
+- `hooks/useRemoveLiquidityMutation.ts`
+- `hooks/useAddLiquidityMutation.ts`
+- `hooks/useWrapSwapMutation.ts`
+- `hooks/useUnwrapMutation.ts`
+
+**Why keystore wallets work with symbolic addresses:**
+- Keystore wallets load a real mnemonic via `provider.loadWallet()`
+- Symbolic addresses (`p2tr:0`) resolve to derived addresses from that mnemonic
+- Browser wallets DON'T load a mnemonic — we only have address strings from the extension
+- The SDK's dummy wallet (created via `walletCreate()`) is used for PSBT construction
+- All symbolic addresses resolve to THIS dummy wallet, not the user's wallet
+
+**Verification checklist for any new mutation hook:**
+1. Check if `walletType === 'browser'`
+2. If browser wallet, ALL address parameters MUST be actual address strings
+3. Check console logs during transaction — should show real bc1p/bc1q addresses
+4. After broadcast, verify on mempool.space that outputs go to user's addresses
+
+**Lessons:**
+- NEVER use symbolic addresses (`p2tr:0`, `p2wpkh:0`) for browser wallet output addresses
+- This is NOT a PSBT patching problem — the SDK needs correct addresses at call time
+- Always test with browser wallets, not just keystore, when working on mutations
+- Verify transaction outputs on-chain before considering a fix complete
+
+### 2026-03-01: OYL Wallet Connection and Signing Behavior — VERIFIED WORKING
+
+**Confirmed working transaction:** `0b2455ceef9c0f1fb8c09d37b08f667a656cac5e09e4d0cf01ddccc7b59aef43`
+
+**Key insights about OYL wallet behavior:**
+
+1. **isConnected() returns FALSE even when working**
+   - OYL's `isConnected()` tracks persistent site approval, NOT session readiness
+   - Signing works even when `isConnected()` returns `false`
+   - DO NOT gate signing operations on `isConnected()` — it will block valid users
+
+2. **OYL has NO connect() method**
+   - Unlike other wallets, OYL doesn't expose `window.oyl.connect()`
+   - Connection is established implicitly via `getAddresses()`
+   - Available methods: `disconnect, isConnected, getNetwork, switchNetwork, getAddresses, getBalance, signMessage, signPsbt, signPsbts, pushPsbt`
+
+3. **Multiple signature popups are EXPECTED**
+   - OYL shows one confirmation popup PER INPUT in the PSBT
+   - If a swap spends 3 UTXOs (e.g., 1 segwit + 2 taproot), user sees 3 popups
+   - This is OYL's UX design, NOT a bug in our code
+   - Other wallets like Xverse batch all signatures into a single popup
+
+4. **Auto-reconnection on "connected first" error**
+   - If signing fails with "Site origin must be connected first", we automatically:
+     1. Call `getAddresses()` to re-establish connection
+     2. Retry the signing operation
+   - This handles session expiration between operations
+
+5. **SDK adapter path is correct**
+   - Use `walletAdapter.signPsbt()` (from SDK), NOT direct `window.oyl` calls
+   - The SDK adapter handles format conversion and validation correctly
+   - Direct `window.oyl.signPsbt()` calls were tried and failed with validation errors
+
+**Files with OYL-specific code:**
+- `context/WalletContext.tsx:1665-1787` — OYL debugging logs and auto-reconnection
+- `hooks/useSwapMutation.ts:578-604` — Browser wallet signing with debug logs
+
+**Single-address wallet support (UniSat, OKX):**
+- These wallets only provide one address type at a time (user-configurable)
+- Code now handles this: `primaryAddress = taprootAddress || segwitAddress`
+- Prefer taproot for alkane operations, fall back to segwit if unavailable
+- Changed from requiring BOTH addresses to requiring AT LEAST ONE
+
+---
+
+## Browser Wallet Integration Checklist
+
+When implementing or modifying any transaction hook that supports browser wallets:
+
+### Pre-implementation
+1. Read this section and the "Browser Wallet Output Address Bug" documentation above
+2. Understand the difference between `walletType === 'browser'` and `walletType === 'keystore'`
+
+### Implementation requirements
+```typescript
+const { walletType, account, browserWallet } = useWallet();
+const isBrowserWallet = walletType === 'browser';
+
+// 1. Support single-address wallets (UniSat, OKX)
+const taprootAddress = account?.taproot?.address;
+const segwitAddress = account?.nativeSegwit?.address;
+const primaryAddress = taprootAddress || segwitAddress;
+
+// 2. NEVER use symbolic addresses for browser wallets
+const toAddresses = isBrowserWallet
+  ? [primaryAddress]      // ✅ Actual address
+  : ['p2tr:0'];           // OK for keystore
+
+const changeAddr = isBrowserWallet
+  ? (segwitAddress || taprootAddress)
+  : 'p2wpkh:0';
+
+const alkanesChangeAddr = isBrowserWallet
+  ? primaryAddress
+  : 'p2tr:0';
+
+// 3. Pass actual addresses to SDK
+await provider.alkanesExecuteTyped({
+  toAddresses,
+  changeAddress: changeAddr,
+  alkanesChangeAddress: alkanesChangeAddr,
+  // ...
+});
+
+// 4. Single signing call for browser wallets
+if (isBrowserWallet) {
+  signedPsbt = await signTaprootPsbt(psbtBase64); // Signs ALL inputs
+} else {
+  signedPsbt = await signSegwitPsbt(psbtBase64);
+  signedPsbt = await signTaprootPsbt(signedPsbt);
+}
+```
+
+### Testing checklist
+- [ ] Test with OYL wallet (multi-address, multiple signature popups expected)
+- [ ] Test with UniSat wallet (single-address mode)
+- [ ] Test with OKX wallet (single-address mode)
+- [ ] Verify console logs show actual bc1p/bc1q addresses, NOT symbolic p2tr:0
+- [ ] After broadcast, verify on mempool.space that outputs go to user's addresses
+- [ ] If swap involves multiple UTXOs, confirm all signature popups complete successfully

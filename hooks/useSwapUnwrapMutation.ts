@@ -122,14 +122,21 @@ export function useSwapUnwrapMutation() {
       if (!provider) throw new Error('Provider not available');
 
       // Get addresses
+      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
+      // UniSat/OKX only provide one address type at a time (user-configurable).
+      // We need at least ONE address, but don't require both taproot AND segwit.
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address available');
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('No wallet address available. Please connect a wallet first.');
+      }
+      // For alkane operations, prefer taproot if available (alkanes use P2TR)
+      const primaryAddress = taprootAddress || segwitAddress;
 
       const signerAddress = getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
-      console.log('[SwapUnwrap] Addresses:', { taprootAddress, segwitAddress, signerAddress });
+      console.log('[SwapUnwrap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });
 
       // Calculate minimum frBTC from swap (accounting for slippage)
       // The swap outputs frBTC which then gets unwrapped to BTC
@@ -177,8 +184,9 @@ export function useSwapUnwrapMutation() {
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
+      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       const toAddresses = isBrowserWallet
-        ? [taprootAddress, taprootAddress]
+        ? [primaryAddress, primaryAddress]
         : ['p2tr:0', 'p2tr:0'];
 
       const changeAddr = isBrowserWallet
@@ -186,7 +194,7 @@ export function useSwapUnwrapMutation() {
         : 'p2wpkh:0';
 
       const alkanesChangeAddr = isBrowserWallet
-        ? taprootAddress
+        ? primaryAddress
         : 'p2tr:0';
 
       console.log('[SwapUnwrap] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');

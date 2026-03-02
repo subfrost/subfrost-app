@@ -1,3 +1,38 @@
+/**
+ * WalletContext - Unified wallet management for keystore and browser wallets
+ *
+ * ============================================================================
+ * ⚠️⚠️⚠️ CRITICAL: BROWSER WALLET ADDRESS HANDLING (2026-03-01) ⚠️⚠️⚠️
+ * ============================================================================
+ *
+ * This context exposes `walletType` which can be 'browser' or 'keystore'.
+ *
+ * **ALL mutation hooks MUST check walletType and use ACTUAL addresses for
+ * browser wallets.** Browser wallets do NOT load a mnemonic into the SDK,
+ * so symbolic addresses (`p2tr:0`, `p2wpkh:0`) resolve to the SDK's DUMMY
+ * wallet instead of the user's wallet.
+ *
+ * Example of CORRECT usage in mutation hooks:
+ * ```typescript
+ * const { walletType, account } = useWallet();
+ * const isBrowserWallet = walletType === 'browser';
+ *
+ * const toAddresses = isBrowserWallet
+ *   ? [account?.taproot?.address]     // ✅ Actual address
+ *   : ['p2tr:0'];                      // OK for keystore
+ *
+ * const changeAddr = isBrowserWallet
+ *   ? account?.nativeSegwit?.address
+ *   : 'p2wpkh:0';
+ * ```
+ *
+ * This is NOT optional. Using symbolic addresses for browser wallets causes
+ * tokens to be sent to the SDK's dummy wallet addresses. See useSwapMutation.ts
+ * header comment for full documentation of this bug and the tokens lost to it.
+ *
+ * See also: CLAUDE.md "2026-03-01: Browser Wallet Output Address Bug"
+ * ============================================================================
+ */
 'use client';
 
 import type { ReactNode } from 'react';
@@ -475,6 +510,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         // If wallet provided explicit addresses, use them
         if (hasExplicitSegwit || hasExplicitTaproot) {
+          // Log addresses being used for balance queries
+          console.log('[WalletContext] Using browser wallet addresses for balance queries:');
+          console.log('  Taproot:', taprootAddr?.address || '(none)');
+          console.log('  NativeSegwit:', segwitAddr?.address || '(none)');
           return {
             nativeSegwit: hasExplicitSegwit ? {
               address: segwitAddr!.address,
@@ -1008,35 +1047,131 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         });
       } else if (walletId === 'oyl') {
         // OYL wallet exposes window.oyl with getAddresses(), signPsbt(), signMessage()
+        console.log('[WalletContext][OYL-CONNECT] ===== OYL CONNECTION FLOW START =====');
         const oylProvider = (window as any).oyl;
         if (!oylProvider) throw new Error('OYL wallet not available');
 
+        // Log all available methods on window.oyl
+        console.log('[WalletContext][OYL-CONNECT] window.oyl available methods:', Object.keys(oylProvider).join(', '));
+        console.log('[WalletContext][OYL-CONNECT] window.oyl prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(oylProvider) || {}).join(', '));
+
         // Check if already connected - if not, getAddresses() will trigger connection prompt
-        const isConnected = oylProvider.isConnected ? await oylProvider.isConnected() : false;
-        console.log('[WalletContext] OYL wallet connected status:', isConnected);
+        let isConnectedResult: any = 'N/A';
+        if (typeof oylProvider.isConnected === 'function') {
+          try {
+            isConnectedResult = await oylProvider.isConnected();
+          } catch (e: any) {
+            isConnectedResult = `ERROR: ${e?.message || e}`;
+          }
+        }
+        console.log('[WalletContext][OYL-CONNECT] isConnected() result:', isConnectedResult);
 
         // getAddresses returns all address types in one call
         // On first call when not connected, this triggers the connection approval popup
-        const addresses = await oylProvider.getAddresses();
-        if (!addresses?.nativeSegwit || !addresses?.taproot) {
+        const rawAddresses = await oylProvider.getAddresses();
+        console.log('[WalletContext] OYL getAddresses RAW response:', rawAddresses);
+        console.log('[WalletContext] OYL getAddresses RAW JSON:', JSON.stringify(rawAddresses, null, 2));
+        console.log('[WalletContext] OYL response type:', typeof rawAddresses);
+        if (rawAddresses) {
+          console.log('[WalletContext] OYL response keys:', Object.keys(rawAddresses));
+          console.log('[WalletContext] OYL nativeSegwit type:', typeof rawAddresses.nativeSegwit);
+          console.log('[WalletContext] OYL taproot type:', typeof rawAddresses.taproot);
+        }
+
+        // Handle different possible response formats from OYL
+        // Format 1: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey } }
+        // Format 2: { nativeSegwit: "address", taproot: "address" }
+        // Format 3: Array format
+        let addresses: {
+          nativeSegwit?: { address: string; publicKey?: string };
+          taproot?: { address: string; publicKey?: string };
+        } = {};
+
+        if (Array.isArray(rawAddresses)) {
+          // Handle array format - find by address type
+          console.log('[WalletContext] OYL returned array format');
+          for (const addr of rawAddresses) {
+            if (addr.type === 'p2wpkh' || addr.addressType === 'p2wpkh' || addr.purpose === 'payment') {
+              addresses.nativeSegwit = { address: addr.address, publicKey: addr.publicKey };
+            } else if (addr.type === 'p2tr' || addr.addressType === 'p2tr' || addr.purpose === 'ordinals') {
+              addresses.taproot = { address: addr.address, publicKey: addr.publicKey };
+            }
+          }
+        } else if (rawAddresses && typeof rawAddresses === 'object') {
+          // Handle object format
+          if (typeof rawAddresses.nativeSegwit === 'string') {
+            // Format: { nativeSegwit: "address", taproot: "address" }
+            console.log('[WalletContext] OYL returned string addresses');
+            addresses.nativeSegwit = { address: rawAddresses.nativeSegwit };
+            addresses.taproot = { address: rawAddresses.taproot };
+          } else {
+            // Format: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey } }
+            console.log('[WalletContext] OYL returned object addresses');
+            addresses = rawAddresses;
+          }
+        }
+
+        if (!addresses?.nativeSegwit?.address && !addresses?.taproot?.address) {
+          console.error('[WalletContext] OYL missing addresses after parsing:', { nativeSegwit: addresses?.nativeSegwit, taproot: addresses?.taproot });
           throw new Error('No addresses returned from OYL');
         }
 
-        // Store both address types
-        additionalAddresses.taproot = {
-          address: addresses.taproot.address,
-          publicKey: addresses.taproot.publicKey,
-        };
-        additionalAddresses.nativeSegwit = {
-          address: addresses.nativeSegwit.address,
-          publicKey: addresses.nativeSegwit.publicKey,
-        };
+        console.log('[WalletContext] OYL addresses (parsed):');
+        console.log('  Taproot:', addresses.taproot?.address || '(none)');
+        console.log('  NativeSegwit:', addresses.nativeSegwit?.address || '(none)');
 
-        // Use taproot as primary address
+        // DEBUGGING: Log address comparison for derivation path analysis
+        // Different wallets may derive different addresses from the same seed
+        // due to different BIP derivation paths (BIP44/84/86)
+        console.log('[WalletContext] OYL address comparison - check if these match your Xverse addresses:');
+        console.log('  If addresses differ, your funds are on Xverse addresses, not OYL addresses.');
+        console.log('  This is normal - different wallets use different derivation paths.');
+
+        // Store both address types
+        if (addresses.taproot?.address) {
+          additionalAddresses.taproot = {
+            address: addresses.taproot.address,
+            publicKey: addresses.taproot.publicKey,
+          };
+        }
+        if (addresses.nativeSegwit?.address) {
+          additionalAddresses.nativeSegwit = {
+            address: addresses.nativeSegwit.address,
+            publicKey: addresses.nativeSegwit.publicKey,
+          };
+        }
+
+        // Use taproot as primary address (fall back to segwit if no taproot)
+        const primaryAddress = addresses.taproot?.address || addresses.nativeSegwit?.address;
+        const primaryPubKey = addresses.taproot?.publicKey || addresses.nativeSegwit?.publicKey;
+        const primaryType = addresses.taproot?.address ? 'p2tr' : 'p2wpkh';
+
+        if (!primaryAddress) {
+          throw new Error('No valid address found from OYL wallet');
+        }
+
+        // Log final connection state
+        console.log('[WalletContext][OYL-CONNECT] Creating ConnectedWallet with:');
+        console.log('[WalletContext][OYL-CONNECT]   address:', primaryAddress);
+        console.log('[WalletContext][OYL-CONNECT]   publicKey:', primaryPubKey);
+        console.log('[WalletContext][OYL-CONNECT]   addressType:', primaryType);
+
+        // Check isConnected again after getAddresses
+        if (typeof oylProvider.isConnected === 'function') {
+          try {
+            const postConnectStatus = await oylProvider.isConnected();
+            console.log('[WalletContext][OYL-CONNECT] isConnected() AFTER getAddresses:', postConnectStatus);
+          } catch (e: any) {
+            console.log('[WalletContext][OYL-CONNECT] isConnected() threw after getAddresses:', e?.message || e);
+          }
+        }
+
+        console.log('[WalletContext][OYL-CONNECT] ===== OYL CONNECTION FLOW END =====');
+
         connected = new (ConnectedWallet as any)(walletInfo, oylProvider, {
-          address: addresses.taproot.address,
-          publicKey: addresses.taproot.publicKey,
-          addressType: 'p2tr',
+          address: primaryAddress,
+          publicKey: primaryPubKey,
+          addressType: primaryType,
         });
       } else if (walletId === 'tokeo') {
         // Tokeo exposes window.tokeo.bitcoin with requestAccounts(), getAccounts(), signPsbt()
@@ -1385,7 +1520,27 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
-      // For Xverse: call the Xverse Bitcoin Provider directly
+      // ============================================================================
+      // Xverse Signing (2026-03-01)
+      // ============================================================================
+      // Xverse uses the sats-connect protocol and requires a signInputs mapping
+      // that tells the wallet which address should sign which inputs.
+      //
+      // CRITICAL: The PSBT must have CORRECT addresses in input witnessUtxo scripts.
+      // If patchPsbtForBrowserWallet() was applied to a PSBT that already had correct
+      // addresses from the SDK, it will CORRUPT the scripts and break signInputs mapping.
+      //
+      // When working correctly:
+      // - Input 0 (segwit UTXO): decoded address matches paymentAddr → payIdx
+      // - Input 1 (taproot token UTXO): decoded address matches ordinalsAddr → ordIdx
+      // - signInputs = { "bc1q...": [0], "bc1p...": [1] }
+      //
+      // When corrupted (PSBT patching bug):
+      // - Both inputs decode to same address type
+      // - signInputs only has one entry → Xverse hangs waiting for missing signatures
+      //
+      // Verified working TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
+      // ============================================================================
       const xverse = (window as any).XverseProviders?.BitcoinProvider;
       if (xverse && browserWallet?.info?.id === 'xverse') {
         console.log('[WalletContext] Xverse: signing PSBT directly (bypassing SDK adapter)');
@@ -1406,27 +1561,43 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         for (let i = 0; i < psbt.data.inputs.length; i++) {
           const input = psbt.data.inputs[i];
+          console.log(`[WalletContext] Input ${i}: witnessUtxo exists:`, !!input.witnessUtxo);
           if (!input.witnessUtxo) {
             // No witnessUtxo — assume payment input
+            console.log(`[WalletContext] Input ${i}: No witnessUtxo, assigning to payment`);
             if (paymentAddr) payIdx.push(i);
             else ordIdx.push(i);
             continue;
           }
           try {
+            const scriptHex = Buffer.from(input.witnessUtxo.script).toString('hex');
+            console.log(`[WalletContext] Input ${i}: script hex:`, scriptHex);
             const addr = bitcoin.address.fromOutputScript(
               Buffer.from(input.witnessUtxo.script), btcNetwork
             );
+            console.log(`[WalletContext] Input ${i}: Decoded address:`, addr);
+            console.log(`[WalletContext] Input ${i}: Comparing to ordinalsAddr:`, ordinalsAddr, '| match:', addr === ordinalsAddr);
+            console.log(`[WalletContext] Input ${i}: Comparing to paymentAddr:`, paymentAddr, '| match:', addr === paymentAddr);
             if (paymentAddr && addr === paymentAddr) {
+              console.log(`[WalletContext] Input ${i}: → Assigning to PAYMENT`);
               payIdx.push(i);
             } else if (addr === ordinalsAddr) {
+              console.log(`[WalletContext] Input ${i}: → Assigning to ORDINALS`);
               ordIdx.push(i);
             } else {
               // Heuristic: P2SH (3...) or P2WPKH (bc1q...) → payment; else → ordinals
               const isSegwit = addr.startsWith('3') || addr.toLowerCase().startsWith('bc1q');
-              if (isSegwit && paymentAddr) payIdx.push(i);
-              else ordIdx.push(i);
+              console.log(`[WalletContext] Input ${i}: Using heuristic, isSegwit:`, isSegwit);
+              if (isSegwit && paymentAddr) {
+                console.log(`[WalletContext] Input ${i}: → Assigning to PAYMENT (heuristic)`);
+                payIdx.push(i);
+              } else {
+                console.log(`[WalletContext] Input ${i}: → Assigning to ORDINALS (heuristic)`);
+                ordIdx.push(i);
+              }
             }
-          } catch {
+          } catch (e) {
+            console.error(`[WalletContext] Input ${i}: Failed to decode address:`, e);
             ordIdx.push(i);
           }
         }
@@ -1436,13 +1607,26 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         console.log('[WalletContext] Xverse signInputs:', JSON.stringify(signInputs));
 
-        const response = await xverse.request('signPsbt', {
-          psbt: psbt.toBase64(),
-          signInputs,
-          broadcast: false,
-        });
+        // Debug: Log PSBT details before signing
+        console.log('[WalletContext] PSBT to sign (base64 length):', psbt.toBase64().length);
+        console.log('[WalletContext] PSBT input count:', psbt.data.inputs.length);
+        console.log('[WalletContext] Calling xverse.request("signPsbt")...');
 
-        console.log('[WalletContext] Xverse response:', JSON.stringify(response));
+        let response;
+        try {
+          response = await xverse.request('signPsbt', {
+            psbt: psbt.toBase64(),
+            signInputs,
+            broadcast: false,
+          });
+          console.log('[WalletContext] Xverse response:', JSON.stringify(response));
+        } catch (xverseError: any) {
+          console.error('[WalletContext] Xverse signPsbt threw error:', xverseError);
+          console.error('[WalletContext] Error message:', xverseError?.message);
+          console.error('[WalletContext] Error name:', xverseError?.name);
+          console.error('[WalletContext] Full error:', JSON.stringify(xverseError, Object.getOwnPropertyNames(xverseError)));
+          throw xverseError;
+        }
 
         // Xverse returns either:
         //   - SIP format: { status: "success", result: { psbt: "..." } }
@@ -1470,41 +1654,171 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // not base64. It validates the input is valid hex before calling the wallet extension.
       // JOURNAL ENTRY (2026-02-28): OYL wallet requires explicit connection check before signing.
       // If "Site origin must be connected first" error occurs, the wallet needs to be reconnected.
+      // JOURNAL ENTRY (2026-03-01): REMOVED pre-emptive isConnected() check.
+      // OYL's isConnected() returns false even after successful getAddresses() - it tracks
+      // a different concept (persistent site approval) vs. session availability. The SDK's
+      // OylAdapter doesn't use isConnected() at all - it just calls signPsbt() directly.
+      // Let the SDK try to sign and handle errors gracefully instead of blocking users.
       const patchedPsbtHex = psbt.toHex();
       const walletId = browserWallet?.info?.id || 'unknown';
 
-      // For OYL wallet: check connection status before signing
+      // ============================================================================
+      // OYL WALLET BEHAVIOR DOCUMENTATION (2026-03-01)
+      // ============================================================================
+      //
+      // VERIFIED WORKING: OYL wallet swaps work correctly as of 2026-03-01.
+      // Confirmed via txid: 0b2455ceef9c0f1fb8c09d37b08f667a656cac5e09e4d0cf01ddccc7b59aef43
+      //
+      // KEY INSIGHTS ABOUT OYL WALLET:
+      //
+      // 1. isConnected() RETURNS FALSE EVEN WHEN WORKING
+      //    OYL's isConnected() tracks persistent site approval, NOT session readiness.
+      //    Signing works even when isConnected() returns false.
+      //    DO NOT gate signing on isConnected() - it will block valid users.
+      //
+      // 2. OYL HAS NO connect() METHOD
+      //    Unlike other wallets, OYL doesn't expose a connect() method.
+      //    Connection is established implicitly via getAddresses().
+      //    Available methods: disconnect, isConnected, getNetwork, switchNetwork,
+      //    getAddresses, getBalance, signMessage, signPsbt, signPsbts, pushPsbt
+      //
+      // 3. MULTIPLE SIGNATURE POPUPS ARE EXPECTED
+      //    OYL shows one popup PER INPUT being signed in the transaction.
+      //    If a swap has 3 UTXOs (e.g., 1 segwit for fees + 2 taproot for tokens),
+      //    the user will see 3 separate signature popups. This is OYL's UX design,
+      //    NOT a bug in our code. Other wallets like Xverse batch all signatures
+      //    into a single popup.
+      //
+      // 4. AUTO-RECONNECTION ON "connected first" ERROR
+      //    If signing fails with "Site origin must be connected first", we
+      //    automatically call getAddresses() to re-establish connection, then retry.
+      //    This handles the case where OYL's session expired between operations.
+      //
+      // 5. SDK ADAPTER PATH IS CORRECT
+      //    We use walletAdapter.signPsbt() (from SDK), NOT direct window.oyl calls.
+      //    The SDK adapter handles format conversion and validation correctly.
+      //    Direct window.oyl.signPsbt() calls were tried and failed with validation errors.
+      //
+      // This logging section helps trace signing flow for debugging future issues.
+      // ============================================================================
+
+      // Log 1: Entry point - what wallet and what PSBT
+      console.log(`[WalletContext][OYL-DEBUG] ===== SIGNING ATTEMPT START =====`);
+      console.log(`[WalletContext][OYL-DEBUG] walletId: "${walletId}"`);
+      console.log(`[WalletContext][OYL-DEBUG] PSBT hex length: ${patchedPsbtHex.length}`);
+      console.log(`[WalletContext][OYL-DEBUG] PSBT hex (first 100 chars): ${patchedPsbtHex.substring(0, 100)}...`);
+
+      // Log 2: Check OYL provider state BEFORE signing
       if (walletId === 'oyl') {
         const oylProvider = (window as any).oyl;
-        if (oylProvider && oylProvider.isConnected) {
-          const isConnected = await oylProvider.isConnected();
-          if (!isConnected) {
-            console.warn('[WalletContext] OYL wallet connection lost');
-            // OYL requires manual reconnection - cannot auto-reconnect programmatically
-            throw new Error(
-              'OYL wallet connection expired. Please:\n' +
-              '1. Click "Disconnect Wallet" in the top right\n' +
-              '2. Click "Connect Wallet" and choose OYL again\n' +
-              '3. Retry your transaction'
-            );
+        console.log(`[WalletContext][OYL-DEBUG] window.oyl exists: ${!!oylProvider}`);
+        if (oylProvider) {
+          console.log(`[WalletContext][OYL-DEBUG] window.oyl methods: ${Object.keys(oylProvider).join(', ')}`);
+          console.log(`[WalletContext][OYL-DEBUG] window.oyl.isConnected exists: ${typeof oylProvider.isConnected}`);
+          console.log(`[WalletContext][OYL-DEBUG] window.oyl.signPsbt exists: ${typeof oylProvider.signPsbt}`);
+          console.log(`[WalletContext][OYL-DEBUG] window.oyl.getAddresses exists: ${typeof oylProvider.getAddresses}`);
+          console.log(`[WalletContext][OYL-DEBUG] window.oyl.connect exists: ${typeof oylProvider.connect}`);
+
+          // Check isConnected if available
+          if (typeof oylProvider.isConnected === 'function') {
+            try {
+              const connected = await oylProvider.isConnected();
+              console.log(`[WalletContext][OYL-DEBUG] isConnected() returned: ${connected}`);
+            } catch (connCheckErr: any) {
+              console.log(`[WalletContext][OYL-DEBUG] isConnected() threw: ${connCheckErr?.message || connCheckErr}`);
+            }
           }
         }
       }
 
-      console.log(`[WalletContext] Signing PSBT with SDK adapter (${walletId})`);
+      // Log 3: What adapter is being used
+      console.log(`[WalletContext][OYL-DEBUG] walletAdapter type: ${walletAdapter?.constructor?.name || typeof walletAdapter}`);
+      console.log(`[WalletContext][OYL-DEBUG] Calling walletAdapter.signPsbt() with auto_finalized: false`);
+
       let signedHex: string;
       try {
+        const signStartTime = Date.now();
         signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
+        const signDuration = Date.now() - signStartTime;
+        console.log(`[WalletContext][OYL-DEBUG] signPsbt SUCCESS in ${signDuration}ms`);
+        console.log(`[WalletContext][OYL-DEBUG] signedHex length: ${signedHex?.length || 'undefined'}`);
       } catch (e: any) {
-        console.error(`[WalletContext] ${walletId} adapter signPsbt error:`, e?.message || e);
+        // Log 4: Detailed error information
+        console.error(`[WalletContext][OYL-DEBUG] ===== signPsbt FAILED =====`);
+        console.error(`[WalletContext][OYL-DEBUG] Error type: ${e?.constructor?.name || typeof e}`);
+        console.error(`[WalletContext][OYL-DEBUG] Error message: "${e?.message}"`);
+        console.error(`[WalletContext][OYL-DEBUG] Error code: ${e?.code}`);
+        console.error(`[WalletContext][OYL-DEBUG] Full error object:`, e);
+        console.error(`[WalletContext][OYL-DEBUG] Error stack:`, e?.stack);
 
-        // Provide more helpful error for OYL connection issues
-        if (walletId === 'oyl' && e?.message?.includes('connected first')) {
-          throw new Error('OYL wallet connection required. Please disconnect and reconnect your wallet, then try again.');
+        // JOURNAL ENTRY (2026-03-01): OYL wallet auto-reconnection
+        // OYL requires persistent site connection. If signing fails with "connected first",
+        // try to re-establish connection by calling getAddresses() and retry signing.
+        const errorMsg = e?.message || String(e);
+        const isConnectionError = errorMsg.includes('connected first') ||
+                                   errorMsg.includes('not connected') ||
+                                   errorMsg.includes('connection');
+
+        console.log(`[WalletContext][OYL-DEBUG] isConnectionError check: "${errorMsg}" includes 'connected first': ${errorMsg.includes('connected first')}`);
+        console.log(`[WalletContext][OYL-DEBUG] walletId === 'oyl': ${walletId === 'oyl'}`);
+
+        if (walletId === 'oyl' && isConnectionError) {
+          console.log('[WalletContext][OYL-DEBUG] Detected OYL connection error, attempting reconnection...');
+          const oylProvider = (window as any).oyl;
+
+          console.log(`[WalletContext][OYL-DEBUG] oylProvider exists for reconnect: ${!!oylProvider}`);
+          console.log(`[WalletContext][OYL-DEBUG] oylProvider.getAddresses exists: ${typeof oylProvider?.getAddresses}`);
+          console.log(`[WalletContext][OYL-DEBUG] oylProvider.connect exists: ${typeof oylProvider?.connect}`);
+
+          if (oylProvider?.getAddresses) {
+            try {
+              // Try calling connect() first if available (more explicit)
+              if (typeof oylProvider.connect === 'function') {
+                console.log('[WalletContext][OYL-DEBUG] Calling oylProvider.connect()...');
+                try {
+                  const connectResult = await oylProvider.connect();
+                  console.log('[WalletContext][OYL-DEBUG] connect() result:', connectResult);
+                } catch (connectErr: any) {
+                  console.log('[WalletContext][OYL-DEBUG] connect() error:', connectErr?.message || connectErr);
+                }
+              }
+
+              // Then call getAddresses() to ensure we're connected
+              console.log('[WalletContext][OYL-DEBUG] Calling oylProvider.getAddresses()...');
+              const addresses = await oylProvider.getAddresses();
+              console.log('[WalletContext][OYL-DEBUG] getAddresses() returned:', addresses);
+
+              // Check isConnected again after reconnection
+              if (typeof oylProvider.isConnected === 'function') {
+                const connectedAfter = await oylProvider.isConnected();
+                console.log(`[WalletContext][OYL-DEBUG] isConnected() AFTER reconnect: ${connectedAfter}`);
+              }
+
+              // Retry signing after reconnection
+              console.log('[WalletContext][OYL-DEBUG] Retrying walletAdapter.signPsbt() after reconnection...');
+              const retryStartTime = Date.now();
+              signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
+              const retryDuration = Date.now() - retryStartTime;
+              console.log(`[WalletContext][OYL-DEBUG] RETRY signPsbt SUCCESS in ${retryDuration}ms`);
+              console.log(`[WalletContext][OYL-DEBUG] signedHex length: ${signedHex?.length || 'undefined'}`);
+            } catch (reconnectError: any) {
+              console.error('[WalletContext][OYL-DEBUG] ===== RECONNECTION FAILED =====');
+              console.error('[WalletContext][OYL-DEBUG] reconnectError type:', reconnectError?.constructor?.name);
+              console.error('[WalletContext][OYL-DEBUG] reconnectError message:', reconnectError?.message);
+              console.error('[WalletContext][OYL-DEBUG] reconnectError full:', reconnectError);
+              throw new Error('OYL wallet connection required. Please disconnect and reconnect your wallet, then try again.');
+            }
+          } else {
+            console.error('[WalletContext][OYL-DEBUG] No getAddresses method available for reconnection');
+            throw new Error('OYL wallet connection required. Please disconnect and reconnect your wallet, then try again.');
+          }
+        } else {
+          console.log(`[WalletContext][OYL-DEBUG] Not an OYL connection error, throwing original error`);
+          throw new Error(`${walletId} signing failed: ${e?.message || e}`);
         }
-
-        throw new Error(`${walletId} signing failed: ${e?.message || e}`);
       }
+
+      console.log(`[WalletContext][OYL-DEBUG] ===== SIGNING ATTEMPT END (success) =====`);
 
       // Wallet adapter returns hex, convert to base64 for return
       const signedBuffer = Buffer.from(signedHex, 'hex');

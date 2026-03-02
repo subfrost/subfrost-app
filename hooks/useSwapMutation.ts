@@ -218,7 +218,7 @@ export type SwapTransactionBaseData = {
  */
 
 export function useSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -252,10 +252,18 @@ export function useSwapMutation() {
 
       // Get addresses - use actual addresses instead of SDK descriptors
       // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
+      //
+      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
+      // UniSat/OKX only provide one address type at a time (user-configurable).
+      // We need at least ONE address, but don't require both taproot AND segwit.
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address available');
-      console.log('[useSwapMutation] Using addresses:', { taprootAddress, segwitAddress });
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('No wallet address available. Please connect a wallet first.');
+      }
+      // For alkane operations, prefer taproot if available (alkanes use P2TR)
+      const primaryAddress = taprootAddress || segwitAddress;
+      console.log('[useSwapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // NOTE: BTC → token swaps (other than frBTC) should be handled in SwapShell.tsx
       // by first wrapping BTC to frBTC, then calling swapMutation with frBTC.
@@ -382,8 +390,10 @@ export function useSwapMutation() {
         : ['p2wpkh:0', 'p2tr:0'];
 
       // Output addresses: where swapped tokens and BTC change should go
+      // JOURNAL ENTRY (2026-03-01): For single-address wallets (UniSat, OKX), use
+      // the available address. Prefer taproot for alkane outputs but fall back to segwit.
       const toAddresses = isBrowserWallet
-        ? [taprootAddress]
+        ? [primaryAddress]
         : ['p2tr:0'];
 
       const changeAddr = isBrowserWallet
@@ -391,7 +401,7 @@ export function useSwapMutation() {
         : 'p2wpkh:0';
 
       const alkanesChangeAddr = isBrowserWallet
-        ? taprootAddress
+        ? primaryAddress
         : 'p2tr:0';
 
       console.log('[useSwapMutation] Address configuration:');
@@ -565,12 +575,55 @@ export function useSwapMutation() {
             console.log('[useSwapMutation] User approved transaction');
           }
 
-          // Sign PSBT — browser wallets sign all input types in a single call,
-          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
+          // ============================================================================
+          // BROWSER WALLET SIGNING (2026-03-01)
+          // ============================================================================
+          //
+          // VERIFIED WORKING: OYL wallet swaps confirmed via txid:
+          // 0b2455ceef9c0f1fb8c09d37b08f667a656cac5e09e4d0cf01ddccc7b59aef43
+          //
+          // KEY IMPLEMENTATION DETAILS:
+          //
+          // 1. SINGLE signTaprootPsbt() CALL FOR ALL INPUTS
+          //    Browser wallets handle both taproot AND segwit inputs in one call.
+          //    DO NOT call signSegwitPsbt then signTaprootPsbt - this causes
+          //    "inputType: sh without redeemScript" errors.
+          //
+          // 2. MULTIPLE WALLET POPUPS ARE EXPECTED (OYL specific)
+          //    OYL wallet shows one confirmation popup PER INPUT in the PSBT.
+          //    If the swap spends 3 UTXOs, user will see 3 popups.
+          //    This is OYL's UX design, not a bug. Other wallets batch signatures.
+          //
+          // 3. signTaprootPsbt() HANDLES EVERYTHING
+          //    Despite the name, signTaprootPsbt() in WalletContext dispatches to
+          //    the correct wallet adapter which signs ALL input types.
+          //
+          // 4. ACTUAL ADDRESSES ALREADY CONFIGURED (see lines 388-411)
+          //    The SDK was called with actual user addresses, not symbolic ones.
+          //    This prevents the dummy wallet address bug that caused token loss.
+          //
+          // See WalletContext.tsx OYL WALLET BEHAVIOR DOCUMENTATION for full details.
+          // ============================================================================
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[useSwapMutation] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+            console.log('[useSwapMutation][OYL-DEBUG] ===== BROWSER WALLET SIGN START =====');
+            console.log('[useSwapMutation][OYL-DEBUG] walletType:', walletType);
+            console.log('[useSwapMutation][OYL-DEBUG] browserWallet?.info?.id:', browserWallet?.info?.id);
+            console.log('[useSwapMutation][OYL-DEBUG] PSBT base64 length:', finalPsbtBase64.length);
+            console.log('[useSwapMutation][OYL-DEBUG] About to call signTaprootPsbt()...');
+
+            const signStartTime = Date.now();
+            try {
+              signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+              console.log(`[useSwapMutation][OYL-DEBUG] signTaprootPsbt SUCCESS in ${Date.now() - signStartTime}ms`);
+            } catch (signErr: any) {
+              console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
+              console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
+              console.error('[useSwapMutation][OYL-DEBUG] Error type:', signErr?.constructor?.name);
+              console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
+              throw signErr;
+            }
+            console.log('[useSwapMutation][OYL-DEBUG] ===== BROWSER WALLET SIGN END =====');
           } else {
             console.log('[useSwapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);

@@ -7,7 +7,27 @@
  * routed through the factory contract (opcode 13: SwapExactTokensForTokens)
  * because the deployed pool logic is missing the Swap opcode.
  *
+ * ## Quotes Not Showing (Troubleshooting)
+ *
+ * If swap quotes stop appearing after code changes, this is usually caused by:
+ *
+ * 1. **Next.js module caching** - Stale cached versions prevent data flow:
+ *    ```bash
+ *    rm -rf .next && lsof -ti:3000 | xargs kill -9; pnpm dev
+ *    ```
+ *
+ * 2. **Pool data not loading** - Check useAlkanesTokenPairs console logs:
+ *    - Should see "[useAlkanesTokenPairs] SDK returned N pools"
+ *    - If 0 pools, check REST endpoint or RPC connection
+ *
+ * 3. **Browser cache** - Hard refresh: Cmd+Shift+R (Mac) or Ctrl+Shift+R
+ *
+ * JOURNAL (2026-03-01): Quotes stopped showing after swap signing fix.
+ * Root cause was Next.js caching stale hook versions. Fixed by clearing
+ * .next directory and restarting dev server.
+ *
  * @see useSwapMutation.ts - Uses factory opcode 13 for swaps
+ * @see useAlkanesTokenPairs.ts - Pool data fetching
  * @see constants/index.ts - Documentation on factory vs pool opcodes
  */
 import { useQuery } from '@tanstack/react-query';
@@ -207,8 +227,22 @@ export function useSwapQuotes(
   const sellCurrencyId = sellCurrency === 'btc' ? FRBTC_ALKANE_ID : sellCurrency;
   const buyCurrencyId = buyCurrency === 'btc' ? FRBTC_ALKANE_ID : buyCurrency;
 
-  const { data: sellPairs, isFetching: fetchingSell } = useAlkanesTokenPairs(sellCurrencyId);
-  const { data: buyPairs, isFetching: fetchingBuy } = useAlkanesTokenPairs(buyCurrencyId);
+  const { data: sellPairs, isFetching: fetchingSell, isError: sellError, error: sellErrorObj } = useAlkanesTokenPairs(sellCurrencyId);
+  const { data: buyPairs, isFetching: fetchingBuy, isError: buyError, error: buyErrorObj } = useAlkanesTokenPairs(buyCurrencyId);
+
+  // DIAGNOSTIC: Log pool fetching status
+  console.log('[useSwapQuotes] Pool data status:', {
+    sellCurrencyId,
+    buyCurrencyId,
+    sellPairs: sellPairs?.length ?? 'undefined',
+    buyPairs: buyPairs?.length ?? 'undefined',
+    fetchingSell,
+    fetchingBuy,
+    sellError,
+    buyError,
+    sellErrorObj: sellErrorObj?.message,
+    buyErrorObj: buyErrorObj?.message,
+  });
   
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -340,11 +374,21 @@ export function useSwapQuotes(
         } as SwapQuote;
       }
 
+      // Log pool discovery for debugging
+      console.log('[useSwapQuotes] Looking for direct pool:', { sellCurrencyId, buyCurrencyId });
+      console.log('[useSwapQuotes] sellPairs count:', sellPairs.length);
+      console.log('[useSwapQuotes] sellPairs tokens:', sellPairs.map((p: any) => ({
+        token0: p.token0.id,
+        token1: p.token1.id,
+        poolId: p.poolId,
+      })));
+
       const direct = sellPairs.find(
         (p: any) =>
           (p.token0.id === sellCurrencyId && p.token1.id === buyCurrencyId) ||
           (p.token0.id === buyCurrencyId && p.token1.id === sellCurrencyId),
       );
+      console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
       if (direct) {
         return calculateSwapPrice(
           sellCurrencyId,

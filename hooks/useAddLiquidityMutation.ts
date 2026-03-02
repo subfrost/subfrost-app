@@ -307,11 +307,18 @@ export function useAddLiquidityMutation() {
 
       // Get addresses - use actual addresses instead of SDK descriptors
       // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
+      //
+      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
+      // UniSat/OKX only provide one address type at a time (user-configurable).
+      // We need at least ONE address, but don't require both taproot AND segwit.
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address available');
-
-      console.log('[AddLiquidity] Using addresses:', { taprootAddress, segwitAddress });
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('No wallet address available. Please connect a wallet first.');
+      }
+      // For alkane operations, prefer taproot if available (alkanes use P2TR)
+      const primaryAddress = taprootAddress || segwitAddress;
+      console.log('[AddLiquidity] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Convert display amounts to alks
       const amount0Alks = toAlks(data.token0Amount, data.token0Decimals ?? 8);
@@ -397,8 +404,9 @@ export function useAddLiquidityMutation() {
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
+      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       const toAddresses = isBrowserWallet
-        ? [taprootAddress]
+        ? [primaryAddress]
         : ['p2tr:0'];
 
       const changeAddr = isBrowserWallet
@@ -406,7 +414,7 @@ export function useAddLiquidityMutation() {
         : 'p2wpkh:0';
 
       const alkanesChangeAddr = isBrowserWallet
-        ? taprootAddress
+        ? primaryAddress
         : 'p2tr:0';
 
       console.log('[AddLiquidity] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');

@@ -60,10 +60,18 @@ export function useUnwrapMutation() {
 
       // Get addresses - use actual addresses instead of SDK descriptors
       // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
+      //
+      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
+      // UniSat/OKX only provide one address type at a time (user-configurable).
+      // We need at least ONE address, but don't require both taproot AND segwit.
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address available');
-      console.log('[useUnwrapMutation] Using addresses:', { taprootAddress, segwitAddress });
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('No wallet address available. Please connect a wallet first.');
+      }
+      // For alkane operations, prefer taproot if available (alkanes use P2TR)
+      const primaryAddress = taprootAddress || segwitAddress;
+      console.log('[useUnwrapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Verify wallet is loaded in provider
       if (!provider.walletIsLoaded()) {
@@ -118,8 +126,9 @@ export function useUnwrapMutation() {
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
+      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       const alkanesChangeAddr = isBrowserWallet
-        ? taprootAddress
+        ? primaryAddress
         : 'p2tr:0';
 
       console.log('[useUnwrapMutation] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');

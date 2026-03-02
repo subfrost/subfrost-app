@@ -837,9 +837,19 @@ export default function SwapShell() {
     // Default AMM swap (frBTC/DIESEL or other alkane pairs)
     if (!quote) return;
 
-    // Validate that we have a poolId - confirms a pool exists for this pair
-    if (!quote.poolId) {
-      console.error('[SWAP] No poolId in quote - cannot execute swap');
+    // Validate that we have either a poolId (direct swap) or a route (multi-hop swap).
+    // Multi-hop swaps use the factory's opcode 13 with a token path, not a single poolId.
+    // The quote.route array indicates multi-hop (e.g., [DIESEL, bUSD, frBTC]).
+    const hasValidRoute = quote.route && quote.route.length >= 2;
+    console.log('[SWAP] Quote validation:', {
+      poolId: quote.poolId,
+      route: quote.route,
+      hasValidRoute,
+      error: quote.error,
+    });
+    if (!quote.poolId && !hasValidRoute) {
+      console.error('[SWAP] No poolId or route in quote - cannot execute swap');
+      console.error('[SWAP] Full quote object:', JSON.stringify(quote, null, 2));
       window.alert('Swap failed: Pool not found. Please try again.');
       return;
     }
