@@ -656,7 +656,7 @@ export default function DashboardTab() {
       {showFuel && (
         <>
           {/* FUEL stat cards */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {fuelCards.map((card) => (
               <div
                 key={card.label}
@@ -671,9 +671,9 @@ export default function DashboardTab() {
           </div>
 
           {/* Community FUEL Allocation charts */}
-          <div className="flex gap-6">
+          <div className="flex flex-col gap-6 md:flex-row">
             {/* Bar chart */}
-            <div className={`${dashboardView === 'BOTH' ? 'w-[60%]' : 'w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
+            <div className={`w-full ${dashboardView === 'BOTH' ? 'md:w-[60%]' : 'md:w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-[color:var(--sf-text)]">
                   FUEL Allocated by Community
@@ -697,11 +697,11 @@ export default function DashboardTab() {
               {communityFuel.length === 0 ? (
                 <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
               ) : (
-                <CommunityFuelChart data={communityFuel} mode={fuelAggMode} heightScale={dashboardView === 'BOTH' ? 1 : 1.25} />
+                <CommunityFuelChart data={communityFuel} mode={fuelAggMode} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
               )}
             </div>
             {/* Pie chart */}
-            <div className={`${dashboardView === 'BOTH' ? 'w-[40%]' : 'w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
+            <div className={`w-full ${dashboardView === 'BOTH' ? 'md:w-[40%]' : 'md:w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
               <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
                 FUEL Allocations
               </h3>
@@ -709,7 +709,7 @@ export default function DashboardTab() {
                 <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
               ) : (
                 <div className="flex items-center justify-center">
-                  <CommunityFuelPie data={communityFuel} showValues={dashboardView === 'FUEL'} sizeScale={dashboardView === 'BOTH' ? 1 : 1.25} />
+                  <CommunityFuelPie data={communityFuel} showValues={dashboardView === 'FUEL'} sizeScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
                 </div>
               )}
             </div>
@@ -735,21 +735,21 @@ export default function DashboardTab() {
             ))}
           </div>
 
-          <div className="flex gap-6">
+          <div className="flex flex-col gap-6 md:flex-row">
             {/* Top parents bar chart */}
-            <div className={`${dashboardView === 'BOTH' ? 'w-[60%]' : 'w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
+            <div className={`w-full ${dashboardView === 'BOTH' ? 'md:w-[60%]' : 'md:w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
               <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
                 Top Parents by Code Redemptions
               </h3>
               {stats.topParents.length === 0 ? (
                 <div className="text-sm text-[color:var(--sf-muted)]">No codes yet</div>
               ) : (
-                <TopParentsBarChart data={stats.topParents} heightScale={dashboardView === 'BOTH' ? 1 : 1.25} />
+                <TopParentsBarChart data={stats.topParents} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
               )}
             </div>
 
             {/* Cumulative redemptions graph */}
-            <div className={`flex ${dashboardView === 'BOTH' ? 'w-[40%]' : 'w-[50%]'} flex-col rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`} style={dashboardView !== 'BOTH' ? { minHeight: 250 * 1.25 } : undefined}>
+            <div className={`flex w-full ${dashboardView === 'BOTH' ? 'md:w-[40%]' : 'md:w-[50%]'} flex-col rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`} style={{ minHeight: dashboardView !== 'BOTH' ? 250 * 1.875 : 250 * 1.5 }}>
               <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
                 Cumulative Code Redemptions
               </h3>
