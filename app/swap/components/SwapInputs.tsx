@@ -584,14 +584,23 @@ export default function SwapInputs({
         <button
           type="button"
           onClick={() => {
+            console.log('[SwapInputs] Confirm button clicked');
+            console.log('[SwapInputs] isConnected:', isConnected);
+            console.log('[SwapInputs] isDemoGated:', isDemoGated);
+            console.log('[SwapInputs] from:', from?.symbol, 'to:', to?.symbol);
+            console.log('[SwapInputs] fromAmount:', fromAmount, 'toAmount:', toAmount);
+
             if (!isConnected) {
+              console.log('[SwapInputs] Not connected, opening connect modal');
               onConnectModalOpenChange(true);
               return;
             }
             if (!isDemoGated) {
+              console.log('[SwapInputs] NOT demo gated, calling onSwapClick');
               onSwapClick();
               return;
             }
+            console.log('[SwapInputs] Demo gated, showing coming soon');
             if (!showSwapComingSoon) {
               setShowSwapComingSoon(true);
               setTimeout(() => setShowSwapComingSoon(false), 1000);

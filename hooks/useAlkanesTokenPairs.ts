@@ -2,9 +2,28 @@
  * useAlkanesTokenPairs - Find pools containing a specific token
  *
  * Priority order for pool data:
- * 1. dataApiGetTokenPairs — single REST call for token-specific pairs (fastest)
- * 2. dataApiGetAllTokenPairs — single REST call for all pairs
- * 3. alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (slowest, always works)
+ * 1. Direct REST call to /api/rpc/{network}/get-all-token-pairs (most reliable)
+ * 2. dataApiGetAllTokenPairs — SDK wrapper for the above (may return empty {})
+ * 3. dataApiGetAllPoolsDetails — single REST call for all pools
+ * 4. alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (slowest, always works)
+ *
+ * ## Troubleshooting: No Pools Returned
+ *
+ * If this hook returns 0 pools:
+ * 1. Check browser console for "[fetchPoolsFromSDK]" and "[normalizePoolArray]" logs
+ * 2. Verify REST endpoint is responding: check Network tab for /api/rpc/.../get-all-token-pairs
+ * 3. Clear Next.js cache: `rm -rf .next && pnpm dev`
+ *
+ * ## Troubleshooting: Quotes Not Showing After Pool Selection
+ *
+ * If pools load but quotes don't appear in SwapInputs:
+ * 1. This is usually Next.js caching stale hook versions
+ * 2. Fix: `rm -rf .next && lsof -ti:3000 | xargs kill -9; pnpm dev`
+ * 3. Then hard refresh browser: Cmd+Shift+R (Mac) or Ctrl+Shift+R
+ *
+ * JOURNAL ENTRY (2026-03-01): After fixing swap signing (PSBT patching removal),
+ * quotes stopped showing. Root cause was Next.js module caching - hooks were
+ * using stale versions. Always clear .next when debugging data flow issues.
  *
  * JOURNAL ENTRY (2026-02-11): Added dataApi methods as preferred sources over
  * alkanes_simulate. Previously only used alkanesGetAllPoolsWithDetails.
@@ -41,9 +60,47 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
 // ============================================================================
 
 function normalizePoolArray(raw: any): any[] {
-  if (!raw) return [];
-  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : null) || (Array.isArray(parsed) ? parsed : []);
+  if (!raw) {
+    console.log('[normalizePoolArray] raw is falsy:', raw);
+    return [];
+  }
+
+  let parsed: any;
+  try {
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (e) {
+    console.error('[normalizePoolArray] JSON.parse failed:', e, 'raw:', String(raw).slice(0, 200));
+    return [];
+  }
+
+  // DIAGNOSTIC: Log what we're working with
+  console.log('[normalizePoolArray] parsed type:', typeof parsed);
+  console.log('[normalizePoolArray] parsed keys:', parsed ? Object.keys(parsed) : 'N/A');
+  console.log('[normalizePoolArray] parsed.pools?:', parsed?.pools?.length ?? 'undefined');
+  console.log('[normalizePoolArray] parsed.data?.pools?:', parsed?.data?.pools?.length ?? 'undefined');
+  console.log('[normalizePoolArray] Array.isArray(parsed.data)?:', Array.isArray(parsed?.data), 'length:', parsed?.data?.length);
+  console.log('[normalizePoolArray] Array.isArray(parsed)?:', Array.isArray(parsed), 'length:', Array.isArray(parsed) ? parsed.length : 'N/A');
+
+  // Try multiple possible response shapes
+  if (parsed?.pools && Array.isArray(parsed.pools)) {
+    console.log('[normalizePoolArray] Using parsed.pools');
+    return parsed.pools;
+  }
+  if (parsed?.data?.pools && Array.isArray(parsed.data.pools)) {
+    console.log('[normalizePoolArray] Using parsed.data.pools');
+    return parsed.data.pools;
+  }
+  if (Array.isArray(parsed?.data)) {
+    console.log('[normalizePoolArray] Using parsed.data (array)');
+    return parsed.data;
+  }
+  if (Array.isArray(parsed)) {
+    console.log('[normalizePoolArray] Using parsed (array)');
+    return parsed;
+  }
+
+  console.log('[normalizePoolArray] No valid pool array found, returning empty');
+  return [];
 }
 
 // Normalize pool data from multiple API response formats into a flat schema.
@@ -51,6 +108,10 @@ function normalizePoolArray(raw: any): any[] {
 // get-all-pools-details has them flat: token0.block
 // RPC fallback uses details.token_a_block
 function toPoolRow(p: any): any {
+  // Handle multiple API response shapes:
+  // - dataApiGetAllTokenPairs: token0.alkaneId.block, token0.alkaneId.tx
+  // - dataApiGetAllPoolsDetails: token0.block, token0.tx
+  // - alkanesGetAllPoolsWithDetails: details.token_a_block, details.token_a_tx
   return {
     pool_block_id: p.pool_block_id ?? p.pool_id_block ?? p.poolId?.block ?? 0,
     pool_tx_id: p.pool_tx_id ?? p.pool_id_tx ?? p.poolId?.tx ?? 0,
@@ -67,7 +128,12 @@ function toPoolRow(p: any): any {
 async function fetchPoolsFromSDK(
   provider: any,
   factoryId: string,
+  network: string,
 ): Promise<AlkanesTokenPair[]> {
+  console.log('[fetchPoolsFromSDK] ENTRY - factoryId:', factoryId, 'network:', network);
+  console.log('[fetchPoolsFromSDK] provider available:', !!provider);
+  console.log('[fetchPoolsFromSDK] provider.dataApiGetAllTokenPairs:', typeof provider?.dataApiGetAllTokenPairs);
+
   const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
     Promise.race([
       promise,
@@ -76,11 +142,43 @@ async function fetchPoolsFromSDK(
 
   let poolsArray: any[] = [];
 
-  // Method 1: dataApiGetAllTokenPairs — single REST call (preferred)
+  // Method 1: Direct REST call to get-all-token-pairs (bypasses broken SDK method)
+  // The SDK's dataApiGetAllTokenPairs returns empty object {} despite REST succeeding
+  if (poolsArray.length === 0) {
+    try {
+      const [block, tx] = factoryId.split(':');
+      const response = await withTimeout(
+        fetch(`/api/rpc/${encodeURIComponent(network)}/get-all-token-pairs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ factoryId: { block, tx } }),
+        }),
+        15000,
+        'direct-get-all-token-pairs'
+      );
+      const result = await response.json();
+      console.log('[useAlkanesTokenPairs] Direct REST result:', JSON.stringify(result)?.slice(0, 300));
+      const pools = normalizePoolArray(result);
+      console.log('[useAlkanesTokenPairs] Direct REST normalized pools count:', pools.length);
+      if (pools.length > 0) {
+        poolsArray = pools.map(toPoolRow);
+        console.log('[useAlkanesTokenPairs] Direct REST returned', poolsArray.length, 'pools');
+      }
+    } catch (e) {
+      console.warn('[useAlkanesTokenPairs] Direct REST get-all-token-pairs failed:', e);
+    }
+  }
+
+  // Method 2: SDK dataApiGetAllTokenPairs (broken - returns empty, kept as fallback)
   if (poolsArray.length === 0) {
     try {
       const result = await withTimeout(provider.dataApiGetAllTokenPairs(factoryId), 15000, 'dataApiGetAllTokenPairs');
+      // DIAGNOSTIC: Log raw SDK return value to debug pool fetching issues
+      console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs RAW result type:', typeof result);
+      console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs RAW result:',
+        typeof result === 'string' ? result.slice(0, 500) : JSON.stringify(result)?.slice(0, 500));
       const pools = normalizePoolArray(result);
+      console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs normalized pools count:', pools.length);
       if (pools.length > 0) {
         poolsArray = pools.map(toPoolRow);
         console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs returned', poolsArray.length, 'pools');
@@ -94,7 +192,12 @@ async function fetchPoolsFromSDK(
   if (poolsArray.length === 0) {
     try {
       const result = await withTimeout(provider.dataApiGetAllPoolsDetails(factoryId), 15000, 'dataApiGetAllPoolsDetails');
+      // DIAGNOSTIC: Log raw SDK return value
+      console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails RAW result type:', typeof result);
+      console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails RAW result:',
+        typeof result === 'string' ? result.slice(0, 500) : JSON.stringify(result)?.slice(0, 500));
       const pools = normalizePoolArray(result);
+      console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails normalized pools count:', pools.length);
       if (pools.length > 0) {
         poolsArray = pools.map(toPoolRow);
         console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails returned', poolsArray.length, 'pools');
@@ -203,7 +306,7 @@ export function useAlkanesTokenPairs(
         throw new Error('SDK provider not available');
       }
 
-      const allPools = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID);
+      const allPools = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network);
       console.log('[useAlkanesTokenPairs] SDK returned', allPools.length, 'pools');
 
       if (allPools.length === 0) {

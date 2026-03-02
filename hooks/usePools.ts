@@ -176,7 +176,7 @@ async function fetchPoolsFromDataApi(
     const poolId = p.poolId
       ? `${p.poolId.block}:${p.poolId.tx}`
       : '';
-    // get-all-pools-details: token0.block; get-all-token-pairs: token0.alkaneId.block
+    // Handle both API formats: token0.alkaneId.block (get-all-token-pairs) and token0.block (get-all-pools-details)
     const token0Id = p.token0
       ? `${p.token0.alkaneId?.block ?? p.token0.block}:${p.token0.alkaneId?.tx ?? p.token0.tx}`
       : '';
@@ -308,6 +308,88 @@ async function fetchPoolsFromTokenPairsRest(
 }
 
 // ============================================================================
+// Data API fallback (dataApiGetAllTokenPairs — no TVL/volume but works when poolsDetails fails)
+// ============================================================================
+
+async function fetchPoolsFromTokenPairsApi(
+  provider: any,
+  factoryId: string,
+  network: string,
+  tokenMetaMap?: Map<string, { name: string; symbol: string }>,
+): Promise<PoolsListItem[]> {
+  const result = await Promise.race([
+    provider.dataApiGetAllTokenPairs(factoryId),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dataApiGetAllTokenPairs timeout (30s)')), 30000)),
+  ]);
+  const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+  // API returns { data: [...] } with pool objects
+  const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : []) || (Array.isArray(parsed) ? parsed : []);
+
+  console.log('[usePools] dataApiGetAllTokenPairs returned', pools.length, 'pools');
+
+  if (pools.length === 0) {
+    throw new Error('dataApiGetAllTokenPairs returned 0 pools');
+  }
+
+  const items: PoolsListItem[] = [];
+
+  for (const p of pools) {
+    const poolId = p.poolId
+      ? `${p.poolId.block}:${p.poolId.tx}`
+      : '';
+    // Handle get-all-token-pairs format: token0.alkaneId.block
+    const token0Id = p.token0
+      ? `${p.token0.alkaneId?.block ?? p.token0.block}:${p.token0.alkaneId?.tx ?? p.token0.tx}`
+      : '';
+    const token1Id = p.token1
+      ? `${p.token1.alkaneId?.block ?? p.token1.block}:${p.token1.alkaneId?.tx ?? p.token1.tx}`
+      : '';
+
+    if (!poolId || !token0Id || !token1Id) continue;
+
+    // Extract token names from pool name
+    let token0NameFromPool = '';
+    let token1NameFromPool = '';
+    if (p.poolName) {
+      const match = p.poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
+      if (match) {
+        token0NameFromPool = match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        token1NameFromPool = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+      }
+    }
+
+    const token0Symbol = getTokenSymbol(token0Id, token0NameFromPool, tokenMetaMap);
+    const token1Symbol = getTokenSymbol(token1Id, token1NameFromPool, tokenMetaMap);
+
+    if (!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') continue;
+
+    const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
+    const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
+
+    // get-all-token-pairs provides TVL and volume data
+    items.push({
+      id: poolId,
+      pairLabel: `${token0Name} / ${token1Name} LP`,
+      token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
+      token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
+      tvlUsd: p.poolTvlInUsd ?? 0,
+      token0TvlUsd: p.token0TvlInUsd ?? 0,
+      token1TvlUsd: p.token1TvlInUsd ?? 0,
+      vol24hUsd: p.poolVolume1dInUsd ?? 0,
+      vol7dUsd: p.poolVolume7dInUsd ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? 0,
+      apr: p.poolApr ?? 0,
+      // Get reserve amounts from the token objects or top-level
+      token0Amount: p.reserve0 || p.token0?.token0Amount || '0',
+      token1Amount: p.reserve1 || p.token1?.token1Amount || '0',
+      lpTotalSupply: p.tokenSupply || undefined,
+    });
+  }
+
+  return items;
+}
+
+// ============================================================================
 // SDK RPC fallback (N+1 calls via alkanesGetAllPoolsWithDetails)
 // ============================================================================
 
@@ -410,7 +492,7 @@ export function usePools(params: UsePoolsParams = {}) {
         console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
         items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
       } catch (e) {
-        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to SDK:', e);
+        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to dataApiGetAllTokenPairs:', e);
         // Ensure token metadata is resolved even if pool fetch failed
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
@@ -421,6 +503,15 @@ export function usePools(params: UsePoolsParams = {}) {
           items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
           console.warn('[usePools] get-all-token-pairs REST failed:', e);
+        }
+      }
+
+      // Fallback 1b: dataApiGetAllTokenPairs (no TVL/volume but faster than RPC)
+      if (items.length === 0) {
+        try {
+          items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+        } catch (e) {
+          console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
         }
       }
 
