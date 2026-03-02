@@ -96,9 +96,25 @@ export default function FuelTab() {
   };
 
   const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
+  const [communitySort, setCommunitySort] = useState<'asc' | 'desc' | null>(null);
+  const [updatedSort, setUpdatedSort] = useState<'asc' | 'desc' | null>(null);
 
   const toggleAmountSort = () => {
     setAmountSort((s) => (s === 'desc' ? 'asc' : 'desc'));
+    setCommunitySort(null);
+    setUpdatedSort(null);
+  };
+
+  const toggleCommunitySort = () => {
+    setCommunitySort((s) => (s === 'desc' ? 'asc' : 'desc'));
+    setAmountSort(null);
+    setUpdatedSort(null);
+  };
+
+  const toggleUpdatedSort = () => {
+    setUpdatedSort((s) => (s === 'desc' ? 'asc' : 'desc'));
+    setAmountSort(null);
+    setCommunitySort(null);
   };
 
   const filtered = (() => {
@@ -113,6 +129,22 @@ export default function FuelTab() {
       list = [...list].sort((a, b) =>
         amountSort === 'asc' ? a.amount - b.amount : b.amount - a.amount
       );
+    }
+    if (communitySort) {
+      list = [...list].sort((a, b) => {
+        const noteA = (a.note || '').toLowerCase();
+        const noteB = (b.note || '').toLowerCase();
+        return communitySort === 'asc'
+          ? noteA.localeCompare(noteB)
+          : noteB.localeCompare(noteA);
+      });
+    }
+    if (updatedSort) {
+      list = [...list].sort((a, b) => {
+        const dateA = new Date(a.updatedAt).getTime();
+        const dateB = new Date(b.updatedAt).getTime();
+        return updatedSort === 'asc' ? dateA - dateB : dateB - dateA;
+      });
     }
     return list;
   })();
@@ -242,8 +274,28 @@ export default function FuelTab() {
                   <span className="ml-1">{amountSort === 'asc' ? '\u2191' : '\u2193'}</span>
                 )}
               </th>
-              <th className="p-3 text-left text-xs font-medium text-[color:var(--sf-muted)]">Note</th>
-              <th className="p-3 text-left text-xs font-medium text-[color:var(--sf-muted)]">Updated</th>
+              <th
+                className="p-3 text-left text-xs font-medium text-[color:var(--sf-muted)] cursor-pointer select-none hover:text-[color:var(--sf-text)]"
+                onClick={toggleCommunitySort}
+              >
+                Community
+                {communitySort === null ? (
+                  <span className="ml-1 opacity-40">&uarr;&darr;</span>
+                ) : (
+                  <span className="ml-1">{communitySort === 'asc' ? '\u2191' : '\u2193'}</span>
+                )}
+              </th>
+              <th
+                className="p-3 text-left text-xs font-medium text-[color:var(--sf-muted)] cursor-pointer select-none hover:text-[color:var(--sf-text)]"
+                onClick={toggleUpdatedSort}
+              >
+                Updated
+                {updatedSort === null ? (
+                  <span className="ml-1 opacity-40">&uarr;&darr;</span>
+                ) : (
+                  <span className="ml-1">{updatedSort === 'asc' ? '\u2191' : '\u2193'}</span>
+                )}
+              </th>
               <th className="p-3 text-right text-xs font-medium text-[color:var(--sf-muted)]">Actions</th>
             </tr>
           </thead>

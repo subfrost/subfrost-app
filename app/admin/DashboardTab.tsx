@@ -198,9 +198,140 @@ function CumulativeRedemptionsGraph({
   );
 }
 
+interface CommunityFuel {
+  community: string;
+  total: number;
+}
+
+function CommunityFuelChart({ data }: { data: CommunityFuel[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  const updateWidth = useCallback(() => {
+    if (containerRef.current) {
+      setWidth(containerRef.current.clientWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [updateWidth]);
+
+  const sorted = [...data].sort((a, b) => b.total - a.total);
+  const maxVal = sorted.length > 0 ? sorted[0].total : 1;
+
+  const height = 220;
+  const padLeft = 50;
+  const padRight = 12;
+  const padTop = 12;
+  const padBottom = 60;
+  const chartW = Math.max(width - padLeft - padRight, 1);
+  const chartH = height - padTop - padBottom;
+
+  const barCount = sorted.length;
+  const gap = Math.max(4, chartW * 0.02);
+  const barWidth = barCount > 0 ? Math.max(8, (chartW - gap * (barCount + 1)) / barCount) : 0;
+
+  // Y-axis ticks
+  const yTicks: number[] = [];
+  if (maxVal <= 5) {
+    for (let i = 0; i <= maxVal; i++) yTicks.push(i);
+  } else {
+    const step = Math.ceil(maxVal / 4);
+    for (let v = 0; v <= maxVal; v += step) yTicks.push(v);
+    if (yTicks[yTicks.length - 1] !== maxVal) yTicks.push(maxVal);
+  }
+
+  return (
+    <div ref={containerRef} className="w-full">
+      {width > 0 && (
+        <svg width={width} height={height} className="overflow-visible">
+          {/* Grid lines */}
+          {yTicks.map((v) => {
+            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+            return (
+              <line
+                key={v}
+                x1={padLeft}
+                y1={y}
+                x2={padLeft + chartW}
+                y2={y}
+                stroke="var(--sf-glass-border)"
+                strokeDasharray="3,3"
+              />
+            );
+          })}
+          {/* Y-axis labels */}
+          {yTicks.map((v) => {
+            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+            return (
+              <text
+                key={v}
+                x={padLeft - 6}
+                y={y}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="var(--sf-muted)"
+                fontSize={10}
+              >
+                {v.toLocaleString()}
+              </text>
+            );
+          })}
+          {/* Bars */}
+          {sorted.map((item, i) => {
+            const barH = maxVal > 0 ? (item.total / maxVal) * chartH : 0;
+            const x = padLeft + gap + i * (barWidth + gap);
+            const y = padTop + chartH - barH;
+            return (
+              <g key={item.community}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={barH}
+                  fill="rgb(59,130,246)"
+                  rx={2}
+                />
+                {/* Value label on top of bar */}
+                <text
+                  x={x + barWidth / 2}
+                  y={y - 4}
+                  textAnchor="middle"
+                  fill="var(--sf-text)"
+                  fontSize={9}
+                  fontWeight="bold"
+                >
+                  {item.total.toLocaleString()}
+                </text>
+                {/* Community label below bar */}
+                <text
+                  x={x + barWidth / 2}
+                  y={padTop + chartH + 12}
+                  textAnchor="end"
+                  dominantBaseline="hanging"
+                  fill="var(--sf-muted)"
+                  fontSize={10}
+                  transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 12})`}
+                >
+                  {item.community}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardTab() {
   const adminFetch = useAdminFetch();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [communityFuel, setCommunityFuel] = useState<CommunityFuel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -209,10 +340,27 @@ export default function DashboardTab() {
     (async () => {
       try {
         setLoading(true);
-        const res = await adminFetch('/api/admin/stats');
-        if (!res.ok) throw new Error('Failed to fetch stats');
-        const data = await res.json();
-        if (!cancelled) setStats(data);
+        const [statsRes, fuelRes] = await Promise.all([
+          adminFetch('/api/admin/stats'),
+          adminFetch('/api/admin/fuel'),
+        ]);
+        if (!statsRes.ok) throw new Error('Failed to fetch stats');
+        const statsData = await statsRes.json();
+        if (!cancelled) setStats(statsData);
+
+        if (fuelRes.ok) {
+          const fuelData = await fuelRes.json();
+          const communityMap: Record<string, number> = {};
+          for (const alloc of fuelData.allocations || []) {
+            const community = (alloc.note || 'Unknown').trim();
+            communityMap[community] = (communityMap[community] || 0) + alloc.amount;
+          }
+          const result = Object.entries(communityMap).map(([community, total]) => ({
+            community,
+            total: Math.round(total * 100) / 100,
+          }));
+          if (!cancelled) setCommunityFuel(result);
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Unknown error');
       } finally {
@@ -249,6 +397,18 @@ export default function DashboardTab() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Community FUEL Allocation chart - full width */}
+      <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
+        <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
+          FUEL Allocated by Community
+        </h3>
+        {communityFuel.length === 0 ? (
+          <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
+        ) : (
+          <CommunityFuelChart data={communityFuel} />
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
