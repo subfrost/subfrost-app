@@ -216,7 +216,7 @@ function computeMedian(nums: number[]): number {
   return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-function CommunityFuelChart({ data, mode }: { data: CommunityFuel[]; mode: FuelAggMode }) {
+function CommunityFuelChart({ data, mode, heightScale = 1 }: { data: CommunityFuel[]; mode: FuelAggMode; heightScale?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -248,7 +248,7 @@ function CommunityFuelChart({ data, mode }: { data: CommunityFuel[]; mode: FuelA
   const sorted = [...withValue].sort((a, b) => b.value - a.value);
   const maxVal = sorted.length > 0 ? sorted[0].value : 1;
 
-  const height = 220;
+  const height = Math.round(220 * heightScale);
   const padLeft = 50;
   const padRight = 12;
   const padTop = 12;
@@ -359,15 +359,15 @@ const PIE_COLORS = [
   '#e879f9', '#fb923c', '#38bdf8', '#4ade80', '#fbbf24',
 ];
 
-function CommunityFuelPie({ data }: { data: CommunityFuel[] }) {
+function CommunityFuelPie({ data, showValues, sizeScale = 1 }: { data: CommunityFuel[]; showValues?: boolean; sizeScale?: number }) {
   const sorted = [...data].sort((a, b) => b.total - a.total);
   const grandTotal = sorted.reduce((s, d) => s + d.total, 0);
   if (grandTotal === 0) return null;
 
-  const size = 200;
+  const size = Math.round(200 * sizeScale);
   const cx = size / 2;
   const cy = size / 2;
-  const r = 70;
+  const r = Math.round(70 * sizeScale);
 
   // Build slices
   let cumAngle = -Math.PI / 2;
@@ -417,7 +417,7 @@ function CommunityFuelPie({ data }: { data: CommunityFuel[] }) {
               fontSize={10}
               fontWeight="bold"
             >
-              {Math.round(s.frac * 100)}%
+              {Math.round(s.frac * 100)}%{showValues ? `, ${Math.round(s.total).toLocaleString()}` : ''}
             </text>
           );
         })}
@@ -438,11 +438,133 @@ function CommunityFuelPie({ data }: { data: CommunityFuel[] }) {
   );
 }
 
+function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents']; heightScale?: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  const updateWidth = useCallback(() => {
+    if (containerRef.current) {
+      setWidth(containerRef.current.clientWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [updateWidth]);
+
+  const sorted = [...data].sort((a, b) => b.totalRedemptions - a.totalRedemptions);
+  const maxVal = sorted.length > 0 ? sorted[0].totalRedemptions : 1;
+
+  const height = Math.round(220 * heightScale);
+  const padLeft = 50;
+  const padRight = 12;
+  const padTop = 12;
+  const padBottom = 60;
+  const chartW = Math.max(width - padLeft - padRight, 1);
+  const chartH = height - padTop - padBottom;
+
+  const barCount = sorted.length;
+  const gap = Math.max(4, chartW * 0.02);
+  const barWidth = barCount > 0 ? Math.max(8, (chartW - gap * (barCount + 1)) / barCount) : 0;
+
+  const yTicks: number[] = [];
+  if (maxVal <= 5) {
+    for (let i = 0; i <= maxVal; i++) yTicks.push(i);
+  } else {
+    const step = Math.ceil(maxVal / 4);
+    for (let v = 0; v <= maxVal; v += step) yTicks.push(v);
+    if (yTicks[yTicks.length - 1] !== maxVal) yTicks.push(maxVal);
+  }
+
+  return (
+    <div ref={containerRef} className="w-full">
+      {width > 0 && (
+        <svg width={width} height={height} className="overflow-visible">
+          {yTicks.map((v) => {
+            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+            return (
+              <line
+                key={v}
+                x1={padLeft}
+                y1={y}
+                x2={padLeft + chartW}
+                y2={y}
+                stroke="var(--sf-glass-border)"
+                strokeDasharray="3,3"
+              />
+            );
+          })}
+          {yTicks.map((v) => {
+            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+            return (
+              <text
+                key={v}
+                x={padLeft - 6}
+                y={y}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="var(--sf-muted)"
+                fontSize={10}
+              >
+                {v}
+              </text>
+            );
+          })}
+          {sorted.map((item, i) => {
+            const barH = maxVal > 0 ? (item.totalRedemptions / maxVal) * chartH : 0;
+            const x = padLeft + gap + i * (barWidth + gap);
+            const y = padTop + chartH - barH;
+            return (
+              <g key={item.id}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={barH}
+                  fill="rgb(59,130,246)"
+                  rx={2}
+                />
+                <text
+                  x={x + barWidth / 2}
+                  y={y - 4}
+                  textAnchor="middle"
+                  fill="var(--sf-text)"
+                  fontSize={9}
+                  fontWeight="bold"
+                >
+                  {item.totalRedemptions}
+                </text>
+                <text
+                  x={x + barWidth / 2}
+                  y={padTop + chartH + 12}
+                  textAnchor="end"
+                  dominantBaseline="hanging"
+                  fill="var(--sf-muted)"
+                  fontSize={10}
+                  transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 12})`}
+                >
+                  {item.code}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
+    </div>
+  );
+}
+
+type DashboardView = 'FUEL' | 'CODES' | 'BOTH';
+
 export default function DashboardTab() {
   const adminFetch = useAdminFetch();
   const [stats, setStats] = useState<Stats | null>(null);
   const [communityFuel, setCommunityFuel] = useState<CommunityFuel[]>([]);
   const [fuelAggMode, setFuelAggMode] = useState<FuelAggMode>('total');
+  const [dashboardView, setDashboardView] = useState<DashboardView>('BOTH');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -489,118 +611,157 @@ export default function DashboardTab() {
   if (error) return <div className="text-red-400">{error}</div>;
   if (!stats) return null;
 
-  const cards = [
+  // Compute FUEL metrics from communityFuel data
+  const totalFuel = communityFuel.reduce((s, c) => s + c.total, 0);
+  const totalAddresses = communityFuel.reduce((s, c) => s + c.addressCount, 0);
+  const averageFuel = totalAddresses > 0 ? Math.round((totalFuel / totalAddresses) * 100) / 100 : 0;
+  const allAmounts = communityFuel.flatMap((c) => c.amounts);
+  const medianFuel = computeMedian(allAmounts);
+
+  const showFuel = dashboardView === 'FUEL' || dashboardView === 'BOTH';
+  const showCodes = dashboardView === 'CODES' || dashboardView === 'BOTH';
+
+  const fuelCards = [
+    { label: 'Total FUEL', value: totalFuel },
+    { label: 'Average FUEL', value: averageFuel },
+    { label: 'Median FUEL', value: medianFuel },
+    { label: 'Total Addresses', value: totalAddresses },
+  ];
+
+  const codeCards = [
     { label: 'Total Codes', value: stats.totalCodes },
     { label: 'Total Redemptions', value: stats.totalRedemptions },
   ];
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4"
+      {/* Dashboard view toggle */}
+      <div className="flex items-center gap-2">
+        {(['FUEL', 'CODES', 'BOTH'] as const).map((view) => (
+          <button
+            key={view}
+            onClick={() => setDashboardView(view)}
+            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+              dashboardView === view
+                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
+                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
+            }`}
           >
-            <div className="text-xs text-[color:var(--sf-muted)]">{card.label}</div>
-            <div className="mt-1 text-2xl font-bold text-[color:var(--sf-text)]">
-              {card.value.toLocaleString()}
-            </div>
-          </div>
+            {view}
+          </button>
         ))}
       </div>
 
-      {/* Community FUEL Allocation charts */}
-      <div className="flex gap-6">
-        {/* Bar chart - 60% */}
-        <div className="w-[60%] rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[color:var(--sf-text)]">
-              FUEL Allocated by Community
-            </h3>
-            <div className="flex gap-1 rounded-lg border border-[color:var(--sf-glass-border)] p-0.5">
-              {(['total', 'average', 'median'] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setFuelAggMode(m)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    fuelAggMode === m
-                      ? 'bg-blue-500 text-white'
-                      : 'text-[color:var(--sf-muted)] hover:text-[color:var(--sf-text)]'
-                  }`}
-                >
-                  {m.charAt(0).toUpperCase() + m.slice(1)}
-                </button>
-              ))}
-            </div>
+      {/* FUEL section */}
+      {showFuel && (
+        <>
+          {/* FUEL stat cards */}
+          <div className="grid grid-cols-4 gap-4">
+            {fuelCards.map((card) => (
+              <div
+                key={card.label}
+                className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4"
+              >
+                <div className="text-xs text-[color:var(--sf-muted)]">{card.label}</div>
+                <div className="mt-1 text-2xl font-bold text-[color:var(--sf-text)]">
+                  {card.value.toLocaleString()}
+                </div>
+              </div>
+            ))}
           </div>
-          {communityFuel.length === 0 ? (
-            <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
-          ) : (
-            <CommunityFuelChart data={communityFuel} mode={fuelAggMode} />
-          )}
-        </div>
-        {/* Pie chart - 40% */}
-        <div className="w-[40%] rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
-          <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-            FUEL Allocations
-          </h3>
-          {communityFuel.length === 0 ? (
-            <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
-          ) : (
-            <div className="flex items-center justify-center">
-              <CommunityFuelPie data={communityFuel} />
-            </div>
-          )}
-        </div>
-      </div>
 
-      <div className="flex gap-6">
-        {/* Cumulative redemptions graph */}
-        <div className="flex w-[60%] flex-col rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
-          <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-            Cumulative Code Redemptions
-          </h3>
-          {stats.redemptionsByDay.length === 0 ? (
-            <div className="text-sm text-[color:var(--sf-muted)]">No redemptions yet</div>
-          ) : (
-            <CumulativeRedemptionsGraph data={stats.redemptionsByDay} />
-          )}
-        </div>
-
-        {/* Top parents */}
-        <div className="w-[40%] rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
-          <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-            Top Parents by Code Redemptions
-          </h3>
-          {stats.topParents.length === 0 ? (
-            <div className="text-sm text-[color:var(--sf-muted)]">No codes yet</div>
-          ) : (
-            <div className="space-y-3">
-              {stats.topParents.map((c) => (
-                <div key={c.id} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[color:var(--sf-text)]">{c.code}</span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        c.isActive
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-red-500/20 text-red-400'
+          {/* Community FUEL Allocation charts */}
+          <div className="flex gap-6">
+            {/* Bar chart */}
+            <div className={`${dashboardView === 'BOTH' ? 'w-[60%]' : 'w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[color:var(--sf-text)]">
+                  FUEL Allocated by Community
+                </h3>
+                <div className="flex gap-1 rounded-lg border border-[color:var(--sf-glass-border)] p-0.5">
+                  {(['total', 'average', 'median'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setFuelAggMode(m)}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                        fuelAggMode === m
+                          ? 'bg-blue-500 text-white'
+                          : 'text-[color:var(--sf-muted)] hover:text-[color:var(--sf-text)]'
                       }`}
                     >
-                      {c.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <span className="font-medium text-[color:var(--sf-text)]">
-                    {c.totalRedemptions}
-                  </span>
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
+              {communityFuel.length === 0 ? (
+                <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
+              ) : (
+                <CommunityFuelChart data={communityFuel} mode={fuelAggMode} heightScale={dashboardView === 'BOTH' ? 1 : 1.25} />
+              )}
             </div>
-          )}
-        </div>
-      </div>
+            {/* Pie chart */}
+            <div className={`${dashboardView === 'BOTH' ? 'w-[40%]' : 'w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
+              <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
+                FUEL Allocations
+              </h3>
+              {communityFuel.length === 0 ? (
+                <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
+              ) : (
+                <div className="flex items-center justify-center">
+                  <CommunityFuelPie data={communityFuel} showValues={dashboardView === 'FUEL'} sizeScale={dashboardView === 'BOTH' ? 1 : 1.25} />
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* CODES section */}
+      {showCodes && (
+        <>
+          {/* Code stat cards */}
+          <div className="grid grid-cols-2 gap-4">
+            {codeCards.map((card) => (
+              <div
+                key={card.label}
+                className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4"
+              >
+                <div className="text-xs text-[color:var(--sf-muted)]">{card.label}</div>
+                <div className="mt-1 text-2xl font-bold text-[color:var(--sf-text)]">
+                  {card.value.toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-6">
+            {/* Top parents bar chart */}
+            <div className={`${dashboardView === 'BOTH' ? 'w-[60%]' : 'w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
+              <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
+                Top Parents by Code Redemptions
+              </h3>
+              {stats.topParents.length === 0 ? (
+                <div className="text-sm text-[color:var(--sf-muted)]">No codes yet</div>
+              ) : (
+                <TopParentsBarChart data={stats.topParents} heightScale={dashboardView === 'BOTH' ? 1 : 1.25} />
+              )}
+            </div>
+
+            {/* Cumulative redemptions graph */}
+            <div className={`flex ${dashboardView === 'BOTH' ? 'w-[40%]' : 'w-[50%]'} flex-col rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`} style={dashboardView !== 'BOTH' ? { minHeight: 250 * 1.25 } : undefined}>
+              <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
+                Cumulative Code Redemptions
+              </h3>
+              {stats.redemptionsByDay.length === 0 ? (
+                <div className="text-sm text-[color:var(--sf-muted)]">No redemptions yet</div>
+              ) : (
+                <CumulativeRedemptionsGraph data={stats.redemptionsByDay} />
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
