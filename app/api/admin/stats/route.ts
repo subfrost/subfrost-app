@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
 
-    // Aggregate parent + child redemptions, sort by total, take top 10
-    const topParents = topCodes
+    // Aggregate parent + child redemptions for all parents
+    const allParents = topCodes
       .map((parent) => {
         const childRedemptions = parent.childCodes.reduce(
           (sum, child) => sum + child._count.redemptions,
@@ -80,8 +80,15 @@ export async function GET(request: NextRequest) {
           totalRedemptions: parent._count.redemptions + childRedemptions,
         };
       })
-      .sort((a, b) => b.totalRedemptions - a.totalRedemptions)
-      .slice(0, 10);
+      .sort((a, b) => b.totalRedemptions - a.totalRedemptions);
+
+    const topParents = allParents.slice(0, 10);
+
+    // Individual redemption counts per code (parent + child) for median by address
+    const allCodeRedemptions = topCodes.flatMap((parent) => [
+      parent._count.redemptions,
+      ...parent.childCodes.map((c) => c._count.redemptions),
+    ]);
 
     const stats = {
       totalCodes,
@@ -92,6 +99,8 @@ export async function GET(request: NextRequest) {
       recentRedemptions,
       topParents,
       redemptionsByDay,
+      allParentRedemptions: allParents.map((p) => p.totalRedemptions),
+      allCodeRedemptions,
     };
 
     await cache.set(CACHE_KEY, stats, CACHE_TTL);

@@ -26,6 +26,8 @@ interface Stats {
     isActive: boolean;
     totalRedemptions: number;
   }>;
+  allParentRedemptions: number[];
+  allCodeRedemptions: number[];
 }
 
 function formatLabel(dateStr: string): string {
@@ -41,17 +43,17 @@ function addDays(dateStr: string, n: number): string {
 
 function CumulativeRedemptionsGraph({
   data,
+  heightScale = 1,
 }: {
   data: Array<{ date: string; count: number }>;
+  heightScale?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(0);
 
   const updateSize = useCallback(() => {
     if (containerRef.current) {
       setWidth(containerRef.current.clientWidth);
-      setContainerHeight(containerRef.current.clientHeight);
     }
   }, []);
 
@@ -87,7 +89,7 @@ function CumulativeRedemptionsGraph({
   const totalDays = points.length;
 
   // Chart dimensions
-  const height = containerHeight > 40 ? containerHeight : 200;
+  const height = Math.round(220 * heightScale);
   const padLeft = 40;
   const padRight = 12;
   const padTop = 12;
@@ -133,8 +135,8 @@ function CumulativeRedemptionsGraph({
   }
 
   return (
-    <div ref={containerRef} className="w-full flex-1">
-      {width > 0 && containerHeight > 0 && (
+    <div ref={containerRef} className="w-full">
+      {width > 0 && (
         <svg width={width} height={height} className="overflow-visible">
           {/* Grid lines */}
           {yTicks.map((v) => {
@@ -628,9 +630,17 @@ export default function DashboardTab() {
     { label: 'Total Addresses', value: totalAddresses },
   ];
 
+  const numParents = stats.allParentRedemptions.length;
+  const avgByCommunity = numParents > 0 ? Math.round((stats.totalRedemptions / numParents) * 100) / 100 : 0;
+  const medianByCommunity = computeMedian(stats.allParentRedemptions);
+  const medianByAddress = computeMedian(stats.allCodeRedemptions);
+
   const codeCards = [
-    { label: 'Total Codes', value: stats.totalCodes },
     { label: 'Total Redemptions', value: stats.totalRedemptions },
+    { label: 'Average by Community', value: avgByCommunity },
+    { label: 'Median by Community', value: medianByCommunity },
+    { label: 'Median by Address', value: medianByAddress },
+    { label: 'Total Codes', value: stats.totalCodes },
   ];
 
   return (
@@ -720,19 +730,47 @@ export default function DashboardTab() {
       {/* CODES section */}
       {showCodes && (
         <>
-          {/* Code stat cards */}
-          <div className="grid grid-cols-2 gap-4">
-            {codeCards.map((card) => (
-              <div
-                key={card.label}
-                className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4"
-              >
-                <div className="text-xs text-[color:var(--sf-muted)]">{card.label}</div>
-                <div className="mt-1 text-2xl font-bold text-[color:var(--sf-text)]">
-                  {card.value.toLocaleString()}
+          {/* Code stat cards: 2 on top + 3 on bottom on small screens, all 5 in a row on md+ */}
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-4 md:hidden">
+              {codeCards.slice(0, 2).map((card) => (
+                <div
+                  key={card.label}
+                  className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4"
+                >
+                  <div className="text-xs text-[color:var(--sf-muted)]">{card.label}</div>
+                  <div className="mt-1 text-2xl font-bold text-[color:var(--sf-text)]">
+                    {card.value.toLocaleString()}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-4 md:hidden">
+              {codeCards.slice(2).map((card) => (
+                <div
+                  key={card.label}
+                  className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4"
+                >
+                  <div className="text-xs text-[color:var(--sf-muted)]">{card.label}</div>
+                  <div className="mt-1 text-2xl font-bold text-[color:var(--sf-text)]">
+                    {card.value.toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden gap-4 md:grid md:grid-cols-5">
+              {codeCards.map((card) => (
+                <div
+                  key={card.label}
+                  className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4"
+                >
+                  <div className="text-xs text-[color:var(--sf-muted)]">{card.label}</div>
+                  <div className="mt-1 text-2xl font-bold text-[color:var(--sf-text)]">
+                    {card.value.toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col gap-6 md:flex-row">
@@ -749,14 +787,14 @@ export default function DashboardTab() {
             </div>
 
             {/* Cumulative redemptions graph */}
-            <div className={`flex w-full ${dashboardView === 'BOTH' ? 'md:w-[40%]' : 'md:w-[50%]'} flex-col rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`} style={{ minHeight: dashboardView !== 'BOTH' ? 250 * 1.875 : 250 * 1.5 }}>
+            <div className={`w-full ${dashboardView === 'BOTH' ? 'md:w-[40%]' : 'md:w-[50%]'} rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6`}>
               <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
                 Cumulative Code Redemptions
               </h3>
               {stats.redemptionsByDay.length === 0 ? (
                 <div className="text-sm text-[color:var(--sf-muted)]">No redemptions yet</div>
               ) : (
-                <CumulativeRedemptionsGraph data={stats.redemptionsByDay} />
+                <CumulativeRedemptionsGraph data={stats.redemptionsByDay} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
               )}
             </div>
           </div>
