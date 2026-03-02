@@ -889,3 +889,124 @@ if (isBrowserWallet) {
 - [ ] Verify console logs show actual bc1p/bc1q addresses, NOT symbolic p2tr:0
 - [ ] After broadcast, verify on mempool.space that outputs go to user's addresses
 - [ ] If swap involves multiple UTXOs, confirm all signature popups complete successfully
+
+---
+
+## Send Modal (BTC Transfer) — Critical Implementation Notes
+
+### 2026-03-01: Send Modal Complete Overhaul — VERIFIED WORKING
+
+**Verified transaction:** `d450245756a5e24b28756889ad60ea91c04195671edad7c65453ed04c7427cad` (OYL mainnet)
+
+The Send Modal (`app/wallet/components/SendModal.tsx`) handles BTC and Alkane token transfers. Several critical bugs were fixed:
+
+### Bug 1: UTXO Fetch Returning 0 Results on Mainnet
+
+**Symptom:** "Some selected UTXOs are no longer available" error even with valid UTXOs
+
+**Root cause:** The code used JSON-RPC method `esplora_address::utxo` which returns empty on mainnet:
+```typescript
+// ❌ BROKEN - returns 0 results on mainnet
+fetch('/api/rpc', {
+  method: 'POST',
+  body: JSON.stringify({ method: 'esplora_address::utxo', params: [addr] })
+});
+```
+
+**Fix:** Use the esplora REST API proxy:
+```typescript
+// ✅ WORKS on all networks
+fetch(`/api/esplora/address/${addr}/utxo?network=${network}`);
+```
+
+### Bug 2: Taproot Inputs Missing tapInternalKey
+
+**Symptom:** "Can not sign for input #N with the key 037e48..." error from OYL
+
+**Root cause:** Taproot inputs require `tapInternalKey` in the PSBT for wallets to identify the signing key. Without it, wallets don't know which key corresponds to the P2TR output.
+
+**Fix:** Add tapInternalKey for Taproot inputs:
+```typescript
+const tapInternalKey = account?.taproot?.pubKeyXOnly
+  ? Buffer.from(account.taproot.pubKeyXOnly, 'hex')
+  : undefined;
+
+// Detect Taproot by address prefix
+const isTaprootInput = utxoAddress?.startsWith('bc1p') ||
+                       utxoAddress?.startsWith('tb1p') ||
+                       utxoAddress?.startsWith('bcrt1p');
+
+const inputData: any = {
+  hash: txid,
+  index: vout,
+  witnessUtxo: { script, value },
+};
+
+if (isTaprootInput && tapInternalKey) {
+  inputData.tapInternalKey = tapInternalKey;
+}
+
+psbt.addInput(inputData);
+```
+
+### Bug 3: Fee Warning Loop on Small Amounts
+
+**Symptom:** Modal loops between confirm and fee warning, never allowing send
+
+**Root cause:** Small amounts (e.g., 1000 sats) always trigger >2% fee ratio warning. When `handleBroadcast()` failed and returned to input, clicking "Send" triggered the warning again.
+
+**Fix:** Track acknowledgment with `feeWarningAcknowledged` state:
+```typescript
+const [feeWarningAcknowledged, setFeeWarningAcknowledged] = useState(false);
+
+// In checkFeeAndBroadcast:
+if (!feeWarningAcknowledged && (feeTooHigh || feePercentageTooHigh)) {
+  setShowFeeWarning(true);
+} else {
+  handleBroadcast(); // Skip warning if already acknowledged
+}
+
+// In proceedWithHighFee:
+setFeeWarningAcknowledged(true);
+handleBroadcast();
+
+// Reset when amount changes:
+onChange={(e) => {
+  setAmount(e.target.value);
+  setFeeWarningAcknowledged(false);
+}}
+```
+
+### Bug 4: Insufficient Funds Despite Having Balance
+
+**Symptom:** "Available: 0.00009712 BTC" but wallet shows 0.00221835 BTC
+
+**Root cause:** Send Modal only used SegWit UTXOs. Most balance was on Taproot address.
+
+**Fix:** Aggregate UTXOs from both addresses:
+```typescript
+const allBtcAddresses = [paymentAddress, taprootAddress].filter(Boolean);
+
+const availableUtxos = utxos.all.filter((utxo) => {
+  if (!utxo.status.confirmed) return false;
+  if (!allBtcAddresses.includes(utxo.address)) return false; // Include BOTH
+  // Exclude special UTXOs...
+  return true;
+});
+```
+
+### PSBT Construction Checklist for BTC Sends
+
+When building PSBTs for browser wallet BTC sends:
+
+1. **Fetch fresh UTXOs** via `/api/esplora/address/{addr}/utxo?network={network}`
+2. **For each input:**
+   - Add `witnessUtxo` with script from the spent output
+   - If Taproot (bc1p/tb1p/bcrt1p): Add `tapInternalKey`
+   - If P2SH (starts with '3' or '2'): Inject `redeemScript` via `injectRedeemScripts()`
+3. **For outputs:** Use actual addresses, never symbolic refs for browser wallets
+4. **Sign:** Use `signTaprootPsbt()` which handles all input types for browser wallets
+
+### Files Changed
+- `app/wallet/components/SendModal.tsx` — Main component with all fixes
+- `app/api/esplora/[...path]/route.ts` — REST proxy for UTXO fetching
