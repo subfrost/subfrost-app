@@ -405,8 +405,9 @@ export function useAddLiquidityMutation() {
         : ['p2wpkh:0', 'p2tr:0'];
 
       // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
+      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
       const toAddresses = isBrowserWallet
-        ? [primaryAddress]
+        ? [primaryAddress!]
         : ['p2tr:0'];
 
       const changeAddr = isBrowserWallet
@@ -457,14 +458,14 @@ export function useAddLiquidityMutation() {
           // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
           // alkane UTXOs and inject them into the PSBT before signing.
           console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
-          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress, '/api/rpc');
+          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, '/api/rpc');
 
           if (alkaneUtxos.length > 0) {
             const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
             psbtBase64 = injectAlkaneInputs(
               psbtBase64,
               alkaneUtxos,
-              taprootAddress,
+              taprootAddress!,
               btcNetwork,
               tapInternalKeyHex,
             );

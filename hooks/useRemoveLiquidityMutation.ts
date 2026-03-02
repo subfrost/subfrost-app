@@ -212,8 +212,9 @@ export function useRemoveLiquidityMutation() {
         : ['p2wpkh:0', 'p2tr:0'];
 
       // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
+      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
       const toAddresses = isBrowserWallet
-        ? [primaryAddress]
+        ? [primaryAddress!]
         : ['p2tr:0'];
 
       const changeAddr = isBrowserWallet

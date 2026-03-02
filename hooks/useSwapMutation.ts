@@ -392,8 +392,9 @@ export function useSwapMutation() {
       // Output addresses: where swapped tokens and BTC change should go
       // JOURNAL ENTRY (2026-03-01): For single-address wallets (UniSat, OKX), use
       // the available address. Prefer taproot for alkane outputs but fall back to segwit.
+      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
       const toAddresses = isBrowserWallet
-        ? [primaryAddress]
+        ? [primaryAddress!]
         : ['p2tr:0'];
 
       const changeAddr = isBrowserWallet

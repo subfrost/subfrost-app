@@ -118,8 +118,9 @@ export function useUnwrapMutation() {
         : ['p2wpkh:0', 'p2tr:0'];
 
       // Unwrap outputs BTC to segwit address (or taproot if no segwit)
+      // TypeScript can't infer from the early return that at least one address exists
       const toAddresses = isBrowserWallet
-        ? [segwitAddress || taprootAddress]
+        ? [(segwitAddress || taprootAddress)!]
         : ['p2wpkh:0'];
 
       const changeAddr = isBrowserWallet
