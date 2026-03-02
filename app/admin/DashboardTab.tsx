@@ -201,9 +201,20 @@ function CumulativeRedemptionsGraph({
 interface CommunityFuel {
   community: string;
   total: number;
+  addressCount: number;
+  amounts: number[];
 }
 
-function CommunityFuelChart({ data }: { data: CommunityFuel[] }) {
+type FuelAggMode = 'total' | 'average' | 'median';
+
+function computeMedian(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+function CommunityFuelChart({ data, mode }: { data: CommunityFuel[]; mode: FuelAggMode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -220,8 +231,20 @@ function CommunityFuelChart({ data }: { data: CommunityFuel[] }) {
     return () => observer.disconnect();
   }, [updateWidth]);
 
-  const sorted = [...data].sort((a, b) => b.total - a.total);
-  const maxVal = sorted.length > 0 ? sorted[0].total : 1;
+  const withValue = data.map((item) => {
+    let value: number;
+    if (mode === 'average') {
+      value = item.addressCount > 0 ? item.total / item.addressCount : 0;
+    } else if (mode === 'median') {
+      value = computeMedian(item.amounts);
+    } else {
+      value = item.total;
+    }
+    return { ...item, value: Math.round(value * 100) / 100 };
+  });
+
+  const sorted = [...withValue].sort((a, b) => b.value - a.value);
+  const maxVal = sorted.length > 0 ? sorted[0].value : 1;
 
   const height = 220;
   const padLeft = 50;
@@ -283,7 +306,7 @@ function CommunityFuelChart({ data }: { data: CommunityFuel[] }) {
           })}
           {/* Bars */}
           {sorted.map((item, i) => {
-            const barH = maxVal > 0 ? (item.total / maxVal) * chartH : 0;
+            const barH = maxVal > 0 ? (item.value / maxVal) * chartH : 0;
             const x = padLeft + gap + i * (barWidth + gap);
             const y = padTop + chartH - barH;
             return (
@@ -305,9 +328,9 @@ function CommunityFuelChart({ data }: { data: CommunityFuel[] }) {
                   fontSize={9}
                   fontWeight="bold"
                 >
-                  {item.total.toLocaleString()}
+                  {item.value.toLocaleString()}
                 </text>
-                {/* Community label below bar */}
+                {/* Community label below bar (with address count) */}
                 <text
                   x={x + barWidth / 2}
                   y={padTop + chartH + 12}
@@ -317,7 +340,7 @@ function CommunityFuelChart({ data }: { data: CommunityFuel[] }) {
                   fontSize={10}
                   transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 12})`}
                 >
-                  {item.community}
+                  {item.community} ({item.addressCount})
                 </text>
               </g>
             );
@@ -328,10 +351,96 @@ function CommunityFuelChart({ data }: { data: CommunityFuel[] }) {
   );
 }
 
+const PIE_COLORS = [
+  '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981',
+  '#06b6d4', '#f43f5e', '#84cc16', '#a855f7', '#14b8a6',
+  '#e879f9', '#fb923c', '#38bdf8', '#4ade80', '#fbbf24',
+];
+
+function CommunityFuelPie({ data }: { data: CommunityFuel[] }) {
+  const sorted = [...data].sort((a, b) => b.total - a.total);
+  const grandTotal = sorted.reduce((s, d) => s + d.total, 0);
+  if (grandTotal === 0) return null;
+
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 70;
+
+  // Build slices
+  let cumAngle = -Math.PI / 2;
+  const slices = sorted.map((item, i) => {
+    const frac = item.total / grandTotal;
+    const startAngle = cumAngle;
+    const endAngle = cumAngle + frac * 2 * Math.PI;
+    cumAngle = endAngle;
+    return { ...item, frac, startAngle, endAngle, color: PIE_COLORS[i % PIE_COLORS.length] };
+  });
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {slices.map((s) => {
+          const largeArc = s.frac > 0.5 ? 1 : 0;
+          const x1 = cx + r * Math.cos(s.startAngle);
+          const y1 = cy + r * Math.sin(s.startAngle);
+          const x2 = cx + r * Math.cos(s.endAngle);
+          const y2 = cy + r * Math.sin(s.endAngle);
+
+          // For 100% case
+          if (s.frac >= 0.9999) {
+            return (
+              <circle key={s.community} cx={cx} cy={cy} r={r} fill={s.color} />
+            );
+          }
+
+          const d = `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z`;
+          return <path key={s.community} d={d} fill={s.color} />;
+        })}
+        {/* Percentage labels on slices */}
+        {slices.map((s) => {
+          if (s.frac < 0.04) return null;
+          const midAngle = (s.startAngle + s.endAngle) / 2;
+          const labelR = r * 0.6;
+          const lx = cx + labelR * Math.cos(midAngle);
+          const ly = cy + labelR * Math.sin(midAngle);
+          return (
+            <text
+              key={s.community}
+              x={lx}
+              y={ly}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="white"
+              fontSize={10}
+              fontWeight="bold"
+            >
+              {Math.round(s.frac * 100)}%
+            </text>
+          );
+        })}
+      </svg>
+      {/* Legend */}
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+        {slices.map((s) => (
+          <div key={s.community} className="flex items-center gap-1 text-[10px] text-[color:var(--sf-muted)]">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ backgroundColor: s.color }}
+            />
+            {s.community}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardTab() {
   const adminFetch = useAdminFetch();
   const [stats, setStats] = useState<Stats | null>(null);
   const [communityFuel, setCommunityFuel] = useState<CommunityFuel[]>([]);
+  const [fuelAggMode, setFuelAggMode] = useState<FuelAggMode>('total');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -350,14 +459,18 @@ export default function DashboardTab() {
 
         if (fuelRes.ok) {
           const fuelData = await fuelRes.json();
-          const communityMap: Record<string, number> = {};
+          const communityMap: Record<string, { total: number; amounts: number[] }> = {};
           for (const alloc of fuelData.allocations || []) {
             const community = (alloc.note || 'Unknown').trim();
-            communityMap[community] = (communityMap[community] || 0) + alloc.amount;
+            if (!communityMap[community]) communityMap[community] = { total: 0, amounts: [] };
+            communityMap[community].total += alloc.amount;
+            communityMap[community].amounts.push(alloc.amount);
           }
-          const result = Object.entries(communityMap).map(([community, total]) => ({
+          const result = Object.entries(communityMap).map(([community, { total, amounts }]) => ({
             community,
             total: Math.round(total * 100) / 100,
+            addressCount: amounts.length,
+            amounts,
           }));
           if (!cancelled) setCommunityFuel(result);
         }
@@ -401,13 +514,37 @@ export default function DashboardTab() {
 
       {/* Community FUEL Allocation chart - full width */}
       <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
-        <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-          FUEL Allocated by Community
-        </h3>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-[color:var(--sf-text)]">
+            FUEL Allocated by Community
+          </h3>
+          <div className="flex gap-1 rounded-lg border border-[color:var(--sf-glass-border)] p-0.5">
+            {(['total', 'average', 'median'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setFuelAggMode(m)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  fuelAggMode === m
+                    ? 'bg-blue-500 text-white'
+                    : 'text-[color:var(--sf-muted)] hover:text-[color:var(--sf-text)]'
+                }`}
+              >
+                {m.charAt(0).toUpperCase() + m.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
         {communityFuel.length === 0 ? (
           <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
         ) : (
-          <CommunityFuelChart data={communityFuel} />
+          <div className="flex gap-4">
+            <div className="w-3/4">
+              <CommunityFuelChart data={communityFuel} mode={fuelAggMode} />
+            </div>
+            <div className="flex w-1/4 items-center justify-center">
+              <CommunityFuelPie data={communityFuel} />
+            </div>
+          </div>
         )}
       </div>
 
@@ -415,7 +552,7 @@ export default function DashboardTab() {
         {/* Cumulative redemptions graph */}
         <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
           <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-            Cumulative Redemptions
+            Cumulative Code Redemptions
           </h3>
           {stats.redemptionsByDay.length === 0 ? (
             <div className="text-sm text-[color:var(--sf-muted)]">No redemptions yet</div>
@@ -427,7 +564,7 @@ export default function DashboardTab() {
         {/* Top parents */}
         <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
           <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-            Top Parents by Redemptions
+            Top Parents by Code Redemptions
           </h3>
           {stats.topParents.length === 0 ? (
             <div className="text-sm text-[color:var(--sf-muted)]">No codes yet</div>
