@@ -516,8 +516,19 @@ describe('WalletContext connection logic (source verification)', () => {
       'utf-8'
     );
 
-    const oylBlock = src.match(/if\s*\(walletId\s*===\s*'oyl'\)\s*\{([\s\S]*?)\}\s*else\s*if/)?.[1] || '';
+    // Find the OYL connection block - use greedy match to capture nested if/else blocks
+    // The OYL block has format handling with nested conditions, so we need a larger capture
+    const oylBlockMatch = src.match(/if\s*\(walletId\s*===\s*'oyl'\)\s*\{([\s\S]+?)\}\s*else\s*if\s*\(walletId\s*===\s*'unisat'\)/);
+    const oylBlock = oylBlockMatch?.[1] || '';
+
+    // Core requirement: must call oylProvider.getAddresses()
     expect(oylBlock).toContain('oylProvider.getAddresses()');
+
+    // The OYL handler now supports multiple response formats:
+    // Format 1: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey } }
+    // Format 2: { nativeSegwit: "address", taproot: "address" }
+    // Format 3: Array format
+    // Check that it handles the object format with address property access
     expect(oylBlock).toContain('addresses.taproot.address');
     expect(oylBlock).toContain('addresses.nativeSegwit.address');
   });
