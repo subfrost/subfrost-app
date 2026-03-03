@@ -204,25 +204,33 @@ async function fetchAlkaneOutpoints(address: string, networkName?: string): Prom
 
   const result: AlkaneOutpoint[] = [];
 
-  for (const outpoint of outpoints) {
-    const [txid, voutStr] = (outpoint.outpoint || '').split(':');
-    const vout = parseInt(voutStr, 10);
-
-    if (!txid || isNaN(vout)) {
-      console.warn('[fetchAlkaneOutpoints] Invalid outpoint format:', outpoint.outpoint);
+  for (const entry of outpoints) {
+    // JOURNAL (2026-03-03): Response structure is:
+    // { outpoint: { txid: string, vout: number }, output: { value: number }, balance_sheet: { cached: { balances: [...] } } }
+    // NOT a "txid:vout" string as originally assumed.
+    const outpointData = entry.outpoint;
+    if (!outpointData || typeof outpointData !== 'object') {
+      console.warn('[fetchAlkaneOutpoints] Invalid outpoint structure:', entry);
       continue;
     }
 
-    const balances = outpoint?.balance_sheet?.cached?.balances || [];
+    const txid = outpointData.txid;
+    const vout = outpointData.vout;
+
+    if (!txid || typeof vout !== 'number') {
+      console.warn('[fetchAlkaneOutpoints] Missing txid or vout:', outpointData);
+      continue;
+    }
+
+    const balances = entry?.balance_sheet?.cached?.balances || [];
     const alkanes = balances.map((bal: any) => ({
       block: bal.block,
       tx: bal.tx,
-      amount: bal.amount || '0',
+      amount: String(bal.amount || '0'),
     }));
 
-    // Get UTXO value - we need to fetch this from esplora since the RPC doesn't include it
-    // For now, use 546 as default dust value
-    const value = outpoint.value || 546;
+    // Get UTXO value from output.value (included in RPC response)
+    const value = entry?.output?.value || 546;
 
     result.push({
       txid,
