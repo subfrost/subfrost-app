@@ -59,9 +59,17 @@ export interface BuildAlkaneTransferParams {
   networkName: string;           // for RPC proxy routing
 }
 
+export interface CollateralWarning {
+  hasInscriptions: boolean;
+  hasRunes: boolean;
+  otherAlkanesCount: number;
+  utxoCount: number;  // How many UTXOs have collateral assets
+}
+
 export interface BuildAlkaneTransferResult {
   psbtBase64: string;
   estimatedFee: number;
+  collateralWarning?: CollateralWarning;  // Present if some UTXOs contain other assets
 }
 
 interface SimpleUtxo {
@@ -76,6 +84,9 @@ interface AlkaneOutpoint {
   vout: number;
   value: number;
   alkanes: { block: number; tx: number; amount: string }[];
+  hasInscriptions?: boolean;  // true if UTXO also contains ordinal inscriptions
+  hasRunes?: boolean;         // true if UTXO also contains runes
+  otherAlkanesCount?: number; // count of OTHER alkanes (not the target) on this UTXO
 }
 
 /**
@@ -153,6 +164,72 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
   }));
   console.log('[fetchUtxos] Found', utxos.length, 'UTXOs via JSON-RPC');
   return utxos;
+}
+
+/**
+ * Fetch ord_outputs to detect inscriptions and runes on UTXOs.
+ * This is critical for avoiding spending inscriptions/runes when transferring alkanes.
+ *
+ * JOURNAL (2026-03-03): Added to complement alkane UTXO selection — we need to know
+ * if a UTXO also contains inscriptions or runes to avoid collateral damage.
+ */
+async function fetchOrdOutputs(address: string, networkName?: string): Promise<Map<string, { hasInscriptions: boolean; hasRunes: boolean }>> {
+  console.log('[fetchOrdOutputs] Fetching ord outputs for:', address);
+
+  // Determine the RPC endpoint based on network
+  const RPC_ENDPOINTS: Record<string, string> = {
+    mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+    testnet: 'https://testnet.subfrost.io/v4/subfrost',
+    signet: 'https://signet.subfrost.io/v4/subfrost',
+    regtest: 'https://regtest.subfrost.io/v4/subfrost',
+    'regtest-local': 'http://localhost:18888',
+    'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+    oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  };
+
+  const baseUrl = RPC_ENDPOINTS[networkName || 'mainnet'] || RPC_ENDPOINTS.mainnet;
+  const result = new Map<string, { hasInscriptions: boolean; hasRunes: boolean }>();
+
+  try {
+    const resp = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'ord_outputs',
+        params: [address],
+      }),
+    });
+
+    const json = await resp.json();
+
+    if (json.error) {
+      console.warn('[fetchOrdOutputs] RPC error (may not be available on this network):', json.error);
+      return result; // Return empty map, we'll proceed without inscription/rune data
+    }
+
+    const outputs = json?.result || [];
+    console.log('[fetchOrdOutputs] Raw outputs:', outputs.length);
+
+    for (const output of outputs) {
+      if (!output.outpoint) continue;
+
+      const hasInscriptions = Array.isArray(output.inscriptions) && output.inscriptions.length > 0;
+      const hasRunes = output.runes && typeof output.runes === 'object' && Object.keys(output.runes).length > 0;
+
+      if (hasInscriptions || hasRunes) {
+        result.set(output.outpoint, { hasInscriptions, hasRunes });
+        console.log(`[fetchOrdOutputs] ${output.outpoint} has inscriptions=${hasInscriptions}, runes=${hasRunes}`);
+      }
+    }
+
+    console.log('[fetchOrdOutputs] UTXOs with inscriptions/runes:', result.size);
+    return result;
+  } catch (err) {
+    console.warn('[fetchOrdOutputs] Failed to fetch (proceeding without inscription/rune data):', err);
+    return result;
+  }
 }
 
 /**
@@ -339,47 +416,70 @@ export async function buildAlkaneTransferPsbt(
   const opReturnScript = Buffer.from(encodedRunestone);
 
   // -----------------------------------------------------------------------
-  // 2. Discover UTXOs — CRITICAL: Only select UTXOs containing target alkane
+  // 2. Discover UTXOs — CRITICAL: Smart selection to minimize collateral damage
   // -----------------------------------------------------------------------
   // JOURNAL (2026-03-03): Fixed critical bug where ALL dust UTXOs were included,
   // causing wallets to show "spending 2 inscriptions, 21 runes, 10 alkanes" when
-  // user only wanted to send 0.1 DIESEL. Now we:
-  // 1. Fetch alkane-specific outpoints to identify which UTXOs contain the target alkane
-  // 2. Only include those specific UTXOs as inputs
-  // 3. The protostone edict handles the transfer of the exact amount
+  // user only wanted to send 0.1 DIESEL.
+  //
+  // JOURNAL (2026-03-03): Further enhanced to prefer UTXOs that ONLY contain
+  // the target alkane (no inscriptions, runes, or other alkanes). This minimizes
+  // "collateral damage" when transferring alkanes.
+  //
+  // Selection priority:
+  // 1. UTXOs with ONLY the target alkane (no inscriptions, no runes, no other alkanes)
+  // 2. UTXOs with only alkanes (no inscriptions or runes) - sorted by fewest other alkanes
+  // 3. UTXOs with other assets - last resort, sorted by fewest other assets
   // -----------------------------------------------------------------------
 
   console.log('[buildAlkaneTransferPsbt] Fetching alkane outpoints for:', senderTaprootAddress);
-  const alkaneOutpoints = await fetchAlkaneOutpoints(senderTaprootAddress, networkName);
+
+  // Fetch both alkane data and inscription/rune data in parallel
+  const [alkaneOutpoints, ordOutputs] = await Promise.all([
+    fetchAlkaneOutpoints(senderTaprootAddress, networkName),
+    fetchOrdOutputs(senderTaprootAddress, networkName),
+  ]);
 
   // Find UTXOs that contain the target alkane
   const targetAlkaneId = `${block}:${tx}`;
   console.log('[buildAlkaneTransferPsbt] Looking for alkane:', targetAlkaneId);
 
-  const matchingOutpoints = alkaneOutpoints.filter(outpoint =>
-    outpoint.alkanes.some(a => `${a.block}:${a.tx}` === targetAlkaneId)
-  );
+  // Enrich alkane outpoints with inscription/rune data
+  const enrichedOutpoints = alkaneOutpoints
+    .filter(outpoint => outpoint.alkanes.some(a => `${a.block}:${a.tx}` === targetAlkaneId))
+    .map(outpoint => {
+      const outpointKey = `${outpoint.txid}:${outpoint.vout}`;
+      const ordData = ordOutputs.get(outpointKey);
+      const otherAlkanesCount = outpoint.alkanes.filter(a => `${a.block}:${a.tx}` !== targetAlkaneId).length;
+      const targetBalance = outpoint.alkanes.find(a => `${a.block}:${a.tx}` === targetAlkaneId);
 
-  console.log('[buildAlkaneTransferPsbt] Matching outpoints with target alkane:', matchingOutpoints.length);
-  matchingOutpoints.forEach(o => {
-    const targetBalance = o.alkanes.find(a => `${a.block}:${a.tx}` === targetAlkaneId);
-    console.log(`  ${o.txid.slice(0, 8)}...:${o.vout} - ${targetBalance?.amount} units of ${targetAlkaneId}`);
+      return {
+        ...outpoint,
+        hasInscriptions: ordData?.hasInscriptions ?? false,
+        hasRunes: ordData?.hasRunes ?? false,
+        otherAlkanesCount,
+        targetAmount: BigInt(targetBalance?.amount || '0'),
+      };
+    });
+
+  console.log('[buildAlkaneTransferPsbt] Enriched outpoints:', enrichedOutpoints.length);
+  enrichedOutpoints.forEach(o => {
+    const collateral = [];
+    if (o.hasInscriptions) collateral.push('inscriptions');
+    if (o.hasRunes) collateral.push('runes');
+    if (o.otherAlkanesCount > 0) collateral.push(`${o.otherAlkanesCount} other alkane(s)`);
+    const collateralStr = collateral.length > 0 ? ` [COLLATERAL: ${collateral.join(', ')}]` : ' [CLEAN]';
+    console.log(`  ${o.txid.slice(0, 8)}...:${o.vout} - ${o.targetAmount.toString()} units${collateralStr}`);
   });
 
-  if (matchingOutpoints.length === 0) {
+  if (enrichedOutpoints.length === 0) {
     console.error('[buildAlkaneTransferPsbt] No UTXOs found containing alkane:', targetAlkaneId);
     console.error('[buildAlkaneTransferPsbt] Available alkane outpoints:', alkaneOutpoints);
     throw new Error(`No UTXOs found containing alkane ${targetAlkaneId}`);
   }
 
-  // Calculate total available balance of target alkane across all matching UTXOs
-  let totalAvailable = BigInt(0);
-  for (const outpoint of matchingOutpoints) {
-    const targetBalance = outpoint.alkanes.find(a => `${a.block}:${a.tx}` === targetAlkaneId);
-    if (targetBalance) {
-      totalAvailable += BigInt(targetBalance.amount);
-    }
-  }
+  // Calculate total available balance
+  const totalAvailable = enrichedOutpoints.reduce((sum, o) => sum + o.targetAmount, BigInt(0));
   console.log('[buildAlkaneTransferPsbt] Total available:', totalAvailable.toString(), 'units');
   console.log('[buildAlkaneTransferPsbt] Amount to send:', amount.toString(), 'units');
 
@@ -387,17 +487,70 @@ export async function buildAlkaneTransferPsbt(
     throw new Error(`Insufficient balance: have ${totalAvailable}, need ${amount}`);
   }
 
-  // Select UTXOs that cover the required amount
-  // For simplicity, include all matching UTXOs (the edict handles exact distribution)
-  // TODO: Optimize to select minimum UTXOs needed
-  const alkaneUtxos: SimpleUtxo[] = matchingOutpoints.map(o => ({
+  // -----------------------------------------------------------------------
+  // Smart UTXO Selection — prefer UTXOs with minimal collateral assets
+  // -----------------------------------------------------------------------
+  // Sort UTXOs by "cleanliness" score (lower = cleaner = prefer first):
+  // - Clean (no inscriptions, no runes, no other alkanes): score 0
+  // - Only other alkanes (no inscriptions/runes): score 1 + otherAlkanesCount
+  // - Has inscriptions or runes: score 100 + otherAlkanesCount
+  const scoredOutpoints = enrichedOutpoints.map(o => ({
+    ...o,
+    cleanlinessScore: (o.hasInscriptions || o.hasRunes ? 100 : 0) + o.otherAlkanesCount,
+  })).sort((a, b) => {
+    // First by cleanliness score (lower is better)
+    if (a.cleanlinessScore !== b.cleanlinessScore) {
+      return a.cleanlinessScore - b.cleanlinessScore;
+    }
+    // Then by amount (higher is better - use fewer UTXOs)
+    return Number(b.targetAmount - a.targetAmount);
+  });
+
+  // Greedy selection: pick UTXOs until we have enough
+  const selectedOutpoints: typeof scoredOutpoints = [];
+  let selectedAmount = BigInt(0);
+
+  for (const outpoint of scoredOutpoints) {
+    if (selectedAmount >= amount) break;
+    selectedOutpoints.push(outpoint);
+    selectedAmount += outpoint.targetAmount;
+  }
+
+  console.log('[buildAlkaneTransferPsbt] Selected', selectedOutpoints.length, 'of', enrichedOutpoints.length, 'UTXOs');
+
+  // Warn if we're spending UTXOs with collateral assets
+  const collateralUtxos = selectedOutpoints.filter(o => o.hasInscriptions || o.hasRunes || o.otherAlkanesCount > 0);
+  let collateralWarning: CollateralWarning | undefined;
+
+  if (collateralUtxos.length > 0) {
+    console.warn('[buildAlkaneTransferPsbt] WARNING: Some selected UTXOs contain other assets!');
+    collateralUtxos.forEach(o => {
+      const assets = [];
+      if (o.hasInscriptions) assets.push('inscriptions');
+      if (o.hasRunes) assets.push('runes');
+      if (o.otherAlkanesCount > 0) assets.push(`${o.otherAlkanesCount} other alkane(s)`);
+      console.warn(`  ${o.txid.slice(0, 8)}...:${o.vout} also contains: ${assets.join(', ')}`);
+    });
+    console.warn('[buildAlkaneTransferPsbt] The protostone pointer will return unedicted alkanes to sender.');
+    console.warn('[buildAlkaneTransferPsbt] However, inscriptions and runes will be transferred to the recipient!');
+
+    // Build collateral warning for UI
+    collateralWarning = {
+      hasInscriptions: collateralUtxos.some(o => o.hasInscriptions),
+      hasRunes: collateralUtxos.some(o => o.hasRunes),
+      otherAlkanesCount: Math.max(...collateralUtxos.map(o => o.otherAlkanesCount)),
+      utxoCount: collateralUtxos.length,
+    };
+  }
+
+  const alkaneUtxos: SimpleUtxo[] = selectedOutpoints.map(o => ({
     txid: o.txid,
     vout: o.vout,
     value: o.value,
-    confirmed: true, // Assume confirmed since they came from the indexer
+    confirmed: true,
   }));
 
-  console.log('[buildAlkaneTransferPsbt] Selected alkane UTXOs:', alkaneUtxos.length);
+  console.log('[buildAlkaneTransferPsbt] Final selected alkane UTXOs:', alkaneUtxos.length);
 
   // Fetch all UTXOs for BTC fee funding
   console.log('[buildAlkaneTransferPsbt] Fetching all UTXOs for fee funding...');
@@ -553,5 +706,6 @@ export async function buildAlkaneTransferPsbt(
   return {
     psbtBase64: psbt.toBase64(),
     estimatedFee,
+    ...(collateralWarning ? { collateralWarning } : {}),
   };
 }

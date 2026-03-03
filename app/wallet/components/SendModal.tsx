@@ -267,6 +267,18 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // SEND TRANSACTION because small amounts (1000 sats) always have >2% fee ratio.
   // If user already clicked "PROCEED ANYWAY", we bypass the check on retry.
   const [feeWarningAcknowledged, setFeeWarningAcknowledged] = useState(false);
+  // JOURNAL (2026-03-03): Collateral asset warning for alkane transfers.
+  // If the UTXOs containing the target alkane ALSO contain inscriptions/runes,
+  // those assets will be transferred to the recipient (not returned to sender).
+  const [collateralWarning, setCollateralWarning] = useState<{
+    hasInscriptions: boolean;
+    hasRunes: boolean;
+    otherAlkanesCount: number;
+    utxoCount: number;
+  } | null>(null);
+  const [showCollateralWarning, setShowCollateralWarning] = useState(false);
+  const [collateralAcknowledged, setCollateralAcknowledged] = useState(false);
+  const [pendingPsbtBase64, setPendingPsbtBase64] = useState<string | null>(null);
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -374,6 +386,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       setIsProcessing(false);
       setFeeWarningAcknowledged(false);
       setShowFeeWarning(false);
+      // Reset collateral warning state
+      setCollateralWarning(null);
+      setShowCollateralWarning(false);
+      setCollateralAcknowledged(false);
+      setPendingPsbtBase64(null);
     }
   }, [isOpen]);
 
@@ -607,6 +624,25 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     // if broadcast fails and user has to retry
     setFeeWarningAcknowledged(true);
     handleBroadcast();
+  };
+
+  // JOURNAL (2026-03-03): Handler for proceeding with collateral warning acknowledgment
+  // This is called when user confirms they want to proceed despite inscriptions/runes
+  // being on the same UTXOs as their alkanes.
+  const proceedWithCollateralWarning = () => {
+    console.log('[SendModal] User acknowledged collateral warning, proceeding...');
+    setShowCollateralWarning(false);
+    setCollateralAcknowledged(true);
+    // Re-trigger the alkane send flow - it will now skip the warning
+    handleBroadcast();
+  };
+
+  const cancelCollateralWarning = () => {
+    console.log('[SendModal] User cancelled due to collateral warning');
+    setShowCollateralWarning(false);
+    setCollateralWarning(null);
+    setPendingPsbtBase64(null);
+    setStep('input');
   };
 
   const handleBroadcast = async () => {
@@ -999,6 +1035,24 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         console.log('[SendModal] buildAlkaneTransferPsbt SUCCESS');
         console.log('[SendModal] Estimated fee:', estimatedFee, 'sats');
         console.log('[SendModal] PSBT base64 length:', rawPsbtBase64.length);
+
+        // JOURNAL (2026-03-03): Check for collateral assets on the selected UTXOs.
+        // If the UTXOs also contain inscriptions or runes, warn the user because
+        // those assets WILL be transferred to the recipient (not returned to sender).
+        // Other alkanes on the same UTXOs are safe (protostone pointer returns them).
+        if (result.collateralWarning && (result.collateralWarning.hasInscriptions || result.collateralWarning.hasRunes)) {
+          console.warn('[SendModal] COLLATERAL WARNING: UTXOs contain inscriptions/runes!');
+          console.warn('[SendModal] collateralWarning:', result.collateralWarning);
+
+          // If user hasn't acknowledged the collateral warning, show it and stop
+          if (!collateralAcknowledged) {
+            setCollateralWarning(result.collateralWarning);
+            setShowCollateralWarning(true);
+            setPendingPsbtBase64(rawPsbtBase64);
+            setIsProcessing(false);
+            return; // Stop here and wait for user acknowledgment
+          }
+        }
       } catch (psbtError: any) {
         console.error('[SendModal] buildAlkaneTransferPsbt FAILED:', psbtError);
         console.error('[SendModal] Error message:', psbtError.message);
@@ -1165,6 +1219,9 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
               // Reset fee warning acknowledgment when amount changes
               // so user sees warning again for new fee ratio
               setFeeWarningAcknowledged(false);
+              // Reset collateral warning acknowledgment when amount changes
+              // because different UTXOs might be selected
+              setCollateralAcknowledged(false);
               // Clear any previous error when user starts typing
               if (error) setError('');
             }}
@@ -1702,10 +1759,66 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           )}
           {sendMode === 'alkanes' && (
             <>
-              {step === 'input' && renderAlkanesInput()}
-              {step === 'confirm' && renderConfirm()}
-              {step === 'broadcasting' && renderBroadcasting()}
-              {step === 'success' && renderSuccess()}
+              {/* JOURNAL (2026-03-03): Collateral warning for alkane transfers when UTXOs
+                  also contain inscriptions/runes. These assets WILL be transferred to
+                  the recipient (they don't have protostone pointer logic). */}
+              {showCollateralWarning && collateralWarning && (
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] border-2 border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle size={24} className="text-[color:var(--sf-info-red-title)]" />
+                      <span className="font-bold text-[color:var(--sf-info-red-title)] uppercase tracking-wide text-lg">
+                        {t('send.collateralWarning', { defaultValue: 'WARNING: BUNDLED ASSETS' })}
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-sm text-[color:var(--sf-info-red-text)]">
+                      <p className="font-medium">
+                        {t('send.collateralDescription', {
+                          defaultValue: 'The UTXOs containing your alkane tokens also contain other assets that will be transferred to the recipient:'
+                        })}
+                      </p>
+                      <ul className="list-disc pl-5 space-y-1">
+                        {collateralWarning.hasInscriptions && (
+                          <li className="font-bold">{t('send.collateralInscriptions', { defaultValue: 'Ordinal Inscriptions (NFTs)' })}</li>
+                        )}
+                        {collateralWarning.hasRunes && (
+                          <li className="font-bold">{t('send.collateralRunes', { defaultValue: 'Runes' })}</li>
+                        )}
+                        {collateralWarning.otherAlkanesCount > 0 && (
+                          <li>{t('send.collateralOtherAlkanes', { count: collateralWarning.otherAlkanesCount, defaultValue: `${collateralWarning.otherAlkanesCount} other alkane token(s) (will be returned to you)` })}</li>
+                        )}
+                      </ul>
+                      <p className="mt-3 p-2 bg-black/20 rounded-lg">
+                        <strong>{t('send.collateralCritical', { defaultValue: 'CRITICAL:' })}</strong>{' '}
+                        {t('send.collateralCriticalDescription', { defaultValue: 'Inscriptions and Runes CANNOT be recovered. They will belong to the recipient after this transaction.' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={cancelCollateralWarning}
+                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
+                    >
+                      {t('send.cancel', { defaultValue: 'CANCEL' })}
+                    </button>
+                    <button
+                      onClick={proceedWithCollateralWarning}
+                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-info-red-title)] font-bold uppercase tracking-wide"
+                    >
+                      {t('send.proceedAnyway', { defaultValue: 'I UNDERSTAND, PROCEED' })}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {!showCollateralWarning && (
+                <>
+                  {step === 'input' && renderAlkanesInput()}
+                  {step === 'confirm' && renderConfirm()}
+                  {step === 'broadcasting' && renderBroadcasting()}
+                  {step === 'success' && renderSuccess()}
+                </>
+              )}
             </>
           )}
         </div>

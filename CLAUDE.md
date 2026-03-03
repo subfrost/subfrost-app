@@ -1048,7 +1048,7 @@ if (existingAccounts?.length > 0) {
 
 ---
 
-### 2026-03-03: Alkane Transfer Spending All User Assets — CRITICAL BUG FIX
+### 2026-03-03: Alkane Transfer Spending All User Assets — CRITICAL BUG FIX (PHASE 1 & 2)
 
 **Symptom:** When sending alkanes (e.g., 0.1 DIESEL), UniSat wallet showed "Spending 2 Inscriptions, 21 Runes, 10 Alkanes" — the transaction would have spent ALL of the user's ordinals, runes, and alkanes!
 
@@ -1057,22 +1057,9 @@ if (existingAccounts?.length > 0) {
 - Runes
 - Different alkanes (DIESEL, frBTC, LP tokens, etc.)
 
-The old code:
+**PHASE 1 FIX — Query alkane indexer for target alkane UTXOs:**
 ```typescript
-// BUG: Includes ALL dust UTXOs regardless of what they contain
-const alkaneUtxos = taprootUtxos
-  .filter(u => u.value <= 1000 && u.confirmed)
-  .sort((a, b) => b.value - a.value);
-```
-
-**The fix:**
-1. Query `alkanes_protorunesbyaddress` RPC to get alkane-specific outpoints with their balance sheets
-2. Filter to find UTXOs containing the TARGET alkane ID (e.g., "2:0" for DIESEL)
-3. Only include those specific UTXOs as inputs
-
-New code:
-```typescript
-// FIXED: Query alkane indexer for UTXOs containing the target alkane
+// Query alkane indexer for UTXOs containing the target alkane
 const alkaneOutpoints = await fetchAlkaneOutpoints(senderTaprootAddress, networkName);
 
 // Filter to UTXOs containing the target alkane
@@ -1082,12 +1069,52 @@ const matchingOutpoints = alkaneOutpoints.filter(outpoint =>
 );
 ```
 
+**PHASE 2 FIX — Smart UTXO selection with collateral warning:**
+
+The Phase 1 fix correctly identified UTXOs containing the target alkane, but those same UTXOs may ALSO contain inscriptions, runes, or other alkanes bundled on them. Phase 2 adds:
+
+1. **`fetchOrdOutputs()` function** — Queries `ord_outputs` RPC to detect inscriptions and runes on UTXOs
+2. **Smart UTXO selection** — Prioritizes "clean" UTXOs (only target alkane, no inscriptions/runes):
+   - Priority 1: UTXOs with ONLY the target alkane (score 0)
+   - Priority 2: UTXOs with target alkane + other alkanes but no inscriptions/runes (score 1+)
+   - Priority 3: UTXOs with inscriptions/runes (score 100+, last resort)
+3. **Greedy selection** — Picks fewest UTXOs needed to cover the amount
+4. **Collateral warning UI** — If selected UTXOs contain inscriptions/runes, shows a prominent warning:
+   - Inscriptions and runes WILL be transferred to the recipient (cannot be recovered)
+   - Other alkanes are safe (protostone pointer returns them to sender)
+   - User must explicitly acknowledge before proceeding
+
 **Files changed:**
-- `lib/alkanes/buildAlkaneTransferPsbt.ts` — Added `fetchAlkaneOutpoints()`, fixed UTXO selection logic
-- `app/wallet/components/SendModal.tsx` — Added diagnostic logging, documented fix
+- `lib/alkanes/buildAlkaneTransferPsbt.ts`:
+  - Added `fetchOrdOutputs()` function to detect inscriptions/runes
+  - Added `CollateralWarning` interface to return type
+  - Implemented smart UTXO selection with cleanliness scoring
+  - Added greedy selection to minimize UTXOs spent
+- `app/wallet/components/SendModal.tsx`:
+  - Added collateral warning state (`showCollateralWarning`, `collateralWarning`, etc.)
+  - Added `proceedWithCollateralWarning()` and `cancelCollateralWarning()` handlers
+  - Added prominent UI warning with "CANCEL" and "I UNDERSTAND, PROCEED" buttons
 
-**Verification:**
-After the fix, sending 0.1 DIESEL should only show spending 1 Alkane (or however many UTXOs contain DIESEL), NOT inscriptions or runes.
+**Browser console logging (for debugging):**
+```
+[fetchOrdOutputs] txid...:0 has inscriptions=true, runes=false
+[buildAlkaneTransferPsbt] Enriched outpoints: 2
+  491df6ec...:0 - 4503151 units [COLLATERAL: inscriptions, 3 other alkane(s)]
+  0b2455ce...:0 - 1887500000 units [CLEAN]
+[buildAlkaneTransferPsbt] Selected 1 of 2 UTXOs
+```
 
-**⚠️ CRITICAL LESSON:**
-NEVER select dust UTXOs blindly for alkane operations. Always query the alkane indexer to identify which specific UTXOs contain the target asset. Dust UTXOs are a shared namespace for ALL metaprotocol assets (ordinals, runes, alkanes).
+**Understanding multi-asset UTXOs:**
+A single Bitcoin UTXO (especially dust UTXOs ≤546 sats) can contain MULTIPLE metaprotocol assets simultaneously:
+- Ordinal inscriptions (NFTs)
+- Runes tokens
+- Alkane tokens (multiple types on same UTXO)
+
+When spending such a UTXO, ALL assets on it are spent. For alkanes, the protostone's `pointer` field directs unedicted alkanes back to the sender. However, inscriptions and runes do NOT have this mechanism — they go wherever the UTXO output goes.
+
+**⚠️ CRITICAL LESSONS:**
+1. NEVER select dust UTXOs blindly for alkane operations
+2. Query BOTH `alkanes_protorunesbyaddress` (for alkane balances) AND `ord_outputs` (for inscriptions/runes)
+3. Prefer UTXOs that contain ONLY the target asset when possible
+4. If collateral assets exist, WARN the user before proceeding
+5. Inscriptions and runes on spent UTXOs are IRRECOVERABLE if transferred to wrong address
