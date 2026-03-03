@@ -1738,11 +1738,17 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         console.log('[WalletContext] UniSat: PSBT hex length:', patchedPsbtHex.length);
         console.log('[WalletContext] UniSat: Input count:', psbt.data.inputs.length);
 
+        // Get the connected UniSat address - required for toSignInputs
+        // UniSat is a single-address wallet, so all inputs that can be signed use this address
+        const unisatAddress = browserWallet.address;
+        console.log('[WalletContext] UniSat: connected address:', unisatAddress);
+
         // Build toSignInputs - tell UniSat which inputs to sign
-        // For UniSat, we just tell it to sign all inputs (it will filter based on its own key)
+        // Each entry must have index + address (or publicKey)
+        // UniSat will only sign inputs matching its connected address
         const toSignInputs = psbt.data.inputs.map((_, index) => ({
           index,
-          // UniSat uses the connected address by default
+          address: unisatAddress,
         }));
 
         console.log('[WalletContext] UniSat: toSignInputs:', JSON.stringify(toSignInputs));
