@@ -1413,8 +1413,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
             // Race between requestAccounts resolving and our polling
             accounts = await Promise.race([
-              requestPromise.then(result => {
-                if (result?.length > 0) {
+              requestPromise.then((result: string[] | null) => {
+                if (result && result.length > 0) {
                   console.log('[WalletContext] Unisat: requestAccounts resolved:', result);
                   return result;
                 }
@@ -1718,7 +1718,61 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         throw new Error(`Xverse signing failed: ${errDetail}`);
       }
 
-      // For all browser wallets (OYL, OKX, Unisat, etc.): use SDK adapter
+      // ============================================================================
+      // UNISAT WALLET DIRECT SIGNING (2026-03-03)
+      // ============================================================================
+      // JOURNAL ENTRY (2026-03-03): Added direct UniSat signing bypass similar to Xverse.
+      // The SDK adapter path was causing "Cannot read properties of null (reading '0')"
+      // errors. This happens when UniSat's internal code returns null and the SDK or
+      // UniSat's extension tries to access result[0]. Direct calling avoids this issue.
+      //
+      // UniSat API:
+      // - signPsbt(psbtHex, options): Signs a PSBT and returns signed hex
+      // - Options: { autoFinalized?: boolean, toSignInputs?: Array<{index, address?}> }
+      // ============================================================================
+      const unisat = (window as any).unisat;
+      if (unisat && browserWallet?.info?.id === 'unisat') {
+        console.log('[WalletContext] UniSat: signing PSBT directly (bypassing SDK adapter)');
+
+        const patchedPsbtHex = psbt.toHex();
+        console.log('[WalletContext] UniSat: PSBT hex length:', patchedPsbtHex.length);
+        console.log('[WalletContext] UniSat: Input count:', psbt.data.inputs.length);
+
+        // Build toSignInputs - tell UniSat which inputs to sign
+        // For UniSat, we just tell it to sign all inputs (it will filter based on its own key)
+        const toSignInputs = psbt.data.inputs.map((_, index) => ({
+          index,
+          // UniSat uses the connected address by default
+        }));
+
+        console.log('[WalletContext] UniSat: toSignInputs:', JSON.stringify(toSignInputs));
+
+        let signedHex: string | null;
+        try {
+          signedHex = await unisat.signPsbt(patchedPsbtHex, {
+            autoFinalized: false,  // We finalize manually after signing
+            toSignInputs,
+          });
+          console.log('[WalletContext] UniSat: signPsbt returned, result type:', typeof signedHex);
+          console.log('[WalletContext] UniSat: signPsbt result length:', signedHex?.length || 'null');
+        } catch (unisatError: any) {
+          console.error('[WalletContext] UniSat signPsbt threw error:', unisatError);
+          console.error('[WalletContext] Error message:', unisatError?.message);
+          console.error('[WalletContext] Error code:', unisatError?.code);
+          throw new Error(`UniSat signing failed: ${unisatError?.message || unisatError}`);
+        }
+
+        // UniSat can return null if user cancels or something fails internally
+        if (!signedHex) {
+          throw new Error('UniSat signing was cancelled or returned empty result');
+        }
+
+        // Convert hex to base64 for return
+        const signedBuffer = Buffer.from(signedHex, 'hex');
+        return signedBuffer.toString('base64');
+      }
+
+      // For all other browser wallets (OYL, OKX, etc.): use SDK adapter
       // JOURNAL ENTRY (2026-02-20): Direct window.oyl.signPsbt() calls fail with validation errors.
       // The SDK adapter (walletAdapter.signPsbt) works correctly for all wallets including OYL.
       // Successful DIESEL minting proved the SDK adapter path works.

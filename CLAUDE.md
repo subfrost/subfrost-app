@@ -1143,3 +1143,49 @@ curl -s https://mainnet.subfrost.io/v4/subfrost \
 ```
 
 **⚠️ MAINNET LIMITATION:** Users should verify their UTXOs don't contain inscriptions/runes using external tools (ordinals.com, mempool.space) before proceeding with alkane transfers. The app will always show a warning on mainnet due to this limitation.
+
+---
+
+### 2026-03-03: UniSat BTC Send Signing Error — "Cannot read properties of null (reading '0')"
+
+**Symptom:** When sending BTC with UniSat wallet, signing fails with error: `"unisat signing failed: Cannot read properties of null (reading '0')"`
+
+**Root cause:** The SDK adapter path (`walletAdapter.signPsbt()` → `ConnectedWallet.signPsbt()` → `window.unisat.signPsbt()`) was causing issues. Somewhere in the SDK or UniSat's internal code, when processing the PSBT response, code was trying to access `result[0]` on a null value.
+
+**Fix:** Added direct UniSat signing bypass in `WalletContext.tsx`, similar to the existing Xverse bypass:
+
+```typescript
+const unisat = (window as any).unisat;
+if (unisat && browserWallet?.info?.id === 'unisat') {
+  console.log('[WalletContext] UniSat: signing PSBT directly (bypassing SDK adapter)');
+
+  const patchedPsbtHex = psbt.toHex();
+  const toSignInputs = psbt.data.inputs.map((_, index) => ({ index }));
+
+  let signedHex: string | null;
+  try {
+    signedHex = await unisat.signPsbt(patchedPsbtHex, {
+      autoFinalized: false,
+      toSignInputs,
+    });
+  } catch (unisatError: any) {
+    throw new Error(`UniSat signing failed: ${unisatError?.message || unisatError}`);
+  }
+
+  if (!signedHex) {
+    throw new Error('UniSat signing was cancelled or returned empty result');
+  }
+
+  const signedBuffer = Buffer.from(signedHex, 'hex');
+  return signedBuffer.toString('base64');
+}
+```
+
+**Files changed:**
+- `context/WalletContext.tsx` — Added direct UniSat signing bypass (lines 1721-1773)
+
+**Why direct calls work better:**
+- Xverse and UniSat both have direct call bypasses now
+- The SDK adapter path involves multiple layers of abstraction that can fail silently
+- Direct calls give us explicit control over error handling and null checking
+- OYL wallet still uses the SDK adapter (direct calls were tried but failed with validation errors)
