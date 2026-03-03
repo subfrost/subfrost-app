@@ -270,11 +270,14 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // JOURNAL (2026-03-03): Collateral asset warning for alkane transfers.
   // If the UTXOs containing the target alkane ALSO contain inscriptions/runes,
   // those assets will be transferred to the recipient (not returned to sender).
+  // JOURNAL (2026-03-03): Added unverifiedInscriptionRunes for mainnet where
+  // ord_outputs RPC returns "JSON API disabled" - we can't verify what's on UTXOs.
   const [collateralWarning, setCollateralWarning] = useState<{
     hasInscriptions: boolean;
     hasRunes: boolean;
     otherAlkanesCount: number;
     utxoCount: number;
+    unverifiedInscriptionRunes?: boolean;
   } | null>(null);
   const [showCollateralWarning, setShowCollateralWarning] = useState(false);
   const [collateralAcknowledged, setCollateralAcknowledged] = useState(false);
@@ -1040,8 +1043,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         // If the UTXOs also contain inscriptions or runes, warn the user because
         // those assets WILL be transferred to the recipient (not returned to sender).
         // Other alkanes on the same UTXOs are safe (protostone pointer returns them).
-        if (result.collateralWarning && (result.collateralWarning.hasInscriptions || result.collateralWarning.hasRunes)) {
-          console.warn('[SendModal] COLLATERAL WARNING: UTXOs contain inscriptions/runes!');
+        // JOURNAL (2026-03-03): Also warn if ord_outputs RPC failed (mainnet case) — we can't
+        // verify what's on the UTXOs, so user must acknowledge the risk.
+        const needsWarning = result.collateralWarning && (
+          result.collateralWarning.hasInscriptions ||
+          result.collateralWarning.hasRunes ||
+          result.collateralWarning.unverifiedInscriptionRunes
+        );
+        if (needsWarning && result.collateralWarning) {
+          console.warn('[SendModal] COLLATERAL WARNING: UTXOs may contain inscriptions/runes!');
           console.warn('[SendModal] collateralWarning:', result.collateralWarning);
 
           // If user hasn't acknowledged the collateral warning, show it and stop
@@ -1761,33 +1771,65 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
             <>
               {/* JOURNAL (2026-03-03): Collateral warning for alkane transfers when UTXOs
                   also contain inscriptions/runes. These assets WILL be transferred to
-                  the recipient (they don't have protostone pointer logic). */}
+                  the recipient (they don't have protostone pointer logic).
+                  JOURNAL (2026-03-03): Also handles mainnet case where ord_outputs RPC is disabled
+                  and we can't verify what assets are on the UTXOs. */}
               {showCollateralWarning && collateralWarning && (
                 <div className="space-y-4">
                   <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] border-2 border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                     <div className="flex items-center gap-2 mb-3">
                       <AlertCircle size={24} className="text-[color:var(--sf-info-red-title)]" />
                       <span className="font-bold text-[color:var(--sf-info-red-title)] uppercase tracking-wide text-lg">
-                        {t('send.collateralWarning', { defaultValue: 'WARNING: BUNDLED ASSETS' })}
+                        {collateralWarning.unverifiedInscriptionRunes
+                          ? t('send.unverifiedWarning', { defaultValue: 'WARNING: UNVERIFIED ASSETS' })
+                          : t('send.collateralWarning', { defaultValue: 'WARNING: BUNDLED ASSETS' })
+                        }
                       </span>
                     </div>
                     <div className="space-y-2 text-sm text-[color:var(--sf-info-red-text)]">
-                      <p className="font-medium">
-                        {t('send.collateralDescription', {
-                          defaultValue: 'The UTXOs containing your alkane tokens also contain other assets that will be transferred to the recipient:'
-                        })}
-                      </p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        {collateralWarning.hasInscriptions && (
-                          <li className="font-bold">{t('send.collateralInscriptions', { defaultValue: 'Ordinal Inscriptions (NFTs)' })}</li>
-                        )}
-                        {collateralWarning.hasRunes && (
-                          <li className="font-bold">{t('send.collateralRunes', { defaultValue: 'Runes' })}</li>
-                        )}
-                        {collateralWarning.otherAlkanesCount > 0 && (
-                          <li>{t('send.collateralOtherAlkanes', { count: collateralWarning.otherAlkanesCount, defaultValue: `${collateralWarning.otherAlkanesCount} other alkane token(s) (will be returned to you)` })}</li>
-                        )}
-                      </ul>
+                      {/* Unverified case (mainnet) - we couldn't query ord_outputs */}
+                      {collateralWarning.unverifiedInscriptionRunes && (
+                        <>
+                          <p className="font-medium">
+                            {t('send.unverifiedDescription', {
+                              defaultValue: 'Unable to verify inscription/rune status on mainnet. Your alkane UTXOs MAY contain:'
+                            })}
+                          </p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            <li className="font-bold">{t('send.collateralInscriptions', { defaultValue: 'Ordinal Inscriptions (NFTs)' })}</li>
+                            <li className="font-bold">{t('send.collateralRunes', { defaultValue: 'Runes' })}</li>
+                          </ul>
+                          <p className="mt-2">
+                            {t('send.unverifiedExplanation', {
+                              defaultValue: 'If any inscriptions or runes exist on these UTXOs, they WILL be transferred to the recipient along with your alkane tokens.'
+                            })}
+                          </p>
+                        </>
+                      )}
+                      {/* Verified case - we know exactly what's on the UTXOs */}
+                      {!collateralWarning.unverifiedInscriptionRunes && (
+                        <>
+                          <p className="font-medium">
+                            {t('send.collateralDescription', {
+                              defaultValue: 'The UTXOs containing your alkane tokens also contain other assets that will be transferred to the recipient:'
+                            })}
+                          </p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {collateralWarning.hasInscriptions && (
+                              <li className="font-bold">{t('send.collateralInscriptions', { defaultValue: 'Ordinal Inscriptions (NFTs)' })}</li>
+                            )}
+                            {collateralWarning.hasRunes && (
+                              <li className="font-bold">{t('send.collateralRunes', { defaultValue: 'Runes' })}</li>
+                            )}
+                          </ul>
+                        </>
+                      )}
+                      {/* Other alkanes are always safe due to protostone pointer */}
+                      {collateralWarning.otherAlkanesCount > 0 && (
+                        <p className="mt-2 text-[color:var(--sf-text-secondary)]">
+                          {t('send.collateralOtherAlkanes', { count: collateralWarning.otherAlkanesCount, defaultValue: `${collateralWarning.otherAlkanesCount} other alkane token(s) on these UTXOs will be returned to you.` })}
+                        </p>
+                      )}
                       <p className="mt-3 p-2 bg-black/20 rounded-lg">
                         <strong>{t('send.collateralCritical', { defaultValue: 'CRITICAL:' })}</strong>{' '}
                         {t('send.collateralCriticalDescription', { defaultValue: 'Inscriptions and Runes CANNOT be recovered. They will belong to the recipient after this transaction.' })}

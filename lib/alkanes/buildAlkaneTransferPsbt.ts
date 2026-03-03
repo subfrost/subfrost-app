@@ -64,6 +64,10 @@ export interface CollateralWarning {
   hasRunes: boolean;
   otherAlkanesCount: number;
   utxoCount: number;  // How many UTXOs have collateral assets
+  // JOURNAL (2026-03-03): Added unverifiedInscriptionRunes flag for mainnet where
+  // ord_outputs RPC returns "JSON API disabled". When this is true, we couldn't
+  // verify whether the UTXOs contain inscriptions/runes, so the user MUST be warned.
+  unverifiedInscriptionRunes: boolean;
 }
 
 export interface BuildAlkaneTransferResult {
@@ -173,7 +177,12 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
  * JOURNAL (2026-03-03): Added to complement alkane UTXO selection — we need to know
  * if a UTXO also contains inscriptions or runes to avoid collateral damage.
  */
-async function fetchOrdOutputs(address: string, networkName?: string): Promise<Map<string, { hasInscriptions: boolean; hasRunes: boolean }>> {
+interface OrdOutputsResult {
+  data: Map<string, { hasInscriptions: boolean; hasRunes: boolean }>;
+  rpcFailed: boolean;  // True if RPC returned error/disabled or fetch failed
+}
+
+async function fetchOrdOutputs(address: string, networkName?: string): Promise<OrdOutputsResult> {
   console.log('[fetchOrdOutputs] Fetching ord outputs for:', address);
 
   // Determine the RPC endpoint based on network
@@ -204,9 +213,17 @@ async function fetchOrdOutputs(address: string, networkName?: string): Promise<M
 
     const json = await resp.json();
 
+    // JOURNAL (2026-03-03): On mainnet, ord_outputs returns "JSON API disabled"
+    // This means we can't verify inscription/rune status on mainnet UTXOs
     if (json.error) {
       console.warn('[fetchOrdOutputs] RPC error (may not be available on this network):', json.error);
-      return result; // Return empty map, we'll proceed without inscription/rune data
+      return { data: result, rpcFailed: true };
+    }
+
+    // Check for "JSON API disabled" response (mainnet returns this as result, not error)
+    if (typeof json.result === 'string' && json.result.includes('disabled')) {
+      console.warn('[fetchOrdOutputs] RPC disabled on this network:', json.result);
+      return { data: result, rpcFailed: true };
     }
 
     const outputs = json?.result || [];
@@ -225,10 +242,10 @@ async function fetchOrdOutputs(address: string, networkName?: string): Promise<M
     }
 
     console.log('[fetchOrdOutputs] UTXOs with inscriptions/runes:', result.size);
-    return result;
+    return { data: result, rpcFailed: false };
   } catch (err) {
     console.warn('[fetchOrdOutputs] Failed to fetch (proceeding without inscription/rune data):', err);
-    return result;
+    return { data: result, rpcFailed: true };
   }
 }
 
@@ -435,10 +452,19 @@ export async function buildAlkaneTransferPsbt(
   console.log('[buildAlkaneTransferPsbt] Fetching alkane outpoints for:', senderTaprootAddress);
 
   // Fetch both alkane data and inscription/rune data in parallel
-  const [alkaneOutpoints, ordOutputs] = await Promise.all([
+  const [alkaneOutpoints, ordOutputsResult] = await Promise.all([
     fetchAlkaneOutpoints(senderTaprootAddress, networkName),
     fetchOrdOutputs(senderTaprootAddress, networkName),
   ]);
+
+  // JOURNAL (2026-03-03): Track whether ord_outputs RPC failed (mainnet returns "JSON API disabled")
+  // If RPC failed, we can't verify inscription/rune status, so we MUST warn the user
+  const ordOutputs = ordOutputsResult.data;
+  const ordRpcFailed = ordOutputsResult.rpcFailed;
+  if (ordRpcFailed) {
+    console.warn('[buildAlkaneTransferPsbt] WARNING: ord_outputs RPC failed/disabled. Cannot verify inscription/rune status!');
+    console.warn('[buildAlkaneTransferPsbt] Will show warning to user that UTXOs may contain undetected assets.');
+  }
 
   // Find UTXOs that contain the target alkane
   const targetAlkaneId = `${block}:${tx}`;
@@ -522,24 +548,38 @@ export async function buildAlkaneTransferPsbt(
   const collateralUtxos = selectedOutpoints.filter(o => o.hasInscriptions || o.hasRunes || o.otherAlkanesCount > 0);
   let collateralWarning: CollateralWarning | undefined;
 
-  if (collateralUtxos.length > 0) {
-    console.warn('[buildAlkaneTransferPsbt] WARNING: Some selected UTXOs contain other assets!');
-    collateralUtxos.forEach(o => {
-      const assets = [];
-      if (o.hasInscriptions) assets.push('inscriptions');
-      if (o.hasRunes) assets.push('runes');
-      if (o.otherAlkanesCount > 0) assets.push(`${o.otherAlkanesCount} other alkane(s)`);
-      console.warn(`  ${o.txid.slice(0, 8)}...:${o.vout} also contains: ${assets.join(', ')}`);
-    });
-    console.warn('[buildAlkaneTransferPsbt] The protostone pointer will return unedicted alkanes to sender.');
-    console.warn('[buildAlkaneTransferPsbt] However, inscriptions and runes will be transferred to the recipient!');
+  // JOURNAL (2026-03-03): Two scenarios require warning:
+  // 1. We detected inscriptions/runes via ord_outputs (hasInscriptions/hasRunes = true)
+  // 2. We couldn't query ord_outputs (ordRpcFailed = true, mainnet case)
+  // In case 2, we can't know if UTXOs have inscriptions/runes, so we MUST warn
+  const shouldWarn = collateralUtxos.length > 0 || ordRpcFailed;
+
+  if (shouldWarn) {
+    if (collateralUtxos.length > 0) {
+      console.warn('[buildAlkaneTransferPsbt] WARNING: Some selected UTXOs contain other assets!');
+      collateralUtxos.forEach(o => {
+        const assets = [];
+        if (o.hasInscriptions) assets.push('inscriptions');
+        if (o.hasRunes) assets.push('runes');
+        if (o.otherAlkanesCount > 0) assets.push(`${o.otherAlkanesCount} other alkane(s)`);
+        console.warn(`  ${o.txid.slice(0, 8)}...:${o.vout} also contains: ${assets.join(', ')}`);
+      });
+      console.warn('[buildAlkaneTransferPsbt] The protostone pointer will return unedicted alkanes to sender.');
+      console.warn('[buildAlkaneTransferPsbt] However, inscriptions and runes will be transferred to the recipient!');
+    }
+
+    if (ordRpcFailed) {
+      console.warn('[buildAlkaneTransferPsbt] WARNING: Could not verify inscription/rune status!');
+      console.warn('[buildAlkaneTransferPsbt] The selected UTXOs MAY contain inscriptions or runes that will be sent to the recipient.');
+    }
 
     // Build collateral warning for UI
     collateralWarning = {
       hasInscriptions: collateralUtxos.some(o => o.hasInscriptions),
       hasRunes: collateralUtxos.some(o => o.hasRunes),
-      otherAlkanesCount: Math.max(...collateralUtxos.map(o => o.otherAlkanesCount)),
-      utxoCount: collateralUtxos.length,
+      otherAlkanesCount: Math.max(0, ...collateralUtxos.map(o => o.otherAlkanesCount)),
+      utxoCount: selectedOutpoints.length, // All selected UTXOs may have unverified assets
+      unverifiedInscriptionRunes: ordRpcFailed,
     };
   }
 

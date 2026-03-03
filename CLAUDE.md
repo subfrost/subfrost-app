@@ -1118,3 +1118,28 @@ When spending such a UTXO, ALL assets on it are spent. For alkanes, the protosto
 3. Prefer UTXOs that contain ONLY the target asset when possible
 4. If collateral assets exist, WARN the user before proceeding
 5. Inscriptions and runes on spent UTXOs are IRRECOVERABLE if transferred to wrong address
+
+**PHASE 3 FIX (2026-03-03) — Mainnet `ord_outputs` RPC Disabled:**
+
+The `ord_outputs` RPC that detects inscriptions/runes is **disabled on mainnet** (returns "JSON API disabled"). This means on mainnet we CANNOT verify what inscriptions/runes exist on UTXOs.
+
+**Solution:** Added `unverifiedInscriptionRunes` flag to `CollateralWarning`:
+- When `ord_outputs` RPC fails/returns disabled, set `unverifiedInscriptionRunes: true`
+- This triggers a different warning in SendModal: "Unable to verify inscription/rune status on mainnet"
+- User is warned that UTXOs MAY contain inscriptions/runes that will be sent to recipient
+- This ensures users are ALWAYS warned on mainnet, even without inscription/rune detection
+
+**Key changes:**
+- `fetchOrdOutputs()` now returns `{ data: Map, rpcFailed: boolean }`
+- `CollateralWarning` interface now includes `unverifiedInscriptionRunes: boolean`
+- SendModal shows different warning text for unverified vs verified collateral
+- Warning condition: `hasInscriptions || hasRunes || unverifiedInscriptionRunes`
+
+**Verified on mainnet:**
+```bash
+curl -s https://mainnet.subfrost.io/v4/subfrost \
+  -d '{"jsonrpc":"2.0","method":"ord_outputs","params":["bc1p..."],"id":1}'
+# Returns: {"jsonrpc":"2.0","result":"JSON API disabled","id":1}
+```
+
+**⚠️ MAINNET LIMITATION:** Users should verify their UTXOs don't contain inscriptions/runes using external tools (ordinals.com, mempool.space) before proceeding with alkane transfers. The app will always show a warning on mainnet due to this limitation.
