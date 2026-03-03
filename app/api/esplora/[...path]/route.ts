@@ -25,9 +25,12 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const network = (searchParams.get('network') || 'mainnet') as Network;
 
-    const esploraUrl = getConfig(network).BLOCK_EXPLORER_URL_BTC;
+    const config = getConfig(network);
+    const esploraUrl = config.BLOCK_EXPLORER_URL_BTC;
     const targetUrl = `${esploraUrl}/api/${pathString}`;
 
+    console.log(`[Esplora Proxy] Network: ${network}`);
+    console.log(`[Esplora Proxy] Base URL: ${esploraUrl}`);
     console.log(`[Esplora Proxy] Forwarding: ${pathString} -> ${targetUrl}`);
 
     const response = await fetch(targetUrl, {
@@ -58,12 +61,16 @@ export async function GET(
     }
 
     if (!response.ok) {
+      console.error(`[Esplora Proxy] Error: ${response.status} ${response.statusText}`);
+      const errorBody = await response.text().catch(() => '');
+      console.error(`[Esplora Proxy] Error body: ${errorBody.slice(0, 200)}`);
       return NextResponse.json(
         { error: `Esplora returned ${response.status}: ${response.statusText}` },
         { status: response.status }
       );
     }
 
+    console.log(`[Esplora Proxy] Success: ${response.status}`);
     return handleSuccessResponse(response, pathString);
   } catch (error) {
     console.error('[Esplora Proxy] Error:', error);

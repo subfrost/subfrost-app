@@ -80,6 +80,10 @@ export async function POST(
       targetUrl = pickEndpoint(body, network);
     }
 
+    // Log for debugging UTXO fetches
+    const method = Array.isArray(body) ? 'batch' : body?.method;
+    console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
+
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -87,6 +91,7 @@ export async function POST(
     });
 
     if (!response.ok) {
+      console.error(`[RPC Proxy] Error: ${response.status} for ${method}`);
       return NextResponse.json(
         { error: `RPC request failed: ${response.status}` },
         { status: response.status }
@@ -94,6 +99,17 @@ export async function POST(
     }
 
     const data = await response.json();
+
+    // Log UTXO fetch results for debugging
+    if (method === 'esplora_address::utxo') {
+      const resultCount = Array.isArray(data?.result) ? data.result.length : 0;
+      console.log(`[RPC Proxy] esplora_address::utxo returned ${resultCount} UTXOs`);
+      if (resultCount === 0) {
+        console.log(`[RPC Proxy] esplora_address::utxo params:`, body?.params);
+        console.log(`[RPC Proxy] Full response:`, JSON.stringify(data).slice(0, 200));
+      }
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('[RPC Proxy] Error:', error);

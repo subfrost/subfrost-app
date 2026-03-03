@@ -74,6 +74,29 @@
  * - OYL mainnet send: txid d450245756a5e24b28756889ad60ea91c04195671edad7c65453ed04c7427cad
  * - Taproot UTXO (bc1p...) spent with tapInternalKey
  * - Fee: 141 sats, ~1.08 sat/vB
+ *
+ * ============================================================================
+ * ALKANE TRANSFER BUG FIX (2026-03-03)
+ * ============================================================================
+ *
+ * **THE BUG:**
+ * When sending alkanes (e.g., 0.1 DIESEL), UniSat showed "Spending 2 Inscriptions,
+ * 21 Runes, 10 Alkanes" — the transaction would have spent ALL user's assets!
+ *
+ * **ROOT CAUSE:**
+ * `buildAlkaneTransferPsbt()` was including ALL dust UTXOs (≤1000 sats) as inputs,
+ * assuming they all contained the target alkane. But dust UTXOs can contain any
+ * asset type: inscriptions, runes, or different alkanes.
+ *
+ * **THE FIX (in lib/alkanes/buildAlkaneTransferPsbt.ts):**
+ * 1. Query `alkanes_protorunesbyaddress` to get alkane-specific outpoints
+ * 2. Filter to find UTXOs containing the TARGET alkane ID only
+ * 3. Only include those specific UTXOs as inputs
+ *
+ * **VERIFICATION:**
+ * After fix, sending 0.1 DIESEL should only show spending alkanes (not inscriptions/runes).
+ *
+ * **Source:** User screenshot showing UniSat spending all assets when only sending DIESEL
  */
 
 import { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
@@ -905,11 +928,21 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         }));
       }
 
-      console.log('[SendModal] Starting alkane transfer...');
-      console.log('[SendModal] Alkane:', selectedAlkaneId, selectedAlkane.symbol);
-      console.log('[SendModal] Amount:', amountBaseUnits.toString(), 'base units');
+      console.log('[SendModal] ========== ALKANE TRANSFER START ==========');
+      console.log('[SendModal] Alkane ID:', selectedAlkaneId);
+      console.log('[SendModal] Alkane symbol:', selectedAlkane.symbol);
+      console.log('[SendModal] Alkane decimals:', decimals);
+      console.log('[SendModal] Amount (display):', amount);
+      console.log('[SendModal] Amount (base units):', amountBaseUnits.toString());
+      console.log('[SendModal] Balance (base units):', balanceBaseUnits.toString());
       console.log('[SendModal] Recipient:', recipientAddress);
       console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
+      console.log('[SendModal] Network:', network);
+      console.log('[SendModal] Wallet type:', walletType);
+      console.log('[SendModal] Taproot address (alkaneSendAddress):', alkaneSendAddress);
+      console.log('[SendModal] Payment address (btcSendAddress):', btcSendAddress);
+      console.log('[SendModal] Account taproot pubkey:', account?.taproot?.pubKeyXOnly?.slice(0, 16) + '...');
+      console.log('[SendModal] Account segwit pubkey:', account?.nativeSegwit?.pubkey?.slice(0, 16) + '...');
 
       // For keystore wallets, request user confirmation before signing
       if (walletType === 'keystore') {
@@ -942,23 +975,36 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
       console.log('[SendModal] Wallet mode:', isSingleAddressMode
         ? `Single-address (${primaryAddressType.type})`
-        : `Dual-address`);
+        : `Dual-address (taproot: ${alkaneSendAddress}, payment: ${btcSendAddress})`);
 
       // Build PSBT in pure JS (bypasses WASM/metashrew entirely)
-      const { psbtBase64: rawPsbtBase64, estimatedFee } = await buildAlkaneTransferPsbt({
-        alkaneId: selectedAlkaneId,
-        amount: amountBaseUnits,
-        senderTaprootAddress: alkaneSendAddress,
-        senderPaymentAddress: hasBothAddresses ? btcSendAddress : undefined,
-        recipientAddress: normalizedRecipientAddress,
-        tapInternalKeyHex: account?.taproot?.pubKeyXOnly,
-        paymentPubkeyHex: account?.nativeSegwit?.pubkey,
-        feeRate,
-        network: btcNetwork,
-        networkName: network,
-      });
-
-      console.log('[SendModal] Built PSBT (JS), estimated fee:', estimatedFee, 'sats');
+      console.log('[SendModal] Calling buildAlkaneTransferPsbt...');
+      let rawPsbtBase64: string;
+      let estimatedFee: number;
+      try {
+        const result = await buildAlkaneTransferPsbt({
+          alkaneId: selectedAlkaneId,
+          amount: amountBaseUnits,
+          senderTaprootAddress: alkaneSendAddress,
+          senderPaymentAddress: hasBothAddresses ? btcSendAddress : undefined,
+          recipientAddress: normalizedRecipientAddress,
+          tapInternalKeyHex: account?.taproot?.pubKeyXOnly,
+          paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+          feeRate,
+          network: btcNetwork,
+          networkName: network,
+        });
+        rawPsbtBase64 = result.psbtBase64;
+        estimatedFee = result.estimatedFee;
+        console.log('[SendModal] buildAlkaneTransferPsbt SUCCESS');
+        console.log('[SendModal] Estimated fee:', estimatedFee, 'sats');
+        console.log('[SendModal] PSBT base64 length:', rawPsbtBase64.length);
+      } catch (psbtError: any) {
+        console.error('[SendModal] buildAlkaneTransferPsbt FAILED:', psbtError);
+        console.error('[SendModal] Error message:', psbtError.message);
+        console.error('[SendModal] Error stack:', psbtError.stack);
+        throw psbtError;
+      }
 
       // Inject redeemScripts for P2SH-P2WPKH wallets (Xverse) if needed
       let psbtBase64 = rawPsbtBase64;

@@ -1045,3 +1045,49 @@ if (existingAccounts?.length > 0) {
 - `context/WalletContext.tsx` — OKX: added 10s timeout + debug logging
 
 **Key insight:** Wallets should respond within seconds. A 10s timeout catches broken states quickly. Also, checking `getAccounts()` first avoids unnecessary popups for already-connected wallets.
+
+---
+
+### 2026-03-03: Alkane Transfer Spending All User Assets — CRITICAL BUG FIX
+
+**Symptom:** When sending alkanes (e.g., 0.1 DIESEL), UniSat wallet showed "Spending 2 Inscriptions, 21 Runes, 10 Alkanes" — the transaction would have spent ALL of the user's ordinals, runes, and alkanes!
+
+**Root cause:** `buildAlkaneTransferPsbt()` in `lib/alkanes/buildAlkaneTransferPsbt.ts` was including ALL dust UTXOs (≤1000 sats) as inputs, assuming they all contained the target alkane. But dust UTXOs can contain ANY asset type:
+- Inscriptions (ordinals)
+- Runes
+- Different alkanes (DIESEL, frBTC, LP tokens, etc.)
+
+The old code:
+```typescript
+// BUG: Includes ALL dust UTXOs regardless of what they contain
+const alkaneUtxos = taprootUtxos
+  .filter(u => u.value <= 1000 && u.confirmed)
+  .sort((a, b) => b.value - a.value);
+```
+
+**The fix:**
+1. Query `alkanes_protorunesbyaddress` RPC to get alkane-specific outpoints with their balance sheets
+2. Filter to find UTXOs containing the TARGET alkane ID (e.g., "2:0" for DIESEL)
+3. Only include those specific UTXOs as inputs
+
+New code:
+```typescript
+// FIXED: Query alkane indexer for UTXOs containing the target alkane
+const alkaneOutpoints = await fetchAlkaneOutpoints(senderTaprootAddress, networkName);
+
+// Filter to UTXOs containing the target alkane
+const targetAlkaneId = `${block}:${tx}`;
+const matchingOutpoints = alkaneOutpoints.filter(outpoint =>
+  outpoint.alkanes.some(a => `${a.block}:${a.tx}` === targetAlkaneId)
+);
+```
+
+**Files changed:**
+- `lib/alkanes/buildAlkaneTransferPsbt.ts` — Added `fetchAlkaneOutpoints()`, fixed UTXO selection logic
+- `app/wallet/components/SendModal.tsx` — Added diagnostic logging, documented fix
+
+**Verification:**
+After the fix, sending 0.1 DIESEL should only show spending 1 Alkane (or however many UTXOs contain DIESEL), NOT inscriptions or runes.
+
+**⚠️ CRITICAL LESSON:**
+NEVER select dust UTXOs blindly for alkane operations. Always query the alkane indexer to identify which specific UTXOs contain the target asset. Dust UTXOs are a shared namespace for ALL metaprotocol assets (ordinals, runes, alkanes).
