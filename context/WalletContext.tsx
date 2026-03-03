@@ -373,17 +373,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // Check for browser wallet auto-reconnect
       const storedBrowserWalletId = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID);
       if (storedBrowserWalletId && storedWalletType === 'browser') {
-        // Restore cached addresses from localStorage
-        let cachedAddrs: string | null = null;
-        try {
-          cachedAddrs = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
-          if (cachedAddrs) {
-            setBrowserWalletAddresses(JSON.parse(cachedAddrs));
-          }
-        } catch {
-          // ignore parse errors
-        }
-
         try {
           const walletInfo = BROWSER_WALLETS.find(w => w.id === storedBrowserWalletId);
           if (walletInfo && isWalletInstalled(walletInfo)) {
@@ -391,6 +380,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             // extension. connector.connect() would show a popup (e.g., Xverse getAddresses)
             // which blocks initialization and can leave the extension in a conflicting
             // state if the user dismisses it or it times out.
+            const cachedAddrs = localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
             let cachedParsed: any = null;
             try { cachedParsed = cachedAddrs ? JSON.parse(cachedAddrs) : null; } catch {}
 
@@ -409,7 +399,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
                 addressType: isTaproot ? 'p2tr' : 'p2wpkh',
               });
 
+              // Only set state if we successfully created the connected wallet
               setBrowserWallet(connected);
+              setBrowserWalletAddresses(cachedParsed);
               setWalletType('browser');
               const adapter = createWalletAdapter(connected);
               setWalletAdapter(adapter);
@@ -432,6 +424,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
               localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
             }
+          } else {
+            // Wallet not installed anymore, clear stored state
+            console.log('[WalletContext] Stored browser wallet not installed, clearing');
+            localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
+            localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
+            localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
           }
         } catch (error) {
           // Auto-reconnect failed, clear stored ID
@@ -857,14 +855,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       throw new Error('Not in browser environment');
     }
 
+    console.log('[WalletContext] connectBrowserWallet called with walletId:', walletId);
+
     const walletInfo = BROWSER_WALLETS.find(w => w.id === walletId);
     if (!walletInfo) {
       throw new Error(`Unknown wallet: ${walletId}`);
     }
 
+    console.log('[WalletContext] Found wallet info:', walletInfo.name, 'injectionKey:', walletInfo.injectionKey);
+
     if (!isWalletInstalled(walletInfo)) {
       throw new Error(`${walletInfo.name} is not installed`);
     }
+
+    console.log('[WalletContext] Wallet is installed, starting connection...');
 
     try {
       let connected: ConnectedWallet;
@@ -1325,10 +1329,22 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         });
       } else if (walletId === 'okx') {
         // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
+        // JOURNAL ENTRY (2026-03-02): Added 10s timeout - should respond quickly.
         const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
-        const result = await okxProvider.connect();
+        console.log('[WalletContext] OKX: calling connect...');
+
+        const result = await Promise.race([
+          okxProvider.connect(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'OKX wallet connection timed out after 10s. ' +
+              'Please check your OKX extension popup and approve the connection.'
+            )), 10000)
+          ),
+        ]);
+        console.log('[WalletContext] OKX: connect returned:', result);
         const addr = result?.address;
         const pubKey = result?.publicKey;
         if (!addr) throw new Error('No address returned from OKX');
@@ -1348,16 +1364,71 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       } else if (walletId === 'unisat') {
         // Unisat exposes window.unisat with requestAccounts(), getPublicKey(), signPsbt()
         // Only provides one address type at a time (user-configurable in wallet settings)
+        // JOURNAL ENTRY (2026-03-02): Added 10s timeout - Unisat should respond quickly.
+        // If it doesn't, the extension is likely in a bad state and needs refresh.
         const unisatProvider = (window as any).unisat;
         if (!unisatProvider) throw new Error('Unisat wallet not available. Please install the Unisat extension.');
 
+        console.log('[WalletContext] Unisat: provider found, available methods:', Object.keys(unisatProvider));
+        console.log('[WalletContext] Unisat: calling requestAccounts...');
+
         let accounts: string[];
         try {
-          accounts = await unisatProvider.requestAccounts();
+          // Check if already connected first - getAccounts() returns existing accounts without prompting
+          const existingAccounts = await unisatProvider.getAccounts();
+          console.log('[WalletContext] Unisat: getAccounts() returned:', existingAccounts);
+
+          if (existingAccounts?.length > 0) {
+            accounts = existingAccounts;
+            console.log('[WalletContext] Unisat: using existing connection');
+          } else {
+            // Not connected - trigger requestAccounts() but don't wait for it directly
+            // because Unisat's requestAccounts() often hangs even after user approval.
+            // Instead, we poll getAccounts() to detect when connection is established.
+            console.log('[WalletContext] Unisat: triggering requestAccounts (this shows the popup)...');
+
+            // Fire and forget - this triggers the popup
+            const requestPromise = unisatProvider.requestAccounts().catch((e: any) => {
+              console.log('[WalletContext] Unisat: requestAccounts rejected:', e);
+              return null;
+            });
+
+            // Poll getAccounts() to detect when user approves
+            const pollForConnection = async (): Promise<string[]> => {
+              const maxAttempts = 60; // 30 seconds total (500ms * 60)
+              for (let i = 0; i < maxAttempts; i++) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                try {
+                  const accts = await unisatProvider.getAccounts();
+                  if (accts?.length > 0) {
+                    console.log('[WalletContext] Unisat: poll detected connection after', (i + 1) * 0.5, 'seconds');
+                    return accts;
+                  }
+                } catch (e) {
+                  // Ignore polling errors
+                }
+              }
+              throw new Error('Unisat connection timed out. Please approve the connection in your Unisat wallet.');
+            };
+
+            // Race between requestAccounts resolving and our polling
+            accounts = await Promise.race([
+              requestPromise.then(result => {
+                if (result?.length > 0) {
+                  console.log('[WalletContext] Unisat: requestAccounts resolved:', result);
+                  return result;
+                }
+                // If requestAccounts returned empty, keep waiting for poll
+                return new Promise<string[]>(() => {}); // Never resolves
+              }),
+              pollForConnection(),
+            ]);
+          }
+          console.log('[WalletContext] Unisat: final accounts:', accounts);
         } catch (e: any) {
-          // Unisat may throw a non-Error (string or object) on rejection
+          console.error('[WalletContext] Unisat: connection error:', e);
           const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
-          throw new Error(`Unisat requestAccounts failed: ${msg}`);
+          throw new Error(`Unisat connection failed: ${msg}`);
         }
         if (!accounts?.length) throw new Error('No accounts returned from Unisat');
         const addr = accounts[0];
@@ -1406,6 +1477,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
       console.log('[WalletContext] Connected to browser wallet:', walletInfo.name);
       console.log('[WalletContext] Primary address:', connected.address);
+      console.log('[WalletContext] Additional addresses:', additionalAddresses);
+      console.log('[WalletContext] browserWalletAddresses state will be:', additionalAddresses);
       console.log('[WalletContext] Additional addresses:', additionalAddresses);
       console.log('[WalletContext] Created wallet adapter:', adapter.getInfo().name);
 

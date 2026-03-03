@@ -56,15 +56,16 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
   if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
   const addressKey = addresses.sort().join(',');
 
-  // Debug: log what addresses we're using for balance queries
-  console.log('[enrichedWalletQueryOptions] Account check:', {
-    hasAccount: !!deps.account,
-    nativeSegwit: deps.account?.nativeSegwit?.address || '(missing)',
-    taproot: deps.account?.taproot?.address || '(missing)',
-    addressCount: addresses.length,
+  // Debug: log wallet state for balance queries
+  console.log('[enrichedWalletQueryOptions] Wallet state:', {
     isConnected: deps.isConnected,
     isInitialized: deps.isInitialized,
     hasProvider: !!deps.provider,
+    hasAccount: !!deps.account,
+    addresses,
+    nativeSegwit: deps.account?.nativeSegwit?.address || '(none)',
+    taproot: deps.account?.taproot?.address || '(none)',
+    queryEnabled: deps.isInitialized && !!deps.provider && !!deps.account && deps.isConnected && addresses.length > 0,
   });
 
   return queryOptions({

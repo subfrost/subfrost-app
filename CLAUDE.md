@@ -1010,3 +1010,38 @@ When building PSBTs for browser wallet BTC sends:
 ### Files Changed
 - `app/wallet/components/SendModal.tsx` — Main component with all fixes
 - `app/api/esplora/[...path]/route.ts` — REST proxy for UTXO fetching
+
+---
+
+### 2026-03-02: Unisat/OKX Wallet Infinite Connection Loop — FIXED
+
+**Symptom:** When attempting to connect Unisat wallet, the UI shows "Connecting to Unisat..." spinner indefinitely. The connection never completes and the user cannot interact with the app.
+
+**Root cause:** The `requestAccounts()` call (Unisat) and `connect()` call (OKX) had **no timeout protection**. When the wallet extension doesn't respond (popup dismissed, extension crashed, etc.), the promise hangs forever.
+
+**Fix:** Added 10-second timeouts and smarter connection logic:
+
+1. **For Unisat:** Try `getAccounts()` first to check existing connection before `requestAccounts()`:
+```typescript
+// Try existing connection first (no popup needed)
+const existingAccounts = await unisatProvider.getAccounts();
+if (existingAccounts?.length > 0) {
+  accounts = existingAccounts; // Already connected!
+} else {
+  // Need to request (shows popup) - with 10s timeout
+  accounts = await Promise.race([
+    unisatProvider.requestAccounts(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Unisat connection timed out after 10s.')), 10000)
+    ),
+  ]);
+}
+```
+
+2. **For OKX:** Added 10-second timeout to `connect()` call
+
+**Files changed:**
+- `context/WalletContext.tsx` — Unisat: added getAccounts() check + 10s timeout + debug logging
+- `context/WalletContext.tsx` — OKX: added 10s timeout + debug logging
+
+**Key insight:** Wallets should respond within seconds. A 10s timeout catches broken states quickly. Also, checking `getAccounts()` first avoids unnecessary popups for already-connected wallets.
