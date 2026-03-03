@@ -1214,3 +1214,91 @@ const DUST_VALUE = 600;
 
 **Files changed:**
 - `lib/alkanes/buildAlkaneTransferPsbt.ts` — Increased DUST_VALUE from 546 to 600
+
+### 2026-03-03: UniSat BTC Send — Complete Signing Flow Fix
+
+**Verified transaction:** `81b3d4d2c04e163c0ba791963b7569eaa2196814b4d3a5afa8d62719d0a3df69`
+
+**Symptom sequence encountered:**
+1. "Cannot read properties of null (reading '0')" — SDK adapter path failure
+2. "no address or public key in toSignInput" — Missing address field
+3. No popup appearing — API method mismatch
+4. "No tapleaf script signature provided" — Finalization issue
+
+**Root causes and fixes:**
+
+**Issue 1: SDK adapter null error**
+- The SDK's `walletAdapter.signPsbt()` path returns null in some cases
+- UniSat's internal code tries to access `result[0]` on null
+- **Fix:** Direct `window.unisat` signing bypass (similar to Xverse)
+
+**Issue 2: Missing address in toSignInputs**
+- UniSat requires `address` (or `publicKey`) in each `toSignInputs` entry
+- SDK adapter was not providing this
+- **Fix:** Build toSignInputs with explicit address:
+```typescript
+const toSignInputs = psbt.data.inputs.map((_, index) => ({
+  index,
+  address: unisatAddress,  // Required field
+}));
+```
+
+**Issue 3: signPsbt vs signPsbts**
+- UniSat exposes BOTH `signPsbt` (singular) and `signPsbts` (plural)
+- The SDK uses `signPsbts` (array format)
+- Check which method exists and use accordingly:
+```typescript
+const hasSignPsbts = typeof unisat.signPsbts === 'function';
+const hasSignPsbt = typeof unisat.signPsbt === 'function';
+
+if (hasSignPsbts) {
+  const signedHexArray = await unisat.signPsbts([psbtHex], { ... });
+  signedHex = signedHexArray?.[0];
+} else if (hasSignPsbt) {
+  signedHex = await unisat.signPsbt(psbtHex, { ... });
+}
+```
+
+**Issue 4: Taproot finalization failure**
+- With `autoFinalized: false`, UniSat returns signed but not finalized PSBT
+- Our `finalizeAllInputs()` fails with "No tapleaf script signature provided"
+- **Fix:** Use `autoFinalized: true` for UniSat:
+```typescript
+await unisat.signPsbts([psbtHex], {
+  autoFinalized: true,  // Let UniSat handle taproot finalization
+  toSignInputs,
+});
+```
+
+**Issue 5: Double finalization error**
+- With `autoFinalized: true`, the PSBT is already finalized
+- Calling `finalizeAllInputs()` again throws an error
+- **Fix:** Smart extraction that handles both cases:
+```typescript
+let tx;
+try {
+  tx = psbt.extractTransaction();  // Works if already finalized
+} catch {
+  psbt.finalizeAllInputs();         // Fallback if not finalized
+  tx = psbt.extractTransaction();
+}
+```
+
+**Files changed:**
+- `context/WalletContext.tsx` — Added direct UniSat signing bypass with proper toSignInputs
+- `app/wallet/components/SendModal.tsx` — Added smart PSBT finalization handling
+- `lib/wallet/browserWalletSigning.ts` — Created unified wallet signing utilities (new file)
+
+**UniSat API Reference:**
+| Method | Input | Output | Notes |
+|--------|-------|--------|-------|
+| `signPsbt(hex, opts)` | PSBT hex string | Signed hex | Single PSBT |
+| `signPsbts(hexs[], opts)` | Array of PSBT hex | Array of signed hex | Batch signing |
+| Options | `{ autoFinalized: boolean, toSignInputs: [{index, address}] }` | | |
+
+**Critical insights:**
+- UniSat is a SINGLE-ADDRESS wallet — all inputs use the same address
+- Always use `autoFinalized: true` for taproot inputs
+- The SDK prefers `signPsbts` (plural) but both work
+- Add 60-second timeout to detect stuck popups
+- Always include `address` in each toSignInputs entry

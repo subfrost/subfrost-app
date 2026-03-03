@@ -1721,14 +1721,41 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // ============================================================================
       // UNISAT WALLET DIRECT SIGNING (2026-03-03)
       // ============================================================================
-      // JOURNAL ENTRY (2026-03-03): Added direct UniSat signing bypass similar to Xverse.
-      // The SDK adapter path was causing "Cannot read properties of null (reading '0')"
-      // errors. This happens when UniSat's internal code returns null and the SDK or
-      // UniSat's extension tries to access result[0]. Direct calling avoids this issue.
+      // VERIFIED WORKING: Transaction 81b3d4d2c04e163c0ba791963b7569eaa2196814b4d3a5afa8d62719d0a3df69
       //
-      // UniSat API:
-      // - signPsbt(psbtHex, options): Signs a PSBT and returns signed hex
-      // - Options: { autoFinalized?: boolean, toSignInputs?: Array<{index, address?}> }
+      // PITFALLS ENCOUNTERED (in order of discovery):
+      //
+      // 1. SDK ADAPTER NULL ERROR
+      //    - Error: "Cannot read properties of null (reading '0')"
+      //    - Cause: SDK's walletAdapter.signPsbt() returns null in some cases
+      //    - Fix: Direct window.unisat bypass (similar to Xverse pattern)
+      //
+      // 2. MISSING ADDRESS IN toSignInputs
+      //    - Error: "no address or public key in toSignInput"
+      //    - Cause: Each toSignInputs entry MUST have `address` or `publicKey`
+      //    - Fix: Always include `address: unisatAddress` in each entry
+      //
+      // 3. NO POPUP APPEARING
+      //    - Symptom: signPsbt called but no wallet popup
+      //    - Cause: UniSat has BOTH signPsbt AND signPsbts methods
+      //    - Fix: Check which method exists, prefer signPsbts (SDK pattern)
+      //
+      // 4. TAPROOT FINALIZATION FAILURE
+      //    - Error: "No tapleaf script signature provided"
+      //    - Cause: autoFinalized: false returns unfinalized taproot inputs
+      //    - Fix: Use autoFinalized: true for UniSat (it handles taproot internally)
+      //
+      // 5. DOUBLE FINALIZATION ERROR
+      //    - Error: "Input has already been finalized"
+      //    - Cause: autoFinalized: true returns already-finalized PSBT
+      //    - Fix: Try extractTransaction() first, fallback to finalizeAllInputs()
+      //
+      // UniSat API Reference:
+      // - signPsbt(psbtHex, options): Signs single PSBT, returns hex
+      // - signPsbts(psbtHexArray, options): Signs multiple PSBTs, returns hex[]
+      // - Options: { autoFinalized: boolean, toSignInputs: [{index, address}] }
+      //
+      // CRITICAL: UniSat is SINGLE-ADDRESS — all inputs use the same address
       // ============================================================================
       const unisat = (window as any).unisat;
       if (unisat && browserWallet?.info?.id === 'unisat') {
@@ -1753,16 +1780,67 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         console.log('[WalletContext] UniSat: toSignInputs:', JSON.stringify(toSignInputs));
 
-        let signedHex: string | null;
+        // JOURNAL (2026-03-03): UniSat has both signPsbt (singular) and signPsbts (plural).
+        // The SDK uses signPsbts which takes an array and returns an array.
+        // Try signPsbts first (SDK method), fall back to signPsbt if unavailable.
+        let signedHex: string | null = null;
         try {
-          signedHex = await unisat.signPsbt(patchedPsbtHex, {
-            autoFinalized: false,  // We finalize manually after signing
-            toSignInputs,
-          });
-          console.log('[WalletContext] UniSat: signPsbt returned, result type:', typeof signedHex);
-          console.log('[WalletContext] UniSat: signPsbt result length:', signedHex?.length || 'null');
+          // Check which method UniSat exposes
+          const hasSignPsbts = typeof unisat.signPsbts === 'function';
+          const hasSignPsbt = typeof unisat.signPsbt === 'function';
+          console.log('[WalletContext] UniSat: hasSignPsbts:', hasSignPsbts, 'hasSignPsbt:', hasSignPsbt);
+
+          // JOURNAL (2026-03-03): Added 60-second timeout to detect hanging wallet prompts.
+          // If UniSat doesn't respond (popup blocked, extension crashed, etc.), we timeout
+          // rather than hanging indefinitely.
+          const signWithTimeout = async (signFn: () => Promise<any>, method: string): Promise<any> => {
+            return Promise.race([
+              signFn(),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(
+                  `UniSat ${method} timed out after 60s. ` +
+                  'Check if: (1) popup blocker is active, (2) UniSat extension icon has pending request, ' +
+                  '(3) wallet is locked, (4) popup opened behind browser window.'
+                )), 60000)
+              ),
+            ]);
+          };
+
+          if (hasSignPsbts) {
+            // Use SDK-style signPsbts (array format)
+            // toSignInputs is a flat array (same for all PSBTs in the batch)
+            // JOURNAL (2026-03-03): Use autoFinalized: true for UniSat - it handles taproot
+            // finalization internally. With autoFinalized: false, we get "No tapleaf script
+            // signature provided" error during our manual finalizeAllInputs() call.
+            console.log('[WalletContext] UniSat: calling signPsbts (array format, autoFinalized: true)...');
+            console.log('[WalletContext] UniSat: Please check for popup or extension icon notification');
+            const signedHexArray = await signWithTimeout(
+              () => unisat.signPsbts([patchedPsbtHex], {
+                autoFinalized: true,  // Let UniSat finalize taproot inputs
+                toSignInputs,  // Flat array, applies to all PSBTs
+              }),
+              'signPsbts'
+            );
+            console.log('[WalletContext] UniSat: signPsbts returned:', signedHexArray?.length, 'results');
+            signedHex = signedHexArray?.[0] || null;
+          } else if (hasSignPsbt) {
+            // Fall back to singular signPsbt
+            console.log('[WalletContext] UniSat: calling signPsbt (single format, autoFinalized: true)...');
+            console.log('[WalletContext] UniSat: Please check for popup or extension icon notification');
+            signedHex = await signWithTimeout(
+              () => unisat.signPsbt(patchedPsbtHex, {
+                autoFinalized: true,  // Let UniSat finalize taproot inputs
+                toSignInputs,
+              }),
+              'signPsbt'
+            );
+          } else {
+            throw new Error('UniSat wallet does not expose signPsbt or signPsbts');
+          }
+          console.log('[WalletContext] UniSat: sign result type:', typeof signedHex);
+          console.log('[WalletContext] UniSat: sign result length:', signedHex?.length || 'null');
         } catch (unisatError: any) {
-          console.error('[WalletContext] UniSat signPsbt threw error:', unisatError);
+          console.error('[WalletContext] UniSat sign threw error:', unisatError);
           console.error('[WalletContext] Error message:', unisatError?.message);
           console.error('[WalletContext] Error code:', unisatError?.code);
           throw new Error(`UniSat signing failed: ${unisatError?.message || unisatError}`);

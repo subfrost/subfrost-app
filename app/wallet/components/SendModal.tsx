@@ -46,10 +46,17 @@
  * - Use `injectRedeemScripts()` from lib/psbt-patching.ts before signing
  * - Direct signing call via `signTaprootPsbt()` includes Xverse bypass
  *
- * **UniSat Wallet:**
+ * **UniSat Wallet (2026-03-03 — VERIFIED WORKING):**
+ * - Verified tx: 81b3d4d2c04e163c0ba791963b7569eaa2196814b4d3a5afa8d62719d0a3df69
  * - Single-address wallet — user chooses Taproot OR SegWit in settings
  * - Code handles: `primaryAddress = taprootAddress || segwitAddress`
  * - Don't require both addresses — check for at least one
+ * - CRITICAL PITFALLS (see WalletContext.tsx for full documentation):
+ *   1. SDK adapter returns null → use direct window.unisat bypass
+ *   2. toSignInputs MUST have `address` field for each input
+ *   3. Use signPsbts (plural) with array format (SDK pattern)
+ *   4. Use autoFinalized: true for taproot inputs
+ *   5. PSBT may be pre-finalized — use smart extraction pattern
  *
  * **OKX Wallet:**
  * - Similar to UniSat — single-address mode
@@ -820,9 +827,26 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         setStep('broadcasting');
 
         // Finalize and extract transaction
+        // JOURNAL (2026-03-03): UniSat with autoFinalized: true returns already-finalized PSBTs.
+        // Calling finalizeAllInputs() on a finalized PSBT throws an error.
+        // We try to extract directly first; if that fails, try finalizing.
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-        signedPsbt.finalizeAllInputs();
-        const txObj = signedPsbt.extractTransaction();
+        let txObj;
+        try {
+          // Try extracting directly (works if already finalized)
+          txObj = signedPsbt.extractTransaction();
+          console.log('[SendModal] PSBT was already finalized by wallet');
+        } catch (extractError: any) {
+          // If extraction fails, try finalizing first
+          console.log('[SendModal] PSBT not finalized yet, finalizing...', extractError.message);
+          try {
+            signedPsbt.finalizeAllInputs();
+            txObj = signedPsbt.extractTransaction();
+          } catch (finalizeError: any) {
+            console.error('[SendModal] Failed to finalize PSBT:', finalizeError);
+            throw new Error(`Failed to finalize transaction: ${finalizeError.message}`);
+          }
+        }
         const txHex = txObj.toHex();
         const computedTxid = txObj.getId();
 
@@ -1117,10 +1141,23 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       setStep('broadcasting');
 
       // Parse the signed PSBT, finalize, and extract the raw transaction
+      // JOURNAL (2026-03-03): UniSat with autoFinalized: true returns already-finalized PSBTs.
+      // Try to extract directly first; if that fails, try finalizing.
       const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-      signedPsbt.finalizeAllInputs();
-
-      const tx = signedPsbt.extractTransaction();
+      let tx;
+      try {
+        tx = signedPsbt.extractTransaction();
+        console.log('[SendModal] Alkane PSBT was already finalized by wallet');
+      } catch (extractError: any) {
+        console.log('[SendModal] Alkane PSBT not finalized yet, finalizing...', extractError.message);
+        try {
+          signedPsbt.finalizeAllInputs();
+          tx = signedPsbt.extractTransaction();
+        } catch (finalizeError: any) {
+          console.error('[SendModal] Failed to finalize alkane PSBT:', finalizeError);
+          throw new Error(`Failed to finalize transaction: ${finalizeError.message}`);
+        }
+      }
       const txHex = tx.toHex();
       const computedTxid = tx.getId();
 
