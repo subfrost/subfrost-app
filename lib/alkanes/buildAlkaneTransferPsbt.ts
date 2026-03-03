@@ -43,7 +43,12 @@ import * as bitcoin from 'bitcoinjs-lib';
 // @ts-expect-error - ProtoStone and encodeRunestoneProtostone are in dist/index.js but not in index.d.ts
 import { ProtoStone, encodeRunestoneProtostone } from '@alkanes/ts-sdk';
 
-const DUST_VALUE = 546;
+// JOURNAL (2026-03-03): Increased from 546 to 600 sats to fix broadcast failures.
+// Error: "dust, tx with dust output must be 0-fee" (JSON-RPC code -26)
+// P2TR dust threshold is ~330 sats (100.5 vbytes × 3.3 sat/vB), P2WPKH is 294 sats,
+// but P2PKH was 546 sats. Using 600 sats provides margin for different node policies.
+// Some mining pools may have higher dust relay fees (e.g., 5 sat/vB).
+const DUST_VALUE = 600;
 const PROTOCOL_TAG_ALKANES = 1n;
 
 export interface BuildAlkaneTransferParams {

@@ -269,6 +269,7 @@ const zh: Record<string, string> = {
   'send.invalidAddress': '\u65e0\u6548\u7684\u6bd4\u7279\u5e01\u5730\u5740',
   'send.invalidAmount': '\u65e0\u6548\u7684\u91d1\u989d',
   'send.invalidFeeRate': '\u65e0\u6548\u7684\u8d39\u7387',
+  'send.amountBelowDust': '\u91d1\u989d\u5fc5\u987b\u81f3\u5c11\u4e3a {threshold} \u8270\uff08\u5c18\u57c3\u9608\u503c\uff09',
   'send.insufficientFunds': '\u4f59\u989d\u4e0d\u8db3',
   'send.highFeeWarning': '\u9ad8\u8d39\u7528\u8b66\u544a\uff01',
   'send.highFeeDescription': '\u6b64\u4ea4\u6613\u8d39\u7528\u5f02\u5e38\u9ad8 ({percent}%)\u3002\u8bf7\u4ed4\u7ec6\u68c0\u67e5\u3002',

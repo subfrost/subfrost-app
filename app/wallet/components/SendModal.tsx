@@ -517,6 +517,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         return;
       }
 
+      // JOURNAL (2026-03-03): Bitcoin Core rejects outputs below dust threshold (546 sats)
+      // with error "dust, tx with dust output must be 0-fee". Validate before building PSBT.
+      if (amountSats < DUST_THRESHOLD) {
+        setError(t('send.amountBelowDust', { threshold: DUST_THRESHOLD }));
+        return;
+      }
+
       if (feeRate < 1) {
         setError(t('send.invalidFeeRate'));
         return;

@@ -1189,3 +1189,28 @@ if (unisat && browserWallet?.info?.id === 'unisat') {
 - The SDK adapter path involves multiple layers of abstraction that can fail silently
 - Direct calls give us explicit control over error handling and null checking
 - OYL wallet still uses the SDK adapter (direct calls were tried but failed with validation errors)
+
+### 2026-03-03: Alkane Transfer Dust Output Broadcast Failure — FIXED
+
+**Symptom:** Alkane transfers fail to broadcast with error: `"dust, tx with dust output must be 0-fee"` (JSON-RPC code -26)
+
+**Root cause:** The alkane transfer PSBT creates dust outputs at 546 sats for sender change (v0) and recipient (v1). Some Bitcoin nodes reject outputs below their configured dust threshold. While the P2TR theoretical dust threshold is ~330 sats, mining pools and relay nodes may use higher values.
+
+**Fix:** Increased `DUST_VALUE` from 546 to 600 sats in `lib/alkanes/buildAlkaneTransferPsbt.ts`
+
+```typescript
+// Before
+const DUST_VALUE = 546;
+
+// After
+const DUST_VALUE = 600;
+```
+
+**Why 600 sats:**
+- P2TR theoretical minimum: ~330 sats (100.5 vbytes × 3.3 sat/vB)
+- P2WPKH standard: 294 sats
+- P2PKH legacy: 546 sats
+- 600 sats provides margin for nodes with higher dust relay fees (e.g., 5 sat/vB)
+
+**Files changed:**
+- `lib/alkanes/buildAlkaneTransferPsbt.ts` — Increased DUST_VALUE from 546 to 600

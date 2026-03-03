@@ -272,6 +272,7 @@ const en: Record<string, string> = {
   'send.invalidAddress': 'Invalid Bitcoin address',
   'send.invalidAmount': 'Invalid amount',
   'send.invalidFeeRate': 'Invalid fee rate',
+  'send.amountBelowDust': 'Amount must be at least {threshold} sats (dust threshold)',
   'send.insufficientFunds': 'Insufficient funds',
   'send.highFeeWarning': 'High Fee Warning!',
   'send.highFeeDescription': 'This transaction has unusually high fees ({percent}%). Please review carefully.',
