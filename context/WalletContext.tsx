@@ -1946,10 +1946,26 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       console.log(`[WalletContext][OYL-DEBUG] walletAdapter type: ${walletAdapter?.constructor?.name || typeof walletAdapter}`);
       console.log(`[WalletContext][OYL-DEBUG] Calling walletAdapter.signPsbt() with auto_finalized: false`);
 
+      // JOURNAL (2026-03-03): Added 60-second timeout for OYL/OKX signing to match UniSat.
+      // Without timeout, a stuck popup or crashed extension causes indefinite hang.
+      const SIGNING_TIMEOUT_MS = 60000;
+      const signWithTimeout = async (signFn: () => Promise<string>): Promise<string> => {
+        return Promise.race([
+          signFn(),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              `${walletId} signing timed out after 60s. ` +
+              'Check if: (1) popup blocker is active, (2) wallet extension icon has pending request, ' +
+              '(3) wallet is locked, (4) popup opened behind browser window.'
+            )), SIGNING_TIMEOUT_MS)
+          ),
+        ]);
+      };
+
       let signedHex: string;
       try {
         const signStartTime = Date.now();
-        signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
+        signedHex = await signWithTimeout(() => walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false }));
         const signDuration = Date.now() - signStartTime;
         console.log(`[WalletContext][OYL-DEBUG] signPsbt SUCCESS in ${signDuration}ms`);
         console.log(`[WalletContext][OYL-DEBUG] signedHex length: ${signedHex?.length || 'undefined'}`);
@@ -2005,10 +2021,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
                 console.log(`[WalletContext][OYL-DEBUG] isConnected() AFTER reconnect: ${connectedAfter}`);
               }
 
-              // Retry signing after reconnection
+              // Retry signing after reconnection (with timeout)
               console.log('[WalletContext][OYL-DEBUG] Retrying walletAdapter.signPsbt() after reconnection...');
               const retryStartTime = Date.now();
-              signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
+              signedHex = await signWithTimeout(() => walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false }));
               const retryDuration = Date.now() - retryStartTime;
               console.log(`[WalletContext][OYL-DEBUG] RETRY signPsbt SUCCESS in ${retryDuration}ms`);
               console.log(`[WalletContext][OYL-DEBUG] signedHex length: ${signedHex?.length || 'undefined'}`);
