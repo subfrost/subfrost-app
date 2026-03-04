@@ -127,7 +127,7 @@ export async function signWithXverse(
 
   console.log('[browserWalletSigning] Xverse: signInputs:', JSON.stringify(signInputs));
 
-  const response = await withTimeout(
+  const response: any = await withTimeout(
     xverse.request('signPsbt', {
       psbt: psbt.toBase64(),
       signInputs,
@@ -188,7 +188,7 @@ export async function signWithUnisat(
 
   if (hasSignPsbts) {
     console.log('[browserWalletSigning] UniSat: calling signPsbts (autoFinalized: true)...');
-    const signedHexArray = await withTimeout(
+    const signedHexArray: string[] = await withTimeout(
       unisat.signPsbts([psbtHex], {
         autoFinalized: true, // Let UniSat finalize taproot inputs
         toSignInputs,
@@ -244,7 +244,7 @@ export async function signWithOyl(
 
   const signWithRetry = async (): Promise<string> => {
     try {
-      const signedHex = await withTimeout(
+      const signedHex: string = await withTimeout(
         walletAdapter.signPsbt(psbtHex, { auto_finalized: false }),
         SIGNING_TIMEOUT_MS,
         'OYL'
@@ -307,7 +307,7 @@ export async function signWithOkx(
   const psbtHex = psbt.toHex();
   console.log('[browserWalletSigning] OKX: PSBT hex length:', psbtHex.length);
 
-  const signedHex = await withTimeout(
+  const signedHex: string = await withTimeout(
     walletAdapter.signPsbt(psbtHex, { auto_finalized: false }),
     SIGNING_TIMEOUT_MS,
     'OKX'
