@@ -29,9 +29,13 @@ export async function GET(request: NextRequest) {
     const result = { amount: allocation?.amount ?? 0 };
     await cache.set(cacheKey, result, CACHE_TTL);
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    });
   } catch (error) {
     console.error('[API /fuel] Error:', error);
-    return NextResponse.json({ amount: 0 });
+    return NextResponse.json({ amount: 0 }, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    });
   }
 }
