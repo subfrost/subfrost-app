@@ -101,6 +101,8 @@ export type WrapSwapTransactionData = {
 };
 
 export function useWrapSwapMutation() {
+  throw new Error('DEPRECATED: useWrapSwapMutation does not work. BTC→Token swaps use the two-step flow in SwapShell.tsx (wrapMutation → mine → swapMutation). See header comment.');
+
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();

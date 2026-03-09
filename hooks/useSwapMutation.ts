@@ -421,6 +421,12 @@ export function useSwapMutation() {
           toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
+          // UTXO protection strategy for inscriptions:
+          // - 'split': Protects inscriptions by splitting UTXOs (default when detection works)
+          // - 'burn': Treats all UTXOs as spendable, ignoring inscriptions
+          // Currently 'burn' because the "Ignore Ordinals" setting is hardcoded enabled
+          // (ord backend still syncing). When inscription detection is available,
+          // this should conditionally use 'split' based on user's WalletSettings toggle.
           ordinalsStrategy: 'burn',
         });
 

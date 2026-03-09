@@ -98,6 +98,8 @@ export type SwapUnwrapTransactionData = {
 };
 
 export function useSwapUnwrapMutation() {
+  throw new Error('DEPRECATED: useSwapUnwrapMutation does not work. Token→BTC swaps use the two-step flow in SwapShell.tsx (swapMutation → mine → unwrapMutation). See header comment.');
+
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();

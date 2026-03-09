@@ -60,7 +60,8 @@ import {
   JsWalletAdapter,
 } from '@alkanes/ts-sdk';
 import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/constants/wallets';
-import { patchTapInternalKeys } from '@/lib/psbt-patching';
+// PSBT patching is now handled by ts-sdk wallet adapters (adapter.ts)
+// import { patchTapInternalKeys } from '@/lib/psbt-patching';
 
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
@@ -1501,25 +1502,13 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   // Sign PSBT - supports both keystore and browser wallets
   // Uses SDK wallet adapters for all browser wallet signing
   const signPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
-    // For browser wallets - use the SDK adapter which handles all wallet-specific logic
+    // For browser wallets — ts-sdk adapter handles tapInternalKey patching, input scripts,
+    // redeemScripts, wallet-specific protocols, timeouts, and reconnection internally
     if (walletAdapter && walletType === 'browser') {
-      // Patch tapInternalKey on P2TR inputs before signing (same fix as signTaprootPsbt).
-      // Without this, UniSat/other wallets can't match inputs to their connected account.
-      const bitcoin = await import('bitcoinjs-lib');
-      const psbt = bitcoin.Psbt.fromBase64(psbtBase64);
-      const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
-      if (taprootPubKey) {
-        const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
-        patchTapInternalKeys(psbt, xOnlyHex);
-      }
-      const psbtHex = psbt.toHex();
-
+      const psbtHex = Buffer.from(psbtBase64, 'base64').toString('hex');
       console.log('[WalletContext] Signing PSBT with SDK adapter');
       const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
-
-      // Convert signed hex back to base64
-      const signedBuffer = Buffer.from(signedHex, 'hex');
-      return signedBuffer.toString('base64');
+      return Buffer.from(signedHex, 'hex').toString('base64');
     }
 
     // For keystore wallets
@@ -1564,492 +1553,37 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   // tapInternalKey, and if it doesn't match the connected account, all inputs are silently
   // skipped → infinite loading spinner in the UniSat popup. Same issue affected Xverse
   // ("No taproot scripts signed"). Now fixed for all browser wallets uniformly.
+  // ARCHITECTURE NOTE (2026-03-09): All wallet-specific signing logic (Xverse signInputs
+  // mapping, UniSat autoFinalized:true, OYL reconnection, PSBT patching pipeline) is now
+  // handled by the ts-sdk wallet adapters in @alkanes/ts-sdk/browser-wallets/adapter.ts.
+  // This function delegates to walletAdapter.signPsbt() for all browser wallets.
+  // See adapter.ts: XverseAdapter, UnisatAdapter, OylAdapter, OkxAdapter, etc.
   const signTaprootPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
-    // For browser wallets - handle signing based on wallet type
+    // For browser wallets — delegate to ts-sdk adapter which handles:
+    // 1. tapInternalKey patching (dummy → user key)
+    // 2. Input witnessUtxo script patching (dummy → user scripts)
+    // 3. P2SH redeemScript injection (Xverse)
+    // 4. Wallet-specific signing protocols (Xverse signInputs, UniSat autoFinalized, etc.)
+    // 5. OYL auto-reconnection on session expiry
+    // 6. 60-second timeout for all wallets
     if (walletAdapter && walletType === 'browser') {
-      const bitcoin = await import('bitcoinjs-lib');
-      const btcNetwork = (() => {
-        switch (network) {
-          case 'mainnet': return bitcoin.networks.bitcoin;
-          case 'testnet': case 'signet': return bitcoin.networks.testnet;
-          default: return bitcoin.networks.regtest;
-        }
-      })();
-
-      // Parse the PSBT so we can patch tapInternalKey for all browser wallets
-      const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-
-      // Patch tapInternalKey on taproot inputs to the user's actual x-only public key.
-      // The SDK builds PSBTs with a dummy wallet's tapInternalKey (from AlkanesSDKContext's
-      // walletCreate()). Wallets validate tapInternalKey matches their own key before signing:
-      // - Xverse: "No taproot scripts signed" error
-      // - UniSat: silently skips unmatched inputs → infinite loading spinner
-      const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
-      if (taprootPubKey) {
-        const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
-        const patchedCount = patchTapInternalKeys(psbt, xOnlyHex);
-        if (patchedCount > 0) {
-          console.log(`[WalletContext] Patched tapInternalKey on ${patchedCount} input(s) to user x-only: ${xOnlyHex}`);
-        }
-      }
-
-      // ============================================================================
-      // Xverse Signing (2026-03-01)
-      // ============================================================================
-      // Xverse uses the sats-connect protocol and requires a signInputs mapping
-      // that tells the wallet which address should sign which inputs.
-      //
-      // CRITICAL: The PSBT must have CORRECT addresses in input witnessUtxo scripts.
-      // If patchPsbtForBrowserWallet() was applied to a PSBT that already had correct
-      // addresses from the SDK, it will CORRUPT the scripts and break signInputs mapping.
-      //
-      // When working correctly:
-      // - Input 0 (segwit UTXO): decoded address matches paymentAddr → payIdx
-      // - Input 1 (taproot token UTXO): decoded address matches ordinalsAddr → ordIdx
-      // - signInputs = { "bc1q...": [0], "bc1p...": [1] }
-      //
-      // When corrupted (PSBT patching bug):
-      // - Both inputs decode to same address type
-      // - signInputs only has one entry → Xverse hangs waiting for missing signatures
-      //
-      // Verified working TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
-      // ============================================================================
-      const xverse = (window as any).XverseProviders?.BitcoinProvider;
-      if (xverse && browserWallet?.info?.id === 'xverse') {
-        console.log('[WalletContext] Xverse: signing PSBT directly (bypassing SDK adapter)');
-
-        // Build signInputs: map each input to the correct signing address
-        const ordinalsAddr = browserWallet.address;
-        // paymentAddress runtime getter on ConnectedWallet returns undefined for some
-        // wallet types. Fall back to browserWalletAddresses which is populated from
-        // the wallet connect response (getAddress / sats-connect).
-        const paymentAddr: string | undefined =
-          (browserWallet as any).paymentAddress ||
-          browserWalletAddresses?.nativeSegwit?.address;
-        console.log('[WalletContext] Ordinals:', ordinalsAddr, '| Payment:', paymentAddr);
-
-        const signInputs: Record<string, number[]> = {};
-        const ordIdx: number[] = [];
-        const payIdx: number[] = [];
-
-        for (let i = 0; i < psbt.data.inputs.length; i++) {
-          const input = psbt.data.inputs[i];
-          console.log(`[WalletContext] Input ${i}: witnessUtxo exists:`, !!input.witnessUtxo);
-          if (!input.witnessUtxo) {
-            // No witnessUtxo — assume payment input
-            console.log(`[WalletContext] Input ${i}: No witnessUtxo, assigning to payment`);
-            if (paymentAddr) payIdx.push(i);
-            else ordIdx.push(i);
-            continue;
-          }
-          try {
-            const scriptHex = Buffer.from(input.witnessUtxo.script).toString('hex');
-            console.log(`[WalletContext] Input ${i}: script hex:`, scriptHex);
-            const addr = bitcoin.address.fromOutputScript(
-              Buffer.from(input.witnessUtxo.script), btcNetwork
-            );
-            console.log(`[WalletContext] Input ${i}: Decoded address:`, addr);
-            console.log(`[WalletContext] Input ${i}: Comparing to ordinalsAddr:`, ordinalsAddr, '| match:', addr === ordinalsAddr);
-            console.log(`[WalletContext] Input ${i}: Comparing to paymentAddr:`, paymentAddr, '| match:', addr === paymentAddr);
-            if (paymentAddr && addr === paymentAddr) {
-              console.log(`[WalletContext] Input ${i}: → Assigning to PAYMENT`);
-              payIdx.push(i);
-            } else if (addr === ordinalsAddr) {
-              console.log(`[WalletContext] Input ${i}: → Assigning to ORDINALS`);
-              ordIdx.push(i);
-            } else {
-              // Heuristic: P2SH (3...) or P2WPKH (bc1q...) → payment; else → ordinals
-              const isSegwit = addr.startsWith('3') || addr.toLowerCase().startsWith('bc1q');
-              console.log(`[WalletContext] Input ${i}: Using heuristic, isSegwit:`, isSegwit);
-              if (isSegwit && paymentAddr) {
-                console.log(`[WalletContext] Input ${i}: → Assigning to PAYMENT (heuristic)`);
-                payIdx.push(i);
-              } else {
-                console.log(`[WalletContext] Input ${i}: → Assigning to ORDINALS (heuristic)`);
-                ordIdx.push(i);
-              }
-            }
-          } catch (e) {
-            console.error(`[WalletContext] Input ${i}: Failed to decode address:`, e);
-            ordIdx.push(i);
-          }
-        }
-
-        if (ordIdx.length > 0) signInputs[ordinalsAddr] = ordIdx;
-        if (paymentAddr && payIdx.length > 0) signInputs[paymentAddr] = payIdx;
-
-        console.log('[WalletContext] Xverse signInputs:', JSON.stringify(signInputs));
-
-        // Debug: Log PSBT details before signing
-        console.log('[WalletContext] PSBT to sign (base64 length):', psbt.toBase64().length);
-        console.log('[WalletContext] PSBT input count:', psbt.data.inputs.length);
-        console.log('[WalletContext] Calling xverse.request("signPsbt")...');
-
-        let response;
-        try {
-          response = await xverse.request('signPsbt', {
-            psbt: psbt.toBase64(),
-            signInputs,
-            broadcast: false,
-          });
-          console.log('[WalletContext] Xverse response:', JSON.stringify(response));
-        } catch (xverseError: any) {
-          console.error('[WalletContext] Xverse signPsbt threw error:', xverseError);
-          console.error('[WalletContext] Error message:', xverseError?.message);
-          console.error('[WalletContext] Error name:', xverseError?.name);
-          console.error('[WalletContext] Full error:', JSON.stringify(xverseError, Object.getOwnPropertyNames(xverseError)));
-          throw xverseError;
-        }
-
-        // Xverse returns either:
-        //   - SIP format: { status: "success", result: { psbt: "..." } }
-        //   - JSON-RPC format: { jsonrpc: "2.0", result: { psbt: "..." } }
-        // Handle both response formats.
-        const signedPsbtBase64 = response.result?.psbt;
-        if (signedPsbtBase64) {
-          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64);
-          return signedPsbt.toBase64();
-        }
-
-        // No signed PSBT in response — surface the full error
-        const errDetail = response.error
-          ? JSON.stringify(response.error)
-          : JSON.stringify(response);
-        throw new Error(`Xverse signing failed: ${errDetail}`);
-      }
-
-      // ============================================================================
-      // UNISAT WALLET DIRECT SIGNING (2026-03-03)
-      // ============================================================================
-      // VERIFIED WORKING: Transaction 81b3d4d2c04e163c0ba791963b7569eaa2196814b4d3a5afa8d62719d0a3df69
-      //
-      // PITFALLS ENCOUNTERED (in order of discovery):
-      //
-      // 1. SDK ADAPTER NULL ERROR
-      //    - Error: "Cannot read properties of null (reading '0')"
-      //    - Cause: SDK's walletAdapter.signPsbt() returns null in some cases
-      //    - Fix: Direct window.unisat bypass (similar to Xverse pattern)
-      //
-      // 2. MISSING ADDRESS IN toSignInputs
-      //    - Error: "no address or public key in toSignInput"
-      //    - Cause: Each toSignInputs entry MUST have `address` or `publicKey`
-      //    - Fix: Always include `address: unisatAddress` in each entry
-      //
-      // 3. NO POPUP APPEARING
-      //    - Symptom: signPsbt called but no wallet popup
-      //    - Cause: UniSat has BOTH signPsbt AND signPsbts methods
-      //    - Fix: Check which method exists, prefer signPsbts (SDK pattern)
-      //
-      // 4. TAPROOT FINALIZATION FAILURE
-      //    - Error: "No tapleaf script signature provided"
-      //    - Cause: autoFinalized: false returns unfinalized taproot inputs
-      //    - Fix: Use autoFinalized: true for UniSat (it handles taproot internally)
-      //
-      // 5. DOUBLE FINALIZATION ERROR
-      //    - Error: "Input has already been finalized"
-      //    - Cause: autoFinalized: true returns already-finalized PSBT
-      //    - Fix: Try extractTransaction() first, fallback to finalizeAllInputs()
-      //
-      // UniSat API Reference:
-      // - signPsbt(psbtHex, options): Signs single PSBT, returns hex
-      // - signPsbts(psbtHexArray, options): Signs multiple PSBTs, returns hex[]
-      // - Options: { autoFinalized: boolean, toSignInputs: [{index, address}] }
-      //
-      // CRITICAL: UniSat is SINGLE-ADDRESS — all inputs use the same address
-      // ============================================================================
-      const unisat = (window as any).unisat;
-      if (unisat && browserWallet?.info?.id === 'unisat') {
-        console.log('[WalletContext] UniSat: signing PSBT directly (bypassing SDK adapter)');
-
-        const patchedPsbtHex = psbt.toHex();
-        console.log('[WalletContext] UniSat: PSBT hex length:', patchedPsbtHex.length);
-        console.log('[WalletContext] UniSat: Input count:', psbt.data.inputs.length);
-
-        // Get the connected UniSat address - required for toSignInputs
-        // UniSat is a single-address wallet, so all inputs that can be signed use this address
-        const unisatAddress = browserWallet.address;
-        console.log('[WalletContext] UniSat: connected address:', unisatAddress);
-
-        // Build toSignInputs - tell UniSat which inputs to sign
-        // Each entry must have index + address (or publicKey)
-        // UniSat will only sign inputs matching its connected address
-        const toSignInputs = psbt.data.inputs.map((_, index) => ({
-          index,
-          address: unisatAddress,
-        }));
-
-        console.log('[WalletContext] UniSat: toSignInputs:', JSON.stringify(toSignInputs));
-
-        // JOURNAL (2026-03-03): UniSat has both signPsbt (singular) and signPsbts (plural).
-        // The SDK uses signPsbts which takes an array and returns an array.
-        // Try signPsbts first (SDK method), fall back to signPsbt if unavailable.
-        let signedHex: string | null = null;
-        try {
-          // Check which method UniSat exposes
-          const hasSignPsbts = typeof unisat.signPsbts === 'function';
-          const hasSignPsbt = typeof unisat.signPsbt === 'function';
-          console.log('[WalletContext] UniSat: hasSignPsbts:', hasSignPsbts, 'hasSignPsbt:', hasSignPsbt);
-
-          // JOURNAL (2026-03-03): Added 60-second timeout to detect hanging wallet prompts.
-          // If UniSat doesn't respond (popup blocked, extension crashed, etc.), we timeout
-          // rather than hanging indefinitely.
-          const signWithTimeout = async (signFn: () => Promise<any>, method: string): Promise<any> => {
-            return Promise.race([
-              signFn(),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error(
-                  `UniSat ${method} timed out after 60s. ` +
-                  'Check if: (1) popup blocker is active, (2) UniSat extension icon has pending request, ' +
-                  '(3) wallet is locked, (4) popup opened behind browser window.'
-                )), 60000)
-              ),
-            ]);
-          };
-
-          if (hasSignPsbts) {
-            // Use SDK-style signPsbts (array format)
-            // toSignInputs is a flat array (same for all PSBTs in the batch)
-            // JOURNAL (2026-03-03): Use autoFinalized: true for UniSat - it handles taproot
-            // finalization internally. With autoFinalized: false, we get "No tapleaf script
-            // signature provided" error during our manual finalizeAllInputs() call.
-            console.log('[WalletContext] UniSat: calling signPsbts (array format, autoFinalized: true)...');
-            console.log('[WalletContext] UniSat: Please check for popup or extension icon notification');
-            const signedHexArray = await signWithTimeout(
-              () => unisat.signPsbts([patchedPsbtHex], {
-                autoFinalized: true,  // Let UniSat finalize taproot inputs
-                toSignInputs,  // Flat array, applies to all PSBTs
-              }),
-              'signPsbts'
-            );
-            console.log('[WalletContext] UniSat: signPsbts returned:', signedHexArray?.length, 'results');
-            signedHex = signedHexArray?.[0] || null;
-          } else if (hasSignPsbt) {
-            // Fall back to singular signPsbt
-            console.log('[WalletContext] UniSat: calling signPsbt (single format, autoFinalized: true)...');
-            console.log('[WalletContext] UniSat: Please check for popup or extension icon notification');
-            signedHex = await signWithTimeout(
-              () => unisat.signPsbt(patchedPsbtHex, {
-                autoFinalized: true,  // Let UniSat finalize taproot inputs
-                toSignInputs,
-              }),
-              'signPsbt'
-            );
-          } else {
-            throw new Error('UniSat wallet does not expose signPsbt or signPsbts');
-          }
-          console.log('[WalletContext] UniSat: sign result type:', typeof signedHex);
-          console.log('[WalletContext] UniSat: sign result length:', signedHex?.length || 'null');
-        } catch (unisatError: any) {
-          console.error('[WalletContext] UniSat sign threw error:', unisatError);
-          console.error('[WalletContext] Error message:', unisatError?.message);
-          console.error('[WalletContext] Error code:', unisatError?.code);
-          throw new Error(`UniSat signing failed: ${unisatError?.message || unisatError}`);
-        }
-
-        // UniSat can return null if user cancels or something fails internally
-        if (!signedHex) {
-          throw new Error('UniSat signing was cancelled or returned empty result');
-        }
-
-        // Convert hex to base64 for return
-        const signedBuffer = Buffer.from(signedHex, 'hex');
-        return signedBuffer.toString('base64');
-      }
-
-      // For all other browser wallets (OYL, OKX, etc.): use SDK adapter
-      // JOURNAL ENTRY (2026-02-20): Direct window.oyl.signPsbt() calls fail with validation errors.
-      // The SDK adapter (walletAdapter.signPsbt) works correctly for all wallets including OYL.
-      // Successful DIESEL minting proved the SDK adapter path works.
-      // Pass the patched PSBT (with corrected tapInternalKey) as HEX
-      // JOURNAL ENTRY (2026-02-20): The SDK's walletAdapter.signPsbt() expects HEX format,
-      // not base64. It validates the input is valid hex before calling the wallet extension.
-      // JOURNAL ENTRY (2026-02-28): OYL wallet requires explicit connection check before signing.
-      // If "Site origin must be connected first" error occurs, the wallet needs to be reconnected.
-      // JOURNAL ENTRY (2026-03-01): REMOVED pre-emptive isConnected() check.
-      // OYL's isConnected() returns false even after successful getAddresses() - it tracks
-      // a different concept (persistent site approval) vs. session availability. The SDK's
-      // OylAdapter doesn't use isConnected() at all - it just calls signPsbt() directly.
-      // Let the SDK try to sign and handle errors gracefully instead of blocking users.
-      const patchedPsbtHex = psbt.toHex();
+      const psbtBuffer = Buffer.from(psbtBase64, 'base64');
+      const psbtHex = psbtBuffer.toString('hex');
       const walletId = browserWallet?.info?.id || 'unknown';
 
-      // ============================================================================
-      // OYL WALLET BEHAVIOR DOCUMENTATION (2026-03-01)
-      // ============================================================================
-      //
-      // VERIFIED WORKING: OYL wallet swaps work correctly as of 2026-03-01.
-      // Confirmed via txid: 0b2455ceef9c0f1fb8c09d37b08f667a656cac5e09e4d0cf01ddccc7b59aef43
-      //
-      // KEY INSIGHTS ABOUT OYL WALLET:
-      //
-      // 1. isConnected() RETURNS FALSE EVEN WHEN WORKING
-      //    OYL's isConnected() tracks persistent site approval, NOT session readiness.
-      //    Signing works even when isConnected() returns false.
-      //    DO NOT gate signing on isConnected() - it will block valid users.
-      //
-      // 2. OYL HAS NO connect() METHOD
-      //    Unlike other wallets, OYL doesn't expose a connect() method.
-      //    Connection is established implicitly via getAddresses().
-      //    Available methods: disconnect, isConnected, getNetwork, switchNetwork,
-      //    getAddresses, getBalance, signMessage, signPsbt, signPsbts, pushPsbt
-      //
-      // 3. MULTIPLE SIGNATURE POPUPS ARE EXPECTED
-      //    OYL shows one popup PER INPUT being signed in the transaction.
-      //    If a swap has 3 UTXOs (e.g., 1 segwit for fees + 2 taproot for tokens),
-      //    the user will see 3 separate signature popups. This is OYL's UX design,
-      //    NOT a bug in our code. Other wallets like Xverse batch all signatures
-      //    into a single popup.
-      //
-      // 4. AUTO-RECONNECTION ON "connected first" ERROR
-      //    If signing fails with "Site origin must be connected first", we
-      //    automatically call getAddresses() to re-establish connection, then retry.
-      //    This handles the case where OYL's session expired between operations.
-      //
-      // 5. SDK ADAPTER PATH IS CORRECT
-      //    We use walletAdapter.signPsbt() (from SDK), NOT direct window.oyl calls.
-      //    The SDK adapter handles format conversion and validation correctly.
-      //    Direct window.oyl.signPsbt() calls were tried and failed with validation errors.
-      //
-      // This logging section helps trace signing flow for debugging future issues.
-      // ============================================================================
+      console.log(`[WalletContext] Signing PSBT via ts-sdk adapter (wallet: ${walletId}, inputs: ${psbtHex.length / 2} bytes)`);
 
-      // Log 1: Entry point - what wallet and what PSBT
-      console.log(`[WalletContext][OYL-DEBUG] ===== SIGNING ATTEMPT START =====`);
-      console.log(`[WalletContext][OYL-DEBUG] walletId: "${walletId}"`);
-      console.log(`[WalletContext][OYL-DEBUG] PSBT hex length: ${patchedPsbtHex.length}`);
-      console.log(`[WalletContext][OYL-DEBUG] PSBT hex (first 100 chars): ${patchedPsbtHex.substring(0, 100)}...`);
-
-      // Log 2: Check OYL provider state BEFORE signing
-      if (walletId === 'oyl') {
-        const oylProvider = (window as any).oyl;
-        console.log(`[WalletContext][OYL-DEBUG] window.oyl exists: ${!!oylProvider}`);
-        if (oylProvider) {
-          console.log(`[WalletContext][OYL-DEBUG] window.oyl methods: ${Object.keys(oylProvider).join(', ')}`);
-          console.log(`[WalletContext][OYL-DEBUG] window.oyl.isConnected exists: ${typeof oylProvider.isConnected}`);
-          console.log(`[WalletContext][OYL-DEBUG] window.oyl.signPsbt exists: ${typeof oylProvider.signPsbt}`);
-          console.log(`[WalletContext][OYL-DEBUG] window.oyl.getAddresses exists: ${typeof oylProvider.getAddresses}`);
-          console.log(`[WalletContext][OYL-DEBUG] window.oyl.connect exists: ${typeof oylProvider.connect}`);
-
-          // Check isConnected if available
-          if (typeof oylProvider.isConnected === 'function') {
-            try {
-              const connected = await oylProvider.isConnected();
-              console.log(`[WalletContext][OYL-DEBUG] isConnected() returned: ${connected}`);
-            } catch (connCheckErr: any) {
-              console.log(`[WalletContext][OYL-DEBUG] isConnected() threw: ${connCheckErr?.message || connCheckErr}`);
-            }
-          }
-        }
-      }
-
-      // Log 3: What adapter is being used
-      console.log(`[WalletContext][OYL-DEBUG] walletAdapter type: ${walletAdapter?.constructor?.name || typeof walletAdapter}`);
-      console.log(`[WalletContext][OYL-DEBUG] Calling walletAdapter.signPsbt() with auto_finalized: false`);
-
-      // JOURNAL (2026-03-03): Added 60-second timeout for OYL/OKX signing to match UniSat.
-      // Without timeout, a stuck popup or crashed extension causes indefinite hang.
-      const SIGNING_TIMEOUT_MS = 60000;
-      const signWithTimeout = async (signFn: () => Promise<string>): Promise<string> => {
-        return Promise.race([
-          signFn(),
-          new Promise<string>((_, reject) =>
-            setTimeout(() => reject(new Error(
-              `${walletId} signing timed out after 60s. ` +
-              'Check if: (1) popup blocker is active, (2) wallet extension icon has pending request, ' +
-              '(3) wallet is locked, (4) popup opened behind browser window.'
-            )), SIGNING_TIMEOUT_MS)
-          ),
-        ]);
-      };
-
-      let signedHex: string;
       try {
-        const signStartTime = Date.now();
-        signedHex = await signWithTimeout(() => walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false }));
-        const signDuration = Date.now() - signStartTime;
-        console.log(`[WalletContext][OYL-DEBUG] signPsbt SUCCESS in ${signDuration}ms`);
-        console.log(`[WalletContext][OYL-DEBUG] signedHex length: ${signedHex?.length || 'undefined'}`);
-      } catch (e: any) {
-        // Log 4: Detailed error information
-        console.error(`[WalletContext][OYL-DEBUG] ===== signPsbt FAILED =====`);
-        console.error(`[WalletContext][OYL-DEBUG] Error type: ${e?.constructor?.name || typeof e}`);
-        console.error(`[WalletContext][OYL-DEBUG] Error message: "${e?.message}"`);
-        console.error(`[WalletContext][OYL-DEBUG] Error code: ${e?.code}`);
-        console.error(`[WalletContext][OYL-DEBUG] Full error object:`, e);
-        console.error(`[WalletContext][OYL-DEBUG] Error stack:`, e?.stack);
-
-        // JOURNAL ENTRY (2026-03-01): OYL wallet auto-reconnection
-        // OYL requires persistent site connection. If signing fails with "connected first",
-        // try to re-establish connection by calling getAddresses() and retry signing.
-        const errorMsg = e?.message || String(e);
-        const isConnectionError = errorMsg.includes('connected first') ||
-                                   errorMsg.includes('not connected') ||
-                                   errorMsg.includes('connection');
-
-        console.log(`[WalletContext][OYL-DEBUG] isConnectionError check: "${errorMsg}" includes 'connected first': ${errorMsg.includes('connected first')}`);
-        console.log(`[WalletContext][OYL-DEBUG] walletId === 'oyl': ${walletId === 'oyl'}`);
-
-        if (walletId === 'oyl' && isConnectionError) {
-          console.log('[WalletContext][OYL-DEBUG] Detected OYL connection error, attempting reconnection...');
-          const oylProvider = (window as any).oyl;
-
-          console.log(`[WalletContext][OYL-DEBUG] oylProvider exists for reconnect: ${!!oylProvider}`);
-          console.log(`[WalletContext][OYL-DEBUG] oylProvider.getAddresses exists: ${typeof oylProvider?.getAddresses}`);
-          console.log(`[WalletContext][OYL-DEBUG] oylProvider.connect exists: ${typeof oylProvider?.connect}`);
-
-          if (oylProvider?.getAddresses) {
-            try {
-              // Try calling connect() first if available (more explicit)
-              if (typeof oylProvider.connect === 'function') {
-                console.log('[WalletContext][OYL-DEBUG] Calling oylProvider.connect()...');
-                try {
-                  const connectResult = await oylProvider.connect();
-                  console.log('[WalletContext][OYL-DEBUG] connect() result:', connectResult);
-                } catch (connectErr: any) {
-                  console.log('[WalletContext][OYL-DEBUG] connect() error:', connectErr?.message || connectErr);
-                }
-              }
-
-              // Then call getAddresses() to ensure we're connected
-              console.log('[WalletContext][OYL-DEBUG] Calling oylProvider.getAddresses()...');
-              const addresses = await oylProvider.getAddresses();
-              console.log('[WalletContext][OYL-DEBUG] getAddresses() returned:', addresses);
-
-              // Check isConnected again after reconnection
-              if (typeof oylProvider.isConnected === 'function') {
-                const connectedAfter = await oylProvider.isConnected();
-                console.log(`[WalletContext][OYL-DEBUG] isConnected() AFTER reconnect: ${connectedAfter}`);
-              }
-
-              // Retry signing after reconnection (with timeout)
-              console.log('[WalletContext][OYL-DEBUG] Retrying walletAdapter.signPsbt() after reconnection...');
-              const retryStartTime = Date.now();
-              signedHex = await signWithTimeout(() => walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false }));
-              const retryDuration = Date.now() - retryStartTime;
-              console.log(`[WalletContext][OYL-DEBUG] RETRY signPsbt SUCCESS in ${retryDuration}ms`);
-              console.log(`[WalletContext][OYL-DEBUG] signedHex length: ${signedHex?.length || 'undefined'}`);
-            } catch (reconnectError: any) {
-              console.error('[WalletContext][OYL-DEBUG] ===== RECONNECTION FAILED =====');
-              console.error('[WalletContext][OYL-DEBUG] reconnectError type:', reconnectError?.constructor?.name);
-              console.error('[WalletContext][OYL-DEBUG] reconnectError message:', reconnectError?.message);
-              console.error('[WalletContext][OYL-DEBUG] reconnectError full:', reconnectError);
-              throw new Error('OYL wallet connection required. Please disconnect and reconnect your wallet, then try again.');
-            }
-          } else {
-            console.error('[WalletContext][OYL-DEBUG] No getAddresses method available for reconnection');
-            throw new Error('OYL wallet connection required. Please disconnect and reconnect your wallet, then try again.');
-          }
-        } else {
-          console.log(`[WalletContext][OYL-DEBUG] Not an OYL connection error, throwing original error`);
-          throw new Error(`${walletId} signing failed: ${e?.message || e}`);
+        const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+        if (!signedHex) {
+          throw new Error(`${walletId} signing returned empty result`);
         }
+        console.log(`[WalletContext] ${walletId} signing succeeded (${signedHex.length} hex chars)`);
+        return Buffer.from(signedHex, 'hex').toString('base64');
+      } catch (e: any) {
+        console.error(`[WalletContext] ${walletId} signing failed:`, e?.message || e);
+        throw new Error(`${walletId} signing failed: ${e?.message || e}`);
       }
-
-      console.log(`[WalletContext][OYL-DEBUG] ===== SIGNING ATTEMPT END (success) =====`);
-
-      // Wallet adapter returns hex, convert to base64 for return
-      const signedBuffer = Buffer.from(signedHex, 'hex');
-      return signedBuffer.toString('base64');
     }
 
     // For keystore wallets, use BIP86 derivation
