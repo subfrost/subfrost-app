@@ -23,8 +23,6 @@ import { useModalStore } from "@/stores/modals";
 import BigNumber from 'bignumber.js';
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
-import { useWrapSwapMutation } from "@/hooks/useWrapSwapMutation";
-import { useSwapUnwrapMutation } from "@/hooks/useSwapUnwrapMutation";
 import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
 import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
@@ -151,8 +149,6 @@ export default function SwapShell() {
   const swapMutation = useSwapMutation();
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
-  const wrapSwapMutation = useWrapSwapMutation();
-  const swapUnwrapMutation = useSwapUnwrapMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
   const removeLiquidityMutation = useRemoveLiquidityMutation();
   const { data: premiumData } = useFrbtcPremium();
