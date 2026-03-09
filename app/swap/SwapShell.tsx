@@ -813,9 +813,11 @@ export default function SwapShell() {
       return;
     }
 
-    // Token → BTC swap: One-click swap + unwrap in a single transaction
+    // Token → BTC swap: Two-step flow (swap Token→frBTC, then unwrap frBTC→BTC).
+    // Previously used useSwapUnwrapMutation (atomic single-tx), which had the same
+    // protostone pointer issue as useWrapSwapMutation — the swap cellpack's pointer=p2
+    // didn't deliver frBTC to the unwrap cellpack's incomingAlkanes.
     if (isTokenToBtcSwap) {
-      // We need a quote with poolId for the swap portion
       if (!quote || !quote.poolId) {
         console.error('[SWAP] Token → BTC swap requires quote with poolId');
         window.alert('Unable to find pool for this swap. Please try again.');
@@ -823,22 +825,100 @@ export default function SwapShell() {
       }
 
       try {
-        console.log('[SWAP] Executing one-click', fromToken.symbol, '→ BTC swap');
-        const sellAmount = direction === 'sell' ? quote.sellAmount : quote.sellAmount;
+        // Step 1: Swap Token → frBTC
+        console.log('[SWAP]', fromToken.symbol, '→ BTC : Step 1/2 — Swapping', fromToken.symbol, '→ frBTC');
+        const sellAmount = quote.sellAmount;
 
-        const res = await swapUnwrapMutation.mutateAsync({
+        const swapRes = await swapMutation.mutateAsync({
           sellCurrency: fromToken.id,
+          buyCurrency: FRBTC_ALKANE_ID,
+          direction: 'sell',
           sellAmount,
-          expectedBtcAmount: quote.buyAmount, // frBTC amount ≈ BTC amount
+          buyAmount: quote.buyAmount,
           maxSlippage,
           feeRate: fee.feeRate,
           poolId: quote.poolId,
           deadlineBlocks,
         });
 
-        if (res?.success && res.transactionId) {
-          console.log('[SWAP] One-click Token → BTC swap success:', res.transactionId);
-          showNotification(res.transactionId, 'swap');
+        if (!swapRes?.success || !swapRes.transactionId) {
+          throw new Error('Swap step failed — no transaction ID returned');
+        }
+        console.log('[SWAP] Step 1 complete — swap txid:', swapRes.transactionId);
+
+        // Wait for swap tx to confirm before proceeding to unwrap
+        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
+
+        if (isRegtest && address) {
+          console.log('[SWAP] Mining block to confirm swap transaction...');
+          try {
+            await fetch('/api/regtest/mine', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blocks: 1, address }),
+            });
+          } catch (mineErr) {
+            console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
+          }
+        }
+
+        console.log('[SWAP] Waiting for swap tx confirmation before unwrap step...');
+        showNotification(swapRes.transactionId, 'swap');
+
+        const swapTxId = swapRes.transactionId;
+        const pollInterval = isRegtest ? 1500 : 15000;
+        const maxPollAttempts = isRegtest ? 20 : 120;
+        let swapConfirmed = false;
+
+        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          try {
+            const txResp = await fetch(`/api/rpc/${encodeURIComponent(network)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'esplora_tx',
+                params: [swapTxId],
+                id: 1,
+              }),
+            });
+            const txData = await txResp.json();
+            if (txData?.result?.status?.confirmed) {
+              const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
+              console.log(`[SWAP] Swap tx confirmed after ${elapsedSec}s`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              swapConfirmed = true;
+              break;
+            }
+            const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
+            console.log(`[SWAP] Polling swap tx... attempt ${attempt + 1}/${maxPollAttempts} (${elapsed}s elapsed)`);
+          } catch {
+            // Polling error — keep retrying
+          }
+        }
+
+        if (!swapConfirmed) {
+          throw new Error(
+            `Swap tx broadcast successfully (${swapTxId}) but did not confirm within ${Math.round(maxPollAttempts * pollInterval / 60000)} minutes. ` +
+            `Your ${fromToken.symbol} has been swapped to frBTC — once confirmed, unwrap frBTC → BTC manually.`
+          );
+        }
+
+        // Step 2: Unwrap frBTC → BTC
+        console.log('[SWAP] Step 2/2 — Unwrapping frBTC → BTC');
+
+        // The frBTC amount from the swap is approximately the buyAmount from the quote
+        const frbtcAmount = quote.buyAmount;
+
+        const unwrapRes = await unwrapMutation.mutateAsync({
+          amount: frbtcAmount,
+          feeRate: fee.feeRate,
+        });
+
+        if (unwrapRes?.success && unwrapRes.transactionId) {
+          console.log('[SWAP] Step 2 complete — unwrap txid:', unwrapRes.transactionId);
+          showNotification(unwrapRes.transactionId, 'unwrap');
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
