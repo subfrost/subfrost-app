@@ -966,7 +966,7 @@ describe('buildAlkaneTransferPsbt', () => {
   // =========================================================================
   describe('protostone construction', () => {
     it('should call ProtoStone.edicts with correct alkane ID and amount', async () => {
-      const { ProtoStone } = await import('@alkanes/ts-sdk');
+      const sdk = await import('@alkanes/ts-sdk') as any;
 
       setupFetchMock({
         alkaneOutpoints: [
@@ -978,7 +978,7 @@ describe('buildAlkaneTransferPsbt', () => {
 
       await buildAlkaneTransferPsbt(defaultParams({ alkaneId: '32:0', amount: BigInt(42) }));
 
-      expect(ProtoStone.edicts).toHaveBeenCalledWith({
+      expect(sdk.ProtoStone.edicts).toHaveBeenCalledWith({
         protocolTag: 1n,
         edicts: [{
           id: { block: 32n, tx: 0n },
@@ -989,7 +989,7 @@ describe('buildAlkaneTransferPsbt', () => {
     });
 
     it('should call encodeRunestoneProtostone with pointer=0 for sender change', async () => {
-      const { encodeRunestoneProtostone } = await import('@alkanes/ts-sdk');
+      const sdk = await import('@alkanes/ts-sdk') as any;
 
       setupFetchMock({
         alkaneOutpoints: [
@@ -1001,7 +1001,7 @@ describe('buildAlkaneTransferPsbt', () => {
 
       await buildAlkaneTransferPsbt(defaultParams());
 
-      expect(encodeRunestoneProtostone).toHaveBeenCalledWith({
+      expect(sdk.encodeRunestoneProtostone).toHaveBeenCalledWith({
         protostones: [expect.anything()],
         pointer: 0, // unedicted remainder → v0 (sender change)
       });
