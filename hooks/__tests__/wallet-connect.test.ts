@@ -592,7 +592,7 @@ describe('WalletContext connection logic (source verification)', () => {
     expect(src).toContain('localStorage.setItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES');
   });
 
-  it('Xverse signTaprootPsbt bypasses SDK adapter for direct signing', () => {
+  it('signTaprootPsbt delegates to ts-sdk wallet adapter for all browser wallets', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(
@@ -600,8 +600,10 @@ describe('WalletContext connection logic (source verification)', () => {
       'utf-8'
     );
 
-    // The Xverse bypass calls BitcoinProvider.request('signPsbt', ...) directly
-    expect(src).toContain("browserWallet?.info?.id === 'xverse'");
-    expect(src).toContain("XverseProviders?.BitcoinProvider");
+    // All browser wallet signing is now delegated to walletAdapter.signPsbt()
+    // Wallet-specific logic (Xverse signInputs, UniSat autoFinalized, OYL reconnection)
+    // is handled by ts-sdk adapter classes in @alkanes/ts-sdk/browser-wallets/adapter.ts
+    expect(src).toContain("walletAdapter.signPsbt(psbtHex");
+    expect(src).toContain("ts-sdk adapter");
   });
 });
