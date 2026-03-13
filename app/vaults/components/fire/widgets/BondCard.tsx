@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 interface BondCardProps {
@@ -25,6 +26,7 @@ export default function BondCard({
   onClaim,
   disabled = false,
 }: BondCardProps) {
+  const { t } = useTranslation();
   const totalVestBlocks = vestEnd - vestStart;
   const elapsedBlocks = Math.min(currentBlock - vestStart, totalVestBlocks);
   const vestProgress = totalVestBlocks > 0 ? Math.max(0, Math.min(1, elapsedBlocks / totalVestBlocks)) : 0;
@@ -42,13 +44,13 @@ export default function BondCard({
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-bold text-[color:var(--sf-text)]">Bond #{bondId + 1}</span>
+        <span className="text-sm font-bold text-[color:var(--sf-text)]">{t('fire.bond')} #{bondId + 1}</span>
         <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
           isFullyVested
             ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
             : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
         }`}>
-          {isFullyVested ? 'Fully Vested' : `${vestProgressPct}%`}
+          {isFullyVested ? t('fire.fullyVested') : `${vestProgressPct}%`}
         </span>
       </div>
 
@@ -64,19 +66,19 @@ export default function BondCard({
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">LP Bonded</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.lpBonded')}</div>
           <div className="text-sm font-bold text-[color:var(--sf-text)]">{formattedLp}</div>
         </div>
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">Total FIRE</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalFire')}</div>
           <div className="text-sm font-bold text-[color:var(--sf-text)]">{formattedFire}</div>
         </div>
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">Claimed</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.claimed')}</div>
           <div className="text-sm font-bold text-[color:var(--sf-text)]">{formattedClaimed}</div>
         </div>
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">Claimable</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.claimable')}</div>
           <div className="text-sm font-bold text-orange-400">{claimable}</div>
         </div>
       </div>
@@ -86,7 +88,7 @@ export default function BondCard({
         disabled={disabled || claimable === '0.0000'}
         className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 py-2.5 text-xs font-bold text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:shadow-[0_4px_16px_rgba(249,115,22,0.3)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none"
       >
-        Claim Vested FIRE
+        {t('fire.claimVestedFire')}
       </button>
     </div>
   );

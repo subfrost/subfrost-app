@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslation } from '@/hooks/useTranslation';
+
 interface TreasuryAllocation {
   label: string;
   percentage: number;
@@ -18,6 +20,7 @@ const ALLOCATIONS: TreasuryAllocation[] = [
 ];
 
 export default function TreasuryBreakdownChart({ size = 150 }: TreasuryBreakdownChartProps) {
+  const { t } = useTranslation();
   const center = size / 2;
   const outerRadius = size / 2 - 4;
   const innerRadius = outerRadius * 0.62;
@@ -53,7 +56,7 @@ export default function TreasuryBreakdownChart({ size = 150 }: TreasuryBreakdown
   return (
     <div>
       <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-3">
-        Treasury Allocation
+        {t('fire.treasuryAllocation')}
       </div>
       <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">

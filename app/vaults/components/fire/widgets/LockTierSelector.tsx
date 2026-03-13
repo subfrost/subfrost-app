@@ -1,6 +1,7 @@
 'use client';
 
 import { LOCK_TIERS } from '@/utils/fireCalculations';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface LockTierSelectorProps {
   selectedTier: number;
@@ -8,10 +9,12 @@ interface LockTierSelectorProps {
 }
 
 export default function LockTierSelector({ selectedTier, onSelect }: LockTierSelectorProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
-        Lock Duration
+        {t('fire.lockDuration')}
       </span>
       <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
         {LOCK_TIERS.map((tier, index) => (

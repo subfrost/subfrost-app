@@ -1,14 +1,18 @@
 'use client';
 
+import { useTranslation } from '@/hooks/useTranslation';
+
 export type FireTab = 'dashboard' | 'stake' | 'bond' | 'redeem' | 'distribute';
 
-const TABS: { id: FireTab; label: string }[] = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'stake', label: 'Stake' },
-  { id: 'bond', label: 'Bond' },
-  { id: 'redeem', label: 'Redeem' },
-  { id: 'distribute', label: 'Distribute' },
-];
+const TAB_IDS: FireTab[] = ['dashboard', 'stake', 'bond', 'redeem', 'distribute'];
+
+const TAB_KEYS: Record<FireTab, string> = {
+  dashboard: 'fire.tab.dashboard',
+  stake: 'fire.tab.stake',
+  bond: 'fire.tab.bond',
+  redeem: 'fire.tab.redeem',
+  distribute: 'fire.tab.distribute',
+};
 
 interface FireHeaderTabsProps {
   activeTab: FireTab;
@@ -16,10 +20,12 @@ interface FireHeaderTabsProps {
 }
 
 export default function FireHeaderTabs({ activeTab, onTabChange }: FireHeaderTabsProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="overflow-x-auto -mx-1 px-1 scrollbar-hide">
       <div className="inline-flex items-center gap-0.5 rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)] p-1 min-w-max">
-        {TABS.map(({ id, label }) => (
+        {TAB_IDS.map((id) => (
           <button
             key={id}
             onClick={() => onTabChange(id)}
@@ -29,7 +35,7 @@ export default function FireHeaderTabs({ activeTab, onTabChange }: FireHeaderTab
                 : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-panel-bg)]'
             }`}
           >
-            {label}
+            {t(TAB_KEYS[id])}
           </button>
         ))}
       </div>

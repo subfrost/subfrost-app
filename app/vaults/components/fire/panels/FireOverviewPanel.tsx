@@ -10,12 +10,14 @@ import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
 import { useFireTreasury } from '@/hooks/fire/useFireTreasury';
 import { useFireMockData } from '@/hooks/fire/useFireMockData';
 import { formatCompact, LOCK_TIERS } from '@/utils/fireCalculations';
+import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 const FirePriceChart = dynamic(() => import('../charts/FirePriceChart'), { ssr: false });
 const EmissionScheduleChart = dynamic(() => import('../charts/EmissionScheduleChart'), { ssr: false });
 
 export default function FireOverviewPanel() {
+  const { t } = useTranslation();
   const { data: tokenStats } = useFireTokenStats();
   const { data: stakingStats } = useFireStakingStats();
   const { data: treasury } = useFireTreasury();
@@ -50,10 +52,10 @@ export default function FireOverviewPanel() {
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Top metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <FireMetricCard label="FIRE Price" value={metrics.price} delta={metrics.priceDelta} deltaPositive={metrics.priceDeltaPositive} />
-        <FireMetricCard label="Total Staked" value={metrics.totalStaked} />
-        <FireMetricCard label="Supply" value={metrics.circSupply} subValue="circulating" />
-        <FireMetricCard label="Emission Rate" value={metrics.emissionRate} subValue={metrics.currentEpoch} />
+        <FireMetricCard label={t('fire.price')} value={metrics.price} delta={metrics.priceDelta} deltaPositive={metrics.priceDeltaPositive} />
+        <FireMetricCard label={t('fire.totalStaked')} value={metrics.totalStaked} />
+        <FireMetricCard label={t('fire.supply')} value={metrics.circSupply} subValue={t('fire.circulating')} />
+        <FireMetricCard label={t('fire.emissionRate')} value={metrics.emissionRate} subValue={metrics.currentEpoch} />
       </div>
 
       {/* Price chart + Treasury */}
@@ -62,7 +64,7 @@ export default function FireOverviewPanel() {
         <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
-              FIRE / frBTC (30d)
+              {t('fire.priceChart')}
             </span>
             <span className={`text-xs font-bold ${metrics.priceDeltaPositive ? 'text-emerald-400' : 'text-red-400'}`}>
               {metrics.priceDeltaPositive ? '+' : ''}{metrics.priceDelta}
@@ -76,11 +78,11 @@ export default function FireOverviewPanel() {
           <TreasuryBreakdownChart />
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">Total Backing</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalBacking')}</div>
               <div className="text-lg font-bold text-[color:var(--sf-text)]">{metrics.totalBacking}</div>
             </div>
             <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">Emission Pool</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.emissionPool')}</div>
               <div className="text-lg font-bold text-[color:var(--sf-text)]">{metrics.emissionRemaining}</div>
             </div>
           </div>
@@ -92,10 +94,10 @@ export default function FireOverviewPanel() {
         {/* Staking overview */}
         <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
           <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-3">
-            Staking Overview
+            {t('fire.stakingOverview')}
           </div>
           <div className="mb-4">
-            <div className="text-xs text-[color:var(--sf-muted)]">Total Value Staked</div>
+            <div className="text-xs text-[color:var(--sf-muted)]">{t('fire.totalValueStaked')}</div>
             <div className="text-2xl sm:text-3xl font-bold text-[color:var(--sf-text)]">{metrics.totalStaked}</div>
           </div>
 
@@ -104,9 +106,9 @@ export default function FireOverviewPanel() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-[color:var(--sf-muted)] border-b border-[color:var(--sf-row-border)]">
-                  <th className="text-left py-2.5 px-3 font-semibold">Lock Tier</th>
-                  <th className="text-right py-2.5 px-3 font-semibold">Boost</th>
-                  <th className="text-right py-2.5 px-3 font-semibold">Duration</th>
+                  <th className="text-left py-2.5 px-3 font-semibold">{t('fire.lockTier')}</th>
+                  <th className="text-right py-2.5 px-3 font-semibold">{t('fire.boost')}</th>
+                  <th className="text-right py-2.5 px-3 font-semibold">{t('fire.duration')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,7 +121,7 @@ export default function FireOverviewPanel() {
                       </span>
                     </td>
                     <td className="text-right px-3 text-[color:var(--sf-muted)]">
-                      {tier.duration > 0 ? `${tier.duration} blks` : 'Flex'}
+                      {tier.duration > 0 ? `${tier.duration} blks` : t('fire.flex')}
                     </td>
                   </tr>
                 ))}
@@ -130,7 +132,7 @@ export default function FireOverviewPanel() {
           {/* Staker distribution */}
           <div className="mt-4">
             <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-3">
-              Top Stakers
+              {t('fire.topStakers')}
             </div>
             <StakerPieChart data={mockData.stakerDistribution} size={140} />
           </div>

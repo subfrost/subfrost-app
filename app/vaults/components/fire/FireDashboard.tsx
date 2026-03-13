@@ -11,9 +11,11 @@ import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
 import { useFireMockData } from '@/hooks/fire/useFireMockData';
 import { formatCompact } from '@/utils/fireCalculations';
+import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 export default function FireDashboard() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<FireTab>('dashboard');
   const { data: tokenStats } = useFireTokenStats();
   const { data: stakingStats } = useFireStakingStats();
@@ -50,18 +52,18 @@ export default function FireDashboard() {
               </svg>
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-[color:var(--sf-text)]">FIRE Protocol</h1>
-              <p className="text-xs sm:text-sm text-[color:var(--sf-muted)]">OlympusDAO-inspired DeFi on Bitcoin</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-[color:var(--sf-text)]">{t('fire.title')}</h1>
+              <p className="text-xs sm:text-sm text-[color:var(--sf-muted)]">{t('fire.subtitle')}</p>
             </div>
           </div>
 
           {/* Hero metric grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             {[
-              { label: 'FIRE Price', value: heroMetrics.price, unit: 'frBTC' },
-              { label: 'Market Cap', value: heroMetrics.marketCap, unit: 'frBTC' },
-              { label: 'Circ. Supply', value: heroMetrics.circSupply, unit: 'FIRE' },
-              { label: 'Total Staked', value: heroMetrics.totalStaked, unit: 'LP' },
+              { label: t('fire.price'), value: heroMetrics.price, unit: 'frBTC' },
+              { label: t('fire.marketCap'), value: heroMetrics.marketCap, unit: 'frBTC' },
+              { label: t('fire.circSupply'), value: heroMetrics.circSupply, unit: 'FIRE' },
+              { label: t('fire.totalStaked'), value: heroMetrics.totalStaked, unit: 'LP' },
             ].map(({ label, value, unit }) => (
               <div key={label} className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] px-3 py-2.5 sm:px-4 sm:py-3">
                 <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-0.5">{label}</div>

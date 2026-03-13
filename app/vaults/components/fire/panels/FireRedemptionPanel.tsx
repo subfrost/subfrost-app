@@ -8,9 +8,11 @@ import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireTreasury } from '@/hooks/fire/useFireTreasury';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
+import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 export default function FireRedemptionPanel() {
+  const { t } = useTranslation();
   const { isConnected } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: redemption } = useFireRedemption();
@@ -57,12 +59,12 @@ export default function FireRedemptionPanel() {
       {/* Redeem form */}
       <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
-          Burn FIRE for Backing
+          {t('fire.burnFireForBacking')}
         </div>
 
         {/* Amount input */}
         <div className="mb-4">
-          <label className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-1.5 block">FIRE Amount</label>
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-1.5 block">{t('fire.fireAmount')}</label>
           <div className="relative">
             <input
               type="number"
@@ -80,15 +82,15 @@ export default function FireRedemptionPanel() {
         {/* Preview */}
         <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] p-3 sm:p-4 mb-4 space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-[color:var(--sf-muted)]">You receive</span>
+            <span className="text-[color:var(--sf-muted)]">{t('fire.youReceive')}</span>
             <span className="font-bold text-[color:var(--sf-text)]">{preview.lpOut} LP</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-[color:var(--sf-muted)]">Fee ({feePct.toFixed(1)}%)</span>
+            <span className="text-[color:var(--sf-muted)]">{t('fire.fee')} ({feePct.toFixed(1)}%)</span>
             <span className="text-red-400">{preview.feeAmount} LP</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-[color:var(--sf-muted)]">Total redeemed (all time)</span>
+            <span className="text-[color:var(--sf-muted)]">{t('fire.totalRedeemedAllTime')}</span>
             <span className="text-[color:var(--sf-text)]/70">{totalRedeemed.toFixed(2)} FIRE</span>
           </div>
         </div>
@@ -98,7 +100,7 @@ export default function FireRedemptionPanel() {
           disabled={!isConnected || parsedAmount <= 0 || cooldownBlocks > 0 || isDemoGated}
           className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none bg-gradient-to-r from-red-500 to-red-600 hover:shadow-[0_4px_16px_rgba(239,68,68,0.3)]"
         >
-          {isDemoGated ? 'Coming Soon' : cooldownBlocks > 0 ? 'Cooldown Active' : !isConnected ? 'Connect Wallet' : 'Redeem FIRE'}
+          {isDemoGated ? t('common.comingSoon') : cooldownBlocks > 0 ? t('fire.cooldownActive') : !isConnected ? t('fire.connectWallet') : t('fire.redeemFire')}
         </button>
       </div>
     </div>

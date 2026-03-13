@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useMemo } from 'react';
 import { generateEmissionChartData, FIRE_EMISSION_POOL, formatCompact } from '@/utils/fireCalculations';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface EmissionScheduleChartProps {
   numYears?: number;
@@ -12,6 +13,7 @@ export default function EmissionScheduleChart({
   numYears = 10,
   height = 250,
 }: EmissionScheduleChartProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
 
@@ -96,7 +98,7 @@ export default function EmissionScheduleChart({
     <div>
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
-          Emission Schedule
+          {t('fire.emissionSchedule')}
         </span>
         <span className="text-[10px] text-[color:var(--sf-muted)]">
           Pool: {formatCompact(FIRE_EMISSION_POOL)} FIRE

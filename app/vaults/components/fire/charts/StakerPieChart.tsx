@@ -1,6 +1,7 @@
 'use client';
 
 import type { StakerDistribution } from '@/hooks/fire/useFireMockData';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface StakerPieChartProps {
   data: StakerDistribution[];
@@ -10,10 +11,12 @@ interface StakerPieChartProps {
 const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#4b5563'];
 
 export default function StakerPieChart({ data, size = 140 }: StakerPieChartProps) {
+  const { t } = useTranslation();
+
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-xs text-[color:var(--sf-muted)]">No data</span>
+        <span className="text-xs text-[color:var(--sf-muted)]">{t('fire.noData')}</span>
       </div>
     );
   }

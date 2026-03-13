@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 interface FloorPriceIndicatorProps {
@@ -11,6 +12,7 @@ export default function FloorPriceIndicator({
   totalBacking,
   circulatingSupply,
 }: FloorPriceIndicatorProps) {
+  const { t } = useTranslation();
   const backing = new BigNumber(totalBacking);
   const supply = new BigNumber(circulatingSupply);
   const floorPrice = supply.isZero()
@@ -26,17 +28,17 @@ export default function FloorPriceIndicator({
 
       <div className="relative z-10">
         <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-orange-400/70 mb-1.5">
-          Floor Price (Backing / Supply)
+          {t('fire.floorPrice')}
         </div>
         <div className="text-3xl sm:text-4xl font-bold text-orange-400">
           {floorPriceSats} <span className="text-lg text-orange-400/50">sats</span>
         </div>
         <div className="text-sm text-[color:var(--sf-muted)] mt-1">
-          {floorPriceBtc} BTC per FIRE
+          {floorPriceBtc} {t('fire.btcPerFire')}
         </div>
         <div className="flex gap-4 sm:gap-6 mt-3 text-xs text-[color:var(--sf-muted)]">
-          <span>Backing: {backing.dividedBy(1e8).toFixed(4)} BTC</span>
-          <span>Supply: {supply.dividedBy(1e8).toFixed(2)} FIRE</span>
+          <span>{t('fire.backing')}: {backing.dividedBy(1e8).toFixed(4)} BTC</span>
+          <span>{t('fire.supply')}: {supply.dividedBy(1e8).toFixed(2)} FIRE</span>
         </div>
       </div>
     </div>
