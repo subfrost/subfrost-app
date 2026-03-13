@@ -86,7 +86,7 @@ export const VAULT_OPCODES = {
 /**
  * FIRE Protocol Opcodes
  *
- * 6-contract OlympusDAO-inspired DeFi system on Bitcoin:
+ * 6-contract governance vault system on Bitcoin:
  *   Token [4:256], Staking [4:257], Treasury [4:258],
  *   Bonding [4:259], Redemption [4:260], Distributor [4:261]
  */

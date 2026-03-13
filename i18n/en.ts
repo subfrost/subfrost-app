@@ -854,7 +854,7 @@ const en: Record<string, string> = {
 
   // FIRE Protocol Dashboard
   'fire.title': 'FIRE Protocol',
-  'fire.subtitle': 'OlympusDAO-inspired DeFi on Bitcoin',
+  'fire.subtitle': 'Alkanes Governance Vaults',
   'fire.price': 'FIRE Price',
   'fire.marketCap': 'Market Cap',
   'fire.circSupply': 'Circ. Supply',

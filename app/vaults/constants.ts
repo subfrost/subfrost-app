@@ -46,7 +46,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 've-diesel',
     name: 'FIRE Protocol',
-    description: 'OlympusDAO-inspired DeFi on Bitcoin — stake, bond, redeem, distribute',
+    description: 'Alkanes Governance Vaults — stake, bond, redeem, distribute',
     tokenId: '2:0',
     tokenSymbol: 'FIRE',
     iconPath: 'https://cdn.subfrost.io/alkanes/2_0',

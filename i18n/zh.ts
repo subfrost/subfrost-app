@@ -846,7 +846,7 @@ const zh: Record<string, string> = {
 
   // FIRE Protocol Dashboard
   'fire.title': 'FIRE 协议',
-  'fire.subtitle': '比特币上的 OlympusDAO 启发式 DeFi',
+  'fire.subtitle': 'Alkanes 治理金库',
   'fire.price': 'FIRE 价格',
   'fire.marketCap': '市值',
   'fire.circSupply': '流通供应',
