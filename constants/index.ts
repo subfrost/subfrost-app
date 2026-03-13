@@ -83,4 +83,94 @@ export const VAULT_OPCODES = {
   ClaimAndDistributeRewards: '6', // Strategist harvest operation
 };
 
+/**
+ * FIRE Protocol Opcodes
+ *
+ * 6-contract OlympusDAO-inspired DeFi system on Bitcoin:
+ *   Token [4:256], Staking [4:257], Treasury [4:258],
+ *   Bonding [4:259], Redemption [4:260], Distributor [4:261]
+ */
+export const FIRE_TOKEN_OPCODES = {
+  // Write
+  MintFromEmissionPool: '77',
+  Burn: '88',
+  // Read
+  GetName: '99',
+  GetSymbol: '100',
+  GetTotalSupply: '101',
+  GetMaxSupply: '102',
+  GetEmissionPoolRemaining: '103',
+};
+
+export const FIRE_STAKING_OPCODES = {
+  // Write
+  Stake: '1',
+  Unstake: '2',
+  ClaimRewards: '3',
+  ExtendLock: '4',
+  UpdateEpoch: '5',
+  // Read
+  GetUserPositions: '10',
+  GetUserPendingRewards: '11',
+  GetTotalStaked: '12',
+  GetPositionDetails: '13',
+  GetCurrentEpoch: '14',
+  GetEmissionRate: '15',
+};
+
+export const FIRE_TREASURY_OPCODES = {
+  // Read
+  GetAllocations: '20',
+  GetTeamVested: '21',
+  GetTotalBackingValue: '22',
+  GetRedemptionRate: '23',
+};
+
+export const FIRE_BONDING_OPCODES = {
+  // Write
+  Bond: '1',
+  ClaimVested: '2',
+  ClaimAllVested: '3',
+  SetDiscount: '4',
+  SetPaused: '5',
+  SetVestingPeriod: '6',
+  // Read
+  GetUserBonds: '20',
+  GetBondCount: '21',
+  GetClaimableAmount: '22',
+  GetCurrentDiscount: '23',
+  GetFirePrice: '24',
+  GetAvailableFire: '25',
+};
+
+export const FIRE_REDEMPTION_OPCODES = {
+  // Write
+  Redeem: '1',
+  SetFee: '2',
+  SetMinRedemption: '3',
+  SetPaused: '4',
+  // Read
+  GetRedemptionRate: '20',
+  GetRedemptionFee: '21',
+  GetCooldownRemaining: '22',
+  PreviewRedemption: '23',
+  GetTotalRedeemed: '24',
+};
+
+export const FIRE_DISTRIBUTOR_OPCODES = {
+  // Write
+  Contribute: '1',
+  AdvancePhase: '2',
+  Claim: '3',
+  SetMerkleRoot: '4',
+  WithdrawUnclaimed: '5',
+  SetDeadline: '6',
+  // Read
+  GetPhase: '20',
+  GetTotalContributed: '21',
+  GetUserContribution: '22',
+  GetTotalClaimed: '23',
+  GetUserClaimed: '24',
+};
+
 

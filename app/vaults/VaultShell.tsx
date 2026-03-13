@@ -7,6 +7,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { AVAILABLE_VAULTS, VaultConfig } from "./constants";
 import VaultListItem from "./components/VaultListItem";
 import VaultDetail from "./components/VaultDetail";
+import FireDashboard from "./components/fire/FireDashboard";
 
 type SortField = 'estimatedApy' | 'historicalApy' | 'riskLevel' | 'available' | 'deposits';
 type SortDirection = 'asc' | 'desc' | null;
@@ -22,10 +23,10 @@ export default function VaultShell() {
   const searchParams = useSearchParams();
   const [selectedVault, setSelectedVault] = useState<VaultConfig | null>(null);
 
-  // Check for vault ID in URL params on mount (only dxBTC is accessible)
+  // Check for vault ID in URL params on mount
   useEffect(() => {
     const vaultId = searchParams.get('vault');
-    if (vaultId && vaultId === 'dx-btc') {
+    if (vaultId && (vaultId === 'dx-btc' || vaultId === 've-diesel')) {
       const vault = AVAILABLE_VAULTS.find(v => v.id === vaultId);
       if (vault) {
         setSelectedVault(vault);
@@ -128,8 +129,12 @@ export default function VaultShell() {
           <span className="text-sm font-semibold">{t('vaults.backToOverview')}</span>
         </button>
 
-        {/* Vault Detail with integrated boost */}
-        <VaultDetail vault={selectedVault} />
+        {/* Vault Detail: FIRE protocol gets its own dashboard */}
+        {selectedVault.type === 'fire-protocol' ? (
+          <FireDashboard />
+        ) : (
+          <VaultDetail vault={selectedVault} />
+        )}
       </div>
     );
   }
@@ -211,15 +216,18 @@ export default function VaultShell() {
           </div>
 
           {/* Vault List */}
-          {filteredVaults.map((vault) => (
-            <VaultListItem
-              key={vault.id}
-              vault={vault}
-              isSelected={false}
-              onClick={() => vault.id === 'dx-btc' ? setSelectedVault(vault) : undefined}
-              disabled={vault.id !== 'dx-btc'}
-            />
-          ))}
+          {filteredVaults.map((vault) => {
+            const isClickable = vault.id === 'dx-btc' || vault.id === 've-diesel';
+            return (
+              <VaultListItem
+                key={vault.id}
+                vault={vault}
+                isSelected={false}
+                onClick={() => isClickable ? setSelectedVault(vault) : undefined}
+                disabled={!isClickable}
+              />
+            );
+          })}
 
           {filteredVaults.length === 0 && (
             <div className="text-center py-12 text-[color:var(--sf-text)]/60">

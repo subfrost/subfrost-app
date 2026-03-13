@@ -8,7 +8,7 @@ export interface VaultConfig {
   iconPath?: string; // Direct path to token icon (e.g., "/tokens/btc_snowflake.svg")
   contractAddress: string;
   badge?: string;
-  type: 'unit-vault';
+  type: 'unit-vault' | 'fire-protocol';
   inputAsset: string;
   outputAsset: string;
   estimatedApy?: string;
@@ -45,23 +45,23 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
   },
   {
     id: 've-diesel',
-    name: 'FIRE Vault',
-    description: 'First of its kind DeFi vault on Bitcoin',
+    name: 'FIRE Protocol',
+    description: 'OlympusDAO-inspired DeFi on Bitcoin — stake, bond, redeem, distribute',
     tokenId: '2:0',
-    tokenSymbol: 'DIESEL',
+    tokenSymbol: 'FIRE',
     iconPath: 'https://cdn.subfrost.io/alkanes/2_0',
-    contractAddress: '0xBe53A1...F6204',
-    badge: 'Coming Soon',
-    type: 'unit-vault',
-    inputAsset: 'DIESEL',
+    contractAddress: '4:256',
+    badge: 'FIRE',
+    type: 'fire-protocol',
+    inputAsset: 'DIESEL/frBTC LP',
     outputAsset: 'FIRE',
     estimatedApy: '21',
     apyHistory: [17, 18, 19, 19, 18, 19, 20, 21, 20, 20, 21, 21, 22, 21, 20, 21, 22, 22, 21, 22, 23, 22, 22, 23, 23, 22, 23, 22, 23, 22],
     riskLevel: 'very-high',
     hasBoost: true,
     boostTokenSymbol: 'vxFIRE',
-    boostTokenName: 'Staked DIESEL Gauge',
-    boostTokenId: '2:0', // Uses DIESEL icon from Oyl CDN
+    boostTokenName: 'Staked FIRE Gauge',
+    boostTokenId: '2:0',
     boostMultiplier: 1.5,
   },
   {

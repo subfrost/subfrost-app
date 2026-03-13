@@ -1,0 +1,44 @@
+'use client';
+
+import BigNumber from 'bignumber.js';
+
+interface FloorPriceIndicatorProps {
+  totalBacking: string;
+  circulatingSupply: string;
+}
+
+export default function FloorPriceIndicator({
+  totalBacking,
+  circulatingSupply,
+}: FloorPriceIndicatorProps) {
+  const backing = new BigNumber(totalBacking);
+  const supply = new BigNumber(circulatingSupply);
+  const floorPrice = supply.isZero()
+    ? new BigNumber(0)
+    : backing.dividedBy(supply);
+  const floorPriceSats = floorPrice.toFixed(0);
+  const floorPriceBtc = floorPrice.dividedBy(1e8).toFixed(8);
+
+  return (
+    <div className="rounded-2xl p-5 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-orange-500/20 relative overflow-hidden">
+      {/* Orange glow */}
+      <div className="absolute -top-12 -right-12 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="relative z-10">
+        <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-orange-400/70 mb-1.5">
+          Floor Price (Backing / Supply)
+        </div>
+        <div className="text-3xl sm:text-4xl font-bold text-orange-400">
+          {floorPriceSats} <span className="text-lg text-orange-400/50">sats</span>
+        </div>
+        <div className="text-sm text-[color:var(--sf-muted)] mt-1">
+          {floorPriceBtc} BTC per FIRE
+        </div>
+        <div className="flex gap-4 sm:gap-6 mt-3 text-xs text-[color:var(--sf-muted)]">
+          <span>Backing: {backing.dividedBy(1e8).toFixed(4)} BTC</span>
+          <span>Supply: {supply.dividedBy(1e8).toFixed(2)} FIRE</span>
+        </div>
+      </div>
+    </div>
+  );
+}
