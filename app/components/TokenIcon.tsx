@@ -58,9 +58,9 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths;
     }
 
-    // Priority 3: Special handling for DIESEL (2:0) — always use Ordiscan CDN icon
+    // Priority 3: Special handling for DIESEL (2:0) — use local flame icon
     if (id === '2:0' || symbolLower === 'diesel') {
-      paths.push('https://cdn.subfrost.io/alkanes/2_0');
+      paths.push('/tokens/fire.svg');
       return paths;
     }
 

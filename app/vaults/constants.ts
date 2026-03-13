@@ -49,7 +49,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     description: 'Alkanes Governance Vaults — stake, bond, redeem, distribute',
     tokenId: '2:0',
     tokenSymbol: 'FIRE',
-    iconPath: 'https://cdn.subfrost.io/alkanes/2_0',
+    iconPath: '/tokens/fire.svg',
     contractAddress: '4:256',
     badge: 'FIRE',
     type: 'fire-protocol',
