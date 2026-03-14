@@ -392,7 +392,8 @@ export function detectWalletId(browserWallet: any): WalletId {
  * tapInternalKey matches their own key before signing.
  */
 export function patchTapInternalKeys(psbt: bitcoin.Psbt, xOnlyPubKeyHex: string): number {
-  const xOnlyBuffer = Buffer.from(xOnlyPubKeyHex, 'hex');
+  // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
+  const xOnlyBuffer = new Uint8Array(Buffer.from(xOnlyPubKeyHex, 'hex'));
   let patchedCount = 0;
 
   for (let i = 0; i < psbt.data.inputs.length; i++) {

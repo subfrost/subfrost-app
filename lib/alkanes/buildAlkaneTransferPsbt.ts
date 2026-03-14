@@ -683,8 +683,9 @@ export async function buildAlkaneTransferPsbt(
 
   // Parse tapInternalKey for P2TR inputs (BIP-174 standard field).
   // Wallets use this to identify which inputs belong to the connected account.
+  // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
   const tapInternalKey = tapInternalKeyHex
-    ? Buffer.from(tapInternalKeyHex.length === 66 ? tapInternalKeyHex.slice(2) : tapInternalKeyHex, 'hex')
+    ? new Uint8Array(Buffer.from(tapInternalKeyHex.length === 66 ? tapInternalKeyHex.slice(2) : tapInternalKeyHex, 'hex'))
     : undefined;
 
   // Derive output scripts from known sender addresses instead of fetching

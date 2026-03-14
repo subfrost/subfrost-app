@@ -98,7 +98,18 @@ export async function POST(
       );
     }
 
-    const data = await response.json();
+    // Handle upstream responses that may not be valid JSON (e.g., "upstream request failed")
+    let data;
+    const responseText = await response.text();
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error(`[RPC Proxy] Non-JSON response for ${method}: ${responseText.slice(0, 200)}`);
+      return NextResponse.json(
+        { jsonrpc: '2.0', error: { code: -32603, message: responseText.slice(0, 200) }, id: body?.id ?? null },
+        { status: 502 }
+      );
+    }
 
     // Log UTXO fetch results for debugging
     if (method === 'esplora_address::utxo') {

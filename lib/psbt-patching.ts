@@ -559,16 +559,18 @@ export function patchTapInternalKeys(
   psbt: bitcoin.Psbt,
   pubkeyHex: string,
 ): number {
-  let xOnlyBuf = Buffer.from(pubkeyHex, 'hex');
+  let rawBuf = Buffer.from(pubkeyHex, 'hex');
   // Strip 02/03 prefix from compressed pubkey to get 32-byte x-only key
-  if (xOnlyBuf.length === 33 && (xOnlyBuf[0] === 0x02 || xOnlyBuf[0] === 0x03)) {
-    xOnlyBuf = xOnlyBuf.slice(1);
+  if (rawBuf.length === 33 && (rawBuf[0] === 0x02 || rawBuf[0] === 0x03)) {
+    rawBuf = rawBuf.slice(1);
   }
+  // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
+  const xOnlyKey = new Uint8Array(rawBuf);
 
   let patched = 0;
   for (let i = 0; i < psbt.data.inputs.length; i++) {
     if (psbt.data.inputs[i].tapInternalKey) {
-      psbt.data.inputs[i].tapInternalKey = xOnlyBuf;
+      psbt.data.inputs[i].tapInternalKey = xOnlyKey;
       patched++;
     }
   }

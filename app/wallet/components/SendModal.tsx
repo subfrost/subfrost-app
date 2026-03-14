@@ -730,7 +730,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         // Without tapInternalKey, OYL fails with "Can not sign for input #N with the key..."
         let totalInputValue = 0;
         const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
-        const tapInternalKey = tapInternalKeyHex ? Buffer.from(tapInternalKeyHex, 'hex') : undefined;
+        // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
+        const tapInternalKey = tapInternalKeyHex ? new Uint8Array(Buffer.from(tapInternalKeyHex, 'hex')) : undefined;
 
         for (const utxoKey of Array.from(selectedUtxos)) {
           const [txid, voutStr] = utxoKey.split(':');
@@ -1822,61 +1823,25 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
                 <div className="space-y-4">
                   <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] border-2 border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                     <div className="flex items-center gap-2 mb-3">
-                      <AlertCircle size={24} className="text-[color:var(--sf-info-red-title)]" />
-                      <span className="font-bold text-[color:var(--sf-info-red-title)] uppercase tracking-wide text-lg">
-                        {collateralWarning.unverifiedInscriptionRunes
-                          ? t('send.unverifiedWarning', { defaultValue: 'WARNING: UNVERIFIED ASSETS' })
-                          : t('send.collateralWarning', { defaultValue: 'WARNING: BUNDLED ASSETS' })
-                        }
+                      <AlertCircle size={24} className="text-amber-400" />
+                      <span className="font-bold text-amber-400 uppercase tracking-wide text-lg">
+                        {t('send.collateralWarning', { defaultValue: 'CONFIRM TRANSFER' })}
                       </span>
                     </div>
-                    <div className="space-y-2 text-sm text-[color:var(--sf-info-red-text)]">
-                      {/* Unverified case (mainnet) - we couldn't query ord_outputs */}
-                      {collateralWarning.unverifiedInscriptionRunes && (
-                        <>
-                          <p className="font-medium">
-                            {t('send.unverifiedDescription', {
-                              defaultValue: 'Unable to verify inscription/rune status on mainnet. Your alkane UTXOs MAY contain:'
-                            })}
-                          </p>
-                          <ul className="list-disc pl-5 space-y-1">
-                            <li className="font-bold">{t('send.collateralInscriptions', { defaultValue: 'Ordinal Inscriptions (NFTs)' })}</li>
-                            <li className="font-bold">{t('send.collateralRunes', { defaultValue: 'Runes' })}</li>
-                          </ul>
-                          <p className="mt-2">
-                            {t('send.unverifiedExplanation', {
-                              defaultValue: 'If any inscriptions or runes exist on these UTXOs, they WILL be transferred to the recipient along with your alkane tokens.'
-                            })}
-                          </p>
-                        </>
-                      )}
-                      {/* Verified case - we know exactly what's on the UTXOs */}
-                      {!collateralWarning.unverifiedInscriptionRunes && (
-                        <>
-                          <p className="font-medium">
-                            {t('send.collateralDescription', {
-                              defaultValue: 'The UTXOs containing your alkane tokens also contain other assets that will be transferred to the recipient:'
-                            })}
-                          </p>
-                          <ul className="list-disc pl-5 space-y-1">
-                            {collateralWarning.hasInscriptions && (
-                              <li className="font-bold">{t('send.collateralInscriptions', { defaultValue: 'Ordinal Inscriptions (NFTs)' })}</li>
-                            )}
-                            {collateralWarning.hasRunes && (
-                              <li className="font-bold">{t('send.collateralRunes', { defaultValue: 'Runes' })}</li>
-                            )}
-                          </ul>
-                        </>
-                      )}
+                    <div className="space-y-2 text-sm text-[color:var(--sf-text-secondary)]">
+                      <p className="font-medium">
+                        {t('send.collateralDescription', {
+                          defaultValue: 'The selected UTXOs may contain other assets bundled alongside your alkane tokens.'
+                        })}
+                      </p>
                       {/* Other alkanes are always safe due to protostone pointer */}
                       {collateralWarning.otherAlkanesCount > 0 && (
-                        <p className="mt-2 text-[color:var(--sf-text-secondary)]">
-                          {t('send.collateralOtherAlkanes', { count: collateralWarning.otherAlkanesCount, defaultValue: `${collateralWarning.otherAlkanesCount} other alkane token(s) on these UTXOs will be returned to you.` })}
+                        <p className="text-[color:var(--sf-muted)]">
+                          {t('send.collateralOtherAlkanes', { count: collateralWarning.otherAlkanesCount, defaultValue: `${collateralWarning.otherAlkanesCount} other alkane token(s) on these UTXOs will be returned to you via the protostone pointer.` })}
                         </p>
                       )}
-                      <p className="mt-3 p-2 bg-black/20 rounded-lg">
-                        <strong>{t('send.collateralCritical', { defaultValue: 'CRITICAL:' })}</strong>{' '}
-                        {t('send.collateralCriticalDescription', { defaultValue: 'Inscriptions and Runes CANNOT be recovered. They will belong to the recipient after this transaction.' })}
+                      <p className="mt-3 p-2 bg-black/20 rounded-lg text-[color:var(--sf-muted)]">
+                        {t('send.collateralNote', { defaultValue: 'Any non-alkane assets (inscriptions, runes) on the spent UTXOs will be sent to the recipient. Subfrost does not manage these asset types.' })}
                       </p>
                     </div>
                   </div>

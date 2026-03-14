@@ -206,7 +206,7 @@ export function addInputConditionally(
   pubKey: string
 ): ConditionalInput {
   if (addressType === AddressType.P2TR) {
-    inputData['tapInternalKey'] = assertHex(Buffer.from(pubKey, 'hex'))
+    inputData['tapInternalKey'] = assertHex(new Uint8Array(Buffer.from(pubKey, 'hex')))
   }
   return inputData
 }

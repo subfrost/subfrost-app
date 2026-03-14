@@ -808,7 +808,25 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] BTC → Token swap failed:', e);
-        window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
+        const msg = e?.message || 'See console for details.';
+        if (msg.includes('Insufficient alkanes')) {
+          const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
+          if (match) {
+            const [, needed, tokenId, available] = match;
+            const neededDisplay = (Number(needed) / 1e8).toFixed(4);
+            const availableDisplay = (Number(available) / 1e8).toFixed(4);
+            window.alert(
+              `Insufficient spendable balance for ${tokenId}.\n\n` +
+              `Requested: ${neededDisplay}\nSpendable: ${availableDisplay}\n\n` +
+              `Some tokens may be on UTXOs with inscriptions/other assets and are excluded from swaps. ` +
+              `Try a smaller amount (up to ${availableDisplay}).`
+            );
+          } else {
+            window.alert(`Swap failed: ${msg}`);
+          }
+        } else {
+          window.alert(`Swap failed: ${msg}`);
+        }
       }
       return;
     }
@@ -923,7 +941,25 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Token → BTC swap failed:', e);
-        window.alert(`Swap failed: ${e?.message || 'See console for details.'}`);
+        const msg = e?.message || 'See console for details.';
+        if (msg.includes('Insufficient alkanes')) {
+          const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
+          if (match) {
+            const [, needed, tokenId, available] = match;
+            const neededDisplay = (Number(needed) / 1e8).toFixed(4);
+            const availableDisplay = (Number(available) / 1e8).toFixed(4);
+            window.alert(
+              `Insufficient spendable balance for ${tokenId}.\n\n` +
+              `Requested: ${neededDisplay}\nSpendable: ${availableDisplay}\n\n` +
+              `Some tokens may be on UTXOs with inscriptions/other assets and are excluded from swaps. ` +
+              `Try a smaller amount (up to ${availableDisplay}).`
+            );
+          } else {
+            window.alert(`Swap failed: ${msg}`);
+          }
+        } else {
+          window.alert(`Swap failed: ${msg}`);
+        }
       }
       return;
     }
@@ -968,7 +1004,31 @@ export default function SwapShell() {
       }
     } catch (e: any) {
       console.error('[SWAP] Mutation error:', e?.message);
-      window.alert(e?.message || 'Swap failed. See console for details.');
+      const msg = e?.message || 'Swap failed. See console for details.';
+      // Provide a clearer message when SDK reports insufficient spendable balance.
+      // The UI may show a higher total balance than what's actually spendable,
+      // because some alkane UTXOs are co-located with inscriptions/ordinals and
+      // the SDK excludes those from spending to protect user assets.
+      if (msg.includes('Insufficient alkanes')) {
+        const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
+        if (match) {
+          const [, needed, tokenId, available] = match;
+          const neededDisplay = (Number(needed) / 1e8).toFixed(4);
+          const availableDisplay = (Number(available) / 1e8).toFixed(4);
+          window.alert(
+            `Insufficient spendable balance for ${tokenId}.\n\n` +
+            `Requested: ${neededDisplay}\n` +
+            `Spendable: ${availableDisplay}\n\n` +
+            `Your displayed balance may include tokens on UTXOs that also contain ` +
+            `inscriptions or other assets. These are excluded from swaps to protect your assets. ` +
+            `Try swapping a smaller amount (up to ${availableDisplay}).`
+          );
+        } else {
+          window.alert(msg);
+        }
+      } else {
+        window.alert(msg);
+      }
     }
   };
 

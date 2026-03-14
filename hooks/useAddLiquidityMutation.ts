@@ -247,7 +247,8 @@ function injectAlkaneInputs(
   );
 
   const taprootScript = bitcoin.address.toOutputScript(taprootAddress, btcNetwork);
-  const tapInternalKey = tapInternalKeyHex ? Buffer.from(tapInternalKeyHex, 'hex') : undefined;
+  // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
+  const tapInternalKey = tapInternalKeyHex ? new Uint8Array(Buffer.from(tapInternalKeyHex, 'hex')) : undefined;
 
   let injectedCount = 0;
   for (const utxo of alkaneUtxos) {
