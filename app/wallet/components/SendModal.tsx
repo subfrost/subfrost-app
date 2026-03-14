@@ -1072,12 +1072,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         console.log('[SendModal] PSBT base64 length:', rawPsbtBase64.length);
 
         // JOURNAL (2026-03-03): Check for collateral assets on the selected UTXOs.
-        // If the UTXOs also contain inscriptions or runes, warn the user because
-        // those assets WILL be transferred to the recipient (not returned to sender).
-        // Other alkanes on the same UTXOs are safe (protostone pointer returns them).
-        // JOURNAL (2026-03-03): Also warn if ord_outputs RPC failed (mainnet case) — we can't
-        // verify what's on the UTXOs, so user must acknowledge the risk.
-        const needsWarning = result.collateralWarning && (
+        // JOURNAL (2026-03-14): Collateral warning is gated on the "Ignore Ordinals/Runes"
+        // setting in WalletSettings. Currently hardcoded to ON (ord backend not yet available),
+        // meaning we treat all UTXOs as spendable and skip the warning. When ord detection
+        // becomes available and the toggle is made functional, set ignoreOrdinals=false to
+        // activate this warning for verified inscriptions/runes.
+        const ignoreOrdinals = true;  // TODO: Read from WalletSettings context when toggle is functional
+        const ignoreRunes = true;     // TODO: Read from WalletSettings context when toggle is functional
+
+        const needsWarning = !ignoreOrdinals && !ignoreRunes && result.collateralWarning && (
           result.collateralWarning.hasInscriptions ||
           result.collateralWarning.hasRunes ||
           result.collateralWarning.unverifiedInscriptionRunes
@@ -1831,9 +1834,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
                     <div className="space-y-2 text-sm text-[color:var(--sf-text-secondary)]">
                       <p className="font-medium">
                         {t('send.collateralDescription', {
-                          defaultValue: 'The selected UTXOs may contain other assets bundled alongside your alkane tokens.'
+                          defaultValue: 'The selected UTXOs contain other assets bundled alongside your alkane tokens.'
                         })}
                       </p>
+                      {collateralWarning.hasInscriptions && (
+                        <p className="text-amber-400">
+                          {t('send.collateralInscriptions', { defaultValue: 'Inscriptions (ordinals) on these UTXOs will be transferred to the recipient.' })}
+                        </p>
+                      )}
+                      {collateralWarning.hasRunes && (
+                        <p className="text-amber-400">
+                          {t('send.collateralRunes', { defaultValue: 'Runes on these UTXOs will be transferred to the recipient.' })}
+                        </p>
+                      )}
                       {/* Other alkanes are always safe due to protostone pointer */}
                       {collateralWarning.otherAlkanesCount > 0 && (
                         <p className="text-[color:var(--sf-muted)]">
@@ -1841,7 +1854,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
                         </p>
                       )}
                       <p className="mt-3 p-2 bg-black/20 rounded-lg text-[color:var(--sf-muted)]">
-                        {t('send.collateralNote', { defaultValue: 'Any non-alkane assets (inscriptions, runes) on the spent UTXOs will be sent to the recipient. Subfrost does not manage these asset types.' })}
+                        {t('send.collateralNote', { defaultValue: 'You can enable "Ignore Ordinals" and "Ignore Runes" in Wallet Settings to skip this warning and treat all UTXOs as spendable.' })}
                       </p>
                     </div>
                   </div>

@@ -317,8 +317,8 @@ const en: Record<string, string> = {
   'settings.advancedOptions': 'Advanced Options',
   'settings.ignoreOrdinals': 'Ignore Ordinals',
   'settings.ignoreRunes': 'Ignore Runes',
-  'settings.ignoreOrdinalsDescription': 'Treat all UTXOs as spendable, ignoring any inscriptions. This will be disabled once inscription detection is supported.',
-  'settings.ignoreRunesDescription': 'Treat all UTXOs as spendable, ignoring any runes. This will be disabled once rune detection is supported.',
+  'settings.ignoreOrdinalsDescription': 'Treat all UTXOs as spendable, ignoring any inscriptions. Disable this to protect inscription-bearing UTXOs from being spent.',
+  'settings.ignoreRunesDescription': 'Treat all UTXOs as spendable, ignoring any runes. Disable this to protect rune-bearing UTXOs from being spent.',
 
   // Vaults
   'vaults.title': 'DeFi Vaults',

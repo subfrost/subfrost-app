@@ -792,7 +792,7 @@ export default function WalletSettings() {
               <button
                 disabled
                 className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
-                title="Always enabled until inscription detection is supported"
+                title="Enabled — ordinal detection coming soon"
               >
                 <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
               </button>
@@ -807,7 +807,7 @@ export default function WalletSettings() {
               <button
                 disabled
                 className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
-                title="Always enabled until rune detection is supported"
+                title="Enabled — rune detection coming soon"
               >
                 <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
               </button>

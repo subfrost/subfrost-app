@@ -90,25 +90,27 @@ export async function POST(
       body: JSON.stringify(body),
     });
 
-    if (!response.ok) {
-      console.error(`[RPC Proxy] Error: ${response.status} for ${method}`);
-      return NextResponse.json(
-        { error: `RPC request failed: ${response.status}` },
-        { status: response.status }
-      );
-    }
-
-    // Handle upstream responses that may not be valid JSON (e.g., "upstream request failed")
-    let data;
+    // Read the response body once. Upstream is always JSON-RPC, but infrastructure
+    // errors (nginx 502, rate limits, service unavailable) may return plain text or HTML.
     const responseText = await response.text();
+    let data;
     try {
       data = JSON.parse(responseText);
     } catch {
-      console.error(`[RPC Proxy] Non-JSON response for ${method}: ${responseText.slice(0, 200)}`);
+      // Non-JSON response — this is an infrastructure error, not a JSON-RPC response.
+      // Common causes: nginx "upstream request failed", rate limit HTML pages, 502/503 errors.
+      const snippet = responseText.slice(0, 200).replace(/<[^>]*>/g, '').trim(); // strip HTML tags
+      console.error(`[RPC Proxy] Non-JSON upstream response (${response.status}) for ${method}: ${snippet}`);
       return NextResponse.json(
-        { jsonrpc: '2.0', error: { code: -32603, message: responseText.slice(0, 200) }, id: body?.id ?? null },
+        { jsonrpc: '2.0', error: { code: -32603, message: `Upstream error (${response.status}): ${snippet}` }, id: body?.id ?? null },
         { status: 502 }
       );
+    }
+
+    // Non-200 status with valid JSON body — forward the JSON-RPC error as-is
+    if (!response.ok) {
+      console.error(`[RPC Proxy] Upstream HTTP ${response.status} for ${method}`);
+      return NextResponse.json(data, { status: response.status });
     }
 
     // Log UTXO fetch results for debugging
