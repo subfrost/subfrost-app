@@ -58,13 +58,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths;
     }
 
-    // Priority 3: Special handling for DIESEL (2:0) — use local flame icon
-    if (id === '2:0' || symbolLower === 'diesel') {
-      paths.push('/tokens/fire.svg');
-      return paths;
-    }
-
-    // Priority 4: Special handling for bUSD (check by token ID)
+    // Priority 3: Special handling for bUSD (check by token ID)
     if (id === '2:56801' || symbolLower === 'busd') {
       paths.push('/tokens/busd.png');
       return paths;
@@ -82,6 +76,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     }
 
     // Priority 6: Subfrost CDN for Alkanes tokens (proper token icons)
+    // DIESEL (2:0) will use this path to get its icon from the CDN
     if (id && /^\d+:\d+/.test(id) && !hasLocalIconById) {
       const urlSafeId = id.replace(/:/g, '_');
       paths.push(`https://cdn.subfrost.io/alkanes/${urlSafeId}`);
