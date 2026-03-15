@@ -63,6 +63,13 @@ import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/const
 // PSBT patching is now handled by ts-sdk wallet adapters (adapter.ts)
 // import { patchTapInternalKeys } from '@/lib/psbt-patching';
 
+// Import OYL signing utilities with robust reconnection handling
+import { signWithOyl, detectWalletId, getOylCallCount, resetOylCallCount } from '@/lib/wallet/browserWalletSigning';
+
+// Connection-specific counter for OYL getAddresses() calls during initial connection
+// Helps identify if React StrictMode is causing duplicate modal triggers
+let oylConnectionCallCount = 0;
+
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
 
@@ -889,9 +896,22 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         // Xverse connection using direct BitcoinProvider.request('getAccounts')
         // — no sats-connect dependency needed. Same API used for signing.
         const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
+
+        // Diagnostic logging for Xverse connection issues
+        console.log('[WalletContext] Xverse: ===== CONNECTION START =====');
+        console.log('[WalletContext] Xverse: window.XverseProviders:', typeof (window as any).XverseProviders);
+        console.log('[WalletContext] Xverse: BitcoinProvider:', typeof xverseProvider);
+        if (xverseProvider) {
+          console.log('[WalletContext] Xverse: BitcoinProvider.request:', typeof xverseProvider.request);
+          // List all available methods
+          const methods = Object.keys(xverseProvider).filter(k => typeof xverseProvider[k] === 'function');
+          console.log('[WalletContext] Xverse: available methods:', methods.join(', '));
+        }
+
         if (!xverseProvider) throw new Error('Xverse wallet not detected. Please install the Xverse extension.');
 
         console.log('[WalletContext] Xverse: calling getAccounts via direct provider...');
+        console.log('[WalletContext] Xverse: If no popup appears within 5s, the extension may be in a stale state.');
 
         const response: any = await Promise.race([
           xverseProvider.request('getAccounts', {
@@ -1073,7 +1093,18 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         // getAddresses returns all address types in one call
         // On first call when not connected, this triggers the connection approval popup
-        const rawAddresses = await oylProvider.getAddresses();
+        // Add 30s timeout to prevent infinite hang if user dismisses popup or extension is unresponsive
+        oylConnectionCallCount++;
+        console.log(`[WalletContext][OYL-CONNECT] Calling getAddresses() with 30s timeout (connection call #${oylConnectionCallCount}, signing calls: ${getOylCallCount()})...`);
+        const rawAddresses = await Promise.race([
+          oylProvider.getAddresses(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error('OYL connection timed out after 30s. Please try again and approve the connection prompt.')),
+              30000
+            )
+          ),
+        ]);
         console.log('[WalletContext] OYL getAddresses RAW response:', rawAddresses);
         console.log('[WalletContext] OYL getAddresses RAW JSON:', JSON.stringify(rawAddresses, null, 2));
         console.log('[WalletContext] OYL response type:', typeof rawAddresses);
@@ -1567,11 +1598,34 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // 5. OYL auto-reconnection on session expiry
     // 6. 60-second timeout for all wallets
     if (walletAdapter && walletType === 'browser') {
+      const walletId = browserWallet?.info?.id || 'unknown';
+      console.log(`[WalletContext] Signing taproot PSBT (wallet: ${walletId})`);
+
+      // For OYL wallet, use the robust signWithOyl from browserWalletSigning.ts
+      // which has 60s timeout, expanded error detection, and auto-reconnection
+      if (detectWalletId(browserWallet) === 'oyl') {
+        try {
+          // Import bitcoinjs-lib dynamically to parse PSBT
+          const bitcoin = await import('bitcoinjs-lib');
+          const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin
+            : network === 'signet' || network === 'testnet' ? bitcoin.networks.testnet
+            : bitcoin.networks.regtest;
+
+          const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          console.log(`[WalletContext] OYL: Using signWithOyl (${psbt.inputCount} inputs)`);
+
+          const result = await signWithOyl(psbt, walletAdapter);
+          console.log(`[WalletContext] OYL: signing succeeded (finalized: ${result.isFinalized})`);
+          return result.signedPsbtBase64;
+        } catch (e: any) {
+          console.error(`[WalletContext] OYL signing failed:`, e?.message || e);
+          throw new Error(`OYL signing failed: ${e?.message || e}`);
+        }
+      }
+
+      // For other browser wallets, use the SDK adapter directly
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
-      const walletId = browserWallet?.info?.id || 'unknown';
-
-      console.log(`[WalletContext] Signing PSBT via ts-sdk adapter (wallet: ${walletId}, inputs: ${psbtHex.length / 2} bytes)`);
 
       try {
         const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
@@ -1676,15 +1730,46 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const signSegwitPsbt = useCallback(async (psbtBase64: string): Promise<string> => {
     // For browser wallets - use the SDK adapter which handles all wallet-specific logic
     if (walletAdapter && walletType === 'browser') {
+      const walletId = browserWallet?.info?.id || 'unknown';
+      console.log(`[WalletContext] Signing segwit PSBT (wallet: ${walletId})`);
+
+      // For OYL wallet, use the robust signWithOyl from browserWalletSigning.ts
+      // which has 60s timeout, expanded error detection, and auto-reconnection
+      if (detectWalletId(browserWallet) === 'oyl') {
+        try {
+          // Import bitcoinjs-lib dynamically to parse PSBT
+          const bitcoin = await import('bitcoinjs-lib');
+          const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin
+            : network === 'signet' || network === 'testnet' ? bitcoin.networks.testnet
+            : bitcoin.networks.regtest;
+
+          const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          console.log(`[WalletContext] OYL (segwit): Using signWithOyl (${psbt.inputCount} inputs)`);
+
+          const result = await signWithOyl(psbt, walletAdapter);
+          console.log(`[WalletContext] OYL (segwit): signing succeeded (finalized: ${result.isFinalized})`);
+          return result.signedPsbtBase64;
+        } catch (e: any) {
+          console.error(`[WalletContext] OYL (segwit) signing failed:`, e?.message || e);
+          throw new Error(`OYL signing failed: ${e?.message || e}`);
+        }
+      }
+
+      // For other browser wallets, use the SDK adapter directly
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
-      console.log('[WalletContext] Signing segwit PSBT with SDK adapter');
-      const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
-
-      // Convert signed hex back to base64
-      const signedBuffer = Buffer.from(signedHex, 'hex');
-      return signedBuffer.toString('base64');
+      try {
+        const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+        if (!signedHex) {
+          throw new Error(`${walletId} signing returned empty result`);
+        }
+        console.log(`[WalletContext] ${walletId} (segwit) signing succeeded (${signedHex.length} hex chars)`);
+        return Buffer.from(signedHex, 'hex').toString('base64');
+      } catch (e: any) {
+        console.error(`[WalletContext] ${walletId} (segwit) signing failed:`, e?.message || e);
+        throw new Error(`${walletId} signing failed: ${e?.message || e}`);
+      }
     }
 
     // For keystore wallets, use BIP84 derivation

@@ -23,6 +23,22 @@ import * as bitcoin from 'bitcoinjs-lib';
 /** Standard signing timeout (60 seconds) */
 const SIGNING_TIMEOUT_MS = 60000;
 
+/**
+ * Diagnostic counter for OYL getAddresses() calls
+ * Helps identify if React StrictMode or other code is causing duplicate modal triggers
+ */
+let oylGetAddressesCallCount = 0;
+export const getOylCallCount = () => oylGetAddressesCallCount;
+export const resetOylCallCount = () => { oylGetAddressesCallCount = 0; };
+
+/**
+ * Diagnostic counter for OYL signPsbt() calls
+ * If this increments more than once per user action, we have duplicate signing calls
+ */
+let oylSignPsbtCallCount = 0;
+export const getOylSignCount = () => oylSignPsbtCallCount;
+export const resetOylSignCount = () => { oylSignPsbtCallCount = 0; };
+
 /** Wallet identification */
 export type WalletId = 'xverse' | 'unisat' | 'oyl' | 'okx' | 'unknown';
 
@@ -237,28 +253,43 @@ export async function signWithOyl(
   psbt: bitcoin.Psbt,
   walletAdapter: any
 ): Promise<SigningResult> {
+  oylSignPsbtCallCount++;
+  const callId = oylSignPsbtCallCount;
+
   const psbtHex = psbt.toHex();
-  console.log('[browserWalletSigning] OYL: PSBT hex length:', psbtHex.length);
+  const startTime = Date.now();
+  console.log(`[browserWalletSigning] OYL: ===== SIGN START (call #${callId}) =====`);
+  console.log(`[browserWalletSigning] OYL: PSBT hex length:`, psbtHex.length);
+  console.log(`[browserWalletSigning] OYL: inputs:`, psbt.inputCount);
+  console.log(`[browserWalletSigning] OYL: Total signWithOyl calls this session: ${callId}`);
 
   const oylProvider = (window as any).oyl;
 
   const signWithRetry = async (): Promise<string> => {
     try {
+      console.log('[browserWalletSigning] OYL: calling walletAdapter.signPsbt()...');
       const signedHex: string = await withTimeout(
         walletAdapter.signPsbt(psbtHex, { auto_finalized: false }),
         SIGNING_TIMEOUT_MS,
         'OYL'
       );
+      console.log('[browserWalletSigning] OYL: signPsbt SUCCESS, got', signedHex?.length, 'hex chars');
       return signedHex;
     } catch (e: any) {
       const errorMsg = e?.message || String(e);
+      // CONSERVATIVE error detection - only reconnect on SPECIFIC connection errors
+      // Avoid false positives that would trigger unnecessary modals
       const isConnectionError =
-        errorMsg.includes('connected first') ||
+        errorMsg.includes('Site origin must be connected first') ||
         errorMsg.includes('not connected') ||
-        errorMsg.includes('connection');
+        errorMsg.includes('disconnected');
+
+      console.log('[browserWalletSigning] OYL signPsbt error:', errorMsg);
+      console.log('[browserWalletSigning] OYL isConnectionError:', isConnectionError);
 
       if (isConnectionError && oylProvider?.getAddresses) {
-        console.log('[browserWalletSigning] OYL: connection error, attempting reconnection...');
+        oylGetAddressesCallCount++;
+        console.log(`[browserWalletSigning] OYL: connection error, attempting reconnection (call #${oylGetAddressesCallCount})...`);
 
         // Try to reconnect
         if (typeof oylProvider.connect === 'function') {
@@ -270,7 +301,7 @@ export async function signWithOyl(
         }
 
         await oylProvider.getAddresses();
-        console.log('[browserWalletSigning] OYL: reconnection successful, retrying sign...');
+        console.log(`[browserWalletSigning] OYL: reconnection successful (call #${oylGetAddressesCallCount}), retrying sign...`);
 
         // Retry signing
         return await withTimeout(
@@ -285,7 +316,10 @@ export async function signWithOyl(
   };
 
   const signedHex = await signWithRetry();
-  console.log('[browserWalletSigning] OYL: signed hex length:', signedHex?.length);
+  const elapsed = Date.now() - startTime;
+  console.log(`[browserWalletSigning] OYL: ===== SIGN COMPLETE (call #${callId}) =====`);
+  console.log(`[browserWalletSigning] OYL: signed hex length:`, signedHex?.length);
+  console.log(`[browserWalletSigning] OYL: elapsed time:`, elapsed, 'ms');
 
   const signedBuffer = Buffer.from(signedHex, 'hex');
   return {

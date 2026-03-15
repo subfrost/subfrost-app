@@ -163,10 +163,32 @@ export function calculateMaximumFromSlippage({
     .toString();
 }
 
+/**
+ * Helper to add timeout to a promise
+ * JOURNAL ENTRY (2026-03-15): Added to prevent getFutureBlockHeight from hanging
+ * indefinitely when RPC proxy is stuck.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMsg)), ms)
+    ),
+  ]);
+}
+
+/** Default timeout for block height fetch (10 seconds) */
+const BLOCK_HEIGHT_TIMEOUT_MS = 10000;
+
 export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
   // Try WASM provider first (metashrewHeight), then sandshrew, then bitcoin
+  // Use timeout to prevent indefinite hang if RPC is stuck
   if (provider.metashrewHeight) {
-    const currentBlockHeight = await provider.metashrewHeight();
+    const currentBlockHeight = await withTimeout(
+      provider.metashrewHeight(),
+      BLOCK_HEIGHT_TIMEOUT_MS,
+      `Block height fetch timed out after ${BLOCK_HEIGHT_TIMEOUT_MS / 1000}s. Please try again.`
+    );
     return currentBlockHeight + blocks;
   }
 
@@ -177,7 +199,11 @@ export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
     throw new Error('No getBlockCount method available on provider');
   }
 
-  const currentBlockHeight = await getBlockCount();
+  const currentBlockHeight = await withTimeout(
+    getBlockCount(),
+    BLOCK_HEIGHT_TIMEOUT_MS,
+    `Block height fetch timed out after ${BLOCK_HEIGHT_TIMEOUT_MS / 1000}s. Please try again.`
+  );
   return currentBlockHeight + blocks;
 };
 
