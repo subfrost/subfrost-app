@@ -37,6 +37,15 @@ const en: Record<string, string> = {
   'footer.privacy': 'Privacy Policy',
 
   // Swap
+  'swap.transactionProgress': 'Transaction Progress',
+  'swap.stepOf': 'Step {current}/{total}',
+  'swap.step1Wrap': 'Wrap BTC → frBTC',
+  'swap.step2Swap': 'Swap frBTC →',
+  'swap.step1Swap': 'Swap',
+  'swap.step2Unwrap': 'Unwrap frBTC → BTC',
+  'swap.broadcasting': 'Broadcasting...',
+  'swap.waitingForConfirmation': 'Waiting for confirmation...',
+  'swap.retry': 'Retry',
   'swap.youSend': 'You Send',
   'swap.youReceive': 'You Receive',
   'swap.confirmSwap': 'CONFIRM SWAP',
