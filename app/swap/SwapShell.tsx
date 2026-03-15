@@ -41,6 +41,21 @@ const TransactionSettingsModal = lazy(() => import("@/app/components/Transaction
 const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModal"));
 const LPPositionSelectorModal = lazy(() => import("./components/LPPositionSelectorModal"));
 const MyWalletSwaps = lazy(() => import("./components/MyWalletSwaps"));
+const TransactionStepper = lazy(() => import("./components/TransactionStepper"));
+
+// Types for multi-step swap flow state machine
+// JOURNAL (2026-03-15): Added to provide clear UX feedback during BTC→Token and Token→BTC swaps.
+// These flows require two sequential transactions due to UTXO dependency chain.
+type SwapFlowStep =
+  | { type: 'idle' }
+  | { type: 'wrapping'; }
+  | { type: 'wrap-confirming'; txId: string; attempt: number; maxAttempts: number }
+  | { type: 'swapping' }
+  | { type: 'swap-confirming'; txId: string; attempt: number; maxAttempts: number }
+  | { type: 'unwrapping' }
+  | { type: 'unwrap-confirming'; txId: string; attempt: number; maxAttempts: number }
+  | { type: 'complete'; wrapTxId?: string; swapTxId?: string; unwrapTxId?: string }
+  | { type: 'error'; step: 'wrap' | 'swap' | 'unwrap'; message: string; wrapTxId?: string; swapTxId?: string };
 
 // Loading skeleton for swap form
 const SwapFormSkeleton = () => (
@@ -127,6 +142,10 @@ export default function SwapShell() {
   const [selectedLPPosition, setSelectedLPPosition] = useState<LPPosition | null>(null);
   const [isLPSelectorOpen, setIsLPSelectorOpen] = useState(false);
   const [removeAmount, setRemoveAmount] = useState<string>("");
+
+  // Multi-step swap flow state (BTC→Token, Token→BTC)
+  // JOURNAL (2026-03-15): Added to track progress and show TransactionStepper UI
+  const [swapFlowStep, setSwapFlowStep] = useState<SwapFlowStep>({ type: 'idle' });
 
   // LP positions from wallet (real data from useLPPositions hook)
   const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
@@ -629,6 +648,100 @@ export default function SwapShell() {
     [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]
   );
 
+  // Helper: Convert swapFlowStep to TransactionStepper steps
+  // JOURNAL (2026-03-15): Shows clear visual feedback during multi-step swaps
+  const { stepperSteps, currentStepIndex, showStepper } = useMemo(() => {
+    const step = swapFlowStep;
+    if (step.type === 'idle') {
+      return { stepperSteps: [], currentStepIndex: 0, showStepper: false };
+    }
+
+    // BTC → Token flow (wrap then swap)
+    if (isBtcToTokenSwap) {
+      const steps: import('./components/TransactionStepper').TransactionStep[] = [
+        {
+          label: `${t('swap.step1Wrap') || 'Step 1: Wrap BTC → frBTC'}`,
+          status: step.type === 'wrapping' ? 'loading'
+                : step.type === 'wrap-confirming' ? 'confirming'
+                : (step.type === 'swapping' || step.type === 'swap-confirming' || step.type === 'complete') ? 'complete'
+                : step.type === 'error' && step.step === 'wrap' ? 'error'
+                : 'pending',
+          txId: step.type === 'wrap-confirming' ? step.txId
+              : step.type === 'complete' ? step.wrapTxId
+              : step.type === 'error' ? step.wrapTxId
+              : undefined,
+          pollingAttempt: step.type === 'wrap-confirming' ? step.attempt : undefined,
+          maxAttempts: step.type === 'wrap-confirming' ? step.maxAttempts : undefined,
+          errorMessage: step.type === 'error' && step.step === 'wrap' ? step.message : undefined,
+        },
+        {
+          label: `${t('swap.step2Swap') || 'Step 2: Swap frBTC →'} ${toToken?.symbol || 'Token'}`,
+          status: step.type === 'swapping' ? 'loading'
+                : step.type === 'swap-confirming' ? 'confirming'
+                : step.type === 'complete' ? 'complete'
+                : step.type === 'error' && step.step === 'swap' ? 'error'
+                : 'pending',
+          txId: step.type === 'swap-confirming' ? step.txId
+              : step.type === 'complete' ? step.swapTxId
+              : step.type === 'error' ? step.swapTxId
+              : undefined,
+          pollingAttempt: step.type === 'swap-confirming' ? step.attempt : undefined,
+          maxAttempts: step.type === 'swap-confirming' ? step.maxAttempts : undefined,
+          errorMessage: step.type === 'error' && step.step === 'swap' ? step.message : undefined,
+        },
+      ];
+      const currentIdx = step.type === 'wrapping' || step.type === 'wrap-confirming' ? 0
+                       : step.type === 'swapping' || step.type === 'swap-confirming' ? 1
+                       : step.type === 'complete' ? 1
+                       : step.type === 'error' ? (step.step === 'wrap' ? 0 : 1)
+                       : 0;
+      return { stepperSteps: steps, currentStepIndex: currentIdx, showStepper: true };
+    }
+
+    // Token → BTC flow (swap then unwrap)
+    if (isTokenToBtcSwap) {
+      const steps: import('./components/TransactionStepper').TransactionStep[] = [
+        {
+          label: `${t('swap.step1Swap') || 'Step 1: Swap'} ${fromToken?.symbol || 'Token'} → frBTC`,
+          status: step.type === 'swapping' ? 'loading'
+                : step.type === 'swap-confirming' ? 'confirming'
+                : (step.type === 'unwrapping' || step.type === 'unwrap-confirming' || step.type === 'complete') ? 'complete'
+                : step.type === 'error' && step.step === 'swap' ? 'error'
+                : 'pending',
+          txId: step.type === 'swap-confirming' ? step.txId
+              : step.type === 'complete' ? step.swapTxId
+              : step.type === 'error' ? step.swapTxId
+              : undefined,
+          pollingAttempt: step.type === 'swap-confirming' ? step.attempt : undefined,
+          maxAttempts: step.type === 'swap-confirming' ? step.maxAttempts : undefined,
+          errorMessage: step.type === 'error' && step.step === 'swap' ? step.message : undefined,
+        },
+        {
+          label: `${t('swap.step2Unwrap') || 'Step 2: Unwrap frBTC → BTC'}`,
+          status: step.type === 'unwrapping' ? 'loading'
+                : step.type === 'unwrap-confirming' ? 'confirming'
+                : step.type === 'complete' ? 'complete'
+                : step.type === 'error' && step.step === 'unwrap' ? 'error'
+                : 'pending',
+          txId: step.type === 'unwrap-confirming' ? step.txId
+              : step.type === 'complete' ? step.unwrapTxId
+              : undefined,
+          pollingAttempt: step.type === 'unwrap-confirming' ? step.attempt : undefined,
+          maxAttempts: step.type === 'unwrap-confirming' ? step.maxAttempts : undefined,
+          errorMessage: step.type === 'error' && step.step === 'unwrap' ? step.message : undefined,
+        },
+      ];
+      const currentIdx = step.type === 'swapping' || step.type === 'swap-confirming' ? 0
+                       : step.type === 'unwrapping' || step.type === 'unwrap-confirming' ? 1
+                       : step.type === 'complete' ? 1
+                       : step.type === 'error' ? (step.step === 'swap' ? 0 : 1)
+                       : 0;
+      return { stepperSteps: steps, currentStepIndex: currentIdx, showStepper: true };
+    }
+
+    return { stepperSteps: [], currentStepIndex: 0, showStepper: false };
+  }, [swapFlowStep, isBtcToTokenSwap, isTokenToBtcSwap, fromToken?.symbol, toToken?.symbol, t]);
+
   const handleSwap = async () => {
     console.log('[handleSwap] Called with:', {
       fromToken: fromToken?.id,
@@ -684,6 +797,9 @@ export default function SwapShell() {
     // zero tokens and reverted with "balance underflow". See useWrapSwapMutation.ts header
     // for full investigation details.
     //
+    // JOURNAL (2026-03-15): Added state machine + TransactionStepper for clear UX feedback.
+    // Users now see step indicators (1/2, 2/2) and progress during polling.
+    //
     // The two-step approach: wrap first, mine a block (regtest), then swap the frBTC.
     if (isBtcToTokenSwap) {
       if (!quote || !quote.poolId) {
@@ -694,16 +810,10 @@ export default function SwapShell() {
 
       try {
         console.log('[SWAP] BTC →', toToken.symbol, ': Step 1/2 — Wrapping BTC to frBTC');
-        console.log('[SWAP] DEBUG: direction =', direction);
-        console.log('[SWAP] DEBUG: fromAmount =', fromAmount, '(should be BTC display units)');
-        console.log('[SWAP] DEBUG: toAmount =', toAmount);
-        console.log('[SWAP] DEBUG: quote.displaySellAmount =', quote?.displaySellAmount);
-        console.log('[SWAP] DEBUG: quote.sellAmount =', quote?.sellAmount);
-        // fromAmount is always BTC here (it's the "from" token in BTC→Token swaps).
-        // When direction='sell', user typed the BTC amount directly.
-        // When direction='buy', user typed the target token amount and fromAmount
-        // was back-calculated from the quote (via quote.displaySellAmount).
         const btcAmount = fromAmount;
+
+        // Update state: wrapping
+        setSwapFlowStep({ type: 'wrapping' });
 
         // Step 1: Wrap BTC → frBTC
         const wrapRes = await wrapMutation.mutateAsync({
@@ -712,13 +822,13 @@ export default function SwapShell() {
         });
 
         if (!wrapRes?.success || !wrapRes.transactionId) {
+          setSwapFlowStep({ type: 'error', step: 'wrap', message: 'No transaction ID returned' });
           throw new Error('Wrap step failed — no transaction ID returned');
         }
-        console.log('[SWAP] Step 1 complete — wrap txid:', wrapRes.transactionId);
+        const wrapTxId = wrapRes.transactionId;
+        console.log('[SWAP] Step 1 broadcast — wrap txid:', wrapTxId);
 
         // Wait for wrap tx to confirm before proceeding to step 2.
-        // The swap step needs confirmed frBTC UTXOs — if we proceed before
-        // the wrap tx is mined, the SDK won't find enough frBTC balance.
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
 
         // On regtest, mine a block to trigger confirmation
@@ -737,14 +847,16 @@ export default function SwapShell() {
 
         // Poll esplora until the wrap tx is confirmed (all networks)
         console.log('[SWAP] Waiting for wrap tx confirmation before swap step...');
-        showNotification(wrapRes.transactionId, 'wrap');
+        showNotification(wrapTxId, 'wrap', 'Step 1/2');
 
-        const wrapTxId = wrapRes.transactionId;
         const pollInterval = isRegtest ? 1500 : 15000;   // 1.5s regtest, 15s mainnet
         const maxPollAttempts = isRegtest ? 20 : 120;     // 30s regtest, ~30min mainnet
         let wrapConfirmed = false;
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+          // Update state with polling progress
+          setSwapFlowStep({ type: 'wrap-confirming', txId: wrapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
+
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           try {
             const txResp = await fetch(`/api/rpc/${encodeURIComponent(network)}`, {
@@ -774,6 +886,8 @@ export default function SwapShell() {
         }
 
         if (!wrapConfirmed) {
+          const timeoutMsg = `Wrap tx broadcast but did not confirm. Your frBTC is safe — retry swap manually when confirmed.`;
+          setSwapFlowStep({ type: 'error', step: 'wrap', message: timeoutMsg, wrapTxId });
           throw new Error(
             `Wrap tx broadcast successfully (${wrapTxId}) but did not confirm within ${Math.round(maxPollAttempts * pollInterval / 60000)} minutes. ` +
             `Your BTC has been wrapped — once confirmed, swap frBTC → ${toToken.symbol} manually.`
@@ -782,6 +896,7 @@ export default function SwapShell() {
 
         // Step 2: Swap frBTC → Target token
         console.log('[SWAP] Step 2/2 — Swapping frBTC →', toToken.symbol);
+        setSwapFlowStep({ type: 'swapping' });
 
         // Calculate frBTC amount after wrap fee (same logic as useWrapSwapMutation)
         const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
@@ -803,12 +918,21 @@ export default function SwapShell() {
 
         if (swapRes?.success && swapRes.transactionId) {
           console.log('[SWAP] Step 2 complete — swap txid:', swapRes.transactionId);
-          showNotification(swapRes.transactionId, 'swap');
+          setSwapFlowStep({ type: 'complete', wrapTxId, swapTxId: swapRes.transactionId });
+          showNotification(swapRes.transactionId, 'swap', 'Step 2/2');
           setTimeout(() => refreshWalletData(), 2000);
+          // Auto-dismiss stepper after 5 seconds on success
+          setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+        } else {
+          setSwapFlowStep({ type: 'error', step: 'swap', message: 'No transaction ID returned', wrapTxId });
         }
       } catch (e: any) {
         console.error('[SWAP] BTC → Token swap failed:', e);
         const msg = e?.message || 'See console for details.';
+        // Only update state if not already in error state (wrap error)
+        if (swapFlowStep.type !== 'error') {
+          setSwapFlowStep({ type: 'error', step: 'swap', message: msg });
+        }
         if (msg.includes('Insufficient alkanes')) {
           const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
           if (match) {
@@ -835,6 +959,8 @@ export default function SwapShell() {
     // Previously used useSwapUnwrapMutation (atomic single-tx), which had the same
     // protostone pointer issue as useWrapSwapMutation — the swap cellpack's pointer=p2
     // didn't deliver frBTC to the unwrap cellpack's incomingAlkanes.
+    //
+    // JOURNAL (2026-03-15): Added state machine + TransactionStepper for clear UX feedback.
     if (isTokenToBtcSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] Token → BTC swap requires quote with poolId');
@@ -845,6 +971,8 @@ export default function SwapShell() {
       try {
         // Step 1: Swap Token → frBTC
         console.log('[SWAP]', fromToken.symbol, '→ BTC : Step 1/2 — Swapping', fromToken.symbol, '→ frBTC');
+        setSwapFlowStep({ type: 'swapping' });
+
         const sellAmount = quote.sellAmount;
 
         const swapRes = await swapMutation.mutateAsync({
@@ -860,9 +988,11 @@ export default function SwapShell() {
         });
 
         if (!swapRes?.success || !swapRes.transactionId) {
+          setSwapFlowStep({ type: 'error', step: 'swap', message: 'No transaction ID returned' });
           throw new Error('Swap step failed — no transaction ID returned');
         }
-        console.log('[SWAP] Step 1 complete — swap txid:', swapRes.transactionId);
+        const swapTxId = swapRes.transactionId;
+        console.log('[SWAP] Step 1 broadcast — swap txid:', swapTxId);
 
         // Wait for swap tx to confirm before proceeding to unwrap
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
@@ -881,14 +1011,16 @@ export default function SwapShell() {
         }
 
         console.log('[SWAP] Waiting for swap tx confirmation before unwrap step...');
-        showNotification(swapRes.transactionId, 'swap');
+        showNotification(swapTxId, 'swap', 'Step 1/2');
 
-        const swapTxId = swapRes.transactionId;
         const pollInterval = isRegtest ? 1500 : 15000;
         const maxPollAttempts = isRegtest ? 20 : 120;
         let swapConfirmed = false;
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+          // Update state with polling progress
+          setSwapFlowStep({ type: 'swap-confirming', txId: swapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
+
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           try {
             const txResp = await fetch(`/api/rpc/${encodeURIComponent(network)}`, {
@@ -917,6 +1049,8 @@ export default function SwapShell() {
         }
 
         if (!swapConfirmed) {
+          const timeoutMsg = `Swap tx broadcast but did not confirm. Your frBTC is safe — unwrap manually when confirmed.`;
+          setSwapFlowStep({ type: 'error', step: 'swap', message: timeoutMsg, swapTxId });
           throw new Error(
             `Swap tx broadcast successfully (${swapTxId}) but did not confirm within ${Math.round(maxPollAttempts * pollInterval / 60000)} minutes. ` +
             `Your ${fromToken.symbol} has been swapped to frBTC — once confirmed, unwrap frBTC → BTC manually.`
@@ -925,6 +1059,7 @@ export default function SwapShell() {
 
         // Step 2: Unwrap frBTC → BTC
         console.log('[SWAP] Step 2/2 — Unwrapping frBTC → BTC');
+        setSwapFlowStep({ type: 'unwrapping' });
 
         // The frBTC amount from the swap is approximately the buyAmount from the quote
         const frbtcAmount = quote.buyAmount;
@@ -936,12 +1071,21 @@ export default function SwapShell() {
 
         if (unwrapRes?.success && unwrapRes.transactionId) {
           console.log('[SWAP] Step 2 complete — unwrap txid:', unwrapRes.transactionId);
-          showNotification(unwrapRes.transactionId, 'unwrap');
+          setSwapFlowStep({ type: 'complete', swapTxId, unwrapTxId: unwrapRes.transactionId });
+          showNotification(unwrapRes.transactionId, 'unwrap', 'Step 2/2');
           setTimeout(() => refreshWalletData(), 2000);
+          // Auto-dismiss stepper after 5 seconds on success
+          setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+        } else {
+          setSwapFlowStep({ type: 'error', step: 'unwrap', message: 'No transaction ID returned', swapTxId });
         }
       } catch (e: any) {
         console.error('[SWAP] Token → BTC swap failed:', e);
         const msg = e?.message || 'See console for details.';
+        // Only update state if not already in error state
+        if (swapFlowStep.type !== 'error') {
+          setSwapFlowStep({ type: 'error', step: 'swap', message: msg });
+        }
         if (msg.includes('Insufficient alkanes')) {
           const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
           if (match) {
@@ -1770,6 +1914,23 @@ export default function SwapShell() {
           )}
           </Suspense>
           </section>
+
+          {/* Transaction Stepper - shows during multi-step swaps (BTC→Token, Token→BTC) */}
+          {showStepper && stepperSteps.length > 0 && (
+            <div className="mt-4">
+              <Suspense fallback={null}>
+                <TransactionStepper
+                  steps={stepperSteps}
+                  currentStepIndex={currentStepIndex}
+                  network={network}
+                  onRetry={() => {
+                    // Reset to idle and let user retry the swap
+                    setSwapFlowStep({ type: 'idle' });
+                  }}
+                />
+              </Suspense>
+            </div>
+          )}
 
           {/* Mobile Chart Toggle Button */}
           <button

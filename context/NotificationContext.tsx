@@ -8,11 +8,13 @@ export interface Notification {
   txId: string;
   operationType: OperationType;
   createdAt: number;
+  /** Optional step context for multi-step flows (e.g., "1/2", "2/2") */
+  stepContext?: string;
 }
 
 interface NotificationContextValue {
   notifications: Notification[];
-  showNotification: (txId: string, operationType: OperationType) => void;
+  showNotification: (txId: string, operationType: OperationType, stepContext?: string) => void;
   dismissNotification: (id: string) => void;
 }
 
@@ -21,9 +23,9 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const showNotification = useCallback((txId: string, operationType: OperationType) => {
+  const showNotification = useCallback((txId: string, operationType: OperationType, stepContext?: string) => {
     const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    setNotifications((prev) => [...prev, { id, txId, operationType, createdAt: Date.now() }]);
+    setNotifications((prev) => [...prev, { id, txId, operationType, createdAt: Date.now(), stepContext }]);
   }, []);
 
   const dismissNotification = useCallback((id: string) => {

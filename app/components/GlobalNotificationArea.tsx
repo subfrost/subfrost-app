@@ -16,6 +16,7 @@ export default function GlobalNotificationArea() {
           key={notif.id}
           txId={notif.txId}
           operationType={notif.operationType}
+          stepContext={notif.stepContext}
           onClose={() => dismissNotification(notif.id)}
           autoCloseAfterConfirmed
           onAutoClose={() => dismissNotification(notif.id)}

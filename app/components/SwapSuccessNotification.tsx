@@ -14,6 +14,8 @@ type Props = {
   operationType?: OperationType;
   autoCloseAfterConfirmed?: boolean;
   onAutoClose?: () => void;
+  /** Optional step context for multi-step flows (e.g., "Step 1/2") */
+  stepContext?: string;
 };
 
 export default function SwapSuccessNotification({
@@ -22,6 +24,7 @@ export default function SwapSuccessNotification({
   operationType = 'swap',
   autoCloseAfterConfirmed = false,
   onAutoClose,
+  stepContext,
 }: Props) {
   const { t } = useTranslation();
   const [isFlashing, setIsFlashing] = useState(true);
@@ -131,7 +134,10 @@ export default function SwapSuccessNotification({
 
           {/* Content */}
           <div className="ml-8 pr-16">
-            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">{t('success.submitted', { operation: operationLabel })}</h3>
+            <h3 className="text-base font-bold text-[color:var(--sf-info-green-title)] mb-1">
+              {stepContext && <span className="text-[color:var(--sf-info-green-text)] font-medium mr-1">{stepContext}:</span>}
+              {t('success.submitted', { operation: operationLabel })}
+            </h3>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               {t('success.transactionId')}{" "}
               <Link
