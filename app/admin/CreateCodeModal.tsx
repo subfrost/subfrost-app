@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAdminFetch } from './useAdminFetch';
 
 interface Props {
@@ -17,6 +17,24 @@ export default function CreateCodeModal({ onClose, onCreated, parentCodes = [] }
   const [ownerTaprootAddress, setOwnerTaprootAddress] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [parentSearch, setParentSearch] = useState('');
+  const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (parentRef.current && !parentRef.current.contains(e.target as Node)) {
+        setParentDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const filteredParentCodes = parentCodes.filter((p) =>
+    p.code.toLowerCase().includes(parentSearch.toLowerCase())
+  );
+  const selectedParentCode = parentCodes.find((p) => p.id === parentCodeId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,18 +92,46 @@ export default function CreateCodeModal({ onClose, onCreated, parentCodes = [] }
               placeholder="Twitter campaign Jan 2026"
             />
           </div>
-          <div>
+          <div ref={parentRef} className="relative">
             <label className="mb-1 block text-xs text-[color:var(--sf-muted)]">Parent Code</label>
-            <select
-              value={parentCodeId}
-              onChange={(e) => setParentCodeId(e.target.value)}
+            <input
+              type="text"
+              value={parentDropdownOpen ? parentSearch : (selectedParentCode?.code || '')}
+              onChange={(e) => {
+                setParentSearch(e.target.value);
+                setParentDropdownOpen(true);
+              }}
+              onFocus={() => {
+                setParentSearch('');
+                setParentDropdownOpen(true);
+              }}
+              placeholder="None (top-level)"
               className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)]"
-            >
-              <option value="">None (top-level)</option>
-              {parentCodes.map((p) => (
-                <option key={p.id} value={p.id}>{p.code}</option>
-              ))}
-            </select>
+            />
+            {parentDropdownOpen && (
+              <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => { setParentCodeId(''); setParentSearch(''); setParentDropdownOpen(false); }}
+                  className="w-full px-3 py-2 text-left text-sm text-[color:var(--sf-muted)] hover:bg-[color:var(--sf-glass-bg)]"
+                >
+                  None (top-level)
+                </button>
+                {filteredParentCodes.map((p) => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => { setParentCodeId(p.id); setParentSearch(''); setParentDropdownOpen(false); }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-[color:var(--sf-glass-bg)] ${p.id === parentCodeId ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
+                  >
+                    {p.code}
+                  </button>
+                ))}
+                {filteredParentCodes.length === 0 && parentSearch && (
+                  <div className="px-3 py-2 text-sm text-[color:var(--sf-muted)]">No codes found</div>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="mb-1 block text-xs text-[color:var(--sf-muted)]">

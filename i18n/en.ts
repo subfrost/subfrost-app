@@ -356,7 +356,7 @@ const en: Record<string, string> = {
   'vault.veUsd': 'veUSD Vault',
   'vault.veUsdDesc': 'Stake USD for boosted yield',
   'vault.stakedUsd': 'Staked USD Gauge',
-  'vault.dxBtc': 'dxBTC Token',
+  'vault.dxBtc': 'dxBTC Token Vault',
   'vault.dxBtcDesc': 'Stake BTC for pure BTC yield',
   'vault.stakedFuel': 'Staked FUEL',
   'vault.escrowNft': 'Escrow NFT',

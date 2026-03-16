@@ -12,6 +12,19 @@ interface FuelAllocation {
   updatedAt: string;
 }
 
+interface FormEntry {
+  address: string;
+  amount: string;
+  note: string;
+}
+
+interface OverwriteWarning {
+  existing: { address: string; currentAmount: number }[];
+  entriesToSave: { address: string; amount: number; note: string | null }[];
+}
+
+const emptyEntry = (): FormEntry => ({ address: '', amount: '', note: '' });
+
 export default function FuelTab() {
   const adminFetch = useAdminFetch();
   const [allocations, setAllocations] = useState<FuelAllocation[]>([]);
@@ -20,12 +33,11 @@ export default function FuelTab() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
-  // Create/Edit form
+  // Create/Edit form — supports up to 10 entries
   const [showForm, setShowForm] = useState(false);
-  const [formAddress, setFormAddress] = useState('');
-  const [formAmount, setFormAmount] = useState('');
-  const [formNote, setFormNote] = useState('');
+  const [formEntries, setFormEntries] = useState<FormEntry[]>([emptyEntry()]);
   const [saving, setSaving] = useState(false);
+  const [overwriteWarning, setOverwriteWarning] = useState<OverwriteWarning | null>(null);
 
   const fetchAllocations = useCallback(async () => {
     try {
@@ -44,28 +56,103 @@ export default function FuelTab() {
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
 
-  const handleSave = async (e: React.FormEvent) => {
+  const updateEntry = (index: number, field: keyof FormEntry, value: string) => {
+    setFormEntries((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const addMoreEntries = () => {
+    setFormEntries((prev) => {
+      const toAdd = Math.min(9, 10 - prev.length);
+      return [...prev, ...Array.from({ length: toAdd }, emptyEntry)];
+    });
+  };
+
+  // Handle paste from spreadsheets (tab-separated columns, newline-separated rows)
+  const FIELD_ORDER: (keyof FormEntry)[] = ['address', 'amount', 'note'];
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>, rowIndex: number, field: keyof FormEntry) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (!text) return;
+
+    // Detect spreadsheet data: contains tabs or multiple lines
+    const hasTabsOrNewlines = text.includes('\t') || text.includes('\n');
+    if (!hasTabsOrNewlines) {
+      // Single value paste — trim and let default behavior handle it, but strip whitespace
+      e.preventDefault();
+      updateEntry(rowIndex, field, text.trim());
+      return;
+    }
+
     e.preventDefault();
+    const rows = text.split(/\r?\n/).filter((line) => line.length > 0);
+    const startCol = FIELD_ORDER.indexOf(field);
+
+    setFormEntries((prev) => {
+      // Ensure we have enough rows (up to 10)
+      const needed = rowIndex + rows.length;
+      let next = [...prev];
+      while (next.length < needed && next.length < 10) {
+        next.push(emptyEntry());
+      }
+
+      for (let r = 0; r < rows.length && rowIndex + r < 10; r++) {
+        const cells = rows[r].split('\t');
+        const targetRow = rowIndex + r;
+        const updated = { ...next[targetRow] };
+
+        for (let c = 0; c < cells.length && startCol + c < FIELD_ORDER.length; c++) {
+          updated[FIELD_ORDER[startCol + c]] = cells[c].trim();
+        }
+
+        next[targetRow] = updated;
+      }
+
+      return next;
+    });
+  };
+
+  const removeEntry = (index: number) => {
+    setFormEntries((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const buildEntriesToSave = () => {
+    return formEntries
+      .filter((e) => e.address.trim() && e.amount.trim())
+      .map((e) => ({
+        address: e.address.trim(),
+        amount: parseFloat(e.amount),
+        note: e.note.trim() || null,
+      }))
+      .filter((e) => !isNaN(e.amount) && e.amount >= 0);
+  };
+
+  const saveEntries = async (entries: { address: string; amount: number; note: string | null }[]) => {
     setSaving(true);
     setError('');
     try {
       const res = await adminFetch('/api/admin/fuel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address: formAddress,
-          amount: parseFloat(formAmount),
-          note: formNote || null,
-        }),
+        body: JSON.stringify(
+          entries.length === 1
+            ? { address: entries[0].address, amount: entries[0].amount, note: entries[0].note }
+            : { entries }
+        ),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to save');
       }
       setShowForm(false);
-      setFormAddress('');
-      setFormAmount('');
-      setFormNote('');
+      setFormEntries([emptyEntry()]);
+      setOverwriteWarning(null);
       fetchAllocations();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
@@ -74,10 +161,30 @@ export default function FuelTab() {
     }
   };
 
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const entriesToSave = buildEntriesToSave();
+    if (entriesToSave.length === 0) {
+      setError('Please fill in at least one entry with an address and amount.');
+      return;
+    }
+
+    // Check for existing allocations that would be overwritten
+    const existingMap = new Map(allocations.map((a) => [a.address, a]));
+    const existing = entriesToSave
+      .filter((e) => existingMap.has(e.address))
+      .map((e) => ({ address: e.address, currentAmount: existingMap.get(e.address)!.amount }));
+
+    if (existing.length > 0) {
+      setOverwriteWarning({ existing, entriesToSave });
+      return;
+    }
+
+    await saveEntries(entriesToSave);
+  };
+
   const editAllocation = (alloc: FuelAllocation) => {
-    setFormAddress(alloc.address);
-    setFormAmount(String(alloc.amount));
-    setFormNote(alloc.note || '');
+    setFormEntries([{ address: alloc.address, amount: String(alloc.amount), note: alloc.note || '' }]);
     setShowForm(true);
   };
 
@@ -178,9 +285,8 @@ export default function FuelTab() {
           onClick={() => {
             if (showForm) {
               setShowForm(false);
-              setFormAddress('');
-              setFormAmount('');
-              setFormNote('');
+              setFormEntries([emptyEntry()]);
+              setOverwriteWarning(null);
             } else {
               setShowForm(true);
             }
@@ -197,54 +303,117 @@ export default function FuelTab() {
           className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6"
         >
           <h4 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
-            {formAddress && allocations.some((a) => a.address === formAddress)
+            {formEntries.length === 1 && formEntries[0].address && allocations.some((a) => a.address === formEntries[0].address)
               ? 'Edit Allocation'
               : 'New Allocation'}
           </h4>
-          <div className="mb-4 grid gap-4 sm:grid-cols-3">
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs text-[color:var(--sf-muted)]">
-                Wallet Address (taproot or segwit)
-              </label>
-              <input
-                type="text"
-                value={formAddress}
-                onChange={(e) => setFormAddress(e.target.value)}
-                className="h-9 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 font-mono text-sm text-[color:var(--sf-text)]"
-                placeholder="bc1p... or bc1q..."
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-[color:var(--sf-muted)]">FUEL Amount</label>
-              <input
-                type="number"
-                value={formAmount}
-                onChange={(e) => setFormAmount(e.target.value)}
-                className="h-9 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)]"
-                min={0}
-                step="0.01"
-                required
-              />
-            </div>
+
+          {/* Column headers */}
+          <div className="mb-2 hidden items-center gap-3 sm:flex">
+            <div className="flex-[3] text-xs text-[color:var(--sf-muted)]">Wallet Address</div>
+            <div className="flex-[1] text-xs text-[color:var(--sf-muted)]">FUEL Amount</div>
+            <div className="flex-[2] text-xs text-[color:var(--sf-muted)]">Name (optional)</div>
+            {formEntries.length > 1 && <div className="w-8" />}
           </div>
-          <div className="mb-4">
-            <label className="mb-1 block text-xs text-[color:var(--sf-muted)]">Note (optional)</label>
-            <input
-              type="text"
-              value={formNote}
-              onChange={(e) => setFormNote(e.target.value)}
-              className="h-9 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)]"
-              placeholder="e.g., Beta tester, Airdrop batch 1"
-            />
+
+          {/* Entry rows */}
+          <div className="flex flex-col gap-2">
+            {formEntries.map((entry, i) => (
+              <div key={i} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <input
+                  type="text"
+                  value={entry.address}
+                  onChange={(e) => updateEntry(i, 'address', e.target.value)}
+                  onPaste={(e) => handlePaste(e, i, 'address')}
+                  className="h-9 w-full flex-[3] rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 font-mono text-sm text-[color:var(--sf-text)]"
+                  placeholder="bc1p... or bc1q..."
+                />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={entry.amount}
+                  onChange={(e) => updateEntry(i, 'amount', e.target.value)}
+                  onPaste={(e) => handlePaste(e, i, 'amount')}
+                  className="h-9 w-full flex-[1] rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)]"
+                  placeholder="0.00"
+                />
+                <input
+                  type="text"
+                  value={entry.note}
+                  onChange={(e) => updateEntry(i, 'note', e.target.value)}
+                  onPaste={(e) => handlePaste(e, i, 'note')}
+                  className="h-9 w-full flex-[2] rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)]"
+                  placeholder="e.g., Beta tester"
+                />
+                {formEntries.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeEntry(i)}
+                    className="h-9 w-8 shrink-0 rounded-lg text-xs text-red-400 hover:bg-red-500/10"
+                    title="Remove entry"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Allocation'}
-          </button>
+
+          {/* Add more entries button */}
+          {formEntries.length < 10 && (
+            <button
+              type="button"
+              onClick={addMoreEntries}
+              className="mt-3 rounded-lg border border-dashed border-[color:var(--sf-outline)] px-3 py-1.5 text-xs text-[color:var(--sf-muted)] hover:border-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary)]"
+            >
+              + Add more entries
+            </button>
+          )}
+
+          {/* Overwrite warning */}
+          {overwriteWarning && (
+            <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+              <p className="mb-2 text-sm font-medium text-yellow-300">
+                These addresses already have an allocation:
+              </p>
+              <ul className="mb-3 space-y-1">
+                {overwriteWarning.existing.map((e) => (
+                  <li key={e.address} className="font-mono text-xs text-yellow-200">
+                    {e.address.slice(0, 14)}...{e.address.slice(-6)}{' '}
+                    <span className="text-yellow-400">({e.currentAmount})</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => saveEntries(overwriteWarning.entriesToSave)}
+                  className="rounded-lg bg-yellow-600 px-3 py-1.5 text-xs text-white hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOverwriteWarning(null)}
+                  className="rounded-lg border border-[color:var(--sf-outline)] px-3 py-1.5 text-xs text-[color:var(--sf-muted)] hover:text-[color:var(--sf-text)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Save button */}
+          {!overwriteWarning && (
+            <button
+              type="submit"
+              disabled={saving}
+              className="mt-4 rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Allocation'}
+            </button>
+          )}
         </form>
       )}
 

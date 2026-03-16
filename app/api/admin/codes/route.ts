@@ -45,6 +45,9 @@ export async function GET(request: NextRequest) {
       case 'children':
         orderBy = { childCodes: { _count: sortDir } };
         break;
+      case 'description':
+        orderBy = { description: sortDir };
+        break;
       case 'parent':
         orderBy = { parentCode: { code: sortDir } };
         break;

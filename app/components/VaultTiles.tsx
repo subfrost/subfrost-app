@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AVAILABLE_VAULTS } from '@/app/vaults/constants';
 
@@ -46,8 +45,12 @@ export default function VaultTiles() {
               <>
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="h-6 w-6">
-                      <TokenIcon id={v.tokenId} symbol={v.tokenSymbol} size="sm" />
+                    <div className="h-6 w-6 flex items-center justify-center">
+                      <img
+                        src={v.iconPath || `/tokens/${v.tokenSymbol.toLowerCase()}.svg`}
+                        alt={`${v.tokenSymbol} icon`}
+                        className="object-contain rounded-full w-full h-full"
+                      />
                     </div>
                     <span className="text-sm font-bold text-[color:var(--sf-text)]">{VAULT_NAME_KEYS[v.id] ? t(VAULT_NAME_KEYS[v.id]) : v.name}</span>
                   </div>

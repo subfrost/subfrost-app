@@ -51,7 +51,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     tokenSymbol: 'FIRE',
     iconPath: '/tokens/fire.svg',
     contractAddress: '4:256',
-    badge: 'FIRE',
+    badge: 'Coming Soon',
     type: 'fire-protocol',
     inputAsset: 'DIESEL/frBTC LP',
     outputAsset: 'FIRE',

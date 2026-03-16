@@ -53,7 +53,7 @@ interface Pagination {
   totalPages: number;
 }
 
-type SortField = 'code' | 'redemptions' | 'children' | 'parent';
+type SortField = 'code' | 'description' | 'redemptions' | 'children' | 'parent';
 type SortDir = 'asc' | 'desc';
 
 export default function CodesTab() {
@@ -74,7 +74,7 @@ export default function CodesTab() {
       setSortDir(newDir);
     } else {
       setSortField(field);
-      setSortDir(field === 'code' || field === 'parent' ? 'asc' : 'desc');
+      setSortDir(field === 'code' || field === 'description' || field === 'parent' ? 'asc' : 'desc');
     }
   };
 
@@ -173,7 +173,7 @@ export default function CodesTab() {
               <tr className="border-b border-[color:var(--sf-row-border)] text-left text-xs text-[color:var(--sf-muted)]">
                 <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('code')}>Code<SortIndicator field="code" /></th>
                 <th className="px-4 py-3">Owner</th>
-                <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('description')}>Description<SortIndicator field="description" /></th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('redemptions')}>Redemptions<SortIndicator field="redemptions" /></th>
                 <th className="px-4 py-3 cursor-pointer select-none hover:text-[color:var(--sf-text)]" onClick={() => toggleSort('children')}>Children<SortIndicator field="children" /></th>

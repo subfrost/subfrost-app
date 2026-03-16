@@ -32,6 +32,45 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+
+    // Bulk mode: { entries: [{address, amount, note}] }
+    if (Array.isArray(body.entries)) {
+      const entries = body.entries as { address?: string; amount?: number; note?: string }[];
+      if (entries.length === 0 || entries.length > 10) {
+        return NextResponse.json({ error: 'Entries must be between 1 and 10' }, { status: 400 });
+      }
+
+      const validated = [];
+      for (const entry of entries) {
+        const address = entry.address?.trim();
+        const amount = parseFloat(String(entry.amount));
+        const note = entry.note?.trim() || null;
+        if (!address) {
+          return NextResponse.json({ error: 'Each entry must have an address' }, { status: 400 });
+        }
+        if (isNaN(amount) || amount < 0) {
+          return NextResponse.json({ error: `Invalid amount for ${address}` }, { status: 400 });
+        }
+        validated.push({ address, amount: Math.round(amount * 100) / 100, note });
+      }
+
+      const results = await prisma.$transaction(
+        validated.map((v) =>
+          prisma.fuelAllocation.upsert({
+            where: { address: v.address },
+            create: { address: v.address, amount: v.amount, note: v.note },
+            update: { amount: v.amount, note: v.note },
+          })
+        )
+      );
+
+      // Invalidate cache for all addresses
+      await Promise.all(validated.map((v) => cache.del(`fuel:${v.address}`)));
+
+      return NextResponse.json({ allocations: results }, { status: 201 });
+    }
+
+    // Single mode: { address, amount, note }
     const address = body.address?.trim();
     const amount = parseFloat(body.amount);
     const note = body.note?.trim() || null;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAdminFetch } from './useAdminFetch';
 
 export default function BulkTab() {
@@ -13,6 +13,20 @@ export default function BulkTab() {
   const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  const [parentSearch, setParentSearch] = useState('');
+  const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (parentRef.current && !parentRef.current.contains(e.target as Node)) {
+        setParentDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   // Parent code options
   const [parentCodes, setParentCodes] = useState<Array<{ id: string; code: string }>>([]);
@@ -108,18 +122,46 @@ export default function BulkTab() {
               placeholder="Feb 2026 Twitter giveaway"
             />
           </div>
-          <div>
+          <div ref={parentRef} className="relative">
             <label className="mb-1 block text-xs text-[color:var(--sf-muted)]">Parent Code</label>
-            <select
-              value={parentCodeId}
-              onChange={(e) => setParentCodeId(e.target.value)}
+            <input
+              type="text"
+              value={parentDropdownOpen ? parentSearch : (parentCodes.find((p) => p.id === parentCodeId)?.code || '')}
+              onChange={(e) => {
+                setParentSearch(e.target.value);
+                setParentDropdownOpen(true);
+              }}
+              onFocus={() => {
+                setParentSearch('');
+                setParentDropdownOpen(true);
+              }}
+              placeholder="None (top-level)"
               className="h-10 w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-3 text-sm text-[color:var(--sf-text)]"
-            >
-              <option value="">None (top-level)</option>
-              {parentCodes.map((p) => (
-                <option key={p.id} value={p.id}>{p.code}</option>
-              ))}
-            </select>
+            />
+            {parentDropdownOpen && (
+              <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => { setParentCodeId(''); setParentSearch(''); setParentDropdownOpen(false); }}
+                  className="w-full px-3 py-2 text-left text-sm text-[color:var(--sf-muted)] hover:bg-[color:var(--sf-glass-bg)]"
+                >
+                  None (top-level)
+                </button>
+                {parentCodes.filter((p) => p.code.toLowerCase().includes(parentSearch.toLowerCase())).map((p) => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => { setParentCodeId(p.id); setParentSearch(''); setParentDropdownOpen(false); }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-[color:var(--sf-glass-bg)] ${p.id === parentCodeId ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
+                  >
+                    {p.code}
+                  </button>
+                ))}
+                {parentCodes.filter((p) => p.code.toLowerCase().includes(parentSearch.toLowerCase())).length === 0 && parentSearch && (
+                  <div className="px-3 py-2 text-sm text-[color:var(--sf-muted)]">No codes found</div>
+                )}
+              </div>
+            )}
           </div>
 
           {error && <div className="text-sm text-red-400">{error}</div>}
