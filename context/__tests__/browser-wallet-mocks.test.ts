@@ -186,13 +186,14 @@ describe('Signing delegation to ts-sdk adapter', () => {
 
     it('delegates to walletAdapter.signPsbt for browser wallets', () => {
       expect(body).toContain("walletAdapter && walletType === 'browser'");
-      expect(body).toContain('walletAdapter.signPsbt(psbtHex');
+      // Generic adapter path uses patchedPsbtHex (after tapInternalKey patching via Psbt object)
+      expect(body).toContain('walletAdapter.signPsbt(patchedPsbtHex');
     });
 
     it('performs base64-to-hex conversion before calling adapter', () => {
-      // Should convert base64 input to hex for the adapter
-      expect(body).toContain("Buffer.from(psbtBase64, 'base64')");
-      expect(body).toContain(".toString('hex')");
+      // Now uses Psbt.fromBase64() → patching → psbt.toHex() instead of raw Buffer conversion
+      expect(body).toContain('Psbt.fromBase64(psbtBase64');
+      expect(body).toContain('.toHex()');
     });
 
     it('performs hex-to-base64 conversion on adapter result', () => {
