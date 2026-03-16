@@ -8,6 +8,8 @@ type Props = {
   pool?: PoolSummary;
   /** Override which token's symbol to show on the chart. When omitted, uses pool.token0. */
   chartTokenId?: string;
+  /** When true, the user has selected a BTC/frBTC wrap pair — show wrap info instead of "select a market". */
+  isWrapPair?: boolean;
 };
 
 const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
@@ -78,7 +80,7 @@ function getQuoteForPool(pool: PoolSummary): 'usd' | 'btc' {
   return 'usd';
 }
 
-export default function PoolDetailsCard({ pool, chartTokenId }: Props) {
+export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Props) {
   const { t } = useTranslation();
 
   // Use chartTokenId if provided and valid, otherwise fall back to token0
@@ -137,13 +139,35 @@ export default function PoolDetailsCard({ pool, chartTokenId }: Props) {
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[color:var(--sf-text)]/20 mb-3">
-            <path d="M3 3v18h18" />
-            <path d="m19 9-5 5-4-4-3 3" />
-          </svg>
-          <p className="text-sm text-[color:var(--sf-text)]/50">
-            {t('pool.selectMarket')}
-          </p>
+          {isWrapPair ? (
+            <>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[color:var(--sf-text)]/20 mb-3">
+                <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
+                <circle cx="12" cy="12" r="6" />
+              </svg>
+              <p className="text-sm text-[color:var(--sf-text)]/50">
+                BTC Wrapping &amp; Unwrapping is backed 1:1 with our reserve.
+              </p>
+              <a
+                href="https://subfrost.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-[color:var(--sf-primary)] hover:underline mt-1"
+              >
+                See proof here: subfrost.io
+              </a>
+            </>
+          ) : (
+            <>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[color:var(--sf-text)]/20 mb-3">
+                <path d="M3 3v18h18" />
+                <path d="m19 9-5 5-4-4-3 3" />
+              </svg>
+              <p className="text-sm text-[color:var(--sf-text)]/50">
+                {t('pool.selectMarket')}
+              </p>
+            </>
+          )}
         </div>
       )}
     </div>

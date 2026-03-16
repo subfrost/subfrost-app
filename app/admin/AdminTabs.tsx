@@ -16,10 +16,10 @@ const TAB_DEFINITIONS = [
   { key: 'codes', label: 'Codes', permission: 'codes.read' },
   { key: 'redemptions', label: 'Redemptions', permission: 'redemptions.read' },
   { key: 'hierarchy', label: 'Hierarchy', permission: 'codes.read' },
-  { key: 'bulk', label: 'Bulk Generate', permission: 'bulk.create' },
-  { key: 'tools', label: 'Tools', permission: 'tools.access' },
   { key: 'fuel', label: 'FUEL Allocations', permission: 'fuel.read' },
   { key: 'users', label: 'Users', permission: 'iam.owner' },
+  { key: 'bulk', label: 'Bulk Generate', permission: 'bulk.create' },
+  { key: 'tools', label: 'Tools', permission: 'tools.access' },
 ] as const;
 
 type TabKey = (typeof TAB_DEFINITIONS)[number]['key'];

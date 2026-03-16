@@ -126,7 +126,7 @@ export default function CodesTab() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await adminFetch('/api/admin/codes?limit=100&status=active');
+        const res = await adminFetch('/api/admin/codes?limit=0&status=active');
         if (res.ok) {
           const data = await res.json();
           setParentCodes(data.codes.map((c: Code) => ({ id: c.id, code: c.code })));

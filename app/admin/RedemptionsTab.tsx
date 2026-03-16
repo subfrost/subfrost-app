@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useAdminFetch } from './useAdminFetch';
 
 interface Redemption {
@@ -9,6 +9,7 @@ interface Redemption {
   segwitAddress: string | null;
   taprootPubkey: string | null;
   redeemedAt: string;
+  updatedAt: string | null;
   inviteCode: { id: string; code: string; description: string | null };
 }
 
@@ -19,6 +20,9 @@ interface Pagination {
   totalPages: number;
 }
 
+type SortField = 'redeemedAt' | 'updatedAt';
+type SortDir = 'asc' | 'desc';
+
 export default function RedemptionsTab() {
   const adminFetch = useAdminFetch();
   const [redemptions, setRedemptions] = useState<Redemption[]>([]);
@@ -27,6 +31,47 @@ export default function RedemptionsTab() {
   const [codeFilter, setCodeFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [sortBy, setSortBy] = useState<SortField | ''>('');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCodeId, setEditCodeId] = useState('');
+  const [editSearch, setEditSearch] = useState('');
+  const [editDropdownOpen, setEditDropdownOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const editRef = useRef<HTMLDivElement>(null);
+
+  // Delete state
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // All codes for the edit dropdown
+  const [allCodes, setAllCodes] = useState<Array<{ id: string; code: string }>>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await adminFetch('/api/admin/codes?limit=0&status=active');
+        if (res.ok) {
+          const data = await res.json();
+          setAllCodes(data.codes.map((c: { id: string; code: string }) => ({ id: c.id, code: c.code })));
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [adminFetch]);
+
+  // Close edit dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        setEditDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const fetchRedemptions = useCallback(async (page = 1) => {
     try {
@@ -34,6 +79,10 @@ export default function RedemptionsTab() {
       const params = new URLSearchParams({ page: String(page), limit: '25' });
       if (search) params.set('search', search);
       if (codeFilter) params.set('code', codeFilter);
+      if (sortBy) {
+        params.set('sortBy', sortBy);
+        params.set('sortDir', sortDir);
+      }
       const res = await adminFetch(`/api/admin/redemptions?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
@@ -44,7 +93,7 @@ export default function RedemptionsTab() {
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, search, codeFilter]);
+  }, [adminFetch, search, codeFilter, sortBy, sortDir]);
 
   useEffect(() => { fetchRedemptions(); }, [fetchRedemptions]);
 
@@ -66,6 +115,83 @@ export default function RedemptionsTab() {
       setExporting(false);
     }
   };
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDir('asc');
+    }
+  };
+
+  const sortIndicator = (field: SortField) => {
+    if (sortBy !== field) return ' \u2195';
+    return sortDir === 'asc' ? ' \u2191' : ' \u2193';
+  };
+
+  // Edit handlers
+  const startEdit = (r: Redemption) => {
+    setEditingId(r.id);
+    setEditCodeId(r.inviteCode.id);
+    setEditSearch('');
+    setEditError('');
+    setEditDropdownOpen(false);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditCodeId('');
+    setEditSearch('');
+    setEditError('');
+    setEditDropdownOpen(false);
+  };
+
+  const saveEdit = async () => {
+    if (!editingId || !editCodeId) return;
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const res = await adminFetch(`/api/admin/redemptions/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codeId: editCodeId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update');
+      }
+      cancelEdit();
+      fetchRedemptions(pagination.page);
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // Delete handlers
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      const res = await adminFetch(`/api/admin/redemptions/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete');
+      }
+      setDeleteConfirmId(null);
+      fetchRedemptions(pagination.page);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to delete');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const filteredEditCodes = allCodes.filter((c) =>
+    c.code.toLowerCase().includes(editSearch.toLowerCase())
+  );
+  const selectedEditCode = allCodes.find((c) => c.id === editCodeId);
 
   return (
     <div className="flex flex-col gap-4">
@@ -105,14 +231,68 @@ export default function RedemptionsTab() {
                 <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Taproot Address</th>
                 <th className="px-4 py-3">Segwit Address</th>
-                <th className="px-4 py-3">Redeemed At</th>
+                <th
+                  className="cursor-pointer select-none px-4 py-3 hover:text-[color:var(--sf-text)]"
+                  onClick={() => handleSort('redeemedAt')}
+                >
+                  Redeemed At{sortIndicator('redeemedAt')}
+                </th>
+                <th
+                  className="cursor-pointer select-none px-4 py-3 hover:text-[color:var(--sf-text)]"
+                  onClick={() => handleSort('updatedAt')}
+                >
+                  Last Modified{sortIndicator('updatedAt')}
+                </th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--sf-row-border)]">
               {redemptions.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-3 font-mono text-[color:var(--sf-text)]">
-                    {r.inviteCode.code}
+                    {editingId === r.id ? (
+                      <div ref={editRef} className="relative min-w-[160px]">
+                        <input
+                          type="text"
+                          value={editDropdownOpen ? editSearch : (selectedEditCode?.code || '')}
+                          onChange={(e) => {
+                            setEditSearch(e.target.value);
+                            setEditDropdownOpen(true);
+                          }}
+                          onFocus={() => {
+                            setEditSearch('');
+                            setEditDropdownOpen(true);
+                          }}
+                          className="h-8 w-full rounded border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-2 text-xs text-[color:var(--sf-text)]"
+                        />
+                        {editDropdownOpen && (
+                          <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)] shadow-lg">
+                            {filteredEditCodes.map((c) => (
+                              <button
+                                type="button"
+                                key={c.id}
+                                onClick={() => {
+                                  setEditCodeId(c.id);
+                                  setEditSearch('');
+                                  setEditDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[color:var(--sf-glass-bg)] ${c.id === editCodeId ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}
+                              >
+                                {c.code}
+                              </button>
+                            ))}
+                            {filteredEditCodes.length === 0 && editSearch && (
+                              <div className="px-3 py-1.5 text-xs text-[color:var(--sf-muted)]">No codes found</div>
+                            )}
+                          </div>
+                        )}
+                        {editError && (
+                          <div className="mt-1 text-xs text-red-400">{editError}</div>
+                        )}
+                      </div>
+                    ) : (
+                      r.inviteCode.code
+                    )}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-[color:var(--sf-text)]">
                     {r.taprootAddress.slice(0, 14)}...{r.taprootAddress.slice(-6)}
@@ -125,11 +305,64 @@ export default function RedemptionsTab() {
                   <td className="px-4 py-3 text-[color:var(--sf-muted)]">
                     {new Date(r.redeemedAt).toLocaleString()}
                   </td>
+                  <td className="px-4 py-3 text-[color:var(--sf-muted)]">
+                    {r.updatedAt ? new Date(r.updatedAt).toLocaleString() : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {editingId === r.id ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={saveEdit}
+                          disabled={editSaving}
+                          className="rounded bg-[color:var(--sf-primary)] px-2 py-1 text-xs text-white hover:opacity-90 disabled:opacity-50"
+                        >
+                          {editSaving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="rounded px-2 py-1 text-xs text-[color:var(--sf-muted)] hover:text-[color:var(--sf-text)]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : deleteConfirmId === r.id ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDelete(r.id)}
+                          disabled={deletingId === r.id}
+                          className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {deletingId === r.id ? 'Deleting...' : 'Confirm'}
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="rounded px-2 py-1 text-xs text-[color:var(--sf-muted)] hover:text-[color:var(--sf-text)]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startEdit(r)}
+                          className="rounded px-2 py-1 text-xs text-[color:var(--sf-primary)] hover:bg-[color:var(--sf-glass-bg)]"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(r.id)}
+                          className="rounded px-2 py-1 text-xs text-red-400 hover:bg-[color:var(--sf-glass-bg)]"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
               {redemptions.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-[color:var(--sf-muted)]">
+                  <td colSpan={6} className="px-4 py-8 text-center text-[color:var(--sf-muted)]">
                     No redemptions found
                   </td>
                 </tr>

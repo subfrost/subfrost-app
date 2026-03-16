@@ -9,6 +9,7 @@ export const ADMIN_PERMISSIONS = {
   CODES_READ: 'codes.read',
   CODES_EDIT: 'codes.edit',
   REDEMPTIONS_READ: 'redemptions.read',
+  REDEMPTIONS_EDIT: 'redemptions.edit',
   REDEMPTIONS_EXPORT: 'redemptions.export',
   STATS_READ: 'stats.read',
   BULK_CREATE: 'bulk.create',
@@ -37,6 +38,7 @@ export const PERMISSION_LABELS: Record<AdminPermission, string> = {
   'codes.read': 'View invite codes',
   'codes.edit': 'Create/edit/delete invite codes',
   'redemptions.read': 'View redemptions',
+  'redemptions.edit': 'Edit/delete redemptions',
   'redemptions.export': 'Export redemption data',
   'stats.read': 'View dashboard statistics',
   'bulk.create': 'Bulk generate codes',
@@ -67,7 +69,7 @@ export const PERMISSION_GROUPS: { label: string; permissions: AdminPermission[] 
   },
   {
     label: 'Redemptions',
-    permissions: ['redemptions.read', 'redemptions.export'],
+    permissions: ['redemptions.read', 'redemptions.edit', 'redemptions.export'],
   },
   {
     label: 'Tools',

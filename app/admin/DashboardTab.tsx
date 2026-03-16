@@ -244,7 +244,7 @@ function CommunityFuelChart({ data, mode, heightScale = 1 }: { data: CommunityFu
     } else {
       value = item.total;
     }
-    return { ...item, value: Math.round(value * 100) / 100 };
+    return { ...item, value: Math.round(value) };
   });
 
   const sorted = [...withValue].sort((a, b) => b.value - a.value);

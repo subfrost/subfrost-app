@@ -33,12 +33,27 @@ export async function GET(request: NextRequest) {
       where.inviteCode = { code: codeFilter };
     }
 
+    const sortBy = searchParams.get('sortBy') || '';
+    const sortDir = searchParams.get('sortDir') === 'asc' ? 'asc' as const : 'desc' as const;
+
+    let orderBy: Record<string, unknown>;
+    switch (sortBy) {
+      case 'redeemedAt':
+        orderBy = { redeemedAt: sortDir };
+        break;
+      case 'updatedAt':
+        orderBy = { updatedAt: sortDir };
+        break;
+      default:
+        orderBy = { redeemedAt: 'desc' };
+    }
+
     const [redemptions, total] = await Promise.all([
       prisma.inviteCodeRedemption.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { redeemedAt: 'desc' },
+        orderBy,
         include: { inviteCode: { select: { id: true, code: true, description: true } } },
       }),
       prisma.inviteCodeRedemption.count({ where }),

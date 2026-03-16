@@ -193,6 +193,7 @@ model InviteCodeRedemption {
   segwitAddress   String?   @map("segwit_address")
   taprootPubkey   String?   @map("taproot_pubkey")
   redeemedAt      DateTime  @default(now()) @map("redeemed_at")
+  updatedAt       DateTime? @map("updated_at")
 
   inviteCode      InviteCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
 

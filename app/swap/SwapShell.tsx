@@ -75,6 +75,24 @@ const MarketsSkeleton = () => (
   </div>
 );
 
+const SWAP_SESSION_KEY = 'subfrost_swap_pair';
+
+function saveSwapPairToSession(from: TokenMeta, to: TokenMeta) {
+  try {
+    sessionStorage.setItem(SWAP_SESSION_KEY, JSON.stringify({ from, to }));
+  } catch { /* ignore quota/private mode errors */ }
+}
+
+function loadSwapPairFromSession(): { from: TokenMeta; to: TokenMeta } | null {
+  try {
+    const raw = sessionStorage.getItem(SWAP_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.from?.id && parsed?.to?.id) return parsed;
+  } catch { /* ignore */ }
+  return null;
+}
+
 export default function SwapShell() {
   const { t } = useTranslation();
 
@@ -251,18 +269,43 @@ export default function SwapShell() {
     return poolStats !== undefined && Object.keys(poolStats).length > 0;
   }, [poolStats]);
 
-  // Initialize swap tokens and selected pool from trending pool when available.
+  // Initialize swap tokens from session (returning user) or trending pool (first visit).
+  // Session storage preserves the user's last pair choice across page navigations.
   // Wait for BOTH pools AND poolStats to finish loading for accurate trending calculation.
   // Using a ref ensures we only do this once, even if topVolumePool reference changes.
   const trendingPoolInitializedRef = useRef(false);
   useEffect(() => {
+    if (trendingPoolInitializedRef.current) return;
+
     // Don't initialize until both queries have completed loading
     // AND poolStats actually has data (not empty object)
     // AND that data has been merged (markets has volume data)
     const bothQueriesLoaded = !isLoadingPools && !isLoadingPoolStats;
     const dataReady = bothQueriesLoaded && poolStatsHasData && hasVolumeDataMerged;
+    if (!dataReady || markets.length === 0) return;
 
-    if (!trendingPoolInitializedRef.current && topVolumePool && dataReady) {
+    // Try restoring from session first (user previously selected a pair)
+    const saved = loadSwapPairFromSession();
+    if (saved) {
+      // Find the matching pool in current markets so selectedPool has full data
+      const matchingPool = markets.find(
+        (p) =>
+          (p.token0.id === saved.from.id && p.token1.id === saved.to.id) ||
+          (p.token0.id === saved.to.id && p.token1.id === saved.from.id)
+      );
+      if (matchingPool) {
+        console.log('[SwapShell] Restoring saved pair from session:', saved.from.symbol, '→', saved.to.symbol);
+        setFromToken(saved.from);
+        setToToken(saved.to);
+        setSelectedPool(matchingPool);
+        trendingPoolInitializedRef.current = true;
+        return;
+      }
+      // Saved pair no longer exists in markets — fall through to trending
+    }
+
+    // First visit: use trending (highest volume) pool
+    if (topVolumePool) {
       console.log('[SwapShell] Initializing trending pool:', topVolumePool.pairLabel, {
         vol24h: topVolumePool.vol24hUsd,
         vol30d: topVolumePool.vol30dUsd,
@@ -273,7 +316,15 @@ export default function SwapShell() {
       setSelectedPool(topVolumePool);
       trendingPoolInitializedRef.current = true;
     }
-  }, [topVolumePool, isLoadingPools, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged]);
+  }, [topVolumePool, isLoadingPools, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged, markets]);
+
+  // Persist user's pair selection to sessionStorage so it survives page navigation.
+  // Only save after initialization is complete to avoid overwriting with undefined.
+  useEffect(() => {
+    if (trendingPoolInitializedRef.current && fromToken && toToken) {
+      saveSwapPairToSession(fromToken, toToken);
+    }
+  }, [fromToken, toToken]);
 
   // Default LP tokens: frBTC / DIESEL (or bUSD on mainnet)
   // Initialize both poolToken0 and poolToken1 with default values when entering LP tab
@@ -1949,7 +2000,7 @@ export default function SwapShell() {
           {showMobileChart && (
             <div className="lg:hidden mt-4">
               <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-                <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} />
+                <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
               </Suspense>
             </div>
           )}
@@ -1958,7 +2009,7 @@ export default function SwapShell() {
 
         {/* Right Column: Chart (2/3 width on lg) */}
         <div className="hidden lg:flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
-          <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} />
+          <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
         </div>
       </div>
 
