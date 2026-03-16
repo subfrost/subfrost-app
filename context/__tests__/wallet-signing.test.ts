@@ -80,7 +80,8 @@ describe('WalletContext signing architecture (source verification)', () => {
   // ---- Browser wallet delegation to adapter ----
 
   it('signTaprootPsbt delegates to walletAdapter.signPsbt() for browser wallets', () => {
-    expect(signTaprootBody).toContain('walletAdapter.signPsbt(psbtHex');
+    // Generic adapter path uses patchedPsbtHex (after tapInternalKey patching)
+    expect(signTaprootBody).toContain('walletAdapter.signPsbt(patchedPsbtHex');
     // Must check walletType === 'browser'
     expect(signTaprootBody).toContain("walletType === 'browser'");
   });
@@ -103,9 +104,9 @@ describe('WalletContext signing architecture (source verification)', () => {
   // ---- Adapter receives hex format ----
 
   it('signTaprootPsbt converts base64 input to hex before passing to adapter', () => {
-    // Should convert base64 → Buffer → hex
-    expect(signTaprootBody).toContain("Buffer.from(psbtBase64, 'base64')");
-    expect(signTaprootBody).toContain(".toString('hex')");
+    // Now uses Psbt.fromBase64() → patching → psbt.toHex() instead of raw Buffer conversion
+    expect(signTaprootBody).toContain('Psbt.fromBase64(psbtBase64');
+    expect(signTaprootBody).toContain('.toHex()');
   });
 
   it('signSegwitPsbt converts base64 input to hex before passing to adapter', () => {
@@ -252,9 +253,11 @@ describe('Old wallet-specific signing branches are REMOVED', () => {
     expect(signSegwitBody).not.toContain('(window as any).okxwallet');
   });
 
-  it('signTaprootPsbt does NOT contain lib/psbt-patching imports (handled by adapter)', () => {
+  it('signTaprootPsbt patches tapInternalKey before delegating to adapter', () => {
+    // tapInternalKey patching is done in WalletContext BEFORE wallet-specific signing,
+    // because all browser wallets need the user's actual x-only key (not the SDK dummy key).
+    expect(signTaprootBody).toContain('patchTapInternalKeys');
     expect(signTaprootBody).not.toContain('patchPsbtForBrowserWallet');
-    expect(signTaprootBody).not.toContain('patchTapInternalKey');
   });
 
   it('signTaprootPsbt has ARCHITECTURE NOTE about adapter delegation', () => {
@@ -394,16 +397,13 @@ describe('Browser wallet adapter call simulation', () => {
     }
   });
 
-  it('signSegwitPsbt browser path does NOT check for empty result (unlike signTaprootPsbt)', () => {
-    // signSegwitPsbt has a simpler browser path — no null check, no try/catch
+  it('signSegwitPsbt browser path checks for empty result (same as signTaprootPsbt)', () => {
+    // signSegwitPsbt now has the same empty result guard as signTaprootPsbt
     const src = readWalletContextSource();
     const signSegwitBody = extractCallbackBody(src, 'signSegwitPsbt');
 
-    // signSegwitPsbt browser path is simpler — just convert and return
-    // It does NOT have the `if (!signedHex)` guard that signTaprootPsbt has
-    // This is a known asymmetry in the current code
     const browserBlock = signSegwitBody.slice(0, signSegwitBody.indexOf('// For keystore'));
-    expect(browserBlock).not.toContain('signing returned empty result');
+    expect(browserBlock).toContain('signing returned empty result');
   });
 });
 
