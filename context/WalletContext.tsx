@@ -63,8 +63,8 @@ import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/const
 // PSBT patching is now handled by ts-sdk wallet adapters (adapter.ts)
 // import { patchTapInternalKeys } from '@/lib/psbt-patching';
 
-// Import OYL signing utilities with robust reconnection handling
-import { signWithOyl, detectWalletId, getOylCallCount, resetOylCallCount } from '@/lib/wallet/browserWalletSigning';
+// Import browser wallet signing utilities with robust reconnection handling
+import { signWithOyl, signWithXverse, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
 
 // Connection-specific counter for OYL getAddresses() calls during initial connection
 // Helps identify if React StrictMode is causing duplicate modal triggers
@@ -893,43 +893,81 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // The modal component handles its own UI state (loading/connecting overlay).
 
       if (walletId === 'xverse') {
-        // Xverse connection using direct BitcoinProvider.request('getAccounts')
-        // — no sats-connect dependency needed. Same API used for signing.
+        // JOURNAL (2026-03-15): Xverse connection debugging.
+        // The provider.request() call hangs if the extension service worker is stale.
+        // Try multiple approaches and add timeout to prevent infinite waiting.
         const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
 
-        // Diagnostic logging for Xverse connection issues
         console.log('[WalletContext] Xverse: ===== CONNECTION START =====');
-        console.log('[WalletContext] Xverse: window.XverseProviders:', typeof (window as any).XverseProviders);
         console.log('[WalletContext] Xverse: BitcoinProvider:', typeof xverseProvider);
-        if (xverseProvider) {
-          console.log('[WalletContext] Xverse: BitcoinProvider.request:', typeof xverseProvider.request);
-          // List all available methods
-          const methods = Object.keys(xverseProvider).filter(k => typeof xverseProvider[k] === 'function');
-          console.log('[WalletContext] Xverse: available methods:', methods.join(', '));
-        }
+        console.log('[WalletContext] Xverse: Provider object:', xverseProvider);
 
         if (!xverseProvider) throw new Error('Xverse wallet not detected. Please install the Xverse extension.');
 
-        console.log('[WalletContext] Xverse: calling getAccounts via direct provider...');
-        console.log('[WalletContext] Xverse: If no popup appears within 5s, the extension may be in a stale state.');
+        // Check if the extension is responsive by checking btc_providers
+        const btcProviders = (window as any).btc_providers;
+        console.log('[WalletContext] Xverse: window.btc_providers:', btcProviders);
+        const xverseFromBtcProviders = btcProviders?.find?.((p: any) => p.id === 'XverseProviders.BitcoinProvider' || p.name?.toLowerCase().includes('xverse'));
+        console.log('[WalletContext] Xverse: Found in btc_providers:', xverseFromBtcProviders);
 
-        const response: any = await Promise.race([
-          xverseProvider.request('getAccounts', {
-            purposes: ['ordinals', 'payment'],
-            message: 'Connect to Subfrost',
-          }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(
-              'Xverse connection timed out after 60s. ' +
-              'Try: (1) open/unlock your Xverse extension popup first, ' +
-              '(2) check chrome://extensions for errors in Xverse service worker, ' +
-              '(3) try connecting on another site to verify extension works.'
-            )), 60000)
-          ),
-        ]);
+        // Try to ping the extension first with a simple method
+        console.log('[WalletContext] Xverse: Testing extension responsiveness...');
 
-        console.log('[WalletContext] Xverse getAccounts response:', response);
-        const accounts = response?.result || [];
+        let accounts: any[] = [];
+
+        // Wrap in a timeout to detect hung extension
+        const connectionPromise = new Promise<any>(async (resolve, reject) => {
+          try {
+            console.log('[WalletContext] Xverse: calling request("getAccounts")...');
+            console.log('[WalletContext] Xverse: Popup should appear NOW.');
+
+            const response = await xverseProvider.request('getAccounts', {
+              purposes: ['ordinals', 'payment'],
+              message: 'Connect to Subfrost',
+            });
+
+            console.log('[WalletContext] Xverse: getAccounts response:', response);
+            resolve(response);
+          } catch (err) {
+            console.log('[WalletContext] Xverse: getAccounts threw error:', err);
+            reject(err);
+          }
+        });
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(
+              'Xverse connection timed out after 30 seconds.\n\n' +
+              'The Xverse extension is not responding. Please try:\n' +
+              '1. Click the Xverse extension icon in your browser toolbar\n' +
+              '2. If prompted, enter your password to unlock\n' +
+              '3. Go to chrome://extensions, find Xverse, and click the refresh icon\n' +
+              '4. Reload this page and try again'
+            ));
+          }, 30000);
+        });
+
+        const response: any = await Promise.race([connectionPromise, timeoutPromise]);
+
+        // Parse the response
+        if (response?.result && Array.isArray(response.result)) {
+          accounts = response.result;
+        } else if (Array.isArray(response)) {
+          accounts = response;
+        } else if (response?.status === 'success' && response?.result) {
+          accounts = Array.isArray(response.result) ? response.result : [];
+        }
+
+        // Check for error
+        if (response?.error || response?.status === 'error') {
+          const errorCode = response?.error?.code;
+          const errorMsg = response?.error?.message || JSON.stringify(response?.error);
+          if (errorCode === 4001 || errorCode === 'USER_REJECTION') {
+            throw new Error('Connection was rejected by the user');
+          }
+          throw new Error(`Xverse error: ${errorMsg}`);
+        }
+
         if (accounts.length === 0) {
           throw new Error(
             'Xverse connection failed — no accounts returned. ' +
@@ -937,6 +975,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             '(3) check that this site is not blocked in Xverse settings.'
           );
         }
+
+        console.log('[WalletContext] Xverse: got', accounts.length, 'accounts:', accounts);
 
         const ordinalsAccount = accounts.find((a: any) =>
           a.purpose === 'ordinals' || a.addressType === 'p2tr'
@@ -1601,17 +1641,36 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const walletId = browserWallet?.info?.id || 'unknown';
       console.log(`[WalletContext] Signing taproot PSBT (wallet: ${walletId})`);
 
+      // Import bitcoinjs-lib dynamically to parse PSBT
+      const bitcoin = await import('bitcoinjs-lib');
+      const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin
+        : network === 'signet' || network === 'testnet' ? bitcoin.networks.testnet
+        : bitcoin.networks.regtest;
+
+      const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+      const detectedWallet = detectWalletId(browserWallet);
+
+      // CRITICAL: Patch tapInternalKey on ALL taproot inputs BEFORE any wallet-specific signing.
+      // The SDK builds PSBTs with a dummy wallet's tapInternalKey (from AlkanesSDKContext's walletCreate()).
+      // Wallets validate tapInternalKey matches their own key before signing:
+      // - Xverse: "No taproot scripts signed" error / "User rejected request to sign a psbt"
+      // - UniSat: silently skips unmatched inputs → infinite loading spinner
+      // Without this, taproot inputs cannot be signed by ANY browser wallet.
+      const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
+      if (taprootPubKey) {
+        const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
+        const patchedCount = patchTapInternalKeys(psbt, xOnlyHex);
+        if (patchedCount > 0) {
+          console.log(`[WalletContext] Patched tapInternalKey on ${patchedCount} input(s) to user x-only: ${xOnlyHex}`);
+        }
+      } else {
+        console.warn('[WalletContext] No taproot public key available for tapInternalKey patching');
+      }
+
       // For OYL wallet, use the robust signWithOyl from browserWalletSigning.ts
       // which has 60s timeout, expanded error detection, and auto-reconnection
-      if (detectWalletId(browserWallet) === 'oyl') {
+      if (detectedWallet === 'oyl') {
         try {
-          // Import bitcoinjs-lib dynamically to parse PSBT
-          const bitcoin = await import('bitcoinjs-lib');
-          const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin
-            : network === 'signet' || network === 'testnet' ? bitcoin.networks.testnet
-            : bitcoin.networks.regtest;
-
-          const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
           console.log(`[WalletContext] OYL: Using signWithOyl (${psbt.inputCount} inputs)`);
 
           const result = await signWithOyl(psbt, walletAdapter);
@@ -1623,12 +1682,35 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
-      // For other browser wallets, use the SDK adapter directly
-      const psbtBuffer = Buffer.from(psbtBase64, 'base64');
-      const psbtHex = psbtBuffer.toString('hex');
+      // For Xverse wallet, use signWithXverse which uses the proper signInputs mapping
+      // required by Xverse's signPsbt API
+      if (detectedWallet === 'xverse') {
+        try {
+          const ordinalsAddress = browserWalletAddresses?.taproot?.address;
+          const paymentAddress = browserWalletAddresses?.nativeSegwit?.address;
+
+          if (!ordinalsAddress) {
+            throw new Error('Xverse ordinals address not found');
+          }
+
+          console.log(`[WalletContext] Xverse: Using signWithXverse (${psbt.inputCount} inputs)`);
+          console.log(`[WalletContext] Xverse: ordinalsAddr: ${ordinalsAddress}, paymentAddr: ${paymentAddress}`);
+
+          const result = await signWithXverse(psbt, ordinalsAddress, paymentAddress, btcNetwork);
+          console.log(`[WalletContext] Xverse: signing succeeded (finalized: ${result.isFinalized})`);
+          return result.signedPsbtBase64;
+        } catch (e: any) {
+          console.error(`[WalletContext] Xverse signing failed:`, e?.message || e);
+          throw new Error(`Xverse signing failed: ${e?.message || e}`);
+        }
+      }
+
+      // For other browser wallets (UniSat, OKX, etc.), use the SDK adapter directly
+      // IMPORTANT: Use the PATCHED psbt (with corrected tapInternalKey), not the original psbtBase64
+      const patchedPsbtHex = psbt.toHex();
 
       try {
-        const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
+        const signedHex = await walletAdapter.signPsbt(patchedPsbtHex, { auto_finalized: false });
         if (!signedHex) {
           throw new Error(`${walletId} signing returned empty result`);
         }

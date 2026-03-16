@@ -557,6 +557,67 @@ alkanes-cli -p subfrost-regtest bitcoind generatetoaddress 1 [self:p2tr:0]
 
 ## Historical Issues Resolved
 
+### 2026-03-16: tapInternalKey Patching Regression — "No taproot scripts signed" Error
+
+**⚠️⚠️⚠️ CRITICAL: DO NOT REMOVE tapInternalKey PATCHING FROM WalletContext.tsx ⚠️⚠️⚠️**
+
+**Symptom:** Xverse/UniSat/OKX browser wallet signing fails with:
+- Xverse: "No taproot scripts signed" or "User rejected request to sign a psbt"
+- UniSat: Infinite loading spinner (silently skips unmatched inputs)
+- OKX: Similar silent failure
+
+**Root cause commit:** `43ea0ed1` ("refactor(wallet): delegate all browser wallet signing to ts-sdk adapters")
+
+This commit removed the critical `patchTapInternalKeys()` call from `signTaprootPsbt()` in `WalletContext.tsx`, assuming the SDK adapters would handle it. **They cannot** — the SDK adapters don't have access to the user's public key.
+
+**What the SDK does wrong:**
+```
+SDK creates PSBT with: tapInternalKey = DUMMY_WALLET_KEY (from walletCreate())
+User's wallet has:     publicKey = USER_REAL_KEY
+Wallet checks:         DUMMY_KEY ≠ USER_KEY → REFUSES TO SIGN
+```
+
+**What the frontend MUST do:**
+```typescript
+// In signTaprootPsbt(), BEFORE calling any wallet-specific signing:
+const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
+if (taprootPubKey) {
+  const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
+  patchTapInternalKeys(psbt, xOnlyHex);  // CRITICAL: Replace dummy key with user's key
+}
+```
+
+**Why SDK adapters can't do this:**
+1. SDK adapters only receive the PSBT hex — they have no access to `browserWalletAddresses`
+2. The user's public key is stored in React state, not passed to the adapter
+3. The dummy key in the PSBT doesn't match any connected account
+
+**Files that MUST have this patching:**
+- `context/WalletContext.tsx` - `signTaprootPsbt()` function (line ~1653)
+- The patching MUST happen BEFORE any wallet-specific signing (Xverse, UniSat, OKX, OYL)
+
+**Additional bug found:** After patching the PSBT, the code was converting from the ORIGINAL `psbtBase64` instead of using the patched `psbt.toHex()`:
+```typescript
+// BUG (loses all patches):
+const psbtHex = Buffer.from(psbtBase64, 'base64').toString('hex');
+
+// FIX (uses patched PSBT):
+const patchedPsbtHex = psbt.toHex();
+```
+
+**Verification checklist:**
+- [ ] `patchTapInternalKeys` is imported from `@/lib/wallet/browserWalletSigning`
+- [ ] `patchTapInternalKeys(psbt, xOnlyHex)` is called BEFORE wallet-specific signing
+- [ ] SDK adapter path uses `psbt.toHex()` not `Buffer.from(psbtBase64, 'base64').toString('hex')`
+
+**DO NOT:**
+- Remove or comment out `patchTapInternalKeys` import
+- Remove or comment out the patching code block
+- Assume SDK adapters will handle this — THEY CANNOT
+- Pass the original `psbtBase64` to wallets after patching
+
+---
+
 ### 2026-01-28: AMM Factory Deployment — Incomplete WASM Binaries
 
 **Symptom:** Factory proxy [4:65522] returned "Extcall failed: Unrecognized opcode" for CreateNewPool (opcode 1). No pools could be created. LP tokens could never be minted through the UI.
