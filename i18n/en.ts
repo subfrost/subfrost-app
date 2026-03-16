@@ -653,7 +653,7 @@ const en: Record<string, string> = {
   // Boost Section
   'boost.noBoost': 'This vault does not support yield boosting.',
   'boost.boostYourYield': 'BOOST Your Yield',
-  'boost.stakeToIncrease': 'Stake {token} to increase your APY',
+  'boost.stakeToIncrease': 'Stake {token} to increase your APY on dxBTC',
   'boost.comingSoon': 'Coming Soon',
   'boost.fuelNotAvailable': 'FUEL token features are not yet available. We will make announcements when TGE plans are finalized.',
   'boost.estBaseApy': 'Est. Base APY',
@@ -924,7 +924,7 @@ const en: Record<string, string> = {
   'fire.vestingPeriod': 'Vesting period',
   'fire.availableFire': 'Available FIRE',
   'fire.bondLp': 'Bond LP',
-  'fire.activeBonds': 'Active Bonds',
+  'fire.activeBonds': 'Bond Positions',
   'fire.connectToViewBonds': 'Connect wallet to view bonds',
   'fire.noBonds': 'No active bonds',
 

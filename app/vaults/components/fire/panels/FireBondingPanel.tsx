@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import BondCard from '../widgets/BondCard';
 import { useFireBondingStats } from '@/hooks/fire/useFireBondingStats';
-import { useFireUserBonds } from '@/hooks/fire/useFireUserBonds';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -18,7 +16,7 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
   const { isConnected } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: bondingStats } = useFireBondingStats();
-  const { data: userBonds } = useFireUserBonds();
+
 
   const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
@@ -38,10 +36,6 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
     console.log('[FireBondingPanel] Bond:', { amount });
   };
 
-  const handleClaimVested = (bondId: number) => {
-    if (isDemoGated) return;
-    console.log('[FireBondingPanel] Claim:', { bondId });
-  };
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -92,7 +86,7 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
           </div>
 
           {/* Preview */}
-          <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] p-3 sm:p-4 mb-4 space-y-2">
+          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3 sm:p-4 mb-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-[color:var(--sf-muted)]">{t('fire.youReceiveVested')}</span>
               <span className="font-bold text-orange-400">{fireReceived} FIRE</span>
@@ -120,39 +114,43 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
       {vaultDetailsSlot}
 
       {/* Active bonds */}
-      <div className="flex flex-col gap-3 sm:gap-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
-          {t('fire.activeBonds')}
+      <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col opacity-50 pointer-events-none">
+        {/* Header */}
+        <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.activeBonds')} (demo)</h3>
         </div>
 
         {!isConnected ? (
-          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-            <div className="text-[color:var(--sf-muted)] text-sm">{t('fire.connectToViewBonds')}</div>
-          </div>
-        ) : !userBonds?.bonds?.length ? (
-          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-            <div className="text-2xl mb-2">
-              <svg className="h-8 w-8 mx-auto text-[color:var(--sf-muted)]/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" />
-              </svg>
-            </div>
-            <div className="text-[color:var(--sf-muted)] text-sm">{t('fire.noBonds')}</div>
+          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+            {t('fire.connectToViewBonds')}
           </div>
         ) : (
-          userBonds.bonds.map((bond) => (
-            <BondCard
-              key={bond.bondId}
-              bondId={bond.bondId}
-              lpAmount={bond.lpAmount}
-              fireAmount={bond.fireAmount}
-              vestStart={bond.vestStart}
-              vestEnd={bond.vestEnd}
-              claimed={bond.claimed}
-              onClaim={handleClaimVested}
-              disabled={isDemoGated}
-            />
-          ))
+          <>
+            {/* Column headers */}
+            <div className="grid grid-cols-4 gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+              <div>LP Bonded</div>
+              <div>FIRE Vesting</div>
+              <div>Remaining</div>
+              <div className="text-right">Bond Date</div>
+            </div>
+
+            {/* Rows */}
+            <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
+              {[
+                { lpBonded: '5', fireVesting: '25', bondDate: '03/16/2026', remaining: '3d 21h 59m' },
+              ].map((row, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-4 items-center gap-2 px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+                >
+                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.lpBonded}</div>
+                  <div className="text-sm font-bold text-orange-500">{row.fireVesting}</div>
+                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.remaining}</div>
+                  <div className="text-sm text-[color:var(--sf-primary)] text-right">{row.bondDate}</div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

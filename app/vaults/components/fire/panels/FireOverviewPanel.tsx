@@ -62,7 +62,7 @@ export default function FireOverviewPanel() {
         <EmissionScheduleChart numYears={10} height={320} />
       </div>
 
-      {/* Treasury breakdown */}
+      {/* Treasury breakdown — hidden for now, may re-enable later
       <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
         <TreasuryBreakdownChart />
         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -76,6 +76,7 @@ export default function FireOverviewPanel() {
           </div>
         </div>
       </div>
+      */}
     </div>
   );
 }

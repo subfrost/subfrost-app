@@ -2,6 +2,7 @@
 
 import { LOCK_TIERS } from '@/utils/fireCalculations';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useTheme } from '@/context/ThemeContext';
 
 interface LockTierSelectorProps {
   selectedTier: number;
@@ -10,6 +11,7 @@ interface LockTierSelectorProps {
 
 export default function LockTierSelector({ selectedTier, onSelect }: LockTierSelectorProps) {
   const { t } = useTranslation();
+  const { theme } = useTheme();
 
   return (
     <div className="flex flex-col gap-2">
@@ -20,15 +22,20 @@ export default function LockTierSelector({ selectedTier, onSelect }: LockTierSel
         {LOCK_TIERS.map((tier, index) => (
           <button
             key={tier.label}
+            type="button"
             onClick={() => onSelect(index)}
-            className={`rounded-xl px-2 sm:px-3 py-2 sm:py-2.5 text-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] border ${
+            className={`inline-flex flex-col items-center justify-center rounded-md px-2 sm:px-3 py-2 sm:py-2.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
               selectedTier === index
-                ? 'border-orange-500/50 bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
-                : 'border-[color:var(--sf-glass-border)] bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/60 hover:border-[color:var(--sf-outline)]'
+                ? 'bg-[color:var(--sf-primary)]/20'
+                : `${
+                    theme === 'dark'
+                      ? 'bg-white/[0.03]'
+                      : 'bg-[color:var(--sf-surface)]'
+                  } hover:bg-white/[0.06]`
             }`}
           >
             <div className="text-xs sm:text-sm font-bold">{tier.label}</div>
-            <div className={`text-[10px] sm:text-xs ${selectedTier === index ? 'text-orange-400/70' : 'opacity-50'}`}>
+            <div className={`text-[10px] sm:text-xs font-bold ${selectedTier === index ? 'text-[color:var(--sf-percent-btn)]' : 'opacity-50'}`}>
               {tier.multiplier}x
             </div>
           </button>

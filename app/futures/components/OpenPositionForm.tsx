@@ -28,7 +28,7 @@ type PayoutMarker = {
 export default function OpenPositionForm({ contracts, onContractSelect }: OpenPositionFormProps) {
   const { t } = useTranslation();
   const [selectedBlocks, setSelectedBlocks] = useState<number>(30);
-  const [investmentAmount, setInvestmentAmount] = useState<string>('1.0');
+  const [investmentAmount, setInvestmentAmount] = useState<string>('');
   const [inputFocused, setInputFocused] = useState(false);
   const [lockPeriodFocused, setLockPeriodFocused] = useState(false);
   const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
@@ -106,8 +106,8 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   const btnInactiveClass = `${btnBase} hover:bg-white/6`;
 
   const inputPanelClass = inputFocused
-    ? 'rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-    : 'rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]';
+    ? 'group rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+    : 'group rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]';
 
   const lockPeriodInputClass = lockPeriodFocused
     ? 'h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
@@ -336,7 +336,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   ref={inputRef}
                   value={investmentAmount}
                   onChange={setInvestmentAmount}
-                  placeholder="1.0"
+                  placeholder="0.00000000"
                   align="left"
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
@@ -362,7 +362,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => handlePercent(0.25)}

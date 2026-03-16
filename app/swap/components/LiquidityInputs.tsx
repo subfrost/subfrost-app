@@ -238,7 +238,7 @@ export default function LiquidityInputs({
           {selectedLPPosition && (
             <>
               <div
-                className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${removeFocused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
+                className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${removeFocused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
                 onFocusCapture={() => setRemoveFocused(true)}
                 onBlurCapture={() => setRemoveFocused(false)}
               >
@@ -264,7 +264,7 @@ export default function LiquidityInputs({
                     </div>
                     
                     {/* Row 3: Percentage Buttons */}
-                    <div className="flex items-center justify-end gap-1.5">
+                    <div className={`flex items-center justify-end gap-1.5 transition-opacity duration-300 ${removeFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                       {[
                         { label: '25%', value: 0.25 },
                         { label: '50%', value: 0.5 },
@@ -517,7 +517,7 @@ export default function LiquidityInputs({
               <div className="relative z-20 grid grid-cols-2 gap-3">
             {/* Token 0 Amount Input */}
             <div
-              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${token0Focused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
+              className={`group rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${token0Focused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
               onFocusCapture={() => setToken0Focused(true)}
               onBlurCapture={() => setToken0Focused(false)}
             >
@@ -536,7 +536,7 @@ export default function LiquidityInputs({
                 <div className="mt-1 flex flex-col items-end gap-1">
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
                   {onPercentToken0 && (
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div className={`flex flex-wrap items-center gap-1 transition-opacity duration-300 ${token0Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                       {[
                         { label: '25%', value: 0.25 },
                         { label: '50%', value: 0.5 },
@@ -560,7 +560,7 @@ export default function LiquidityInputs({
 
             {/* Token 1 Amount Input */}
             <div
-              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${token1Focused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
+              className={`group rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${token1Focused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
               onFocusCapture={() => setToken1Focused(true)}
               onBlurCapture={() => setToken1Focused(false)}
             >
@@ -579,7 +579,7 @@ export default function LiquidityInputs({
                 <div className="mt-1 flex flex-col items-end gap-1">
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
                   {onPercentToken1 && (
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div className={`flex flex-wrap items-center gap-1 transition-opacity duration-300 ${token1Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                       {[
                         { label: '25%', value: 0.25 },
                         { label: '50%', value: 0.5 },

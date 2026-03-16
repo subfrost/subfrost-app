@@ -256,7 +256,7 @@ export default function SwapInputs({
         {/* You Send - entire panel clickable to focus input */}
         <div className={`relative ${fromFocused ? "z-30" : ""}`}>
           <div
-            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
+            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] px-4 pt-4 pb-6 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
               fromFocused
                 ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
                 : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
@@ -467,7 +467,7 @@ export default function SwapInputs({
               e.stopPropagation();
               openTokenSelector("to");
             }}
-            className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+            className="absolute right-4 top-6 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
           >
             {to && (
               <TokenIcon

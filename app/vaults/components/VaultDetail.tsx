@@ -17,7 +17,7 @@ type Props = {
 };
 
 export default function VaultDetail({ vault: initialVault }: Props) {
-  const [mode, setMode] = useState<'deposit' | 'withdraw'>('deposit');
+  const [mode, setMode] = useState<'deposit' | 'withdraw' | 'boost'>('deposit');
   const [infoTab, setInfoTab] = useState<'about' | 'strategies' | 'info' | 'risk'>('about');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [currentVault, setCurrentVault] = useState<VaultConfig>(initialVault);
@@ -95,23 +95,66 @@ export default function VaultDetail({ vault: initialVault }: Props) {
     }
   };
 
+  const isDxBtc = currentVault.id === 'dx-btc';
+
   return (
     <div className="space-y-6">
       {/* Grid Layout: Deposit Panel (Left) + Vault Info (Right) - 50/50 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left: Deposit Interface */}
-        <VaultDepositInterface
-          mode={mode}
-          onModeChange={setMode}
-          vault={currentVault}
-          onVaultChange={handleVaultChange}
-          userBalance={stats.userBalance}
-          apy={stats.apy}
-          onExecute={handleExecute}
-          vaultUnits={vaultUnits || []}
-          selectedUnitId={selectedUnitId}
-          onUnitSelect={setSelectedUnitId}
-        />
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${isDxBtc ? 'md:grid-rows-[auto_1fr]' : ''}`}>
+        {/* FIRE-style tab buttons for dxBTC */}
+        {isDxBtc && (
+          <div className="md:col-start-1 md:row-start-1 overflow-x-auto -mx-1 px-1 scrollbar-hide">
+            <div className="relative inline-flex items-center gap-2 p-1 min-w-max">
+              {(['deposit', 'withdraw', 'boost'] as const).map((tab) => {
+                const isActive = mode === tab;
+                const isBoostActive = isActive && tab === 'boost';
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setMode(tab)}
+                    className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md whitespace-nowrap overflow-hidden ${
+                      isActive
+                        ? isBoostActive
+                          ? 'text-white shadow-lg'
+                          : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-lg'
+                        : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] shadow-[0_2px_12px_rgba(0,0,0,0.08)]'
+                    }`}
+                    style={isBoostActive ? { background: 'linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))' } : undefined}
+                  >
+                    {isBoostActive && (
+                      <div className="absolute inset-0 animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-purple-300/40 to-transparent pointer-events-none" />
+                    )}
+                    <span className="relative z-10">{tab === 'boost' ? 'BOOST' : t(`vaultDeposit.${tab}`)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Left: Deposit Interface or Boost */}
+        <div className={isDxBtc ? 'md:col-start-1 md:row-start-2' : ''}>
+          {mode === 'boost' && isDxBtc ? (
+            <div className="[&>div]:!block [&>div]:space-y-4">
+              <BoostSection vault={currentVault} showPositions />
+            </div>
+          ) : (
+            <VaultDepositInterface
+              mode={mode === 'boost' ? 'deposit' : mode}
+              onModeChange={setMode}
+              vault={currentVault}
+              onVaultChange={handleVaultChange}
+              userBalance={stats.userBalance}
+              apy={stats.apy}
+              onExecute={handleExecute}
+              vaultUnits={vaultUnits || []}
+              selectedUnitId={selectedUnitId}
+              onUnitSelect={setSelectedUnitId}
+              hideTabs={isDxBtc}
+            />
+          )}
+        </div>
 
         {/* Right: Vault Info - Card on mobile, Hero on desktop */}
         <div className="md:hidden">
@@ -122,7 +165,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             interactive={false}
           />
         </div>
-        <div className="hidden md:flex md:flex-col">
+        <div className={`hidden md:flex md:flex-col ${isDxBtc ? 'md:col-start-2 md:row-start-1 md:row-span-2' : ''}`}>
           <VaultHero
             tokenId={currentVault.tokenId}
             tokenName={currentVault.tokenSymbol}
@@ -137,21 +180,26 @@ export default function VaultDetail({ vault: initialVault }: Props) {
             badges={currentVault.badge ? [currentVault.tokenSymbol, currentVault.badge] : [currentVault.tokenSymbol]}
             riskLevel={currentVault.riskLevel}
             apyHistory={currentVault.apyHistory}
+            glowColor={isDxBtc ? 'var(--sf-primary)' : undefined}
+            compactHeader={isDxBtc ? { title: 'dxBTC Token', subtitle: 'Pure BTC Yield' } : undefined}
+            boostActive={isDxBtc && mode === 'boost'}
           />
         </div>
       </div>
 
       {/* Responsive Grid Layout: 2 columns on md+, stacked on smaller screens */}
       <div className="space-y-6 md:space-y-0">
-        {/* Boost Section - Integrated Gauges */}
-        <div className="md:hidden">
-          <BoostSection vault={currentVault} />
-        </div>
+        {/* Boost Section - Integrated Gauges (hidden for dxBTC since it has a dedicated BOOST tab) */}
+        {!isDxBtc && (
+          <div className="md:hidden">
+            <BoostSection vault={currentVault} />
+          </div>
+        )}
 
         {/* Two Column Grid for md+ screens */}
         <div className="hidden md:grid md:grid-cols-2 md:gap-6 md:items-start">
           {/* Boost Section contents will distribute across columns */}
-          <BoostSection vault={currentVault} />
+          {!isDxBtc && <BoostSection vault={currentVault} />}
 
           {/* Right Column: Info Tabs - starts in column 2 after Boosted APY */}
           <div className={`rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit md:col-start-2 border-t border-[color:var(--sf-top-highlight)] ${currentVault.isBoostComingSoon ? 'md:row-start-4' : 'md:row-start-3'}`}>

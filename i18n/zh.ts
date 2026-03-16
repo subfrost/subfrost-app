@@ -645,7 +645,7 @@ const zh: Record<string, string> = {
   // Boost Section
   'boost.noBoost': '此金库不支持收益加速。',
   'boost.boostYourYield': '加速您的收益',
-  'boost.stakeToIncrease': '质押 {token} 以提高您的 APY',
+  'boost.stakeToIncrease': '质押 {token} 以提高您在 dxBTC 上的 APY',
   'boost.comingSoon': '即将推出',
   'boost.fuelNotAvailable': 'FUEL 代币功能尚未上线。TGE 计划确定后我们将发布公告。',
   'boost.estBaseApy': '预估基础 APY',

@@ -8,13 +8,14 @@ import { useWallet } from "@/context/WalletContext";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDemoGate } from '@/hooks/useDemoGate';
+
 
 type Props = {
   vault: VaultConfig;
+  showPositions?: boolean;
 };
 
-export default function BoostSection({ vault }: Props) {
+export default function BoostSection({ vault, showPositions = false }: Props) {
   const [stakeAmount, setStakeAmount] = useState("");
   const [activeTab, setActiveTab] = useState<"stake" | "unstake">("stake");
   const [inputFocused, setInputFocused] = useState(false);
@@ -22,20 +23,17 @@ export default function BoostSection({ vault }: Props) {
   const { theme } = useTheme();
   const { network } = useWallet();
   const { t } = useTranslation();
-  const isDemoGated = useDemoGate();
+
 
   // Mock data - replace with real data
   const userVeTokenBalance = "1250.50";
   const userVeTokenBalanceFormatted = "1,250.50";
   const totalVxTokenStaked = "850.00";
-  const baseApy = vault.estimatedApy || "0";
   const multiplier = vault.boostMultiplier || 1.5;
-  const boostedApy = (parseFloat(baseApy) * multiplier).toFixed(1);
   const boostMultiplier = `${multiplier}x`;
 
   // Check if this is the special dxBTC vault with FUEL
-  // When not demo-gated, bypass coming soon so all features are testable
-  const isComingSoon = !isDemoGated ? false : vault.isBoostComingSoon;
+  const isComingSoon = vault.isBoostComingSoon;
 
   if (!vault.hasBoost) {
     return (
@@ -92,28 +90,6 @@ export default function BoostSection({ vault }: Props) {
         </div>
       )}
 
-      {/* APY Comparison - Grid on mobile, split columns on md+ */}
-      <div className="grid grid-cols-2 gap-4 md:contents">
-        <div className={`rounded-xl bg-[color:var(--sf-surface)]/60 p-4 md:col-start-1 border-t border-[color:var(--sf-top-highlight)] ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}>
-          <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
-            {t('boost.estBaseApy')}
-          </p>
-          <p className="text-2xl font-bold text-[color:var(--sf-text)]">
-            {baseApy}%
-          </p>
-        </div>
-        <div 
-          className={`rounded-xl border-2 border-purple-500/30 p-4 md:col-start-2 ${isComingSoon ? 'md:row-start-3' : 'md:row-start-2'}`}
-          style={{ background: `linear-gradient(to bottom right, var(--sf-boost-bg-from), var(--sf-boost-bg-to))` }}
-        >
-          <p className="text-xs font-medium text-[color:var(--sf-boost-label)] mb-1">
-            {t('boost.boostedApy')}
-          </p>
-          <p className="text-2xl font-bold text-[color:var(--sf-boost-value)]">
-            {boostedApy}%
-          </p>
-        </div>
-      </div>
 
       {/* Boost Stats - Will be in left column on md+ */}
       <div className={`rounded-2xl bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 border-t border-[color:var(--sf-top-highlight)] ${isComingSoon ? 'md:row-start-4' : 'md:row-start-3'} ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -169,7 +145,7 @@ export default function BoostSection({ vault }: Props) {
         {/* Stake Input - styled like From Wallet */}
         <div className="space-y-3">
           <div
-            className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
             onClick={() => inputRef.current?.focus()}
           >
             {/* Token display - floating top-right (non-selectable) */}
@@ -214,7 +190,7 @@ export default function BoostSection({ vault }: Props) {
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                   {t('boost.balance', { amount: userVeTokenBalanceFormatted })}
                 </div>
-                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     onClick={() => setStakeAmount((parseFloat(userVeTokenBalance) * 0.25).toString())}
@@ -259,40 +235,41 @@ export default function BoostSection({ vault }: Props) {
         </div>
       </div>
 
-      {/* Positions List (if has multiple positions) - Will be in left column on md+ */}
-      {vault.hasBoost && !isComingSoon && (
-        <div className="rounded-2xl bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 md:row-start-4 border-t border-[color:var(--sf-top-highlight)]">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-bold text-[color:var(--sf-text)]">
-              {t('boost.yourBoostedPositions')}
-            </h4>
-            <button className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)]">
+      {/* Positions list */}
+      {vault.hasBoost && (showPositions || !isComingSoon) && (
+        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col opacity-50 pointer-events-none">
+          {/* Header */}
+          <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0 flex items-center justify-between">
+            <h3 className="text-base font-bold text-[color:var(--sf-text)]">
+              Boosted Positions (demo)
+            </h3>
+            <button className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
               {t('boost.consolidateAll')}
             </button>
           </div>
 
-          {/* Mock positions */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-lg bg-[color:var(--sf-surface)]/60 p-3">
-              <div>
-                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.position', { num: '1' })}</p>
-                <p className="text-sm font-bold text-[color:var(--sf-text)]">250.50 {vault.outputAsset}</p>
+          {/* Column headers */}
+          <div className="grid grid-cols-3 gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+            <div>dxBTC Amount</div>
+            <div>vxFUEL Used</div>
+            <div className="text-right">Boost Date</div>
+          </div>
+
+          {/* Rows */}
+          <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
+            {[
+              { dxBtc: '250.50', vxFuel: '200', date: '01/15/2026' },
+              { dxBtc: '1,000.00', vxFuel: '650', date: '01/22/2026' },
+            ].map((row, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-3 items-center gap-2 px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+              >
+                <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.dxBtc}</div>
+                <div className="text-sm font-bold text-purple-600">{row.vxFuel}</div>
+                <div className="text-sm text-[color:var(--sf-primary)] text-right">{row.date}</div>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.boost')}</p>
-                <p className="text-sm font-bold text-purple-600">200 {vault.boostTokenSymbol}</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-[color:var(--sf-surface)]/60 p-3">
-              <div>
-                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.position', { num: '2' })}</p>
-                <p className="text-sm font-bold text-[color:var(--sf-text)]">1,000.00 {vault.outputAsset}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-[color:var(--sf-text)]/60">{t('boost.boost')}</p>
-                <p className="text-sm font-bold text-purple-600">650 {vault.boostTokenSymbol}</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
