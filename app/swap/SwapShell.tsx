@@ -271,18 +271,19 @@ export default function SwapShell() {
 
   // Initialize swap tokens from session (returning user) or trending pool (first visit).
   // Session storage preserves the user's last pair choice across page navigations.
-  // Wait for BOTH pools AND poolStats to finish loading for accurate trending calculation.
-  // Using a ref ensures we only do this once, even if topVolumePool reference changes.
+  // Uses a ref to ensure initialization only happens once per mount.
+  //
+  // Two-phase approach:
+  //   Phase 1 (eager): As soon as pools load, restore from session or pick trending by TVL.
+  //     This avoids empty selectors while waiting for volume stats.
+  //   Phase 2 (refined): Once volume stats arrive, re-pick trending if we used the TVL fallback.
   const trendingPoolInitializedRef = useRef(false);
+  const usedSessionRef = useRef(false);
   useEffect(() => {
     if (trendingPoolInitializedRef.current) return;
 
-    // Don't initialize until both queries have completed loading
-    // AND poolStats actually has data (not empty object)
-    // AND that data has been merged (markets has volume data)
-    const bothQueriesLoaded = !isLoadingPools && !isLoadingPoolStats;
-    const dataReady = bothQueriesLoaded && poolStatsHasData && hasVolumeDataMerged;
-    if (!dataReady || markets.length === 0) return;
+    // Phase 1: need at least pools loaded with some markets
+    if (isLoadingPools || markets.length === 0) return;
 
     // Try restoring from session first (user previously selected a pair)
     const saved = loadSwapPairFromSession();
@@ -299,12 +300,23 @@ export default function SwapShell() {
         setToToken(saved.to);
         setSelectedPool(matchingPool);
         trendingPoolInitializedRef.current = true;
+        usedSessionRef.current = true;
         return;
       }
-      // Saved pair no longer exists in markets — fall through to trending
+      // Saved pair no longer in markets — also check for wrap pairs (BTC/frBTC)
+      const isSavedWrapPair = (saved.from.id === 'btc' || saved.to.id === 'btc');
+      if (isSavedWrapPair) {
+        console.log('[SwapShell] Restoring saved wrap pair from session:', saved.from.symbol, '→', saved.to.symbol);
+        setFromToken(saved.from);
+        setToToken(saved.to);
+        trendingPoolInitializedRef.current = true;
+        usedSessionRef.current = true;
+        return;
+      }
+      // Saved pair no longer exists — fall through to trending
     }
 
-    // First visit: use trending (highest volume) pool
+    // First visit: use trending (highest volume) pool — or first pool by TVL if no volume data yet
     if (topVolumePool) {
       console.log('[SwapShell] Initializing trending pool:', topVolumePool.pairLabel, {
         vol24h: topVolumePool.vol24hUsd,
@@ -316,7 +328,28 @@ export default function SwapShell() {
       setSelectedPool(topVolumePool);
       trendingPoolInitializedRef.current = true;
     }
-  }, [topVolumePool, isLoadingPools, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged, markets]);
+  }, [topVolumePool, isLoadingPools, markets]);
+
+  // Phase 2 (refined): Once volume stats finish loading, re-evaluate trending pool.
+  // If the user restored from session or already picked manually, skip this.
+  const volumeRefinedRef = useRef(false);
+  useEffect(() => {
+    if (volumeRefinedRef.current || usedSessionRef.current) return;
+    if (isLoadingPoolStats || !poolStatsHasData || !hasVolumeDataMerged) return;
+    if (!trendingPoolInitializedRef.current || !topVolumePool) return;
+
+    // Check if trending pool changed now that volume data is available
+    if (topVolumePool.id !== selectedPool?.id) {
+      console.log('[SwapShell] Refining to volume-based trending pool:', topVolumePool.pairLabel, {
+        vol24h: topVolumePool.vol24hUsd,
+        vol30d: topVolumePool.vol30dUsd,
+      });
+      setFromToken(topVolumePool.token0);
+      setToToken(topVolumePool.token1);
+      setSelectedPool(topVolumePool);
+    }
+    volumeRefinedRef.current = true;
+  }, [topVolumePool, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged, selectedPool?.id]);
 
   // Persist user's pair selection to sessionStorage so it survives page navigation.
   // Only save after initialization is complete to avoid overwriting with undefined.

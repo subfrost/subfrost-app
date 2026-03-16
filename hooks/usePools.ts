@@ -170,6 +170,10 @@ async function fetchPoolsFromDataApi(
 
   console.log('[usePools] dataApiGetAllPoolsDetails returned', pools.length, 'pools');
 
+  if (pools.length === 0) {
+    throw new Error('dataApiGetAllPoolsDetails returned 0 pools (API may be down)');
+  }
+
   const items: PoolsListItem[] = [];
 
   for (const p of pools) {

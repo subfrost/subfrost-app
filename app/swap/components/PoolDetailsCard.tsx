@@ -141,21 +141,43 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
         <div className="flex flex-col items-center justify-center py-12 text-center">
           {isWrapPair ? (
             <>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[color:var(--sf-text)]/20 mb-3">
-                <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
-                <circle cx="12" cy="12" r="6" />
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 256 256" className="text-[color:var(--sf-text)]/20 mb-3">
+                <rect width="100%" height="100%" fill="none"/>
+                <g stroke="currentColor" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" fill="none" transform="translate(128,128)">
+                  <line x1="0" y1="-96" x2="0" y2="96"/>
+                  <g transform="rotate(60)"><line x1="0" y1="-96" x2="0" y2="96"/></g>
+                  <g transform="rotate(120)"><line x1="0" y1="-96" x2="0" y2="96"/></g>
+                  <g>
+                    <g>
+                      <line x1="0" y1="-64" x2="16" y2="-80"/><line x1="0" y1="-64" x2="-16" y2="-80"/>
+                      <line x1="0" y1="64" x2="16" y2="80"/><line x1="0" y1="64" x2="-16" y2="80"/>
+                    </g>
+                    <g transform="rotate(60)">
+                      <line x1="0" y1="-64" x2="16" y2="-80"/><line x1="0" y1="-64" x2="-16" y2="-80"/>
+                      <line x1="0" y1="64" x2="16" y2="80"/><line x1="0" y1="64" x2="-16" y2="80"/>
+                    </g>
+                    <g transform="rotate(120)">
+                      <line x1="0" y1="-64" x2="16" y2="-80"/><line x1="0" y1="-64" x2="-16" y2="-80"/>
+                      <line x1="0" y1="64" x2="16" y2="80"/><line x1="0" y1="64" x2="-16" y2="80"/>
+                    </g>
+                  </g>
+                  <circle cx="0" cy="0" r="10" fill="currentColor" stroke="none"/>
+                </g>
               </svg>
               <p className="text-sm text-[color:var(--sf-text)]/50">
                 BTC Wrapping &amp; Unwrapping is backed 1:1 with our reserve.
               </p>
-              <a
-                href="https://subfrost.io/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-[color:var(--sf-primary)] hover:underline mt-1"
-              >
-                See proof here: subfrost.io
-              </a>
+              <p className="text-sm text-[color:var(--sf-text)]/50 mt-1">
+                See proof here:{' '}
+                <a
+                  href="https://subfrost.io/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[color:var(--sf-primary)] hover:underline"
+                >
+                  subfrost.io
+                </a>
+              </p>
             </>
           ) : (
             <>
