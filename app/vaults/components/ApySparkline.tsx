@@ -7,11 +7,16 @@ type ApySparklineProps = {
   data: number[]; // Array of APY values (30 days)
   currentApy: number; // Current/latest APY to display
   fillHeight?: boolean; // Whether to fill parent height (default: false)
+  boostActive?: boolean; // When true, purple line with shimmer + 1.5x data
 };
 
-export default function ApySparkline({ data, currentApy, fillHeight = false }: ApySparklineProps) {
+export default function ApySparkline({ data, currentApy, fillHeight = false, boostActive = false }: ApySparklineProps) {
   const { theme } = useTheme();
   const { t } = useTranslation();
+
+  // When boost is active, multiply all data points by 1.5x
+  const chartData = boostActive ? data.map(v => v * 1.5) : data;
+  const displayApy = boostActive ? currentApy * 1.5 : currentApy;
 
   // Grid line color matching CandleChart styling
   const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(40, 67, 114, 0.1)';
@@ -23,14 +28,14 @@ export default function ApySparkline({ data, currentApy, fillHeight = false }: A
   const chartHeight = height - padding.top - padding.bottom;
 
   // Calculate Y-axis range from data
-  const minY = Math.min(...data);
-  const maxY = Math.max(...data);
+  const minY = Math.min(...chartData);
+  const maxY = Math.max(...chartData);
   const range = maxY - minY;
   const isFlat = range === 0; // All values are the same
 
   // Generate path points
-  const points = data.map((value, index) => {
-    const x = padding.left + (index / (data.length - 1 || 1)) * chartWidth;
+  const points = chartData.map((value, index) => {
+    const x = padding.left + (index / (chartData.length - 1 || 1)) * chartWidth;
     // If flat (all same values), center the line vertically
     const y = isFlat
       ? padding.top + chartHeight / 2
@@ -58,7 +63,7 @@ export default function ApySparkline({ data, currentApy, fillHeight = false }: A
         <svg
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="none"
-          className="w-full h-full text-[color:var(--sf-info-green-title)]"
+          className={`w-full h-full ${boostActive ? '' : 'text-[color:var(--sf-info-green-title)]'}`}
         >
           {/* Horizontal gridlines - 4 lines evenly spaced */}
           {[0, 1, 2, 3].map((i) => {
@@ -92,29 +97,67 @@ export default function ApySparkline({ data, currentApy, fillHeight = false }: A
               />
             );
           })}
+          {boostActive && (
+            <defs>
+              <linearGradient id="boost-purple-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="var(--sf-boost-icon-from)" />
+                <stop offset="100%" stopColor="var(--sf-boost-icon-to)" />
+              </linearGradient>
+              {/* Shimmer gradient that sweeps across the line */}
+              <linearGradient id="boost-shimmer" x1="0%" y1="0%" x2="100%" y2="0%" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="white" stopOpacity="0">
+                  <animate attributeName="offset" values="-0.3;1" dur="2s" repeatCount="indefinite" />
+                </stop>
+                <stop offset="15%" stopColor="white" stopOpacity="0.6">
+                  <animate attributeName="offset" values="-0.15;1.15" dur="2s" repeatCount="indefinite" />
+                </stop>
+                <stop offset="30%" stopColor="white" stopOpacity="0">
+                  <animate attributeName="offset" values="0;1.3" dur="2s" repeatCount="indefinite" />
+                </stop>
+              </linearGradient>
+            </defs>
+          )}
           <path
             d={pathD}
             fill="none"
-            stroke="currentColor"
+            stroke={boostActive ? 'url(#boost-purple-gradient)' : 'currentColor'}
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
           />
+          {/* Shimmer pass drawn on top of the line */}
+          {boostActive && (
+            <path
+              d={pathD}
+              fill="none"
+              stroke="url(#boost-shimmer)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
         </svg>
 
         {/* Pulsating dot - positioned at last data point */}
         <div
-          className="absolute w-2 h-2 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse -translate-x-1/2 -translate-y-1/2"
+          className={`absolute w-2 h-2 rounded-full animate-pulse -translate-x-1/2 -translate-y-1/2 ${
+            boostActive ? 'bg-purple-500' : 'bg-[color:var(--sf-info-green-title)]'
+          }`}
           style={{ left: `${lastPointXPercent}%`, top: `${lastPointYPercent}%` }}
         />
 
         {/* Hist APY label - positioned below the pulsating dot */}
         <div
-          className="absolute z-10 rounded-md bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-1.5 py-0.5 text-[10px] font-bold text-[color:var(--sf-info-green-title)] whitespace-nowrap -translate-x-1/2"
+          className={`absolute z-10 rounded-md px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap -translate-x-1/2 ${
+            boostActive
+              ? 'bg-purple-500/20 border border-purple-500/40 text-[color:var(--sf-coming-soon-title)]'
+              : 'bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]'
+          }`}
           style={{ left: `${lastPointXPercent}%`, top: `calc(${lastPointYPercent}% + 8px)` }}
         >
-          {currentApy.toFixed(1)}%
+          {displayApy.toFixed(1)}%
         </div>
 
       </div>

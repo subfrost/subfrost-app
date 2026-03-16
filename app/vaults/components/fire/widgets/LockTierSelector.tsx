@@ -9,6 +9,15 @@ interface LockTierSelectorProps {
   onSelect: (tierIndex: number) => void;
 }
 
+const LOCK_TIER_KEYS: Record<string, string> = {
+  'None': 'fire.lockNone',
+  '1 Week': 'fire.lock1Week',
+  '1 Month': 'fire.lock1Month',
+  '3 Months': 'fire.lock3Months',
+  '6 Months': 'fire.lock6Months',
+  '1 Year': 'fire.lock1Year',
+};
+
 export default function LockTierSelector({ selectedTier, onSelect }: LockTierSelectorProps) {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -34,7 +43,7 @@ export default function LockTierSelector({ selectedTier, onSelect }: LockTierSel
                   } hover:bg-white/[0.06]`
             }`}
           >
-            <div className="text-xs sm:text-sm font-bold">{tier.label}</div>
+            <div className="text-xs sm:text-sm font-bold">{t(LOCK_TIER_KEYS[tier.label] || tier.label)}</div>
             <div className={`text-[10px] sm:text-xs font-bold ${selectedTier === index ? 'text-[color:var(--sf-percent-btn)]' : 'opacity-50'}`}>
               {tier.multiplier}x
             </div>

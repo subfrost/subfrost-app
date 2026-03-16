@@ -76,7 +76,16 @@ export default function VaultHero({
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-[color:var(--sf-text)]">{compactHeader.title}</h1>
-            <p className="text-xs sm:text-sm text-[color:var(--sf-muted)]">{compactHeader.subtitle}</p>
+            <p className="text-xs sm:text-sm text-[color:var(--sf-muted)]">
+              {boostActive && compactHeader.subtitle.includes(t('vaultDeposit.tokenBoost')) ? (
+                <>
+                  {compactHeader.subtitle.split(t('vaultDeposit.tokenBoost'))[0]}
+                  <span className="text-purple-400 font-semibold">{t('vaultDeposit.tokenBoost')}</span>
+                </>
+              ) : (
+                compactHeader.subtitle
+              )}
+            </p>
           </div>
         </div>
       ) : (
@@ -146,7 +155,7 @@ export default function VaultHero({
       {/* APY Sparkline - Full Width Row */}
       {apyHistory.length > 0 && (
         <div className="w-full h-60 mb-6 relative z-10">
-          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} fillHeight={true} />
+          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} fillHeight={true} boostActive={boostActive} />
         </div>
       )}
 

@@ -70,15 +70,15 @@ export default function YveDieselVault() {
         {infoTab === 'about' && (
           <div className="space-y-4">
             <p className="text-sm text-[color:var(--sf-text)]">
-              Lock DIESEL to earn yield from LP trading fees and external subsidies.
+              Stake BTC to earn yield from LP trading fees and potential external subsidies.
             </p>
             <div className="space-y-2">
               {[
-                'Earn 60% of LP trading fees',
-                'Receive external subsidy rewards (frBTC, DIESEL)',
-                '10% auto-compound on harvest',
+                'Earn XX% of LP trading fees',
+                'Receive external subsidy rewards (frBTC, DIESEL, Others)',
+                'XX% auto-compound on harvest',
                 'No withdrawal timelock',
-                'Provides boost to gauge stakers (1x to 2.5x)',
+                'Optional boost to gauge stakers of FUEL (1x to 2.5x)',
               ].map((feature, i) => (
                 <div key={i} className="flex items-center gap-2 text-sm text-[color:var(--sf-text)]">
                   <svg className="h-4 w-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -98,7 +98,7 @@ export default function YveDieselVault() {
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">LP Fee Harvesting</div>
                 <div className="text-xs text-[color:var(--sf-text)] mb-2">
-                  Extracts 60% of trading fees from DIESEL/frBTC pool using k-value growth tracking
+                  Extracts 60% of trading fees from BTC/frBTC-paired pools using k-value growth tracking
                 </div>
                 <div className="text-xs text-[color:var(--sf-text)]/70">
                   Formula: <span className="bg-[color:var(--sf-surface)] px-1 rounded">(vault_lp × Δ√k × 0.6) / √k_new</span>
@@ -108,15 +108,16 @@ export default function YveDieselVault() {
                 <div className="font-semibold text-sm text-[color:var(--sf-text)] mb-1">External Subsidies</div>
                 <div className="text-xs text-[color:var(--sf-text)]">
                   • DIESEL from Protorunes rewards<br/>
-                  • frBTC from Bitcoin wrapper fees<br/>
+                  • frBTC from BTC wrap/unwrap fees<br/>
+                  • frBTC from frUSD and frADA bridge fees<br/>
                   • Deposited by strategist
                 </div>
               </div>
               <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
                 <div className="font-semibold text-sm text-blue-900 mb-1">Harvest Distribution</div>
                 <div className="text-xs text-blue-800">
-                  • 10% auto-compound (locked as more FIRE)<br/>
-                  • 90% added to reward pool for claimants
+                  • XX% auto-compound (locked as more dxBTC)<br/>
+                  • XX% added to reward pool for claimants
                 </div>
               </div>
             </div>

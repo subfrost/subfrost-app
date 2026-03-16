@@ -60,12 +60,12 @@ export default function FireDistributionPanel() {
         </div>
 
         {/* Current phase info */}
-        <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] p-3 sm:p-4">
-          <div className="text-sm font-bold text-[color:var(--sf-text)]">
-            {t('fire.phase')} {currentPhase}: {t(PHASE_KEYS[currentPhase]?.name || 'fire.unknown')}
+        <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3 sm:p-4 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-[color:var(--sf-muted)]">{t('fire.phase')} {currentPhase}: {t(PHASE_KEYS[currentPhase]?.name || 'fire.unknown')}</span>
           </div>
-          <div className="text-xs text-[color:var(--sf-muted)] mt-1">
-            {PHASE_KEYS[currentPhase]?.description ? t(PHASE_KEYS[currentPhase].description) : ''}
+          <div className="flex justify-between text-xs">
+            <span className="text-[color:var(--sf-muted)]">{PHASE_KEYS[currentPhase]?.description ? t(PHASE_KEYS[currentPhase].description) : ''}</span>
           </div>
         </div>
       </div>

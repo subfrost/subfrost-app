@@ -46,42 +46,34 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
             {t('fire.bondLpForFire')}
           </div>
 
-          {/* Discount + price cards */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="rounded-2xl bg-emerald-500/10 p-3 sm:p-4 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/70">{t('fire.discount')}</div>
-              <div className="text-2xl sm:text-3xl font-bold text-emerald-400">{discount}%</div>
+          {/* Amount input + Discount */}
+          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: '70% 1fr' }}>
+            <div
+              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
+                amountFocused
+                  ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+                  : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
+              }`}
+              onClick={() => amountRef.current?.focus()}
+            >
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.bondLpTokens')}</span>
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  ref={amountRef}
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  onFocus={() => setAmountFocused(true)}
+                  onBlur={() => setAmountFocused(false)}
+                  placeholder="0.00"
+                  className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
+                  style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
+                />
+              </div>
             </div>
-            <div className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-3 sm:p-4 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.firePrice')}</div>
-              <div className="text-sm sm:text-base font-bold text-[color:var(--sf-text)] truncate">{firePrice}</div>
-              <div className="text-[10px] text-[color:var(--sf-muted)]">frBTC</div>
-            </div>
-          </div>
-
-          {/* Amount input */}
-          <div
-            className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
-              amountFocused
-                ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-                : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
-            }`}
-            onClick={() => amountRef.current?.focus()}
-          >
-            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.lpAmount')}</span>
-            <div className="flex items-center gap-2 mt-1">
-              <input
-                ref={amountRef}
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                onFocus={() => setAmountFocused(true)}
-                onBlur={() => setAmountFocused(false)}
-                placeholder="0.00"
-                className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
-                style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
-              />
-              <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">LP</span>
+            <div className="rounded-2xl bg-[color:var(--sf-info-green-bg)] flex flex-col items-center justify-center text-center">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-info-green-title)]">{t('fire.discount')}</div>
+              <div className="text-2xl font-bold text-[color:var(--sf-info-green-title)]">{discount}%</div>
             </div>
           </div>
 
@@ -93,7 +85,7 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-[color:var(--sf-muted)]">{t('fire.vestingPeriod')}</span>
-              <span className="text-[color:var(--sf-text)]/70">~5 days (720 blocks)</span>
+              <span className="text-[color:var(--sf-text)]/70">{t('fire.vestingDuration')}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-[color:var(--sf-muted)]">{t('fire.availableFire')}</span>
@@ -128,10 +120,10 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
           <>
             {/* Column headers */}
             <div className="grid grid-cols-4 gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
-              <div>LP Bonded</div>
-              <div>FIRE Vesting</div>
-              <div>Remaining</div>
-              <div className="text-right">Bond Date</div>
+              <div>{t('fire.lpBonded')}</div>
+              <div>{t('fire.fireVesting')}</div>
+              <div>{t('fire.remaining')}</div>
+              <div className="text-right">{t('fire.bondDate')}</div>
             </div>
 
             {/* Rows */}

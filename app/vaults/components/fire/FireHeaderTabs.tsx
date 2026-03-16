@@ -23,7 +23,7 @@ export default function FireHeaderTabs({ activeTab, onTabChange }: FireHeaderTab
   const { t } = useTranslation();
 
   return (
-    <div className="overflow-x-auto -mx-1 px-1 scrollbar-hide">
+    <div className="overflow-x-auto -mx-1 px-1 -my-3 py-3 scrollbar-hide">
       <div className="relative inline-flex items-center gap-2 p-1 min-w-max">
         {TAB_IDS.map((id) => (
           <button

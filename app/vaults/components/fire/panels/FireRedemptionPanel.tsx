@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useRef } from 'react';
 import FloorPriceIndicator from '../widgets/FloorPriceIndicator';
-import CooldownTimer from '../widgets/CooldownTimer';
 import { useFireRedemption } from '@/hooks/fire/useFireRedemption';
 import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireTreasury } from '@/hooks/fire/useFireTreasury';
@@ -53,10 +52,8 @@ export default function FireRedemptionPanel() {
       <FloorPriceIndicator
         totalBacking={treasury?.totalBacking || '0'}
         circulatingSupply={tokenStats?.circulatingSupply || '0'}
+        cooldownBlocks={cooldownBlocks}
       />
-
-      {/* Cooldown status */}
-      <CooldownTimer cooldownBlocks={cooldownBlocks} />
 
       {/* Redeem form */}
       <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
@@ -91,7 +88,7 @@ export default function FireRedemptionPanel() {
         </div>
 
         {/* Preview */}
-        <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] p-3 sm:p-4 mb-4 space-y-2">
+        <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3 sm:p-4 mb-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-[color:var(--sf-muted)]">{t('fire.youReceive')}</span>
             <span className="font-bold text-[color:var(--sf-text)]">{preview.lpOut} LP</span>

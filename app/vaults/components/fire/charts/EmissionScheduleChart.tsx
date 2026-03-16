@@ -103,10 +103,10 @@ export default function EmissionScheduleChart({
         </span>
         <div className="text-right">
           <div className="text-[10px] text-[color:var(--sf-muted)]">
-            Pool: {formatCompact(FIRE_EMISSION_POOL)} FIRE
+            {t('fire.emissionPool')}: {formatCompact(FIRE_EMISSION_POOL)} FIRE
           </div>
           <div className="text-[10px] text-[color:var(--sf-muted)]">
-            Emission Rate: --
+            {t('fire.emissionRate')}: --
           </div>
         </div>
       </div>

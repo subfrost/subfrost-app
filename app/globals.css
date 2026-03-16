@@ -59,10 +59,10 @@ body {
   --sf-boost-label: #e9d5ff;
   --sf-boost-value: #f3e8ff;
 
-  /* Coming soon - dark mode defaults */
-  --sf-coming-soon-bg: rgba(120, 53, 15, 0.4);
-  --sf-coming-soon-title: #fde68a;
-  --sf-coming-soon-text: #fcd34d;
+  /* Coming soon - dark mode defaults (purple) */
+  --sf-coming-soon-bg: rgba(168, 85, 247, 0.1);
+  --sf-coming-soon-title: #a78bfa;
+  --sf-coming-soon-text: #a78bfa;
 
   /* Info cards - dark mode defaults */
   --sf-info-gray-bg: rgba(55, 65, 81, 0.4);
@@ -158,10 +158,10 @@ body {
   /* Percentage buttons - primary color in light mode */
   --sf-percent-btn: var(--sf-primary);
 
-  /* Coming soon - light mode */
-  --sf-coming-soon-bg: #fffbeb;
-  --sf-coming-soon-title: #92400e;
-  --sf-coming-soon-text: #b45309;
+  /* Coming soon - light mode (purple to match "+ Token Boost") */
+  --sf-coming-soon-bg: rgba(147, 51, 234, 0.1);
+  --sf-coming-soon-title: #9333ea;
+  --sf-coming-soon-text: #9333ea;
 
   /* Info cards - light mode */
   --sf-info-gray-bg: #f9fafb;
@@ -184,7 +184,7 @@ body {
   --sf-info-red-text: #7f1d1d;
   --sf-info-green-bg: #dcfce7;
   --sf-info-green-border: #86efac;
-  --sf-info-green-title: #15803d;
+  --sf-info-green-title: #22c55e;
   --sf-info-green-text: #166534;
 
   /* No futures notification - light mode (keep blue) */
@@ -245,10 +245,10 @@ body {
   --sf-boost-label: #e9d5ff;
   --sf-boost-value: #f3e8ff;
 
-  /* Coming soon - dark mode */
-  --sf-coming-soon-bg: rgba(120, 53, 15, 0.4);
-  --sf-coming-soon-title: #fde68a;
-  --sf-coming-soon-text: #fcd34d;
+  /* Coming soon - dark mode (purple) */
+  --sf-coming-soon-bg: rgba(168, 85, 247, 0.1);
+  --sf-coming-soon-title: #a78bfa;
+  --sf-coming-soon-text: #a78bfa;
 
   /* Info cards - dark mode */
   --sf-info-gray-bg: rgba(55, 65, 81, 0.4);
@@ -350,6 +350,7 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
 }
+
 
 @theme inline {
   --color-primary: var(--sf-primary);

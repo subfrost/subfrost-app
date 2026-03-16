@@ -39,8 +39,8 @@ export default function VaultTiles() {
       <div className="p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {featured.map((v) => {
-            const isDxBtc = v.id === 'dx-btc';
-            const tileClasses = `rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isDxBtc ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10' : 'opacity-40 grayscale cursor-default'} focus:outline-none`;
+            const isActive = v.id === 'dx-btc' || v.id === 've-diesel';
+            const tileClasses = `rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isActive ? 'hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10' : 'opacity-40 grayscale cursor-default'} focus:outline-none`;
             const content = (
               <>
                 <div className="flex items-center justify-between gap-3 mb-3">
@@ -71,7 +71,7 @@ export default function VaultTiles() {
                 </div>
               </>
             );
-            return isDxBtc ? (
+            return isActive ? (
               <Link key={v.id} href={`/vaults?vault=${v.id}`} className={tileClasses}>
                 {content}
               </Link>

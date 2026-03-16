@@ -56,6 +56,10 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
       {/* Stake form */}
       <div className="flex flex-col gap-4">
         <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
+            {t('fire.stakeLpForEmissions')}
+          </div>
+
           {/* Amount input */}
           <div
             className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
@@ -78,7 +82,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
                 className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
                 style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
               />
-              <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">LP</span>
+
             </div>
           </div>
 
@@ -247,7 +251,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
       <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col opacity-50 pointer-events-none">
         {/* Header */}
         <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
-          <h3 className="text-base font-bold text-[color:var(--sf-text)]">Stake Positions (demo)</h3>
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.stakePositions')} (demo)</h3>
         </div>
 
         {!isConnected ? (
@@ -258,10 +262,10 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
           <>
             {/* Column headers */}
             <div className="grid grid-cols-4 gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
-              <div>LP Staked</div>
-              <div>FIRE Earned</div>
-              <div>Remaining</div>
-              <div className="text-right">Lock Date</div>
+              <div>{t('fire.lpStaked')}</div>
+              <div>{t('fire.fireEarned')}</div>
+              <div>{t('fire.remaining')}</div>
+              <div className="text-right">{t('fire.lockDate')}</div>
             </div>
 
             {/* Rows */}

@@ -17,6 +17,15 @@ import BigNumber from 'bignumber.js';
 
 const FirePriceChart = dynamic(() => import('./charts/FirePriceChart'), { ssr: false });
 
+const LOCK_TIER_KEYS: Record<string, string> = {
+  'None': 'fire.lockNone',
+  '1 Week': 'fire.lock1Week',
+  '1 Month': 'fire.lock1Month',
+  '3 Months': 'fire.lock3Months',
+  '6 Months': 'fire.lock6Months',
+  '1 Year': 'fire.lock1Year',
+};
+
 export default function FireDashboard() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<FireTab>('dashboard');
@@ -221,32 +230,32 @@ function StakingOverviewContent({ t, heroMetrics }: { t: (key: string) => string
         {t('fire.stakingOverview')}
       </div>
 
-      {/* APY by tier table */}
-      <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] overflow-hidden">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-[color:var(--sf-muted)] border-b border-[color:var(--sf-row-border)]">
-              <th className="text-left py-2.5 px-3 font-semibold">{t('fire.lockTier')}</th>
-              <th className="text-right py-2.5 px-3 font-semibold">{t('fire.boost')}</th>
-              <th className="text-right py-2.5 px-3 font-semibold">{t('fire.duration')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {LOCK_TIERS.map((tier, i) => (
-              <tr key={tier.label} className="text-[color:var(--sf-text)]/80 border-b border-[color:var(--sf-row-border)] last:border-0">
-                <td className="py-2 px-3">{tier.label}</td>
-                <td className="text-right px-3">
-                  <span className={`font-bold ${i === 0 ? 'text-[color:var(--sf-muted)]' : 'text-orange-400'}`}>
-                    {tier.multiplier}x
-                  </span>
-                </td>
-                <td className="text-right px-3 text-[color:var(--sf-muted)]">
-                  {tier.duration > 0 ? `${tier.duration} blks` : t('fire.flex')}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* APY by tier list */}
+      <div className="rounded-2xl overflow-hidden">
+        {/* Column headers */}
+        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+          <div>{t('fire.lockTier')}</div>
+          <div className="text-right">{t('fire.duration')}</div>
+          <div className="text-right">{t('fire.boost')}</div>
+        </div>
+
+        {/* Rows */}
+        {LOCK_TIERS.map((tier, i) => (
+          <div
+            key={tier.label}
+            className="grid grid-cols-3 items-center gap-2 px-4 py-2 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)] last:border-0"
+          >
+            <div className="text-sm font-bold text-[color:var(--sf-text)]">{t(LOCK_TIER_KEYS[tier.label] || tier.label)}</div>
+            <div className="text-sm text-[color:var(--sf-muted)] text-right">
+              {tier.duration > 0 ? `${tier.duration} ${t('fire.blocks')}` : t('fire.flex')}
+            </div>
+            <div className="text-right">
+              <span className={`text-sm font-bold ${i === 0 ? 'text-[color:var(--sf-muted)]' : 'text-orange-400'}`}>
+                {tier.multiplier}x
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

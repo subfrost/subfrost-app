@@ -69,17 +69,10 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
           </div>
         </div>
 
-        {/* Boost Multiplier Badge */}
-        <div 
-          className="rounded-full px-4 py-1.5"
-          style={{ background: `linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
-        >
-          <span className="text-sm font-bold text-white">{boostMultiplier}</span>
-        </div>
       </div>
 
       {isComingSoon && (
-        <div className="rounded-xl border-2 border-amber-500/30 bg-[color:var(--sf-coming-soon-bg)] p-4 md:col-span-2 md:row-start-2">
+        <div className="rounded-xl border-2 border-[color:var(--sf-coming-soon-title)]/30 bg-[color:var(--sf-coming-soon-bg)] p-4 md:col-span-2 md:row-start-2">
           <div className="flex items-center gap-2 text-[color:var(--sf-coming-soon-title)]">
             <Lock size={18} />
             <span className="text-sm font-semibold">{t('boost.comingSoon')}</span>
