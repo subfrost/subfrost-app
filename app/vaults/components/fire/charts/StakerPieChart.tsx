@@ -54,11 +54,11 @@ export default function StakerPieChart({ data, size = 140 }: StakerPieChartProps
   });
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+    <div className="flex flex-col lg:flex-row items-center gap-3 lg:gap-4">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
         {paths}
       </svg>
-      <div className="flex flex-wrap sm:flex-col gap-x-4 gap-y-1 sm:gap-1.5">
+      <div className="flex flex-wrap lg:flex-col gap-x-4 gap-y-1 lg:gap-1.5">
         {data.map((staker, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <div

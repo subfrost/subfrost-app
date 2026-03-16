@@ -24,15 +24,16 @@ export default function FireHeaderTabs({ activeTab, onTabChange }: FireHeaderTab
 
   return (
     <div className="overflow-x-auto -mx-1 px-1 scrollbar-hide">
-      <div className="inline-flex items-center gap-0.5 rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)] p-1 min-w-max">
+      <div className="relative inline-flex items-center gap-2 p-1 min-w-max">
         {TAB_IDS.map((id) => (
           <button
             key={id}
+            type="button"
             onClick={() => onTabChange(id)}
-            className={`rounded-xl px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] whitespace-nowrap ${
+            className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md whitespace-nowrap shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
               activeTab === id
-                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-[0_2px_12px_rgba(249,115,22,0.4)]'
-                : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-panel-bg)]'
+                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg'
+                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
             }`}
           >
             {t(TAB_KEYS[id])}

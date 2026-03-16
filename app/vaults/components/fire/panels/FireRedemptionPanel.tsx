@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import FloorPriceIndicator from '../widgets/FloorPriceIndicator';
 import CooldownTimer from '../widgets/CooldownTimer';
 import { useFireRedemption } from '@/hooks/fire/useFireRedemption';
@@ -19,7 +19,9 @@ export default function FireRedemptionPanel() {
   const { data: tokenStats } = useFireTokenStats();
   const { data: treasury } = useFireTreasury();
 
+  const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
+  const [amountFocused, setAmountFocused] = useState(false);
   const parsedAmount = parseFloat(amount) || 0;
 
   const cooldownBlocks = Number(redemption?.cooldownRemaining || '0');
@@ -46,7 +48,7 @@ export default function FireRedemptionPanel() {
   };
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6 max-w-2xl mx-auto">
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Floor price */}
       <FloorPriceIndicator
         totalBacking={treasury?.totalBacking || '0'}
@@ -57,25 +59,34 @@ export default function FireRedemptionPanel() {
       <CooldownTimer cooldownBlocks={cooldownBlocks} />
 
       {/* Redeem form */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
+      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
           {t('fire.burnFireForBacking')}
         </div>
 
         {/* Amount input */}
-        <div className="mb-4">
-          <label className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-1.5 block">{t('fire.fireAmount')}</label>
-          <div className="relative">
+        <div
+          className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
+            amountFocused
+              ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+              : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
+          }`}
+          onClick={() => amountRef.current?.focus()}
+        >
+          <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.fireAmount')}</span>
+          <div className="flex items-center gap-2 mt-1">
             <input
+              ref={amountRef}
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.0"
-              className="w-full rounded-xl bg-[color:var(--sf-surface)] px-4 py-3.5 text-lg font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 outline-none border border-[color:var(--sf-glass-border)] focus:border-red-500/50 transition-colors"
+              onFocus={() => setAmountFocused(true)}
+              onBlur={() => setAmountFocused(false)}
+              placeholder="0.00"
+              className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
+              style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-[color:var(--sf-muted)]">
-              FIRE
-            </span>
+            <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">FIRE</span>
           </div>
         </div>
 

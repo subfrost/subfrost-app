@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import LockTierSelector from '../widgets/LockTierSelector';
 import RewardsProjector from '../widgets/RewardsProjector';
 import StakingPositionCard from '../widgets/StakingPositionCard';
@@ -11,14 +11,20 @@ import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
-export default function FireStakingPanel() {
+interface FireStakingPanelProps {
+  vaultDetailsSlot?: React.ReactNode;
+}
+
+export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelProps) {
   const { t } = useTranslation();
   const { isConnected } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: stakingStats } = useFireStakingStats();
   const { data: userPositions } = useFireUserPositions();
 
+  const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
+  const [amountFocused, setAmountFocused] = useState(false);
   const [lockTier, setLockTier] = useState(0);
 
   const emissionRate = Number(stakingStats?.emissionRate || '0') / 1e8;
@@ -44,25 +50,30 @@ export default function FireStakingPanel() {
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Stake form */}
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
-          <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
-            {t('fire.stakeLpTokens')}
-          </div>
-
+        <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
           {/* Amount input */}
-          <div className="mb-4">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-1.5 block">{t('fire.amount')}</label>
-            <div className="relative">
+          <div
+            className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
+              amountFocused
+                ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+                : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
+            }`}
+            onClick={() => amountRef.current?.focus()}
+          >
+            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.stakeLpTokens')}</span>
+            <div className="flex items-center gap-2 mt-1">
               <input
+                ref={amountRef}
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.0"
-                className="w-full rounded-xl bg-[color:var(--sf-surface)] px-4 py-3.5 text-lg font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 outline-none border border-[color:var(--sf-glass-border)] focus:border-orange-500/50 transition-colors"
+                onFocus={() => setAmountFocused(true)}
+                onBlur={() => setAmountFocused(false)}
+                placeholder="0.00"
+                className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
+                style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
               />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-[color:var(--sf-muted)]">
-                LP
-              </span>
+              <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">LP</span>
             </div>
           </div>
 
@@ -92,6 +103,8 @@ export default function FireStakingPanel() {
         </div>
       </div>
 
+      {vaultDetailsSlot}
+
       {/* Positions */}
       <div className="flex flex-col gap-3 sm:gap-4">
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
@@ -99,11 +112,11 @@ export default function FireStakingPanel() {
         </div>
 
         {!isConnected ? (
-          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
             <div className="text-[color:var(--sf-muted)] text-sm">{t('fire.connectToViewPositions')}</div>
           </div>
         ) : !userPositions?.positions?.length ? (
-          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
             <div className="text-2xl mb-2">
               <svg className="h-8 w-8 mx-auto text-[color:var(--sf-muted)]/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />

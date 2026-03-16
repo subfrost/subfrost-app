@@ -22,7 +22,7 @@ export default function FloorPriceIndicator({
   const floorPriceBtc = floorPrice.dividedBy(1e8).toFixed(8);
 
   return (
-    <div className="rounded-2xl p-5 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-orange-500/20 relative overflow-hidden">
+    <div className="rounded-2xl p-5 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] relative overflow-hidden">
       {/* Orange glow */}
       <div className="absolute -top-12 -right-12 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
 

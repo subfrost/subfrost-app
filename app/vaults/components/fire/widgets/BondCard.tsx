@@ -42,7 +42,7 @@ export default function BondCard({
     .toFixed(4);
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-bold text-[color:var(--sf-text)]">{t('fire.bond')} #{bondId + 1}</span>
         <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${

@@ -15,13 +15,13 @@ export default function FirePriceChart({ data, height = 260 }: FirePriceChartPro
   useEffect(() => {
     if (!containerRef.current || data.length === 0) return;
 
-    let chart: any = null;
+    let cancelled = false;
 
     const initChart = async () => {
       const { createChart, LineSeries } = await import('lightweight-charts');
-      if (!containerRef.current) return;
+      if (cancelled || !containerRef.current) return;
 
-      chart = createChart(containerRef.current, {
+      const chart = createChart(containerRef.current, {
         height,
         layout: {
           background: { color: 'transparent' },
@@ -62,9 +62,10 @@ export default function FirePriceChart({ data, height = 260 }: FirePriceChartPro
     initChart();
 
     return () => {
-      if (chart) {
-        chart.remove();
-        chart = null;
+      cancelled = true;
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
       }
     };
   }, [data, height]);

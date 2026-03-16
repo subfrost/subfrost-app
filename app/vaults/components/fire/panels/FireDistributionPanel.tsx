@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useRef } from 'react';
 import { useFireDistributor } from '@/hooks/fire/useFireDistributor';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
@@ -19,14 +20,17 @@ export default function FireDistributionPanel() {
   const isDemoGated = useDemoGate();
   const { data: distributor } = useFireDistributor();
 
+  const contributeRef = useRef<HTMLInputElement>(null);
+  const [contributeFocused, setContributeFocused] = useState(false);
+
   const currentPhase = Number(distributor?.phase || '0');
   const totalContributed = new BigNumber(distributor?.totalContributed || '0').dividedBy(1e8);
   const totalClaimed = new BigNumber(distributor?.totalClaimed || '0').dividedBy(1e8);
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6 max-w-2xl mx-auto">
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Phase indicator */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
+      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
           {t('fire.distributionPhase')}
         </div>
@@ -68,12 +72,12 @@ export default function FireDistributionPanel() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
+        <div className="rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalContributed')}</div>
           <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)] mt-1">{totalContributed.toFixed(4)}</div>
           <div className="text-[10px] text-[color:var(--sf-muted)]">frBTC</div>
         </div>
-        <div className="rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
+        <div className="rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalClaimed')}</div>
           <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)] mt-1">{totalClaimed.toFixed(4)}</div>
           <div className="text-[10px] text-[color:var(--sf-muted)]">FIRE</div>
@@ -81,18 +85,33 @@ export default function FireDistributionPanel() {
       </div>
 
       {/* Action area */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
+      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
         {currentPhase === 0 && (
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
               {t('fire.contributeFrbtc')}
             </div>
-            <div className="mb-4">
-              <input
-                type="number"
-                placeholder="0.0"
-                className="w-full rounded-xl bg-[color:var(--sf-surface)] px-4 py-3.5 text-lg font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 outline-none border border-[color:var(--sf-glass-border)] focus:border-orange-500/50 transition-colors"
-              />
+            <div
+              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
+                contributeFocused
+                  ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+                  : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
+              }`}
+              onClick={() => contributeRef.current?.focus()}
+            >
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.amount')}</span>
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  ref={contributeRef}
+                  type="number"
+                  placeholder="0.00"
+                  onFocus={() => setContributeFocused(true)}
+                  onBlur={() => setContributeFocused(false)}
+                  className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
+                  style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
+                />
+                <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">frBTC</span>
+              </div>
             </div>
             <button
               disabled={!isConnected || isDemoGated}

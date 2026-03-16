@@ -33,13 +33,13 @@ export default function EmissionScheduleChart({
   useEffect(() => {
     if (!containerRef.current || chartData.length === 0) return;
 
-    let chart: any = null;
+    let cancelled = false;
 
     const initChart = async () => {
       const { createChart, AreaSeries } = await import('lightweight-charts');
-      if (!containerRef.current) return;
+      if (cancelled || !containerRef.current) return;
 
-      chart = createChart(containerRef.current, {
+      const chart = createChart(containerRef.current, {
         height,
         layout: {
           background: { color: 'transparent' },
@@ -77,9 +77,10 @@ export default function EmissionScheduleChart({
     initChart();
 
     return () => {
-      if (chart) {
-        chart.remove();
-        chart = null;
+      cancelled = true;
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
       }
     };
   }, [chartData, height]);
@@ -100,9 +101,14 @@ export default function EmissionScheduleChart({
         <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
           {t('fire.emissionSchedule')}
         </span>
-        <span className="text-[10px] text-[color:var(--sf-muted)]">
-          Pool: {formatCompact(FIRE_EMISSION_POOL)} FIRE
-        </span>
+        <div className="text-right">
+          <div className="text-[10px] text-[color:var(--sf-muted)]">
+            Pool: {formatCompact(FIRE_EMISSION_POOL)} FIRE
+          </div>
+          <div className="text-[10px] text-[color:var(--sf-muted)]">
+            Emission Rate: --
+          </div>
+        </div>
       </div>
       <div ref={containerRef} className="w-full" />
     </div>
