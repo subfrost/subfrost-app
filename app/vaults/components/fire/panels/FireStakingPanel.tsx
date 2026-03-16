@@ -41,7 +41,7 @@ export default function FireStakingPanel() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Stake form */}
       <div className="flex flex-col gap-4">
         <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.12)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border border-[color:var(--sf-glass-border)]">
