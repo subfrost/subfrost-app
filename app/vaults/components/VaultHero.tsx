@@ -3,7 +3,10 @@
 import { useWallet } from "@/context/WalletContext";
 import TokenIcon from "@/app/components/TokenIcon";
 import ApySparkline from "./ApySparkline";
+import dynamic from 'next/dynamic';
 import { useTranslation } from '@/hooks/useTranslation';
+
+const ApyTradingChart = dynamic(() => import('./ApyTradingChart'), { ssr: false });
 
 type Props = {
   tokenId: string; // Alkane ID like "2:0"
@@ -152,10 +155,14 @@ export default function VaultHero({
         </div>
       )}
 
-      {/* APY Sparkline - Full Width Row */}
+      {/* APY Chart - Full Width Row */}
       {apyHistory.length > 0 && (
         <div className="w-full h-60 mb-6 relative z-10">
-          <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} fillHeight={true} boostActive={boostActive} />
+          {compactHeader ? (
+            <ApyTradingChart data={apyHistory} currentApy={parseFloat(apy)} boostActive={boostActive} />
+          ) : (
+            <ApySparkline data={apyHistory} currentApy={parseFloat(apy)} fillHeight={true} boostActive={boostActive} />
+          )}
         </div>
       )}
 

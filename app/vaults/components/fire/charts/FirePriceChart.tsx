@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTheme } from '@/context/ThemeContext';
 import type { PricePoint } from '@/hooks/fire/useFireMockData';
 
 interface FirePriceChartProps {
@@ -9,8 +10,14 @@ interface FirePriceChartProps {
 }
 
 export default function FirePriceChart({ data, height = 260 }: FirePriceChartProps) {
+  const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
+
+  const isDark = theme === 'dark';
+  const textColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
+  const gridColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.10)';
+  const scaleBorderColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)';
 
   useEffect(() => {
     if (!containerRef.current || data.length === 0) return;
@@ -25,18 +32,18 @@ export default function FirePriceChart({ data, height = 260 }: FirePriceChartPro
         height,
         layout: {
           background: { color: 'transparent' },
-          textColor: 'rgba(255,255,255,0.4)',
+          textColor,
           fontSize: 11,
         },
         grid: {
-          vertLines: { color: 'rgba(255,255,255,0.04)' },
-          horzLines: { color: 'rgba(255,255,255,0.04)' },
+          vertLines: { color: gridColor },
+          horzLines: { color: gridColor },
         },
         rightPriceScale: {
-          borderColor: 'rgba(255,255,255,0.06)',
+          borderColor: scaleBorderColor,
         },
         timeScale: {
-          borderColor: 'rgba(255,255,255,0.06)',
+          borderColor: scaleBorderColor,
         },
         crosshair: {
           horzLine: { color: 'rgba(249,115,22,0.2)' },
@@ -68,7 +75,7 @@ export default function FirePriceChart({ data, height = 260 }: FirePriceChartPro
         chartRef.current = null;
       }
     };
-  }, [data, height]);
+  }, [data, height, textColor, gridColor, scaleBorderColor]);
 
   useEffect(() => {
     const handleResize = () => {

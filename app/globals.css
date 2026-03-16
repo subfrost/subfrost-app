@@ -589,6 +589,8 @@ textarea:focus-visible,
   }
 }
 
+
+
 .animate-shimmer {
   animation: shimmer 2s infinite linear;
   background: linear-gradient(

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useMemo } from 'react';
+import { useTheme } from '@/context/ThemeContext';
 import { generateEmissionChartData, FIRE_EMISSION_POOL, formatCompact } from '@/utils/fireCalculations';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -14,8 +15,14 @@ export default function EmissionScheduleChart({
   height = 250,
 }: EmissionScheduleChartProps) {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
+
+  const isDark = theme === 'dark';
+  const textColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
+  const gridColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.10)';
+  const scaleBorderColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)';
 
   const chartData = useMemo(() => {
     const raw = generateEmissionChartData(numYears);
@@ -43,18 +50,18 @@ export default function EmissionScheduleChart({
         height,
         layout: {
           background: { color: 'transparent' },
-          textColor: 'rgba(255,255,255,0.4)',
+          textColor,
           fontSize: 11,
         },
         grid: {
-          vertLines: { color: 'rgba(255,255,255,0.04)' },
-          horzLines: { color: 'rgba(255,255,255,0.04)' },
+          vertLines: { color: gridColor },
+          horzLines: { color: gridColor },
         },
         rightPriceScale: {
-          borderColor: 'rgba(255,255,255,0.06)',
+          borderColor: scaleBorderColor,
         },
         timeScale: {
-          borderColor: 'rgba(255,255,255,0.06)',
+          borderColor: scaleBorderColor,
         },
       });
 
@@ -83,7 +90,7 @@ export default function EmissionScheduleChart({
         chartRef.current = null;
       }
     };
-  }, [chartData, height]);
+  }, [chartData, height, textColor, gridColor, scaleBorderColor]);
 
   useEffect(() => {
     const handleResize = () => {

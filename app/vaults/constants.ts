@@ -119,7 +119,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     inputAsset: 'BTC',
     outputAsset: 'dxBTC',
     estimatedApy: '5.2',
-    apyHistory: [4.9, 5.0, 5.0, 5.1, 5.1, 5.2, 5.1, 5.0, 4.9, 4.9, 5.0, 5.0, 5.1, 5.1, 5.2, 5.2, 5.2, 5.3, 5.3, 5.3, 5.4, 5.4, 5.3, 5.4, 5.4, 5.4, 5.5, 5.4, 5.5, 5.4],
+    apyHistory: [4.8, 4.9, 4.85, 5.0, 4.95, 5.1, 5.05, 5.2, 5.1, 5.0, 4.9, 4.85, 5.0, 4.95, 5.1, 5.15, 5.2, 5.25, 5.3, 5.2, 5.3, 5.35, 5.4, 5.3, 5.4, 5.45, 5.5, 5.4, 5.5, 5.4],
     riskLevel: 'medium',
     hasBoost: true,
     boostTokenSymbol: 'vxFUEL',
