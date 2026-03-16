@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const redemption = await prisma.inviteCodeRedemption.findFirst({
       where: { taprootAddress: address },
       include: {
-        code: {
+        inviteCode: {
           include: {
             parentCode: true,
           },
@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       found: true,
-      code: redemption.code.code,
-      codeDescription: redemption.code.description,
-      parentCode: redemption.code.parentCode?.code || null,
+      code: redemption.inviteCode.code,
+      codeDescription: redemption.inviteCode.description,
+      parentCode: redemption.inviteCode.parentCode?.code || null,
     });
   } catch (error) {
     console.error('[Invite Lookup] Error:', error);
