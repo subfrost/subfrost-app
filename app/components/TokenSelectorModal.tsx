@@ -303,29 +303,18 @@ export default function TokenSelectorModal({
                           {token.id}
                         </p>
                       </div>
+                      {!isAvailable && mode === 'from' && (
+                        <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                          {t('tokenSelector.notAvailable')}
+                        </span>
+                      )}
                       <div className="flex flex-col items-end gap-0.5">
-                        {formattedBalance && (
-                          <>
-                            <span className="text-sm font-bold text-[color:var(--sf-text)]">
-                              {formattedBalance}
-                            </span>
-                            {valueUsd && (
-                              <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                                ${valueUsd}
-                              </span>
-                            )}
-                          </>
-                        )}
-                        {token.price && !token.balance && (
-                          <span className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                            ${token.price.toFixed(4)}
-                          </span>
-                        )}
-                        {!isAvailable && mode === 'from' && (
-                          <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                            {t('tokenSelector.notAvailable')}
-                          </span>
-                        )}
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">
+                          {formattedBalance || '0'}
+                        </span>
+                        <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                          ${valueUsd || '0.00'}
+                        </span>
                       </div>
                     </div>
                   </button>

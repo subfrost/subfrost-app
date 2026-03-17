@@ -174,7 +174,7 @@ const zh: Record<string, string> = {
   'tokenSelector.alreadySelected': '\u4ee3\u5e01\u5df2\u9009\u62e9\uff01',
   'tokenSelector.searchAssets': '\u641c\u7d22\u6bd4\u7279\u5e01\u539f\u751f\u8d44\u4ea7...',
   'tokenSelector.noTokens': '\u672a\u627e\u5230\u4ee3\u5e01',
-  'tokenSelector.notAvailable': '\u4e0d\u53ef\u7528',
+  'tokenSelector.notAvailable': '该交易对无流动池',
   'tokenSelector.selectAmount': '选择数量',
 
   // Receive Modal

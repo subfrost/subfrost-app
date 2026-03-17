@@ -1880,9 +1880,9 @@ export default function SwapShell() {
 
   return (
     <div className="flex w-full flex-col gap-8 h-full">
-      <div className="flex flex-col lg:grid lg:grid-cols-5 xl:grid-cols-3 gap-6">
-        {/* Left Column: Swap/LP Module (2/5 on lg, 1/3 on xl) */}
-        <div className="flex flex-col min-h-0 lg:col-span-2 xl:col-span-1">
+      <div className={`flex flex-col lg:grid gap-6 ${selectedTab === 'lp' ? 'lg:grid-cols-2' : 'lg:grid-cols-5 xl:grid-cols-3'}`}>
+        {/* Left Column: Swap/LP Module */}
+        <div className={`flex flex-col min-h-0 ${selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-2 xl:col-span-1'}`}>
           {/* Swap/Liquidity Tabs */}
           <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
@@ -2040,8 +2040,8 @@ export default function SwapShell() {
 
         </div>
 
-        {/* Right Column: Chart (2/3 width on lg) */}
-        <div className="hidden lg:flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
+        {/* Right Column: Chart */}
+        <div className={`hidden lg:flex flex-col gap-4 ${selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-3 xl:col-span-2'}`}>
           <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
         </div>
       </div>
@@ -2085,11 +2085,20 @@ export default function SwapShell() {
         isOpen={isTokenSelectorOpen}
         onClose={closeTokenSelector}
         tokens={
-          tokenSelectorMode === 'from'
+          (tokenSelectorMode === 'from'
             ? fromTokenOptions
             : tokenSelectorMode === 'pool0' || tokenSelectorMode === 'pool1'
             ? poolTokenOptions
             : toTokenOptions
+          ).filter((t) => {
+            // Only show fungible tokens — exclude NFTs (balance === 1) and LP/position assets
+            if (t.balance && BigInt(t.balance) === BigInt(1)) return false;
+            const sym = t.symbol || '';
+            const nm = t.name || '';
+            if (/\bLP\b/i.test(sym) || /\bLP\b/i.test(nm)) return false;
+            if (sym.startsWith('POS-') || nm.startsWith('POS-')) return false;
+            return true;
+          })
         }
         onSelectToken={handleTokenSelect}
         selectedTokenId={

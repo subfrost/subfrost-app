@@ -174,7 +174,7 @@ const en: Record<string, string> = {
   'tokenSelector.alreadySelected': 'Token already selected!',
   'tokenSelector.searchAssets': 'Search bitcoin-native assets...',
   'tokenSelector.noTokens': 'No tokens found',
-  'tokenSelector.notAvailable': 'Not available',
+  'tokenSelector.notAvailable': 'No pool for this pair',
   'tokenSelector.selectAmount': 'Select Amount',
 
   // Receive Modal

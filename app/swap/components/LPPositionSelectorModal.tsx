@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
 import type { LPPosition } from './LiquidityInputs';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useWallet } from '@/context/WalletContext';
+import TokenIcon from '@/app/components/TokenIcon';
 
 type Props = {
   isOpen: boolean;
@@ -21,6 +23,7 @@ export default function LPPositionSelectorModal({
   selectedPositionId,
 }: Props) {
   const { t } = useTranslation();
+  const { network } = useWallet();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredPositions = useMemo(() => {
@@ -105,31 +108,45 @@ export default function LPPositionSelectorModal({
                         : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-md'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-                            {position.token0Symbol}/{position.token1Symbol}
-                          </span>
-                          {isSelected && (
-                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </span>
-                          )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex -space-x-2 shrink-0">
+                          <div className="relative z-10">
+                            <TokenIcon symbol={position.token0Symbol} id={position.token0Id} size="md" network={network} />
+                          </div>
+                          <div className="relative">
+                            <TokenIcon symbol={position.token1Symbol} id={position.token1Id} size="md" network={network} />
+                          </div>
                         </div>
-                        <p className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
-                          {t('lpSelector.lpPosition')}
-                        </p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none truncate">
+                              {position.token0Symbol}/{position.token1Symbol} LP
+                            </span>
+                            {isSelected && (
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white shrink-0">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">
+                            LP · {position.id}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-sm font-bold text-[color:var(--sf-text)]">
+                      <div className="text-right shrink-0 ml-2">
+                        <div className="font-bold text-sm text-[color:var(--sf-text)]">
                           {position.amount}
-                        </span>
-                        <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                          ${position.valueUSD}
-                        </span>
+                        </div>
+                        {position.valueUSD > 0 && (
+                          <div className="text-[10px] text-[color:var(--sf-text)]/60">
+                            ${position.valueUSD < 0.01 ? '<0.01' : position.valueUSD > 999.99
+                              ? Math.round(position.valueUSD).toLocaleString()
+                              : position.valueUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </button>

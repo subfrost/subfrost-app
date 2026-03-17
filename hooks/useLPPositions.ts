@@ -2,42 +2,28 @@ import { useMemo } from 'react';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
-import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
 import type { LPPosition } from '@/app/swap/components/LiquidityInputs';
 
-// Known base tokens that are NOT LP tokens
-// These should not be shown in the LP position selector
-const BASE_TOKEN_IDS = new Set([
-  '32:0',    // frBTC (all networks)
-  '2:0',     // DIESEL (all networks)
-  '2:56801', // bUSD (mainnet)
-]);
+// Filtering helpers — same logic as AlkanesBalancesCard "Positions" tab
+const isLpTokenByName = (alkane: { symbol: string; name: string }) =>
+  /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name);
+const isStakedPosition = (alkane: { symbol: string; name: string }) =>
+  alkane.symbol.startsWith('POS-') || alkane.name.startsWith('POS-');
+const isPositionAsset = (alkane: { symbol: string; name: string; alkaneId?: string }, poolMap?: Map<string, any>) =>
+  isLpTokenByName(alkane) || isStakedPosition(alkane) || (alkane.alkaneId ? poolMap?.has(alkane.alkaneId) ?? false : false);
 
 /**
  * Hook to get LP positions from the user's wallet
  *
- * Strategy:
- * 1. First, try to match alkane IDs with pool IDs from the pools API
- * 2. If pools API returns empty (common on regtest), use fallback:
- *    - Any alkane that is NOT a known base token (frBTC, DIESEL, bUSD) is treated as an LP token
+ * Uses the same filtering logic as AlkanesBalancesCard "Positions" tab:
+ * - Matches alkane IDs against pool IDs from the pools API
+ * - Detects LP tokens by "LP" in name/symbol
+ * - Detects staked positions by "POS-" prefix
  */
 export function useLPPositions() {
   const { balances, isLoading: isLoadingWallet, refresh } = useEnrichedWalletData();
   const { data: poolsData, isLoading: isLoadingPools } = usePools({ limit: 200 });
   const { data: btcPrice } = useBtcPrice();
-  const { network } = useWallet();
-  const config = getConfig(network);
-
-  // Build set of known base tokens for this network
-  const baseTokenIds = useMemo(() => {
-    const ids = new Set(BASE_TOKEN_IDS);
-    // Add network-specific tokens
-    if (config.FRBTC_ALKANE_ID) ids.add(config.FRBTC_ALKANE_ID);
-    if (config.BUSD_ALKANE_ID) ids.add(config.BUSD_ALKANE_ID);
-    return ids;
-  }, [config.FRBTC_ALKANE_ID, config.BUSD_ALKANE_ID]);
-
   const positions = useMemo<LPPosition[]>(() => {
     if (!balances.alkanes) {
       console.log('[useLPPositions] No alkanes data');
@@ -52,23 +38,20 @@ export function useLPPositions() {
       }
     }
 
-    const hasPoolData = poolMap.size > 0;
     console.log('[useLPPositions] Pool IDs in map:', Array.from(poolMap.keys()));
     console.log('[useLPPositions] User alkane IDs:', balances.alkanes.map(a => a.alkaneId));
-    console.log('[useLPPositions] Using fallback (no pool data):', !hasPoolData);
 
     const lpPositions: LPPosition[] = [];
 
     for (const alkane of balances.alkanes) {
       const pool = poolMap.get(alkane.alkaneId);
-      const isBaseToken = baseTokenIds.has(alkane.alkaneId);
 
-      console.log('[useLPPositions] Checking alkane:', alkane.alkaneId, 'symbol:', alkane.symbol, 'matched pool:', !!pool, 'isBaseToken:', isBaseToken);
+      console.log('[useLPPositions] Checking alkane:', alkane.alkaneId, 'symbol:', alkane.symbol, 'matched pool:', !!pool);
 
-      // Determine if this is an LP token:
-      // 1. If we have pool data and this alkane matches a pool ID -> it's an LP token
-      // 2. If we DON'T have pool data (fallback) and this alkane is NOT a base token -> treat as LP token
-      const isLPToken = pool || (!hasPoolData && !isBaseToken);
+      // Use the same filtering logic as AlkanesBalancesCard "Positions" tab:
+      // An asset is an LP position if it matches a pool ID, has "LP" in name/symbol, or starts with "POS-"
+      // NFTs (balance === 1) that are also positions are included
+      const isLPToken = isPositionAsset(alkane, poolMap);
 
       if (isLPToken) {
         // Parse the balance (in atomic units with 8 decimals)
@@ -146,7 +129,7 @@ export function useLPPositions() {
 
     console.log('[useLPPositions] Total LP positions found:', lpPositions.length);
     return lpPositions;
-  }, [balances.alkanes, poolsData?.items, btcPrice, baseTokenIds]);
+  }, [balances.alkanes, poolsData?.items, btcPrice]);
 
   return {
     positions,
