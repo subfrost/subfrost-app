@@ -31,27 +31,27 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
       <div
         ref={modalRef}
-        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.2)]"
+        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-[color:var(--sf-text)]">{t('howItWorks.title')}</h2>
+        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
+          <h2 className="text-xl sm:text-2xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{t('howItWorks.title')}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+            aria-label="Close"
           >
             <svg
-              width="24"
-              height="24"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
-              className="text-[color:var(--sf-text)]"
             >
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
@@ -59,11 +59,11 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
         </div>
 
         {/* Content */}
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="overflow-y-auto p-4 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             {/* Block 1: Buy */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
-              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">{t('howItWorks.buy')}</h3>
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-3">{t('howItWorks.buy')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 {t('howItWorks.buyDesc')}
               </p>
@@ -78,8 +78,8 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
             </div>
 
             {/* Block 2: Hold */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
-              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">{t('howItWorks.hold')}</h3>
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-3">{t('howItWorks.hold')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 {t('howItWorks.holdDesc')}
               </p>
@@ -94,8 +94,8 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
             </div>
 
             {/* Block 3: Exercise */}
-            <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] p-6">
-              <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-3">{t('howItWorks.exercise')}</h3>
+            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-3">{t('howItWorks.exercise')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 {t('howItWorks.exerciseDesc')}
               </p>

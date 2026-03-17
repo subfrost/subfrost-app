@@ -37,8 +37,8 @@ export default function FireDashboard() {
   const heroMetrics = useMemo(() => {
     const circSupply = new BigNumber(tokenStats?.circulatingSupply || '0').dividedBy(1e8);
     const lastPrice = mockData.priceHistory[mockData.priceHistory.length - 1]?.value || 0;
-    const prevPrice = mockData.priceHistory[mockData.priceHistory.length - 2]?.value || lastPrice;
-    const priceDelta = prevPrice > 0 ? ((lastPrice - prevPrice) / prevPrice * 100) : 0;
+    const firstPrice = mockData.priceHistory[0]?.value || lastPrice;
+    const priceDelta = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice * 100) : 0;
     const marketCap = circSupply.multipliedBy(lastPrice);
     const totalStaked = new BigNumber(stakingStats?.totalStaked || '0').dividedBy(1e8);
     const emissionRate = new BigNumber(stakingStats?.emissionRate || '0').dividedBy(1e8);

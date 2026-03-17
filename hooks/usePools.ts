@@ -231,6 +231,97 @@ async function fetchPoolsFromDataApi(
 }
 
 // ============================================================================
+// Pool details REST fallback (direct fetch to OYL Alkanode, bypasses WASM SDK)
+// The SDK WASM's dataApiGetAllPoolsDetails deserializes into a Rust struct that
+// drops poolVolume30dInUsd. This direct REST call preserves ALL API fields
+// including 30D volume. Falls back here when the SDK primary path fails
+// (e.g., mainnet.subfrost.io returns 500 "btc/usd price unavailable").
+// ============================================================================
+
+const OYL_ALKANODE_POOL_DETAILS_URL = 'https://oyl.alkanode.com/get-all-pools-details';
+
+async function fetchPoolsFromPoolsDetailsRest(
+  factoryId: string,
+  network: string,
+  tokenMetaMap?: Map<string, { name: string; symbol: string }>,
+): Promise<PoolsListItem[]> {
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const resp = await Promise.race([
+    fetch(OYL_ALKANODE_POOL_DETAILS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ factoryId: { block: factoryBlock, tx: factoryTx } }),
+    }),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('get-all-pools-details REST timeout (15s)')), 15000)),
+  ]);
+  if (!resp.ok) throw new Error(`get-all-pools-details REST HTTP ${resp.status}`);
+  const json = await resp.json();
+  const pools: any[] = json?.data?.pools || json?.pools || [];
+
+  console.log('[usePools] get-all-pools-details REST (OYL Alkanode) returned', pools.length, 'pools');
+
+  if (pools.length === 0) {
+    throw new Error('get-all-pools-details REST returned 0 pools');
+  }
+
+  const items: PoolsListItem[] = [];
+
+  for (const p of pools) {
+    const poolId = p.poolId
+      ? `${p.poolId.block}:${p.poolId.tx}`
+      : '';
+    const token0Id = p.token0
+      ? `${p.token0.alkaneId?.block ?? p.token0.block}:${p.token0.alkaneId?.tx ?? p.token0.tx}`
+      : '';
+    const token1Id = p.token1
+      ? `${p.token1.alkaneId?.block ?? p.token1.block}:${p.token1.alkaneId?.tx ?? p.token1.tx}`
+      : '';
+
+    if (!poolId || !token0Id || !token1Id) continue;
+
+    let token0NameFromPool = '';
+    let token1NameFromPool = '';
+    if (p.poolName) {
+      const match = p.poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
+      if (match) {
+        token0NameFromPool = match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        token1NameFromPool = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+      }
+    }
+
+    const t0Name = token0NameFromPool || p.token0?.name || p.token0?.symbol || '';
+    const t1Name = token1NameFromPool || p.token1?.name || p.token1?.symbol || '';
+
+    const token0Symbol = getTokenSymbol(token0Id, t0Name, tokenMetaMap);
+    const token1Symbol = getTokenSymbol(token1Id, t1Name, tokenMetaMap);
+
+    if (!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') continue;
+
+    const token0Name = getTokenName(token0Id, t0Name, tokenMetaMap);
+    const token1Name = getTokenName(token1Id, t1Name, tokenMetaMap);
+
+    items.push({
+      id: poolId,
+      pairLabel: `${token0Name} / ${token1Name} LP`,
+      token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
+      token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
+      tvlUsd: p.poolTvlInUsd ?? 0,
+      token0TvlUsd: p.token0TvlInUsd ?? 0,
+      token1TvlUsd: p.token1TvlInUsd ?? 0,
+      vol24hUsd: p.poolVolume1dInUsd ?? 0,
+      vol7dUsd: p.poolVolume7dInUsd ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? 0,
+      apr: p.poolApr ?? 0,
+      token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
+      token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
+      lpTotalSupply: p.tokenSupply || undefined,
+    });
+  }
+
+  return items;
+}
+
+// ============================================================================
 // Token pairs REST fallback (direct fetch, bypasses WASM SDK deserialization)
 // The SDK's dataApiGetAllTokenPairs discards the response during WASM parsing,
 // so we call the REST endpoint directly via fetch.
@@ -496,12 +587,22 @@ export function usePools(params: UsePoolsParams = {}) {
         console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
         items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
       } catch (e) {
-        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to dataApiGetAllTokenPairs:', e);
+        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to REST:', e);
         // Ensure token metadata is resolved even if pool fetch failed
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
 
-      // Fallback 1: get-all-token-pairs REST (single call, bypasses WASM SDK)
+      // Fallback 1: get-all-pools-details REST (direct call to OYL Alkanode,
+      // bypasses WASM SDK deserialization — preserves 30D volume data)
+      if (items.length === 0) {
+        try {
+          items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+        } catch (e) {
+          console.warn('[usePools] get-all-pools-details REST failed:', e);
+        }
+      }
+
+      // Fallback 2: get-all-token-pairs REST (single call, bypasses WASM SDK)
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
@@ -510,7 +611,7 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
 
-      // Fallback 1b: dataApiGetAllTokenPairs (no TVL/volume but faster than RPC)
+      // Fallback 2b: dataApiGetAllTokenPairs (no TVL/volume but faster than RPC)
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
@@ -519,7 +620,7 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
 
-      // Fallback 2: N+1 RPC simulation calls (no TVL/volume data)
+      // Fallback 3: N+1 RPC simulation calls (no TVL/volume data)
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);

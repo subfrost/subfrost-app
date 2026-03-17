@@ -26,6 +26,20 @@ export interface VaultConfig {
   escrowNftName?: string; // For special vaults like dxBTC
 }
 
+/**
+ * Generate a 30-day random walk APY series clamped to [min, max].
+ */
+function generateApyRandomWalk(days: number, start: number, min: number, max: number): number[] {
+  const data: number[] = [];
+  let value = start;
+  for (let i = 0; i < days; i++) {
+    data.push(Number(value.toFixed(2)));
+    const step = (Math.random() - 0.5) * 0.4;
+    value = Math.min(max, Math.max(min, value + step));
+  }
+  return data;
+}
+
 export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 'yv-frbtc',
@@ -119,7 +133,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     inputAsset: 'BTC',
     outputAsset: 'dxBTC',
     estimatedApy: '5.2',
-    apyHistory: [4.8, 4.9, 4.85, 5.0, 4.95, 5.1, 5.05, 5.2, 5.1, 5.0, 4.9, 4.85, 5.0, 4.95, 5.1, 5.15, 5.2, 5.25, 5.3, 5.2, 5.3, 5.35, 5.4, 5.3, 5.4, 5.45, 5.5, 5.4, 5.5, 5.4],
+    apyHistory: generateApyRandomWalk(30, 4.2, 2.1, 6.2),
     riskLevel: 'medium',
     hasBoost: true,
     boostTokenSymbol: 'vxFUEL',

@@ -28,6 +28,16 @@ function PairBadge({ a, b }: { a: { id: string; symbol: string }, b: { id: strin
 
 function formatUsd(n?: number, showZeroAsDash = false) {
   if (n == null || (showZeroAsDash && n === 0)) return "-";
+  const abs = Math.abs(n);
+  if (abs >= 1e7) {
+    return `$${(n / 1e6).toFixed(2)}M`;
+  }
+  if (abs >= 1e6) {
+    return `$${(n / 1e6).toFixed(3)}M`;
+  }
+  if (abs >= 1e5) {
+    return `$${(n / 1e3).toFixed(1)}K`;
+  }
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
@@ -80,14 +90,14 @@ export default function TrendingPairs() {
   }, [data?.items, poolStats]);
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+    <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('trending.trendingPair')}</h3>
           <Link href="/swap" className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">{t('trending.viewAll')}</Link>
         </div>
       </div>
-      <div className="p-3">
+      <div className="p-4">
         <div className="grid grid-cols-1 gap-3">
           {pairs.map((p) => (
             <Link
@@ -99,17 +109,17 @@ export default function TrendingPairs() {
                 <PairBadge a={{ id: p.token0.id, symbol: p.token0.symbol }} b={{ id: p.token1.id, symbol: p.token1.symbol }} />
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+                <div className="min-w-0">
+                  <div className="truncate text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
+                  <div className="truncate font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume24h')}</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
+                <div className="min-w-0 text-center">
+                  <div className="truncate text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume24h')}</div>
+                  <div className="truncate font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
                 </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume30d')}</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
+                <div className="min-w-0 text-right">
+                  <div className="truncate text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume30d')}</div>
+                  <div className="truncate font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
                 </div>
               </div>
             </Link>

@@ -66,14 +66,14 @@ export default function ContractDetailModal({
   const marketPrice = '0.948 BTC';
   const estimatedCost = (parseFloat(amount) * 0.948).toFixed(3);
 
-  // Mock chart data (simple trend)
-  const chartData = [
-    { time: 0, value: 0.5 },
-    { time: 2, value: 0.6 },
-    { time: 4, value: 0.75 },
-    { time: 6, value: 0.942 },
-    { time: 8, value: 1.0 },
-  ];
+  // Linear chart from 0.92 → 1.00 BTC
+  const chartPoints = 50;
+  const chartMin = 0.92;
+  const chartMax = 1.0;
+  const chartData = Array.from({ length: chartPoints }, (_, i) => ({
+    x: i / (chartPoints - 1),
+    value: chartMin + (chartMax - chartMin) * (i / (chartPoints - 1)),
+  }));
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -133,20 +133,47 @@ export default function ContractDetailModal({
             <h3 className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)] mb-4">
               {t('contractModal.unlockValueOverTime')}
             </h3>
-            {/* Simple chart visualization */}
-            <div className="h-36 flex items-end justify-between gap-2">
-              {chartData.map((point, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                  <div
-                    className="w-full rounded-t bg-[color:var(--sf-primary)]/60 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]"
-                    style={{ height: `${point.value * 100}%` }}
+            {/* Linear chart: 0.92 → 1.00 BTC */}
+            <div className="relative h-40">
+              {/* Y-axis labels */}
+              <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-[10px] font-medium text-[color:var(--sf-text)]/50 pr-2">
+                <span>1.00</span>
+                <span>0.96</span>
+                <span>0.92</span>
+              </div>
+              {/* Chart area */}
+              <div className="ml-8 h-full relative">
+                <svg viewBox="0 0 400 160" preserveAspectRatio="none" className="w-full h-full">
+                  <defs>
+                    <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--sf-primary)" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="var(--sf-primary)" stopOpacity="0.02" />
+                    </linearGradient>
+                  </defs>
+                  {/* Grid lines */}
+                  <line x1="0" y1="0" x2="400" y2="0" stroke="var(--sf-text)" strokeOpacity="0.06" strokeWidth="1" />
+                  <line x1="0" y1="80" x2="400" y2="80" stroke="var(--sf-text)" strokeOpacity="0.06" strokeWidth="1" />
+                  <line x1="0" y1="160" x2="400" y2="160" stroke="var(--sf-text)" strokeOpacity="0.06" strokeWidth="1" />
+                  {/* Fill area */}
+                  <polygon
+                    points={`0,160 ${chartData.map((p) => `${p.x * 400},${(1 - (p.value - chartMin) / (chartMax - chartMin)) * 160}`).join(' ')} 400,160`}
+                    fill="url(#chartFill)"
                   />
-                  <div className="text-xs text-[color:var(--sf-text)]/70">{point.time}d</div>
-                </div>
-              ))}
+                  {/* Line */}
+                  <polyline
+                    points={chartData.map((p) => `${p.x * 400},${(1 - (p.value - chartMin) / (chartMax - chartMin)) * 160}`).join(' ')}
+                    fill="none"
+                    stroke="var(--sf-primary)"
+                    strokeWidth="2.5"
+                    vectorEffect="non-scaling-stroke"
+                  />
+
+                </svg>
+              </div>
             </div>
-            <div className="mt-4 text-xs text-[color:var(--sf-text)]/70 text-center">
-              {t('contractModal.timeToFullBtc')}
+            <div className="mt-3 flex justify-between ml-8 text-[10px] font-medium text-[color:var(--sf-text)]/50">
+              <span>{t('contractModal.timeToFullBtc')}</span>
+              <span>1.00 BTC</span>
             </div>
           </div>
 

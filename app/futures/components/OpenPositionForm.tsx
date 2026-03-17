@@ -548,9 +548,9 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                   {/* Background scale line */}
                   <div className="h-2 bg-[color:var(--sf-glass-border)] rounded-full relative">
                     {/* Current position indicator (Now) */}
-                    <div 
-                      className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-[color:var(--sf-primary)] border-2 border-[color:var(--sf-glass-bg)] z-30"
-                      style={{ left: '0%', marginLeft: '-8px' }}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3.5 bg-[color:var(--sf-primary)] z-30"
+                      style={{ left: '0%', marginLeft: '-1px' }}
                     />
 
                     {/* Payout markers */}
@@ -570,15 +570,15 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                         <div
                           key={`${marker.contractId}-${index}`}
                           className="absolute top-1/2 -translate-y-1/2 z-20 group"
-                          style={{ 
-                            left: `${Math.min(position, 100)}%`, 
-                            marginLeft: '-8px',
+                          style={{
+                            left: `${Math.min(position, 100)}%`,
+                            marginLeft: '-1px',
                             transform: `translateY(${verticalOffset}px)`,
                           }}
                         >
-                          {/* Marker dot */}
+                          {/* Marker line */}
                           <div
-                            className="w-4 h-4 rounded-full bg-[color:var(--sf-primary)] border-2 border-[color:var(--sf-glass-bg)] shadow-lg cursor-pointer hover:scale-125 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                            className="w-0.5 h-3.5 bg-[color:var(--sf-primary)] cursor-pointer"
                             onClick={() => {
                               const contract = contracts.find(c => c.id === marker.contractId);
                               if (contract && onContractSelect) {
@@ -636,7 +636,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between">
                               <div className="truncate text-base font-bold text-[color:var(--sf-text)]">{marker.contractId}</div>
-                              <div className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-base font-bold border ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]' : 'bg-[color:var(--sf-info-red-bg)] border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)]'}`}>
+                              <div className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold border ${marker.yieldPercent >= 0 ? 'bg-[color:var(--sf-info-green-bg)] border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]' : 'bg-[color:var(--sf-info-red-bg)] border-[color:var(--sf-info-red-border)] text-[color:var(--sf-info-red-title)]'}`}>
                                 {marker.yieldPercent >= 0 ? '+' : ''}{marker.yieldPercent.toFixed(2)}%
                               </div>
                             </div>

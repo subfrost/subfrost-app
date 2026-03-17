@@ -26,18 +26,36 @@ export interface FireMockData {
 function generateMockPriceHistory(days: number = 30): PricePoint[] {
   const data: PricePoint[] = [];
   const now = new Date();
-  let price = 0.00045; // Starting FIRE/frBTC price
+  const startPrice = 0.00045; // Starting FIRE/frBTC price
+  // Target a positive return: end 0.5-35% higher than start
+  const targetEndPrice = startPrice * (1.005 + Math.random() * 0.345);
 
+  // Generate a random walk, then rescale so it always ends positive
+  const rawPrices: number[] = [];
+  let price = startPrice;
   for (let i = days; i >= 0; i--) {
+    rawPrices.push(price);
+    const change = (Math.random() - 0.5) * 0.00005;
+    price = Math.max(0.0001, price + change);
+  }
+
+  // Linearly interpolate the drift so final price hits targetEndPrice
+  const rawStart = rawPrices[0];
+  const rawEnd = rawPrices[rawPrices.length - 1];
+  const totalSteps = rawPrices.length - 1;
+
+  for (let idx = 0; idx <= totalSteps; idx++) {
+    const i = days - idx;
     const date = new Date(now);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
 
-    // Random walk with slight upward drift
-    const change = (Math.random() - 0.48) * 0.00005;
-    price = Math.max(0.0001, price + change);
+    // Shift each point so the path drifts from startPrice to targetEndPrice
+    const t = idx / totalSteps;
+    const driftAdjustment = t * (targetEndPrice - rawEnd) + (1 - t) * (rawStart - rawPrices[idx]);
+    const adjustedPrice = Math.max(0.0001, rawPrices[idx] + driftAdjustment);
 
-    data.push({ time: dateStr, value: price });
+    data.push({ time: dateStr, value: adjustedPrice });
   }
 
   return data;

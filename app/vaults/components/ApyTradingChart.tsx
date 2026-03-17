@@ -81,7 +81,7 @@ export default function ApyTradingChart({ data, currentApy, boostActive = false 
     let cancelled = false;
 
     const initChart = async () => {
-      const { createChart, LineSeries } = await import('lightweight-charts');
+      const { createChart, AreaSeries } = await import('lightweight-charts');
       if (cancelled || !containerRef.current) return;
 
       const chart = createChart(containerRef.current, {
@@ -105,9 +105,18 @@ export default function ApyTradingChart({ data, currentApy, boostActive = false 
         handleScroll: false,
       });
 
-      const series = chart.addSeries(LineSeries, {
-        color: lineColor,
+      const topColor = boostActive
+        ? 'rgba(168, 85, 247, 0.4)'
+        : 'rgba(34, 197, 94, 0.4)';
+      const bottomColor = boostActive
+        ? 'rgba(168, 85, 247, 0.0)'
+        : 'rgba(34, 197, 94, 0.0)';
+
+      const series = chart.addSeries(AreaSeries, {
+        lineColor,
         lineWidth: 2,
+        topColor,
+        bottomColor,
         priceFormat: {
           type: 'custom',
           formatter: (price: number) => `${price.toFixed(1)}%`,
@@ -146,7 +155,14 @@ export default function ApyTradingChart({ data, currentApy, boostActive = false 
   useEffect(() => {
     if (!chartRef.current || !seriesRef.current) return;
 
-    seriesRef.current.applyOptions({ color: lineColor });
+    const topColor = boostActive
+      ? 'rgba(168, 85, 247, 0.4)'
+      : 'rgba(34, 197, 94, 0.4)';
+    const bottomColor = boostActive
+      ? 'rgba(168, 85, 247, 0.0)'
+      : 'rgba(34, 197, 94, 0.0)';
+
+    seriesRef.current.applyOptions({ lineColor, topColor, bottomColor });
     seriesRef.current.setData(timeSeriesData);
 
     chartRef.current.applyOptions({
