@@ -168,6 +168,22 @@ describe('Devnet E2E: Full Swap Coverage', () => {
     const createPoolProtostone = `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`;
     const createPoolReqs = `2:0:${dieselAmount},32:0:${frbtcAmount}`;
 
+    // First simulate to see if it would work
+    const simResult = await rpcCall('alkanes_simulate', [{
+      target: { block: factoryId.split(':')[0], tx: factoryId.split(':')[1] },
+      inputs: ['1', '2', '0', '32', '0', dieselAmount.toString(), frbtcAmount.toString()],
+      alkanes: [
+        { id: { block: '2', tx: '0' }, value: dieselAmount.toString() },
+        { id: { block: '32', tx: '0' }, value: frbtcAmount.toString() },
+      ],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    console.log('[swaps] CreateNewPool simulate:', JSON.stringify(simResult?.result?.execution).slice(0, 500));
+
     try {
       const poolTxid = await executeAlkanes(createPoolProtostone, createPoolReqs);
       console.log('[swaps] Pool creation txid:', poolTxid);
@@ -193,6 +209,13 @@ describe('Devnet E2E: Full Swap Coverage', () => {
             console.log('[swaps] Pool ID:', poolId);
           }
         }
+      }
+
+      // Trace the pool creation transaction
+      const traceResult = await rpcCall('alkanes_trace', [poolTxid]);
+      console.log('[swaps] Pool creation trace:', JSON.stringify(traceResult?.result).slice(0, 500));
+      if (traceResult?.result?.error) {
+        console.log('[swaps] Trace error:', traceResult.result.error);
       }
 
       // Also check GetNumPools

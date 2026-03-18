@@ -21,7 +21,10 @@ import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
+// Use test/std WASMs for standard contracts (compiled from same source as indexer)
+// and prod_wasms for factory/pool (oyl-amm binaries)
 const PROD_WASMS = resolve(process.env.HOME || '~', 'alkanes-rs/prod_wasms');
+const STD_WASMS = resolve(process.env.HOME || '~', 'alkanes-rs/crates/alkanes/src/tests/std/wasm');
 
 // Slot assignments (matching subfrost-alkanes test harness)
 const SLOTS = {
@@ -41,8 +44,9 @@ const INDEXED = {
   FACTORY_PROXY:   `4:${SLOTS.FACTORY_PROXY}`,
 };
 
-function loadWasm(name: string): string {
-  const path = resolve(PROD_WASMS, name);
+function loadWasm(name: string, useStd = false): string {
+  const dir = useStd ? STD_WASMS : PROD_WASMS;
+  const path = resolve(dir, name);
   const bytes = readFileSync(path);
   return bytes.toString('hex');
 }
@@ -141,11 +145,12 @@ export async function deployAmmContracts(
 
   const poolWasm = loadWasm('pool.wasm');
   const factoryWasm = loadWasm('factory.wasm');
-  const beaconProxyWasm = loadWasm('alkanes_std_beacon_proxy.wasm');
-  const upgradeableBeaconWasm = loadWasm('alkanes_std_upgradeable_beacon.wasm');
-  const upgradeableWasm = loadWasm('alkanes_std_upgradeable.wasm');
+  // Use std WASMs for standard contracts (same alkanes-rs source as indexer)
+  const beaconProxyWasm = loadWasm('alkanes_std_beacon_proxy.wasm', true);
+  const upgradeableBeaconWasm = loadWasm('alkanes_std_upgradeable_beacon.wasm', true);
+  const upgradeableWasm = loadWasm('alkanes_std_upgradeable.wasm', true);
 
-  const authTokenWasm = loadWasm('alkanes_std_auth_token.wasm');
+  const authTokenWasm = loadWasm('alkanes_std_auth_token.wasm', true);
 
   console.log('[amm-deploy] Deploying 6 contracts...');
 
