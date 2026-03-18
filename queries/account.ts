@@ -153,6 +153,8 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         }
       };
 
+      // Fire all three independent data sources in PARALLEL
+      // (enriched balances, mempool spent, alkane balances)
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
           const rawResult = await withTimeout(provider.getEnrichedBalances(address), 15000, null);
@@ -188,7 +190,33 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         }
       });
 
-      const enrichedResults = await Promise.all(enrichedDataPromises);
+      const mempoolSpentPromises = addresses.map(async (address) => ({
+        address,
+        spent: await withTimeout(fetchMempoolSpent(address), 10000, 0),
+      }));
+
+      const alkaneBalancePromises = addresses.map(async (address) => {
+        try {
+          const resp = await withTimeout(
+            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
+            15000,
+            null,
+          );
+          if (!resp) return { address, balances: [] as any[] };
+          const data = await resp.json();
+          return { address, balances: data?.balances || [] };
+        } catch (error) {
+          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
+          return { address, balances: [] as any[] };
+        }
+      });
+
+      // Await all three in parallel
+      const [enrichedResults, mempoolSpentResults, alkaneBalanceResults] = await Promise.all([
+        Promise.all(enrichedDataPromises),
+        Promise.all(mempoolSpentPromises),
+        Promise.all(alkaneBalancePromises),
+      ]);
 
       let totalBtc = 0;
       let p2wpkhBtc = 0;
@@ -269,14 +297,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         for (const utxo of toArray(data.pending)) processUtxo(utxo, false, false);
       }
 
-      // Fetch mempool spent amounts per address (confirmed UTXOs being spent in mempool)
-      const mempoolSpentResults = await Promise.all(
-        addresses.map(async (address) => ({
-          address,
-          spent: await withTimeout(fetchMempoolSpent(address), 10000, 0),
-        })),
-      );
-
+      // Process mempool spent results (already fetched in parallel above)
       let pendingOutgoingP2wpkh = 0;
       let pendingOutgoingP2tr = 0;
       let pendingOutgoingTotal = 0;
@@ -286,63 +307,45 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         pendingOutgoingTotal += spent;
       }
 
-      // Fetch alkane balances via data API (get-alkanes-by-address, espo-backed)
-      const alkaneBalancePromises = addresses.map(async (address) => {
-        try {
-          const resp = await withTimeout(
-            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
-            15000,
-            null,
-          );
-          if (!resp) return;
-          const data = await resp.json();
-          const balances: {
-            alkaneId: string; balance: string;
-            name?: string; symbol?: string;
-            priceUsd?: number; priceInSatoshi?: number;
-            tokenImage?: string;
-          }[] = data?.balances || [];
-          for (const entry of balances) {
-            const alkaneIdStr = entry.alkaneId;
-            const amountStr = String(entry.balance || '0');
-            // Use API-provided metadata, fall back to KNOWN_TOKENS, then defaults
-            const knownInfo = KNOWN_TOKENS[alkaneIdStr];
-            const name = entry.name || knownInfo?.name || `Token ${alkaneIdStr}`;
-            const symbol = entry.symbol || knownInfo?.symbol || '';
-            const decimals = knownInfo?.decimals ?? 8;
-            if (!alkaneMap.has(alkaneIdStr)) {
-              alkaneMap.set(alkaneIdStr, {
-                alkaneId: alkaneIdStr,
-                name,
-                symbol,
-                balance: amountStr,
-                decimals,
-                logo: entry.tokenImage || undefined,
-                priceUsd: entry.priceUsd || undefined,
-                priceInSatoshi: entry.priceInSatoshi || undefined,
-              });
-            } else {
-              const existing = alkaneMap.get(alkaneIdStr)!;
-              try {
-                existing.balance = (BigInt(existing.balance) + BigInt(amountStr)).toString();
-              } catch {
-                existing.balance = String(Number(existing.balance) + Number(amountStr));
-              }
-              // Merge metadata if the existing entry has no name/symbol yet
-              if (!existing.name || existing.name.startsWith('Token ')) {
-                if (name && !name.startsWith('Token ')) existing.name = name;
-              }
-              if (!existing.symbol && symbol) existing.symbol = symbol;
-              if (!existing.priceUsd && entry.priceUsd) existing.priceUsd = entry.priceUsd;
-              if (!existing.priceInSatoshi && entry.priceInSatoshi) existing.priceInSatoshi = entry.priceInSatoshi;
-              if (!existing.logo && entry.tokenImage) existing.logo = entry.tokenImage;
+      // Process alkane balance results (already fetched in parallel above).
+      // Alkane-balances API has richer metadata (priceUsd, tokenImage), so it
+      // takes priority — we merge it AFTER enrichedResults to overwrite defaults.
+      for (const { balances } of alkaneBalanceResults) {
+        for (const entry of balances) {
+          const alkaneIdStr = entry.alkaneId;
+          const amountStr = String(entry.balance || '0');
+          const knownInfo = KNOWN_TOKENS[alkaneIdStr];
+          const name = entry.name || knownInfo?.name || `Token ${alkaneIdStr}`;
+          const symbol = entry.symbol || knownInfo?.symbol || '';
+          const decimals = knownInfo?.decimals ?? 8;
+          if (!alkaneMap.has(alkaneIdStr)) {
+            alkaneMap.set(alkaneIdStr, {
+              alkaneId: alkaneIdStr,
+              name,
+              symbol,
+              balance: amountStr,
+              decimals,
+              logo: entry.tokenImage || undefined,
+              priceUsd: entry.priceUsd || undefined,
+              priceInSatoshi: entry.priceInSatoshi || undefined,
+            });
+          } else {
+            const existing = alkaneMap.get(alkaneIdStr)!;
+            try {
+              existing.balance = (BigInt(existing.balance) + BigInt(amountStr)).toString();
+            } catch {
+              existing.balance = String(Number(existing.balance) + Number(amountStr));
             }
+            if (!existing.name || existing.name.startsWith('Token ')) {
+              if (name && !name.startsWith('Token ')) existing.name = name;
+            }
+            if (!existing.symbol && symbol) existing.symbol = symbol;
+            if (!existing.priceUsd && entry.priceUsd) existing.priceUsd = entry.priceUsd;
+            if (!existing.priceInSatoshi && entry.priceInSatoshi) existing.priceInSatoshi = entry.priceInSatoshi;
+            if (!existing.logo && entry.tokenImage) existing.logo = entry.tokenImage;
           }
-        } catch (error) {
-          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
         }
-      });
-      await Promise.all(alkaneBalancePromises);
+      }
 
       return {
         balances: {

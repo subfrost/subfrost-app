@@ -2091,12 +2091,17 @@ export default function SwapShell() {
             ? poolTokenOptions
             : toTokenOptions
           ).filter((t) => {
-            // Only show fungible tokens — exclude NFTs (balance === 1) and LP/position assets
-            if (t.balance && BigInt(t.balance) === BigInt(1)) return false;
+            // Exclude LP/position assets by name/symbol
             const sym = t.symbol || '';
             const nm = t.name || '';
             if (/\bLP\b/i.test(sym) || /\bLP\b/i.test(nm)) return false;
             if (sym.startsWith('POS-') || nm.startsWith('POS-')) return false;
+            // Exclude likely NFTs: raw balance of exactly 1 (not a fungible token amount).
+            // Fungible alkanes use 8 decimals so "1 token" = 100_000_000 base units.
+            // A balance of literally 1 base unit is almost certainly an NFT/inscription marker.
+            // Also exclude tokens with no symbol/name (unknown metadata = likely NFT).
+            if (t.balance && BigInt(t.balance) === BigInt(1) && !sym && !nm) return false;
+            if (t.balance && BigInt(t.balance) === BigInt(1) && (nm.startsWith('Token ') || nm.match(/^\d+:\d+$/))) return false;
             return true;
           })
         }

@@ -303,7 +303,7 @@ export default function TokenSelectorModal({
                           {token.id}
                         </p>
                       </div>
-                      {!isAvailable && mode === 'from' && (
+                      {!isAvailable && (mode === 'from' || mode === 'to') && (
                         <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
                           {t('tokenSelector.notAvailable')}
                         </span>
