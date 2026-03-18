@@ -123,7 +123,7 @@ describe('Devnet: DIESEL Mint', () => {
         'B:10000:v0',                           // inputRequirements (BTC for fees)
         protostone,                             // protostones
         '2',                                    // feeRate
-        '',                                     // envelopeHex (none)
+        null,                                   // envelopeHex (null = no envelope, single-step tx)
         JSON.stringify({                        // options
           from: [segwitAddress, taprootAddress],
           change: segwitAddress,
