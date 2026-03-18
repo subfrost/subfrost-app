@@ -16,6 +16,7 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
+import { rpcCall } from './devnet-helpers';
 import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -94,6 +95,39 @@ async function deployContract(
 }
 
 /**
+ * Discover auth tokens ([2:N] with balance=1) at an address.
+ * These are created during upgradeable proxy/beacon deployments.
+ */
+async function discoverAuthTokens(address: string): Promise<string[]> {
+  const result = await rpcCall('alkanes_protorunesbyaddress', [
+    { address, protocolTag: '1' }
+  ]);
+
+  const tokens: string[] = [];
+  if (result?.result?.outpoints) {
+    for (const outpoint of result.result.outpoints) {
+      const balances = outpoint.balance_sheet?.cached?.balances
+        || outpoint.runes
+        || [];
+      for (const entry of balances) {
+        const block = parseInt(entry.block ?? '0', 10);
+        const tx = parseInt(entry.tx ?? '0', 10);
+        const amount = parseInt(entry.amount ?? '0', 10);
+        // Auth tokens are at block=2 with amount=1
+        if (block === 2 && amount === 1) {
+          const id = `${block}:${tx}`;
+          if (!tokens.includes(id)) {
+            tokens.push(id);
+          }
+        }
+      }
+    }
+  }
+
+  return tokens;
+}
+
+/**
  * Deploy the full AMM infrastructure and return the factory proxy ID.
  */
 export async function deployAmmContracts(
@@ -111,7 +145,16 @@ export async function deployAmmContracts(
   const upgradeableBeaconWasm = loadWasm('alkanes_std_upgradeable_beacon.wasm');
   const upgradeableWasm = loadWasm('alkanes_std_upgradeable.wasm');
 
-  console.log('[amm-deploy] Deploying 5 contracts...');
+  const authTokenWasm = loadWasm('alkanes_std_auth_token.wasm');
+
+  console.log('[amm-deploy] Deploying 6 contracts...');
+
+  // 0. Auth Token Factory (required for proxy deployments to create auth tokens)
+  await deployContract(
+    provider, signer, segwitAddress, taprootAddress,
+    authTokenWasm, 0xffed, [100], // Deploy marker 100 (from subfrost-alkanes)
+    harness,
+  );
 
   // 1. Pool Logic
   await deployContract(
@@ -148,15 +191,72 @@ export async function deployAmmContracts(
     harness,
   );
 
-  // 6. Initialize Factory (opcode 0 on the deployed proxy)
+  // Verify contracts are deployed by checking if they respond
+  console.log('[amm-deploy] Verifying deployments...');
+  for (const [name, id] of Object.entries(INDEXED)) {
+    const [b, t] = id.split(':');
+    const check = await rpcCall('alkanes_simulate', [{
+      target: { block: b, tx: t },
+      inputs: ['99'],  // GetName — works on most contracts
+      alkanes: [],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    const err = check?.result?.execution?.error;
+    const status = err ? `ERROR: ${err.slice(0, 80)}` : 'OK';
+    console.log(`[amm-deploy]   ${name} [${id}]: ${status}`);
+  }
+
+  // 6. Discover auth tokens created during proxy deployments.
+  //    The upgradeable proxy (0x7fff) creates an auth token at [2:N].
+  //    We need to find it and send it with the factory init call.
+  console.log('[amm-deploy] Discovering auth tokens...');
+
+  // Check both addresses for auth tokens
+  let authTokens = await discoverAuthTokens(taprootAddress);
+  console.log('[amm-deploy] Auth tokens on taproot:', authTokens);
+  if (authTokens.length === 0) {
+    authTokens = await discoverAuthTokens(segwitAddress);
+    console.log('[amm-deploy] Auth tokens on segwit:', authTokens);
+  }
+  // Also try checking all [2:N] via simulate
+  if (authTokens.length === 0) {
+    // Try querying the factory proxy for its auth token
+    const authCheck = await rpcCall('alkanes_simulate', [{
+      target: { block: '4', tx: '1' },
+      inputs: ['32765'],  // 0x7ffd = get implementation (upgradeable query)
+      alkanes: [],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    console.log('[amm-deploy] Factory proxy impl check:', JSON.stringify(authCheck?.result?.execution).slice(0, 200));
+  }
+
+  if (authTokens.length === 0) {
+    throw new Error('No auth tokens found after proxy deployment. Factory init requires an auth token.');
+  }
+
+  // The factory proxy auth token is typically the first one created.
+  // Both the factory proxy and beacon create auth tokens.
+  // Factory proxy auth token = authTokens[0], beacon auth token = authTokens[1]
+  const factoryAuthToken = authTokens[0];
+  console.log('[amm-deploy] Using factory auth token:', factoryAuthToken);
+
+  // 7. Initialize Factory (opcode 0 on the deployed proxy)
+  //    Send the auth token as incomingAlkanes via inputRequirements.
   console.log('[amm-deploy] Initializing factory...');
-  // INDEXED.FACTORY_PROXY is "4:1" — need to split for protostone format
   const [fpBlock, fpTx] = INDEXED.FACTORY_PROXY.split(':');
   const initProtostone = `[${fpBlock},${fpTx},0,${SLOTS.BEACON_PROXY},4,${SLOTS.BEACON}]:v0:v0`;
 
   const initResult = await provider.alkanesExecuteWithStrings(
     JSON.stringify([taprootAddress]),
-    'B:10000:v0',
+    `${factoryAuthToken}:1`,   // Send 1 auth token as input
     initProtostone,
     '1',
     null,
