@@ -200,9 +200,11 @@ export async function deployAmmContracts(
   console.log('[amm-deploy] Verifying deployments...');
   for (const [name, id] of Object.entries(INDEXED)) {
     const [b, t] = id.split(':');
+    // Use opcode 0x8fff for beacon proxy (it only supports 0x7fff and 0x8fff)
+    const testOpcode = name === 'BEACON_PROXY' ? '36863' : '99';
     const check = await rpcCall('alkanes_simulate', [{
       target: { block: b, tx: t },
-      inputs: ['99'],  // GetName — works on most contracts
+      inputs: [testOpcode],
       alkanes: [],
       transaction: '0x',
       block: '0x',
@@ -214,6 +216,39 @@ export async function deployAmmContracts(
     const status = err ? `ERROR: ${err.slice(0, 80)}` : 'OK';
     console.log(`[amm-deploy]   ${name} [${id}]: ${status}`);
   }
+
+  // Test beacon proxy with its actual opcodes
+  const beaconProxyId = INDEXED.BEACON_PROXY;
+  const [bpB, bpT] = beaconProxyId.split(':');
+  for (const opcode of [0x8fff]) {
+    const check = await rpcCall('alkanes_simulate', [{
+      target: { block: bpB, tx: bpT },
+      inputs: [opcode.toString()],
+      alkanes: [],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    const err = check?.result?.execution?.error;
+    console.log(`[amm-deploy]   BEACON_PROXY opcode ${opcode}: ${err ? err.slice(0, 80) : 'OK'}`);
+  }
+
+  // Also test the upgradeable beacon
+  const beaconId = INDEXED.BEACON;
+  const [beB, beT] = beaconId.split(':');
+  const beaconCheck = await rpcCall('alkanes_simulate', [{
+    target: { block: beB, tx: beT },
+    inputs: ['32765'],  // 0x7ffd = get implementation
+    alkanes: [],
+    transaction: '0x',
+    block: '0x',
+    height: '500',
+    txindex: 0,
+    vout: 0,
+  }]);
+  console.log(`[amm-deploy]   BEACON get_impl: ${beaconCheck?.result?.execution?.error || 'data=' + beaconCheck?.result?.execution?.data?.slice(0, 40)}`);
 
   // 6. Discover auth tokens created during proxy deployments.
   //    The upgradeable proxy (0x7fff) creates an auth token at [2:N].
