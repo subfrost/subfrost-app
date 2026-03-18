@@ -21,7 +21,7 @@ export default defineConfig({
     server: {
       deps: {
         // Inline the SDK to allow vite to process WASM imports
-        inline: ['@alkanes/ts-sdk'],
+        inline: ['@alkanes/ts-sdk', '@qubitcoin/sdk'],
       },
     },
     // Use forks pool for better WASM compatibility
@@ -34,10 +34,10 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Don't exclude - let vite process it
-    include: ['@alkanes/ts-sdk', '@alkanes/ts-sdk/wasm'],
+    include: ['@alkanes/ts-sdk', '@alkanes/ts-sdk/wasm', '@qubitcoin/sdk'],
   },
   // Enable WASM in SSR/Node context
   ssr: {
-    noExternal: ['@alkanes/ts-sdk'],
+    noExternal: ['@alkanes/ts-sdk', '@qubitcoin/sdk'],
   },
 });
