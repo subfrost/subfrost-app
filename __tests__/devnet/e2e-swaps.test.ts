@@ -184,10 +184,22 @@ describe('Devnet E2E: Full Swap Coverage', () => {
     }]);
     console.log('[swaps] CreateNewPool simulate:', JSON.stringify(simResult?.result?.execution).slice(0, 500));
 
+    // Check token balances BEFORE pool creation
+    const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+    console.log('[swaps] Before pool creation: DIESEL=%s frBTC=%s', dieselBefore, frbtcBefore);
+
     try {
       const poolTxid = await executeAlkanes(createPoolProtostone, createPoolReqs);
       console.log('[swaps] Pool creation txid:', poolTxid);
       mineBlocks(harness, 1);
+
+      // Check token balances AFTER pool creation
+      const dieselAfterPool = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const frbtcAfterPool = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+      console.log('[swaps] After pool creation: DIESEL=%s frBTC=%s', dieselAfterPool, frbtcAfterPool);
+      console.log('[swaps] DIESEL spent: %s, frBTC spent: %s',
+        dieselBefore - dieselAfterPool, frbtcBefore - frbtcAfterPool);
 
       // Find pool ID via factory opcode 2 (FindExistingPoolId)
       const findPool = await simulateAlkane(factoryId, ['2', '2', '0', '32', '0']);
@@ -211,16 +223,24 @@ describe('Devnet E2E: Full Swap Coverage', () => {
         }
       }
 
-      // Trace the pool creation transaction
-      const traceResult = await rpcCall('alkanes_trace', [poolTxid]);
-      console.log('[swaps] Pool creation trace:', JSON.stringify(traceResult?.result).slice(0, 500));
-      if (traceResult?.result?.error) {
-        console.log('[swaps] Trace error:', traceResult.result.error);
-      }
-
-      // Also check GetNumPools
+      // Check GetNumPools after pool creation
       const numPoolsAfter = await simulateAlkane(factoryId, ['4']);
       console.log('[swaps] NumPools after creation:', JSON.stringify(numPoolsAfter?.result?.execution).slice(0, 200));
+
+      // Check GetNumPools data — parse as u128 LE
+      if (numPoolsAfter?.result?.execution?.data) {
+        const hex = numPoolsAfter.result.execution.data.replace('0x', '');
+        if (hex.length >= 32) {
+          const buf = Buffer.from(hex, 'hex');
+          const count = Number(buf.readBigUInt64LE(0));
+          console.log('[swaps] Pool count:', count);
+          if (count > 0) {
+            // Pool was created! Try to find it
+            const getAllPools = await simulateAlkane(factoryId, ['3']);
+            console.log('[swaps] GetAllPools:', JSON.stringify(getAllPools?.result?.execution).slice(0, 500));
+          }
+        }
+      }
     } catch (e: any) {
       console.log('[swaps] Pool creation error:', e.message?.slice(0, 200));
       console.log('[swaps] NOTE: Pool creation may fail if factory init or deployment is wrong');
