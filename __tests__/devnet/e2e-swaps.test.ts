@@ -63,19 +63,35 @@ async function executeAlkanes(
   }
 ): Promise<string> {
   const opts = options || {};
-  const result = await provider.alkanesExecuteWithStrings(
+
+  // Use alkanesExecuteFull — same path as alkanesExecuteTyped in the production app.
+  // This handles the complete flow internally (including signing with loaded wallet).
+  const result = await (provider as any).alkanesExecuteFull(
     JSON.stringify(opts.toAddresses || [taprootAddress]),
     inputRequirements,
     protostone,
-    '1',
+    1,  // feeRate
     opts.envelopeHex === undefined ? null : opts.envelopeHex,
     JSON.stringify({
-      from: [segwitAddress, taprootAddress],
+      from_addresses: [segwitAddress, taprootAddress],
       change_address: segwitAddress,
       alkanes_change_address: taprootAddress,
-      auto_confirm: false,
+      ordinals_strategy: 'burn',
     }),
   );
+
+  // alkanesExecuteFull returns the complete result with txids
+  if (result?.reveal_txid || result?.revealTxid) {
+    const txid = result.reveal_txid || result.revealTxid;
+    mineBlocks(harness, 1);
+    return txid;
+  }
+  if (result?.txid) {
+    mineBlocks(harness, 1);
+    return result.txid;
+  }
+
+  // Fallback: result might be ReadyToSign
   return signAndBroadcast(provider, result, signer, segwitAddress);
 }
 
@@ -184,6 +200,32 @@ describe('Devnet E2E: Full Swap Coverage', () => {
     }]);
     console.log('[swaps] CreateNewPool simulate:', JSON.stringify(simResult?.result?.execution).slice(0, 500));
 
+    // Test: single-token delivery to different targets
+    const testDieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+
+    // Test A: Send DIESEL to factory [4:1] opcode 50 (Forward)
+    try {
+      const [fb, ft] = factoryId.split(':');
+      await executeAlkanes(`[${fb},${ft},50]:v0:v0`, `2:0:1000000`);
+      mineBlocks(harness, 1);
+      const after = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      console.log('[swaps] Test A (factory [4:1]): spent=%s', testDieselBefore - after);
+    } catch (e: any) {
+      console.log('[swaps] Test A error:', (e?.message || String(e))?.slice(0, 100));
+    }
+
+    // Test B: Send DIESEL to DIESEL [2:0] opcode 77 (mint — should work and return tokens)
+    const beforeB = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+    mineBlocks(harness, 1); // new height for mint
+    try {
+      await executeAlkanes(`[2,0,77]:v0:v0`, `2:0:1000000`);
+      mineBlocks(harness, 1);
+      const afterB = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      console.log('[swaps] Test B (DIESEL [2:0] with input): spent=%s (negative=gained)', beforeB - afterB);
+    } catch (e: any) {
+      console.log('[swaps] Test B error:', (e?.message || String(e))?.slice(0, 100));
+    }
+
     // Check token balances BEFORE pool creation
     const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
     const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
@@ -192,6 +234,30 @@ describe('Devnet E2E: Full Swap Coverage', () => {
     try {
       const poolTxid = await executeAlkanes(createPoolProtostone, createPoolReqs);
       console.log('[swaps] Pool creation txid:', poolTxid);
+
+      // Fetch raw tx to inspect
+      const rawTxResult = await rpcCall('esplora_tx::hex', [poolTxid]);
+      const rawHex = rawTxResult?.result;
+      if (rawHex) {
+        // Parse with bitcoinjs-lib to inspect outputs
+        const tx = bitcoin.Transaction.fromHex(rawHex);
+        console.log('[swaps] Pool creation tx: inputs=%d outputs=%d', tx.ins.length, tx.outs.length);
+        for (let i = 0; i < tx.outs.length; i++) {
+          const out = tx.outs[i];
+          const isOpReturn = out.script[0] === 0x6a;
+          console.log('[swaps]   output %d: value=%d script_len=%d is_op_return=%s',
+            i, out.value, out.script.length, isOpReturn);
+          if (isOpReturn) {
+            console.log('[swaps]   OP_RETURN data: %s', out.script.toString('hex').slice(0, 200));
+          }
+        }
+        for (let i = 0; i < tx.ins.length; i++) {
+          const inp = tx.ins[i];
+          console.log('[swaps]   input %d: txid=%s vout=%d witness_items=%d',
+            i, inp.hash.reverse().toString('hex'), inp.index, inp.witness.length);
+          inp.hash.reverse(); // reverse back
+        }
+      }
       mineBlocks(harness, 1);
 
       // Check token balances AFTER pool creation
