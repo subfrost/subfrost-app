@@ -203,15 +203,31 @@ describe('Devnet E2E: Full Swap Coverage', () => {
     // Test: single-token delivery to different targets
     const testDieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
 
-    // Test A: Send DIESEL to factory [4:1] opcode 50 (Forward)
+    // Test A: Send 1000 DIESEL to factory [4:1] opcode 4 (GetNumPools)
+    // Then check: did the DIESEL land on the expected output?
     try {
       const [fb, ft] = factoryId.split(':');
-      await executeAlkanes(`[${fb},${ft},50]:v0:v0`, `2:0:1000000`);
+      const txid = await executeAlkanes(`[${fb},${ft},4]:v0:v0`, `2:0:1000`);
       mineBlocks(harness, 1);
       const after = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
-      console.log('[swaps] Test A (factory [4:1]): spent=%s', testDieselBefore - after);
+      const spent = testDieselBefore - after;
+      console.log('[swaps] Test A (factory [4:1] opcode 4): spent=%s txid=%s', spent, txid);
+      // If spent=0, tokens were either delivered+returned OR not delivered+rollback
+      // Check the protorune index for the TX output to see if tokens are on v0
+      const txOutpoints = await rpcCall('alkanes_protorunesbyaddress', [
+        { address: taprootAddress, protocolTag: '1' }
+      ]);
+      const outpoints = txOutpoints?.result?.outpoints || [];
+      const txOutput = outpoints.find((op: any) => op?.outpoint?.txid === txid);
+      if (txOutput) {
+        console.log('[swaps] Test A: found output with balances:', JSON.stringify(txOutput?.balance_sheet?.cached?.balances));
+      } else {
+        console.log('[swaps] Test A: NO output found for txid — tokens may be on a different outpoint');
+        // Check all outpoints
+        console.log('[swaps] Test A: total outpoints:', outpoints.length);
+      }
     } catch (e: any) {
-      console.log('[swaps] Test A error:', (e?.message || String(e))?.slice(0, 100));
+      console.log('[swaps] Test A error:', (e?.message || String(e))?.slice(0, 200));
     }
 
     // Test B: Send DIESEL to DIESEL [2:0] opcode 77 (mint — should work and return tokens)
