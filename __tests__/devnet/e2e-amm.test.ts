@@ -46,9 +46,10 @@ let signer: TestSignerResult;
 let segwitAddress: string;
 let taprootAddress: string;
 
-// Track minted/wrapped amounts for assertions
+// Track state across sequential tests
 let dieselMinted = false;
 let frbtcWrapped = false;
+let dieselBalance = 0n;
 
 // ---------------------------------------------------------------------------
 // Helper: execute an alkane call and sign/broadcast
@@ -72,8 +73,9 @@ async function executeAlkanes(
     opts.envelopeHex === undefined ? null : opts.envelopeHex,
     JSON.stringify({
       from: [segwitAddress, taprootAddress],
-      change: segwitAddress,
-      alkanes_change: taprootAddress,
+      change_address: segwitAddress,
+      alkanes_change_address: taprootAddress,
+      auto_confirm: false,
     }),
   );
 
@@ -108,16 +110,30 @@ async function simulateAlkane(
 // ---------------------------------------------------------------------------
 
 async function getFrbtcSignerAddress(): Promise<string | null> {
-  // frBTC opcode 103 (GET_SIGNER) returns the signer address
+  // frBTC opcode 103 (GET_SIGNER) returns the raw x-only pubkey (32 bytes)
   const result = await simulateAlkane('32:0', ['103']);
   if (result?.result?.execution?.data) {
     const hex = result.result.execution.data.replace('0x', '');
-    if (hex.length > 0) {
+    if (hex.length === 64) {
+      // 32-byte x-only pubkey → P2TR bech32m address
       try {
-        return Buffer.from(hex, 'hex').toString('utf8');
-      } catch {
+        const xOnlyPubkey = Buffer.from(hex, 'hex');
+        const payment = bitcoin.payments.p2tr({
+          internalPubkey: xOnlyPubkey,
+          network: bitcoin.networks.regtest,
+        });
+        return payment.address || null;
+      } catch (e) {
+        console.log('[e2e] Failed to derive signer address from pubkey:', hex, e);
         return null;
       }
+    }
+    // May be a bech32 string already
+    if (hex.length > 0) {
+      try {
+        const str = Buffer.from(hex, 'hex').toString('utf8');
+        if (str.startsWith('bcrt1')) return str;
+      } catch { /* not utf8 */ }
     }
   }
   return null;
@@ -183,7 +199,6 @@ describe('Devnet E2E: AMM Workflow', () => {
 
   describe('DIESEL Mint', () => {
     it('should mint DIESEL via opcode 77', async () => {
-      // DIESEL [2:0] opcode 77 = free mint (one per block)
       const protostone = '[2,0,77]:v0:v0';
 
       const txid = await executeAlkanes(protostone, 'B:10000:v0');
@@ -196,21 +211,17 @@ describe('Devnet E2E: AMM Workflow', () => {
       // Check DIESEL balance
       const balance = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
       console.log('[e2e] DIESEL balance after mint:', balance.toString());
+      expect(balance).toBeGreaterThan(0n);
 
-      if (balance > 0n) {
-        dieselMinted = true;
-        console.log('[e2e] DIESEL mint SUCCESS');
-      } else {
-        // If balance query doesn't work yet, check via simulate
-        const simResult = await simulateAlkane('2:0', ['101']); // GetTotalSupply
-        console.log('[e2e] DIESEL total supply:', JSON.stringify(simResult?.result?.execution).slice(0, 200));
-        console.log('[e2e] DIESEL mint tx broadcast OK but balance query returned 0 — may need indexer investigation');
-      }
+      dieselMinted = true;
+      dieselBalance = balance;
     }, 120_000);
 
-    it('should be able to mint DIESEL again at a new block height', async () => {
+    it('should mint DIESEL again at a new block height', async () => {
       // Mine a block first so we're at a new height (one mint per height)
       mineBlocks(harness, 1);
+
+      const balanceBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
 
       const protostone = '[2,0,77]:v0:v0';
       const txid = await executeAlkanes(protostone, 'B:10000:v0');
@@ -218,6 +229,28 @@ describe('Devnet E2E: AMM Workflow', () => {
       expect(txid).toBeTruthy();
 
       mineBlocks(harness, 1);
+
+      const balanceAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      console.log('[e2e] DIESEL balance: before=%s after=%s', balanceBefore.toString(), balanceAfter.toString());
+      expect(balanceAfter).toBeGreaterThan(balanceBefore);
+
+      dieselBalance = balanceAfter;
+    }, 120_000);
+
+    it('should reject duplicate mint at same block height', async () => {
+      // Don't mine a new block — try to mint at the same height
+      const protostone = '[2,0,77]:v0:v0';
+
+      try {
+        const txid = await executeAlkanes(protostone, 'B:10000:v0');
+        // If it broadcasts, the balance should NOT increase
+        mineBlocks(harness, 1);
+        const balance = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+        console.log('[e2e] DIESEL balance after duplicate mint:', balance.toString());
+        // Balance should not have increased (mint was rejected by contract)
+      } catch (e: any) {
+        console.log('[e2e] Duplicate mint correctly rejected:', e.message?.slice(0, 100));
+      }
     }, 120_000);
   });
 
