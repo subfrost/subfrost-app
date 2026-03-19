@@ -150,4 +150,31 @@ describe('Block Bytes Debug', () => {
     const dieselAfter = await getAlkaneBalance(provider, taprootAddress, '2:0');
     console.log('DIESEL after both txs:', dieselAfter.toString());
   }, 120_000);
+
+  it('should check stored binary size for beacon proxy', async () => {
+    // Try getbytecode with different param formats
+    for (const params of [
+      [{ target: '4:780993' }],
+      [{ target: { block: '4', tx: '780993' } }],
+      ['4:780993'],
+    ]) {
+      const result = await rpcCall('alkanes_getbytecode', params);
+      if (result?.result && typeof result.result === 'string' && result.result.length > 10) {
+        const hex = (result.result as string).replace('0x', '');
+        console.log('[bytecode] Beacon proxy stored bytecode:', hex.length / 2, 'bytes');
+        // Check if it starts with gzip magic (1f 8b)
+        console.log('[bytecode] First bytes:', hex.slice(0, 20));
+        // Check if it starts with WASM magic (00 61 73 6d)
+        if (hex.startsWith('0061736d')) {
+          console.log('[bytecode] Starts with WASM magic — stored UNCOMPRESSED');
+        } else if (hex.startsWith('1f8b')) {
+          console.log('[bytecode] Starts with gzip magic — stored COMPRESSED');
+        }
+        break;
+      } else {
+        const err = result?.error?.message || result?.result;
+        console.log('[bytecode] Format', JSON.stringify(params).slice(0, 40), ':', String(err).slice(0, 80));
+      }
+    }
+  });
 });
