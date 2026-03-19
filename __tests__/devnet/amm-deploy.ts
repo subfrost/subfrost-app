@@ -93,6 +93,83 @@ async function deployContract(
   // alkanesExecuteFull returns EnhancedExecuteResult with txids
   const txid = result?.reveal_txid || result?.revealTxid || result?.txid || 'unknown';
 
+  // Compare: what did the SDK broadcast vs what esplorashrew stored?
+  if (result?.reveal_txid || result?.revealTxid) {
+    const revealTxid = result.reveal_txid || result.revealTxid;
+    const storedTxResult = await rpcCall('esplora_tx::hex', [revealTxid]);
+    if (storedTxResult?.result) {
+      const storedHex = storedTxResult.result as string;
+      console.log(`[amm-deploy]   Reveal tx stored hex length: ${storedHex.length / 2} bytes`);
+      // Check witness: parse the stored tx and count witness items
+      try {
+        const bitcoin = await import('bitcoinjs-lib');
+        const zlib = await import('zlib');
+        const tx = bitcoin.Transaction.fromHex(storedHex);
+        if (tx.ins[0]?.witness?.length >= 2) {
+          const script = tx.ins[0].witness[1]; // The reveal script
+          console.log(`[amm-deploy]   Reveal script: ${script.length} bytes`);
+
+          // Parse the script to extract BIN envelope payload
+          // Structure: OP_FALSE(00) OP_IF(63) PUSH3(03) "BIN" PUSH0(00) [chunks...] OP_ENDIF(68)
+          let pos = 0;
+          if (script[pos] === 0x00) pos++; // OP_FALSE
+          if (script[pos] === 0x63) pos++; // OP_IF
+          // Read PROTOCOL_ID
+          const pushLen = script[pos]; pos++;
+          pos += pushLen; // Skip "BIN"
+          // Read BODY_TAG
+          if (script[pos] === 0x00) pos++; // OP_0 (empty push = BODY_TAG)
+
+          // Now read data chunks until OP_ENDIF (0x68)
+          const chunks: Buffer[] = [];
+          while (pos < script.length && script[pos] !== 0x68) {
+            // Read push opcode
+            let chunkLen: number;
+            if (script[pos] <= 0x4b) {
+              // Direct push (1-75 bytes)
+              chunkLen = script[pos]; pos++;
+            } else if (script[pos] === 0x4c) {
+              // OP_PUSHDATA1
+              chunkLen = script[pos + 1]; pos += 2;
+            } else if (script[pos] === 0x4d) {
+              // OP_PUSHDATA2
+              chunkLen = script[pos + 1] | (script[pos + 2] << 8); pos += 3;
+            } else if (script[pos] === 0x4e) {
+              // OP_PUSHDATA4
+              chunkLen = script[pos + 1] | (script[pos + 2] << 8) | (script[pos + 3] << 16) | (script[pos + 4] << 24); pos += 5;
+            } else {
+              break; // Unknown opcode
+            }
+            chunks.push(script.slice(pos, pos + chunkLen) as Buffer);
+            pos += chunkLen;
+          }
+
+          const payload = Buffer.concat(chunks);
+          console.log(`[amm-deploy]   Extracted payload: ${payload.length} bytes (${chunks.length} chunks)`);
+          console.log(`[amm-deploy]   First 4 bytes: ${payload[0]?.toString(16)} ${payload[1]?.toString(16)} ${payload[2]?.toString(16)} ${payload[3]?.toString(16)}`);
+
+          // Try to decompress
+          if (payload[0] === 0x1f && payload[1] === 0x8b) {
+            try {
+              const decompressed = zlib.gunzipSync(payload);
+              console.log(`[amm-deploy]   Decompressed: ${decompressed.length} bytes`);
+              // Check WASM magic
+              if (decompressed[0] === 0x00 && decompressed[1] === 0x61 && decompressed[2] === 0x73 && decompressed[3] === 0x6d) {
+                console.log(`[amm-deploy]   Valid WASM binary!`);
+              }
+            } catch (e: any) {
+              console.log(`[amm-deploy]   Decompression failed: ${e.message}`);
+            }
+          } else {
+            console.log(`[amm-deploy]   NOT gzip compressed (first bytes: ${payload.slice(0, 4).toString('hex')})`);
+          }
+        }
+      } catch (e) {
+        console.log(`[amm-deploy]   Parse error: ${e}`);
+      }
+    }
+  }
+
   mineHarness.mineBlocks(1);
   console.log(`[amm-deploy] Deployed [3,${slot}] → txid: ${txid}`);
   return txid;
