@@ -215,6 +215,11 @@ export const KNOWN_TOKENS: Record<string, { symbol: string; name: string; decima
   '2:68433': { symbol: 'METHANE/bUSD LP', name: 'METHANE/bUSD LP Token', decimals: 8 },
   '2:77221': { symbol: 'METHANE/frBTC LP', name: 'METHANE/frBTC LP Token', decimals: 8 },
   // Note: frBTC is always 32:0 on all networks
+  // Protocol tokens
+  '4:256': { symbol: 'FIRE', name: 'FIRE Token', decimals: 8 },
+  '4:7000': { symbol: 'FUEL', name: 'FUEL Token', decimals: 8 },
+  '4:7020': { symbol: 'dxBTC', name: 'dxBTC Vault Token', decimals: 8 },
+  '4:8201': { symbol: 'frUSD', name: 'frUSD Stablecoin', decimals: 18 },
 };
 
 /**

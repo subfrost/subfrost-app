@@ -26,9 +26,6 @@ importers:
       '@prisma/client':
         specifier: ^6.19.2
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
-      '@qubitcoin/sdk':
-        specifier: link:vendor/@qubitcoin/sdk
-        version: link:vendor/@qubitcoin/sdk
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
@@ -96,6 +93,9 @@ importers:
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.58.2
+      '@qubitcoin/sdk':
+        specifier: link:vendor/@qubitcoin/sdk
+        version: link:vendor/@qubitcoin/sdk
       '@scure/base':
         specifier: ^2.0.0
         version: 2.0.0
