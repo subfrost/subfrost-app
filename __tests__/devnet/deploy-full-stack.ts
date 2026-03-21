@@ -155,25 +155,27 @@ export async function deployCoreProtocol(
     harness, 'ftrBTC Template');
 
   // 3. dxBTC Vault — Init(asset_id=frBTC, yv_vault, escrow_nft, vx_fuel_gauge)
-  // For devnet: use placeholder IDs for yv_vault and escrow_nft
+  // For devnet: yv_vault = FUEL token (won't recurse on deposit — just stores frBTC directly)
+  // escrow_nft = self (placeholder)
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadProtocolWasm('dx_btc'), S.DXBTC_VAULT,
-    [0, 32, 0, 4, S.DXBTC_VAULT, 4, S.DXBTC_VAULT, 4, S.VX_FUEL_GAUGE],
+    [0, 32, 0, 4, S.FUEL_TOKEN, 4, S.DXBTC_VAULT, 4, S.VX_FUEL_GAUGE],
     harness, 'dxBTC Vault');
 
-  // 4. vx-fuel-gauge — Init(lp_token, reward_token, reward_rate)
-  // LP token = FUEL/frBTC pool (placeholder — would need a FUEL/frBTC AMM pool)
+  // 4. vx-fuel-gauge — Init(lp_token, reward_token, yve_token_nft_id, reward_rate, fr_sigil_id)
+  // LP token = AMM pool (placeholder for FUEL/frBTC LP)
   // Reward token = dxBTC vault shares
+  // yve_token_nft_id = placeholder (use self)
+  // fr_sigil_id = placeholder (use self)
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadProtocolWasm('vx_token_gauge_template'), S.VX_FUEL_GAUGE,
-    [0, poolBlock, poolTx, 4, S.DXBTC_VAULT, 100000],
+    [0, poolBlock, poolTx, 4, S.DXBTC_VAULT, 4, S.VX_FUEL_GAUGE, 100000, 4, S.VX_FUEL_GAUGE],
     harness, 'vxFUEL Gauge');
 
-  // 5. vx-btcusd-gauge — Init(lp_token=synth-pool LP, reward_token=FIRE, reward_rate)
-  // Synth pool LP is at its pool ID. For now use the AMM pool.
+  // 5. vx-btcusd-gauge — Init(lp_token, reward_token, yve_token_nft_id, reward_rate, fr_sigil_id)
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadProtocolWasm('vx_token_gauge_template'), S.VX_BTCUSD_GAUGE,
-    [0, poolBlock, poolTx, 4, 256, 100000], // reward = FIRE [4:256]
+    [0, poolBlock, poolTx, 4, 256, 4, S.VX_BTCUSD_GAUGE, 100000, 4, S.VX_BTCUSD_GAUGE],
     harness, 'vxBTCUSD Gauge');
 
   // Verify deployments

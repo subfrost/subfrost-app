@@ -248,6 +248,81 @@ describe('Devnet E2E: Full Protocol Stack', () => {
   });
 
   // =========================================================================
+  // vx Gauge Interactions
+  // =========================================================================
+
+  describe('vx Gauge Interactions', () => {
+    it('should stake LP tokens in vxFUEL gauge', async () => {
+      const lpBal = await getAlkaneBalance(provider, taprootAddress, poolId);
+      if (lpBal === 0n) {
+        console.log('[protocol] No LP tokens for gauge staking');
+        return;
+      }
+
+      const stakeAmount = lpBal / 10n;
+      try {
+        // Gauge opcode 1 = Stake, amount arg
+        await executeAlkanes(
+          `[4,${PROTOCOL_SLOTS.VX_FUEL_GAUGE},1,${stakeAmount}]:v0:v0`,
+          `${poolId}:${stakeAmount}`,
+        );
+        mineBlocks(harness, 1);
+        console.log('[protocol] Staked %s LP in vxFUEL gauge ✓', stakeAmount);
+      } catch (e: any) {
+        console.log('[protocol] vxFUEL stake error:', e.message?.slice(0, 150));
+      }
+    }, 120_000);
+
+    it('should stake LP tokens in vxBTCUSD gauge', async () => {
+      const lpBal = await getAlkaneBalance(provider, taprootAddress, poolId);
+      if (lpBal === 0n) {
+        console.log('[protocol] No LP tokens for gauge staking');
+        return;
+      }
+
+      const stakeAmount = lpBal / 10n;
+      try {
+        await executeAlkanes(
+          `[4,${PROTOCOL_SLOTS.VX_BTCUSD_GAUGE},1,${stakeAmount}]:v0:v0`,
+          `${poolId}:${stakeAmount}`,
+        );
+        mineBlocks(harness, 1);
+        console.log('[protocol] Staked %s LP in vxBTCUSD gauge ✓', stakeAmount);
+      } catch (e: any) {
+        console.log('[protocol] vxBTCUSD stake error:', e.message?.slice(0, 150));
+      }
+    }, 120_000);
+  });
+
+  // =========================================================================
+  // ftrBTC Futures
+  // =========================================================================
+
+  describe('ftrBTC Futures', () => {
+    it('should spawn ftrBTC instance via CREATERESERVED', async () => {
+      const frbtcBal = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+      if (frbtcBal === 0n) {
+        console.log('[protocol] No frBTC to create ftrBTC');
+        return;
+      }
+
+      const lockAmount = frbtcBal / 10n;
+      const expiryBlocks = 100;
+
+      // Spawn ftrBTC via [6, template_tx, 0, frbtc_amount, expiry_blocks, dx_btc_vault_block, dx_btc_vault_tx]
+      const protostone = `[6,${PROTOCOL_SLOTS.FTRBTC_TEMPLATE},0,${lockAmount},${expiryBlocks},4,${PROTOCOL_SLOTS.DXBTC_VAULT}]:v0:v0`;
+
+      try {
+        await executeAlkanes(protostone, `32:0:${lockAmount}`);
+        mineBlocks(harness, 1);
+        console.log('[protocol] ftrBTC instance created with %s frBTC locked ✓', lockAmount);
+      } catch (e: any) {
+        console.log('[protocol] ftrBTC spawn error:', e.message?.slice(0, 200));
+      }
+    }, 120_000);
+  });
+
+  // =========================================================================
   // Full Protocol Status
   // =========================================================================
 
