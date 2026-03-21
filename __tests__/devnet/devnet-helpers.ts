@@ -9,6 +9,7 @@ import * as bip39 from 'bip39';
 import BIP32Factory from 'bip32';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
+import { resolve } from 'path';
 import { DEVNET, loadIndexerWasm } from './devnet-constants';
 import {
   createTestSigner,
@@ -60,12 +61,17 @@ export async function getOrCreateHarness(): Promise<any> {
   // to the same address the SDK wallet controls.
   const secretKey = deriveSecretKeyFromMnemonic(DEVNET.TEST_MNEMONIC);
 
+  // Resolve path to Lua scripts for the devnet Lua runtime
+  const home = process.env.HOME || '/home/ubuntu';
+  const luaScriptsDir = resolve(home, 'alkanes-rs/lua');
+
   // Dynamic import of the qubitcoin SDK
   const sdk = await import('@qubitcoin/sdk');
   _harness = await sdk.DevnetTestHarness.create({
     alkanesWasm,
     esploraWasm: esploraWasm ?? undefined,
     secretKey,
+    luaScriptsDir,
   });
 
   return _harness;

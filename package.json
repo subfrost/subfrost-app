@@ -51,12 +51,12 @@
   },
   "dependencies": {
     "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-14a5493",
-    "@qubitcoin/sdk": "file:../qubitcoin/ts-sdk",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@bprogress/next": "^3.2.12",
     "@jest/globals": "^30.2.0",
     "@noble/hashes": "^2.0.1",
     "@prisma/client": "^6.19.2",
+    "@qubitcoin/sdk": "file:../qubitcoin/ts-sdk",
     "@tanstack/react-query": "^5.90.21",
     "bcryptjs": "^3.0.3",
     "bignumber.js": "^9.3.1",
@@ -74,7 +74,8 @@
     "react-dom": "^19.2.4",
     "tiny-secp256k1": "^2.2.4",
     "use-debounce": "^10.1.0",
-    "varuint-bitcoin": "^2.0.0"
+    "varuint-bitcoin": "^2.0.0",
+    "wasmoon": "^1.16.0"
   },
   "devDependencies": {
     "@noble/curves": "^2.0.1",

@@ -21,10 +21,11 @@ import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
-// Use test/std WASMs for standard contracts (compiled from same source as indexer)
-// and prod_wasms for factory/pool (oyl-amm binaries)
+// Use prod_wasms for ALL contracts — std WASMs must match the alkanes indexer build.
+// Source-built std WASMs can have ABI mismatches that cause "failed to fill whole buffer"
+// during extcall (beacon proxy clone). The prod_wasms are the exact binaries used in production.
 const PROD_WASMS = resolve(process.env.HOME || '~', 'alkanes-rs/prod_wasms');
-const STD_WASMS = resolve(process.env.HOME || '~', 'alkanes-rs/crates/alkanes/src/tests/std/wasm');
+const STD_WASMS = PROD_WASMS;
 
 // Slot assignments (matching subfrost-alkanes test harness)
 const SLOTS = {
