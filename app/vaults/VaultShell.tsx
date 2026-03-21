@@ -55,7 +55,7 @@ export default function VaultShell() {
   };
 
   // Show yv-frbtc on regtest/oylnet for testing, hide on mainnet
-  const isTestNetwork = network === 'regtest' || network === 'oylnet';
+  const isTestNetwork = network === 'regtest' || network === 'oylnet' || network === 'devnet' || network === 'subfrost-regtest';
 
   const filteredVaults = useMemo(() => {
     let vaults = isTestNetwork
