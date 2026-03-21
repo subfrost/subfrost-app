@@ -144,6 +144,16 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     });
   }, []);
 
+  // Auto-boot when devnet network is selected
+  const bootedRef = useRef(false);
+  useEffect(() => {
+    if (isDevnet && state.status === 'idle' && !bootedRef.current) {
+      bootedRef.current = true;
+      const DEFAULT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+      boot(DEFAULT_MNEMONIC);
+    }
+  }, [isDevnet, state.status, boot]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {

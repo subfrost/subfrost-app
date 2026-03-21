@@ -19,10 +19,10 @@ vi.mock('@/hooks/useTranslation', () => ({
 }));
 
 describe('SwapHeaderTabs', () => {
-  let onTabChange: ReturnType<typeof vi.fn>;
+  let onTabChange: ReturnType<typeof vi.fn<(tab: any) => void>>;
 
   beforeEach(() => {
-    onTabChange = vi.fn();
+    onTabChange = vi.fn<(tab: any) => void>();
   });
 
   it('renders three tab buttons', () => {

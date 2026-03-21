@@ -25,25 +25,37 @@ import type { Network } from '@/utils/constants';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
+// Auto-start devnet on staging (set via deploy-staging.yml)
+const DEVNET_AUTOSTART = process.env.NEXT_PUBLIC_DEVNET_AUTOSTART === '1';
+
 // Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'subfrost-regtest';
 
+  // Auto-devnet on staging
+  if (DEVNET_AUTOSTART) {
+    return 'devnet';
+  }
+
+  // Hostname-based devnet detection
+  const host = window.location.host;
+  if (host.includes('staging-app.subfrost.io')) {
+    return 'devnet';
+  }
+
   // First check localStorage for user selection
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
     return stored as Network;
   }
 
   // Then check hostname
-  const host = window.location.host;
   if (!process.env.NEXT_PUBLIC_NETWORK) {
     if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
       return 'signet';
     } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
       return 'subfrost-regtest';
     } else if (host.includes('localhost') || host.includes('127.0.0.1')) {
-      // Default to subfrost-regtest for local development
       return 'subfrost-regtest';
     }
     return 'mainnet';

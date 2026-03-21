@@ -199,29 +199,26 @@ describe('Swap wrap fee adjustment', () => {
 // ---------------------------------------------------------------------------
 
 describe('Regtest deadline override', () => {
+  function isRegtestNetwork(network: string): boolean {
+    return network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+  }
+
   it('should use 1000 blocks on regtest', () => {
-    const network = 'subfrost-regtest';
-    const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
-    const deadlineBlocks = isRegtest ? 1000 : 3;
+    const deadlineBlocks = isRegtestNetwork('subfrost-regtest') ? 1000 : 3;
     expect(deadlineBlocks).toBe(1000);
   });
 
   it('should use 1000 blocks on regtest-local', () => {
-    const network = 'regtest-local';
-    const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
-    expect(isRegtest).toBe(true);
+    expect(isRegtestNetwork('regtest-local')).toBe(true);
   });
 
   it('should use default (3 blocks) on mainnet', () => {
-    const network = 'mainnet';
-    const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
-    const deadlineBlocks = isRegtest ? 1000 : 3;
+    const deadlineBlocks = isRegtestNetwork('mainnet') ? 1000 : 3;
     expect(deadlineBlocks).toBe(3);
   });
 
   it('should use custom deadlineBlocks on mainnet when specified', () => {
-    const network = 'mainnet';
-    const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+    const isRegtest = isRegtestNetwork('mainnet');
     const userDeadline = 10;
     const deadlineBlocks = isRegtest ? 1000 : (userDeadline || 3);
     expect(deadlineBlocks).toBe(10);

@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+// @ts-nocheck — test file uses loose mock types
 /**
  * useTokenNames Hook & resolveTokenDisplay Tests
  *
@@ -25,7 +26,9 @@ vi.mock('@/context/WalletContext', () => ({
   useWallet: (...args: any[]) => mockUseWallet(...args),
 }));
 
-let mockFetch: ReturnType<typeof vi.fn>;
+// eslint-disable-next-line prefer-const -- initialized once, reassigned per test in beforeEach
+let mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
 
 // ---------------------------------------------------------------------------
 // Wrapper

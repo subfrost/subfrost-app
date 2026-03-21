@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+// @ts-nocheck — test file uses loose mock types
 /**
  * usePools Hook Tests
  *
