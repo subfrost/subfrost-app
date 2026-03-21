@@ -21,28 +21,30 @@ import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
-// Use prod_wasms for ALL contracts — std WASMs must match the alkanes indexer build.
-// Source-built std WASMs can have ABI mismatches that cause "failed to fill whole buffer"
-// during extcall (beacon proxy clone). The prod_wasms are the exact binaries used in production.
+// All WASMs from ~/alkanes-rs (develop branch) prod_wasms/.
+// The indexer is prod_indexer/alkanes_v2.1.6_regtest.wasm and these WASMs match it.
+// Deployment pattern must exactly match scripts/deploy-subfrost-regtest.sh.
 const PROD_WASMS = resolve(process.env.HOME || '~', 'alkanes-rs/prod_wasms');
 const STD_WASMS = PROD_WASMS;
 
-// Slot assignments (matching subfrost-alkanes test harness)
+// Slot assignments — match scripts/deploy-subfrost-regtest.sh exactly
 const SLOTS = {
-  POOL_LOGIC:      0xffef,  // 65519
-  FACTORY_LOGIC:   2,
-  BEACON_PROXY:    0xbeac1, // 781505 — but subfrost-alkanes uses 48833
-  BEACON:          0xbeac0, // 781504 — but subfrost-alkanes uses 48832
-  FACTORY_PROXY:   1,
+  AUTH_TOKEN_FACTORY: 0xffed,  // 65517
+  POOL_BEACON_PROXY: 780993,   // beacon proxy template
+  FACTORY_LOGIC:     0xfff4,   // 65524
+  POOL_LOGIC:        0xfff0,   // 65520
+  FACTORY_PROXY:     0xfff2,   // 65522 (upgradeable proxy)
+  BEACON:            0xfff3,   // 65523 (upgradeable beacon)
 };
 
 // After indexing, block 3 becomes block 4
 const INDEXED = {
-  POOL_LOGIC:      `4:${SLOTS.POOL_LOGIC}`,
-  FACTORY_LOGIC:   `4:${SLOTS.FACTORY_LOGIC}`,
-  BEACON_PROXY:    `4:${SLOTS.BEACON_PROXY}`,
-  BEACON:          `4:${SLOTS.BEACON}`,
-  FACTORY_PROXY:   `4:${SLOTS.FACTORY_PROXY}`,
+  AUTH_TOKEN_FACTORY: `4:${SLOTS.AUTH_TOKEN_FACTORY}`,
+  POOL_BEACON_PROXY: `4:${SLOTS.POOL_BEACON_PROXY}`,
+  FACTORY_LOGIC:     `4:${SLOTS.FACTORY_LOGIC}`,
+  POOL_LOGIC:        `4:${SLOTS.POOL_LOGIC}`,
+  FACTORY_PROXY:     `4:${SLOTS.FACTORY_PROXY}`,
+  BEACON:            `4:${SLOTS.BEACON}`,
 };
 
 function loadWasm(name: string, useStd = false): string {
@@ -195,8 +197,8 @@ async function discoverAuthTokens(address: string): Promise<string[]> {
         const block = parseInt(entry.block ?? '0', 10);
         const tx = parseInt(entry.tx ?? '0', 10);
         const amount = parseInt(entry.amount ?? '0', 10);
-        // Auth tokens are at block=2 with amount=1
-        if (block === 2 && amount === 1) {
+        // Auth tokens are at block=2 (amount varies by auth_units param)
+        if (block === 2 && amount > 0) {
           const id = `${block}:${tx}`;
           if (!tokens.includes(id)) {
             tokens.push(id);
@@ -230,47 +232,48 @@ export async function deployAmmContracts(
 
   const authTokenWasm = loadWasm('alkanes_std_auth_token.wasm', true);
 
-  console.log('[amm-deploy] Deploying 6 contracts...');
+  // Deploy order matches scripts/deploy-subfrost-regtest.sh EXACTLY
+  console.log('[amm-deploy] Deploying 6 contracts (matching deploy-subfrost-regtest.sh)...');
 
-  // 0. Auth Token Factory (required for proxy deployments to create auth tokens)
+  // Step 1: Auth Token Factory
   await deployContract(
     provider, signer, segwitAddress, taprootAddress,
-    authTokenWasm, 0xffed, [100], // Deploy marker 100 (from subfrost-alkanes)
+    authTokenWasm, SLOTS.AUTH_TOKEN_FACTORY, [100],
     harness,
   );
 
-  // 1. Pool Logic
+  // Step 2: Beacon Proxy Template
   await deployContract(
     provider, signer, segwitAddress, taprootAddress,
-    poolWasm, SLOTS.POOL_LOGIC, [50],
+    beaconProxyWasm, SLOTS.POOL_BEACON_PROXY, [36863], // 0x8fff
     harness,
   );
 
-  // 2. Factory Logic
+  // Step 3: Factory Logic Implementation
   await deployContract(
     provider, signer, segwitAddress, taprootAddress,
     factoryWasm, SLOTS.FACTORY_LOGIC, [50],
     harness,
   );
 
-  // 3. Beacon Proxy Template
+  // Step 4: Pool Logic Implementation
   await deployContract(
     provider, signer, segwitAddress, taprootAddress,
-    beaconProxyWasm, SLOTS.BEACON_PROXY, [0x8fff],
+    poolWasm, SLOTS.POOL_LOGIC, [50],
     harness,
   );
 
-  // 4. Upgradeable Beacon → points to Pool Logic
+  // Step 5: Factory Proxy (Upgradeable) → points to Factory Logic, auth_units=5
   await deployContract(
     provider, signer, segwitAddress, taprootAddress,
-    upgradeableBeaconWasm, SLOTS.BEACON, [0x7fff, 4, SLOTS.POOL_LOGIC, 1],
+    upgradeableWasm, SLOTS.FACTORY_PROXY, [0x7fff, 4, SLOTS.FACTORY_LOGIC, 5],
     harness,
   );
 
-  // 5. Factory Proxy → points to Factory Logic
+  // Step 6: Upgradeable Beacon → points to Pool Logic, auth_units=5
   await deployContract(
     provider, signer, segwitAddress, taprootAddress,
-    upgradeableWasm, SLOTS.FACTORY_PROXY, [0x7fff, 4, SLOTS.FACTORY_LOGIC, 1],
+    upgradeableBeaconWasm, SLOTS.BEACON, [0x7fff, 4, SLOTS.POOL_LOGIC, 5],
     harness,
   );
 
@@ -279,7 +282,7 @@ export async function deployAmmContracts(
   for (const [name, id] of Object.entries(INDEXED)) {
     const [b, t] = id.split(':');
     // Use opcode 0x8fff for beacon proxy (it only supports 0x7fff and 0x8fff)
-    const testOpcode = name === 'BEACON_PROXY' ? '36863' : '99';
+    const testOpcode = name === 'POOL_BEACON_PROXY' ? '36863' : '99';
     const check = await rpcCall('alkanes_simulate', [{
       target: { block: b, tx: t },
       inputs: [testOpcode],
@@ -296,7 +299,7 @@ export async function deployAmmContracts(
   }
 
   // Test beacon proxy with its actual opcodes
-  const beaconProxyId = INDEXED.BEACON_PROXY;
+  const beaconProxyId = INDEXED.POOL_BEACON_PROXY;
   const [bpB, bpT] = beaconProxyId.split(':');
   for (const opcode of [0x8fff]) {
     const check = await rpcCall('alkanes_simulate', [{
@@ -344,7 +347,7 @@ export async function deployAmmContracts(
   if (authTokens.length === 0) {
     // Try querying the factory proxy for its auth token
     const authCheck = await rpcCall('alkanes_simulate', [{
-      target: { block: '4', tx: '1' },
+      target: { block: '4', tx: SLOTS.FACTORY_PROXY.toString() },
       inputs: ['32765'],  // 0x7ffd = get implementation (upgradeable query)
       alkanes: [],
       transaction: '0x',
@@ -370,7 +373,8 @@ export async function deployAmmContracts(
   //    Send the auth token as incomingAlkanes via inputRequirements.
   console.log('[amm-deploy] Initializing factory...');
   const [fpBlock, fpTx] = INDEXED.FACTORY_PROXY.split(':');
-  const initProtostone = `[${fpBlock},${fpTx},0,${SLOTS.BEACON_PROXY},4,${SLOTS.BEACON}]:v0:v0`;
+  // Matches: [4,$AMM_FACTORY_PROXY_TX,0,$POOL_BEACON_PROXY_TX,4,$POOL_UPGRADEABLE_BEACON_TX]:v0:v0
+  const initProtostone = `[${fpBlock},${fpTx},0,${SLOTS.POOL_BEACON_PROXY},4,${SLOTS.BEACON}]:v0:v0`;
 
   const initResult = await provider.alkanesExecuteWithStrings(
     JSON.stringify([taprootAddress]),
