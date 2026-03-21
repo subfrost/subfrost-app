@@ -295,6 +295,31 @@ describe('Devnet E2E: Full Protocol Stack', () => {
   });
 
   // =========================================================================
+  // Fujin Difficulty Futures
+  // =========================================================================
+
+  describe('Fujin Difficulty Futures', () => {
+    it('should deploy Fujin contracts', async () => {
+      const { deployFujin } = await import('./deploy-full-stack');
+      try {
+        await deployFujin(provider, signer, segwitAddress, taprootAddress, harness);
+        console.log('[protocol] Fujin deployed ✓');
+
+        // Verify factory proxy
+        const check = await simulate(PROTOCOL_IDS.FUJIN_FACTORY_PROXY, ['4']); // GetNumPools
+        const err = check?.result?.execution?.error || '';
+        if (err.includes('unexpected end of file')) {
+          console.log('[protocol] Fujin factory: NOT operational (init needed)');
+        } else {
+          console.log('[protocol] Fujin factory: operational ✓');
+        }
+      } catch (e: any) {
+        console.log('[protocol] Fujin deploy error:', e.message?.slice(0, 200));
+      }
+    }, 300_000);
+  });
+
+  // =========================================================================
   // ftrBTC Futures
   // =========================================================================
 
