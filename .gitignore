@@ -53,3 +53,4 @@ yarn.lock
 
 # CLI data files (may contain addresses/secrets)
 bin/*.json
+vendor/@qubitcoin/sdk/dist/wasm/qubitcoin_web_sys_bg.wasm
