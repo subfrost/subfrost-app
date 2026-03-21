@@ -31,20 +31,23 @@ import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
 
+// New unified layout components
+import PairSelectorBar from "./components/PairSelectorBar";
+import TradeForm from "./components/TradeForm";
+import BottomPanels from "./components/BottomPanels";
+import LiquidityModal from "./components/LiquidityModal";
+import MarketsSidepanel from "./components/MarketsSidepanel";
+import MobileDataPanels from "./components/MobileDataPanels";
+
 // Lazy loaded components - split into separate chunks
-const SwapInputs = lazy(() => import("./components/SwapInputs"));
 const LiquidityInputs = lazy(() => import("./components/LiquidityInputs"));
-const MarketsGrid = lazy(() => import("./components/MarketsGrid"));
 const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
 const SwapSummary = lazy(() => import("./components/SwapSummary"));
 const TransactionSettingsModal = lazy(() => import("@/app/components/TransactionSettingsModal"));
 const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModal"));
 const LPPositionSelectorModal = lazy(() => import("./components/LPPositionSelectorModal"));
-const MyWalletSwaps = lazy(() => import("./components/MyWalletSwaps"));
 const TransactionStepper = lazy(() => import("./components/TransactionStepper"));
 const OrderbookPanel = lazy(() => import("./components/OrderbookPanel"));
-const LimitOrderPanel = lazy(() => import("./components/LimitOrderPanel"));
-const RecentTradesPanel = lazy(() => import("./components/RecentTradesPanel"));
 
 // Types for multi-step swap flow state machine
 // JOURNAL (2026-03-15): Added to provide clear UX feedback during BTC→Token and Token→BTC swaps.
@@ -135,13 +138,16 @@ export default function SwapShell() {
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
 
-  // Mobile chart visibility state
-  const [showMobileChart, setShowMobileChart] = useState(false);
+  // Market type (spot vs futures)
+  const [marketType, setMarketType] = useState<'spot' | 'futures'>('spot');
 
-  // Tab state
-  const [selectedTab, setSelectedTab] = useState<'swap' | 'limit' | 'lp'>('swap');
+  // Limit order price from orderbook click
   const [limitSelectedPrice, setLimitSelectedPrice] = useState<string | undefined>();
-  
+
+  // Modal states
+  const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
+  const [isMarketsPanelOpen, setIsMarketsPanelOpen] = useState(false);
+
   // Liquidity mode state
   const [liquidityMode, setLiquidityMode] = useState<'provide' | 'remove'>('provide');
 
@@ -364,20 +370,18 @@ export default function SwapShell() {
   }, [fromToken, toToken]);
 
   // Default LP tokens: frBTC / DIESEL (or bUSD on mainnet)
-  // Initialize both poolToken0 and poolToken1 with default values when entering LP tab
+  // Initialize when liquidity modal opens
   useEffect(() => {
-    if (selectedTab === 'lp') {
-      // Set default token0 to frBTC if not already set
+    if (isLiquidityModalOpen) {
       if (!poolToken0 && FRBTC_ALKANE_ID) {
         setPoolToken0({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
       }
-      // Set default token1 to DIESEL/bUSD if not already set
       if (!poolToken1 && BUSD_ALKANE_ID) {
         const symbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
         setPoolToken1({ id: BUSD_ALKANE_ID, symbol, name: symbol });
       }
     }
-  }, [selectedTab, poolToken0, poolToken1, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
+  }, [isLiquidityModalOpen, poolToken0, poolToken1, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
 
   // Allow all tokens - no filtering
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
@@ -1287,10 +1291,10 @@ export default function SwapShell() {
 
   const handleSelectPool = (pool: PoolSummary) => {
     setSelectedPool(pool);
-    if (selectedTab === 'swap') {
-      setFromToken(pool.token0);
-      setToToken(pool.token1);
-    } else {
+    setFromToken(pool.token0);
+    setToToken(pool.token1);
+    // Also update LP tokens if liquidity modal is open
+    if (isLiquidityModalOpen) {
       setPoolToken0(pool.token0);
       setPoolToken1(pool.token1);
     }
@@ -1845,15 +1849,7 @@ export default function SwapShell() {
   // For bUSD pairs → chart shows the non-bUSD token with quote=usd
   // For TOKEN/TOKEN pairs → chart shows the "to" token with quote=usd
   const chartPool = useMemo(() => {
-    if (selectedTab === 'lp' && poolToken0 && poolToken1) {
-      const token0Id = poolToken0.id === 'btc' ? FRBTC_ALKANE_ID : poolToken0.id;
-      const token1Id = poolToken1.id === 'btc' ? FRBTC_ALKANE_ID : poolToken1.id;
-      return markets.find(p =>
-        (p.token0.id === token0Id && p.token1.id === token1Id) ||
-        (p.token0.id === token1Id && p.token1.id === token0Id)
-      );
-    }
-    if (selectedTab === 'swap' && fromToken && toToken) {
+    if (fromToken && toToken) {
       const fromId = fromToken.id === 'btc' ? FRBTC_ALKANE_ID : fromToken.id;
       const toId = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
       return markets.find(p =>
@@ -1862,237 +1858,211 @@ export default function SwapShell() {
       );
     }
     return selectedPool;
-  }, [selectedTab, poolToken0, poolToken1, fromToken, toToken, markets, selectedPool, FRBTC_ALKANE_ID]);
+  }, [fromToken, toToken, markets, selectedPool, FRBTC_ALKANE_ID]);
 
   const chartTokenId = useMemo(() => {
     if (!chartPool) return undefined;
     const t0 = chartPool.token0?.id;
     const t1 = chartPool.token1?.id;
-    // frBTC pairs: show the non-frBTC token
     if (t0 === FRBTC_ALKANE_ID) return t1;
     if (t1 === FRBTC_ALKANE_ID) return t0;
-    // bUSD pairs: show the non-bUSD token
     if (t0 === BUSD_ALKANE_ID) return t1;
     if (t1 === BUSD_ALKANE_ID) return t0;
-    // TOKEN/TOKEN: show the "to" token (the token user is swapping into)
-    if (selectedTab === 'swap' && toToken) {
+    if (toToken) {
       const toId = toToken.id === 'btc' ? FRBTC_ALKANE_ID : toToken.id;
       if (toId === t0 || toId === t1) return toId;
     }
     return t0;
-  }, [chartPool, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, selectedTab, toToken]);
+  }, [chartPool, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, toToken]);
 
   return (
-    <div className="flex w-full flex-col gap-8 h-full">
-      <div className={`flex flex-col lg:grid gap-6 ${selectedTab === 'limit' ? 'lg:grid-cols-1' : selectedTab === 'lp' ? 'lg:grid-cols-2' : 'lg:grid-cols-5 xl:grid-cols-3'}`}>
-        {/* Left Column: Swap/LP/Limit Module */}
-        <div className={`flex flex-col min-h-0 ${selectedTab === 'limit' ? 'lg:col-span-1' : selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-2 xl:col-span-1'}`}>
-          {/* Swap/Liquidity Tabs */}
-          <div className="flex w-full items-center justify-center mb-4">
-            <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
-          </div>
+    <div className="flex w-full flex-col gap-4 h-full">
+      {/* Pair Selector Bar */}
+      <PairSelectorBar
+        fromToken={fromToken}
+        toToken={toToken}
+        selectedPool={selectedPool}
+        marketType={marketType}
+        onMarketTypeChange={setMarketType}
+        onOpenMarkets={() => setIsMarketsPanelOpen(true)}
+        btcPrice={btcPrice}
+      />
 
-          <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
-          <Suspense fallback={<SwapFormSkeleton />}>
-          {selectedTab === 'limit' ? (
-            <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ minHeight: '480px' }}>
-                <OrderbookPanel
-                  baseToken={fromToken?.symbol || 'DIESEL'}
-                  quoteToken={toToken?.symbol || 'frBTC'}
-                  onPriceSelect={setLimitSelectedPrice}
-                />
-                <LimitOrderPanel
-                  baseToken={fromToken?.symbol || 'DIESEL'}
-                  quoteToken={toToken?.symbol || 'frBTC'}
-                  selectedPrice={limitSelectedPrice}
-                />
-              </div>
-              <RecentTradesPanel
-                baseToken={fromToken?.symbol || 'DIESEL'}
-                quoteToken={toToken?.symbol || 'frBTC'}
-              />
-            </div>
-          ) : selectedTab === 'swap' ? (
-            <SwapInputs
-              from={fromToken}
-              to={toToken}
-              fromOptions={fromOptions}
-              toOptions={toOptions}
-              fromAmount={fromAmount}
-              toAmount={toAmount}
-              onChangeFromAmount={(v) => { setDirection('sell'); setFromAmount(v); }}
-              onChangeToAmount={(v) => { setDirection('buy'); setToAmount(v); }}
-              onSelectFromToken={(id) => {
-                const t = fromOptions.find((x) => x.id === id);
-                if (t) {
-                  setFromToken(t);
-                  // Reset TO selection when FROM changes
-                  setToToken(undefined);
-                  setToAmount("");
-                }
-              }}
-              onSelectToToken={(symbol) => {
-                if (!symbol) {
-                  setToToken(undefined);
-                  setToAmount("");
-                  return;
-                }
-                const t = toOptions.find((x) => x.id === symbol);
-                if (t) setToToken(t);
-              }}
-              onInvert={handleInvert}
-              onSwapClick={handleSwap}
-              fromBalanceText={formatBalance(fromToken?.id)}
-              toBalanceText={formatBalance(toToken?.id)}
-              fromFiatText={calculateUsdValue(fromToken?.id, fromAmount)}
-              toFiatText={calculateUsdValue(toToken?.id, toAmount)}
-              onMaxFrom={fromToken ? handleMaxFrom : undefined}
-              onPercentFrom={fromToken ? handlePercentFrom : undefined}
-              ethereumAddress={ethereumAddress}
-              onChangeEthereumAddress={setEthereumAddress}
-              summary={
-                <SwapSummary
-                  sellId={fromToken?.id ?? ''}
-                  buyId={toToken?.id ?? ''}
-                  sellName={fromToken?.name ?? fromToken?.symbol}
-                  buyName={toToken?.name ?? toToken?.symbol}
-                  direction={direction}
-                  quote={quote}
-                  isCalculating={!!isCalculating}
-                  feeRate={fee.feeRate}
-                  isCrossChainFrom={['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '')}
-                  feeSelection={fee.selection}
-                  setFeeSelection={fee.setSelection}
-                  customFee={fee.custom}
-                  setCustomFee={fee.setCustom}
-                  feePresets={fee.presets}
-                />
-              }
-            />
-          ) : (
-            <LiquidityInputs
-              token0={poolToken0}
-              token1={poolToken1}
-              token0Options={poolTokenOptions}
-              token1Options={poolTokenOptions}
-              token0Amount={poolToken0Amount}
-              token1Amount={poolToken1Amount}
-              onChangeToken0Amount={setPoolToken0Amount}
-              onChangeToken1Amount={setPoolToken1Amount}
-              onSelectToken0={(id) => {
-                const t = poolTokenOptions.find((x) => x.id === id);
-                if (t) setPoolToken0(t);
-              }}
-              onSelectToken1={(id) => {
-                const t = poolTokenOptions.find((x) => x.id === id);
-                if (t) setPoolToken1(t);
-              }}
-              onAddLiquidity={handleAddLiquidity}
-              onRemoveLiquidity={handleRemoveLiquidity}
-              isLoading={addLiquidityMutation.isPending}
-              isRemoveLoading={removeLiquidityMutation.isPending}
-              token0BalanceText={formatBalance(poolToken0?.id)}
-              token1BalanceText={formatBalance(poolToken1?.id)}
-              token0FiatText="$0.00"
-              token1FiatText="$0.00"
-              onPercentToken0={poolToken0 ? handlePercentToken0 : undefined}
-              onPercentToken1={poolToken1 ? handlePercentToken1 : undefined}
-              minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(
-                poolToken0?.id === 'btc' || poolToken0?.id === FRBTC_ALKANE_ID ? 8 : 2
-              ) : undefined}
-              minimumToken1={poolToken1Amount ? (parseFloat(poolToken1Amount) * 0.995).toFixed(
-                poolToken1?.id === 'btc' || poolToken1?.id === FRBTC_ALKANE_ID ? 8 : 2
-              ) : undefined}
-              feeRate={fee.feeRate}
-              feeSelection={fee.selection}
-              setFeeSelection={fee.setSelection}
-              customFee={fee.custom}
-              setCustomFee={fee.setCustom}
-              feePresets={fee.presets}
-              liquidityMode={liquidityMode}
-              onModeChange={setLiquidityMode}
-              selectedLPPosition={selectedLPPosition}
-              onSelectLPPosition={setSelectedLPPosition}
-              onOpenLPSelector={() => setIsLPSelectorOpen(true)}
-              removeAmount={removeAmount}
-              onChangeRemoveAmount={setRemoveAmount}
-            />
-          )}
-          </Suspense>
-          </section>
+      {/* Desktop: 12-column grid — Chart (7) + Orderbook (2) + TradeForm (3) */}
+      {/* Mobile: stacked — TradeForm first, then data panels */}
+      <div className="flex flex-col lg:grid lg:grid-cols-12 gap-3">
 
-          {/* Transaction Stepper - shows during multi-step swaps (BTC→Token, Token→BTC) */}
-          {showStepper && stepperSteps.length > 0 && (
-            <div className="mt-4">
+        {/* Trade Form — FIRST on mobile (order matters), RIGHT on desktop */}
+        <div className="lg:col-span-3 lg:order-3 order-1 min-h-0">
+          <div className="flex flex-col gap-3">
+            <TradeForm
+              swapInputsProps={{
+                from: fromToken,
+                to: toToken,
+                fromOptions,
+                toOptions,
+                fromAmount,
+                toAmount,
+                onChangeFromAmount: (v: string) => { setDirection('sell'); setFromAmount(v); },
+                onChangeToAmount: (v: string) => { setDirection('buy'); setToAmount(v); },
+                onSelectFromToken: (id: string) => {
+                  const t = fromOptions.find((x: any) => x.id === id);
+                  if (t) { setFromToken(t); setToToken(undefined); setToAmount(""); }
+                },
+                onSelectToToken: (symbol: string) => {
+                  if (!symbol) { setToToken(undefined); setToAmount(""); return; }
+                  const t = toOptions.find((x: any) => x.id === symbol);
+                  if (t) setToToken(t);
+                },
+                onInvert: handleInvert,
+                onSwapClick: handleSwap,
+                fromBalanceText: formatBalance(fromToken?.id),
+                toBalanceText: formatBalance(toToken?.id),
+                fromFiatText: calculateUsdValue(fromToken?.id, fromAmount),
+                toFiatText: calculateUsdValue(toToken?.id, toAmount),
+                onMaxFrom: fromToken ? handleMaxFrom : undefined,
+                onPercentFrom: fromToken ? handlePercentFrom : undefined,
+                ethereumAddress,
+                onChangeEthereumAddress: setEthereumAddress,
+                summary: (
+                  <SwapSummary
+                    sellId={fromToken?.id ?? ''}
+                    buyId={toToken?.id ?? ''}
+                    sellName={fromToken?.name ?? fromToken?.symbol}
+                    buyName={toToken?.name ?? toToken?.symbol}
+                    direction={direction}
+                    quote={quote}
+                    isCalculating={!!isCalculating}
+                    feeRate={fee.feeRate}
+                    isCrossChainFrom={['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '')}
+                    feeSelection={fee.selection}
+                    setFeeSelection={fee.setSelection}
+                    customFee={fee.custom}
+                    setCustomFee={fee.setCustom}
+                    feePresets={fee.presets}
+                  />
+                ),
+              }}
+              baseToken={fromToken?.symbol || 'DIESEL'}
+              quoteToken={toToken?.symbol || 'frBTC'}
+              limitSelectedPrice={limitSelectedPrice}
+              onLimitPriceSelect={setLimitSelectedPrice}
+              onOpenLiquidity={() => setIsLiquidityModalOpen(true)}
+            />
+
+            {/* Transaction Stepper - shows during multi-step swaps */}
+            {showStepper && stepperSteps.length > 0 && (
               <Suspense fallback={null}>
                 <TransactionStepper
                   steps={stepperSteps}
                   currentStepIndex={currentStepIndex}
                   network={network}
-                  onRetry={() => {
-                    // Reset to idle and let user retry the swap
-                    setSwapFlowStep({ type: 'idle' });
-                  }}
+                  onRetry={() => setSwapFlowStep({ type: 'idle' })}
                 />
               </Suspense>
-            </div>
-          )}
-
-          {/* Mobile Chart Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setShowMobileChart(!showMobileChart)}
-            className="lg:hidden mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 text-sm font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/80 hover:text-[color:var(--sf-text)]"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3v18h18" />
-              <path d="m19 9-5 5-4-4-3 3" />
-            </svg>
-            {showMobileChart ? t('swap.hideChart') : t('swap.showChart')}
-          </button>
-
-          {/* Mobile-only Chart - below swap form */}
-          {showMobileChart && (
-            <div className="lg:hidden mt-4">
-              <Suspense fallback={<div className="animate-pulse h-48 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-                <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
-              </Suspense>
-            </div>
-          )}
-
+            )}
+          </div>
         </div>
 
-        {/* Right Column: Chart (hidden on limit tab - orderbook replaces it) */}
-        <div className={`${selectedTab === 'limit' ? 'hidden' : 'hidden lg:flex'} flex-col gap-4 ${selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-3 xl:col-span-2'}`}>
+        {/* Chart — desktop only (7 cols) */}
+        <div className="hidden lg:flex lg:col-span-7 lg:order-1 flex-col min-h-0" style={{ minHeight: '450px' }}>
           <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
         </div>
+
+        {/* Orderbook — desktop only (2 cols) */}
+        <div className="hidden lg:flex lg:col-span-2 lg:order-2 flex-col min-h-0" style={{ minHeight: '450px' }}>
+          <OrderbookPanel
+            baseToken={fromToken?.symbol || 'DIESEL'}
+            quoteToken={toToken?.symbol || 'frBTC'}
+            onPriceSelect={setLimitSelectedPrice}
+          />
+        </div>
+
+        {/* Mobile data panels — Chart/Book/Trades tabs (below trade form on mobile) */}
+        <div className="lg:hidden order-2">
+          <MobileDataPanels
+            chartPool={chartPool}
+            chartTokenId={chartTokenId}
+            isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)}
+            baseToken={fromToken?.symbol || 'DIESEL'}
+            quoteToken={toToken?.symbol || 'frBTC'}
+            onPriceSelect={setLimitSelectedPrice}
+          />
+        </div>
       </div>
 
-      {/* My Wallet Activity + Markets Grid - 50/50 on lg */}
-      <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6">
-        <div className="hidden lg:block">
-          <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-            <MyWalletSwaps />
-          </Suspense>
-        </div>
-        <Suspense fallback={<MarketsSkeleton />}>
-          <MarketsGrid
-            pools={markets}
-            onSelect={handleSelectPool}
-            volumePeriod={volumePeriod}
-            onVolumePeriodChange={setVolumePeriod}
-            selectedPoolId={selectedPool?.id}
+      {/* Bottom Panels: Open Orders, Positions, Trades, Activity */}
+      <BottomPanels
+        baseToken={fromToken?.symbol || 'DIESEL'}
+        quoteToken={toToken?.symbol || 'frBTC'}
+      />
+
+      {/* Liquidity Modal */}
+      <LiquidityModal
+        isOpen={isLiquidityModalOpen}
+        onClose={() => setIsLiquidityModalOpen(false)}
+      >
+        <Suspense fallback={<SwapFormSkeleton />}>
+          <LiquidityInputs
+            token0={poolToken0}
+            token1={poolToken1}
+            token0Options={poolTokenOptions}
+            token1Options={poolTokenOptions}
+            token0Amount={poolToken0Amount}
+            token1Amount={poolToken1Amount}
+            onChangeToken0Amount={setPoolToken0Amount}
+            onChangeToken1Amount={setPoolToken1Amount}
+            onSelectToken0={(id) => {
+              const t = poolTokenOptions.find((x) => x.id === id);
+              if (t) setPoolToken0(t);
+            }}
+            onSelectToken1={(id) => {
+              const t = poolTokenOptions.find((x) => x.id === id);
+              if (t) setPoolToken1(t);
+            }}
+            onAddLiquidity={handleAddLiquidity}
+            onRemoveLiquidity={handleRemoveLiquidity}
+            isLoading={addLiquidityMutation.isPending}
+            isRemoveLoading={removeLiquidityMutation.isPending}
+            token0BalanceText={formatBalance(poolToken0?.id)}
+            token1BalanceText={formatBalance(poolToken1?.id)}
+            token0FiatText="$0.00"
+            token1FiatText="$0.00"
+            onPercentToken0={poolToken0 ? handlePercentToken0 : undefined}
+            onPercentToken1={poolToken1 ? handlePercentToken1 : undefined}
+            minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(
+              poolToken0?.id === 'btc' || poolToken0?.id === FRBTC_ALKANE_ID ? 8 : 2
+            ) : undefined}
+            minimumToken1={poolToken1Amount ? (parseFloat(poolToken1Amount) * 0.995).toFixed(
+              poolToken1?.id === 'btc' || poolToken1?.id === FRBTC_ALKANE_ID ? 8 : 2
+            ) : undefined}
+            feeRate={fee.feeRate}
+            feeSelection={fee.selection}
+            setFeeSelection={fee.setSelection}
+            customFee={fee.custom}
+            setCustomFee={fee.setCustom}
+            feePresets={fee.presets}
+            liquidityMode={liquidityMode}
+            onModeChange={setLiquidityMode}
+            selectedLPPosition={selectedLPPosition}
+            onSelectLPPosition={setSelectedLPPosition}
+            onOpenLPSelector={() => setIsLPSelectorOpen(true)}
+            removeAmount={removeAmount}
+            onChangeRemoveAmount={setRemoveAmount}
           />
         </Suspense>
-      </div>
+      </LiquidityModal>
 
-      {/* My Wallet Swaps - mobile only, at the bottom under market cards */}
-      <div className="lg:hidden mt-6">
-        <Suspense fallback={<div className="animate-pulse h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-          <MyWalletSwaps />
-        </Suspense>
-      </div>
+      {/* Markets Sidepanel */}
+      <MarketsSidepanel
+        isOpen={isMarketsPanelOpen}
+        onClose={() => setIsMarketsPanelOpen(false)}
+        pools={markets}
+        onSelect={handleSelectPool}
+        selectedPoolId={selectedPool?.id}
+        volumePeriod={volumePeriod}
+        onVolumePeriodChange={setVolumePeriod}
+      />
 
       <Suspense fallback={null}>
       <TransactionSettingsModal
