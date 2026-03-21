@@ -106,7 +106,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           <div className="min-w-0 flex-1 text-left">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-sm font-bold text-[color:var(--sf-text)] truncate">{vaultName}</h3>
-              {vault.badge && (
+              {vault.badge && vault.badge !== 'Coming Soon' && (
                 <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
                   {badgeText}
                 </span>
