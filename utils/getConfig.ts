@@ -86,6 +86,30 @@ export function getConfig(network: string) {
         BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: '',
       } as const;
+    case 'devnet':
+      return {
+        ALKANE_FACTORY_ID: '4:65522',
+        BUSD_ALKANE_ID: '2:0',
+        DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
+        FRBTC_ALKANE_ID: '32:0',
+        FIRE_TOKEN_ID: '4:256',
+        FIRE_STAKING_ID: '4:257',
+        FIRE_TREASURY_ID: '4:258',
+        FIRE_BONDING_ID: '4:259',
+        FIRE_REDEMPTION_ID: '4:260',
+        FIRE_DISTRIBUTOR_ID: '4:261',
+        FUEL_TOKEN_ID: '4:7000',
+        FTRBTC_TEMPLATE_ID: '4:7010',
+        DXBTC_VAULT_ID: '4:7020',
+        VX_FUEL_GAUGE_ID: '4:7030',
+        VX_BTCUSD_GAUGE_ID: '4:7031',
+        SYNTH_POOL_ID: '4:8202',
+        FRUSD_TOKEN_ID: '4:8201',
+        FUJIN_FACTORY_ID: '4:7105',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: '',
+        BLOCK_EXPLORER_URL_ETH: '',
+      } as const;
     case 'regtest-local':
       return {
         ALKANE_FACTORY_ID: '4:65522',
