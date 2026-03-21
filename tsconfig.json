@@ -44,6 +44,8 @@
     "scripts",
     "e2e",
     "tools",
-    "e2e-tests"
+    "e2e-tests",
+    "__tests__/devnet",
+    "vendor"
   ]
 }
