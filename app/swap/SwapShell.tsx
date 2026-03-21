@@ -42,6 +42,9 @@ const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModa
 const LPPositionSelectorModal = lazy(() => import("./components/LPPositionSelectorModal"));
 const MyWalletSwaps = lazy(() => import("./components/MyWalletSwaps"));
 const TransactionStepper = lazy(() => import("./components/TransactionStepper"));
+const OrderbookPanel = lazy(() => import("./components/OrderbookPanel"));
+const LimitOrderPanel = lazy(() => import("./components/LimitOrderPanel"));
+const RecentTradesPanel = lazy(() => import("./components/RecentTradesPanel"));
 
 // Types for multi-step swap flow state machine
 // JOURNAL (2026-03-15): Added to provide clear UX feedback during BTC→Token and Token→BTC swaps.
@@ -136,7 +139,8 @@ export default function SwapShell() {
   const [showMobileChart, setShowMobileChart] = useState(false);
 
   // Tab state
-  const [selectedTab, setSelectedTab] = useState<'swap' | 'lp'>('swap');
+  const [selectedTab, setSelectedTab] = useState<'swap' | 'limit' | 'lp'>('swap');
+  const [limitSelectedPrice, setLimitSelectedPrice] = useState<string | undefined>();
   
   // Liquidity mode state
   const [liquidityMode, setLiquidityMode] = useState<'provide' | 'remove'>('provide');
@@ -1880,9 +1884,9 @@ export default function SwapShell() {
 
   return (
     <div className="flex w-full flex-col gap-8 h-full">
-      <div className={`flex flex-col lg:grid gap-6 ${selectedTab === 'lp' ? 'lg:grid-cols-2' : 'lg:grid-cols-5 xl:grid-cols-3'}`}>
-        {/* Left Column: Swap/LP Module */}
-        <div className={`flex flex-col min-h-0 ${selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-2 xl:col-span-1'}`}>
+      <div className={`flex flex-col lg:grid gap-6 ${selectedTab === 'limit' ? 'lg:grid-cols-1' : selectedTab === 'lp' ? 'lg:grid-cols-2' : 'lg:grid-cols-5 xl:grid-cols-3'}`}>
+        {/* Left Column: Swap/LP/Limit Module */}
+        <div className={`flex flex-col min-h-0 ${selectedTab === 'limit' ? 'lg:col-span-1' : selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-2 xl:col-span-1'}`}>
           {/* Swap/Liquidity Tabs */}
           <div className="flex w-full items-center justify-center mb-4">
             <SwapHeaderTabs selectedTab={selectedTab} onTabChange={setSelectedTab} />
@@ -1890,7 +1894,26 @@ export default function SwapShell() {
 
           <section className="relative w-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md flex-shrink-0 border-t border-[color:var(--sf-top-highlight)]">
           <Suspense fallback={<SwapFormSkeleton />}>
-          {selectedTab === 'swap' ? (
+          {selectedTab === 'limit' ? (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ minHeight: '480px' }}>
+                <OrderbookPanel
+                  baseToken={fromToken?.symbol || 'DIESEL'}
+                  quoteToken={toToken?.symbol || 'frBTC'}
+                  onPriceSelect={setLimitSelectedPrice}
+                />
+                <LimitOrderPanel
+                  baseToken={fromToken?.symbol || 'DIESEL'}
+                  quoteToken={toToken?.symbol || 'frBTC'}
+                  selectedPrice={limitSelectedPrice}
+                />
+              </div>
+              <RecentTradesPanel
+                baseToken={fromToken?.symbol || 'DIESEL'}
+                quoteToken={toToken?.symbol || 'frBTC'}
+              />
+            </div>
+          ) : selectedTab === 'swap' ? (
             <SwapInputs
               from={fromToken}
               to={toToken}
@@ -2040,8 +2063,8 @@ export default function SwapShell() {
 
         </div>
 
-        {/* Right Column: Chart */}
-        <div className={`hidden lg:flex flex-col gap-4 ${selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-3 xl:col-span-2'}`}>
+        {/* Right Column: Chart (hidden on limit tab - orderbook replaces it) */}
+        <div className={`${selectedTab === 'limit' ? 'hidden' : 'hidden lg:flex'} flex-col gap-4 ${selectedTab === 'lp' ? 'lg:col-span-1' : 'lg:col-span-3 xl:col-span-2'}`}>
           <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
         </div>
       </div>

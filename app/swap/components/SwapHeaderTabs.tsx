@@ -2,7 +2,7 @@
 
 import { useTranslation } from '@/hooks/useTranslation';
 
-type TabKey = "swap" | "lp";
+type TabKey = "swap" | "limit" | "lp";
 
 type Props = {
   selectedTab: TabKey;
@@ -30,6 +30,17 @@ export default function SwapHeaderTabs({ selectedTab, onTabChange }: Props) {
           <path d="M16 19l4-4-4-4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M20 15H8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
         </svg>
+      </button>
+      <button
+        type="button"
+        className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md whitespace-nowrap shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
+          selectedTab === "limit"
+            ? "bg-[color:var(--sf-primary)] text-white shadow-lg"
+            : "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]"
+        }`}
+        onClick={() => onTabChange("limit")}
+      >
+        LIMIT
       </button>
       <button
         type="button"
