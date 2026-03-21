@@ -6,7 +6,8 @@ import * as bitcoin from 'bitcoinjs-lib';
 // - regtest-local: Local Docker regtest environment (localhost:18888)
 // - subfrost-regtest: Hosted Subfrost regtest at regtest.subfrost.io
 // - oylnet: Legacy local development network
-export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest' | 'regtest-local' | 'subfrost-regtest';
+// - devnet: In-browser devnet (full protocol simulation)
+export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'devnet';
 
 // NetworkMap maps to bitcoin.networks.Network objects using bitcoinjs-lib directly
 export const NetworkMap: Partial<Record<Network, bitcoin.networks.Network>> = {
@@ -17,6 +18,7 @@ export const NetworkMap: Partial<Record<Network, bitcoin.networks.Network>> = {
   regtest: bitcoin.networks.regtest,
   'regtest-local': bitcoin.networks.regtest,
   'subfrost-regtest': bitcoin.networks.regtest,
+  devnet: bitcoin.networks.regtest,
 };
 
 // Human-readable network names for UI
@@ -28,6 +30,7 @@ export const NetworkNames: Record<Network, string> = {
   regtest: 'Local Regtest',
   'regtest-local': 'Local Docker',
   'subfrost-regtest': 'Subfrost Regtest',
+  devnet: 'In-Browser Devnet',
 };
 
 // Sandshrew URL map (legacy, used by some components)

@@ -90,6 +90,7 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   'regtest-local': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
+  devnet: 'subfrost-regtest', // Devnet uses regtest params, fetch interceptor routes to in-process
 };
 
 // Direct URL configurations for each network (used in production or server-side)
@@ -121,6 +122,10 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
   'subfrost-regtest': {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  devnet: {
+    jsonrpc_url: 'http://localhost:18888', // Intercepted by DevnetProvider
+    data_api_url: 'http://localhost:18888',
   },
 };
 

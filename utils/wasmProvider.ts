@@ -18,6 +18,7 @@ const NETWORK_URLS: Record<Network, string> = {
   'regtest-local': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
+  devnet: 'subfrost-regtest',
 };
 
 // Subfrost uses /v4/subfrost endpoint for both jsonrpc and data_api_url
@@ -49,6 +50,10 @@ const NETWORK_CONFIG: Record<Network, Record<string, string>> = {
   'subfrost-regtest': {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  devnet: {
+    jsonrpc_url: 'http://localhost:18888',
+    data_api_url: 'http://localhost:18888',
   },
 };
 

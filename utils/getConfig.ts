@@ -15,6 +15,7 @@ export const SUBFROST_API_URLS: Record<string, string> = {
   'regtest-local': 'http://localhost:18888',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  devnet: 'http://localhost:18888', // Intercepted by DevnetProvider fetch interceptor
 };
 
 // Block explorer URLs per network
@@ -26,6 +27,7 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
   'regtest-local': 'http://localhost:50010',
   'subfrost-regtest': 'https://espo.subfrost.io/regtest',
   oylnet: 'https://espo.subfrost.io/mainnet',
+  devnet: '', // No external block explorer for devnet
 };
 
 export function getConfig(network: string) {

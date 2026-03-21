@@ -272,6 +272,7 @@ export async function createAlkanesProvider(
     signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
     oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+  devnet: 'https://regtest.subfrost.io/v4/subfrost',
   };
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;

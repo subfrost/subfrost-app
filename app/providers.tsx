@@ -14,6 +14,9 @@ import { LanguageProvider } from '@/context/LanguageContext';
 import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
+import { DevnetProvider } from '@/context/DevnetContext';
+import { DevnetBootModal, DevnetErrorModal } from '@/components/DevnetBootModal';
+import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetControlPanel';
 import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
 
@@ -122,18 +125,24 @@ export default function Providers({ children }: { children: ReactNode }) {
           <ModalStore>
             <ThemeProvider>
               <LanguageProvider>
-                <AlkanesSDKProvider network={network}>
-                  <HeightPoller network={network} />
-                  <WalletProvider network={network}>
-                    <TransactionConfirmProvider>
-                      <NotificationProvider>
-                        {children}
-                        <TransactionConfirmModal />
-                        <GlobalNotificationArea />
-                      </NotificationProvider>
-                    </TransactionConfirmProvider>
-                  </WalletProvider>
-                </AlkanesSDKProvider>
+                <DevnetProvider network={network}>
+                  <AlkanesSDKProvider network={network}>
+                    <HeightPoller network={network} />
+                    <WalletProvider network={network}>
+                      <TransactionConfirmProvider>
+                        <NotificationProvider>
+                          <DevnetNetworkBanner />
+                          {children}
+                          <DevnetBootModal />
+                          <DevnetErrorModal />
+                          <DevnetControlPanel />
+                          <TransactionConfirmModal />
+                          <GlobalNotificationArea />
+                        </NotificationProvider>
+                      </TransactionConfirmProvider>
+                    </WalletProvider>
+                  </AlkanesSDKProvider>
+                </DevnetProvider>
               </LanguageProvider>
             </ThemeProvider>
           </ModalStore>

@@ -135,6 +135,7 @@ export async function createAlkanesProvider(
     signet: 'https://signet-api.subfrost.com',
     oylnet: 'https://oylnet-api.subfrost.com',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+  devnet: 'https://regtest.subfrost.io/v4/subfrost',
   };
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;
