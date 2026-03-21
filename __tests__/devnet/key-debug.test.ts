@@ -79,24 +79,21 @@ describe('Devnet: Key & UTXO Debug', () => {
     expect(result.result.outpoints.length).toBeGreaterThan(0);
   });
 
-  it('Lua-intercepted spendables should return mature UTXOs', async () => {
-    // Simulate what the SDK does: call lua_evalscript with the spendables script
-    const result = await rpcCall('lua_evalscript', [
-      '-- spendables script (is_coinbase check)\nlocal address = args[1]\nreturn {spendable = {}, address = address}',
-      derivedAddress,
+  it('sandshrew_balances should return spendable UTXOs', async () => {
+    // Use sandshrew_balances which is the real composite balance query
+    // (replaces the Lua stub that was returning empty)
+    const result = await rpcCall('sandshrew_balances', [
+      { address: derivedAddress },
     ]);
-    console.log('[key] Lua intercept result:', JSON.stringify(result).slice(0, 500));
+    console.log('[key] sandshrew_balances result keys:', Object.keys(result.result || {}));
 
     expect(result.result).toBeTruthy();
-    const returns = result.result.returns || result.result;
-    const spendable = returns.spendable;
-    console.log('[key] Spendable UTXOs:', Array.isArray(spendable) ? spendable.length : typeof spendable);
-
-    if (Array.isArray(spendable)) {
-      expect(spendable.length).toBeGreaterThan(0);
-      if (spendable.length > 0) {
-        console.log('[key] First spendable:', JSON.stringify(spendable[0]).slice(0, 200));
-      }
+    expect(result.result.spendable).toBeTruthy();
+    expect(Array.isArray(result.result.spendable)).toBe(true);
+    expect(result.result.spendable.length).toBeGreaterThan(0);
+    console.log('[key] Spendable UTXOs:', result.result.spendable.length);
+    if (result.result.spendable.length > 0) {
+      console.log('[key] First spendable:', JSON.stringify(result.result.spendable[0]).slice(0, 200));
     }
   });
 });

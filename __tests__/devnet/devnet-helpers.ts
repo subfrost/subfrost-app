@@ -10,7 +10,7 @@ import BIP32Factory from 'bip32';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
 import { resolve } from 'path';
-import { DEVNET, loadIndexerWasm } from './devnet-constants';
+import { DEVNET, loadIndexerWasm, loadTertiaryWasm } from './devnet-constants';
 import {
   createTestSigner,
   TEST_MNEMONIC,
@@ -65,11 +65,19 @@ export async function getOrCreateHarness(): Promise<any> {
   const home = process.env.HOME || '/home/ubuntu';
   const luaScriptsDir = resolve(home, 'alkanes-rs/lua');
 
+  // Load tertiary indexers
+  const quspoWasm = loadTertiaryWasm('quspo');
+  const tertiaryIndexers = [];
+  if (quspoWasm) {
+    tertiaryIndexers.push({ label: 'quspo', wasm: quspoWasm });
+  }
+
   // Dynamic import of the qubitcoin SDK
   const sdk = await import('@qubitcoin/sdk');
   _harness = await sdk.DevnetTestHarness.create({
     alkanesWasm,
     esploraWasm: esploraWasm ?? undefined,
+    tertiaryIndexers: tertiaryIndexers.length > 0 ? tertiaryIndexers : undefined,
     secretKey,
     luaScriptsDir,
   });

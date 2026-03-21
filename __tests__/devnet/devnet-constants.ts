@@ -61,3 +61,21 @@ export function loadIndexerWasm(name: string): Uint8Array | null {
   }
   return null;
 }
+
+/**
+ * Load a tertiary indexer WASM from test fixtures.
+ * Returns null if not found.
+ */
+export function loadTertiaryWasm(name: string): Uint8Array | null {
+  const paths = [
+    resolve(__dirname, `fixtures/${name}.wasm`),
+    resolve(process.env.HOME || '~', `${name}/target/wasm32-unknown-unknown/release/${name}.wasm`),
+  ];
+
+  for (const p of paths) {
+    if (existsSync(p)) {
+      return new Uint8Array(readFileSync(p));
+    }
+  }
+  return null;
+}
