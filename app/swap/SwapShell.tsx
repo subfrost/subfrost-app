@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import type { PoolSummary, TokenMeta } from "./types";
 import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import type { LPPosition } from "./components/LiquidityInputs";
 import { useNotification } from "@/context/NotificationContext";
 
 // Critical path imports - needed immediately
-import SwapHeaderTabs from "./components/SwapHeaderTabs";
 import { useSwapQuotes } from "@/hooks/useSwapQuotes";
 import { useSwapMutation } from "@/hooks/useSwapMutation";
 import { useWallet } from "@/context/WalletContext";
@@ -138,8 +138,11 @@ export default function SwapShell() {
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
 
-  // Market type (spot vs futures)
-  const [marketType, setMarketType] = useState<'spot' | 'futures'>('spot');
+  // Market type (spot vs futures) — check URL param on mount
+  const searchParams = useSearchParams();
+  const [marketType, setMarketType] = useState<'spot' | 'futures'>(
+    searchParams.get('type') === 'futures' ? 'futures' : 'spot'
+  );
 
   // Limit order price from orderbook click
   const [limitSelectedPrice, setLimitSelectedPrice] = useState<string | undefined>();
@@ -1896,6 +1899,7 @@ export default function SwapShell() {
         <div className="lg:col-span-3 lg:order-3 order-1 min-h-0">
           <div className="flex flex-col gap-3">
             <TradeForm
+              marketType={marketType}
               swapInputsProps={{
                 from: fromToken,
                 to: toToken,

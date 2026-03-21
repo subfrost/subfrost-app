@@ -5,10 +5,13 @@ import { Plus } from 'lucide-react';
 
 const SwapInputs = lazy(() => import('./SwapInputs'));
 const LimitOrderPanel = lazy(() => import('./LimitOrderPanel'));
+const FujinDifficultyPanel = lazy(() => import('@/app/futures/components/FujinDifficultyPanel'));
 
 type OrderType = 'market' | 'limit';
+type MarketType = 'spot' | 'futures';
 
 interface Props {
+  marketType: MarketType;
   swapInputsProps: any;
   baseToken: string;
   quoteToken: string;
@@ -27,6 +30,7 @@ const FormSkeleton = () => (
 );
 
 export default function TradeForm({
+  marketType,
   swapInputsProps,
   baseToken,
   quoteToken,
@@ -36,6 +40,25 @@ export default function TradeForm({
 }: Props) {
   const [orderType, setOrderType] = useState<OrderType>('market');
 
+  // Futures mode — render Fujin difficulty panel
+  if (marketType === 'futures') {
+    return (
+      <div className="flex flex-col h-full rounded-2xl bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] shadow-sm overflow-hidden">
+        <div className="flex border-b border-[color:var(--sf-glass-border)]">
+          <div className="flex-1 py-2.5 text-xs font-bold uppercase tracking-wide text-center text-[color:var(--sf-text)] border-b-2 border-[color:var(--sf-primary)]">
+            Difficulty Futures
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0 p-3">
+          <Suspense fallback={<FormSkeleton />}>
+            <FujinDifficultyPanel />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
+  // Spot mode — Market/Limit tabs
   return (
     <div className="flex flex-col h-full rounded-2xl bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] shadow-sm overflow-hidden">
       {/* Market / Limit tabs */}
