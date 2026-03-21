@@ -16,7 +16,9 @@ import { mockContracts } from './data/mockContracts';
 import { useFutures } from '@/hooks/useFutures';
 import { useTranslation } from '@/hooks/useTranslation';
 
-type TabKey = 'markets' | 'positions';
+import FujinDifficultyPanel from './components/FujinDifficultyPanel';
+
+type TabKey = 'markets' | 'positions' | 'difficulty';
 
 export default function FuturesPage() {
   const { t } = useTranslation();
@@ -214,6 +216,8 @@ export default function FuturesPage() {
               />
             )}
           </>
+        ) : activeTab === 'difficulty' ? (
+          <FujinDifficultyPanel />
         ) : (
           <PositionsSection />
         )}
