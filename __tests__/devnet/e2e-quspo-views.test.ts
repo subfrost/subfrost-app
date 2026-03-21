@@ -251,6 +251,26 @@ describe('Devnet E2E: Quspo Views', () => {
   });
 
   // =========================================================================
+  // Activity Feed (from incremental trace processing)
+  // =========================================================================
+
+  describe('Activity Feed', () => {
+    it('get_activity should return recent events', async () => {
+      const payload = JSON.stringify({ limit: 20 });
+      const hex = '0x' + Buffer.from(payload).toString('hex');
+      const result = await quspoView('get_activity', hex);
+      console.log('[quspo] Activity feed:', JSON.stringify(result)?.slice(0, 300));
+      if (result && result.items) {
+        console.log('[quspo] Activity items: %d, total count: %d', result.items.length, result.count);
+        if (result.items.length > 0) {
+          console.log('[quspo] Latest event:', JSON.stringify(result.items[0]));
+        }
+      }
+      expect(result).toBeDefined();
+    });
+  });
+
+  // =========================================================================
   // Status
   // =========================================================================
 
