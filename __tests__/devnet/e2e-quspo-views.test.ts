@@ -271,6 +271,115 @@ describe('Devnet E2E: Quspo Views', () => {
   });
 
   // =========================================================================
+  // FIRE Bonding, Redemption, Distributor, Treasury
+  // =========================================================================
+
+  describe('FIRE Extended Views', () => {
+    it('get_fire_bonding_stats', async () => {
+      const hex = '0x' + Buffer.from(FIRE.BONDING_ID).toString('hex');
+      const result = await quspoView('get_fire_bonding_stats', hex);
+      console.log('[quspo] FIRE bonding:', JSON.stringify(result));
+      expect(result).toBeDefined();
+    });
+
+    it('get_fire_redemption_stats', async () => {
+      const hex = '0x' + Buffer.from(FIRE.REDEMPTION_ID).toString('hex');
+      const result = await quspoView('get_fire_redemption_stats', hex);
+      console.log('[quspo] FIRE redemption:', JSON.stringify(result));
+      expect(result).toBeDefined();
+    });
+
+    it('get_fire_distributor_stats', async () => {
+      const hex = '0x' + Buffer.from(FIRE.DISTRIBUTOR_ID).toString('hex');
+      const result = await quspoView('get_fire_distributor_stats', hex);
+      console.log('[quspo] FIRE distributor:', JSON.stringify(result));
+      expect(result).toBeDefined();
+    });
+
+    it('get_fire_treasury_stats', async () => {
+      const hex = '0x' + Buffer.from(FIRE.TREASURY_ID).toString('hex');
+      const result = await quspoView('get_fire_treasury_stats', hex);
+      console.log('[quspo] FIRE treasury:', JSON.stringify(result));
+      expect(result).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // Synth Pool, Normal Pool, frUSD
+  // =========================================================================
+
+  describe('Protocol Pool Views', () => {
+    it('get_synth_pool_state', async () => {
+      // Synth pool may or may not be deployed in this test
+      const hex = '0x' + Buffer.from('4:8202').toString('hex');
+      const result = await quspoView('get_synth_pool_state', hex);
+      console.log('[quspo] Synth pool:', JSON.stringify(result));
+      expect(result).toBeDefined();
+    });
+
+    it('get_normal_pool_state', async () => {
+      const hex = '0x' + Buffer.from(PROTOCOL_IDS.DXBTC_NORMAL_POOL).toString('hex');
+      const result = await quspoView('get_normal_pool_state', hex);
+      console.log('[quspo] Normal pool:', JSON.stringify(result));
+      expect(result).toBeDefined();
+    });
+
+    it('get_frusd_state', async () => {
+      const hex = '0x' + Buffer.from('4:8201').toString('hex');
+      const result = await quspoView('get_frusd_state', hex);
+      console.log('[quspo] frUSD:', JSON.stringify(result));
+      expect(result).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // Token Details + User Positions
+  // =========================================================================
+
+  describe('Token & Position Views', () => {
+    it('get_token_details for DIESEL', async () => {
+      const hex = '0x' + Buffer.from('2:0').toString('hex');
+      const result = await quspoView('get_token_details', hex);
+      console.log('[quspo] DIESEL details:', JSON.stringify(result));
+      if (result && result.name) {
+        expect(result.name).toBe('DIESEL');
+      }
+    });
+
+    it('get_user_positions', async () => {
+      const payload = JSON.stringify({ address: taprootAddress });
+      const hex = '0x' + Buffer.from(payload).toString('hex');
+      const result = await quspoView('get_user_positions', hex);
+      console.log('[quspo] User positions:', JSON.stringify(result)?.slice(0, 200));
+      if (result && result.positions) {
+        console.log('[quspo]   LP positions found: %d', result.positions.length);
+      }
+    });
+  });
+
+  // =========================================================================
+  // Wrap/Unwrap Events
+  // =========================================================================
+
+  describe('Wrap/Unwrap Events', () => {
+    it('get_wrap_events', async () => {
+      const result = await quspoView('get_wrap_events', '0x');
+      console.log('[quspo] Wrap events:', JSON.stringify(result)?.slice(0, 200));
+      if (result && result.events) {
+        console.log('[quspo]   Wrap events found: %d', result.events.length);
+      }
+    });
+
+    it('get_unwrap_events', async () => {
+      const result = await quspoView('get_unwrap_events', '0x');
+      console.log('[quspo] Unwrap events:', JSON.stringify(result)?.slice(0, 200));
+      if (result && result.events) {
+        console.log('[quspo]   Unwrap events found: %d', result.events.length);
+      }
+    });
+  });
+
+  // =========================================================================
   // Status
   // =========================================================================
 
