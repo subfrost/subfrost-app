@@ -43,6 +43,8 @@ const nextConfig = {
       '@alkanes/ts-sdk/wasm': localWasmPath,
       // Prevent Node.js-specific loader from being bundled for browser
       '@alkanes/ts-sdk/wasm/node-loader.cjs': { browser: './lib/empty-module.js' },
+      // Exclude qubitcoin SDK from Turbopack (only used for in-browser devnet, loaded dynamically)
+      '@qubitcoin/sdk': { browser: './lib/empty-module.js' },
       // Stub out Node.js built-in modules for browser builds
       fs: { browser: './lib/empty-module.js' },
       path: { browser: './lib/empty-module.js' },
@@ -67,6 +69,11 @@ const nextConfig = {
         ...config.resolve.alias,
         '@alkanes/ts-sdk/wasm/node-loader.cjs': path.join(__dirname, 'lib/empty-module.js'),
       };
+      // Exclude qubitcoin SDK from webpack build (loaded dynamically for devnet only)
+      config.externals = [
+        ...(config.externals || []),
+        '@qubitcoin/sdk',
+      ];
     }
 
     // WASM support
