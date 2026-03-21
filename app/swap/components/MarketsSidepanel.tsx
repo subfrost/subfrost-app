@@ -50,7 +50,7 @@ export default function MarketsSidepanel({
       {/* Panel */}
       <div
         ref={panelRef}
-        className="relative w-full max-w-lg h-full bg-[color:var(--sf-panel-bg)] border-l border-[color:var(--sf-glass-border)] shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200"
+        className="relative w-full max-w-lg h-full bg-[color:var(--sf-panel-bg)] border-l border-[color:var(--sf-glass-border)] shadow-2xl overflow-y-auto transition-transform duration-200"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-[color:var(--sf-glass-border)] bg-[color:var(--sf-panel-bg)]">
