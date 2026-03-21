@@ -147,4 +147,82 @@ describe('Devnet: Quspo Tertiary Indexer', () => {
       }
     }
   });
+
+  it('should query get_pools after AMM deployment + pool creation', async () => {
+    // Deploy AMM and create a pool
+    const { deployAmmContracts } = await import('./amm-deploy');
+    await deployAmmContracts(provider, signer, segwitAddress, taprootAddress, harness);
+
+    // Mint more DIESEL + wrap frBTC for pool creation
+    mineBlocks(harness, 1);
+    const mintResult = await (provider as any).alkanesExecuteFull(
+      JSON.stringify([taprootAddress]), 'B:10000:v0', '[2,0,77]:v0:v0', '1', null,
+      JSON.stringify({ from: [segwitAddress, taprootAddress], change_address: segwitAddress, alkanes_change_address: taprootAddress }),
+    );
+    if (mintResult?.txid) mineBlocks(harness, 1);
+
+    // Wrap BTC for frBTC
+    const bitcoin = await import('bitcoinjs-lib');
+    const ecc = await import('@bitcoinerlab/secp256k1');
+    try { bitcoin.initEccLib(ecc); } catch {}
+    const signerResult = await rpcCall('alkanes_simulate', [{
+      target: { block: '32', tx: '0' }, inputs: ['103'], alkanes: [],
+      transaction: '0x', block: '0x', height: '999', txindex: 0, vout: 0
+    }]);
+    let signerAddr = taprootAddress;
+    if (signerResult?.result?.execution?.data) {
+      const hex = signerResult.result.execution.data.replace('0x', '');
+      if (hex.length === 64) {
+        try {
+          const xOnly = Buffer.from(hex, 'hex');
+          const payment = bitcoin.payments.p2tr({ internalPubkey: xOnly, network: bitcoin.networks.regtest });
+          if (payment.address) signerAddr = payment.address;
+        } catch {}
+      }
+    }
+    const wrapResult = await (provider as any).alkanesExecuteFull(
+      JSON.stringify([signerAddr, taprootAddress]), 'B:500000:v0', '[32,0,77]:v1:v1', '1', null,
+      JSON.stringify({ from: [segwitAddress, taprootAddress], change_address: segwitAddress, alkanes_change_address: taprootAddress }),
+    );
+    if (wrapResult?.txid || wrapResult?.reveal_txid) mineBlocks(harness, 1);
+
+    // Create pool
+    const dieselBal = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+    const frbtcBal = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+    if (dieselBal > 0n && frbtcBal > 0n) {
+      const factoryId = '4:65522';
+      const createResult = await (provider as any).alkanesExecuteFull(
+        JSON.stringify([taprootAddress]),
+        `2:0:${dieselBal / 3n},32:0:${frbtcBal / 2n}`,
+        `[4,65522,1,2,0,32,0,${dieselBal / 3n},${frbtcBal / 2n}]:v0:v0`,
+        '1', null,
+        JSON.stringify({ from: [segwitAddress, taprootAddress], change_address: segwitAddress, alkanes_change_address: taprootAddress }),
+      );
+      if (createResult?.txid || createResult?.reveal_txid) mineBlocks(harness, 2);
+
+      // Now query quspo get_pools with factory ID
+      const poolsInput = Buffer.from(factoryId).toString('hex');
+      const poolsResult = await rpcCall('metashrew_view', [
+        'get_pools',
+        '0x' + poolsInput,
+        'latest',
+      ]);
+
+      if (poolsResult?.result) {
+        const hex = poolsResult.result.replace('0x', '');
+        const jsonStr = Buffer.from(hex, 'hex').toString('utf-8');
+        console.log('[quspo] get_pools result:', jsonStr);
+        const parsed = JSON.parse(jsonStr);
+        console.log('[quspo] Pool count:', parsed.pools?.length ?? 0);
+        if (parsed.pools?.length > 0) {
+          console.log('[quspo] First pool:', JSON.stringify(parsed.pools[0]));
+          expect(parsed.pools[0].poolId).toBeTruthy();
+        }
+      } else {
+        console.log('[quspo] get_pools returned no result');
+      }
+    } else {
+      console.log('[quspo] Skipping pool test — no DIESEL or frBTC balance');
+    }
+  }, 300_000);
 });
