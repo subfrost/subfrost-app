@@ -37,12 +37,10 @@ export const FIRE = {
   REDEMPTION_ID:  '4:260',
   DISTRIBUTOR_ID: '4:261',
 
-  // Supply constants (8 decimals)
+  // Supply constants (8 decimals) — no-premine tokenomics (v2)
   DECIMAL_FACTOR:    100_000_000n,
   MAX_SUPPLY:        210_000_000_000_000n,   // 2.1M * 10^8
-  EMISSION_POOL:      63_000_000_000_000n,   // 630K * 10^8
-  TREASURY_PREMINE: 105_000_000_000_000n,    // 1.05M * 10^8
-  TEAM_PREMINE:      42_000_000_000_000n,    // 420K * 10^8
+  EMISSION_POOL:     210_000_000_000_000n,   // 100% = 2.1M * 10^8 (no premine)
 };
 
 function loadFireWasm(name: string): string {
@@ -232,11 +230,10 @@ export async function deployFireContracts(
     [4, FIRE.TOKEN_SLOT, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
     harness, 'Treasury');
 
-  // 2. Token: Init(staking_contract, treasury, treasury_amount, team_vesting, team_amount, emission_pool)
-  //    team_vesting = bonding contract (receives team premine)
+  // 2. Token: Init(staking_contract) — no-premine, 100% emission pool
   await deployAndInit(provider, signer, segwitAddress, taprootAddress,
     tokenWasm, FIRE.TOKEN_SLOT,
-    [4, FIRE.STAKING_SLOT, 4, FIRE.TREASURY_SLOT, FIRE.TREASURY_PREMINE, 4, FIRE.BONDING_SLOT, FIRE.TEAM_PREMINE, FIRE.EMISSION_POOL],
+    [4, FIRE.STAKING_SLOT],
     harness, 'Token');
 
   // 3. Staking: Init(lp_token, fire_token)

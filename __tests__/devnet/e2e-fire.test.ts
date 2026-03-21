@@ -254,8 +254,8 @@ describe('Devnet E2E: FIRE Protocol', () => {
       const supplyResult = await simulate(FIRE.TOKEN_ID, ['101']);
       const totalSupply = parseU128(supplyResult?.result?.execution?.data || '');
       console.log('[fire-e2e] Total supply:', totalSupply, `(${Number(totalSupply) / 1e8} FIRE)`);
-      // Total supply = treasury_premine + team_premine (emission pool is reserved, not minted)
-      expect(totalSupply).toBeGreaterThan(0n);
+      // No premine — total supply starts at 0, increases only through emission
+      expect(totalSupply).toBe(0n);
 
       const maxResult = await simulate(FIRE.TOKEN_ID, ['102']);
       const maxSupply = parseU128(maxResult?.result?.execution?.data || '');
@@ -474,23 +474,10 @@ describe('Devnet E2E: FIRE Protocol', () => {
           console.log('[fire-e2e] Set distributor auth error:', e.message?.slice(0, 100));
         }
 
-        // Fund bonding: Treasury opcode 3 (FundBonding), amount
-        const fundAmount = FIRE.TREASURY_PREMINE / 10n; // 10% of treasury premine
-        try {
-          await executeAlkanes(
-            `[4,${FIRE.TREASURY_SLOT},3,${fundAmount}]:v0:v0`,
-            `${treasuryAuthToken}:1`,
-          );
-          mineBlocks(harness, 1);
-          console.log('[fire-e2e] Funded bonding with', fundAmount.toString(), 'FIRE ✓');
-
-          // Verify bonding now has available FIRE
-          const availResult = await simulate(FIRE.BONDING_ID, ['25']);
-          const available = parseU128(availResult?.result?.execution?.data || '');
-          console.log('[fire-e2e] Bonding available FIRE:', available.toString());
-        } catch (e: any) {
-          console.log('[fire-e2e] Fund bonding error:', e.message?.slice(0, 200));
-        }
+        // Note: With no-premine tokenomics, treasury starts empty.
+        // Bonding is funded externally via Deposit (opcode 10) when FIRE is available.
+        // Treasury no longer has FundBonding (opcode 3).
+        console.log('[fire-e2e] Treasury admin setup complete (no-premine: no FundBonding needed)');
       } else {
         console.log('[fire-e2e] Could not find treasury auth token — skipping admin tests');
       }
