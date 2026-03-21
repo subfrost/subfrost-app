@@ -238,16 +238,15 @@ async function fetchPoolsFromDataApi(
 // (e.g., mainnet.subfrost.io returns 500 "btc/usd price unavailable").
 // ============================================================================
 
-const OYL_ALKANODE_POOL_DETAILS_URL = 'https://oyl.alkanode.com/get-all-pools-details';
-
 async function fetchPoolsFromPoolsDetailsRest(
   factoryId: string,
   network: string,
   tokenMetaMap?: Map<string, { name: string; symbol: string }>,
 ): Promise<PoolsListItem[]> {
   const [factoryBlock, factoryTx] = factoryId.split(':');
+  // Route through app API proxy — never call external URLs directly from hooks
   const resp = await Promise.race([
-    fetch(OYL_ALKANODE_POOL_DETAILS_URL, {
+    fetch(`/api/rpc/${network}/get-all-pools-details`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ factoryId: { block: factoryBlock, tx: factoryTx } }),
@@ -258,7 +257,7 @@ async function fetchPoolsFromPoolsDetailsRest(
   const json = await resp.json();
   const pools: any[] = json?.data?.pools || json?.pools || [];
 
-  console.log('[usePools] get-all-pools-details REST (OYL Alkanode) returned', pools.length, 'pools');
+  console.log('[usePools] get-all-pools-details REST returned', pools.length, 'pools');
 
   if (pools.length === 0) {
     throw new Error('get-all-pools-details REST returned 0 pools');

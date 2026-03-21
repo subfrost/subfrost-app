@@ -550,30 +550,24 @@ describe('useLPPositions', () => {
     expect(src).toContain('useBtcPrice');
   });
 
-  it('defines BASE_TOKEN_IDS to exclude known non-LP tokens', () => {
-    expect(src).toContain('BASE_TOKEN_IDS');
-    expect(src).toContain("'32:0'");    // frBTC
-    expect(src).toContain("'2:0'");     // DIESEL
-    expect(src).toContain("'2:56801'"); // bUSD
+  it('filters LP tokens by name pattern or pool map', () => {
+    // Current implementation uses isLpTokenByName and isPositionAsset helpers
+    expect(src).toContain('isLpTokenByName');
+    expect(src).toContain('isPositionAsset');
   });
 
   it('builds a pool map for fast lookup of alkane ID to pool', () => {
     expect(src).toContain('poolMap');
     expect(src).toContain('new Map');
-    expect(src).toContain('pool.id');
   });
 
-  it('has fallback heuristic: non-base tokens treated as LP when no pool data', () => {
-    expect(src).toContain('!hasPoolData && !isBaseToken');
+  it('detects LP tokens by LP keyword in name/symbol', () => {
+    expect(src).toContain('/\\bLP\\b/i');
   });
 
-  it('parses LP token symbol from pattern like "TOKEN0/TOKEN1 LP"', () => {
-    expect(src).toContain("symbol.match(/^(.+?)\\/(.+?)\\s*LP$/i)");
-  });
-
-  it('formats balance with BigInt division and 4 decimal places', () => {
-    expect(src).toContain('BigInt(alkane.balance)');
-    expect(src).toContain('remainderStr.slice(0, 4)');
+  it('detects staked positions by POS- prefix', () => {
+    expect(src).toContain('isStakedPosition');
+    expect(src).toContain("'POS-'");
   });
 
   it('returns positions, isLoading, and refresh', () => {
@@ -590,9 +584,9 @@ describe('useLPPositions', () => {
     expect(src).toContain('useMemo');
   });
 
-  it('adds network-specific base tokens from config', () => {
-    expect(src).toContain('config.FRBTC_ALKANE_ID');
-    expect(src).toContain('config.BUSD_ALKANE_ID');
+  it('uses pool data from usePools for filtering', () => {
+    expect(src).toContain('usePools');
+    expect(src).toContain('poolsData');
   });
 
   it('returns empty array when no alkanes data', () => {
