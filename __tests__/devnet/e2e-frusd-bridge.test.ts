@@ -469,15 +469,13 @@ describe('Devnet E2E: frUSD Bridge (BTC↔USDC)', () => {
       mineBlocks(harness, 1);
       console.log('[bridge] Synth pool deployed at', SYNTH_POOL_ID);
 
-      // Verify: GetVirtualPrice (opcode 100)
+      // Verify: GetVirtualPrice (opcode 100) — should error with "no liquidity" (not "unreachable")
       const vpCheck = await simulate(SYNTH_POOL_ID, ['100']);
-      if (vpCheck?.result?.execution?.error) {
-        console.log('[bridge] Synth pool check:', vpCheck.result.execution.error.slice(0, 80));
-      } else {
-        console.log('[bridge] Synth pool virtual price: OK');
-      }
-      // Just verify it deployed (not unexpected end of file)
-      expect(vpCheck?.result?.execution?.error || '').not.toContain('unexpected end of file');
+      const vpErr = vpCheck?.result?.execution?.error || '';
+      // Before liquidity: should get a clean error, NOT "unreachable"
+      expect(vpErr).not.toContain('unexpected end of file');
+      expect(vpErr).not.toContain('unreachable');
+      console.log('[bridge] Synth pool pre-liquidity check:', vpErr.slice(0, 60) || 'OK');
     }, 120_000);
 
     it('should add liquidity to synth pool', async () => {
@@ -527,6 +525,18 @@ describe('Devnet E2E: frUSD Bridge (BTC↔USDC)', () => {
         console.log('[bridge] Add liquidity error:', e.message?.slice(0, 200));
       }
     }, 120_000);
+
+    it('should return virtual price after liquidity is added', async () => {
+      const vpCheck = await simulate(SYNTH_POOL_ID, ['100']);
+      if (vpCheck?.result?.execution?.error) {
+        console.log('[bridge] GetVirtualPrice after liquidity:', vpCheck.result.execution.error.slice(0, 80));
+      } else {
+        const data = vpCheck?.result?.execution?.data?.replace('0x', '') || '';
+        console.log('[bridge] Virtual price data:', data.slice(0, 64));
+        expect(data.length).toBeGreaterThan(0);
+        console.log('[bridge] GetVirtualPrice ✓');
+      }
+    });
 
     it('should swap frBTC → frUSD via synth pool', async () => {
       const frbtcBal = await getAlkaneBalance(provider, taprootAddress, '32:0').catch(() => 0n);
