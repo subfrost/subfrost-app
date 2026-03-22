@@ -207,27 +207,35 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       }));
 
       const alkaneBalancePromises = addresses.map(async (address) => {
-        // NOTE: Do NOT catch errors here — let them propagate so React Query's
-        // retry: 3 kicks in. Previously, timeouts resolved with null and errors
-        // were caught, causing the query to "succeed" with empty alkane data.
-        const resp = await withTimeout(
-          fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
-          15000,
-          null,
-        );
-        if (!resp) {
-          throw new Error(`[BALANCE] alkane-balances API timed out for ${address}`);
+        try {
+          const resp = await withTimeout(
+            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
+            15000,
+            null,
+          );
+          if (!resp) {
+            console.warn(`[BALANCE] alkane-balances API timed out for ${address}`);
+            return { address, balances: [] as any[], failed: true };
+          }
+          const data = await resp.json();
+          return { address, balances: data?.balances || [], failed: false };
+        } catch (error) {
+          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
+          return { address, balances: [] as any[], failed: true };
         }
-        const data = await resp.json();
-        return { address, balances: data?.balances || [] };
       });
 
-      // Await all three in parallel
+      // Await all three in parallel — alkane failures don't block BTC data
       const [enrichedResults, mempoolSpentResults, alkaneBalanceResults] = await Promise.all([
         Promise.all(enrichedDataPromises),
         Promise.all(mempoolSpentPromises),
         Promise.all(alkaneBalancePromises),
       ]);
+
+      // If ANY alkane fetch failed/timed out but we have BTC data, mark this as
+      // partial so we can signal the UI to retry just alkanes
+      const alkanesFetchFailed = alkaneBalanceResults.some(r => r.failed);
+      const hasBtcData = enrichedResults.some(r => r.data !== null);
 
       let totalBtc = 0;
       let p2wpkhBtc = 0;
@@ -358,6 +366,12 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         }
       }
 
+      // If alkane fetch failed but we have BTC data, return partial results
+      // with a flag so the UI can schedule an alkane-only retry
+      if (alkanesFetchFailed && hasBtcData) {
+        console.warn('[BALANCE] Alkane fetch failed/timed out — returning BTC data with _alkanesFetchFailed flag');
+      }
+
       return {
         balances: {
           bitcoin: {
@@ -378,6 +392,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           runes: Array.from(runeMap.values()),
         },
         utxos: { p2wpkh: p2wpkhUtxos, p2tr: p2trUtxos, all: allUtxos },
+        _alkanesFetchFailed: alkanesFetchFailed,
       };
     },
   });

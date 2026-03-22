@@ -117,6 +117,32 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
   const { data, isLoading, error, refetch } = useQuery(opts);
 
+  // When alkane fetch failed but BTC loaded, auto-refetch after a short delay.
+  // This gives the alkane API a second chance without blocking BTC display.
+  const alkaneRetryCountRef = useRef(0);
+  const MAX_ALKANE_RETRIES = 3;
+
+  useEffect(() => {
+    if (!data) return;
+
+    // Reset retry counter when alkanes arrive successfully
+    if (data.balances.alkanes.length > 0) {
+      alkaneRetryCountRef.current = 0;
+      return;
+    }
+
+    // If the query reported alkane fetch failure, retry
+    if ((data as any)._alkanesFetchFailed && alkaneRetryCountRef.current < MAX_ALKANE_RETRIES) {
+      const delay = Math.min(2000 * Math.pow(2, alkaneRetryCountRef.current), 15000);
+      console.log(`[useEnrichedWalletData] Alkane fetch failed — auto-retry ${alkaneRetryCountRef.current + 1}/${MAX_ALKANE_RETRIES} in ${delay}ms`);
+      const timer = setTimeout(() => {
+        alkaneRetryCountRef.current += 1;
+        refetch();
+      }, delay);
+      return () => clearTimeout(timer);
+    }
+  }, [data, refetch]);
+
   // Trigger an immediate refetch when the wallet transitions to connected state
   // AND the SDK provider is ready. This covers:
   //   - Initial page load with cached wallet (SDK may init after wallet restores)
