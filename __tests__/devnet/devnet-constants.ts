@@ -52,6 +52,8 @@ export function loadIndexerWasm(name: string): Uint8Array | null {
   const paths = [
     resolve(process.env.HOME || '~', `.local/qubitcoin/indexers/${name}/program.wasm`),
     resolve(__dirname, `../../fixtures/indexers/${name}.wasm`),
+    // Fallback: public/wasm/ directory (served by Next.js in dev)
+    resolve(__dirname, `../../public/wasm/${name}.wasm`),
   ];
 
   for (const p of paths) {

@@ -1,18 +1,29 @@
 'use client';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDevnet } from '@/context/DevnetContext';
 import { useWallet } from '@/context/WalletContext';
 
 export function DevnetControlPanel() {
   const { state, controls, isDevnet } = useDevnet();
   const { account } = useWallet();
+  const queryClient = useQueryClient();
   const [isExpanded, setIsExpanded] = useState(false);
   const [miningCount, setMiningCount] = useState(1);
 
   if (!isDevnet || state.status !== 'ready') return null;
 
   const address = account?.taproot?.address || '';
+
+  // Wrapper that invalidates React Query caches after devnet actions
+  // so wallet balances, UTXOs, etc. refresh automatically.
+  const withRefresh = async (action: () => Promise<void> | void) => {
+    await action();
+    // Small delay for indexer to process the new block(s)
+    await new Promise(r => setTimeout(r, 200));
+    queryClient.invalidateQueries().catch(() => {});
+  };
 
   return (
     <div className="fixed bottom-20 right-4 z-50 md:bottom-4">
@@ -54,19 +65,19 @@ export function DevnetControlPanel() {
             <div className="text-xs text-zinc-500 font-medium">Mine Blocks</div>
             <div className="flex gap-2">
               <button
-                onClick={() => { controls.mineBlocks(1); }}
+                onClick={() => withRefresh(() => controls.mineBlocks(1))}
                 className="flex-1 px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs"
               >
                 +1
               </button>
               <button
-                onClick={() => { controls.mineBlocks(10); }}
+                onClick={() => withRefresh(() => controls.mineBlocks(10))}
                 className="flex-1 px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs"
               >
                 +10
               </button>
               <button
-                onClick={() => { controls.mineBlocks(100); }}
+                onClick={() => withRefresh(() => controls.mineBlocks(100))}
                 className="flex-1 px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs"
               >
                 +100
@@ -79,25 +90,25 @@ export function DevnetControlPanel() {
             <div className="text-xs text-zinc-500 font-medium">Faucet</div>
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => controls.faucetBtc(address, 100000000)}
+                onClick={() => withRefresh(() => controls.faucetBtc(address, 100000000))}
                 className="px-2 py-1.5 bg-orange-900/50 hover:bg-orange-800/50 text-orange-300 rounded-lg text-xs border border-orange-800/30"
               >
                 +1 BTC
               </button>
               <button
-                onClick={() => controls.faucetDiesel(address)}
+                onClick={() => withRefresh(() => controls.faucetDiesel(address))}
                 className="px-2 py-1.5 bg-blue-900/50 hover:bg-blue-800/50 text-blue-300 rounded-lg text-xs border border-blue-800/30"
               >
                 +5K DIESEL
               </button>
               <button
-                onClick={() => controls.faucetFuel(address)}
+                onClick={() => withRefresh(() => controls.faucetFuel(address))}
                 className="px-2 py-1.5 bg-purple-900/50 hover:bg-purple-800/50 text-purple-300 rounded-lg text-xs border border-purple-800/30"
               >
                 +100 FUEL
               </button>
               <button
-                onClick={() => controls.mineBlocks(1)}
+                onClick={() => withRefresh(() => controls.mineBlocks(1))}
                 className="px-2 py-1.5 bg-green-900/50 hover:bg-green-800/50 text-green-300 rounded-lg text-xs border border-green-800/30"
               >
                 Wrap frBTC

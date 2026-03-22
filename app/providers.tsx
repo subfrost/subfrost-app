@@ -52,7 +52,7 @@ function detectNetwork(): Network {
     } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
       return 'subfrost-regtest';
     } else if (host.includes('localhost') || host.includes('127.0.0.1')) {
-      return 'subfrost-regtest';
+      return 'devnet';
     }
     return 'mainnet';
   }

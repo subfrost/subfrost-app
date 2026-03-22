@@ -95,6 +95,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           console.warn('[DevnetContext] esplora.wasm not available (optional)');
         }
 
+        // JOURNAL (2026-03-22): quspo is loaded here but added AFTER initial
+        // mining in bootDevnetWithWasms() to avoid OOM. TertiaryRuntime::run_block
+        // creates a new WebAssembly.Instance per block — processing 110 blocks
+        // during boot exhausts browser memory. Deferring means quspo only indexes
+        // blocks mined after boot (the initial 110 are empty coinbase txs anyway).
         console.log('[DevnetContext] Fetching quspo.wasm...');
         const quspoResp = await fetch('/wasm/quspo.wasm');
         if (quspoResp.ok) {

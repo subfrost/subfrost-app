@@ -8,7 +8,7 @@ import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
 
-type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'oylnet' | 'custom';
+type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
 
 interface DerivationConfig {
   accountIndex: number;
@@ -64,6 +64,7 @@ export default function WalletSettings() {
       case 'regtest': return 'Local Regtest (localhost)';
       case 'regtest-local': return 'Local Docker (localhost:18888)';
       case 'subfrost-regtest': return 'Subfrost Regtest (regtest.subfrost.io)';
+      case 'devnet': return 'Devnet (in-browser)';
       default: return networkType;
     }
   };
@@ -218,6 +219,7 @@ export default function WalletSettings() {
   ];
 
   const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
+    { value: 'devnet', label: 'Devnet (in-browser)' },
     { value: 'mainnet', label: t('settings.mainnet') },
     { value: 'signet', label: t('settings.signet') },
     { value: 'subfrost-regtest', label: t('settings.subfrostRegtest') + ' (regtest.subfrost.io)' },

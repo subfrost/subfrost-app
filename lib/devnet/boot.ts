@@ -99,41 +99,60 @@ export async function bootDevnetWithWasms(
 
   onProgress('Initializing Bitcoin node (loading WASM)...', 15);
 
-  // Tertiary indexers (quspo) — now safe with closure memory fix
-  const tertiaryIndexers = quspoWasm
-    ? [{ label: 'quspo', wasm: quspoWasm }]
-    : [];
+  // JOURNAL (2026-03-22): Create harness WITHOUT quspo tertiary indexer.
+  // quspo is added AFTER initial mining to avoid OOM. TertiaryRuntime::run_block
+  // creates a new WebAssembly.Instance per block, exhausting browser memory when
+  // processing 110 coinbase-maturity blocks. Deferring quspo means it only indexes
+  // blocks mined after boot — which is fine since the initial 110 blocks are empty
+  // coinbase transactions with nothing for quspo to index.
 
-  console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esploraWasm=%sKB quspo=%s',
+  console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esploraWasm=%sKB quspo=%s (deferred)',
     Math.round(alkanesWasm.length / 1024),
     esploraWasm ? Math.round(esploraWasm.length / 1024) : 'none',
-    quspoWasm ? Math.round(quspoWasm.length / 1024) + 'KB' : 'none',
+    quspoWasm ? Math.round(quspoWasm.length / 1024) + 'KB' : 'deferred',
   );
 
   _harness = await sdk.DevnetTestHarness.create({
     alkanesWasm,
     esploraWasm,
-    tertiaryIndexers: tertiaryIndexers.length > 0 ? tertiaryIndexers : undefined,
     secretKey,
   });
-  console.log('[devnet-boot] Harness created successfully');
+  console.log('[devnet-boot] Harness created successfully (without quspo)');
 
   // Install fetch interceptor — all RPC calls now go in-process
   _harness.installFetchInterceptor();
 
   onProgress('Mining initial blocks...', 20);
-  // Mine in small batches to avoid OOM in browser WASM.
-  // Coinbase maturity requires 100 blocks; we mine 110 for safety.
-  // Batching allows GC to reclaim memory between rounds.
-  const TOTAL_BLOCKS = 110;
-  const BATCH_SIZE = 10;
-  for (let mined = 0; mined < TOTAL_BLOCKS; mined += BATCH_SIZE) {
-    const batch = Math.min(BATCH_SIZE, TOTAL_BLOCKS - mined);
-    _harness.mineBlocks(batch);
-    const pct = 20 + Math.round((mined / TOTAL_BLOCKS) * 30);
-    onProgress(`Mining blocks... ${mined + batch}/${TOTAL_BLOCKS}`, pct);
-    // Yield to event loop for GC
-    await new Promise(r => setTimeout(r, 0));
+  // JOURNAL (2026-03-22): Mine 1 block at a time with real delays.
+  // Both alkanes and esplora indexers create a new WebAssembly.Instance per block
+  // via WebIndexerRuntime::run_block. With batch size > 1, multiple instances
+  // accumulate before GC gets a chance to reclaim them, causing browser OOM.
+  // Mining 1 block at a time with 50ms delay gives the browser GC enough time
+  // to collect the previous block's instances before creating new ones.
+  // Coinbase maturity requires 100 blocks; we mine 101 for safety.
+  // Total extra time: ~5s (101 × 50ms).
+  const TOTAL_BLOCKS = 101;
+  for (let mined = 0; mined < TOTAL_BLOCKS; mined++) {
+    _harness.mineBlocks(1);
+    if (mined % 10 === 0) {
+      const pct = 20 + Math.round((mined / TOTAL_BLOCKS) * 30);
+      onProgress(`Mining blocks... ${mined + 1}/${TOTAL_BLOCKS}`, pct);
+    }
+    // Real delay (not setTimeout(0)) to allow browser GC to reclaim
+    // the WebAssembly.Instance objects created by run_block
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  // Now add quspo tertiary indexer AFTER initial mining is complete.
+  // This avoids OOM from processing 110 empty blocks.
+  if (quspoWasm) {
+    onProgress('Loading quspo indexer...', 52);
+    try {
+      _harness.server.addTertiary('quspo', quspoWasm);
+      console.log('[devnet-boot] quspo tertiary indexer added (post-mining)');
+    } catch (e: any) {
+      console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
+    }
   }
 
   // Create provider
