@@ -31,6 +31,10 @@ export interface DeployedContracts {
 
   // Fujin
   fujinFactoryId: string;
+
+  // EVM Bridge Contracts
+  evmUsdtAddress?: string;
+  evmUsdcAddress?: string;
 }
 
 export type DevnetStatus = 'idle' | 'booting' | 'ready' | 'error';
@@ -49,6 +53,8 @@ export interface DevnetControls {
   faucetBtc(address: string, sats: number): Promise<void>;
   faucetDiesel(address: string): Promise<void>;
   faucetFuel(address: string): Promise<void>;
+  faucetUsdt(address: string): Promise<void>;
+  faucetUsdc(address: string): Promise<void>;
   getChainHeight(): number;
   resetDevnet(): Promise<void>;
 }

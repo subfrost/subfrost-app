@@ -6,7 +6,7 @@ import { useDevnet } from '@/context/DevnetContext';
 import { useWallet } from '@/context/WalletContext';
 import { Loader2, RotateCcw } from 'lucide-react';
 
-type BusyAction = 'mine' | 'btc' | 'diesel' | 'fuel' | 'frbtc' | 'reset' | null;
+type BusyAction = 'mine' | 'btc' | 'diesel' | 'fuel' | 'frbtc' | 'usdt' | 'usdc' | 'reset' | null;
 
 export function DevnetControlPanel() {
   const { state, controls, isDevnet, boot, shutdown } = useDevnet();
@@ -128,7 +128,7 @@ export function DevnetControlPanel() {
             <div className="text-xs text-zinc-500 font-medium">
               Faucet {!address && <span className="text-amber-500">(connect wallet first)</span>}
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <ActionButton
                 action="btc"
                 onClick={() => runAction('btc', () => controls.faucetBtc(address || segwitAddress, 100_000_000))}
@@ -156,6 +156,20 @@ export function DevnetControlPanel() {
                 className="px-2 py-1.5 bg-green-900/50 hover:bg-green-800/50 text-green-300 rounded-lg text-xs border border-green-800/30"
               >
                 Wrap frBTC
+              </ActionButton>
+              <ActionButton
+                action="usdt"
+                onClick={() => runAction('usdt', () => controls.faucetUsdt(address || segwitAddress))}
+                className="px-2 py-1.5 bg-emerald-900/50 hover:bg-emerald-800/50 text-emerald-300 rounded-lg text-xs border border-emerald-800/30"
+              >
+                +USDT
+              </ActionButton>
+              <ActionButton
+                action="usdc"
+                onClick={() => runAction('usdc', () => controls.faucetUsdc(address || segwitAddress))}
+                className="px-2 py-1.5 bg-sky-900/50 hover:bg-sky-800/50 text-sky-300 rounded-lg text-xs border border-sky-800/30"
+              >
+                +USDC
               </ActionButton>
             </div>
           </div>

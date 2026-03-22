@@ -22,6 +22,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { DevnetState, DevnetControls, DeployedContracts } from '@/lib/devnet/types';
 import { saveDevnetState, loadDevnetState, clearDevnetState } from '@/lib/devnet/persistence';
+import type { DevnetEvmProvider, MockTokenAddresses } from '@/lib/devnet/evmProvider';
 
 interface DevnetContextValue {
   state: DevnetState;
@@ -46,6 +47,8 @@ const DevnetContext = createContext<DevnetContextValue>({
     faucetBtc: async () => {},
     faucetDiesel: async () => {},
     faucetFuel: async () => {},
+    faucetUsdt: async () => {},
+    faucetUsdc: async () => {},
     getChainHeight: () => 0,
     resetDevnet: async () => {},
   },
@@ -65,6 +68,8 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   const [state, setState] = useState<DevnetState>(defaultState);
   const harnessRef = useRef<any>(null);
   const providerRef = useRef<any>(null);
+  const evmProviderRef = useRef<DevnetEvmProvider | null>(null);
+  const evmTokensRef = useRef<MockTokenAddresses | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDevnet = network === 'devnet';
@@ -182,6 +187,34 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
 
       harnessRef.current = result.harness;
       providerRef.current = result.provider;
+
+      // Initialize EVM devnet (in-process revm) for bridge testing
+      setState(prev => ({ ...prev, bootProgress: 'Initializing EVM devnet...', bootPercent: 85 }));
+      try {
+        const { DevnetEvmProvider: EvmProvider } = await import('@/lib/devnet/evmProvider');
+        const evmProvider = await EvmProvider.create();
+        const mockTokens = await evmProvider.deployMockTokens();
+
+        // Seed a default EVM user with 10,000 USDT and 10,000 USDC
+        const defaultEvmUser = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+        evmProvider.fundAccount(defaultEvmUser, '1000');
+        await evmProvider.seedWallet(defaultEvmUser, {
+          usdt: BigInt(10_000) * 10n ** 6n,
+          usdc: BigInt(10_000) * 10n ** 6n,
+        }, mockTokens);
+
+        evmProviderRef.current = evmProvider;
+        evmTokensRef.current = mockTokens;
+
+        // Update contracts with EVM addresses
+        result.contracts.evmUsdtAddress = mockTokens.usdtAddress;
+        result.contracts.evmUsdcAddress = mockTokens.usdcAddress;
+
+        console.log('[DevnetContext] EVM devnet ready — USDT:', mockTokens.usdtAddress, 'USDC:', mockTokens.usdcAddress);
+      } catch (evmErr: any) {
+        // EVM is optional — Bitcoin devnet still works without it
+        console.warn('[DevnetContext] EVM devnet init failed (non-fatal):', evmErr?.message || evmErr);
+      }
 
       setState({
         status: 'ready',
@@ -314,6 +347,22 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       console.log('[devnet] FUEL faucet: mined 3 blocks');
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
+    },
+    faucetUsdt: async (address: string) => {
+      if (!evmProviderRef.current || !evmTokensRef.current) {
+        throw new Error('EVM devnet not ready');
+      }
+      const amount = BigInt(10_000) * 10n ** 6n; // 10,000 USDT
+      await evmProviderRef.current.seedWallet(address, { usdt: amount }, evmTokensRef.current);
+      console.log('[devnet] USDT faucet: minted 10,000 USDT to', address);
+    },
+    faucetUsdc: async (address: string) => {
+      if (!evmProviderRef.current || !evmTokensRef.current) {
+        throw new Error('EVM devnet not ready');
+      }
+      const amount = BigInt(10_000) * 10n ** 6n; // 10,000 USDC
+      await evmProviderRef.current.seedWallet(address, { usdc: amount }, evmTokensRef.current);
+      console.log('[devnet] USDC faucet: minted 10,000 USDC to', address);
     },
     getChainHeight: () => {
       return harnessRef.current?.height ?? 0;
