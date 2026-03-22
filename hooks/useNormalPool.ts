@@ -1,7 +1,7 @@
 /**
- * useNormalPool — queries the dx-btc normal pool for ftrBTC futures trading.
+ * useNormalPool — queries the volBTC pool for ftrBTC futures trading.
  *
- * The normal pool is a constant-product AMM where all ftrBTC instances
+ * The volBTC pool is a constant-product AMM where all ftrBTC instances
  * are valued by their intrinsic dxBTC share value (utilization-adjusted).
  * This enables trading between futures with different expiries/premiums.
  *

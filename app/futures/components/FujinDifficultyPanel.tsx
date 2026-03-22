@@ -172,10 +172,10 @@ export default function FujinDifficultyPanel() {
         </div>
       </div>
 
-      {/* Normalized BTC Pool */}
+      {/* volBTC Pool — unified ftrBTC futures liquidity */}
       <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-6">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-bold text-[color:var(--sf-text)]">Normalized BTC Pool</h4>
+          <h4 className="text-sm font-bold text-[color:var(--sf-text)]">volBTC Pool</h4>
           <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${normalPool?.hasLiquidity ? 'bg-green-400' : 'bg-zinc-600'}`} />
             <span className="text-xs text-[color:var(--sf-text)]/50">
@@ -184,7 +184,7 @@ export default function FujinDifficultyPanel() {
           </div>
         </div>
         <p className="text-xs text-[color:var(--sf-text)]/50 mb-3">
-          Trade ftrBTC futures against dxBTC. All ftrBTC instances valued by time-weighted utilization premium.
+          Pool and trade ftrBTC futures. All instances valued by dxBTC share price, adjusted for utilization premium.
         </p>
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
@@ -203,7 +203,7 @@ export default function FujinDifficultyPanel() {
                 ? (Number(BigInt(normalPool.totalSupply)) / 1e8).toFixed(4)
                 : '--'}
             </div>
-            <div className="text-[10px] text-[color:var(--sf-text)]/30">DXNPL</div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/30">volBTC</div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
             <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Holdings</div>
