@@ -81,32 +81,38 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   const isLoadingData = isLoading || isRefreshing;
 
-  // Auto-refresh alkanes once after 15 seconds if no tokens found
-  const hasNoTokens = useMemo(() => {
-    const tokens = balances.alkanes.filter((a) => {
-      const isNftAsset = BigInt(a.balance) === BigInt(1);
-      const isPositionAsset = /\bLP\b/i.test(a.symbol) || /\bLP\b/i.test(a.name) || a.symbol.startsWith('POS-') || a.name.startsWith('POS-');
-      return !isNftAsset && !isPositionAsset;
-    });
-    return tokens.length === 0;
-  }, [balances.alkanes]);
+  // Auto-retry when balances loaded but alkanes are empty — catches cases where
+  // the alkane-balances API was slow or timed out on the initial fetch.
+  // Retries at 3s and 8s, then stops. Resets when wallet reconnects.
+  const retryCountRef = useRef(0);
+  const MAX_AUTO_RETRIES = 2;
 
   useEffect(() => {
-    // Only auto-refresh once, when not loading, and when no tokens found
-    if (hasAutoRefreshed.current || isLoading || !hasNoTokens) {
+    // Reset retry counter when alkanes appear or loading starts fresh
+    if (balances.alkanes.length > 0) {
+      retryCountRef.current = 0;
+      hasAutoRefreshed.current = true;
+    }
+  }, [balances.alkanes.length]);
+
+  useEffect(() => {
+    // Only retry when: not loading, alkanes are empty, and we haven't exhausted retries
+    if (isLoading || balances.alkanes.length > 0 || retryCountRef.current >= MAX_AUTO_RETRIES) {
       return;
     }
 
+    // Exponential delay: 3s, then 8s
+    const delay = retryCountRef.current === 0 ? 3000 : 8000;
     const timer = setTimeout(() => {
-      if (!hasAutoRefreshed.current && hasNoTokens) {
-        console.log('[AlkanesBalancesCard] Auto-refreshing alkanes after 15s (no tokens found)');
-        hasAutoRefreshed.current = true;
+      if (balances.alkanes.length === 0 && retryCountRef.current < MAX_AUTO_RETRIES) {
+        retryCountRef.current += 1;
+        console.log(`[AlkanesBalancesCard] Auto-retry ${retryCountRef.current}/${MAX_AUTO_RETRIES} — alkanes empty after ${delay}ms`);
         handleRefresh();
       }
-    }, 15000);
+    }, delay);
 
     return () => clearTimeout(timer);
-  }, [hasNoTokens, isLoading]);
+  }, [balances.alkanes.length, isLoading]);
 
   const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);

@@ -76,6 +76,17 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       !!deps.account &&
       deps.isConnected &&
       addresses.length > 0,
+    // Keep data fresh for 30s — HeightPoller invalidates on new blocks anyway.
+    // Prevents unnecessary refetches from re-renders and query key identity changes.
+    staleTime: 30_000,
+    // Always refetch when the dashboard mounts (navigating back to wallet page)
+    refetchOnMount: 'always',
+    // Refetch when user returns to the tab
+    refetchOnWindowFocus: true,
+    // Retry up to 3 times with exponential backoff — covers transient API failures
+    // that previously caused empty balance display
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     queryFn: async () => {
       const provider = deps.provider!;
 

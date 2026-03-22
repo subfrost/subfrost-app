@@ -3,7 +3,7 @@
  *
  * Flow:
  * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + inscriptions + runes
- * 2. provider.dataApi.getAlkanesByAddress(address) - SDK dataApi for alkane token balances
+ * 2. /api/alkane-balances - REST API for alkane token balances with metadata
  *
  * JOURNAL ENTRY (2026-02-03):
  * Migrated from deprecated fetchAlkaneBalances to SDK's dataApi.getAlkanesByAddress.
@@ -11,13 +11,25 @@
  * JOURNAL ENTRY (2026-02-02):
  * Converted from useEffect+useState to useQuery. The query is invalidated by the
  * central HeightPoller when block height changes.
+ *
+ * JOURNAL ENTRY (2026-03-22):
+ * Fixed intermittent balance loading — protorunes would sometimes not appear on
+ * wallet dashboard, requiring refresh or disconnect/reconnect. Root causes:
+ *   - No retry logic: transient API failures returned empty data permanently
+ *   - No explicit refetch on wallet connection state change
+ *   - No staleTime: unnecessary refetches racing with each other
+ *   - 15s auto-refresh band-aid in AlkanesBalancesCard was insufficient
+ * Fix: Added retry(3), staleTime(30s), refetchOnMount('always') to query options,
+ * plus an effect here that triggers refetch when isConnected transitions to true
+ * with a ready provider.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { enrichedWalletQueryOptions } from '@/queries/account';
+import { queryKeys } from '@/queries/keys';
 
 export interface AlkaneAsset {
   alkaneId: string;
@@ -93,6 +105,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   const { account, isConnected, network } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const queryClient = useQueryClient();
+  const prevConnectedRef = useRef(false);
 
   const opts = enrichedWalletQueryOptions({
     provider,
@@ -103,6 +116,36 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   });
 
   const { data, isLoading, error, refetch } = useQuery(opts);
+
+  // Trigger an immediate refetch when the wallet transitions to connected state
+  // AND the SDK provider is ready. This covers:
+  //   - Initial page load with cached wallet (SDK may init after wallet restores)
+  //   - Fresh wallet connection (isConnected flips from false to true)
+  //   - Disconnect + reconnect cycle
+  useEffect(() => {
+    const isReady = isConnected && isInitialized && !!provider && !!account;
+    const wasDisconnected = !prevConnectedRef.current;
+
+    if (isReady && wasDisconnected) {
+      console.log('[useEnrichedWalletData] Wallet connected + SDK ready — triggering balance fetch');
+      // Small delay to let React settle state updates from the connection flow
+      const timer = setTimeout(() => {
+        // Invalidate to clear any stale/empty cached data, then refetch
+        const addresses: string[] = [];
+        if (account?.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
+        if (account?.taproot?.address) addresses.push(account.taproot.address);
+        const addressKey = addresses.sort().join(',');
+        if (addressKey) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.account.enrichedWallet(network || 'mainnet', addressKey),
+          });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+
+    prevConnectedRef.current = isReady;
+  }, [isConnected, isInitialized, provider, account, network, queryClient]);
 
   const refresh = useCallback(async () => {
     await refetch();

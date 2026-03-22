@@ -105,9 +105,22 @@ export function HeightPoller({ network }: { network: string }) {
   useEffect(() => {
     if (height == null) return;
 
-    // First mount — just record the height, don't invalidate
+    // First mount — record the height and trigger a single invalidation to ensure
+    // balance queries that may have started before HeightPoller mounted get a
+    // fresh fetch. This fixes the case where initial balance fetch returns empty
+    // data and nothing triggers a retry until the next block.
     if (prevHeight.current === null) {
       prevHeight.current = height;
+      console.log(`[HeightPoller] Initial height: ${height}, triggering first invalidation`);
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          if (!Array.isArray(key)) return true;
+          if (key[0] === 'height') return false;
+          if (key[0] === 'frbtc-premium') return false;
+          return true;
+        },
+      });
       return;
     }
 
