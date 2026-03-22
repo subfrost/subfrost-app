@@ -78,12 +78,15 @@ export async function bootDevnetWithWasms(
 }> {
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
+  console.log('[devnet-boot] Importing SDK from /sdk/qubitcoin/index.js...');
   // @ts-ignore — runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
+  console.log('[devnet-boot] SDK imported, exports:', Object.keys(sdk));
 
-  onProgress('Creating in-browser Bitcoin node...', 10);
+  onProgress('Deriving wallet keys...', 10);
 
   // Derive coinbase key from mnemonic
+  console.log('[devnet-boot] Importing crypto libs...');
   const bip39 = await import('bip39');
   const bip32Lib = await import('bip32');
   const ecc = await import('@bitcoinerlab/secp256k1');
@@ -92,11 +95,20 @@ export async function bootDevnetWithWasms(
   const root = bip32.fromSeed(seed);
   const child = root.derivePath("m/84'/1'/0'/0/0");
   const secretKey = new Uint8Array(child.privateKey!);
+  console.log('[devnet-boot] Keys derived, creating harness...');
+
+  onProgress('Initializing Bitcoin node (loading WASM)...', 15);
 
   // Create harness with indexers
   const tertiaryIndexers = quspoWasm
     ? [{ label: 'quspo', wasm: quspoWasm }]
     : [];
+
+  console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esploraWasm=%sKB quspo=%s',
+    Math.round(alkanesWasm.length / 1024),
+    esploraWasm ? Math.round(esploraWasm.length / 1024) : 'none',
+    quspoWasm ? Math.round(quspoWasm.length / 1024) + 'KB' : 'none',
+  );
 
   _harness = await sdk.DevnetTestHarness.create({
     alkanesWasm,
@@ -104,6 +116,7 @@ export async function bootDevnetWithWasms(
     tertiaryIndexers: tertiaryIndexers.length > 0 ? tertiaryIndexers : undefined,
     secretKey,
   });
+  console.log('[devnet-boot] Harness created successfully');
 
   // Install fetch interceptor — all RPC calls now go in-process
   _harness.installFetchInterceptor();

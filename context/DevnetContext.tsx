@@ -77,24 +77,34 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       let quspoWasm: Uint8Array | undefined;
 
       try {
-        // Try fetching from public directory
+        console.log('[DevnetContext] Fetching alkanes.wasm...');
         const alkanesResp = await fetch('/wasm/alkanes.wasm');
         if (alkanesResp.ok) {
           alkanesWasm = new Uint8Array(await alkanesResp.arrayBuffer());
+          console.log('[DevnetContext] alkanes.wasm loaded:', Math.round(alkanesWasm.length / 1024), 'KB');
         } else {
-          throw new Error('Alkanes WASM not available at /wasm/alkanes.wasm');
+          throw new Error(`Alkanes WASM not available: HTTP ${alkanesResp.status}`);
         }
 
+        console.log('[DevnetContext] Fetching esplora.wasm...');
         const esploraResp = await fetch('/wasm/esplora.wasm');
         if (esploraResp.ok) {
           esploraWasm = new Uint8Array(await esploraResp.arrayBuffer());
+          console.log('[DevnetContext] esplora.wasm loaded:', Math.round(esploraWasm.length / 1024), 'KB');
+        } else {
+          console.warn('[DevnetContext] esplora.wasm not available (optional)');
         }
 
+        console.log('[DevnetContext] Fetching quspo.wasm...');
         const quspoResp = await fetch('/wasm/quspo.wasm');
         if (quspoResp.ok) {
           quspoWasm = new Uint8Array(await quspoResp.arrayBuffer());
+          console.log('[DevnetContext] quspo.wasm loaded:', Math.round(quspoWasm.length / 1024), 'KB');
+        } else {
+          console.warn('[DevnetContext] quspo.wasm not available (optional)');
         }
-      } catch (e) {
+      } catch (e: any) {
+        console.error('[DevnetContext] WASM fetch failed:', e);
         // If WASMs aren't served from public dir, the devnet can't boot
         setState(prev => ({
           ...prev,
