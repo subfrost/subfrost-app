@@ -103,6 +103,7 @@ export function getConfig(network: string) {
         FUEL_TOKEN_ID: '4:7000',
         FTRBTC_TEMPLATE_ID: '4:7010',
         DXBTC_VAULT_ID: '4:7020',
+        DXBTC_NORMAL_POOL_ID: '4:7021',
         VX_FUEL_GAUGE_ID: '4:7030',
         VX_BTCUSD_GAUGE_ID: '4:7031',
         SYNTH_POOL_ID: '4:8202',

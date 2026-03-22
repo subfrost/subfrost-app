@@ -6,6 +6,7 @@ import { useSynthPoolState } from '@/hooks/useSynthPoolState';
 import { useWallet } from '@/context/WalletContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Info, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
+import { useNormalPool } from '@/hooks/useNormalPool';
 
 /**
  * Fujin Difficulty Futures Panel
@@ -18,6 +19,7 @@ export default function FujinDifficultyPanel() {
   const { data: fujinData, isLoading: fujinLoading } = useFujinMarkets();
   const { data: synthData } = useSynthPoolState();
   const { isConnected } = useWallet();
+  const { data: normalPool } = useNormalPool();
   const [swapDirection, setSwapDirection] = useState<'LONG' | 'SHORT'>('LONG');
   const [amount, setAmount] = useState('');
 
@@ -172,20 +174,58 @@ export default function FujinDifficultyPanel() {
 
       {/* Normalized BTC Pool */}
       <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-6">
-        <h4 className="text-sm font-bold text-[color:var(--sf-text)] mb-2">Normalized BTC Pool</h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-bold text-[color:var(--sf-text)]">Normalized BTC Pool</h4>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${normalPool?.hasLiquidity ? 'bg-green-400' : 'bg-zinc-600'}`} />
+            <span className="text-xs text-[color:var(--sf-text)]/50">
+              {normalPool?.hasLiquidity ? 'Active' : 'No Liquidity'}
+            </span>
+          </div>
+        </div>
         <p className="text-xs text-[color:var(--sf-text)]/50 mb-3">
           Trade ftrBTC futures against dxBTC. All ftrBTC instances valued by time-weighted utilization premium.
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">dxBTC Reserve</div>
-            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">--</div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Pool Value</div>
+            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
+              {normalPool?.totalValue && BigInt(normalPool.totalValue) > 0n
+                ? (Number(BigInt(normalPool.totalValue)) / 1e8).toFixed(4)
+                : '--'}
+            </div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/30">dxBTC</div>
           </div>
           <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">ftrBTC Reserve</div>
-            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">--</div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">LP Supply</div>
+            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
+              {normalPool?.totalSupply && BigInt(normalPool.totalSupply) > 0n
+                ? (Number(BigInt(normalPool.totalSupply)) / 1e8).toFixed(4)
+                : '--'}
+            </div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/30">DXNPL</div>
+          </div>
+          <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
+            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Holdings</div>
+            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
+              {normalPool?.holdings?.length ?? 0}
+            </div>
+            <div className="text-[10px] text-[color:var(--sf-text)]/30">ftrBTC types</div>
           </div>
         </div>
+        {/* Show holdings if any */}
+        {normalPool?.holdings && normalPool.holdings.length > 0 && (
+          <div className="mt-3 space-y-1">
+            {normalPool.holdings.map(h => (
+              <div key={h.ftrId} className="flex items-center justify-between px-2 py-1.5 rounded bg-[color:var(--sf-surface)]/50 text-[11px]">
+                <span className="font-mono text-[color:var(--sf-text)]/60">{h.ftrId}</span>
+                <span className="font-mono tabular-nums text-[color:var(--sf-text)]/80">
+                  {(Number(BigInt(h.amount)) / 1e8).toFixed(4)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
