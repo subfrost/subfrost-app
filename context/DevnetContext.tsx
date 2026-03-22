@@ -183,49 +183,60 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
 
   const controls: DevnetControls = {
     mineBlocks: async (count: number) => {
-      if (harnessRef.current) {
-        harnessRef.current.mineBlocks(count);
-        setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+      if (!harnessRef.current) return;
+      // Mine 1 block at a time with yields to prevent OOM
+      for (let i = 0; i < count; i++) {
+        harnessRef.current.mineBlocks(1);
+        if (count > 1) await new Promise(r => setTimeout(r, 50));
       }
+      setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
     },
     faucetBtc: async (address: string, sats: number) => {
-      // Mine a block to the user — the coinbase goes to the harness key
-      // Then use a tx to send BTC to the user's address
-      if (harnessRef.current) {
-        harnessRef.current.mineBlocks(1);
-        setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
-      }
+      if (!harnessRef.current) throw new Error('Devnet not ready');
+      // Mining produces coinbase to the loaded wallet's key.
+      // The loaded wallet IS the user's wallet (same mnemonic).
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      harnessRef.current.mineBlocks(1);
+      console.log('[devnet] BTC faucet: mined 2 blocks (coinbase → wallet)');
+      setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
     },
     faucetDiesel: async (address: string) => {
-      // Mint DIESEL via opcode 77
-      if (providerRef.current && harnessRef.current) {
-        harnessRef.current.mineBlocks(1);
-        try {
-          await providerRef.current.alkanesExecuteFull(
-            JSON.stringify([address]),
-            'B:10000:v0',
-            '[2,0,77]:v0:v0',
-            '1', null,
-            JSON.stringify({ from_addresses: [address], change_address: address, alkanes_change_address: address }),
-          );
-          harnessRef.current.mineBlocks(1);
-        } catch { /* best effort */ }
-        setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
-      }
+      if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      await providerRef.current.alkanesExecuteFull(
+        JSON.stringify([address]),
+        'B:10000:v0',
+        '[2,0,77]:v0:v0',
+        '1', null,
+        JSON.stringify({
+          from_addresses: [address],
+          change_address: address,
+          alkanes_change_address: address,
+        }),
+      );
+      harnessRef.current.mineBlocks(1);
+      console.log('[devnet] DIESEL minted to', address);
+      setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
     },
     faucetFuel: async (address: string) => {
-      // FUEL tokens would need to be transferred from treasury
-      if (harnessRef.current) {
-        harnessRef.current.mineBlocks(1);
-        setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
-      }
+      if (!harnessRef.current) throw new Error('Devnet not ready');
+      // FUEL mint — mine blocks for now (coinbase contains BTC)
+      harnessRef.current.mineBlocks(3);
+      console.log('[devnet] FUEL faucet: mined 3 blocks');
+      setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
     },
     getChainHeight: () => {
       return harnessRef.current?.height ?? 0;
     },
     resetDevnet: async () => {
+      console.log('[devnet] Resetting...');
       shutdown();
-      // Re-boot would need the mnemonic — caller should trigger boot() again
+      bootedRef.current = false;
+      await new Promise(r => setTimeout(r, 500));
+      const DEFAULT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+      await boot(DEFAULT_MNEMONIC);
     },
   };
 
