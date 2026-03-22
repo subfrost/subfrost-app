@@ -12,10 +12,16 @@
  *
  * The fetch interceptor routes ALL RPC calls to the in-process devnet,
  * so the rest of the app works exactly as it does against a real network.
+ *
+ * JOURNAL (2026-03-22): Added IndexedDB persistence via lib/devnet/persistence.ts.
+ * On boot, we check for a saved state and import it instead of mining 101 blocks.
+ * After boot and after each faucet/mine action, we debounce-save the state.
+ * On reset, we clear the saved state.
  */
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { DevnetState, DevnetControls, DeployedContracts } from '@/lib/devnet/types';
+import { saveDevnetState, loadDevnetState, clearDevnetState } from '@/lib/devnet/persistence';
 
 interface DevnetContextValue {
   state: DevnetState;
@@ -52,12 +58,44 @@ export function useDevnet() {
   return useContext(DevnetContext);
 }
 
+/** Debounce delay (ms) for saving state after actions. */
+const SAVE_DEBOUNCE_MS = 2000;
+
 export function DevnetProvider({ children, network }: { children: React.ReactNode; network: string }) {
   const [state, setState] = useState<DevnetState>(defaultState);
   const harnessRef = useRef<any>(null);
   const providerRef = useRef<any>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDevnet = network === 'devnet';
+
+  /**
+   * Debounce-save the current devnet state to IndexedDB.
+   * Called after boot, mine, faucet, etc.
+   */
+  const debounceSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      const harness = harnessRef.current;
+      if (!harness?.server?.exportState) return;
+      try {
+        const stateBytes = harness.server.exportState();
+        const bytes = stateBytes instanceof Uint8Array
+          ? stateBytes
+          : new Uint8Array(stateBytes);
+        console.log('[DevnetContext] Saving state to IndexedDB (%d KB)...', Math.round(bytes.length / 1024));
+        saveDevnetState(bytes).then(() => {
+          console.log('[DevnetContext] State saved successfully');
+        }).catch((e: any) => {
+          console.warn('[DevnetContext] Failed to save state:', e?.message || e);
+        });
+      } catch (e: any) {
+        console.warn('[DevnetContext] Failed to export state:', e?.message || e);
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }, []);
 
   const boot = useCallback(async (mnemonic: string) => {
     if (state.status === 'booting' || state.status === 'ready') return;
@@ -68,8 +106,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       const { bootDevnetWithWasms } = await import('@/lib/devnet/boot');
 
       // Fetch indexer WASMs
-      // In production these would be served from a CDN or public dir
-      // For now, we check if they're available at known paths
       setState(prev => ({ ...prev, bootProgress: 'Fetching indexer WASMs...', bootPercent: 8 }));
 
       let alkanesWasm: Uint8Array;
@@ -110,7 +146,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         }
       } catch (e: any) {
         console.error('[DevnetContext] WASM fetch failed:', e);
-        // If WASMs aren't served from public dir, the devnet can't boot
         setState(prev => ({
           ...prev,
           status: 'error',
@@ -118,6 +153,20 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           bootPercent: 0,
         }));
         return;
+      }
+
+      // Check for saved state in IndexedDB
+      let savedState: Uint8Array | undefined;
+      try {
+        const loaded = await loadDevnetState();
+        if (loaded) {
+          console.log('[DevnetContext] Found saved state in IndexedDB (%d KB)', Math.round(loaded.length / 1024));
+          savedState = loaded;
+        } else {
+          console.log('[DevnetContext] No saved state found, will do fresh boot');
+        }
+      } catch (e: any) {
+        console.warn('[DevnetContext] Failed to load saved state (will do fresh boot):', e?.message || e);
       }
 
       const result = await bootDevnetWithWasms(
@@ -128,6 +177,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         (message, percent) => {
           setState(prev => ({ ...prev, bootProgress: message, bootPercent: percent }));
         },
+        savedState,
       );
 
       harnessRef.current = result.harness;
@@ -140,6 +190,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         contracts: result.contracts,
         chainHeight: result.harness.height,
       });
+
+      // Save state after boot completes (if we did a fresh boot, persist it)
+      if (!savedState) {
+        debounceSave();
+      }
     } catch (e: any) {
       const errorMsg = e?.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'Boot failed (unknown error)';
       console.error('[DevnetContext] Boot failed:', e);
@@ -151,9 +206,13 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         bootPercent: 0,
       }));
     }
-  }, [state.status]);
+  }, [state.status, debounceSave]);
 
   const shutdown = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     import('@/lib/devnet/boot').then(({ disposeDevnet }) => {
       disposeDevnet();
       harnessRef.current = null;
@@ -175,6 +234,9 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
       if (harnessRef.current) {
         import('@/lib/devnet/boot').then(({ disposeDevnet }) => disposeDevnet());
       }
@@ -190,6 +252,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         if (count > 1) await new Promise(r => setTimeout(r, 50));
       }
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+      debounceSave();
     },
     faucetBtc: async (address: string, sats: number) => {
       if (!harnessRef.current) throw new Error('Devnet not ready');
@@ -200,6 +263,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       harnessRef.current.mineBlocks(1);
       console.log('[devnet] BTC faucet: mined 2 blocks (coinbase → wallet)');
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+      debounceSave();
     },
     faucetDiesel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
@@ -219,6 +283,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       harnessRef.current.mineBlocks(1);
       console.log('[devnet] DIESEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+      debounceSave();
     },
     faucetFuel: async (address: string) => {
       if (!harnessRef.current) throw new Error('Devnet not ready');
@@ -226,12 +291,20 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       harnessRef.current.mineBlocks(3);
       console.log('[devnet] FUEL faucet: mined 3 blocks');
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+      debounceSave();
     },
     getChainHeight: () => {
       return harnessRef.current?.height ?? 0;
     },
     resetDevnet: async () => {
       console.log('[devnet] Resetting...');
+      // Clear saved state from IndexedDB before shutting down
+      try {
+        await clearDevnetState();
+        console.log('[devnet] Cleared saved state from IndexedDB');
+      } catch (e: any) {
+        console.warn('[devnet] Failed to clear saved state:', e?.message || e);
+      }
       shutdown();
       bootedRef.current = false;
       await new Promise(r => setTimeout(r, 500));

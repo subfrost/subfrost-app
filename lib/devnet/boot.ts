@@ -6,6 +6,11 @@
  *
  * This runs in the browser's main thread (could be moved to a web worker
  * for better UX if boot time becomes problematic).
+ *
+ * JOURNAL (2026-03-22): Added savedState parameter to bootDevnetWithWasms.
+ * When a previously exported state blob is provided, the boot skips mining
+ * 101 blocks and instead calls DevnetServer.importState() to restore the
+ * indexer KV stores + chain height. This cuts boot from ~5s to <0.5s.
  */
 
 import type { DeployedContracts } from './types';
@@ -62,6 +67,10 @@ export async function bootDevnet(
 /**
  * Boot devnet with pre-loaded WASM bytes.
  * Called by DevnetContext after fetching all required WASMs.
+ *
+ * @param savedState - If provided, skip mining and import this state blob
+ *   (produced by DevnetServer.exportState()). This restores the indexer
+ *   KV stores and chain height without re-indexing.
  */
 export async function bootDevnetWithWasms(
   alkanesWasm: Uint8Array,
@@ -69,6 +78,7 @@ export async function bootDevnetWithWasms(
   quspoWasm: Uint8Array | undefined,
   mnemonic: string,
   onProgress: ProgressCallback,
+  savedState?: Uint8Array,
 ): Promise<{
   harness: any;
   provider: any;
@@ -122,25 +132,21 @@ export async function bootDevnetWithWasms(
   // Install fetch interceptor — all RPC calls now go in-process
   _harness.installFetchInterceptor();
 
-  onProgress('Mining initial blocks...', 20);
-  // JOURNAL (2026-03-22): Mine 1 block at a time with real delays.
-  // Both alkanes and esplora indexers create a new WebAssembly.Instance per block
-  // via WebIndexerRuntime::run_block. With batch size > 1, multiple instances
-  // accumulate before GC gets a chance to reclaim them, causing browser OOM.
-  // Mining 1 block at a time with 50ms delay gives the browser GC enough time
-  // to collect the previous block's instances before creating new ones.
-  // Coinbase maturity requires 100 blocks; we mine 101 for safety.
-  // Total extra time: ~5s (101 × 50ms).
-  const TOTAL_BLOCKS = 101;
-  for (let mined = 0; mined < TOTAL_BLOCKS; mined++) {
-    _harness.mineBlocks(1);
-    if (mined % 10 === 0) {
-      const pct = 20 + Math.round((mined / TOTAL_BLOCKS) * 30);
-      onProgress(`Mining blocks... ${mined + 1}/${TOTAL_BLOCKS}`, pct);
+  // If we have a saved state, import it instead of mining blocks
+  if (savedState) {
+    onProgress('Restoring saved state...', 20);
+    console.log('[devnet-boot] Importing saved state (%d KB)...', Math.round(savedState.length / 1024));
+    try {
+      _harness.server.importState(savedState);
+      console.log('[devnet-boot] State imported, chain height:', _harness.height);
+      onProgress('State restored!', 50);
+    } catch (e: any) {
+      console.warn('[devnet-boot] Failed to import saved state, falling back to fresh boot:', e?.message || e);
+      // Fall through to normal mining path
+      await mineInitialBlocks(onProgress);
     }
-    // Real delay (not setTimeout(0)) to allow browser GC to reclaim
-    // the WebAssembly.Instance objects created by run_block
-    await new Promise(r => setTimeout(r, 50));
+  } else {
+    await mineInitialBlocks(onProgress);
   }
 
   // Now add quspo tertiary indexer AFTER initial mining is complete.
@@ -216,6 +222,33 @@ export async function bootDevnetWithWasms(
     taprootAddress,
     segwitAddress,
   };
+}
+
+/**
+ * Mine 101 blocks one at a time with GC-friendly delays.
+ * Extracted to share between fresh boot and fallback after import failure.
+ */
+async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
+  onProgress('Mining initial blocks...', 20);
+  // JOURNAL (2026-03-22): Mine 1 block at a time with real delays.
+  // Both alkanes and esplora indexers create a new WebAssembly.Instance per block
+  // via WebIndexerRuntime::run_block. With batch size > 1, multiple instances
+  // accumulate before GC gets a chance to reclaim them, causing browser OOM.
+  // Mining 1 block at a time with 50ms delay gives the browser GC enough time
+  // to collect the previous block's instances before creating new ones.
+  // Coinbase maturity requires 100 blocks; we mine 101 for safety.
+  // Total extra time: ~5s (101 x 50ms).
+  const TOTAL_BLOCKS = 101;
+  for (let mined = 0; mined < TOTAL_BLOCKS; mined++) {
+    _harness.mineBlocks(1);
+    if (mined % 10 === 0) {
+      const pct = 20 + Math.round((mined / TOTAL_BLOCKS) * 30);
+      onProgress(`Mining blocks... ${mined + 1}/${TOTAL_BLOCKS}`, pct);
+    }
+    // Real delay (not setTimeout(0)) to allow browser GC to reclaim
+    // the WebAssembly.Instance objects created by run_block
+    await new Promise(r => setTimeout(r, 50));
+  }
 }
 
 /**
