@@ -10,7 +10,7 @@ import FireRedemptionPanel from './panels/FireRedemptionPanel';
 import FireDistributionPanel from './panels/FireDistributionPanel';
 import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
-import { useFireMockData } from '@/hooks/fire/useFireMockData';
+import { useFireChartData } from '@/hooks/fire/useFireChartData';
 import { formatCompact, LOCK_TIERS } from '@/utils/fireCalculations';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
@@ -32,7 +32,7 @@ export default function FireDashboard() {
   const [showMobileVaultDetails, setShowMobileVaultDetails] = useState(false);
   const { data: tokenStats } = useFireTokenStats();
   const { data: stakingStats } = useFireStakingStats();
-  const mockData = useFireMockData();
+  const mockData = useFireChartData();
 
   const heroMetrics = useMemo(() => {
     const circSupply = new BigNumber(tokenStats?.circulatingSupply || '0').dividedBy(1e8);

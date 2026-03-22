@@ -13,7 +13,8 @@ import { getPools, type PoolConfig } from '@/lib/alkanes-client';
 export type CandleTimeframe = '1h' | '4h' | '1d' | '1w';
 
 // Set to true to use mock data for demo purposes
-const USE_MOCK_DATA = true;
+// Real data infrastructure is implemented below — candle-fetcher queries on-chain reserves at historical heights
+const USE_MOCK_DATA = false;
 
 interface UsePoolCandlesOptions {
   poolId?: string;

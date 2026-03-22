@@ -7,7 +7,7 @@ import StakerPieChart from '../charts/StakerPieChart';
 import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
 import { useFireTreasury } from '@/hooks/fire/useFireTreasury';
-import { useFireMockData } from '@/hooks/fire/useFireMockData';
+import { useFireChartData } from '@/hooks/fire/useFireChartData';
 import { formatCompact } from '@/utils/fireCalculations';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
@@ -19,7 +19,7 @@ export default function FireOverviewPanel() {
   const { data: tokenStats } = useFireTokenStats();
   const { data: stakingStats } = useFireStakingStats();
   const { data: treasury } = useFireTreasury();
-  const mockData = useFireMockData();
+  const mockData = useFireChartData();
 
   const metrics = useMemo(() => {
     const emissionRemaining = new BigNumber(tokenStats?.emissionPoolRemaining || '0').dividedBy(1e8);
