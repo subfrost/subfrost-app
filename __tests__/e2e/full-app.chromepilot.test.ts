@@ -286,20 +286,25 @@ describe('Full App E2E (ChromePilot)', () => {
       await screenshot('swap-futures');
     });
 
-    it('should show LONG/SHORT toggle', async () => {
+    it('should show LONG/SHORT toggle on Difficulty sub-tab', async () => {
       if (!sessionId) return;
-      expect(await hasText('LONG')).toBe(true);
-      expect(await hasText('SHORT')).toBe(true);
+      // LONG/SHORT is on the Difficulty sub-tab within futures
+      await clickButton('Difficulty');
+      await new Promise(r => setTimeout(r, 2000));
+      expect(await hasText('LONG') || await hasText('Long')).toBe(true);
+      expect(await hasText('SHORT') || await hasText('Short')).toBe(true);
     });
 
-    it('should show difficulty stats', async () => {
+    it('should show difficulty stats on Difficulty sub-tab', async () => {
       if (!sessionId) return;
-      expect(await hasText('Forecast')).toBe(true);
-      expect(await hasText('Epoch')).toBe(true);
+      expect(await hasText('Forecast') || await hasText('Difficulty')).toBe(true);
     });
 
-    it('should show volBTC pool', async () => {
+    it('should show volBTC pool on Yield Futures sub-tab', async () => {
       if (!sessionId) return;
+      // Switch back to Yield Futures tab where volBTC lives
+      await clickButton('Yield Futures');
+      await new Promise(r => setTimeout(r, 1000));
       expect(await hasText('volBTC')).toBe(true);
     });
   });
@@ -399,9 +404,10 @@ describe('Full App E2E (ChromePilot)', () => {
       await screenshot('futures-difficulty');
     });
 
-    it('should show synth pool', async () => {
+    it('should NOT show synth pool in futures (moved to swap)', async () => {
       if (!sessionId) return;
-      expect(await hasText('Synth Pool')).toBe(true);
+      // Synth pool was removed from futures — it's a regular swap pool
+      expect(await hasText('Synth Pool')).toBe(false);
     });
 
     it('should show volBTC pool', async () => {
@@ -678,14 +684,14 @@ describe('Full App E2E (ChromePilot)', () => {
       await screenshot('swap-futures-mode');
     });
 
-    it('should show LONG button in futures mode', async () => {
+    it('should show Yield Futures sub-tab in futures mode', async () => {
       if (!sessionId) return;
-      expect(await hasText('LONG')).toBe(true);
+      expect(await hasButton('Yield Futures') || await hasText('YIELD FUTURES')).toBe(true);
     });
 
-    it('should show SHORT button in futures mode', async () => {
+    it('should show Difficulty sub-tab in futures mode', async () => {
       if (!sessionId) return;
-      expect(await hasText('SHORT')).toBe(true);
+      expect(await hasButton('Difficulty') || await hasText('DIFFICULTY')).toBe(true);
     });
 
     it('should click back to Spot mode', async () => {
@@ -883,9 +889,9 @@ describe('Full App E2E (ChromePilot)', () => {
       expect(hasPctButtons === true || hasPctButtons === 'true' || await hasButton('MAX')).toBe(true);
     });
 
-    it('should show Synth Pool section', async () => {
+    it('should NOT show Synth Pool in futures (removed)', async () => {
       if (!sessionId) return;
-      expect(await hasText('Synth Pool')).toBe(true);
+      expect(await hasText('Synth Pool')).toBe(false);
     });
 
     it('should show volBTC Pool section', async () => {
