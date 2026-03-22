@@ -29,7 +29,7 @@ export const USDC_DECIMALS = 6;
 export const FRUSD_DECIMALS = 18;
 
 /** Cross-chain token identifiers */
-export const BRIDGE_TOKEN_IDS = ['usdt', 'usdc', 'eth', 'sol', 'zec'] as const;
+export const BRIDGE_TOKEN_IDS = ['usdt', 'usdc'] as const;
 export type BridgeTokenId = typeof BRIDGE_TOKEN_IDS[number];
 
 // ---- Parsing helpers ----

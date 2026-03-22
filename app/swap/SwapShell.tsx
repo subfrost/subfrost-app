@@ -1938,7 +1938,7 @@ export default function SwapShell() {
                     quote={quote}
                     isCalculating={!!isCalculating}
                     feeRate={fee.feeRate}
-                    isCrossChainFrom={['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '')}
+                    isCrossChainFrom={['USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
                     feeSelection={fee.selection}
                     setFeeSelection={fee.setSelection}
                     customFee={fee.custom}
@@ -2075,7 +2075,7 @@ export default function SwapShell() {
         custom={fee.custom}
         setCustom={fee.setCustom}
         feeRate={fee.feeRate}
-        isCrossChainFrom={['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '')}
+        isCrossChainFrom={['USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
       />
 
       <TokenSelectorModal
@@ -2124,9 +2124,9 @@ export default function SwapShell() {
         selectedBridgeTokenFromOther={
           // Check if the opposite selector has a cross-chain bridge token selected
           tokenSelectorMode === 'from'
-            ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(toToken?.symbol ?? '') ? toToken?.symbol : undefined)
+            ? (['USDT', 'USDC'].includes(toToken?.symbol ?? '') ? toToken?.symbol : undefined)
             : tokenSelectorMode === 'to'
-            ? (['USDT', 'ETH', 'SOL', 'ZEC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
+            ? (['USDT', 'USDC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
             : undefined
         }
         onPercentFrom={tokenSelectorMode === 'from' && fromToken ? handlePercentFrom : undefined}
@@ -2134,9 +2134,7 @@ export default function SwapShell() {
         onBridgeTokenSelect={(tokenSymbol) => {
           const bridgeTokenMap: Record<string, { name: string }> = {
             USDT: { name: 'USDT' },
-            ETH: { name: 'ETH' },
-            SOL: { name: 'SOL' },
-            ZEC: { name: 'ZEC' },
+            USDC: { name: 'USD Coin' },
           };
           const tokenInfo = bridgeTokenMap[tokenSymbol];
           if (tokenInfo) {

@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import TokenIcon from './TokenIcon';
 import { Search, X } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDemoGate } from '@/hooks/useDemoGate';
+
 
 // Import Network type from constants
 import type { Network } from '@/utils/constants';
@@ -80,10 +80,8 @@ type Props = {
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'USDT', enabled: false },
-  { symbol: 'ETH', name: 'ETH', enabled: false },
-  { symbol: 'SOL', name: 'SOL', enabled: false },
-  { symbol: 'ZEC', name: 'ZEC', enabled: false },
+  { symbol: 'USDT', name: 'USDT', enabled: true },
+  { symbol: 'USDC', name: 'USD Coin', enabled: true },
 ] as const;
 
 export default function TokenSelectorModal({
@@ -102,7 +100,6 @@ export default function TokenSelectorModal({
   activePercent,
 }: Props) {
   const { t } = useTranslation();
-  const isDemoGated = useDemoGate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showAlreadySelected, setShowAlreadySelected] = useState(false);

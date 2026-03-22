@@ -89,7 +89,7 @@ export default function SwapInputs({
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
 
   // Bridge tokens don't have on-chain balances
-  const BRIDGE_TOKEN_IDS = ["usdt", "usdc", "eth", "sol", "zec"];
+  const BRIDGE_TOKEN_IDS = ["usdt", "usdc"];
   const isFromBridgeToken = from?.id
     ? BRIDGE_TOKEN_IDS.includes(from.id)
     : false;
@@ -628,8 +628,10 @@ export default function SwapInputs({
               onConnectModalOpenChange(true);
               return;
             }
-            if (!isDemoGated) {
-              console.log('[SwapInputs] NOT demo gated, calling onSwapClick');
+            // Bridge tokens bypass demo gating — USDT/USDC swaps should always work
+            const isBridgeSwap = isFromBridgeToken || isToBridgeToken;
+            if (!isDemoGated || isBridgeSwap) {
+              console.log('[SwapInputs] NOT demo gated (or bridge swap), calling onSwapClick');
               onSwapClick();
               return;
             }
@@ -640,7 +642,7 @@ export default function SwapInputs({
             }
           }}
           className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-            isConnected && isDemoGated
+            isConnected && isDemoGated && !isFromBridgeToken && !isToBridgeToken
               ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
               : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
           }`}
