@@ -22,6 +22,7 @@ type ProgressCallback = (message: string, percent: number) => void;
 // routes all RPC calls to the in-process devnet.
 let _harness: any = null;
 let _provider: any = null;
+let _bootAddresses: { segwit: string; taproot: string } | null = null;
 
 /**
  * Boot the in-browser devnet.
@@ -186,6 +187,7 @@ export async function bootDevnetWithWasms(
   });
   const segwitAddress = segwitPayment.address!;
   const taprootAddress = taprootPayment.address!;
+  _bootAddresses = { segwit: segwitAddress, taproot: taprootAddress };
 
   onProgress('Deploying AMM contracts...', 30);
   // TODO: Deploy AMM, FIRE, protocol contracts
@@ -263,6 +265,14 @@ export function getHarness() {
  */
 export function getProvider() {
   return _provider;
+}
+
+/**
+ * Get the boot addresses (derived from the mnemonic during boot).
+ */
+export function getBootAddresses(): { segwit: string; taproot: string } {
+  if (!_bootAddresses) throw new Error('Devnet not booted');
+  return _bootAddresses;
 }
 
 /**
