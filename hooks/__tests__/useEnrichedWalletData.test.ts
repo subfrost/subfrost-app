@@ -196,13 +196,14 @@ describe('useEnrichedWalletData', () => {
       expect(querySrc).toContain('esplora fallback');
     });
 
-    it('fetches alkane balances via /api/alkane-balances endpoint', () => {
-      expect(querySrc).toContain('/api/alkane-balances');
+    it('fetches alkane balances via SDK alkanesByAddress in separate query', () => {
+      expect(querySrc).toContain('alkaneBalanceQueryOptions');
+      expect(querySrc).toContain('alkanesByAddress');
     });
 
     it('aggregates alkane balances across multiple addresses using BigInt', () => {
       expect(querySrc).toContain('BigInt(existing.balance)');
-      expect(querySrc).toContain('BigInt(amountStr)');
+      expect(querySrc).toContain('BigInt(balanceStr');
     });
 
     it('processes spendable, assets, and pending UTXO categories', () => {
@@ -225,7 +226,7 @@ describe('useEnrichedWalletData', () => {
     it('merges alkane metadata (name, symbol, price) from API and KNOWN_TOKENS', () => {
       expect(querySrc).toContain('KNOWN_TOKENS');
       expect(querySrc).toContain('knownInfo');
-      expect(querySrc).toContain('entry.name || knownInfo?.name');
+      expect(querySrc).toContain('knownInfo?.name');
     });
 
     it('accumulates rune balances from UTXOs', () => {

@@ -389,7 +389,7 @@ export function useWrapSwapMutation() {
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
-      queryClient.invalidateQueries({ queryKey: ['alkane-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['alkane-balances'] });
       queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['alkanesTokenPairs'] });
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });

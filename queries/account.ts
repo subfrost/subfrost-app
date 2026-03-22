@@ -1,7 +1,8 @@
 /**
  * Account / wallet query options.
  *
- * - enrichedWallet: BTC UTXOs + alkane balances (was useEffect, now useQuery)
+ * - enrichedWallet: BTC UTXOs + runes (was useEffect, now useQuery)
+ * - alkaneBalances: alkane token balances via SDK WASM (separate query)
  * - btcBalance: spendable BTC satoshis
  * - sellableCurrencies: alkane tokens the wallet holds
  *
@@ -32,7 +33,7 @@ function mapToObject(value: any): any {
   if (value instanceof Map) {
     const obj: Record<string, any> = {};
     for (const [k, v] of value.entries()) {
-      obj[k] = mapToObject(v);
+      obj[String(k)] = mapToObject(v);
     }
     return obj;
   }
@@ -41,6 +42,7 @@ function mapToObject(value: any): any {
   }
   return value;
 }
+
 
 interface EnrichedWalletDeps {
   provider: WebProvider | null;
@@ -206,36 +208,11 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         spent: await withTimeout(fetchMempoolSpent(address), 10000, 0),
       }));
 
-      const alkaneBalancePromises = addresses.map(async (address) => {
-        try {
-          const resp = await withTimeout(
-            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
-            15000,
-            null,
-          );
-          if (!resp) {
-            console.warn(`[BALANCE] alkane-balances API timed out for ${address}`);
-            return { address, balances: [] as any[], failed: true };
-          }
-          const data = await resp.json();
-          return { address, balances: data?.balances || [], failed: false };
-        } catch (error) {
-          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
-          return { address, balances: [] as any[], failed: true };
-        }
-      });
-
-      // Await all three in parallel — alkane failures don't block BTC data
-      const [enrichedResults, mempoolSpentResults, alkaneBalanceResults] = await Promise.all([
+      // Await BTC data sources in parallel — alkanes are fetched by a separate query
+      const [enrichedResults, mempoolSpentResults] = await Promise.all([
         Promise.all(enrichedDataPromises),
         Promise.all(mempoolSpentPromises),
-        Promise.all(alkaneBalancePromises),
       ]);
-
-      // If ANY alkane fetch failed/timed out but we have BTC data, mark this as
-      // partial so we can signal the UI to retry just alkanes
-      const alkanesFetchFailed = alkaneBalanceResults.some(r => r.failed);
-      const hasBtcData = enrichedResults.some(r => r.data !== null);
 
       let totalBtc = 0;
       let p2wpkhBtc = 0;
@@ -248,7 +225,6 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       const allUtxos: any[] = [];
       const p2wpkhUtxos: any[] = [];
       const p2trUtxos: any[] = [];
-      const alkaneMap = new Map<string, any>();
       const runeMap = new Map<string, any>();
       const pendingTxIdsP2wpkh = new Set<string>();
       const pendingTxIdsP2tr = new Set<string>();
@@ -326,52 +302,6 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         pendingOutgoingTotal += spent;
       }
 
-      // Process alkane balance results (already fetched in parallel above).
-      // Alkane-balances API has richer metadata (priceUsd, tokenImage), so it
-      // takes priority — we merge it AFTER enrichedResults to overwrite defaults.
-      for (const { balances } of alkaneBalanceResults) {
-        for (const entry of balances) {
-          const alkaneIdStr = entry.alkaneId;
-          const amountStr = String(entry.balance || '0');
-          const knownInfo = KNOWN_TOKENS[alkaneIdStr];
-          const name = entry.name || knownInfo?.name || `Token ${alkaneIdStr}`;
-          const symbol = entry.symbol || knownInfo?.symbol || '';
-          const decimals = knownInfo?.decimals ?? 8;
-          if (!alkaneMap.has(alkaneIdStr)) {
-            alkaneMap.set(alkaneIdStr, {
-              alkaneId: alkaneIdStr,
-              name,
-              symbol,
-              balance: amountStr,
-              decimals,
-              logo: entry.tokenImage || undefined,
-              priceUsd: entry.priceUsd || undefined,
-              priceInSatoshi: entry.priceInSatoshi || undefined,
-            });
-          } else {
-            const existing = alkaneMap.get(alkaneIdStr)!;
-            try {
-              existing.balance = (BigInt(existing.balance) + BigInt(amountStr)).toString();
-            } catch {
-              existing.balance = String(Number(existing.balance) + Number(amountStr));
-            }
-            if (!existing.name || existing.name.startsWith('Token ')) {
-              if (name && !name.startsWith('Token ')) existing.name = name;
-            }
-            if (!existing.symbol && symbol) existing.symbol = symbol;
-            if (!existing.priceUsd && entry.priceUsd) existing.priceUsd = entry.priceUsd;
-            if (!existing.priceInSatoshi && entry.priceInSatoshi) existing.priceInSatoshi = entry.priceInSatoshi;
-            if (!existing.logo && entry.tokenImage) existing.logo = entry.tokenImage;
-          }
-        }
-      }
-
-      // If alkane fetch failed but we have BTC data, return partial results
-      // with a flag so the UI can schedule an alkane-only retry
-      if (alkanesFetchFailed && hasBtcData) {
-        console.warn('[BALANCE] Alkane fetch failed/timed out — returning BTC data with _alkanesFetchFailed flag');
-      }
-
       return {
         balances: {
           bitcoin: {
@@ -388,12 +318,92 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
             pendingOutgoingTotal,
           },
           pendingTxCount: { p2wpkh: pendingTxIdsP2wpkh.size, p2tr: pendingTxIdsP2tr.size },
-          alkanes: Array.from(alkaneMap.values()),
+          alkanes: [] as any[],
           runes: Array.from(runeMap.values()),
         },
         utxos: { p2wpkh: p2wpkhUtxos, p2tr: p2trUtxos, all: allUtxos },
-        _alkanesFetchFailed: alkanesFetchFailed,
       };
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Alkane balances (separate query — decoupled from BTC/UTXO fetch)
+// ---------------------------------------------------------------------------
+
+interface AlkaneBalanceDeps {
+  provider: WebProvider | null;
+  isInitialized: boolean;
+  account: any;
+  isConnected: boolean;
+  network: string;
+}
+
+export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
+  const addresses: string[] = [];
+  if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
+  if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+  const addressKey = addresses.sort().join(',');
+
+  return queryOptions({
+    queryKey: queryKeys.account.alkaneBalances(deps.network, addressKey),
+    enabled:
+      deps.isInitialized &&
+      !!deps.provider &&
+      !!deps.account &&
+      deps.isConnected &&
+      addresses.length > 0,
+    staleTime: 30_000,
+    refetchOnMount: 'always' as const,
+    refetchOnWindowFocus: true,
+    retry: 3,
+    retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
+    queryFn: async () => {
+      const provider = deps.provider!;
+      const alkaneMap = new Map<string, any>();
+
+      for (const address of addresses) {
+        try {
+          // SDK's alkanesByAddress calls metashrew_view("protorunesbyaddress") via WASM.
+          // The WASM decodes the protobuf response — result may be a Map or plain object.
+          // SDK WASM alkanesByAddress returns a flat Map: alkaneId → balance string
+          // e.g. Map { "2:0" => "1852003151", "32:0" => "3977", "2:69" => "1000000000000000" }
+          // The WASM aggregates across outpoints internally.
+          const rawResult = await provider.alkanesByAddress(address, null, 1);
+
+          // Convert Map entries to alkane balances
+          const entries: Array<[string, string]> = rawResult instanceof Map
+            ? Array.from(rawResult.entries()).map(([k, v]: [any, any]) => [String(k), String(v)])
+            : Object.entries(rawResult || {}).map(([k, v]) => [k, String(v)]);
+
+          console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${entries.length} alkanes`, entries.map(([id, bal]) => `${id}=${bal}`).join(', '));
+
+          for (const [alkaneId, balanceStr] of entries) {
+            const amount = BigInt(balanceStr || 0);
+            const knownInfo = KNOWN_TOKENS[alkaneId];
+
+            if (!alkaneMap.has(alkaneId)) {
+              alkaneMap.set(alkaneId, {
+                alkaneId,
+                name: knownInfo?.name || `Token ${alkaneId}`,
+                symbol: knownInfo?.symbol || '',
+                balance: amount.toString(),
+                decimals: knownInfo?.decimals ?? 8,
+              });
+            } else {
+              const existing = alkaneMap.get(alkaneId)!;
+              existing.balance = (BigInt(existing.balance) + amount).toString();
+            }
+          }
+        } catch (error) {
+          console.error(`[alkaneBalanceQuery] SDK alkanesByAddress failed for ${address}:`, error);
+          // Let React Query's retry handle transient failures
+          throw error;
+        }
+      }
+
+      console.log(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`, Array.from(alkaneMap.values()).map(a => `${a.alkaneId}=${a.balance}`).join(', '));
+      return Array.from(alkaneMap.values());
     },
   });
 }
