@@ -36,7 +36,10 @@ export async function bootDevnet(
   onProgress('Loading WASM modules...', 5);
 
   // Dynamic import of qubitcoin SDK
-  const sdk = await import(/* webpackIgnore: true */ '@qubitcoin/sdk');
+  // Import qubitcoin SDK from public dir (served as static ESM).
+  // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
+  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
 
   // Load indexer WASMs from the app's public directory or bundled assets
   // In production, these would be served as static files
@@ -73,7 +76,10 @@ export async function bootDevnetWithWasms(
   taprootAddress: string;
   segwitAddress: string;
 }> {
-  const sdk = await import(/* webpackIgnore: true */ '@qubitcoin/sdk');
+  // Import qubitcoin SDK from public dir (served as static ESM).
+  // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
+  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
 
   onProgress('Creating in-browser Bitcoin node...', 10);
 
