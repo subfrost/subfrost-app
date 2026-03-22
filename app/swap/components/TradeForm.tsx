@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react';
 
 const SwapInputs = lazy(() => import('./SwapInputs'));
 const LimitOrderPanel = lazy(() => import('./LimitOrderPanel'));
-const FujinDifficultyPanel = lazy(() => import('@/app/futures/components/FujinDifficultyPanel'));
+const FuturesDashboard = lazy(() => import('./FuturesDashboard'));
 
 type OrderType = 'market' | 'limit';
 type MarketType = 'spot' | 'futures';
@@ -51,7 +51,7 @@ export default function TradeForm({
         </div>
         <div className="flex-1 overflow-y-auto min-h-0 p-3">
           <Suspense fallback={<FormSkeleton />}>
-            <FujinDifficultyPanel />
+            <FuturesDashboard />
           </Suspense>
         </div>
       </div>
