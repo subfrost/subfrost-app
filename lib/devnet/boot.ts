@@ -122,7 +122,19 @@ export async function bootDevnetWithWasms(
   _harness.installFetchInterceptor();
 
   onProgress('Mining initial blocks...', 20);
-  _harness.mineBlocks(201);
+  // Mine in small batches to avoid OOM in browser WASM.
+  // Coinbase maturity requires 100 blocks; we mine 110 for safety.
+  // Batching allows GC to reclaim memory between rounds.
+  const TOTAL_BLOCKS = 110;
+  const BATCH_SIZE = 10;
+  for (let mined = 0; mined < TOTAL_BLOCKS; mined += BATCH_SIZE) {
+    const batch = Math.min(BATCH_SIZE, TOTAL_BLOCKS - mined);
+    _harness.mineBlocks(batch);
+    const pct = 20 + Math.round((mined / TOTAL_BLOCKS) * 30);
+    onProgress(`Mining blocks... ${mined + batch}/${TOTAL_BLOCKS}`, pct);
+    // Yield to event loop for GC
+    await new Promise(r => setTimeout(r, 0));
+  }
 
   // Create provider
   const wasm = await import('@alkanes/ts-sdk/wasm');
