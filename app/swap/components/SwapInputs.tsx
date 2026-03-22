@@ -9,6 +9,8 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { ChevronDown } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
+import BridgeDepositFlow from "./BridgeDepositFlow";
+import type { BridgeDirection } from "./BridgeDepositFlow";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useDemoGate } from "@/hooks/useDemoGate";
 
@@ -87,7 +89,7 @@ export default function SwapInputs({
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
 
   // Bridge tokens don't have on-chain balances
-  const BRIDGE_TOKEN_IDS = ["usdt", "eth", "sol", "zec"];
+  const BRIDGE_TOKEN_IDS = ["usdt", "usdc", "eth", "sol", "zec"];
   const isFromBridgeToken = from?.id
     ? BRIDGE_TOKEN_IDS.includes(from.id)
     : false;
@@ -242,6 +244,37 @@ export default function SwapInputs({
   };
 
   const activePercent = getActivePercent();
+
+  // ---- Cross-chain bridge pair detection ----
+  // When a cross-chain pair is selected (e.g., USDT -> BTC or BTC -> USDT),
+  // render the BridgeDepositFlow component instead of the normal swap form.
+  const BTC_TOKEN_IDS = ["btc", "32:0"]; // BTC and frBTC
+  const isCrossChainPair =
+    (isFromBridgeToken && to?.id && (BTC_TOKEN_IDS.includes(to.id) || !BRIDGE_TOKEN_IDS.includes(to.id))) ||
+    (isToBridgeToken && from?.id && (BTC_TOKEN_IDS.includes(from.id) || !BRIDGE_TOKEN_IDS.includes(from.id)));
+
+  const bridgeDirection: BridgeDirection | null = isCrossChainPair
+    ? isFromBridgeToken
+      ? "to-btc"
+      : "to-evm"
+    : null;
+
+  if (isCrossChainPair && bridgeDirection) {
+    return (
+      <div className="relative flex flex-col gap-3">
+        <BridgeDepositFlow
+          direction={bridgeDirection}
+          fromSymbol={from?.symbol ?? (isFromBridgeToken ? "USDT" : "BTC")}
+          toSymbol={to?.symbol ?? (isToBridgeToken ? "USDT" : "BTC")}
+          amount={fromAmount}
+          onAmountChange={onChangeFromAmount}
+          evmAddress={ethereumAddress}
+          onEvmAddressChange={onChangeEthereumAddress}
+          onBridge={onSwapClick}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex flex-col gap-3">
