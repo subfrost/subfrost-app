@@ -214,7 +214,7 @@ describe('AlkanesBalancesCard', () => {
 
   it('has auto-refresh logic for empty token list', () => {
     expect(src).toMatch(/hasAutoRefreshed/);
-    expect(src).toMatch(/Auto-refreshing alkanes after 15s/);
+    expect(src).toMatch(/Auto-retry/);
   });
 });
 

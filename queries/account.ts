@@ -207,19 +207,19 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       }));
 
       const alkaneBalancePromises = addresses.map(async (address) => {
-        try {
-          const resp = await withTimeout(
-            fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
-            15000,
-            null,
-          );
-          if (!resp) return { address, balances: [] as any[] };
-          const data = await resp.json();
-          return { address, balances: data?.balances || [] };
-        } catch (error) {
-          console.error(`[BALANCE] alkane-balances API failed for ${address}:`, error);
-          return { address, balances: [] as any[] };
+        // NOTE: Do NOT catch errors here — let them propagate so React Query's
+        // retry: 3 kicks in. Previously, timeouts resolved with null and errors
+        // were caught, causing the query to "succeed" with empty alkane data.
+        const resp = await withTimeout(
+          fetch(`/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`),
+          15000,
+          null,
+        );
+        if (!resp) {
+          throw new Error(`[BALANCE] alkane-balances API timed out for ${address}`);
         }
+        const data = await resp.json();
+        return { address, balances: data?.balances || [] };
       });
 
       // Await all three in parallel
