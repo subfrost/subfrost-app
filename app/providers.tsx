@@ -32,15 +32,19 @@ const DEVNET_AUTOSTART = process.env.NEXT_PUBLIC_DEVNET_AUTOSTART === '1';
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'subfrost-regtest';
 
-  // Auto-devnet on staging
-  if (DEVNET_AUTOSTART) {
-    return 'devnet';
-  }
-
-  // Hostname-based devnet detection
   const host = window.location.host;
-  if (host.includes('staging-app.subfrost.io')) {
-    return 'devnet';
+
+  // Auto-devnet: only when explicitly enabled AND user hasn't overridden network
+  // NOTE: In-browser devnet requires ~1GB RAM for WASM indexers.
+  // On memory-constrained environments, users should use regtest instead.
+  if (DEVNET_AUTOSTART || host.includes('staging-app.subfrost.io')) {
+    // Check if user explicitly chose a different network
+    const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
+    if (!stored || stored === 'devnet') {
+      // Default to subfrost-regtest on staging (devnet boot has memory issues)
+      // Users can manually select devnet from network selector if they want
+      return 'subfrost-regtest';
+    }
   }
 
   // First check localStorage for user selection
