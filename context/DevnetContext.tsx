@@ -136,10 +136,13 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         chainHeight: result.harness.height,
       });
     } catch (e: any) {
+      const errorMsg = e?.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'Boot failed (unknown error)';
+      console.error('[DevnetContext] Boot failed:', e);
+      console.error('[DevnetContext] Error type:', typeof e, 'keys:', e ? Object.keys(e) : 'null');
       setState(prev => ({
         ...prev,
         status: 'error',
-        error: e.message || 'Boot failed',
+        error: errorMsg,
         bootPercent: 0,
       }));
     }
