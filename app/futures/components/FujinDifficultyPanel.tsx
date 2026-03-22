@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useFujinMarkets } from '@/hooks/useFujinMarkets';
-import { useSynthPoolState } from '@/hooks/useSynthPoolState';
 import { useWallet } from '@/context/WalletContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Info, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
@@ -17,7 +16,6 @@ import { useNormalPool } from '@/hooks/useNormalPool';
 export default function FujinDifficultyPanel() {
   const { t } = useTranslation();
   const { data: fujinData, isLoading: fujinLoading } = useFujinMarkets();
-  const { data: synthData } = useSynthPoolState();
   const { isConnected } = useWallet();
   const { data: normalPool } = useNormalPool();
   const [swapDirection, setSwapDirection] = useState<'LONG' | 'SHORT'>('LONG');
@@ -145,32 +143,7 @@ export default function FujinDifficultyPanel() {
         </button>
       </div>
 
-      {/* Synth Pool Status */}
-      <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-bold text-[color:var(--sf-text)]">frBTC/frUSD Synth Pool</h4>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${synthData?.hasLiquidity ? 'bg-green-400' : 'bg-zinc-600'}`} />
-            <span className="text-xs text-[color:var(--sf-text)]/50">
-              {synthData?.hasLiquidity ? 'Active' : 'No Liquidity'}
-            </span>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Pool ID</div>
-            <div className="text-xs font-mono text-[color:var(--sf-text)]">{synthData?.poolId || '--'}</div>
-          </div>
-          <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Type</div>
-            <div className="text-xs text-[color:var(--sf-text)]">StableSwap</div>
-          </div>
-          <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Fee</div>
-            <div className="text-xs text-[color:var(--sf-text)]">0.04%</div>
-          </div>
-        </div>
-      </div>
+      {/* frBTC/frUSD Synth Pool removed — it's a regular swap pool, not a futures component */}
 
       {/* volBTC Pool — unified ftrBTC futures liquidity */}
       <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-6">

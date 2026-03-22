@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { TrendingUp, BarChart3 } from 'lucide-react';
 import PremiumCurveChart from './PremiumCurveChart';
 import DifficultyProjection from './DifficultyProjection';
 import VolBtcPanel from './VolBtcPanel';
@@ -12,19 +13,15 @@ import {
   type CubicCoefficients,
 } from '@/lib/math/futuresEngine';
 
-/**
- * Default coefficients derived from typical mainnet fee growth (~0.05% per block over 2016 blocks).
- * These serve as fallback until on-chain data is available from dxBTC vault queries.
- */
+type FuturesTab = 'yield' | 'difficulty';
+
 const DEFAULT_COEFFICIENTS: CubicCoefficients = computeCoefficientsFromGrowth(1.0005, 2016);
 
 export default function FuturesDashboard() {
+  const [activeTab, setActiveTab] = useState<FuturesTab>('yield');
   const [utilization, setUtilization] = useState(0.5);
 
-  // In production these would come from on-chain queries (dxBTC vault, block explorer API).
-  // Using reasonable mainnet defaults for now.
   const baseCoeffs = DEFAULT_COEFFICIENTS;
-
   const adjustedCoeffs = useMemo(
     () => adjustCoefficients(baseCoeffs, utilization),
     [baseCoeffs, utilization],
@@ -32,36 +29,68 @@ export default function FuturesDashboard() {
 
   const handleDeposit = (ftrId: string) => {
     console.log('[FuturesDashboard] Deposit requested for ftrBTC:', ftrId);
-    // Future: open deposit modal
   };
 
+  const tabs: { key: FuturesTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'yield', label: 'Yield Futures', icon: <TrendingUp size={14} /> },
+    { key: 'difficulty', label: 'Difficulty', icon: <BarChart3 size={14} /> },
+  ];
+
   return (
-    <div className="space-y-4">
-      {/* Top row: Premium Curve + Difficulty Projection */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <PremiumCurveChart
-          coefficients={adjustedCoeffs}
-          currentT={0.35}
-          utilization={utilization}
-        />
-        <DifficultyProjection
-          currentDifficulty={113.76e12}
-          avgBlockTime={580}
-          blockHeight={886000}
-        />
+    <div className="space-y-3">
+      {/* Sub-tabs: Yield Futures | Difficulty */}
+      <div className="flex gap-1 p-1 bg-[color:var(--sf-surface)] rounded-lg">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-bold uppercase tracking-wide transition-all ${
+              activeTab === tab.key
+                ? 'bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] shadow-sm'
+                : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/60'
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Middle row: volBTC Pool + Fujin Epoch */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <VolBtcPanel onDeposit={handleDeposit} />
-        <FujinEpochPanel />
-      </div>
+      {/* Yield Futures: ftrBTC + volBTC + premium curve */}
+      {activeTab === 'yield' && (
+        <div className="space-y-3">
+          {/* Premium curve */}
+          <PremiumCurveChart
+            coefficients={adjustedCoeffs}
+            currentT={0.35}
+            utilization={utilization}
+          />
 
-      {/* Bottom row: Utilization Slider */}
-      <UtilizationSlider
-        baseCoefficients={baseCoeffs}
-        onChange={setUtilization}
-      />
+          {/* volBTC pool (with ftrBTC deposit flow) */}
+          <VolBtcPanel onDeposit={handleDeposit} />
+
+          {/* Utilization slider */}
+          <UtilizationSlider
+            baseCoefficients={baseCoeffs}
+            onChange={setUtilization}
+          />
+        </div>
+      )}
+
+      {/* Difficulty: Fujin LONG/SHORT */}
+      {activeTab === 'difficulty' && (
+        <div className="space-y-3">
+          {/* Difficulty projection + settlement simulator */}
+          <DifficultyProjection
+            currentDifficulty={113.76e12}
+            avgBlockTime={580}
+            blockHeight={886000}
+          />
+
+          {/* Fujin epoch trading (LONG/SHORT) */}
+          <FujinEpochPanel />
+        </div>
+      )}
     </div>
   );
 }
