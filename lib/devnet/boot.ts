@@ -99,10 +99,10 @@ export async function bootDevnetWithWasms(
 
   onProgress('Initializing Bitcoin node (loading WASM)...', 15);
 
-  // Create harness with indexers
-  const tertiaryIndexers = quspoWasm
-    ? [{ label: 'quspo', wasm: quspoWasm }]
-    : [];
+  // Skip tertiary indexers in browser — they consume too much WASM memory
+  // when instantiated per-block during the 201-block mine sequence.
+  // Quspo indexing can be added later with a streaming approach.
+  const tertiaryIndexers: { label: string; wasm: Uint8Array }[] = [];
 
   console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esploraWasm=%sKB quspo=%s',
     Math.round(alkanesWasm.length / 1024),
