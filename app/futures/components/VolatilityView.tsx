@@ -306,7 +306,7 @@ export default function VolatilityView() {
         {/* Your Holdings + Deposit */}
         <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-5">
           <h3 className="text-base sm:text-lg font-bold text-[color:var(--sf-text)] mb-3">
-            {isConnected ? 'Your Holdings' : 'Your Holdings (Demo)'}
+            Your ftrBTC Holdings
           </h3>
 
           <div className="text-[11px] font-semibold text-[color:var(--sf-text)]/60 mb-2 uppercase tracking-wide">
