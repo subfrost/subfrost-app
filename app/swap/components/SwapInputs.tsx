@@ -263,14 +263,10 @@ export default function SwapInputs({
     return (
       <div className="relative flex flex-col gap-3">
         <BridgeDepositFlow
-          direction={bridgeDirection}
-          fromSymbol={from?.symbol ?? (isFromBridgeToken ? "USDT" : "BTC")}
-          toSymbol={to?.symbol ?? (isToBridgeToken ? "USDT" : "BTC")}
+          fromToken={from?.symbol ?? (isFromBridgeToken ? "USDT" : "BTC")}
+          toToken={to?.symbol ?? (isToBridgeToken ? "USDT" : "BTC")}
           amount={fromAmount}
           onAmountChange={onChangeFromAmount}
-          evmAddress={ethereumAddress}
-          onEvmAddressChange={onChangeEthereumAddress}
-          onBridge={onSwapClick}
         />
       </div>
     );

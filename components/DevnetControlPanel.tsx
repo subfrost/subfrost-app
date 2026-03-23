@@ -6,10 +6,10 @@ import { useDevnet } from '@/context/DevnetContext';
 import { useWallet } from '@/context/WalletContext';
 import { Loader2, RotateCcw } from 'lucide-react';
 
-type BusyAction = 'mine' | 'btc' | 'diesel' | 'fuel' | 'frbtc' | 'usdt' | 'usdc' | 'reset' | null;
+type BusyAction = 'mine' | 'btc' | 'diesel' | 'fuel' | 'frbtc' | 'usdt' | 'usdc' | 'bridge' | 'reset' | null;
 
 export function DevnetControlPanel() {
-  const { state, controls, isDevnet, boot, shutdown } = useDevnet();
+  const { state, controls, isDevnet, boot, shutdown, coordinator } = useDevnet();
   const { account } = useWallet();
   const queryClient = useQueryClient();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -173,6 +173,30 @@ export function DevnetControlPanel() {
               </ActionButton>
             </div>
           </div>
+
+          {/* Bridge Coordinator */}
+          {coordinator && (
+            <div className="space-y-1">
+              <div className="text-xs text-zinc-500 font-medium">Bridge Coordinator</div>
+              <ActionButton
+                action="bridge"
+                onClick={() => runAction('bridge', async () => {
+                  const result = await coordinator.poll();
+                  const counts = coordinator.getPendingCounts();
+                  if (result.depositsProcessed > 0 || result.withdrawalsProcessed > 0) {
+                    setLastResult(`Processed ${result.depositsProcessed} dep, ${result.withdrawalsProcessed} wd`);
+                  } else if (counts.deposits > 0 || counts.withdrawals > 0) {
+                    setLastResult(`${counts.deposits} pending deposits, ${counts.withdrawals} pending withdrawals`);
+                  } else {
+                    setLastResult('No pending bridge operations');
+                  }
+                })}
+                className="w-full px-2 py-1.5 bg-indigo-900/50 hover:bg-indigo-800/50 text-indigo-300 rounded-lg text-xs border border-indigo-800/30"
+              >
+                Process Bridge
+              </ActionButton>
+            </div>
+          )}
 
           {/* Reset */}
           <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">

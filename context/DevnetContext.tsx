@@ -23,6 +23,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import type { DevnetState, DevnetControls, DeployedContracts } from '@/lib/devnet/types';
 import { saveDevnetState, loadDevnetState, clearDevnetState } from '@/lib/devnet/persistence';
 import type { DevnetEvmProvider, MockTokenAddresses } from '@/lib/devnet/evmProvider';
+import type { DevnetCoordinator } from '@/lib/devnet/coordinatorSim';
 
 interface DevnetContextValue {
   state: DevnetState;
@@ -30,6 +31,8 @@ interface DevnetContextValue {
   isDevnet: boolean;
   boot: (mnemonic: string) => Promise<void>;
   shutdown: () => void;
+  /** In-browser bridge coordinator (available after boot if EVM is ready) */
+  coordinator: DevnetCoordinator | null;
 }
 
 const defaultState: DevnetState = {
@@ -55,6 +58,7 @@ const DevnetContext = createContext<DevnetContextValue>({
   isDevnet: false,
   boot: async () => {},
   shutdown: () => {},
+  coordinator: null,
 });
 
 export function useDevnet() {
@@ -70,6 +74,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   const providerRef = useRef<any>(null);
   const evmProviderRef = useRef<DevnetEvmProvider | null>(null);
   const evmTokensRef = useRef<MockTokenAddresses | null>(null);
+  const coordinatorRef = useRef<DevnetCoordinator | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDevnet = network === 'devnet';
@@ -210,6 +215,26 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         result.contracts.evmUsdtAddress = mockTokens.usdtAddress;
         result.contracts.evmUsdcAddress = mockTokens.usdcAddress;
 
+        // Create the in-browser bridge coordinator
+        try {
+          const { DevnetCoordinator: CoordClass } = await import('@/lib/devnet/coordinatorSim');
+          const coord = new CoordClass(
+            providerRef.current,
+            evmProvider,
+            mockTokens,
+            {
+              frusdId: result.contracts.frusdTokenId || '4:8201',
+              synthPoolId: result.contracts.synthPoolId || '4:8202',
+              authTokenId: result.contracts.frusdAuthTokenId || '2:10',
+              factoryId: result.contracts.ammFactoryId || '4:65522',
+            },
+          );
+          coordinatorRef.current = coord;
+          console.log('[DevnetContext] Bridge coordinator created');
+        } catch (coordErr: any) {
+          console.warn('[DevnetContext] Coordinator init failed (non-fatal):', coordErr?.message || coordErr);
+        }
+
         console.log('[DevnetContext] EVM devnet ready — USDT:', mockTokens.usdtAddress, 'USDC:', mockTokens.usdcAddress);
       } catch (evmErr: any) {
         // EVM is optional — Bitcoin devnet still works without it
@@ -246,6 +271,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
+    if (coordinatorRef.current) {
+      coordinatorRef.current.dispose();
+      coordinatorRef.current = null;
+    }
     import('@/lib/devnet/boot').then(({ disposeDevnet }) => {
       disposeDevnet();
       harnessRef.current = null;
@@ -269,6 +298,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
+      }
+      if (coordinatorRef.current) {
+        coordinatorRef.current.dispose();
+        coordinatorRef.current = null;
       }
       if (harnessRef.current) {
         import('@/lib/devnet/boot').then(({ disposeDevnet }) => disposeDevnet());
@@ -385,7 +418,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   };
 
   return (
-    <DevnetContext.Provider value={{ state, controls, isDevnet, boot, shutdown }}>
+    <DevnetContext.Provider value={{ state, controls, isDevnet, boot, shutdown, coordinator: coordinatorRef.current }}>
       {children}
     </DevnetContext.Provider>
   );
