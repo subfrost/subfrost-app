@@ -17,7 +17,6 @@ import { useFutures } from '@/hooks/useFutures';
 import { useTranslation } from '@/hooks/useTranslation';
 
 import FujinDifficultyPanel from './components/FujinDifficultyPanel';
-import FuturesDashboard from '@/app/swap/components/FuturesDashboard';
 
 export default function FuturesPage() {
   const { t } = useTranslation();
@@ -221,10 +220,6 @@ export default function FuturesPage() {
           </>
         ) : activeTab === 'predictions' ? (
           <FujinDifficultyPanel />
-        ) : activeTab === 'yield' ? (
-          <FuturesDashboard activeTab="yield" />
-        ) : activeTab === 'difficulty' ? (
-          <FuturesDashboard activeTab="difficulty" />
         ) : (
           <VolatilityView />
         )}

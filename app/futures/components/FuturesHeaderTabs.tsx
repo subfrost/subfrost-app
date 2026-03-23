@@ -2,7 +2,7 @@
 
 import { useTranslation } from '@/hooks/useTranslation';
 
-export type FuturesTabKey = "futures" | "predictions" | "volatility" | "yield" | "difficulty";
+export type FuturesTabKey = "futures" | "predictions" | "volatility";
 
 type Props = {
   activeTab: FuturesTabKey;
@@ -13,8 +13,6 @@ const tabs: { key: FuturesTabKey; labelKey: string; fallback: string }[] = [
   { key: 'futures', labelKey: 'futuresTabs.futures', fallback: 'FUTURES' },
   { key: 'predictions', labelKey: 'futuresTabs.predictions', fallback: 'PREDICTIONS' },
   { key: 'volatility', labelKey: 'futuresTabs.volatility', fallback: 'VOLATILITY' },
-  { key: 'yield', labelKey: 'futuresTabs.yieldFutures', fallback: 'YIELD FUTURES' },
-  { key: 'difficulty', labelKey: 'futuresTabs.difficulty', fallback: 'DIFFICULTY' },
 ];
 
 export default function FuturesHeaderTabs({ activeTab, onTabChange }: Props) {
