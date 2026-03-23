@@ -28,10 +28,15 @@
  *
  * JOURNAL ENTRY (2026-03-22):
  * Decoupled alkane balance fetching into its own query (alkaneBalanceQueryOptions)
- * using the SDK's provider.alkanesByAddress() — calls alkanes_protorunesbyaddress
- * RPC directly through WASM. Removes the /api/alkane-balances server-side proxy
- * dependency and the _alkanesFetchFailed monkey-patch retry logic.
+ * using the SDK's provider.dataApiGetAlkanesByAddress() — Espo-backed data API
+ * that returns enriched metadata (name, symbol, balance, price, tokenImage).
+ * Removes the /api/alkane-balances server-side proxy dependency and the
+ * _alkanesFetchFailed monkey-patch retry logic.
  * Each query now has independent TanStack Query lifecycle (retry, error, staleTime).
+ *
+ * Note: Initially tried provider.alkanesByAddress() (raw WASM protorunesbyaddress)
+ * but that returns only a flat alkaneId→balance Map without name/symbol metadata.
+ * The data API returns full token info including names from on-chain contract metadata.
  */
 
 import { useCallback, useEffect, useRef } from 'react';

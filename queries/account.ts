@@ -2,7 +2,7 @@
  * Account / wallet query options.
  *
  * - enrichedWallet: BTC UTXOs + runes (was useEffect, now useQuery)
- * - alkaneBalances: alkane token balances via SDK WASM (separate query)
+ * - alkaneBalances: alkane token balances via SDK data API (separate query)
  * - btcBalance: spendable BTC satoshis
  * - sellableCurrencies: alkane tokens the wallet holds
  *
@@ -364,45 +364,50 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
 
       for (const address of addresses) {
         try {
-          // SDK's alkanesByAddress calls metashrew_view("protorunesbyaddress") via WASM.
-          // The WASM decodes the protobuf response — result may be a Map or plain object.
-          // SDK WASM alkanesByAddress returns a flat Map: alkaneId → balance string
-          // e.g. Map { "2:0" => "1852003151", "32:0" => "3977", "2:69" => "1000000000000000" }
-          // The WASM aggregates across outpoints internally.
-          const rawResult = await provider.alkanesByAddress(address, null, 1);
+          // SDK data API returns enriched metadata: name, symbol, balance, price, image.
+          // Uses provider.dataApiGetAlkanesByAddress under the hood (Espo-backed).
+          const result = await (provider as any).dataApiGetAlkanesByAddress(address);
+          const items: any[] = result?.data || [];
 
-          // Convert Map entries to alkane balances
-          const entries: Array<[string, string]> = rawResult instanceof Map
-            ? Array.from(rawResult.entries()).map(([k, v]: [any, any]) => [String(k), String(v)])
-            : Object.entries(rawResult || {}).map(([k, v]) => [k, String(v)]);
+          console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes`);
 
-          console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${entries.length} alkanes`, entries.map(([id, bal]) => `${id}=${bal}`).join(', '));
+          for (const item of items) {
+            const block = item.alkaneId?.block;
+            const tx = item.alkaneId?.tx;
+            if (block == null || tx == null) continue;
 
-          for (const [alkaneId, balanceStr] of entries) {
-            const amount = BigInt(balanceStr || 0);
+            const alkaneId = `${block}:${tx}`;
+            const balance = String(item.balance || '0');
             const knownInfo = KNOWN_TOKENS[alkaneId];
 
             if (!alkaneMap.has(alkaneId)) {
               alkaneMap.set(alkaneId, {
                 alkaneId,
-                name: knownInfo?.name || `Token ${alkaneId}`,
-                symbol: knownInfo?.symbol || '',
-                balance: amount.toString(),
+                name: item.name || knownInfo?.name || `Token ${alkaneId}`,
+                symbol: item.symbol || knownInfo?.symbol || '',
+                balance,
                 decimals: knownInfo?.decimals ?? 8,
+                logo: item.tokenImage || undefined,
+                priceUsd: item.priceUsd || item.busdPoolPriceInUsd || undefined,
+                priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : undefined,
               });
             } else {
               const existing = alkaneMap.get(alkaneId)!;
-              existing.balance = (BigInt(existing.balance) + amount).toString();
+              try {
+                existing.balance = (BigInt(existing.balance) + BigInt(balance)).toString();
+              } catch {
+                existing.balance = String(Number(existing.balance || 0) + Number(balance));
+              }
             }
           }
         } catch (error) {
-          console.error(`[alkaneBalanceQuery] SDK alkanesByAddress failed for ${address}:`, error);
+          console.error(`[alkaneBalanceQuery] SDK dataApiGetAlkanesByAddress failed for ${address}:`, error);
           // Let React Query's retry handle transient failures
           throw error;
         }
       }
 
-      console.log(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`, Array.from(alkaneMap.values()).map(a => `${a.alkaneId}=${a.balance}`).join(', '));
+      console.log(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`, Array.from(alkaneMap.values()).map(a => `${a.name}(${a.alkaneId})=${a.balance}`).join(', '));
       return Array.from(alkaneMap.values());
     },
   });
