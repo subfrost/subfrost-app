@@ -259,7 +259,16 @@ export default function SwapInputs({
       : "to-evm"
     : null;
 
-  if (isCrossChainPair && bridgeDirection) {
+  // Cross-chain bridge: show bridge deposit flow ONLY after user clicks swap
+  // (not immediately when pair is selected — user needs to see the quote first)
+  const [showBridgeFlow, setShowBridgeFlow] = useState(false);
+
+  // Reset bridge flow when tokens change
+  useEffect(() => {
+    setShowBridgeFlow(false);
+  }, [from?.id, to?.id]);
+
+  if (isCrossChainPair && bridgeDirection && showBridgeFlow && fromAmount) {
     return (
       <div className="relative flex flex-col gap-3">
         <BridgeDepositFlow
@@ -268,6 +277,12 @@ export default function SwapInputs({
           amount={fromAmount}
           onAmountChange={onChangeFromAmount}
         />
+        <button
+          onClick={() => setShowBridgeFlow(false)}
+          className="text-xs text-[color:var(--sf-text)]/40 hover:text-[color:var(--sf-text)]/60 transition-colors"
+        >
+          ← Back to quote
+        </button>
       </div>
     );
   }
@@ -624,8 +639,13 @@ export default function SwapInputs({
               onConnectModalOpenChange(true);
               return;
             }
-            // Bridge tokens bypass demo gating — USDT/USDC swaps should always work
+            // Bridge tokens: show bridge deposit flow instead of normal swap
             const isBridgeSwap = isFromBridgeToken || isToBridgeToken;
+            if (isBridgeSwap && isCrossChainPair && fromAmount) {
+              console.log('[SwapInputs] Cross-chain pair, showing bridge flow');
+              setShowBridgeFlow(true);
+              return;
+            }
             if (!isDemoGated || isBridgeSwap) {
               console.log('[SwapInputs] NOT demo gated (or bridge swap), calling onSwapClick');
               onSwapClick();
@@ -645,10 +665,12 @@ export default function SwapInputs({
         >
           {showSwapComingSoon ? (
             <span className="animate-pulse">{t("badge.comingSoon")}</span>
-          ) : isConnected ? (
-            t("swap.confirmSwap")
-          ) : (
+          ) : !isConnected ? (
             t("swap.connectWallet")
+          ) : isCrossChainPair ? (
+            `Bridge ${from?.symbol || ''} → ${to?.symbol || ''}`
+          ) : (
+            t("swap.confirmSwap")
           )}
         </button>
       </div>
