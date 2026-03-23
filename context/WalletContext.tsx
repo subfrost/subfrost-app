@@ -122,6 +122,7 @@ function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
     case 'regtest-local':
     case 'subfrost-regtest':
     case 'oylnet':
+    case 'devnet':
       return 'regtest';
     default:
       return 'mainnet';
@@ -155,6 +156,7 @@ function toSatsConnectNetwork(network: Network): string {
     case 'regtest-local':
     case 'subfrost-regtest':
     case 'oylnet':
+    case 'devnet':
       return 'Regtest';
     default:
       return 'Mainnet';
@@ -1756,6 +1758,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         case 'regtest-local':
         case 'subfrost-regtest':
         case 'oylnet':
+        case 'devnet':
           return bitcoin.networks.regtest;
         default:
           return bitcoin.networks.bitcoin;
@@ -1888,6 +1891,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         case 'regtest-local':
         case 'subfrost-regtest':
         case 'oylnet':
+        case 'devnet':
           return bitcoin.networks.regtest;
         default:
           return bitcoin.networks.bitcoin;

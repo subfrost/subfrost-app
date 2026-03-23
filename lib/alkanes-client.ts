@@ -169,6 +169,7 @@ export function getNetworkConfig(networkName?: string): NetworkConfig {
         dataApiUrl: process.env.ALKANES_DATA_API_URL || 'https://signet.subfrost.io/v4/subfrost',
       };
     case 'subfrost-regtest':
+    case 'devnet':
       // subfrost-regtest is a development network that uses mainnet RPC for pool data
       return {
         network: 'subfrost-regtest',

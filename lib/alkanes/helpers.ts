@@ -33,6 +33,7 @@ export function getBitcoinNetwork(network: string): bitcoin.Network {
     case 'regtest':
     case 'regtest-local':
     case 'subfrost-regtest':
+    case 'devnet':
     case 'oylnet':
       return bitcoin.networks.regtest;
     default:

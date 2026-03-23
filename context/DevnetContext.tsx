@@ -322,20 +322,17 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     },
     faucetBtc: async (address: string, sats: number) => {
       if (!harnessRef.current) throw new Error('Devnet not ready');
-      // Convert bc1 (mainnet bech32) to bcrt1 (regtest bech32) for devnet.
-      // The wallet derives mainnet addresses but devnet uses regtest.
-      // We decode the witness program and re-encode with the bcrt HRP.
+      // With devnet mapped to regtest in WalletContext, the address should already be bcrt1.
+      // If it's still bc1 (mainnet), convert it.
       let devnetAddr = address;
       if (address.startsWith('bc1') && !address.startsWith('bcrt1')) {
         try {
           const bitcoin = await import('bitcoinjs-lib');
-          // Decode the mainnet address to get the output script
           const mainnetOutput = bitcoin.address.toOutputScript(address, bitcoin.networks.bitcoin);
-          // Re-encode using regtest network
           devnetAddr = bitcoin.address.fromOutputScript(mainnetOutput, bitcoin.networks.regtest);
           console.log('[devnet] Converted', address.slice(0, 10) + '...', '→', devnetAddr.slice(0, 12) + '...');
         } catch (e: any) {
-          console.warn('[devnet] Address conversion failed:', e?.message);
+          console.warn('[devnet] Address conversion failed, using raw:', e?.message);
         }
       }
       // Use generatetoaddress RPC — mines a block with coinbase paying to the user's address

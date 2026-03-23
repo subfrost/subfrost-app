@@ -110,6 +110,7 @@ function getAlkanesNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' 
     case 'regtest':
     case 'regtest-local':
     case 'subfrost-regtest':
+    case 'devnet':
     case 'oylnet':
       return 'regtest';
     case 'signet':
@@ -131,6 +132,7 @@ function getBitcoinJsNetwork(network: Network): bitcoin.Network {
     case 'regtest':
     case 'regtest-local':
     case 'subfrost-regtest':
+    case 'devnet':
     case 'oylnet':
       return bitcoin.networks.regtest;
     default:
