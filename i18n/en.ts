@@ -471,6 +471,10 @@ const en: Record<string, string> = {
   // Futures Tabs
   'futuresTabs.markets': 'MARKETS',
   'futuresTabs.positions': 'POSITIONS',
+  'futuresTabs.futures': 'FUTURES',
+  'futuresTabs.predictions': 'PREDICTIONS',
+  'futuresTabs.volatility': 'VOLATILITY',
+  'futuresTabs.difficulty': 'DIFFICULTY',
 
   // Settings Page
   'settingsPage.title': 'Settings',

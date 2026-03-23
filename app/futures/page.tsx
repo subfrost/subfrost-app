@@ -11,25 +11,24 @@ import MarketsTable from './components/MarketsTable';
 import HowItWorksModal from './components/HowItWorksModal';
 import OpenPositionForm from './components/OpenPositionForm';
 import PositionsSection from './components/PositionsSection';
-import FuturesHeaderTabs from './components/FuturesHeaderTabs';
+import FuturesHeaderTabs, { type FuturesTabKey } from './components/FuturesHeaderTabs';
+import VolatilityView from './components/VolatilityView';
 import { mockContracts } from './data/mockContracts';
 import { useFutures } from '@/hooks/useFutures';
 import { useTranslation } from '@/hooks/useTranslation';
 
 import FujinDifficultyPanel from './components/FujinDifficultyPanel';
 
-type TabKey = 'markets' | 'positions' | 'difficulty';
-
 export default function FuturesPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<TabKey>('markets');
+  const [activeTab, setActiveTab] = useState<FuturesTabKey>('futures');
   const [selectedContract, setSelectedContract] = useState<{ id: string; blocksLeft: number } | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch real futures data from regtest
   const { futures, currentBlock, loading, error, refetch, generateFuture } = useFutures();
-  
+
   // Use real data if available, otherwise fall back to mocks
   const contracts = futures.length > 0 ? futures.map(f => ({
     id: f.id,
@@ -65,7 +64,7 @@ export default function FuturesPage() {
   const handleContractSelect = (contractId: string, blocksLeft: number) => {
     setSelectedContract({ id: contractId, blocksLeft });
   };
-  
+
   // Handle generate future button
   const handleGenerateFuture = async () => {
     try {
@@ -74,12 +73,12 @@ export default function FuturesPage() {
       setTimeout(() => {
         refetch();
       }, 3000);
-      alert('✅ Future generated successfully! Refreshing in 3 seconds...');
+      alert('Future generated successfully! Refreshing in 3 seconds...');
     } catch (err) {
-      alert(`❌ Failed to generate future: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      alert(`Failed to generate future: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
-  
+
   // Handle manual refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -106,11 +105,11 @@ export default function FuturesPage() {
               {/* Row 1: Block info, futures count, Generate Future button, Info button */}
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm text-[color:var(--sf-text)]/70">
                 <span className="whitespace-nowrap">{t('futures.block').replace('...', currentBlock ? String(currentBlock) : '...')}</span>
-                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">-</span>
                 <span className="whitespace-nowrap">{futures.length} {t('futures.activeFutures')}</span>
                 {loading && (
                   <>
-                    <span className="hidden sm:inline">•</span>
+                    <span className="hidden sm:inline">-</span>
                     <span>{t('futures.loading')}</span>
                   </>
                 )}
@@ -143,7 +142,7 @@ export default function FuturesPage() {
                 </div>
               </div>
 
-              {/* Row 2: Markets/Positions tabs and Refresh button */}
+              {/* Row 2: Tab buttons and Refresh button */}
               <div className="flex items-center gap-3">
                 <FuturesHeaderTabs activeTab={activeTab} onTabChange={setActiveTab} />
                 <button
@@ -162,7 +161,8 @@ export default function FuturesPage() {
       }>
         {/* How It Works Modal - shown on click */}
         {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
-        {activeTab === 'markets' ? (
+
+        {activeTab === 'futures' ? (
           <>
             {/* Data Source Banner */}
             {futures.length === 0 && !loading && (
@@ -200,13 +200,16 @@ export default function FuturesPage() {
               </div>
             )}
 
-            {/* Section 1: Open Position Form */}
+            {/* Open Position Form */}
             <OpenPositionForm contracts={contracts} onContractSelect={handleContractSelect} />
 
-            {/* Section 3: Active Markets Table */}
+            {/* Active Markets Table */}
             <MarketsTable contracts={contracts} onContractSelect={setSelectedContract} />
 
-            {/* Section 4: Contract Detail Modal */}
+            {/* Positions Section */}
+            <PositionsSection />
+
+            {/* Contract Detail Modal */}
             {selectedContract && contractData && (
               <ContractDetailModal
                 contractId={contractData.id}
@@ -216,10 +219,10 @@ export default function FuturesPage() {
               />
             )}
           </>
-        ) : activeTab === 'difficulty' ? (
+        ) : activeTab === 'predictions' ? (
           <FujinDifficultyPanel />
         ) : (
-          <PositionsSection />
+          <VolatilityView />
         )}
       </AlkanesMainWrapper>
       </MainnetFeatureNotice>

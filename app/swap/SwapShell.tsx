@@ -205,7 +205,20 @@ export default function SwapShell() {
 
   // Wallet/config
   const { address, network } = useWallet();
-  const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
+  const config = getConfig(network);
+  const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = config;
+  const FIRE_TOKEN_ID = (config as any).FIRE_TOKEN_ID as string | undefined;
+  const FRUSD_TOKEN_ID = (config as any).FRUSD_TOKEN_ID as string | undefined;
+  const VOLBTC_POOL_ID = (config as any).DXBTC_NORMAL_POOL_ID as string | undefined;
+
+  // Protocol tokens that should always appear in the token selector
+  const protocolTokens = useMemo(() => {
+    const tokens: { id: string; symbol: string; name: string }[] = [];
+    if (FIRE_TOKEN_ID) tokens.push({ id: FIRE_TOKEN_ID, symbol: 'FIRE', name: 'FIRE Token' });
+    if (FRUSD_TOKEN_ID) tokens.push({ id: FRUSD_TOKEN_ID, symbol: 'frUSD', name: 'frUSD Stablecoin' });
+    if (VOLBTC_POOL_ID) tokens.push({ id: VOLBTC_POOL_ID, symbol: 'volBTC', name: 'volBTC Pool' });
+    return tokens;
+  }, [FIRE_TOKEN_ID, FRUSD_TOKEN_ID, VOLBTC_POOL_ID]);
 
   // User tokens (for FROM selector)
   const { data: userCurrencies = [], isFetching: isFetchingUserCurrencies } = useSellableCurrencies(address);
@@ -451,6 +464,14 @@ export default function SwapShell() {
       }
     }
 
+    // Add protocol tokens (FIRE, frUSD, volBTC) — always visible when configured
+    protocolTokens.forEach((pt) => {
+      if (!seen.has(pt.id) && shouldShowToken(pt.id, pt.symbol)) {
+        opts.push({ id: pt.id, symbol: pt.symbol, name: pt.name, isAvailable: true });
+        seen.add(pt.id);
+      }
+    });
+
     // Add tokens from pool data (only if TO is not an alt token)
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
       if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
@@ -480,7 +501,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, tokenNamesMap, network, toToken, baseTokenIds]);
+  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, userCurrencies, tokenNamesMap, network, toToken, baseTokenIds]);
 
   // Build TO options - show all tokens with pools (no alt-to-alt restriction)
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -563,6 +584,14 @@ export default function SwapShell() {
       }
     }
 
+    // Add protocol tokens (FIRE, frUSD, volBTC) — always visible when configured
+    protocolTokens.forEach((pt) => {
+      if (!seen.has(pt.id) && shouldShowToken(pt.id, pt.symbol)) {
+        opts.push({ id: pt.id, symbol: pt.symbol, name: pt.name, isAvailable: true });
+        seen.add(pt.id);
+      }
+    });
+
     // Add remaining tokens from pool data
     Array.from(poolTokenMap.values()).forEach((poolToken) => {
       if (!seen.has(poolToken.id) && shouldShowToken(poolToken.id, poolToken.symbol)) {
@@ -591,7 +620,7 @@ export default function SwapShell() {
     });
 
     return opts;
-  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, userCurrencies, tokenNamesMap, baseTokenIds, markets, network]);
+  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, userCurrencies, tokenNamesMap, baseTokenIds, markets, network]);
 
   // Balances - use useEnrichedWalletData for all balances (BTC and alkanes)
   // This is the same data source used by the Header for consistency

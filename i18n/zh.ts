@@ -463,6 +463,10 @@ const zh: Record<string, string> = {
   // Futures Tabs
   'futuresTabs.markets': '\u5e02\u573a',
   'futuresTabs.positions': '\u4ed3\u4f4d',
+  'futuresTabs.futures': '\u671f\u8d27',
+  'futuresTabs.predictions': '\u9884\u6d4b',
+  'futuresTabs.volatility': '\u6ce2\u52a8\u7387',
+  'futuresTabs.difficulty': '\u96be\u5ea6',
 
   // Settings Page
   'settingsPage.title': '\u8bbe\u7f6e',
