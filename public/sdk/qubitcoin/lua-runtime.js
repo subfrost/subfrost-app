@@ -281,7 +281,7 @@ _RPC = setmetatable({}, {
  * Pre-loaded Lua scripts stored by SHA-256 hash.
  * Used by lua_evalsaved / sandshrew_evalsaved.
  */
-const scriptStore = new Map();
+
 /** Compute SHA-256 hex digest of a string. */
 function sha256(content) {
     return createHash('sha256').update(content, 'utf8').digest('hex');
