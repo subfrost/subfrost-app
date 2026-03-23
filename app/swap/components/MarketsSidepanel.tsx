@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { X } from 'lucide-react';
 import type { PoolSummary } from '../types';
 
@@ -29,6 +29,27 @@ export default function MarketsSidepanel({
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyDisplay>('usd');
+  // Track mount state separately so we can animate out before unmounting
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  // Mount on open, animate in after mount; animate out then unmount on close
+  useEffect(() => {
+    if (isOpen) {
+      setMounted(true);
+      // Trigger the slide-in on the next frame so the browser paints the off-screen state first
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setVisible(true));
+      });
+    } else {
+      setVisible(false);
+    }
+  }, [isOpen]);
+
+  // Unmount after the exit transition ends
+  const handleTransitionEnd = useCallback(() => {
+    if (!visible) setMounted(false);
+  }, [visible]);
 
   // Close on Escape
   useEffect(() => {
@@ -40,20 +61,24 @@ export default function MarketsSidepanel({
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end" onTransitionEnd={handleTransitionEnd}>
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ease-[cubic-bezier(0,0,0,1)] ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/* Panel — slides in from the right on md+ */}
       <div
         ref={panelRef}
-        className="sf-panel sf-panel--overlay relative w-full max-w-lg h-full flex flex-col overflow-hidden transition-transform duration-200 shadow-2xl"
+        className={`sf-panel sf-panel--overlay relative w-full max-w-lg h-full flex flex-col overflow-hidden shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0,0,0,1)] ${
+          visible ? 'translate-x-0' : 'translate-x-full'
+        }`}
       >
         {/* Header */}
         <div className="sf-popup-header flex-shrink-0 flex items-center justify-between px-4 py-3">

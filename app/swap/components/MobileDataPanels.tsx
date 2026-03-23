@@ -1,82 +1,57 @@
 'use client';
 
 import { useState, lazy, Suspense } from 'react';
-import { BarChart2, BookOpen, Clock } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { PoolSummary } from '../types';
 
 const PoolDetailsCard = lazy(() => import('./PoolDetailsCard'));
-const OrderbookPanel = lazy(() => import('./OrderbookPanel'));
-const RecentTradesPanel = lazy(() => import('./RecentTradesPanel'));
-
-type MobilePanel = 'chart' | 'book' | 'trades';
 
 interface Props {
-  // Chart
   chartPool?: PoolSummary;
   chartTokenId?: string;
   isWrapPair?: boolean;
-  // Orderbook
-  baseToken: string;
-  quoteToken: string;
-  onPriceSelect?: (price: string) => void;
 }
 
 export default function MobileDataPanels({
   chartPool,
   chartTokenId,
   isWrapPair,
-  baseToken,
-  quoteToken,
-  onPriceSelect,
 }: Props) {
-  const [activePanel, setActivePanel] = useState<MobilePanel>('chart');
-
-  const panels: { key: MobilePanel; label: string; icon: React.ReactNode }[] = [
-    { key: 'chart', label: 'Chart', icon: <BarChart2 size={14} /> },
-    { key: 'book', label: 'Book', icon: <BookOpen size={14} /> },
-    { key: 'trades', label: 'Trades', icon: <Clock size={14} /> },
-  ];
+  const [chartOpen, setChartOpen] = useState(false);
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Tab buttons */}
-      <div className="sf-tab-group w-full">
-        {panels.map(panel => (
-          <button
-            key={panel.key}
-            onClick={() => setActivePanel(panel.key)}
-            className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 py-2 ${activePanel === panel.key ? 'sf-tab-btn--active' : ''}`}
+    <div className="sf-panel overflow-visible">
+      <button
+        type="button"
+        onClick={() => setChartOpen(!chartOpen)}
+        className="sf-collapsible-trigger"
+      >
+        <span>{chartOpen ? 'Hide Chart' : 'Show Chart'}</span>
+        <ChevronDown
+          size={14}
+          className={`transition-transform duration-300 ${chartOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <div
+        className={`transition-all duration-300 ease-in-out ${
+          chartOpen
+            ? 'max-h-[600px] opacity-100 overflow-visible'
+            : 'max-h-0 opacity-0 overflow-hidden'
+        }`}
+      >
+        <div className="h-[460px] px-1 pb-3">
+          <Suspense
+            fallback={
+              <div className="animate-pulse h-full bg-[color:var(--sf-primary)]/10 rounded-xl" />
+            }
           >
-            {panel.icon}
-            {panel.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Panel content */}
-      <div className="min-h-[300px]">
-        <Suspense fallback={<div className="animate-pulse h-[300px] bg-[color:var(--sf-primary)]/10 rounded-xl" />}>
-          {activePanel === 'chart' && (
             <PoolDetailsCard
               pool={chartPool}
               chartTokenId={chartTokenId}
               isWrapPair={isWrapPair}
             />
-          )}
-          {activePanel === 'book' && (
-            <OrderbookPanel
-              baseToken={baseToken}
-              quoteToken={quoteToken}
-              onPriceSelect={onPriceSelect}
-            />
-          )}
-          {activePanel === 'trades' && (
-            <RecentTradesPanel
-              baseToken={baseToken}
-              quoteToken={quoteToken}
-            />
-          )}
-        </Suspense>
+          </Suspense>
+        </div>
       </div>
     </div>
   );

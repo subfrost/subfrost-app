@@ -2,13 +2,22 @@
 
 import { useMemo } from 'react';
 import { useInfiniteAmmTxHistory } from '@/hooks/useAmmHistory';
+import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
+import TokenIcon from '@/app/components/TokenIcon';
+import { useWallet } from '@/context/WalletContext';
+import type { Network } from '@/utils/constants';
 
 interface Trade {
   id: string;
-  price: string;
-  amount: string;
-  side: 'buy' | 'sell';
+  soldFormatted: string;
+  boughtFormatted: string;
+  fromSymbol: string;
+  fromId: string;
+  toSymbol: string;
+  toId: string;
+  type: 'Market' | 'Limit';
   time: string;
+  side: 'buy' | 'sell';
 }
 
 interface Props {
@@ -16,46 +25,86 @@ interface Props {
   quoteToken: string;
 }
 
-/** Empty trades list shown when no real swap history is available */
-const EMPTY_TRADES: Trade[] = [];
+const KNOWN_TOKEN_NAMES: Record<string, string> = {
+  '32:0': 'frBTC',
+  '2:0': 'DIESEL',
+  '2:56801': 'bUSD',
+};
+
+function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
+  const n = Number(raw ?? '0');
+  const scaled = n / Math.pow(10, decimals);
+  if (!Number.isFinite(scaled)) return '0';
+  const fractionDigits = (tokenSymbol === 'BTC' || tokenSymbol === 'frBTC') ? 5 : 2;
+  if (scaled > 0 && scaled < Math.pow(10, -fractionDigits)) {
+    return `<${(Math.pow(10, -fractionDigits)).toFixed(fractionDigits)}`;
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits,
+  }).format(scaled);
+}
 
 export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
-  // Fetch real swap history from AMM DataApi
+  const { network } = useWallet() as { network: Network };
+
   const { data: historyData } = useInfiniteAmmTxHistory({
     count: 20,
     transactionType: 'swap',
   });
 
-  // Map AMM history items to Trade format, returning empty array when no history available
+  // Collect all token IDs for display name resolution
+  const tokenIds = useMemo(() => {
+    const ids = new Set<string>();
+    const pages = historyData?.pages;
+    if (!pages) return [];
+    for (const page of pages) {
+      for (const item of (page.items || [])) {
+        if (item?.soldTokenBlockId && item?.soldTokenTxId) {
+          ids.add(`${item.soldTokenBlockId}:${item.soldTokenTxId}`);
+        }
+        if (item?.boughtTokenBlockId && item?.boughtTokenTxId) {
+          ids.add(`${item.boughtTokenBlockId}:${item.boughtTokenTxId}`);
+        }
+      }
+    }
+    return Array.from(ids);
+  }, [historyData]);
+
+  const { data: displayMap } = useTokenDisplayMap(tokenIds);
+
+  const getName = (id: string) => {
+    const d = displayMap?.[id];
+    return d?.name || d?.symbol || KNOWN_TOKEN_NAMES[id] || id;
+  };
+
   const trades: Trade[] = useMemo(() => {
     const pages = historyData?.pages;
-    if (!pages || pages.length === 0) return EMPTY_TRADES;
+    if (!pages || pages.length === 0) return [];
 
     const allItems = pages.flatMap((page) => page.items || []);
-    if (allItems.length === 0) return EMPTY_TRADES;
+    if (allItems.length === 0) return [];
 
     return allItems.slice(0, 20).map((item: any, idx: number) => {
-      // Determine side: if token0 is being sold (amount0 negative or swap direction)
-      // The DataApi swap items typically have: amount0In, amount1Out, or similar fields
+      const fromId = item.soldTokenBlockId && item.soldTokenTxId
+        ? `${item.soldTokenBlockId}:${item.soldTokenTxId}` : '';
+      const toId = item.boughtTokenBlockId && item.boughtTokenTxId
+        ? `${item.boughtTokenBlockId}:${item.boughtTokenTxId}` : '';
+
+      const fromSymbol = getName(fromId);
+      const toSymbol = getName(toId);
+
+      const soldFormatted = formatAmount(item.soldAmount || '0', 8, fromSymbol);
+      const boughtFormatted = formatAmount(item.boughtAmount || '0', 8, toSymbol);
+
+      // Determine side based on common base token position
       const side: 'buy' | 'sell' = item.side === 'sell' ? 'sell'
         : item.side === 'buy' ? 'buy'
         : (item.amount0In && Number(item.amount0In) > 0) ? 'sell' : 'buy';
 
-      // Format price from available fields
-      const price = item.price
-        ? Number(item.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : item.amount1 && item.amount0 && Number(item.amount0) !== 0
-          ? Math.abs(Number(item.amount1) / Number(item.amount0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })
-          : '0.00';
+      // Type: all AMM swaps are Market orders; carbine limit orders will be 'Limit'
+      const type: 'Market' | 'Limit' = item.orderType === 'limit' ? 'Limit' : 'Market';
 
-      // Format amount
-      const amount = item.amount
-        ? Number(item.amount).toFixed(4)
-        : item.amount0
-          ? Math.abs(Number(item.amount0)).toFixed(4)
-          : '0.0000';
-
-      // Format timestamp
       let time = '--:--:--';
       if (item.timestamp) {
         const d = new Date(typeof item.timestamp === 'number' ? item.timestamp * 1000 : item.timestamp);
@@ -65,46 +114,67 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
       }
 
       return {
-        id: item.txid || item.id || String(idx),
-        price,
-        amount,
-        side,
+        id: item.txid || item.transactionId || item.id || String(idx),
+        soldFormatted,
+        boughtFormatted,
+        fromSymbol,
+        fromId,
+        toSymbol,
+        toId,
+        type,
         time,
+        side,
       };
     });
-  }, [historyData]);
+  }, [historyData, displayMap]);
 
   return (
-    <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[color:var(--sf-glass-border)]">
-        <span className="text-xs font-bold text-[color:var(--sf-text)] uppercase tracking-wide">
-          Recent Trades
-        </span>
-        <span className="text-[10px] text-[color:var(--sf-text)]/20">
-          {baseToken}/{quoteToken}
-        </span>
-      </div>
-
+    <div>
       {/* Column headers */}
-      <div className="grid grid-cols-3 text-right text-[10px] text-[color:var(--sf-text)]/30 uppercase tracking-wider px-2 py-1 border-b border-[color:var(--sf-glass-border)]/50">
-        <span className="text-left">Price</span>
-        <span>Size</span>
-        <span>Time</span>
+      <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-3 py-2">
+        <span>Type</span>
+        <span>From</span>
+        <span>To</span>
+        <span className="text-right">Amounts</span>
+        <span className="text-right">Time</span>
       </div>
 
-      <div className="max-h-[200px] overflow-y-auto">
-        {trades.map(trade => (
+      <div className="max-h-[240px] overflow-y-auto">
+        {trades.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-[color:var(--sf-text)]/20">
+            <span className="text-xs">No recent trades</span>
+          </div>
+        ) : trades.map(trade => (
           <div
             key={trade.id}
-            className="grid grid-cols-3 text-right text-[11px] leading-[20px] px-2 hover:bg-white/[0.02] transition-colors"
+            className="sf-row grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-3 py-1.5 items-center"
           >
-            <span className={`text-left tabular-nums ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-              {trade.price}
+            {/* Type */}
+            <span className="text-[color:var(--sf-text)]/40">
+              {trade.type}
             </span>
-            <span className="text-[color:var(--sf-text)]/60 tabular-nums">
-              {trade.amount}
+
+            {/* From */}
+            <div className="flex items-center gap-1 min-w-0">
+              <TokenIcon symbol={trade.fromSymbol} id={trade.fromId} size="sm" network={network} />
+              <span className="text-[color:var(--sf-text)]/60 truncate">{trade.fromSymbol}</span>
+            </div>
+
+            {/* To */}
+            <div className="flex items-center gap-1 min-w-0">
+              <TokenIcon symbol={trade.toSymbol} id={trade.toId} size="sm" network={network} />
+              <span className="text-[color:var(--sf-text)]/60 truncate">{trade.toSymbol}</span>
+            </div>
+
+            {/* Amounts */}
+            <span className="text-right tabular-nums truncate">
+              <span className="text-[color:var(--sf-text)]/60">-{trade.soldFormatted} {trade.fromSymbol}</span>
+              <span className="text-[color:var(--sf-text)]/25">{', '}</span>
+              <span className="text-green-400">+{trade.boughtFormatted} {trade.toSymbol}</span>
             </span>
-            <span className="text-[color:var(--sf-text)]/25 tabular-nums">
+
+            {/* Time */}
+            <span className="text-[color:var(--sf-text)]/25 tabular-nums text-right">
               {trade.time}
             </span>
           </div>

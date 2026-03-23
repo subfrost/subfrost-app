@@ -1,24 +1,28 @@
 'use client';
 
 import { useState, lazy, Suspense } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronDown } from 'lucide-react';
 import OrderbookPanel from './OrderbookPanel';
+import TokenIcon from '@/app/components/TokenIcon';
+import type { TokenMeta } from '../types';
+import type { Network } from '@/utils/constants';
 
 const SwapInputs = lazy(() => import('./SwapInputs'));
 const LimitOrderPanel = lazy(() => import('./LimitOrderPanel'));
-const FuturesDashboard = lazy(() => import('./FuturesDashboard'));
 
 type OrderType = 'market' | 'limit' | 'orderbook';
-type MarketType = 'spot' | 'futures';
 
 interface Props {
-  marketType: MarketType;
   swapInputsProps: any;
   baseToken: string;
   quoteToken: string;
   limitSelectedPrice?: string;
   onLimitPriceSelect: (price: string) => void;
   onOpenLiquidity: () => void;
+  fromToken?: TokenMeta;
+  toToken?: TokenMeta;
+  onOpenMarkets: () => void;
+  network?: Network;
 }
 
 const FormSkeleton = () => (
@@ -31,38 +35,28 @@ const FormSkeleton = () => (
 );
 
 export default function TradeForm({
-  marketType,
   swapInputsProps,
   baseToken,
   quoteToken,
   limitSelectedPrice,
   onLimitPriceSelect,
   onOpenLiquidity,
+  fromToken,
+  toToken,
+  onOpenMarkets,
+  network,
 }: Props) {
   const [orderType, setOrderType] = useState<OrderType>('market');
 
-  // Futures mode — render Fujin difficulty panel
-  if (marketType === 'futures') {
-    return (
-      <div className="sf-card flex flex-col h-full overflow-hidden">
-        <div className="flex border-b border-[color:var(--sf-glass-border)]">
-          <div className="flex-1 py-2.5 text-xs font-bold uppercase tracking-wide text-center text-[color:var(--sf-text)] border-b-2 border-[color:var(--sf-primary)]">
-            Difficulty Futures
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto min-h-0 p-3">
-          <Suspense fallback={<FormSkeleton />}>
-            <FuturesDashboard />
-          </Suspense>
-        </div>
-      </div>
-    );
-  }
+  const pairLabel = fromToken && toToken
+    ? `${fromToken.symbol}/${toToken.symbol}`
+    : 'Select Pair';
 
-  // Spot mode — tabs above the card
+  // Tabs + pair selector on same row
   return (
     <>
-      {/* Market / Limit / Order Book tabs — outside the card, above it */}
+      <div className="flex items-center justify-between gap-2">
+      {/* Market / Limit / Order Book tabs */}
       <div className="sf-tab-group">
         <button
           onClick={() => setOrderType('market')}
@@ -82,6 +76,26 @@ export default function TradeForm({
         >
           Order Book
         </button>
+      </div>
+
+      {/* Pair selector dropdown */}
+      <button
+        onClick={onOpenMarkets}
+        className="sf-tab-btn flex items-center gap-2 min-w-0"
+      >
+        {fromToken && toToken && (
+          <div className="flex items-center -space-x-1.5 leading-none shrink-0">
+            <div className="relative z-10 h-5 w-5">
+              <TokenIcon symbol={fromToken.symbol} id={fromToken.id} iconUrl={fromToken.iconUrl} size="sm" network={network} />
+            </div>
+            <div className="relative z-0 h-5 w-5">
+              <TokenIcon symbol={toToken.symbol} id={toToken.id} iconUrl={toToken.iconUrl} size="sm" network={network} />
+            </div>
+          </div>
+        )}
+        <span className="text-xs font-bold text-[color:var(--sf-text)] truncate">{pairLabel}</span>
+        <ChevronDown size={12} className="text-[color:var(--sf-text)]/40 shrink-0" />
+      </button>
       </div>
 
       {/* Order Book mode — full-height orderbook panel */}
@@ -107,6 +121,12 @@ export default function TradeForm({
                   baseToken={baseToken}
                   quoteToken={quoteToken}
                   selectedPrice={limitSelectedPrice}
+                  fromToken={fromToken}
+                  fromBalanceText={swapInputsProps.fromBalanceText}
+                  fromFiatText={swapInputsProps.fromFiatText}
+                  onPercentFrom={swapInputsProps.onPercentFrom}
+                  onMaxFrom={swapInputsProps.onMaxFrom}
+                  network={network}
                 />
               )}
             </Suspense>

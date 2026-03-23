@@ -62,6 +62,8 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
   const [grouping, setGrouping] = useState<GroupingSize>('0.01');
   const [showGroupingMenu, setShowGroupingMenu] = useState(false);
   const spreadRef = useRef<HTMLDivElement>(null);
+  const groupingTriggerRef = useRef<HTMLButtonElement>(null);
+  const groupingDropdownRef = useRef<HTMLDivElement>(null);
 
   // Scroll to spread on load
   useEffect(() => {
@@ -88,19 +90,20 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
     return 'text-orange-400';
   }, [orderbook?.spreadPercent]);
 
-  const groupingOptions: GroupingSize[] = ['0.01', '0.1', '1', '10', '50', '100'];
+  const groupingOptions: GroupingSize[] = ['0.01', '0.1', '1'];
 
   return (
     <div className="sf-card flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="sf-card-header">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-[color:var(--sf-text)] uppercase tracking-wide">
-            Order Book
-          </span>
+        <span className="text-xs font-bold text-[color:var(--sf-text)] uppercase tracking-wide">
+          Order Book
+        </span>
+        <div className="flex items-center gap-1.5">
           {/* Grouping selector */}
           <div className="relative">
             <button
+              ref={groupingTriggerRef}
               onClick={() => setShowGroupingMenu(!showGroupingMenu)}
               className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono text-[color:var(--sf-text)]/50 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-surface)]/80 transition-colors"
             >
@@ -110,13 +113,22 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
             {showGroupingMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowGroupingMenu(false)} />
-                <div className="sf-dropdown absolute top-full left-0 mt-1 z-50 overflow-hidden">
+                <div
+                  className="sf-dropdown fixed z-50 w-24"
+                  ref={(el) => {
+                    if (el && groupingTriggerRef.current) {
+                      const rect = groupingTriggerRef.current.getBoundingClientRect();
+                      el.style.top = `${rect.bottom + 4}px`;
+                      el.style.left = `${rect.left}px`;
+                    }
+                  }}
+                >
                   {groupingOptions.map(g => (
                     <button
                       key={g}
                       onClick={() => { setGrouping(g); setShowGroupingMenu(false); }}
-                      className={`sf-popup-row px-3 py-1.5 text-[10px] font-mono ${
-                        g === grouping ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10' : 'text-[color:var(--sf-text)]/60'
+                      className={`w-full px-3 py-1.5 text-left text-[10px] font-mono transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                        g === grouping ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/60 hover:bg-[color:var(--sf-primary)]/5'
                       }`}
                     >
                       {g}
@@ -126,8 +138,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
               </>
             )}
           </div>
-        </div>
-        <div className="flex gap-0.5 bg-[color:var(--sf-surface)] rounded-md p-0.5">
+          <div className="flex gap-0.5 bg-[color:var(--sf-surface)] rounded-md p-0.5">
           <button
             onClick={() => setDisplayMode('both')}
             title="Both"
@@ -149,6 +160,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
           >
             <TrendingDown size={12} />
           </button>
+          </div>
         </div>
       </div>
 

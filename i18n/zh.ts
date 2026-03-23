@@ -466,6 +466,7 @@ const zh: Record<string, string> = {
   'futuresTabs.futures': '\u671f\u8d27',
   'futuresTabs.predictions': '\u9884\u6d4b',
   'futuresTabs.volatility': '\u6ce2\u52a8\u7387',
+  'futuresTabs.yieldFutures': '收益期货',
   'futuresTabs.difficulty': '\u96be\u5ea6',
 
   // Settings Page

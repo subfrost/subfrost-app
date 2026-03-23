@@ -235,7 +235,7 @@ export default function LiquidityInputs({
           <button
             type="button"
             onClick={onOpenLPSelector}
-            className="sf-tile w-full inline-flex items-center justify-between gap-2 px-4 py-3 focus:outline-none"
+            className="sf-tile w-full inline-flex items-center justify-between gap-2 px-4 py-3 !rounded-[0.375rem] focus:outline-none"
           >
             {selectedLPPosition ? (
               <div className="flex items-center gap-2 min-w-0">
@@ -494,7 +494,7 @@ export default function LiquidityInputs({
                   className="sf-panel h-full p-4 cursor-pointer flex items-center justify-center hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                   onClick={() => openTokenSelector('pool0')}
                 >
-                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5">
+                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5 !rounded-[0.375rem]">
                     <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
                       {t('liquidity.selectToken')}
                     </span>
@@ -518,7 +518,7 @@ export default function LiquidityInputs({
                         e.stopPropagation();
                         openTokenSelector('pool0');
                       }}
-                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 focus:outline-none z-10"
+                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 !rounded-[0.375rem] focus:outline-none z-10"
                     >
                       <TokenIcon
                         key={`pool0-${token0.id}-${token0.symbol}`}
@@ -549,45 +549,45 @@ export default function LiquidityInputs({
                         />
                       </div>
 
-                      <div className="text-[10px] font-medium text-[color:var(--sf-text)]/50">
-                        {token0FiatText}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-0.5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-medium text-[color:var(--sf-text)]/50">
+                          {token0FiatText}
+                        </div>
                         <div className="text-[10px] font-medium text-[color:var(--sf-text)]/60">
                           {token0BalanceText}
                         </div>
-                        {onPercentToken0 && (
-                          <div
-                            className="flex items-center justify-end w-full"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className={`flex items-center gap-1 transition-opacity duration-300 ${
-                              token0Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            }`}>
-                              {[
-                                { label: '25%', value: 0.25 },
-                                { label: '50%', value: 0.5 },
-                                { label: '75%', value: 0.75 },
-                                { label: 'Max', value: 1 },
-                              ].map(({ label, value }) => (
-                                <button
-                                  key={label}
-                                  type="button"
-                                  onClick={() => onPercentToken0(value)}
-                                  className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
-                                    activePercentToken0 === value
-                                      ? "bg-[color:var(--sf-primary)]/20"
-                                      : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
+
+                      {onPercentToken0 && (
+                        <div
+                          className="flex items-center justify-end w-full"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className={`flex items-center gap-1 transition-opacity duration-300 ${
+                            token0Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                          }`}>
+                            {[
+                              { label: '25%', value: 0.25 },
+                              { label: '50%', value: 0.5 },
+                              { label: '75%', value: 0.75 },
+                              { label: 'Max', value: 1 },
+                            ].map(({ label, value }) => (
+                              <button
+                                key={label}
+                                type="button"
+                                onClick={() => onPercentToken0(value)}
+                                className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                                  activePercentToken0 === value
+                                    ? "bg-[color:var(--sf-primary)]/20"
+                                    : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -604,7 +604,7 @@ export default function LiquidityInputs({
                   className="sf-panel h-full p-4 cursor-pointer flex items-center justify-center hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                   onClick={() => openTokenSelector('pool1')}
                 >
-                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5">
+                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5 !rounded-[0.375rem]">
                     <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
                       {t('liquidity.selectToken')}
                     </span>
@@ -628,7 +628,7 @@ export default function LiquidityInputs({
                         e.stopPropagation();
                         openTokenSelector('pool1');
                       }}
-                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 focus:outline-none z-10"
+                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 !rounded-[0.375rem] focus:outline-none z-10"
                     >
                       <TokenIcon
                         key={`pool1-${token1.id}-${token1.symbol}`}
@@ -659,45 +659,45 @@ export default function LiquidityInputs({
                         />
                       </div>
 
-                      <div className="text-[10px] font-medium text-[color:var(--sf-text)]/50">
-                        {token1FiatText}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-0.5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-medium text-[color:var(--sf-text)]/50">
+                          {token1FiatText}
+                        </div>
                         <div className="text-[10px] font-medium text-[color:var(--sf-text)]/60">
                           {token1BalanceText}
                         </div>
-                        {onPercentToken1 && (
-                          <div
-                            className="flex items-center justify-end w-full"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className={`flex items-center gap-1 transition-opacity duration-300 ${
-                              token1Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            }`}>
-                              {[
-                                { label: '25%', value: 0.25 },
-                                { label: '50%', value: 0.5 },
-                                { label: '75%', value: 0.75 },
-                                { label: 'Max', value: 1 },
-                              ].map(({ label, value }) => (
-                                <button
-                                  key={label}
-                                  type="button"
-                                  onClick={() => onPercentToken1(value)}
-                                  className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
-                                    activePercentToken1 === value
-                                      ? "bg-[color:var(--sf-primary)]/20"
-                                      : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
+
+                      {onPercentToken1 && (
+                        <div
+                          className="flex items-center justify-end w-full"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className={`flex items-center gap-1 transition-opacity duration-300 ${
+                            token1Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                          }`}>
+                            {[
+                              { label: '25%', value: 0.25 },
+                              { label: '50%', value: 0.5 },
+                              { label: '75%', value: 0.75 },
+                              { label: 'Max', value: 1 },
+                            ].map(({ label, value }) => (
+                              <button
+                                key={label}
+                                type="button"
+                                onClick={() => onPercentToken1(value)}
+                                className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                                  activePercentToken1 === value
+                                    ? "bg-[color:var(--sf-primary)]/20"
+                                    : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

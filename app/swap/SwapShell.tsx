@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef, lazy, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import type { PoolSummary, TokenMeta } from "./types";
 import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import type { LPPosition } from "./components/LiquidityInputs";
@@ -32,7 +31,6 @@ import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
 
 // New unified layout components
-import PairSelectorBar from "./components/PairSelectorBar";
 import TradeForm from "./components/TradeForm";
 import BottomPanels from "./components/BottomPanels";
 import LiquidityModal from "./components/LiquidityModal";
@@ -138,11 +136,7 @@ export default function SwapShell() {
   // Volume period state (shared between MarketsGrid and PoolDetailsCard)
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
 
-  // Market type (spot vs futures) — check URL param on mount
-  const searchParams = useSearchParams();
-  const [marketType, setMarketType] = useState<'spot' | 'futures'>(
-    searchParams.get('type') === 'futures' ? 'futures' : 'spot'
-  );
+  const marketType = 'spot' as const;
 
   // Limit order price from orderbook click
   const [limitSelectedPrice, setLimitSelectedPrice] = useState<string | undefined>();
@@ -1909,37 +1903,6 @@ export default function SwapShell() {
 
   return (
     <div className="flex w-full flex-col gap-4 h-full">
-      {/* Top bar: SPOT/FUTURES tabs + Pair Selector */}
-      <div className="flex items-center gap-3">
-        {/* Spot / Futures toggle — lives on the page, not inside the card */}
-        <div className="sf-tab-group shrink-0">
-          <button
-            onClick={() => setMarketType('spot')}
-            className={`sf-tab-btn ${marketType === 'spot' ? 'sf-tab-btn--active' : ''} px-3 py-1`}
-          >
-            Spot
-          </button>
-          <button
-            onClick={() => setMarketType('futures')}
-            className={`sf-tab-btn ${marketType === 'futures' ? 'sf-tab-btn--active' : ''} px-3 py-1`}
-          >
-            Futures
-          </button>
-        </div>
-
-        {/* Pair Selector Bar */}
-        <div className="flex-1 min-w-0">
-          <PairSelectorBar
-            fromToken={fromToken}
-            toToken={toToken}
-            selectedPool={selectedPool}
-            onOpenMarkets={() => setIsMarketsPanelOpen(true)}
-            btcPrice={btcPrice}
-            network={network}
-          />
-        </div>
-      </div>
-
       {/* Desktop: 12-column grid — Chart (7) + TradeForm/Orderbook (5) */}
       {/* Mobile: stacked — TradeForm first, then data panels */}
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-3">
@@ -1948,7 +1911,10 @@ export default function SwapShell() {
         <div className="lg:col-span-5 lg:order-2 order-1 min-h-0">
           <div className="flex flex-col gap-3">
             <TradeForm
-              marketType={marketType}
+              fromToken={fromToken}
+              toToken={toToken}
+              onOpenMarkets={() => setIsMarketsPanelOpen(true)}
+              network={network}
               swapInputsProps={{
                 from: fromToken,
                 to: toToken,
@@ -2022,15 +1988,12 @@ export default function SwapShell() {
           <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
         </div>
 
-        {/* Mobile data panels — Chart/Book/Trades tabs (below trade form on mobile) */}
+        {/* Mobile data panels — collapsible chart (below trade form on mobile) */}
         <div className="lg:hidden order-2">
           <MobileDataPanels
             chartPool={chartPool}
             chartTokenId={chartTokenId}
             isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)}
-            baseToken={fromToken?.symbol || 'DIESEL'}
-            quoteToken={toToken?.symbol || 'frBTC'}
-            onPriceSelect={setLimitSelectedPrice}
           />
         </div>
       </div>

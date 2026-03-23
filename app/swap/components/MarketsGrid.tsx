@@ -132,34 +132,22 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="sf-card-header flex-shrink-0 gap-4 !rounded-none">
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="sf-tab-group flex-shrink-0">
           <button
             onClick={() => setMarketFilter('all')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-              marketFilter === 'all'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-            }`}
+            className={`sf-tab-btn h-10 ${marketFilter === 'all' ? 'sf-tab-btn--active' : ''}`}
           >
             All
           </button>
           <button
             onClick={() => setMarketFilter('btc')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-              marketFilter === 'btc'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-            }`}
+            className={`sf-tab-btn h-10 ${marketFilter === 'btc' ? 'sf-tab-btn--active' : ''}`}
           >
             BTC
           </button>
           <button
             onClick={() => setMarketFilter('usd')}
-            className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-              marketFilter === 'usd'
-                ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-            }`}
+            className={`sf-tab-btn h-10 ${marketFilter === 'usd' ? 'sf-tab-btn--active' : ''}`}
           >
             USD
           </button>

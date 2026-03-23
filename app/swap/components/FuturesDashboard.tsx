@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { TrendingUp, BarChart3 } from 'lucide-react';
 import PremiumCurveChart from './PremiumCurveChart';
 import DifficultyProjection from './DifficultyProjection';
 import VolBtcPanel from './VolBtcPanel';
@@ -20,8 +19,11 @@ type FuturesTab = 'yield' | 'difficulty';
 
 const DEFAULT_COEFFICIENTS: CubicCoefficients = computeCoefficientsFromGrowth(1.0005, 2016);
 
-export default function FuturesDashboard() {
-  const [activeTab, setActiveTab] = useState<FuturesTab>('yield');
+interface FuturesDashboardProps {
+  activeTab: FuturesTab;
+}
+
+export default function FuturesDashboard({ activeTab }: FuturesDashboardProps) {
   const [utilization, setUtilization] = useState(0.5);
   const { network } = useWallet();
 
@@ -42,31 +44,8 @@ export default function FuturesDashboard() {
     console.log('[FuturesDashboard] Deposit requested for ftrBTC:', ftrId);
   };
 
-  const tabs: { key: FuturesTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'yield', label: 'Yield Futures', icon: <TrendingUp size={14} /> },
-    { key: 'difficulty', label: 'Difficulty', icon: <BarChart3 size={14} /> },
-  ];
-
   return (
     <div className="space-y-3">
-      {/* Sub-tabs: Yield Futures | Difficulty */}
-      <div className="flex gap-1 p-1 bg-[color:var(--sf-surface)] rounded-lg">
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-bold uppercase tracking-wide transition-all ${
-              activeTab === tab.key
-                ? 'bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] shadow-sm'
-                : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/60'
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       {/* Yield Futures: ftrBTC + volBTC + premium curve */}
       {activeTab === 'yield' && (
         <div className="space-y-3">

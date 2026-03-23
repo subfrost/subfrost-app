@@ -310,7 +310,7 @@ export default function SwapInputs({
                 e.stopPropagation();
                 openTokenSelector("from");
               }}
-              className="sf-tile absolute right-4 top-4 inline-flex items-center gap-2 px-3 py-2 focus:outline-none z-10"
+              className="sf-tile absolute right-4 top-4 inline-flex items-center gap-2 px-3 py-2 !rounded-[0.375rem] focus:outline-none z-10"
             >
               {from && (
                 <TokenIcon
@@ -351,23 +351,24 @@ export default function SwapInputs({
                 />
               </div>
 
-              {/* Fiat value row */}
+              {/* Fiat value + Balance row */}
               <div className="flex items-center justify-between">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
                   {fromFiatText}
                 </div>
-              </div>
-
-              {/* Balance + Percentage Buttons (hidden for bridge tokens) */}
-              {!isFromBridgeToken && (
-                <div className="flex flex-col items-end gap-1">
+                {!isFromBridgeToken && (
                   <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                     {resolvedFromBalanceText}
                   </div>
-                  <div
-                    className="flex items-center justify-between w-full"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                )}
+              </div>
+
+              {/* Fill bar + Percentage Buttons (hidden for bridge tokens) */}
+              {!isFromBridgeToken && (
+                <div
+                  className="flex items-center justify-between w-full"
+                  onClick={(e) => e.stopPropagation()}
+                >
                     <div
                       className={`max-w-[45%] flex-1 mr-3 h-1 rounded-full overflow-hidden ${
                         balanceUsage > 0
@@ -454,7 +455,6 @@ export default function SwapInputs({
                     </button>
                     </div>
                   </div>
-                </div>
               )}
             </div>
           </div>
@@ -503,7 +503,7 @@ export default function SwapInputs({
               e.stopPropagation();
               openTokenSelector("to");
             }}
-            className="sf-tile absolute right-4 top-6 inline-flex items-center gap-2 px-3 py-2 focus:outline-none z-10"
+            className="sf-tile absolute right-4 top-6 inline-flex items-center gap-2 px-3 py-2 !rounded-[0.375rem] focus:outline-none z-10"
           >
             {to && (
               <TokenIcon
@@ -541,22 +541,21 @@ export default function SwapInputs({
                 onChange={onChangeToAmount}
                 onFocus={() => setToFocused(true)}
                 onBlur={() => setToFocused(false)}
+                className={toAmount ? '' : '!text-[color:var(--sf-text)]/40'}
               />
             </div>
 
-            {/* Fiat value */}
-            <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
-              {toFiatText}
-            </div>
-
-            {/* Balance row at bottom (hidden for bridge tokens) */}
-            {!isToBridgeToken && (
-              <div className="flex items-center justify-end">
+            {/* Fiat value + Balance on same row */}
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                {toFiatText}
+              </div>
+              {!isToBridgeToken && (
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                   {to?.id ? resolvedToBalanceText : `${t("swap.balance")} 0`}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

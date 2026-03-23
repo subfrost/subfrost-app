@@ -99,7 +99,7 @@ function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
 
   // Use 4 decimals for BTC/frBTC, 2 for other tokens
   const fractionDigits =
-    tokenSymbol === "BTC" || tokenSymbol === "frBTC" ? 4 : 2;
+    tokenSymbol === "BTC" || tokenSymbol === "frBTC" ? 5 : 2;
 
   if (scaled > 0 && scaled < Math.pow(10, -fractionDigits)) {
     return `<${Math.pow(10, -fractionDigits).toFixed(fractionDigits)}`;
