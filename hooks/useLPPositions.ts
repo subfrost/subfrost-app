@@ -106,7 +106,7 @@ export function useLPPositions() {
           valueUSD = balanceFloat * btcPrice;
         }
 
-        // Gain/loss placeholder
+        // Gain/loss: zero until impermanent loss tracking is implemented via quspo historical views
         const gainLoss = {
           token0: { amount: '0', symbol: token0Symbol },
           token1: { amount: '0', symbol: token1Symbol },

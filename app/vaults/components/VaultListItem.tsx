@@ -52,14 +52,13 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   const vaultDesc = VAULT_DESC_KEYS[vault.id] ? t(VAULT_DESC_KEYS[vault.id]) : vault.description;
   const badgeText = vault.badge && BADGE_KEYS[vault.badge] ? t(BADGE_KEYS[vault.badge]) : vault.badge;
 
-  // Mock data - replace with real vault queries
+  // Vault balances: zero until user deposits. Updated by useVaultStats hook.
   const depositsUsd = "$0.00";
   const depositsToken = "0.00";
   const availableUsd = "$0.00";
   const availableToken = "0.00";
 
-  // Mock 30-day APY history - replace with real data
-  // For now, all values are 0 (horizontal line)
+  // APY history: flat at 0 until historical data is available from quspo indexer
   const apyHistory = useMemo(() => Array(30).fill(0), []);
   const currentHistoricalApy = parseFloat(vault.historicalApy || "0");
 

@@ -1,25 +1,78 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useFujinMarkets } from '@/hooks/useFujinMarkets';
 import { useWallet } from '@/context/WalletContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Info, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
-import { useNormalPool } from '@/hooks/useNormalPool';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/queries/keys';
 
 /**
  * Fujin Difficulty Futures Panel
  *
- * Replicates the fuboku-app trading interface patterns within subfrost-app.
- * Shows difficulty epoch info, LONG/SHORT positions, and the normalized BTC pool.
+ * Shows difficulty epoch info, LONG/SHORT positions.
+ * Epoch info is derived from on-chain block height:
+ * - Bitcoin difficulty adjusts every 2016 blocks
+ * - Epoch progress = (blockHeight % 2016) / 2016
+ * - Blocks remaining = 2016 - (blockHeight % 2016)
  */
+
+const EPOCH_LENGTH = 2016;
+
+function formatDifficulty(diff: number): string {
+  if (diff >= 1e12) return `${(diff / 1e12).toFixed(2)}T`;
+  if (diff >= 1e9) return `${(diff / 1e9).toFixed(2)}G`;
+  if (diff >= 1e6) return `${(diff / 1e6).toFixed(2)}M`;
+  return diff.toFixed(0);
+}
+
 export default function FujinDifficultyPanel() {
   const { t } = useTranslation();
   const { data: fujinData, isLoading: fujinLoading } = useFujinMarkets();
-  const { isConnected } = useWallet();
-  const { data: normalPool } = useNormalPool();
+  const { isConnected, network } = useWallet();
   const [swapDirection, setSwapDirection] = useState<'LONG' | 'SHORT'>('LONG');
   const [amount, setAmount] = useState('');
+
+  // Get current block height from the shared height query
+  const { data: blockHeight } = useQuery({
+    queryKey: queryKeys.height.espo(network || 'devnet'),
+    enabled: !!network,
+    staleTime: 8_000,
+  });
+
+  // Compute epoch info from block height
+  const epochInfo = useMemo(() => {
+    if (typeof blockHeight !== 'number' || blockHeight <= 0) return null;
+    const blocksIntoEpoch = blockHeight % EPOCH_LENGTH;
+    const progress = blocksIntoEpoch / EPOCH_LENGTH;
+    const blocksRemaining = EPOCH_LENGTH - blocksIntoEpoch;
+    // Estimated time remaining: ~10 min per block
+    const minutesRemaining = blocksRemaining * 10;
+    const daysRemaining = minutesRemaining / (60 * 24);
+
+    let timeLabel: string;
+    if (daysRemaining >= 1) {
+      timeLabel = `~${daysRemaining.toFixed(0)} days left`;
+    } else {
+      const hoursRemaining = minutesRemaining / 60;
+      timeLabel = `~${hoursRemaining.toFixed(0)} hours left`;
+    }
+
+    return {
+      progress,
+      progressPct: (progress * 100).toFixed(0),
+      blocksRemaining,
+      timeLabel,
+      epochNumber: Math.floor(blockHeight / EPOCH_LENGTH),
+    };
+  }, [blockHeight]);
+
+  // Pool TVL from fujin markets (number of markets as proxy)
+  const poolTvl = useMemo(() => {
+    if (!fujinData || fujinData.numMarkets === 0) return null;
+    return `${fujinData.numMarkets} markets`;
+  }, [fujinData]);
 
   return (
     <div className="space-y-4">
@@ -27,31 +80,41 @@ export default function FujinDifficultyPanel() {
       <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm px-4 py-3 sm:px-6 sm:py-4">
         <div className="grid grid-cols-2 gap-3 sm:gap-0 sm:grid-cols-4 sm:divide-x divide-[color:var(--sf-glass-border)]">
           <div className="text-center px-1 sm:px-4">
-            <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Forecast</div>
-            <div className="text-sm sm:text-lg font-bold text-green-400 tabular-nums">+3.2%</div>
-            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">Implied from pool</div>
-          </div>
-          <div className="text-center px-1 sm:px-4">
-            <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Difficulty</div>
-            <div className="text-sm sm:text-lg font-bold text-[color:var(--sf-text)] tabular-nums">113.76T</div>
-            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">Est. +2.8%</div>
+            <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Block Height</div>
+            <div className="text-sm sm:text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
+              {typeof blockHeight === 'number' ? blockHeight.toLocaleString() : '--'}
+            </div>
+            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">
+              {epochInfo ? `Epoch #${epochInfo.epochNumber}` : '--'}
+            </div>
           </div>
           <div className="text-center px-1 sm:px-4">
             <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Epoch Progress</div>
-            <div className="text-sm sm:text-lg font-bold text-[color:var(--sf-primary)] tabular-nums">72%</div>
-            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">~4 days left</div>
+            <div className="text-sm sm:text-lg font-bold text-[color:var(--sf-primary)] tabular-nums">
+              {epochInfo ? `${epochInfo.progressPct}%` : '--'}
+            </div>
+            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">
+              {epochInfo ? epochInfo.timeLabel : '--'}
+            </div>
           </div>
           <div className="text-center px-1 sm:px-4">
-            <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Pool TVL</div>
+            <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Blocks Remaining</div>
             <div className="text-sm sm:text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
-              {fujinLoading ? <Loader2 className="h-4 w-4 animate-spin inline" /> : '--'}
+              {epochInfo ? epochInfo.blocksRemaining.toLocaleString() : '--'}
             </div>
-            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">DIESEL locked</div>
+            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">Until next adjustment</div>
+          </div>
+          <div className="text-center px-1 sm:px-4">
+            <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Fujin Markets</div>
+            <div className="text-sm sm:text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
+              {fujinLoading ? <Loader2 className="h-4 w-4 animate-spin inline" /> : poolTvl ?? '0'}
+            </div>
+            <div className="hidden sm:block text-[11px] text-[color:var(--sf-text)]/40 mt-0.5">Active pools</div>
           </div>
         </div>
       </div>
 
-      {/* Swap Panel — LONG/SHORT */}
+      {/* Swap Panel -- LONG/SHORT */}
       <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-6">
         {/* Direction toggle */}
         <div className="flex gap-1 p-1 bg-[color:var(--sf-surface)] rounded-lg mb-4">
@@ -141,64 +204,6 @@ export default function FujinDifficultyPanel() {
         >
           {isConnected ? `Buy ${swapDirection}` : 'Connect Wallet'}
         </button>
-      </div>
-
-      {/* frBTC/frUSD Synth Pool removed — it's a regular swap pool, not a futures component */}
-
-      {/* volBTC Pool — unified ftrBTC futures liquidity */}
-      <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-bold text-[color:var(--sf-text)]">volBTC Pool</h4>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${normalPool?.hasLiquidity ? 'bg-green-400' : 'bg-zinc-600'}`} />
-            <span className="text-xs text-[color:var(--sf-text)]/50">
-              {normalPool?.hasLiquidity ? 'Active' : 'No Liquidity'}
-            </span>
-          </div>
-        </div>
-        <p className="text-xs text-[color:var(--sf-text)]/50 mb-3">
-          Pool and trade ftrBTC futures. All instances valued by dxBTC share price, adjusted for utilization premium.
-        </p>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Pool Value</div>
-            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
-              {normalPool?.totalValue && BigInt(normalPool.totalValue) > 0n
-                ? (Number(BigInt(normalPool.totalValue)) / 1e8).toFixed(4)
-                : '--'}
-            </div>
-            <div className="text-[10px] text-[color:var(--sf-text)]/30">dxBTC</div>
-          </div>
-          <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">LP Supply</div>
-            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
-              {normalPool?.totalSupply && BigInt(normalPool.totalSupply) > 0n
-                ? (Number(BigInt(normalPool.totalSupply)) / 1e8).toFixed(4)
-                : '--'}
-            </div>
-            <div className="text-[10px] text-[color:var(--sf-text)]/30">volBTC</div>
-          </div>
-          <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
-            <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Holdings</div>
-            <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
-              {normalPool?.holdings?.length ?? 0}
-            </div>
-            <div className="text-[10px] text-[color:var(--sf-text)]/30">ftrBTC types</div>
-          </div>
-        </div>
-        {/* Show holdings if any */}
-        {normalPool?.holdings && normalPool.holdings.length > 0 && (
-          <div className="mt-3 space-y-1">
-            {normalPool.holdings.map(h => (
-              <div key={h.ftrId} className="flex items-center justify-between px-2 py-1.5 rounded bg-[color:var(--sf-surface)]/50 text-[11px]">
-                <span className="font-mono text-[color:var(--sf-text)]/60">{h.ftrId}</span>
-                <span className="font-mono tabular-nums text-[color:var(--sf-text)]/80">
-                  {(Number(BigInt(h.amount)) / 1e8).toFixed(4)}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -12,10 +12,11 @@ export default function YveDieselVault() {
   // Get DIESEL vault from constants
   const dieselVault = AVAILABLE_VAULTS.find(v => v.id === 've-diesel')!;
 
-  // Mock data
+  // Vault stats: zero until vault contract is deployed on-chain.
+  // Will be populated via useVaultStats hook once live.
   const stats = {
-    tvl: "34,033,640.92",
-    apy: "3.95",
+    tvl: "0.00",
+    apy: "0.0",
     userBalance: "0.00",
   };
 

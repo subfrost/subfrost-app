@@ -16,55 +16,18 @@ export interface OrderbookData {
   midPrice: string;
 }
 
-function generateOrderLevels(
-  startPrice: number,
-  direction: 'up' | 'down',
-  count: number,
-  step: number,
-): OrderLevel[] {
-  const levels: OrderLevel[] = [];
-  let cumTotal = 0;
-  for (let i = 0; i < count; i++) {
-    const price = direction === 'down'
-      ? startPrice - (i * step)
-      : startPrice + (i * step);
-    // Varying sizes — some clustered, some sparse
-    const amount = parseFloat((Math.random() * 2.5 + 0.05).toFixed(4));
-    const total = price * amount;
-    cumTotal += total;
-    levels.push({
-      price: price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      amount: amount.toFixed(4),
-      total: cumTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    });
-  }
-  return levels;
-}
-
-// Stable seed-based mock (deterministic within session)
-let cachedBook: OrderbookData | null = null;
-
-function getMockOrderbook(): OrderbookData {
-  if (cachedBook) return cachedBook;
-
-  const midPrice = 99875.00;
-  const halfSpread = 25;
-
-  const bids = generateOrderLevels(midPrice - halfSpread, 'down', 15, 50);
-  const asks = generateOrderLevels(midPrice + halfSpread, 'up', 15, 50);
-
-  const bestBid = midPrice - halfSpread;
-  const bestAsk = midPrice + halfSpread;
-  const spread = bestAsk - bestBid;
-
-  cachedBook = {
-    bids,
-    asks,
-    spread: spread.toFixed(2),
-    spreadPercent: ((spread / midPrice) * 100).toFixed(3),
-    midPrice: midPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+/**
+ * Returns an empty orderbook. Used as fallback when carbine controller
+ * is not deployed or the query fails.
+ */
+function getEmptyOrderbook(): OrderbookData {
+  return {
+    bids: [],
+    asks: [],
+    spread: '0.00',
+    spreadPercent: '0.000',
+    midPrice: '0.00',
   };
-  return cachedBook;
 }
 
 /**
@@ -193,12 +156,12 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
             if (parsed) return parsed;
           }
         } catch (err) {
-          console.warn('[useOrderbook] Carbine controller query failed, falling back to mock:', err);
+          console.warn('[useOrderbook] Carbine controller query failed, returning empty orderbook:', err);
         }
       }
 
-      // Fallback: mock orderbook when controller is not deployed or query fails
-      return getMockOrderbook();
+      // Return empty orderbook when controller is not deployed or query fails
+      return getEmptyOrderbook();
     },
     enabled: !!baseToken && !!quoteToken && !!network,
     staleTime: 5_000,

@@ -25,10 +25,10 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
   const { t } = useTranslation();
 
 
-  // Mock data - replace with real data
-  const userVeTokenBalance = "1250.50";
-  const userVeTokenBalanceFormatted = "1,250.50";
-  const totalVxTokenStaked = "850.00";
+  // Boost stats: zero until boost/gauge contract is deployed on-chain
+  const userVeTokenBalance = "0.00";
+  const userVeTokenBalanceFormatted = "0.00";
+  const totalVxTokenStaked = "0.00";
   const multiplier = vault.boostMultiplier || 1.5;
   const boostMultiplier = `${multiplier}x`;
 

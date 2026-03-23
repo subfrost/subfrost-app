@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useTheme } from '@/context/ThemeContext';
-import type { PricePoint } from '@/hooks/fire/useFireMockData';
+import type { PricePoint } from '@/hooks/fire/fireTypes';
 
 interface FirePriceChartProps {
   data: PricePoint[];

@@ -10,14 +10,15 @@ export default function GaugeVault() {
   const [infoTab, setInfoTab] = useState<'about' | 'boost' | 'info' | 'risk'>('about');
   const { t } = useTranslation();
 
-  // Mock data
+  // Gauge stats: zero until gauge contract is deployed on-chain.
+  // Will be populated via alkanes_simulate opcode queries once live.
   const stats = {
-    tvl: "450,200.00",
-    baseApy: "12.5",
-    boostedApy: "28.2",
+    tvl: "0.00",
+    baseApy: "0.0",
+    boostedApy: "0.0",
     userStaked: "0.00",
     userBoost: "1.0",
-    pendingRewards: "12.50",
+    pendingRewards: "0.00",
   };
 
   const handleExecute = () => {

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from 'react';
 import { calculateProfitAtLockPeriod } from '../utils/calculations';
-import { type Contract } from '../data/mockContracts';
+import { type Contract } from '../data/contracts';
 import TokenIcon from '@/app/components/TokenIcon';
 import NumberField from '@/app/components/NumberField';
 import { useBtcBalance } from '@/hooks/useBtcBalance';

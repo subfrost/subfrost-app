@@ -2,9 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { mockContracts, type Contract } from '../data/mockContracts';
-
-// Use Contract type from mockContracts.ts
+import { type Contract } from '../data/contracts';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)

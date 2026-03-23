@@ -1,7 +1,7 @@
 /**
  * useFireChartData — derives chart data from real on-chain FIRE protocol state.
  *
- * Replaces useFireMockData for production use. Instead of random walks,
+ * Derives chart data from real on-chain FIRE protocol state. Instead of random walks,
  * uses actual staking stats + token stats to compute:
  * - Price: derived from totalStaked / circulatingSupply ratio
  * - TVL: actual totalStaked from staking contract
@@ -15,7 +15,7 @@ import { useMemo } from 'react';
 import { useFireStakingStats } from './useFireStakingStats';
 import { useFireTokenStats } from './useFireTokenStats';
 import { useFireTreasury } from './useFireTreasury';
-import type { PricePoint, StakerDistribution, FireMockData } from './useFireMockData';
+import type { PricePoint, StakerDistribution, FireChartData } from './fireTypes';
 import BigNumber from 'bignumber.js';
 
 /**
@@ -55,7 +55,7 @@ function generateHistorySeries(
   return points;
 }
 
-export function useFireChartData(): FireMockData {
+export function useFireChartData(): FireChartData {
   const { data: stakingStats } = useFireStakingStats();
   const { data: tokenStats } = useFireTokenStats();
   const { data: treasury } = useFireTreasury();

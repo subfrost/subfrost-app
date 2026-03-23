@@ -7,6 +7,9 @@ import DifficultyProjection from './DifficultyProjection';
 import VolBtcPanel from './VolBtcPanel';
 import FujinEpochPanel from './FujinEpochPanel';
 import UtilizationSlider from './UtilizationSlider';
+import { useWallet } from '@/context/WalletContext';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/queries/keys';
 import {
   computeCoefficientsFromGrowth,
   adjustCoefficients,
@@ -20,6 +23,14 @@ const DEFAULT_COEFFICIENTS: CubicCoefficients = computeCoefficientsFromGrowth(1.
 export default function FuturesDashboard() {
   const [activeTab, setActiveTab] = useState<FuturesTab>('yield');
   const [utilization, setUtilization] = useState(0.5);
+  const { network } = useWallet();
+
+  // Get current block height from the shared height query
+  const { data: blockHeight } = useQuery({
+    queryKey: queryKeys.height.espo(network || 'devnet'),
+    enabled: !!network,
+    staleTime: 8_000,
+  });
 
   const baseCoeffs = DEFAULT_COEFFICIENTS;
   const adjustedCoeffs = useMemo(
@@ -82,9 +93,7 @@ export default function FuturesDashboard() {
         <div className="space-y-3">
           {/* Difficulty projection + settlement simulator */}
           <DifficultyProjection
-            currentDifficulty={113.76e12}
-            avgBlockTime={580}
-            blockHeight={886000}
+            blockHeight={typeof blockHeight === 'number' ? blockHeight : undefined}
           />
 
           {/* Fujin epoch trading (LONG/SHORT) */}

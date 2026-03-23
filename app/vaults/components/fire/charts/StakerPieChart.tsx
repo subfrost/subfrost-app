@@ -1,6 +1,6 @@
 'use client';
 
-import type { StakerDistribution } from '@/hooks/fire/useFireMockData';
+import type { StakerDistribution } from '@/hooks/fire/fireTypes';
 import { useTranslation } from '@/hooks/useTranslation';
 
 interface StakerPieChartProps {

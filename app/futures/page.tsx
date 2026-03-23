@@ -13,7 +13,6 @@ import OpenPositionForm from './components/OpenPositionForm';
 import PositionsSection from './components/PositionsSection';
 import FuturesHeaderTabs, { type FuturesTabKey } from './components/FuturesHeaderTabs';
 import VolatilityView from './components/VolatilityView';
-import { mockContracts } from './data/mockContracts';
 import { useFutures } from '@/hooks/useFutures';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -29,8 +28,8 @@ export default function FuturesPage() {
   // Fetch real futures data from regtest
   const { futures, currentBlock, loading, error, refetch, generateFuture } = useFutures();
 
-  // Use real data if available, otherwise fall back to mocks
-  const contracts = futures.length > 0 ? futures.map(f => ({
+  // Map on-chain futures data to contract format
+  const contracts = futures.map(f => ({
     id: f.id,
     timeLeft: f.timeLeft,
     blocksLeft: f.blocksLeft,
@@ -43,21 +42,21 @@ export default function FuturesPage() {
     exercised: f.exercised,
     mempoolQueue: f.mempoolQueue,
     remaining: f.remaining,
-  })) : mockContracts;
+  }));
 
-  // Mock contract data - find the actual contract to get real values
+  // Build contract detail data from the selected contract's on-chain data
   const selectedContractData = contracts.find(c => c.id === selectedContract?.id);
-  const contractData = selectedContract
+  const contractData = selectedContract && selectedContractData
     ? {
         id: selectedContract.id,
         blocksLeft: selectedContract.blocksLeft,
-        expiryBlock: selectedContractData?.expiryBlock ?? 982110,
-        created: selectedContractData?.created ?? '6 blocks ago',
-        totalSupply: selectedContractData?.totalSupply ?? 100,
-        remaining: selectedContractData?.remaining ?? 75,
-        exercised: selectedContractData?.exercised ?? 25,
-        vaultFreeCapital: 310,
-        liquidityDepth: 21,
+        expiryBlock: selectedContractData.expiryBlock,
+        created: selectedContractData.created,
+        totalSupply: selectedContractData.totalSupply,
+        remaining: selectedContractData.remaining,
+        exercised: selectedContractData.exercised,
+        vaultFreeCapital: 0,
+        liquidityDepth: 0,
       }
     : null;
 

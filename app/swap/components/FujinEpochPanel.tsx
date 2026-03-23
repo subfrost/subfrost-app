@@ -6,14 +6,23 @@ import { useFujinMarkets } from '@/hooks/useFujinMarkets';
 import { useSynthPoolState } from '@/hooks/useSynthPoolState';
 import { useWallet } from '@/context/WalletContext';
 import { computeSettlementPayouts } from '@/lib/math/futuresEngine';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/queries/keys';
 
 interface Props {
   poolId?: string;
 }
 
 export default function FujinEpochPanel({ poolId }: Props) {
-  const { isConnected } = useWallet();
+  const { isConnected, network } = useWallet();
   const { data: fujinData, isLoading: fujinLoading } = useFujinMarkets();
+
+  // Get current block height from the shared height query
+  const { data: blockHeight } = useQuery({
+    queryKey: queryKeys.height.espo(network || 'devnet'),
+    enabled: !!network,
+    staleTime: 8_000,
+  });
   const { data: synthData } = useSynthPoolState();
 
   const [direction, setDirection] = useState<'LONG' | 'SHORT'>('LONG');
@@ -48,7 +57,11 @@ export default function FujinEpochPanel({ poolId }: Props) {
     return a / price;
   }, [amount, direction, longPrice]);
 
-  const settled = false; // Placeholder: would come from on-chain state
+  // Epoch settlement status: derived from on-chain market state.
+  // When Fujin market is settled, the settlement payouts are computed from actual difficulty change.
+  const settled = currentMarket?.expiry != null && typeof blockHeight === 'number'
+    ? (blockHeight >= (currentMarket.expiry ?? Infinity))
+    : false;
 
   return (
     <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4">

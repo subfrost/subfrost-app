@@ -19,7 +19,7 @@ export default function FireOverviewPanel() {
   const { data: tokenStats } = useFireTokenStats();
   const { data: stakingStats } = useFireStakingStats();
   const { data: treasury } = useFireTreasury();
-  const mockData = useFireChartData();
+  const chartData = useFireChartData();
 
   const metrics = useMemo(() => {
     const emissionRemaining = new BigNumber(tokenStats?.emissionPoolRemaining || '0').dividedBy(1e8);
@@ -49,7 +49,7 @@ export default function FireOverviewPanel() {
         <div className="flex gap-4 sm:gap-5">
           {/* Staker pie chart */}
           <div className="flex-1 min-w-0">
-            <StakerPieChart data={mockData.stakerDistribution} size={140} />
+            <StakerPieChart data={chartData.stakerDistribution} size={140} />
           </div>
 
           {/* Temperature bar: staked vs circulating supply */}

@@ -95,7 +95,7 @@ export default function VaultShell() {
           }
           case 'available':
           case 'deposits':
-            // Mock data for now - all zeros, so no sorting effect
+            // Vault balances not yet available for sorting -- requires on-chain state queries
             compareValue = 0;
             break;
         }

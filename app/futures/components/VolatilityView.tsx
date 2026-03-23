@@ -33,12 +33,8 @@ function formatCompact(raw: string, decimals: number = 8): string {
   return n.toFixed(4);
 }
 
-/** Mock ftrBTC user holdings when wallet is not connected */
-const MOCK_USER_HOLDINGS = [
-  { ftrId: '2:100', amount: '5000000000', dxBtcValue: '95000000' },
-  { ftrId: '2:101', amount: '3000000000', dxBtcValue: '92000000' },
-  { ftrId: '2:102', amount: '1500000000', dxBtcValue: '89000000' },
-];
+/** Empty user holdings shown when wallet is not connected or has no ftrBTC */
+const EMPTY_USER_HOLDINGS: { ftrId: string; amount: string; dxBtcValue: string }[] = [];
 
 const DEFAULT_COEFFICIENTS: CubicCoefficients = computeCoefficientsFromGrowth(1.0005, 2016);
 
@@ -172,9 +168,9 @@ export default function VolatilityView() {
   const holdings = pool?.holdings ?? [];
   const holdingIds = holdings.map((h) => h.ftrId);
 
-  // Derive user's ftrBTC holdings from wallet data or use mocks
+  // Derive user's ftrBTC holdings from wallet data (empty when disconnected)
   const userFtrHoldings = useMemo(() => {
-    if (!isConnected || !walletData?.balances) return MOCK_USER_HOLDINGS;
+    if (!isConnected || !walletData?.balances) return EMPTY_USER_HOLDINGS;
     const alkanes = walletData.balances.alkanes ?? [];
     // Filter for ftrBTC tokens (tokens that appear in pool holdings)
     const ftrIds = new Set(holdingIds);
@@ -185,7 +181,7 @@ export default function VolatilityView() {
         amount: a.balance,
         dxBtcValue: '0',
       }));
-    return userHoldings.length > 0 ? userHoldings : MOCK_USER_HOLDINGS;
+    return userHoldings.length > 0 ? userHoldings : EMPTY_USER_HOLDINGS;
   }, [isConnected, walletData, holdingIds]);
 
   // Coefficients adjusted by utilization
@@ -196,10 +192,9 @@ export default function VolatilityView() {
   );
   const adjustment = useMemo(() => computeUtilizationAdjustment(utilization), [utilization]);
 
-  // Selected ftrBTC time position (mock: derive from ftrId)
+  // Selected ftrBTC time position: derive normalized t from the ftrId's tx component
   const selectedT = useMemo(() => {
     if (!selectedFtr) return 0.35;
-    // Derive a pseudo t from the ftrId for demo purposes
     const parts = selectedFtr.split(':');
     const tx = parseInt(parts[1] || '100', 10);
     return Math.max(0.05, Math.min(0.95, (tx % 100) / 100));

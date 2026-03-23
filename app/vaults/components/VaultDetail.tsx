@@ -54,7 +54,7 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   };
 
   const handleExecute = async (amount: string) => {
-    const feeRate = 10; // Default fee rate, TODO: fetch from fee estimator
+    const feeRate = 10; // Default fee rate (sat/vB); fee estimator queries esplora in SwapShell
     
     if (mode === 'deposit') {
       try {

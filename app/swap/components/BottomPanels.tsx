@@ -30,7 +30,7 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
   const { isConnected } = useWallet();
   const { positions: lpPositions, isLoading: isLoadingPositions } = useLPPositions();
 
-  // Mock open orders count — will connect to carbine controller
+  // Open orders count: zero until carbine controller is deployed on-chain
   const openOrderCount = 0;
 
   const tabs: { key: PanelTab; label: string; icon: React.ReactNode; count?: number }[] = [

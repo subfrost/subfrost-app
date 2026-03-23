@@ -16,19 +16,8 @@ interface Props {
   quoteToken: string;
 }
 
-/** Fallback mock trades shown when real data is unavailable */
-const MOCK_TRADES: Trade[] = [
-  { id: '1', price: '99,875.50', amount: '0.0234', side: 'buy', time: '12:45:32' },
-  { id: '2', price: '99,870.00', amount: '0.1500', side: 'sell', time: '12:45:28' },
-  { id: '3', price: '99,880.25', amount: '0.0089', side: 'buy', time: '12:45:15' },
-  { id: '4', price: '99,865.00', amount: '0.3200', side: 'buy', time: '12:44:58' },
-  { id: '5', price: '99,890.00', amount: '0.0450', side: 'sell', time: '12:44:41' },
-  { id: '6', price: '99,885.75', amount: '0.0120', side: 'sell', time: '12:44:33' },
-  { id: '7', price: '99,870.50', amount: '0.2800', side: 'buy', time: '12:44:19' },
-  { id: '8', price: '99,895.00', amount: '0.0067', side: 'sell', time: '12:44:02' },
-  { id: '9', price: '99,860.25', amount: '0.5100', side: 'buy', time: '12:43:48' },
-  { id: '10', price: '99,875.00', amount: '0.0340', side: 'buy', time: '12:43:31' },
-];
+/** Empty trades list shown when no real swap history is available */
+const EMPTY_TRADES: Trade[] = [];
 
 export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
   // Fetch real swap history from AMM DataApi
@@ -37,13 +26,13 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
     transactionType: 'swap',
   });
 
-  // Map AMM history items to Trade format, falling back to mock data
+  // Map AMM history items to Trade format, returning empty array when no history available
   const trades: Trade[] = useMemo(() => {
     const pages = historyData?.pages;
-    if (!pages || pages.length === 0) return MOCK_TRADES;
+    if (!pages || pages.length === 0) return EMPTY_TRADES;
 
     const allItems = pages.flatMap((page) => page.items || []);
-    if (allItems.length === 0) return MOCK_TRADES;
+    if (allItems.length === 0) return EMPTY_TRADES;
 
     return allItems.slice(0, 20).map((item: any, idx: number) => {
       // Determine side: if token0 is being sold (amount0 negative or swap direction)

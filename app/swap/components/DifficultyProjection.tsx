@@ -30,26 +30,41 @@ function formatTime(seconds: number): string {
 }
 
 export default function DifficultyProjection({
-  currentDifficulty = 113.76e12,
-  avgBlockTime = 580,
-  blockHeight = 886000,
+  currentDifficulty,
+  avgBlockTime = 600,
+  blockHeight,
 }: Props) {
   const [simChangePercent, setSimChangePercent] = useState(3);
 
-  const epoch = useMemo(() => getEpochInfo(blockHeight), [blockHeight]);
+  // Default difficulty for devnet/regtest (1.0 = minimum difficulty)
+  const effectiveDifficulty = currentDifficulty ?? 1.0;
+  const effectiveHeight = blockHeight ?? 0;
+
+  const epoch = useMemo(() => getEpochInfo(effectiveHeight), [effectiveHeight]);
 
   const projection = useMemo(
-    () => projectNextDifficulty(currentDifficulty, avgBlockTime, epoch.blocksRemaining),
-    [currentDifficulty, avgBlockTime, epoch.blocksRemaining],
+    () => projectNextDifficulty(effectiveDifficulty, avgBlockTime, epoch.blocksRemaining),
+    [effectiveDifficulty, avgBlockTime, epoch.blocksRemaining],
   );
 
   const simPayouts = useMemo(() => {
-    const endDiff = currentDifficulty * (1 + simChangePercent / 100);
-    return computeSettlementPayouts(currentDifficulty, endDiff);
-  }, [currentDifficulty, simChangePercent]);
+    const endDiff = effectiveDifficulty * (1 + simChangePercent / 100);
+    return computeSettlementPayouts(effectiveDifficulty, endDiff);
+  }, [effectiveDifficulty, simChangePercent]);
 
   const longBarW = Math.max(0, Math.min(200, simPayouts.longPayout * 200));
   const shortBarW = Math.max(0, Math.min(200, simPayouts.shortPayout * 200));
+
+  // Show loading state when block height is not yet available
+  if (!blockHeight) {
+    return (
+      <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 text-center">
+        <div className="text-sm text-[color:var(--sf-text)]/40">
+          Loading block height...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4">
@@ -81,7 +96,7 @@ export default function DifficultyProjection({
         <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">
           <div className="text-[10px] text-[color:var(--sf-text)]/50 mb-1">Current Difficulty</div>
           <div className="text-lg font-bold text-[color:var(--sf-text)] tabular-nums">
-            {formatDifficulty(currentDifficulty)}
+            {formatDifficulty(effectiveDifficulty)}
           </div>
         </div>
         <div className="rounded-lg bg-[color:var(--sf-surface)] p-3 text-center">

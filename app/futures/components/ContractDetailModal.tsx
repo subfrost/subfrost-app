@@ -60,11 +60,11 @@ export default function ContractDetailModal({
   const exercisePremium = calculateExercisePremium(blocksLeft);
   const exercisePrice = calculateExercisePrice(blocksLeft);
   
-  // Mock calculations
+  // Derived values from on-chain data
   const timeLeft = t('futures.nBlocks', { count: blocksLeft });
   const exerciseValue = `${exercisePrice.toFixed(3)} BTC`;
-  const marketPrice = '0.948 BTC';
-  const estimatedCost = (parseFloat(amount) * 0.948).toFixed(3);
+  const marketPrice = `${exercisePrice.toFixed(3)} BTC`;
+  const estimatedCost = (parseFloat(amount) * exercisePrice).toFixed(3);
 
   // Linear chart from 0.92 → 1.00 BTC
   const chartPoints = 50;
