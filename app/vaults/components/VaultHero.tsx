@@ -58,7 +58,7 @@ export default function VaultHero({
 
   const riskValue = riskLevel === 'low' ? 2 : riskLevel === 'medium' ? 3 : riskLevel === 'high' ? 4 : 5;
   return (
-    <div className="relative overflow-hidden rounded-2xl p-6 sm:p-9 shadow-[0_4px_20px_rgba(0,0,0,0.2)] w-full bg-[color:var(--sf-glass-bg)] backdrop-blur-md text-[color:var(--sf-text)] border-t border-[color:var(--sf-top-highlight)]">
+    <div className="sf-card relative p-5 sm:p-8 w-full text-[color:var(--sf-text)]">
       {/* Background glow accent */}
       {glowColor && (
         <>
@@ -177,10 +177,8 @@ export default function VaultHero({
             ].map(({ label, value, unit, isBoosted }) => (
               <div
                 key={label}
-                className={`relative overflow-hidden rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3 shadow-[0_4px_20px_rgba(0,0,0,0.2)] ${
-                  isBoosted && boostActive ? '' : 'bg-[color:var(--sf-surface)]/40'
-                }`}
-                style={isBoosted && boostActive ? { background: 'linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))' } : undefined}
+                className="sf-card-small relative overflow-hidden px-3 py-2.5 sm:px-4 sm:py-3"
+                style={isBoosted && boostActive ? { background: 'linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.25)' } : undefined}
               >
                 {isBoosted && boostActive && (
                   <div className="absolute inset-0 animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-purple-300/40 to-transparent pointer-events-none" />
@@ -196,7 +194,7 @@ export default function VaultHero({
               { label: 'Circ. Supply', value: tvl, unit: tokenSymbol },
               { label: t('vaultHero.yourBalance'), value: userBalance, unit: '$0.00' },
             ].map(({ label, value, unit }) => (
-              <div key={label} className="rounded-2xl bg-[color:var(--sf-surface)]/40 px-3 py-2.5 sm:px-4 sm:py-3 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+              <div key={label} className="sf-card-small px-3 py-2.5 sm:px-4 sm:py-3">
                 <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-0.5">{label}</div>
                 <div className="text-base sm:text-lg font-bold text-[color:var(--sf-text)] truncate">{value}</div>
                 <div className="text-[10px] text-[color:var(--sf-muted)]">{unit}</div>

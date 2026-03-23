@@ -300,11 +300,7 @@ export default function SwapInputs({
         {/* You Send - entire panel clickable to focus input */}
         <div className={`relative ${fromFocused ? "z-30" : ""}`}>
           <div
-            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] px-4 pt-4 pb-6 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
-              fromFocused
-                ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
-                : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
-            }`}
+            className="sf-input group relative z-20 px-4 pt-4 pb-6 cursor-text"
             onClick={() => fromInputRef.current?.focus()}
           >
             {/* Token Selector - floating top-right */}
@@ -314,7 +310,7 @@ export default function SwapInputs({
                 e.stopPropagation();
                 openTokenSelector("from");
               }}
-              className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+              className="sf-tile absolute right-4 top-4 inline-flex items-center gap-2 px-3 py-2 focus:outline-none z-10"
             >
               {from && (
                 <TokenIcon
@@ -497,11 +493,7 @@ export default function SwapInputs({
 
         {/* You Receive - entire panel clickable to focus input */}
         <div
-          className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] px-4 pb-4 pt-6 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
-            toFocused
-              ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
-              : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
-          }`}
+          className="sf-input group relative z-20 px-4 pb-4 pt-6 cursor-text"
           onClick={() => toInputRef.current?.focus()}
         >
           {/* Token Selector - floating top-right */}
@@ -511,7 +503,7 @@ export default function SwapInputs({
               e.stopPropagation();
               openTokenSelector("to");
             }}
-            className="absolute right-4 top-6 inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+            className="sf-tile absolute right-4 top-6 inline-flex items-center gap-2 px-3 py-2 focus:outline-none z-10"
           >
             {to && (
               <TokenIcon
@@ -583,11 +575,7 @@ export default function SwapInputs({
       {/* Ethereum Wallet Address for cross-chain tokens (when sending TO bridge token) */}
       {isToBridgeToken && !bridgeActive && (
         <div
-          className={`relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] ${
-            ethAddressFocused
-              ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
-              : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
-          }`}
+          className="sf-input relative z-10 p-4"
         >
           <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
             {t("swap.ethWalletAddress")}
@@ -599,7 +587,7 @@ export default function SwapInputs({
             onFocus={() => setEthAddressFocused(true)}
             onBlur={() => setEthAddressFocused(false)}
             placeholder={t("swap.enterUsdtRecipient")}
-            className="w-full rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 !outline-none !ring-0 focus:!ring-0 focus:!outline-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms]"
+            className="sf-input w-full px-4 py-3 text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40"
           />
           <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
             {t("swap.enterEthAddress")}

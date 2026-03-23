@@ -930,8 +930,8 @@ const en: Record<string, string> = {
   'fire.unstake': 'Unstake',
 
   // FIRE Bonding Panel
-  'fire.bondLpForFire': 'Bond LP for Discounted FIRE',
-  'fire.stakeLpForEmissions': 'Stake LP to Earn FIRE Emissions',
+  'fire.bondLpForFire': 'Earn Discounted FIRE',
+  'fire.stakeLpForEmissions': 'Earn FIRE Emissions',
   'fire.discount': 'Discount',
   'fire.firePrice': 'FIRE Price',
   'fire.lpAmount': 'LP Amount',

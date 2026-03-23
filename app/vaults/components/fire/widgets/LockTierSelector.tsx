@@ -2,7 +2,6 @@
 
 import { LOCK_TIERS } from '@/utils/fireCalculations';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useTheme } from '@/context/ThemeContext';
 
 interface LockTierSelectorProps {
   selectedTier: number;
@@ -20,7 +19,6 @@ const LOCK_TIER_KEYS: Record<string, string> = {
 
 export default function LockTierSelector({ selectedTier, onSelect }: LockTierSelectorProps) {
   const { t } = useTranslation();
-  const { theme } = useTheme();
 
   return (
     <div className="flex flex-col gap-2">
@@ -33,14 +31,8 @@ export default function LockTierSelector({ selectedTier, onSelect }: LockTierSel
             key={tier.label}
             type="button"
             onClick={() => onSelect(index)}
-            className={`inline-flex flex-col items-center justify-center rounded-md px-2 sm:px-3 py-2 sm:py-2.5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
-              selectedTier === index
-                ? 'bg-[color:var(--sf-primary)]/20'
-                : `${
-                    theme === 'dark'
-                      ? 'bg-white/[0.03]'
-                      : 'bg-[color:var(--sf-surface)]'
-                  } hover:bg-white/[0.06]`
+            className={`sf-tile inline-flex flex-col items-center justify-center px-2 sm:px-3 py-2 sm:py-2.5 text-center text-[color:var(--sf-percent-btn)] focus:outline-none ${
+              selectedTier === index ? '!bg-[color:var(--sf-primary)]/20' : ''
             }`}
           >
             <div className="text-xs sm:text-sm font-bold">{t(LOCK_TIER_KEYS[tier.label] || tier.label)}</div>

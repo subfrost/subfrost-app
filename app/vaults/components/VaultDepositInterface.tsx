@@ -173,7 +173,7 @@ export default function VaultDepositInterface({
   };
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+    <div className="sf-card !overflow-visible p-6">
       {/* Tabs */}
       {!hideTabs && (
         <div className="flex gap-4 mb-6">
@@ -205,7 +205,7 @@ export default function VaultDepositInterface({
         <div className="relative flex flex-col gap-3">
           {/* From Wallet Panel */}
           <div
-            className={`group relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            className="sf-input group relative z-30 p-4 cursor-text"
             onClick={() => inputRef.current?.focus()}
           >
             {/* Token Selector - floating top-right */}
@@ -230,7 +230,7 @@ export default function VaultDepositInterface({
 
               {/* Token Selector Dropdown */}
               {showTokenSelector && (
-                <div className="absolute right-0 mt-2 z-[100] w-44 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
+                <div className="absolute right-0 mt-2 z-[100] w-44 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] overflow-hidden">
                   {ALL_VAULT_TOKENS.map((token) => (
                     <button
                       key={token.id}
@@ -315,7 +315,7 @@ export default function VaultDepositInterface({
           </div>
 
           {/* To Vault Panel */}
-          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="sf-panel relative z-10 p-4">
             {/* Token display - floating top-right */}
             <div className="absolute right-4 top-4 z-10">
               <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
@@ -349,12 +349,12 @@ export default function VaultDepositInterface({
           </div>
 
           {/* Transaction Settings - collapsible panel */}
-          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+          <div className="sf-panel relative z-[5] overflow-visible">
             {/* Toggle button */}
             <button
               type="button"
               onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+              className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
               <ChevronDown
@@ -403,8 +403,7 @@ export default function VaultDepositInterface({
                         }
                       }}
                       placeholder="3"
-                      style={{ outline: 'none', border: 'none' }}
-                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      className="sf-pill-input"
                     />
                   </div>
                 </div>
@@ -482,8 +481,7 @@ export default function VaultDepositInterface({
                           }
                         }}
                         placeholder="0"
-                        style={{ outline: 'none', border: 'none' }}
-                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        className="sf-pill-input"
                       />
                     </div>
                   ) : (
@@ -642,7 +640,7 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
@@ -729,7 +727,7 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />

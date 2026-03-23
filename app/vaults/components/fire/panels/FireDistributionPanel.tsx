@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useFireDistributor } from '@/hooks/fire/useFireDistributor';
 import { useWallet } from '@/context/WalletContext';
+import TokenIcon from '@/app/components/TokenIcon';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
@@ -16,12 +17,13 @@ const PHASE_KEYS = [
 
 export default function FireDistributionPanel() {
   const { t } = useTranslation();
-  const { isConnected } = useWallet();
+  const { isConnected, network } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: distributor } = useFireDistributor();
 
   const contributeRef = useRef<HTMLInputElement>(null);
-  const [contributeFocused, setContributeFocused] = useState(false);
+  const [contributeAmount, setContributeAmount] = useState('');
+  const [inputFocused, setInputFocused] = useState(false);
 
   const currentPhase = Number(distributor?.phase || '0');
   const totalContributed = new BigNumber(distributor?.totalContributed || '0').dividedBy(1e8);
@@ -29,88 +31,68 @@ export default function FireDistributionPanel() {
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
-      {/* Phase indicator */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
-        <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
-          {t('fire.distributionPhase')}
-        </div>
-
-        {/* Phase progress */}
-        <div className="flex items-start gap-1 sm:gap-2 mb-5">
-          {PHASE_KEYS.map((phase, i) => (
-            <div key={i} className="flex-1 min-w-0">
-              <div className={`h-1.5 sm:h-2 rounded-full transition-colors duration-500 ${
-                i < currentPhase
-                  ? 'bg-emerald-400'
-                  : i === currentPhase
-                    ? 'bg-gradient-to-r from-orange-500 to-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.4)]'
-                    : 'bg-[color:var(--sf-panel-bg)]'
-              }`} />
-              <div className={`text-[9px] sm:text-[10px] mt-1.5 font-semibold uppercase tracking-wider truncate ${
-                i === currentPhase
-                  ? 'text-orange-400'
-                  : i < currentPhase
-                    ? 'text-emerald-400/70'
-                    : 'text-[color:var(--sf-muted)]/40'
-              }`}>
-                {t(phase.name)}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Current phase info */}
-        <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3 sm:p-4 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-[color:var(--sf-muted)]">{t('fire.phase')} {currentPhase}: {t(PHASE_KEYS[currentPhase]?.name || 'fire.unknown')}</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-[color:var(--sf-muted)]">{PHASE_KEYS[currentPhase]?.description ? t(PHASE_KEYS[currentPhase].description) : ''}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalContributed')}</div>
-          <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)] mt-1">{totalContributed.toFixed(4)}</div>
-          <div className="text-[10px] text-[color:var(--sf-muted)]">frBTC</div>
-        </div>
-        <div className="rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalClaimed')}</div>
-          <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)] mt-1">{totalClaimed.toFixed(4)}</div>
-          <div className="text-[10px] text-[color:var(--sf-muted)]">FIRE</div>
-        </div>
-      </div>
-
       {/* Action area */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="sf-card p-4 sm:p-5">
         {currentPhase === 0 && (
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
               {t('fire.contributeFrbtc')}
             </div>
-            <div
-              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
-                contributeFocused
-                  ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-                  : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
-              }`}
-              onClick={() => contributeRef.current?.focus()}
-            >
+            <div className="relative sf-input group p-4 cursor-text mb-4" onClick={() => contributeRef.current?.focus()}>
+              <div className="absolute right-4 top-4 z-10">
+                <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                  <TokenIcon symbol="frBTC" size="sm" network={network} />
+                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">frBTC</span>
+                </div>
+              </div>
               <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.amount')}</span>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1 pr-32">
                 <input
                   ref={contributeRef}
                   type="number"
+                  value={contributeAmount}
+                  onChange={(e) => setContributeAmount(e.target.value)}
                   placeholder="0.00"
-                  onFocus={() => setContributeFocused(true)}
-                  onBlur={() => setContributeFocused(false)}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
                   className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
                   style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
                 />
-                <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">frBTC</span>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  {t('boost.balance', { amount: '0.00' })}
+                </div>
+                <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setContributeAmount((parseFloat('0.00') * 0.25).toString())}
+                    className="sf-percent-btn-pill"
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContributeAmount((parseFloat('0.00') * 0.5).toString())}
+                    className="sf-percent-btn-pill"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContributeAmount((parseFloat('0.00') * 0.75).toString())}
+                    className="sf-percent-btn-pill"
+                  >
+                    75%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContributeAmount('0.00')}
+                    className="sf-percent-btn-pill"
+                  >
+                    {t('boost.max')}
+                  </button>
+                </div>
               </div>
             </div>
             <button
@@ -163,6 +145,61 @@ export default function FireDistributionPanel() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="sf-card p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalContributed')}</div>
+          <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)] mt-1">{totalContributed.toFixed(4)}</div>
+          <div className="text-[10px] text-[color:var(--sf-muted)]">frBTC</div>
+        </div>
+        <div className="sf-card p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">{t('fire.totalClaimed')}</div>
+          <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)] mt-1">{totalClaimed.toFixed(4)}</div>
+          <div className="text-[10px] text-[color:var(--sf-muted)]">FIRE</div>
+        </div>
+      </div>
+
+      {/* Phase indicator */}
+      <div className="sf-card p-4 sm:p-5">
+        <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
+          {t('fire.distributionPhase')}
+        </div>
+
+        {/* Phase progress */}
+        <div className="flex items-start gap-1 sm:gap-2 mb-5">
+          {PHASE_KEYS.map((phase, i) => (
+            <div key={i} className="flex-1 min-w-0">
+              <div className={`h-1.5 sm:h-2 rounded-full transition-colors duration-500 ${
+                i < currentPhase
+                  ? 'bg-emerald-400'
+                  : i === currentPhase
+                    ? 'bg-gradient-to-r from-orange-500 to-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.4)]'
+                    : 'bg-[color:var(--sf-panel-bg)]'
+              }`} />
+              <div className={`text-[9px] sm:text-[10px] mt-1.5 font-semibold uppercase tracking-wider truncate ${
+                i === currentPhase
+                  ? 'text-orange-400'
+                  : i < currentPhase
+                    ? 'text-emerald-400/70'
+                    : 'text-[color:var(--sf-muted)]/40'
+              }`}>
+                {t(phase.name)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Current phase info */}
+        <div className="sf-panel p-3 sm:p-4 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-[color:var(--sf-muted)]">{t('fire.phase')} {currentPhase}: {t(PHASE_KEYS[currentPhase]?.name || 'fire.unknown')}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-[color:var(--sf-muted)]">{PHASE_KEYS[currentPhase]?.description ? t(PHASE_KEYS[currentPhase].description) : ''}</span>
+          </div>
+        </div>
       </div>
     </div>
   );

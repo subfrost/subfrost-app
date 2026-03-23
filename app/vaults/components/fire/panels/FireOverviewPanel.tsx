@@ -36,7 +36,7 @@ export default function FireOverviewPanel() {
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Top stakers */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="sf-card p-4 sm:p-5">
         <div className="flex items-start justify-between mb-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
             {t('fire.topStakers')}
@@ -58,12 +58,12 @@ export default function FireOverviewPanel() {
       </div>
 
       {/* Emission schedule */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="sf-card p-4 sm:p-5">
         <EmissionScheduleChart numYears={10} height={320} />
       </div>
 
       {/* Treasury breakdown — hidden for now, may re-enable later
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="sf-card p-4 sm:p-5">
         <TreasuryBreakdownChart />
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-3 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">

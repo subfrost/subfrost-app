@@ -36,6 +36,16 @@ Use the named CSS utility classes in `app/globals.css` instead of composing raw 
 | `.sf-table-header` | Column header row — tinted bg, bottom border, muted caps text |
 | `.sf-badge-apy` | APY / yield percentage pill badge |
 | `.sf-dropdown` | Floating dropdowns and overlays |
+| `.sf-collapsible-trigger` | Toggle button for collapsible panels (e.g. Transaction Details) |
+| `.sf-dropdown-trigger` / `.sf-dropdown-trigger--open` | Pill-shaped select button (slippage, fee mode) — glows blue when open |
+| `.sf-percent-btn-pill` | Quick-fill percent buttons (25 / 50 / 75 / MAX) inside token inputs |
+| `.sf-pill-input` | Small fixed-width pill number input (h-7 w-16) — no border, blue glow on :focus |
+| `.sf-btn-primary` | Primary CTA button — gradient bg, white text, scale on hover/active, disabled state |
+| `.sf-btn-secondary` | Secondary action button — quiet surface bg, for Cancel / Retry / Select actions |
+| `.sf-btn-ghost` | Ghost button — transparent bg, primary text, hover tint |
+| `.sf-alert` | Alert/info box base — always pair with a colour modifier (see below) |
+| `.sf-alert-green` / `.sf-alert-blue` / `.sf-alert-yellow` / `.sf-alert-orange` / `.sf-alert-red` / `.sf-alert-gray` | Colour modifiers for `.sf-alert` — theme-aware via `--sf-info-*` tokens |
+| `.sf-alert-title` | Bold heading line inside an `.sf-alert` — colour auto-matches the modifier |
 
 ### Rules for New Components
 

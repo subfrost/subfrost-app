@@ -8,7 +8,10 @@ interface StakerPieChartProps {
   size?: number;
 }
 
-const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#4b5563'];
+const COLORS = [
+  '#f97316', '#fb923c', '#fdba74', '#fbbf24', '#fed7aa',
+  '#fde68a', '#fef3c7', '#d97706', '#b45309', '#92400e',
+];
 
 export default function StakerPieChart({ data, size = 140 }: StakerPieChartProps) {
   const { t } = useTranslation();

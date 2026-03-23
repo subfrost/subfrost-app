@@ -18,9 +18,11 @@ type Props = {
   volumePeriod?: VolumePeriod;
   onVolumePeriodChange?: (period: VolumePeriod) => void;
   selectedPoolId?: string | null;
+  currencyDisplay?: CurrencyDisplay;
+  onCurrencyDisplayChange?: (currency: CurrencyDisplay) => void;
 };
 
-export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange, selectedPoolId: externalSelectedPoolId }: Props) {
+export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVolumePeriod, onVolumePeriodChange, selectedPoolId: externalSelectedPoolId, currencyDisplay: externalCurrencyDisplay, onCurrencyDisplayChange }: Props) {
   const { network } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const { t } = useTranslation();
@@ -30,7 +32,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   const [searchQuery, setSearchQuery] = useState('');
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
   const [internalVolumePeriod, setInternalVolumePeriod] = useState<VolumePeriod>('30d');
-  const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyDisplay>('usd');
+  const [internalCurrencyDisplay, setInternalCurrencyDisplay] = useState<CurrencyDisplay>('usd');
 
   // Use external selected pool ID if provided, otherwise use internal state
   const selectedPoolId = externalSelectedPoolId ?? internalSelectedPoolId;
@@ -38,6 +40,10 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   // Use external volume period if provided, otherwise use internal state
   const volumePeriod = externalVolumePeriod ?? internalVolumePeriod;
   const setVolumePeriod = onVolumePeriodChange ?? setInternalVolumePeriod;
+
+  // Use external currency display if provided, otherwise use internal state
+  const currencyDisplay = externalCurrencyDisplay ?? internalCurrencyDisplay;
+  const setCurrencyDisplay = onCurrencyDisplayChange ?? setInternalCurrencyDisplay;
 
   const sortedPools = useMemo(() => {
     // Allow all alkane pools on every network
@@ -124,8 +130,8 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
   };
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between gap-4">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="sf-card-header flex-shrink-0 gap-4 !rounded-none">
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setMarketFilter('all')}
@@ -196,76 +202,9 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
         </div>
       </div>
 
-      {/* Empty State */}
-      {filteredPools.length === 0 && (
-        <div className="rounded-2xl bg-[color:var(--sf-surface)]/50 backdrop-blur-sm p-12 text-center">
-          <svg className="mx-auto h-12 w-12 text-[color:var(--sf-text)]/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">No pools found</h3>
-          <p className="text-sm text-[color:var(--sf-text)]/60">
-            {searchQuery ? `No pools match "${searchQuery}"` : 'No pools available'}
-          </p>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="mt-4 text-sm font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-            >
-              Clear search
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Desktop Table View */}
+      {/* Pinned column header — outside scroll container */}
       {filteredPools.length > 0 && (
-        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
-        <div className="px-4 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-bold text-[color:var(--sf-text)]">Markets</h3>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setCurrencyDisplay('usd')}
-                  className={`text-xs font-bold uppercase tracking-wider transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                    currencyDisplay === 'usd' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                  }`}
-                >
-                  $
-                </button>
-                <span className="text-[color:var(--sf-text)]/30">|</span>
-                <button
-                  onClick={() => setCurrencyDisplay('btc')}
-                  className={`text-xs font-bold uppercase tracking-wider transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                    currencyDisplay === 'btc' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                  }`}
-                >
-                  ₿
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setVolumePeriod('24h')}
-                  className={`text-xs font-bold uppercase tracking-wider transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                    volumePeriod === '24h' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                  }`}
-                >
-                  24H
-                </button>
-                <span className="text-[color:var(--sf-text)]/30">|</span>
-                <button
-                  onClick={() => setVolumePeriod('30d')}
-                  className={`text-xs font-bold uppercase tracking-wider transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                    volumePeriod === '30d' ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/50 hover:text-[color:var(--sf-text)]/70'
-                  }`}
-                >
-                  30D
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <table className="w-full table-fixed">
+        <table className="w-full table-fixed flex-shrink-0">
           <colgroup>
             <col className="w-[35%]" />
             <col className="w-[22%]" />
@@ -274,7 +213,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
           </colgroup>
           <thead>
             <tr className="border-b border-[color:var(--sf-row-border)]">
-              <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
+              <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
               <th className="px-2 py-3 text-right">
                 <button
                   onClick={() => handleSort('tvl')}
@@ -321,61 +260,86 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             </tr>
           </thead>
         </table>
-        <div className="no-scrollbar overflow-y-auto max-h-[450px]">
-          <table className="w-full table-fixed">
-            <colgroup>
-              <col className="w-[35%]" />
-              <col className="w-[22%]" />
-              <col className="w-[22%]" />
-              <col className="w-[21%]" />
-            </colgroup>
-            <tbody>
-              {displayedPools.map((pool) => (
-                <tr
-                  key={pool.id}
-                  className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 cursor-pointer group border-b border-[color:var(--sf-row-border)] ${
-                    selectedPoolId === pool.id ? 'bg-[color:var(--sf-primary)]/5 border-l-4 border-l-[color:var(--sf-primary)]' : ''
-                  }`}
-                  onClick={() => handleSelectPool(pool)}
-                >
-                  <td className="px-6 py-3">
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="flex -space-x-2">
-                        <div className="relative">
-                          <TokenIcon symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="xl" network={network} />
-                        </div>
-                        <div className="relative">
-                          <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="xl" network={network} />
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap overflow-hidden text-ellipsis w-full text-left">
-                        {pool.pairLabel.replace(/ LP$/, '')}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-3 text-right">
-                    <span className="text-xs font-semibold text-[color:var(--sf-text)]">
-                      {formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}
-                    </span>
-                  </td>
-                  <td className="px-2 py-3 text-right text-xs font-semibold text-[color:var(--sf-text)]">
-                    {volumePeriod === '24h' && formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}
-                    {volumePeriod === '30d' && formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice, true)}
-                  </td>
-                  <td className="px-2 py-3 text-center">
-                    <span className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
-                      {formatPercent(pool.apr)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      )}
+
+      {/* Scrollable content — only rows scroll */}
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+
+      {/* Empty State */}
+      {filteredPools.length === 0 && (
+        <div className="rounded-2xl bg-[color:var(--sf-surface)]/50 backdrop-blur-sm p-12 text-center mx-4">
+          <svg className="mx-auto h-12 w-12 text-[color:var(--sf-text)]/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">No pools found</h3>
+          <p className="text-sm text-[color:var(--sf-text)]/60">
+            {searchQuery ? `No pools match "${searchQuery}"` : 'No pools available'}
+          </p>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="mt-4 text-sm font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+            >
+              Clear search
+            </button>
+          )}
         </div>
       )}
 
+      {/* Rows */}
+      {filteredPools.length > 0 && (
+        <table className="w-full table-fixed">
+          <colgroup>
+            <col className="w-[35%]" />
+            <col className="w-[22%]" />
+            <col className="w-[22%]" />
+            <col className="w-[21%]" />
+          </colgroup>
+          <tbody>
+            {displayedPools.map((pool) => (
+              <tr
+                key={pool.id}
+                className={`transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 cursor-pointer group border-b border-[color:var(--sf-row-border)] ${
+                  selectedPoolId === pool.id ? 'bg-[color:var(--sf-primary)]/5 border-l-4 border-l-[color:var(--sf-primary)]' : ''
+                }`}
+                onClick={() => handleSelectPool(pool)}
+              >
+                <td className="px-4 py-3">
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex -space-x-2">
+                      <div className="relative">
+                        <TokenIcon symbol={pool.token0.symbol} id={pool.token0.id} iconUrl={pool.token0.iconUrl} size="xl" network={network} />
+                      </div>
+                      <div className="relative">
+                        <TokenIcon symbol={pool.token1.symbol} id={pool.token1.id} iconUrl={pool.token1.iconUrl} size="xl" network={network} />
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap overflow-hidden text-ellipsis w-full text-left">
+                      {pool.pairLabel.replace(/ LP$/, '')}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-2 py-3 text-right">
+                  <span className="text-xs font-semibold text-[color:var(--sf-text)]">
+                    {formatCurrency(pool.tvlUsd, currencyDisplay, btcPrice)}
+                  </span>
+                </td>
+                <td className="px-2 py-3 text-right text-xs font-semibold text-[color:var(--sf-text)]">
+                  {volumePeriod === '24h' && formatCurrency(pool.vol24hUsd, currencyDisplay, btcPrice, true)}
+                  {volumePeriod === '30d' && formatCurrency(pool.vol30dUsd, currencyDisplay, btcPrice, true)}
+                </td>
+                <td className="px-2 py-3 text-center">
+                  <span className="inline-flex items-center rounded-full bg-[color:var(--sf-info-green-bg)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)]">
+                    {formatPercent(pool.apr)}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
+      </div>{/* end scroll container */}
     </div>
   );
 }

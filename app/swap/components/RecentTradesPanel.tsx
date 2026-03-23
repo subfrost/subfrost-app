@@ -80,7 +80,7 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
         <span className="text-xs font-bold text-[color:var(--sf-text)] uppercase tracking-wide">
           Recent Trades
         </span>
-        <span className="text-[10px] text-[color:var(--sf-text)]/20 font-mono">
+        <span className="text-[10px] text-[color:var(--sf-text)]/20">
           {baseToken}/{quoteToken}
         </span>
       </div>
@@ -98,13 +98,13 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
             key={trade.id}
             className="grid grid-cols-3 text-right text-[11px] leading-[20px] px-2 hover:bg-white/[0.02] transition-colors"
           >
-            <span className={`text-left font-mono tabular-nums ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+            <span className={`text-left tabular-nums ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
               {trade.price}
             </span>
-            <span className="text-[color:var(--sf-text)]/60 font-mono tabular-nums">
+            <span className="text-[color:var(--sf-text)]/60 tabular-nums">
               {trade.amount}
             </span>
-            <span className="text-[color:var(--sf-text)]/25 font-mono tabular-nums">
+            <span className="text-[color:var(--sf-text)]/25 tabular-nums">
               {trade.time}
             </span>
           </div>

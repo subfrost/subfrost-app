@@ -20,7 +20,7 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
 
   const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
-  const [amountFocused, setAmountFocused] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const parsedAmount = parseFloat(amount) || 0;
 
   const discount = new BigNumber(bondingStats?.currentDiscount || '0').dividedBy(10).toFixed(1);
@@ -41,44 +41,79 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Bond form */}
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+        <div className="sf-card p-4 sm:p-5">
           <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
             {t('fire.bondLpForFire')}
           </div>
 
-          {/* Amount input + Discount */}
-          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: '70% 1fr' }}>
-            <div
-              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
-                amountFocused
-                  ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-                  : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
-              }`}
-              onClick={() => amountRef.current?.focus()}
-            >
+          {/* Amount input */}
+          <div className="mb-3">
+            <div className="relative sf-input group p-4 cursor-text" onClick={() => amountRef.current?.focus()}>
+              <div className="absolute right-4 top-4 z-10">
+                <div className="inline-flex items-center rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">LP</span>
+                </div>
+              </div>
               <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.bondLpTokens')}</span>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1 pr-20">
                 <input
                   ref={amountRef}
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  onFocus={() => setAmountFocused(true)}
-                  onBlur={() => setAmountFocused(false)}
                   placeholder="0.00"
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
                   className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
                   style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
                 />
               </div>
-            </div>
-            <div className="rounded-2xl bg-[color:var(--sf-info-green-bg)] flex flex-col items-center justify-center text-center">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-info-green-title)]">{t('fire.discount')}</div>
-              <div className="text-2xl font-bold text-[color:var(--sf-info-green-title)]">{discount}%</div>
+              <div className="flex flex-col items-end gap-1">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                  {t('boost.balance', { amount: '0.00' })}
+                </div>
+                <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setAmount((parseFloat('0.00') * 0.25).toString())}
+                    className="sf-percent-btn-pill"
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmount((parseFloat('0.00') * 0.5).toString())}
+                    className="sf-percent-btn-pill"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmount((parseFloat('0.00') * 0.75).toString())}
+                    className="sf-percent-btn-pill"
+                  >
+                    75%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmount('0.00')}
+                    className="sf-percent-btn-pill"
+                  >
+                    {t('boost.max')}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
+          {/* Discount */}
+          <div className="rounded-2xl bg-[color:var(--sf-info-green-bg)] flex flex-col items-center justify-center text-center py-3 mb-4">
+            <div className="text-2xl font-bold text-[color:var(--sf-info-green-title)]">{discount}%</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-info-green-title)]">{t('fire.discount')}</div>
+          </div>
+
           {/* Preview */}
-          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3 sm:p-4 mb-4 space-y-2">
+          <div className="sf-panel p-3 sm:p-4 mb-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-[color:var(--sf-muted)]">{t('fire.youReceiveVested')}</span>
               <span className="font-bold text-orange-400">{fireReceived} FIRE</span>
@@ -106,9 +141,8 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
       {vaultDetailsSlot}
 
       {/* Active bonds */}
-      <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col opacity-50 pointer-events-none">
-        {/* Header */}
-        <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
+      <div className="sf-card overflow-hidden flex flex-col opacity-50 pointer-events-none">
+        <div className="sf-card-header">
           <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.activeBonds')} (demo)</h3>
         </div>
 
@@ -118,23 +152,18 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
           </div>
         ) : (
           <>
-            {/* Column headers */}
-            <div className="grid grid-cols-4 gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+            <div className="sf-table-header grid grid-cols-4 gap-2 px-6">
               <div>{t('fire.lpBonded')}</div>
               <div>{t('fire.fireVesting')}</div>
               <div>{t('fire.remaining')}</div>
               <div className="text-right">{t('fire.bondDate')}</div>
             </div>
 
-            {/* Rows */}
             <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
               {[
                 { lpBonded: '5', fireVesting: '25', bondDate: '03/16/2026', remaining: '3d 21h 59m' },
               ].map((row, i) => (
-                <div
-                  key={i}
-                  className="grid grid-cols-4 items-center gap-2 px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
-                >
+                <div key={i} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
                   <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.lpBonded}</div>
                   <div className="text-sm font-bold text-orange-500">{row.fireVesting}</div>
                   <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.remaining}</div>

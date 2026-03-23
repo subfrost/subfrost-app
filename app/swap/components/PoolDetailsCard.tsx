@@ -97,7 +97,7 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
   const iframeUrl = symbol ? buildIframeUrl(symbol, quote) : null;
 
   return (
-    <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] overflow-hidden">
+    <div className="sf-card h-full overflow-hidden">
       {pool ? (
         <div className="relative h-full min-h-[460px]">
           {isSymbolLoading && (

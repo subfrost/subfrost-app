@@ -34,9 +34,8 @@ export default function FloorPriceIndicator({
             {t('fire.floorPrice')}
           </div>
           {cooldownBlocks !== undefined && cooldownBlocks <= 0 && (
-            <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1">
-              <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-              <span className="text-[10px] font-semibold text-emerald-400">{t('fire.readyToRedeem')}</span>
+            <div className="sf-badge-apy">
+              {t('fire.readyToRedeem')}
             </div>
           )}
           {cooldownBlocks !== undefined && cooldownBlocks > 0 && (

@@ -1,29 +1,26 @@
 'use client';
 
-import { useState } from 'react';
 import { ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
 import type { PoolSummary, TokenMeta } from '../types';
-
-type MarketType = 'spot' | 'futures';
+import TokenIcon from '@/app/components/TokenIcon';
+import type { Network } from '@/utils/constants';
 
 interface Props {
   fromToken?: TokenMeta;
   toToken?: TokenMeta;
   selectedPool?: PoolSummary;
-  marketType: MarketType;
-  onMarketTypeChange: (type: MarketType) => void;
   onOpenMarkets: () => void;
   btcPrice?: number;
+  network?: Network;
 }
 
 export default function PairSelectorBar({
   fromToken,
   toToken,
   selectedPool,
-  marketType,
-  onMarketTypeChange,
   onOpenMarkets,
   btcPrice,
+  network,
 }: Props) {
   const pairLabel = fromToken && toToken
     ? `${fromToken.symbol}/${toToken.symbol}`
@@ -34,31 +31,7 @@ export default function PairSelectorBar({
   const isPositive = change24h >= 0;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] shadow-sm">
-      {/* Spot / Futures toggle */}
-      <div className="flex p-0.5 bg-[color:var(--sf-surface)] rounded-lg">
-        <button
-          onClick={() => onMarketTypeChange('spot')}
-          className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${
-            marketType === 'spot'
-              ? 'bg-[color:var(--sf-primary)] text-white shadow-sm'
-              : 'text-[color:var(--sf-text)]/40 hover:text-[color:var(--sf-text)]/60'
-          }`}
-        >
-          Spot
-        </button>
-        <button
-          onClick={() => onMarketTypeChange('futures')}
-          className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${
-            marketType === 'futures'
-              ? 'bg-[color:var(--sf-primary)] text-white shadow-sm'
-              : 'text-[color:var(--sf-text)]/40 hover:text-[color:var(--sf-text)]/60'
-          }`}
-        >
-          Futures
-        </button>
-      </div>
-
+    <div className="sf-card flex items-center gap-3 px-3 py-2">
       {/* Pair selector button */}
       <button
         onClick={onOpenMarkets}
@@ -66,12 +39,12 @@ export default function PairSelectorBar({
       >
         {/* Token icons */}
         {fromToken && toToken && (
-          <div className="flex -space-x-1.5">
-            <div className="w-6 h-6 rounded-full bg-[color:var(--sf-primary)]/20 border border-[color:var(--sf-glass-border)] flex items-center justify-center text-[8px] font-bold text-[color:var(--sf-primary)]">
-              {fromToken.symbol?.charAt(0)}
+          <div className="flex -space-x-2">
+            <div className="relative z-10">
+              <TokenIcon symbol={fromToken.symbol} id={fromToken.id} iconUrl={fromToken.iconUrl} size="sm" network={network} />
             </div>
-            <div className="w-6 h-6 rounded-full bg-[color:var(--sf-surface)] border border-[color:var(--sf-glass-border)] flex items-center justify-center text-[8px] font-bold text-[color:var(--sf-text)]/60">
-              {toToken.symbol?.charAt(0)}
+            <div className="relative z-0">
+              <TokenIcon symbol={toToken.symbol} id={toToken.id} iconUrl={toToken.iconUrl} size="sm" network={network} />
             </div>
           </div>
         )}
@@ -83,7 +56,7 @@ export default function PairSelectorBar({
       {hasPool && (
         <>
           <div className="hidden sm:flex items-center gap-2 ml-auto">
-            <span className="text-sm font-bold text-[color:var(--sf-text)] tabular-nums font-mono">
+            <span className="text-sm font-bold text-[color:var(--sf-text)] tabular-nums">
               {btcPrice ? `$${btcPrice.toLocaleString()}` : '--'}
             </span>
             {change24h !== 0 && (
@@ -97,7 +70,7 @@ export default function PairSelectorBar({
           {/* Volume */}
           <div className="hidden md:flex items-center gap-1.5 text-[color:var(--sf-text)]/30">
             <span className="text-[10px] uppercase tracking-wider">Vol</span>
-            <span className="text-xs font-mono tabular-nums text-[color:var(--sf-text)]/50">
+            <span className="text-xs tabular-nums text-[color:var(--sf-text)]/50">
               ${(selectedPool.vol24hUsd ?? 0) > 0
                 ? (selectedPool.vol24hUsd! > 1e6
                   ? `${(selectedPool.vol24hUsd! / 1e6).toFixed(1)}M`
@@ -111,7 +84,7 @@ export default function PairSelectorBar({
           {/* TVL */}
           <div className="hidden lg:flex items-center gap-1.5 text-[color:var(--sf-text)]/30">
             <span className="text-[10px] uppercase tracking-wider">TVL</span>
-            <span className="text-xs font-mono tabular-nums text-[color:var(--sf-text)]/50">
+            <span className="text-xs tabular-nums text-[color:var(--sf-text)]/50">
               ${(selectedPool.tvlUsd ?? 0) > 0
                 ? (selectedPool.tvlUsd! > 1e6
                   ? `${(selectedPool.tvlUsd! / 1e6).toFixed(1)}M`

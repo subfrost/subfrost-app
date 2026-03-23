@@ -40,16 +40,12 @@ export default function MobileDataPanels({
   return (
     <div className="flex flex-col gap-2">
       {/* Tab buttons */}
-      <div className="flex gap-1 p-1 bg-[color:var(--sf-surface)] rounded-lg">
+      <div className="sf-tab-group w-full">
         {panels.map(panel => (
           <button
             key={panel.key}
             onClick={() => setActivePanel(panel.key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-semibold transition-all ${
-              activePanel === panel.key
-                ? 'bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)] shadow-sm'
-                : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/60'
-            }`}
+            className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 py-2 ${activePanel === panel.key ? 'sf-tab-btn--active' : ''}`}
           >
             {panel.icon}
             {panel.label}

@@ -37,11 +37,11 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
     { key: 'orders', label: 'Open Orders', icon: <Layers size={12} />, count: openOrderCount },
     { key: 'positions', label: 'Positions', icon: <BarChart3 size={12} />, count: lpPositions.length },
     { key: 'trades', label: 'Trades', icon: <Clock size={12} /> },
-    { key: 'activity', label: 'Activity', icon: <Activity size={12} /> },
+    { key: 'activity', label: 'My Activity', icon: <Activity size={12} /> },
   ];
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] border border-[color:var(--sf-glass-border)] shadow-sm overflow-hidden">
+    <div className="sf-card overflow-hidden">
       {/* Tab bar */}
       <div className="flex border-b border-[color:var(--sf-glass-border)]">
         {tabs.map(tab => (
@@ -114,13 +114,13 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
                         {pos.token0Symbol}/{pos.token1Symbol}
                       </span>
                     </div>
-                    <span className="text-[11px] text-right font-mono tabular-nums text-[color:var(--sf-text)]/60">
+                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60">
                       {pos.amount || '--'}
                     </span>
-                    <span className="text-[11px] text-right font-mono tabular-nums text-[color:var(--sf-text)]/60">
+                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60">
                       {pos.valueUSD > 0 ? `$${pos.valueUSD.toFixed(2)}` : '--'}
                     </span>
-                    <span className="text-[11px] text-right font-mono tabular-nums text-green-400/60">
+                    <span className="text-[11px] text-right tabular-nums text-green-400/60">
                       --
                     </span>
                   </div>

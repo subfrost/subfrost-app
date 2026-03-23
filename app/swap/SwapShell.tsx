@@ -1909,23 +1909,43 @@ export default function SwapShell() {
 
   return (
     <div className="flex w-full flex-col gap-4 h-full">
-      {/* Pair Selector Bar */}
-      <PairSelectorBar
-        fromToken={fromToken}
-        toToken={toToken}
-        selectedPool={selectedPool}
-        marketType={marketType}
-        onMarketTypeChange={setMarketType}
-        onOpenMarkets={() => setIsMarketsPanelOpen(true)}
-        btcPrice={btcPrice}
-      />
+      {/* Top bar: SPOT/FUTURES tabs + Pair Selector */}
+      <div className="flex items-center gap-3">
+        {/* Spot / Futures toggle — lives on the page, not inside the card */}
+        <div className="sf-tab-group shrink-0">
+          <button
+            onClick={() => setMarketType('spot')}
+            className={`sf-tab-btn ${marketType === 'spot' ? 'sf-tab-btn--active' : ''} px-3 py-1`}
+          >
+            Spot
+          </button>
+          <button
+            onClick={() => setMarketType('futures')}
+            className={`sf-tab-btn ${marketType === 'futures' ? 'sf-tab-btn--active' : ''} px-3 py-1`}
+          >
+            Futures
+          </button>
+        </div>
 
-      {/* Desktop: 12-column grid — Chart (7) + Orderbook (2) + TradeForm (3) */}
+        {/* Pair Selector Bar */}
+        <div className="flex-1 min-w-0">
+          <PairSelectorBar
+            fromToken={fromToken}
+            toToken={toToken}
+            selectedPool={selectedPool}
+            onOpenMarkets={() => setIsMarketsPanelOpen(true)}
+            btcPrice={btcPrice}
+            network={network}
+          />
+        </div>
+      </div>
+
+      {/* Desktop: 12-column grid — Chart (7) + TradeForm/Orderbook (5) */}
       {/* Mobile: stacked — TradeForm first, then data panels */}
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-3">
 
         {/* Trade Form — FIRST on mobile (order matters), RIGHT on desktop */}
-        <div className="lg:col-span-3 lg:order-3 order-1 min-h-0">
+        <div className="lg:col-span-5 lg:order-2 order-1 min-h-0">
           <div className="flex flex-col gap-3">
             <TradeForm
               marketType={marketType}
@@ -2000,15 +2020,6 @@ export default function SwapShell() {
         {/* Chart — desktop only (7 cols) */}
         <div className="hidden lg:flex lg:col-span-7 lg:order-1 flex-col min-h-0" style={{ minHeight: '450px' }}>
           <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
-        </div>
-
-        {/* Orderbook — desktop only (2 cols) */}
-        <div className="hidden lg:flex lg:col-span-2 lg:order-2 flex-col min-h-0" style={{ minHeight: '450px' }}>
-          <OrderbookPanel
-            baseToken={fromToken?.symbol || 'DIESEL'}
-            quoteToken={toToken?.symbol || 'frBTC'}
-            onPriceSelect={setLimitSelectedPrice}
-          />
         </div>
 
         {/* Mobile data panels — Chart/Book/Trades tabs (below trade form on mobile) */}

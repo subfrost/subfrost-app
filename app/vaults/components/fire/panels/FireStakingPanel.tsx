@@ -12,7 +12,6 @@ import { useFeeRate } from '@/hooks/useFeeRate';
 import type { FeeSelection } from '@/hooks/useFeeRate';
 import { useGlobalStore } from '@/stores/global';
 import type { SlippageSelection } from '@/stores/global';
-
 const SLIPPAGE_PRESETS: Record<Exclude<SlippageSelection, 'custom'>, string> = {
   low: '1',
   medium: '5',
@@ -35,7 +34,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
 
   const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
-  const [amountFocused, setAmountFocused] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const [lockTier, setLockTier] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [deadlineLocal, setDeadlineLocal] = useState('3');
@@ -55,34 +54,66 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Stake form */}
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+        <div className="sf-card p-4 sm:p-5">
           <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
             {t('fire.stakeLpForEmissions')}
           </div>
 
           {/* Amount input */}
-          <div
-            className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
-              amountFocused
-                ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-                : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
-            }`}
-            onClick={() => amountRef.current?.focus()}
-          >
+          <div className="relative sf-input group p-4 cursor-text mb-4" onClick={() => amountRef.current?.focus()}>
+            <div className="absolute right-4 top-4 z-10">
+              <div className="inline-flex items-center rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">LP</span>
+              </div>
+            </div>
             <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.stakeLpTokens')}</span>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 pr-20">
               <input
                 ref={amountRef}
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                onFocus={() => setAmountFocused(true)}
-                onBlur={() => setAmountFocused(false)}
                 placeholder="0.00"
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
                 style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
               />
-
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                {t('boost.balance', { amount: '0.00' })}
+              </div>
+              <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setAmount((parseFloat('0.00') * 0.25).toString())}
+                  className="sf-percent-btn-pill"
+                >
+                  25%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount((parseFloat('0.00') * 0.5).toString())}
+                  className="sf-percent-btn-pill"
+                >
+                  50%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount((parseFloat('0.00') * 0.75).toString())}
+                  className="sf-percent-btn-pill"
+                >
+                  75%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount('0.00')}
+                  className="sf-percent-btn-pill"
+                >
+                  {t('boost.max')}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -102,11 +133,11 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
           </div>
 
           {/* Transaction Details - collapsible */}
-          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible mb-4">
+          <div className="sf-panel overflow-visible mb-4">
             <button
               type="button"
               onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+              className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
               <ChevronDown
@@ -140,8 +171,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
                         }
                       }}
                       placeholder="3"
-                      style={{ outline: 'none', border: 'none' }}
-                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      className="sf-pill-input"
                     />
                   </div>
                 </div>
@@ -214,8 +244,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
                             if (!customFee) setCustomFee(String(feePresets.medium));
                           }}
                           placeholder="0"
-                          style={{ outline: 'none', border: 'none' }}
-                          className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                          className="sf-pill-input"
                         />
                       </div>
                     ) : (
@@ -248,9 +277,8 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
       {vaultDetailsSlot}
 
       {/* Positions */}
-      <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col opacity-50 pointer-events-none">
-        {/* Header */}
-        <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
+      <div className="sf-card overflow-hidden flex flex-col opacity-50 pointer-events-none">
+        <div className="sf-card-header">
           <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.stakePositions')} (demo)</h3>
         </div>
 
@@ -260,23 +288,18 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
           </div>
         ) : (
           <>
-            {/* Column headers */}
-            <div className="grid grid-cols-4 gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+            <div className="sf-table-header grid grid-cols-4 gap-2 px-6">
               <div>{t('fire.lpStaked')}</div>
               <div>{t('fire.fireEarned')}</div>
               <div>{t('fire.remaining')}</div>
               <div className="text-right">{t('fire.lockDate')}</div>
             </div>
 
-            {/* Rows */}
             <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
               {[
                 { lpStaked: '5', fireEarned: '25', lockDate: '03/16/2026', remaining: '3d 21h 59m' },
               ].map((row, i) => (
-                <div
-                  key={i}
-                  className="grid grid-cols-4 items-center gap-2 px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
-                >
+                <div key={i} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
                   <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.lpStaked}</div>
                   <div className="text-sm font-bold text-orange-500">{row.fireEarned}</div>
                   <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.remaining}</div>
@@ -322,14 +345,14 @@ function FireSlippageButton({ selection, setSelection, setValue }: {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{selection === 'custom' ? t('vaultDeposit.custom') : t(`vaultDeposit.${selection}`)}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.4)]" style={{ backgroundColor: 'var(--sf-surface)' }}>
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
           {(['low', 'medium', 'high', 'custom'] as SlippageSelection[]).map((option) => (
             <button
               key={option}
@@ -387,14 +410,14 @@ function FireMinerFeeButton({ selection, setSelection, presets }: {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{selection === 'custom' ? t('vaultDeposit.custom') : t(`vaultDeposit.${selection}`)}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.4)]" style={{ backgroundColor: 'var(--sf-surface)' }}>
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
           {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
             <button
               key={option}

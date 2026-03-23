@@ -95,37 +95,35 @@ export default function TrendingPairs() {
         <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('trending.trendingPair')}</h3>
         <Link href="/swap" className="sf-card-header-action">{t('trending.viewAll')}</Link>
       </div>
-      <div className="p-4">
-        <div className="grid grid-cols-1 gap-3">
-          {pairs.map((p) => (
-            <Link
-              key={p.id}
-              href="/swap"
-              className="sf-tile p-5 focus:outline-none"
-            >
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <PairBadge a={{ id: p.token0.id, symbol: p.token0.symbol }} b={{ id: p.token1.id, symbol: p.token1.symbol }} />
+      <div className="p-4 flex flex-col gap-3">
+        {pairs.map((p) => (
+          <Link
+            key={p.id}
+            href="/swap"
+            className="sf-tile p-5 focus:outline-none"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <PairBadge a={{ id: p.token0.id, symbol: p.token0.symbol }} b={{ id: p.token1.id, symbol: p.token1.symbol }} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div className="min-w-0">
-                  <div className="truncate text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
-                  <div className="truncate font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
-                </div>
-                <div className="min-w-0 text-center">
-                  <div className="truncate text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume24h')}</div>
-                  <div className="truncate font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
-                </div>
-                <div className="min-w-0 text-right">
-                  <div className="truncate text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume30d')}</div>
-                  <div className="truncate font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
-                </div>
+              <div className="text-center">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume24h')}</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
               </div>
-            </Link>
-          ))}
-          {pairs.length === 0 && (
-            <div className="text-sm text-[color:var(--sf-text)]/60">{t('trending.noPairs')}</div>
-          )}
-        </div>
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume30d')}</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
+              </div>
+            </div>
+          </Link>
+        ))}
+        {pairs.length === 0 && (
+          <div className="text-sm text-[color:var(--sf-text)]/60">{t('trending.noPairs')}</div>
+        )}
       </div>
     </div>
   );

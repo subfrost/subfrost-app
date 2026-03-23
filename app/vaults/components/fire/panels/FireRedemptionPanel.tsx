@@ -20,7 +20,7 @@ export default function FireRedemptionPanel() {
 
   const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
-  const [amountFocused, setAmountFocused] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const parsedAmount = parseFloat(amount) || 0;
 
   const cooldownBlocks = Number(redemption?.cooldownRemaining || '0');
@@ -56,39 +56,76 @@ export default function FireRedemptionPanel() {
       />
 
       {/* Redeem form */}
-      <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="sf-card p-4 sm:p-5">
         <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
           {t('fire.burnFireForBacking')}
         </div>
 
         {/* Amount input */}
-        <div
-          className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
-            amountFocused
-              ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-              : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
-          }`}
-          onClick={() => amountRef.current?.focus()}
-        >
+        <div className="relative sf-input group p-4 cursor-text mb-4" onClick={() => amountRef.current?.focus()}>
+          <div className="absolute right-4 top-4 z-10">
+            <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <div className="h-6 w-6 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-[0_2px_8px_rgba(249,115,22,0.35)] flex-shrink-0">
+                <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13.5 0.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/>
+                </svg>
+              </div>
+              <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">FIRE</span>
+            </div>
+          </div>
           <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.fireAmount')}</span>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 pr-32">
             <input
               ref={amountRef}
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              onFocus={() => setAmountFocused(true)}
-              onBlur={() => setAmountFocused(false)}
               placeholder="0.00"
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
               style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
             />
-            <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">FIRE</span>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+              {t('boost.balance', { amount: '0.00' })}
+            </div>
+            <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setAmount((parseFloat('0.00') * 0.25).toString())}
+                className="sf-percent-btn-pill"
+              >
+                25%
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmount((parseFloat('0.00') * 0.5).toString())}
+                className="sf-percent-btn-pill"
+              >
+                50%
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmount((parseFloat('0.00') * 0.75).toString())}
+                className="sf-percent-btn-pill"
+              >
+                75%
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmount('0.00')}
+                className="sf-percent-btn-pill"
+              >
+                {t('boost.max')}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Preview */}
-        <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3 sm:p-4 mb-4 space-y-2">
+        <div className="sf-panel p-3 sm:p-4 mb-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-[color:var(--sf-muted)]">{t('fire.youReceive')}</span>
             <span className="font-bold text-[color:var(--sf-text)]">{preview.lpOut} LP</span>

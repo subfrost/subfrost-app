@@ -40,6 +40,11 @@ export default function TestPage() {
   const [selectedToken, setSelectedToken] = useState('DIESEL');
   const [activeTab, setActiveTab] = useState('futures');
   const [activeFireTab, setActiveFireTab] = useState('stake');
+  const [activeUnderlineTab, setActiveUnderlineTab] = useState('stake');
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [slippageOpen, setSlippageOpen] = useState(false);
+  const [feeOpen, setFeeOpen] = useState(false);
+  const [deadlineValue, setDeadlineValue] = useState('3');
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupSearch, setPopupSearch] = useState('');
   const [selectedPopupToken, setSelectedPopupToken] = useState<string | null>(null);
@@ -59,7 +64,9 @@ export default function TestPage() {
             <code className="text-[color:var(--sf-primary)] font-mono text-xs">.sf-panel</code>,{' '}
             <code className="text-[color:var(--sf-primary)] font-mono text-xs">.sf-input</code>,{' '}
             <code className="text-[color:var(--sf-primary)] font-mono text-xs">.sf-row</code>, and{' '}
-            <code className="text-[color:var(--sf-primary)] font-mono text-xs">.sf-dropdown</code>.
+            <code className="text-[color:var(--sf-primary)] font-mono text-xs">.sf-dropdown</code>,{' '}
+            <code className="text-[color:var(--sf-primary)] font-mono text-xs">.sf-collapsible-trigger</code>, and{' '}
+            <code className="text-[color:var(--sf-primary)] font-mono text-xs">.sf-dropdown-trigger</code>.
           </p>
         </div>
 
@@ -266,7 +273,7 @@ export default function TestPage() {
         {/* ── Row 3: sf-tab-group + sf-tab-btn ── */}
         <div className="sf-card">
           <div className="sf-card-header">
-            <h2 className="text-sm font-bold text-[color:var(--sf-text)]">.sf-tab-group + .sf-tab-btn</h2>
+            <h2 className="text-sm font-bold text-[color:var(--sf-text)]">.sf-tab-group + .sf-tab-btn — .sf-tab-underline-btn</h2>
           </div>
           <div className="p-5 flex flex-col gap-6">
 
@@ -297,6 +304,23 @@ export default function TestPage() {
                     type="button"
                     className={`sf-tab-btn ${activeFireTab === tab ? 'sf-tab-btn--active' : ''}`}
                     onClick={() => setActiveFireTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Underline style — Boost / Info tabs style */}
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40">Underline (sf-tab-underline-btn)</p>
+              <div className="flex gap-2">
+                {['stake', 'unstake'].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={`sf-tab-underline-btn capitalize ${activeUnderlineTab === tab ? 'sf-tab-underline-btn--active' : ''}`}
+                    onClick={() => setActiveUnderlineTab(tab)}
                   >
                     {tab}
                   </button>
@@ -360,11 +384,11 @@ export default function TestPage() {
                   <div className="grid grid-cols-3 gap-1 text-center">
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Type</div>
-                      <div className="text-xs font-semibold text-[color:var(--sf-text)]">{vault.sub}</div>
+                      <div className="text-[color:var(--sf-text)]">{vault.sub}</div>
                     </div>
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Hist.</div>
-                      <div className="text-xs font-semibold text-[color:var(--sf-text)]">-</div>
+                      <div className="text-[color:var(--sf-text)]">-</div>
                     </div>
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">Est.</div>
@@ -468,7 +492,124 @@ export default function TestPage() {
           </div>
         )}
 
-        {/* ── Row 6: Badge reference ── */}
+        {/* ── Row 6: sf-collapsible-trigger + sf-dropdown-trigger ── */}
+        <div className="sf-card">
+          <div className="sf-card-header">
+            <h2 className="text-sm font-bold text-[color:var(--sf-text)]">.sf-collapsible-trigger + .sf-dropdown-trigger</h2>
+          </div>
+          <div className="p-5">
+            <p className="text-xs text-[color:var(--sf-text)]/60 mb-4">
+              Transaction Details collapsible panel. Outer container is <code className="text-[color:var(--sf-primary)] font-mono">.sf-panel</code>{' '}
+              with <code className="font-mono text-[color:var(--sf-primary)]">overflow-visible</code>. The toggle button is{' '}
+              <code className="text-[color:var(--sf-primary)] font-mono">.sf-collapsible-trigger</code>. The select buttons inside are{' '}
+              <code className="text-[color:var(--sf-primary)] font-mono">.sf-dropdown-trigger</code> and{' '}
+              <code className="text-[color:var(--sf-primary)] font-mono">.sf-dropdown-trigger--open</code>. The numeric input is{' '}
+              <code className="text-[color:var(--sf-primary)] font-mono">.sf-pill-input</code>.
+            </p>
+
+            <div className="sf-panel overflow-visible max-w-sm">
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(!detailsOpen)}
+                className="sf-collapsible-trigger"
+              >
+                <span>Transaction Details</span>
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              <div className={`transition-all duration-300 ease-in-out ${detailsOpen ? 'max-h-[400px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
+                <div className="flex flex-col gap-3 px-4">
+
+                  {/* Slippage row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Slippage Tolerance
+                    </span>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => { setSlippageOpen(!slippageOpen); setFeeOpen(false); }}
+                        className={`sf-dropdown-trigger ${slippageOpen ? 'sf-dropdown-trigger--open' : ''}`}
+                      >
+                        <span>Medium</span>
+                        <ChevronDown size={12} className={`transition-transform duration-200 ${slippageOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {slippageOpen && (
+                        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
+                          {['Low', 'Medium', 'High', 'Custom'].map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setSlippageOpen(false)}
+                              className="w-full px-3 py-2 text-left text-xs font-semibold transition-colors duration-[200ms] hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)] first:rounded-t-lg last:rounded-b-lg"
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Fee rate row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Miner Fee Rate
+                    </span>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => { setFeeOpen(!feeOpen); setSlippageOpen(false); }}
+                        className={`sf-dropdown-trigger ${feeOpen ? 'sf-dropdown-trigger--open' : ''}`}
+                      >
+                        <span>Medium</span>
+                        <ChevronDown size={12} className={`transition-transform duration-200 ${feeOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {feeOpen && (
+                        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
+                          {['Slow', 'Medium', 'Fast', 'Custom'].map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setFeeOpen(false)}
+                              className="w-full px-3 py-2 text-left text-xs font-semibold transition-colors duration-[200ms] hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)] first:rounded-t-lg last:rounded-b-lg"
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Deadline row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                      Deadline (blocks)
+                    </span>
+                    <input
+                      type="number"
+                      value={deadlineValue}
+                      onChange={(e) => setDeadlineValue(e.target.value)}
+                      onBlur={() => {
+                        const val = parseInt(deadlineValue, 10);
+                        if (!deadlineValue || isNaN(val) || val < 1) setDeadlineValue('3');
+                      }}
+                      placeholder="3"
+                      className="sf-pill-input"
+                    />
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Row 8: Badge reference ── */}
         <div className="sf-card">
           <div className="px-5 py-4 border-b border-[color:var(--sf-row-border)]">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40 mb-0.5">component</p>
@@ -496,7 +637,126 @@ export default function TestPage() {
           </div>
         </div>
 
-        {/* ── Row 7: Colour + typography reference ── */}
+        {/* ── Row 9: Buttons ── */}
+        <div className="sf-card">
+          <div className="px-5 py-4 border-b border-[color:var(--sf-row-border)]">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40 mb-0.5">component</p>
+            <h2 className="text-sm font-bold text-[color:var(--sf-text)]">.sf-btn-primary / .sf-btn-secondary / .sf-btn-ghost — Buttons</h2>
+          </div>
+          <div className="p-5 flex flex-col gap-6">
+
+            {/* Primary */}
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40">.sf-btn-primary</p>
+              <p className="text-xs text-[color:var(--sf-text)]/60 mb-1">Full-width primary CTA. Use for Swap, Confirm, Submit. Add <code className="font-mono text-[color:var(--sf-primary)]">w-auto</code> to shrink-wrap.</p>
+              <div className="flex flex-col sm:flex-row gap-3 max-w-sm">
+                <button type="button" className="sf-btn-primary">Swap Now</button>
+                <button type="button" className="sf-btn-primary" disabled>Insufficient Balance</button>
+              </div>
+            </div>
+
+            {/* Secondary */}
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40">.sf-btn-secondary</p>
+              <p className="text-xs text-[color:var(--sf-text)]/60 mb-1">Quieter confirmatory or alternative action. Inline width by default.</p>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" className="sf-btn-secondary">Cancel</button>
+                <button type="button" className="sf-btn-secondary">Retry</button>
+                <button type="button" className="sf-btn-secondary">Select Pool</button>
+                <button type="button" className="sf-btn-secondary" disabled>Disabled</button>
+              </div>
+            </div>
+
+            {/* Ghost */}
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40">.sf-btn-ghost</p>
+              <p className="text-xs text-[color:var(--sf-text)]/60 mb-1">Low-emphasis inline action. No background, primary text colour.</p>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" className="sf-btn-ghost">View Details</button>
+                <button type="button" className="sf-btn-ghost">View All →</button>
+                <button type="button" className="sf-btn-ghost" disabled>Disabled</button>
+              </div>
+            </div>
+
+            {/* Together */}
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40">Together — confirm dialog pattern</p>
+              <div className="sf-panel p-4 max-w-sm flex flex-col gap-3">
+                <p className="text-sm font-semibold text-[color:var(--sf-text)]">Remove liquidity?</p>
+                <p className="text-xs text-[color:var(--sf-text)]/60">You will receive 0.0042 frBTC and 1,240 DIESEL.</p>
+                <div className="flex gap-2 mt-1">
+                  <button type="button" className="sf-btn-secondary flex-1">Cancel</button>
+                  <button type="button" className="sf-btn-primary flex-1">Confirm</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── Row 10: Alerts ── */}
+        <div className="sf-card">
+          <div className="px-5 py-4 border-b border-[color:var(--sf-row-border)]">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40 mb-0.5">component</p>
+            <h2 className="text-sm font-bold text-[color:var(--sf-text)]">.sf-alert + modifier — Alert / Info Boxes</h2>
+          </div>
+          <div className="p-5 flex flex-col gap-3">
+            <p className="text-xs text-[color:var(--sf-text)]/60 mb-1">
+              Always combine <code className="text-[color:var(--sf-primary)] font-mono">.sf-alert</code> with a colour modifier.
+              Optionally add a <code className="text-[color:var(--sf-primary)] font-mono">.sf-alert-title</code> child for a bold heading line.
+              All colours are theme-aware via <code className="text-[color:var(--sf-primary)] font-mono">--sf-info-*</code> tokens.
+            </p>
+
+            <div className="sf-alert sf-alert-green">
+              <div>
+                <p className="sf-alert-title">Swap confirmed</p>
+                <p>Your transaction has been broadcast and is awaiting confirmation.</p>
+              </div>
+            </div>
+
+            <div className="sf-alert sf-alert-blue">
+              <div>
+                <p className="sf-alert-title">Info</p>
+                <p>Adding liquidity requires both tokens in the correct ratio.</p>
+              </div>
+            </div>
+
+            <div className="sf-alert sf-alert-yellow">
+              <div>
+                <p className="sf-alert-title">High slippage</p>
+                <p>Your slippage tolerance is set above 5%. You may receive significantly less than expected.</p>
+              </div>
+            </div>
+
+            <div className="sf-alert sf-alert-orange">
+              <div>
+                <p className="sf-alert-title">Low liquidity</p>
+                <p>This pool has limited depth. Large swaps may result in significant price impact.</p>
+              </div>
+            </div>
+
+            <div className="sf-alert sf-alert-red">
+              <div>
+                <p className="sf-alert-title">Transaction failed</p>
+                <p>Insufficient balance to cover the swap amount and miner fee.</p>
+              </div>
+            </div>
+
+            <div className="sf-alert sf-alert-gray">
+              <div>
+                <p className="sf-alert-title">Note</p>
+                <p>Wrapped BTC (frBTC) is required to provide liquidity in BTC-denominated pools.</p>
+              </div>
+            </div>
+
+            {/* Inline / no title variant */}
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sf-text)]/40 mt-2">No title (inline message)</p>
+            <div className="sf-alert sf-alert-yellow">Slippage tolerance is above 10% — proceed with caution.</div>
+            <div className="sf-alert sf-alert-red">Deadline blocks must be a positive number.</div>
+          </div>
+        </div>
+
+        {/* ── Row 12: Colour + typography reference ── */}
 
         <div className="sf-card">
           <div className="px-5 py-4 border-b border-[color:var(--sf-row-border)]">

@@ -98,17 +98,13 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   const isDxBtc = currentVault.id === 'dx-btc';
 
   const infoTabsPanel = (
-    <div className="rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm h-fit border-t border-[color:var(--sf-top-highlight)]">
-      <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
+    <div className="sf-card p-6 h-fit">
+      <div className="flex gap-2 mb-6">
         {['about', 'strategies', 'info', 'risk'].map((tab) => (
           <button
             key={tab}
             onClick={() => setInfoTab(tab as any)}
-            className={`pb-3 text-sm font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-              infoTab === tab
-                ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
-            }`}
+            className={`sf-tab-underline-btn capitalize ${infoTab === tab ? 'sf-tab-underline-btn--active' : ''}`}
           >
             {t(`vaultInfo.${tab}`)}
           </button>
@@ -351,19 +347,20 @@ export default function VaultDetail({ vault: initialVault }: Props) {
         </div>
 
         {/* Info Tabs Section - Mobile/Tablet Only */}
-        <div className="md:hidden rounded-xl bg-[color:var(--sf-surface)]/60 p-6 backdrop-blur-sm border-t border-[color:var(--sf-top-highlight)]">
-          <div className="flex gap-6 mb-6 border-b border-[color:var(--sf-outline)]">
+        <div className="md:hidden sf-card p-6">
+          <div className="flex gap-2 mb-6">
             {['about', 'strategies', 'info', 'risk'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setInfoTab(tab as any)}
-                className={`pb-3 text-sm font-semibold capitalize transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                  infoTab === tab
-                    ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                    : 'text-[color:var(--sf-text)] hover:text-[color:var(--sf-text)]'
+                className={`px-4 py-2 text-sm font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative capitalize ${
+                  infoTab === tab ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/60'
                 }`}
               >
                 {t(`vaultInfo.${tab}`)}
+                {infoTab === tab && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--sf-primary)]" />
+                )}
               </button>
             ))}
           </div>

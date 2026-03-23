@@ -144,75 +144,25 @@ export default function VaultShell() {
     <div className="flex w-full flex-col gap-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-3">
           {/* Filter Buttons - mobile/tablet only */}
-          <div className="col-span-full flex items-center gap-2 mb-2 lg:hidden">
-            <button
-              onClick={() => setVaultFilter('all')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-                vaultFilter === 'all'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-              }`}
-            >
-              {t('vaults.all')}
-            </button>
-            <button
-              onClick={() => setVaultFilter('mains')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-                vaultFilter === 'mains'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-              }`}
-            >
-              {t('vaults.mains')}
-            </button>
-            <button
-              onClick={() => setVaultFilter('alts')}
-              className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-                vaultFilter === 'alts'
-                  ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                  : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-              }`}
-            >
-              {t('vaults.alts')}
-            </button>
+          <div className="col-span-full mb-2 lg:hidden">
+            <div className="sf-tab-group">
+              {(['all', 'mains', 'alts'] as VaultFilter[]).map((f) => (
+                <button key={f} onClick={() => setVaultFilter(f)} className={`sf-tab-btn ${vaultFilter === f ? 'sf-tab-btn--active' : ''}`}>
+                  {t(`vaults.${f}`)}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Sorting Header - only visible on lg+ screens */}
-          <div className="hidden lg:flex items-center pb-1 bg-transparent w-full">
-            {/* Filter Buttons at left */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setVaultFilter('all')}
-                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-                  vaultFilter === 'all'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-                }`}
-              >
-                {t('vaults.all')}
-              </button>
-              <button
-                onClick={() => setVaultFilter('mains')}
-                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-                  vaultFilter === 'mains'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-                }`}
-              >
-                {t('vaults.mains')}
-              </button>
-              <button
-                onClick={() => setVaultFilter('alts')}
-                className={`rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-                  vaultFilter === 'alts'
-                    ? 'bg-[color:var(--sf-primary)] text-white shadow-lg'
-                    : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-                }`}
-              >
-                {t('vaults.alts')}
-              </button>
+          <div className="hidden lg:flex items-center pb-1 w-full">
+            <div className="sf-tab-group">
+              {(['all', 'mains', 'alts'] as VaultFilter[]).map((f) => (
+                <button key={f} onClick={() => setVaultFilter(f)} className={`sf-tab-btn ${vaultFilter === f ? 'sf-tab-btn--active' : ''}`}>
+                  {t(`vaults.${f}`)}
+                </button>
+              ))}
             </div>
-
           </div>
 
           {/* Vault List */}

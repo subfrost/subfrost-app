@@ -235,7 +235,7 @@ export default function LiquidityInputs({
           <button
             type="button"
             onClick={onOpenLPSelector}
-            className="w-full inline-flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
+            className="sf-tile w-full inline-flex items-center justify-between gap-2 px-4 py-3 focus:outline-none"
           >
             {selectedLPPosition ? (
               <div className="flex items-center gap-2 min-w-0">
@@ -275,12 +275,12 @@ export default function LiquidityInputs({
           {selectedLPPosition && (
             <>
               <div
-                className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${removeFocused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
+                className={`sf-panel group relative z-20 p-5 transition-shadow duration-[200ms] ${removeFocused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
                 onFocusCapture={() => setRemoveFocused(true)}
                 onBlurCapture={() => setRemoveFocused(false)}
               >
                 <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('liquidity.amountToRemove')}</span>
-                <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+                <div className="sf-input p-3">
                   <div className="flex flex-col gap-2">
                     {/* Row 1: Input */}
                     <NumberField 
@@ -327,12 +327,12 @@ export default function LiquidityInputs({
               </div>
 
               {/* Transaction Details - collapsible panel */}
-              <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+              <div className="sf-panel relative z-[5] overflow-visible">
                 {/* Toggle button */}
                 <button
                   type="button"
                   onClick={() => setDetailsOpen(!detailsOpen)}
-                  className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+                  className="sf-collapsible-trigger"
                 >
                   <span>{t('vaultDeposit.transactionDetails')}</span>
                   <ChevronDown
@@ -381,8 +381,7 @@ export default function LiquidityInputs({
                             }
                           }}
                           placeholder="3"
-                          style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                          className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                          className="sf-pill-input"
                         />
                       </div>
                     </div>
@@ -460,8 +459,7 @@ export default function LiquidityInputs({
                               }
                             }}
                             placeholder="0"
-                            style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                            className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                            className="sf-pill-input"
                           />
                         </div>
                       ) : (
@@ -493,10 +491,10 @@ export default function LiquidityInputs({
             <div className="flex-1 min-w-0">
               {!token0 ? (
                 <div
-                  className="h-full rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] cursor-pointer flex items-center justify-center"
+                  className="sf-panel h-full p-4 cursor-pointer flex items-center justify-center hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                   onClick={() => openTokenSelector('pool0')}
                 >
-                  <div className="flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06]">
+                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5">
                     <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
                       {t('liquidity.selectToken')}
                     </span>
@@ -506,10 +504,10 @@ export default function LiquidityInputs({
               ) : (
                 <div className={`relative ${token0Focused ? "z-30" : ""}`}>
                   <div
-                    className={`group relative rounded-2xl bg-[color:var(--sf-panel-bg)] px-3 pt-3 pb-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
+                    className={`sf-panel group relative px-3 pt-3 pb-4 transition-shadow duration-[200ms] cursor-text ${
                       token0Focused
                         ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
-                        : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
+                        : "hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                     }`}
                     onClick={() => token0InputRef.current?.focus()}
                   >
@@ -520,7 +518,7 @@ export default function LiquidityInputs({
                         e.stopPropagation();
                         openTokenSelector('pool0');
                       }}
-                      className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-white/[0.03] px-2 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 focus:outline-none z-10"
                     >
                       <TokenIcon
                         key={`pool0-${token0.id}-${token0.symbol}`}
@@ -603,10 +601,10 @@ export default function LiquidityInputs({
             <div className="flex-1 min-w-0">
               {!token1 ? (
                 <div
-                  className="h-full rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] cursor-pointer flex items-center justify-center"
+                  className="sf-panel h-full p-4 cursor-pointer flex items-center justify-center hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                   onClick={() => openTokenSelector('pool1')}
                 >
-                  <div className="flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06]">
+                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5">
                     <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
                       {t('liquidity.selectToken')}
                     </span>
@@ -616,10 +614,10 @@ export default function LiquidityInputs({
               ) : (
                 <div className={`relative ${token1Focused ? "z-30" : ""}`}>
                   <div
-                    className={`group relative rounded-2xl bg-[color:var(--sf-panel-bg)] px-3 pt-3 pb-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${
+                    className={`sf-panel group relative px-3 pt-3 pb-4 transition-shadow duration-[200ms] cursor-text ${
                       token1Focused
                         ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
-                        : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
+                        : "hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                     }`}
                     onClick={() => token1InputRef.current?.focus()}
                   >
@@ -630,7 +628,7 @@ export default function LiquidityInputs({
                         e.stopPropagation();
                         openTokenSelector('pool1');
                       }}
-                      className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-white/[0.03] px-2 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none z-10"
+                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 focus:outline-none z-10"
                     >
                       <TokenIcon
                         key={`pool1-${token1.id}-${token1.symbol}`}
@@ -712,12 +710,12 @@ export default function LiquidityInputs({
             <>
 
           {/* Transaction Details - collapsible panel */}
-          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+          <div className="sf-panel relative z-[5] overflow-visible">
             {/* Toggle button */}
             <button
               type="button"
               onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+              className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
               <ChevronDown
@@ -766,8 +764,7 @@ export default function LiquidityInputs({
                         }
                       }}
                       placeholder="3"
-                      style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                          className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      className="sf-pill-input"
                     />
                   </div>
                 </div>
@@ -845,8 +842,7 @@ export default function LiquidityInputs({
                           }
                         }}
                         placeholder="0"
-                        style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                            className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        className="sf-pill-input"
                       />
                     </div>
                   ) : (
@@ -948,14 +944,14 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)] focus:outline-none"
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
           {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
             <button
               key={option}
@@ -1040,14 +1036,14 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)] focus:outline-none"
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
           {(['low', 'medium', 'high', 'custom'] as SlippageSelection[]).map((option) => (
             <button
               key={option}

@@ -85,7 +85,7 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
 
 
       {/* Boost Stats - Will be in left column on md+ */}
-      <div className={`rounded-2xl bg-[color:var(--sf-surface)]/40 backdrop-blur-sm p-6 md:col-start-1 border-t border-[color:var(--sf-top-highlight)] ${isComingSoon ? 'md:row-start-4' : 'md:row-start-3'} ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`sf-card p-6 md:col-start-1 ${isComingSoon ? 'md:row-start-4' : 'md:row-start-3'} ${isComingSoon ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-xs font-medium text-[color:var(--sf-text)]/60 mb-1">
@@ -106,39 +106,25 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
         </div>
 
         {/* Stake/Unstake Tabs */}
-        <div className="flex gap-2 mb-4 border-b border-[color:var(--sf-outline)]">
+        <div className="flex gap-2 mb-4">
           <button
             onClick={() => setActiveTab("stake")}
-            className={`px-4 py-2 text-sm font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative ${
-              activeTab === "stake"
-                ? "text-[color:var(--sf-primary)]"
-                : "text-[color:var(--sf-text)]/60"
-            }`}
+            className={`sf-tab-underline-btn ${activeTab === "stake" ? "sf-tab-underline-btn--active" : ""}`}
           >
             {t('boost.stakeTab')}
-            {activeTab === "stake" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--sf-primary)]" />
-            )}
           </button>
           <button
             onClick={() => setActiveTab("unstake")}
-            className={`px-4 py-2 text-sm font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative ${
-              activeTab === "unstake"
-                ? "text-[color:var(--sf-primary)]"
-                : "text-[color:var(--sf-text)]/60"
-            }`}
+            className={`sf-tab-underline-btn ${activeTab === "unstake" ? "sf-tab-underline-btn--active" : ""}`}
           >
             {t('boost.unstakeTab')}
-            {activeTab === "unstake" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[color:var(--sf-primary)]" />
-            )}
           </button>
         </div>
 
         {/* Stake Input - styled like From Wallet */}
         <div className="space-y-3">
           <div
-            className={`group relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            className="sf-input group relative z-20 p-4 cursor-text"
             onClick={() => inputRef.current?.focus()}
           >
             {/* Token display - floating top-right (non-selectable) */}
@@ -230,19 +216,19 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
 
       {/* Positions list */}
       {vault.hasBoost && (showPositions || !isComingSoon) && (
-        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col opacity-50 pointer-events-none">
+        <div className="sf-card flex flex-col opacity-50 pointer-events-none">
           {/* Header */}
-          <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0 flex items-center justify-between">
+          <div className="sf-card-header">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">
               Boosted Positions (demo)
             </h3>
-            <button className="text-xs font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+            <button className="sf-card-header-action">
               {t('boost.consolidateAll')}
             </button>
           </div>
 
           {/* Column headers */}
-          <div className="grid grid-cols-3 gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+          <div className="sf-table-header grid grid-cols-3 gap-2 px-6 py-2.5">
             <div>dxBTC Amount</div>
             <div>vxFUEL Used</div>
             <div className="text-right">Boost Date</div>
@@ -254,10 +240,7 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
               { dxBtc: '250.50', vxFuel: '200', date: '01/15/2026' },
               { dxBtc: '1,000.00', vxFuel: '650', date: '01/22/2026' },
             ].map((row, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-3 items-center gap-2 px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
-              >
+              <div key={i} className="sf-row grid grid-cols-3 items-center gap-2 px-6 py-4">
                 <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.dxBtc}</div>
                 <div className="text-sm font-bold text-purple-600">{row.vxFuel}</div>
                 <div className="text-sm text-[color:var(--sf-primary)] text-right">{row.date}</div>

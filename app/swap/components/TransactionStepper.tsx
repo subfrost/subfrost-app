@@ -75,7 +75,7 @@ export default function TransactionStepper({
   const { t } = useTranslation();
 
   return (
-    <div className="w-full rounded-xl bg-[color:var(--sf-surface)] p-4 space-y-3">
+    <div className="sf-panel w-full p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-[color:var(--sf-text)]/70 font-medium">

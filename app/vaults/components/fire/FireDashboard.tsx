@@ -57,7 +57,7 @@ export default function FireDashboard() {
 
   // Mobile hero card content (reused in multiple places)
   const mobileHeroCard = (
-    <div className="rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] relative overflow-hidden">
+    <div className="sf-card p-5 relative">
       <div className="flex items-center gap-3 mb-4">
         <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-[0_4px_16px_rgba(249,115,22,0.35)] flex-shrink-0">
           <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -142,7 +142,7 @@ export default function FireDashboard() {
 
         {/* Desktop: full hero — spans right column, both rows */}
         <div className="hidden md:flex md:flex-col md:col-start-2 md:row-start-1 md:row-span-2">
-          <div className="rounded-2xl p-5 sm:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] relative overflow-hidden">
+          <div className="sf-card p-5 sm:p-8 relative">
             {/* Background glow accent */}
             <div className="absolute -top-20 -right-20 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-orange-600/5 rounded-full blur-3xl pointer-events-none" />

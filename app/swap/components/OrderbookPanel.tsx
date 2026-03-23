@@ -32,7 +32,7 @@ function OrderRow({
   return (
     <button
       onClick={onSelect}
-      className="grid grid-cols-3 w-full text-right text-[11px] leading-[18px] px-2 hover:bg-white/[0.04] relative group cursor-pointer transition-colors"
+      className="sf-row grid grid-cols-3 w-full text-right text-[11px] leading-[18px] px-2 relative group cursor-pointer"
     >
       {/* Depth bar */}
       <div
@@ -43,13 +43,13 @@ function OrderRow({
       {isUserOrder && (
         <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-3 rounded-r ${side === 'bid' ? 'bg-green-400' : 'bg-red-400'}`} />
       )}
-      <span className={`relative z-10 font-mono tabular-nums ${side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
+      <span className={`relative z-10 tabular-nums ${side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
         {level.price}
       </span>
-      <span className="relative z-10 text-[color:var(--sf-text)]/80 font-mono tabular-nums">
+      <span className="relative z-10 text-[color:var(--sf-text)]/80 tabular-nums">
         {level.amount}
       </span>
-      <span className="relative z-10 text-[color:var(--sf-text)]/40 font-mono tabular-nums">
+      <span className="relative z-10 text-[color:var(--sf-text)]/40 tabular-nums">
         {level.total}
       </span>
     </button>
@@ -91,9 +91,9 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
   const groupingOptions: GroupingSize[] = ['0.01', '0.1', '1', '10', '50', '100'];
 
   return (
-    <div className="flex flex-col h-full rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm overflow-hidden">
+    <div className="sf-card flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[color:var(--sf-glass-border)]">
+      <div className="sf-card-header">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-[color:var(--sf-text)] uppercase tracking-wide">
             Order Book
@@ -110,12 +110,12 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
             {showGroupingMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowGroupingMenu(false)} />
-                <div className="absolute top-full left-0 mt-1 z-50 bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] rounded-lg shadow-xl overflow-hidden">
+                <div className="sf-dropdown absolute top-full left-0 mt-1 z-50 overflow-hidden">
                   {groupingOptions.map(g => (
                     <button
                       key={g}
                       onClick={() => { setGrouping(g); setShowGroupingMenu(false); }}
-                      className={`block w-full text-left px-3 py-1.5 text-[10px] font-mono hover:bg-white/5 transition-colors ${
+                      className={`sf-popup-row px-3 py-1.5 text-[10px] font-mono ${
                         g === grouping ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10' : 'text-[color:var(--sf-text)]/60'
                       }`}
                     >
@@ -153,7 +153,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-3 text-right text-[10px] text-[color:var(--sf-text)]/30 uppercase tracking-wider px-2 py-1 border-b border-[color:var(--sf-glass-border)]/50">
+      <div className="sf-table-header grid grid-cols-3 text-right px-2 py-1">
         <span>Price ({quoteToken})</span>
         <span>Size ({baseToken})</span>
         <span>Total</span>
@@ -198,7 +198,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-[10px] text-[color:var(--sf-text)]/30 font-mono tabular-nums">
+                <span className="text-[10px] text-[color:var(--sf-text)]/30 tabular-nums">
                   {orderbook.spread}
                 </span>
                 <span className="text-[10px] text-[color:var(--sf-text)]/20">
@@ -225,15 +225,6 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
         </div>
       )}
 
-      {/* Footer - pair info */}
-      <div className="px-3 py-1.5 border-t border-[color:var(--sf-glass-border)]/30 flex items-center justify-between">
-        <span className="text-[10px] text-[color:var(--sf-text)]/20 font-mono">
-          {baseToken}/{quoteToken}
-        </span>
-        <span className="text-[10px] text-[color:var(--sf-text)]/20">
-          Carbine CLOB
-        </span>
-      </div>
     </div>
   );
 }
