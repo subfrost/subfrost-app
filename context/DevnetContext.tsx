@@ -322,19 +322,35 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     },
     faucetBtc: async (address: string, sats: number) => {
       if (!harnessRef.current) throw new Error('Devnet not ready');
+      // Convert bc1 (mainnet bech32) to bcrt1 (regtest bech32) for devnet.
+      // The wallet derives mainnet addresses but devnet uses regtest.
+      // We decode the witness program and re-encode with the bcrt HRP.
+      let devnetAddr = address;
+      if (address.startsWith('bc1') && !address.startsWith('bcrt1')) {
+        try {
+          const bitcoin = await import('bitcoinjs-lib');
+          // Decode the mainnet address to get the output script
+          const mainnetOutput = bitcoin.address.toOutputScript(address, bitcoin.networks.bitcoin);
+          // Re-encode using regtest network
+          devnetAddr = bitcoin.address.fromOutputScript(mainnetOutput, bitcoin.networks.regtest);
+          console.log('[devnet] Converted', address.slice(0, 10) + '...', '→', devnetAddr.slice(0, 12) + '...');
+        } catch (e: any) {
+          console.warn('[devnet] Address conversion failed:', e?.message);
+        }
+      }
       // Use generatetoaddress RPC — mines a block with coinbase paying to the user's address
       const result = harnessRef.current.server.handleRpc(JSON.stringify({
         jsonrpc: '2.0',
         method: 'generatetoaddress',
-        params: [1, address],
+        params: [1, devnetAddr],
         id: 1,
       }));
       const parsed = JSON.parse(result);
       if (parsed.error) {
-        console.warn('[devnet] generatetoaddress error:', parsed.error);
+        console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
       }
       await new Promise(r => setTimeout(r, 50));
-      console.log('[devnet] BTC faucet: mined block with coinbase to', address);
+      console.log('[devnet] BTC faucet: mined block with coinbase to', devnetAddr);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
