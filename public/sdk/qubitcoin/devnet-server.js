@@ -28,10 +28,8 @@
  * harness.dispose();
  * ```
  */
-// LuaRuntime requires Node.js modules (wasmoon, fs, crypto) — stub for browser
-const LuaRuntime = { create: async () => null };
-const preloadLuaScripts = () => {};
-const saveScript = () => '';
+// Browser-compatible Lua runtime (uses wasmoon WASM served from /sdk/wasmoon/)
+import { LuaRuntime, preloadLuaScripts, saveScript } from './lua-runtime.js';
 /** Default secret key (32 bytes of 0x01 — deterministic for testing). */
 const DEFAULT_SECRET_KEY = new Uint8Array(32).fill(0x01);
 /** Intercepted URL patterns — any POST to these routes to the devnet. */
@@ -222,12 +220,16 @@ export class DevnetTestHarness {
                 return this.server.handleRpc(requestJson);
             };
             this.luaRuntime = await LuaRuntime.create(rpcHandler);
-            // Pre-load Lua scripts from disk
+            // Pre-load Lua scripts (browser fetches from /lua/, Node reads from disk)
             if (luaScriptsDir) {
-                preloadLuaScripts(luaScriptsDir);
+                await preloadLuaScripts(luaScriptsDir);
+            }
+            else if (typeof window !== 'undefined') {
+                // Browser: fetch from served directory
+                await preloadLuaScripts('/lua');
             }
             else {
-                // Try common paths
+                // Node.js: try common paths
                 const { existsSync } = await import('fs');
                 const { resolve } = await import('path');
                 const home = process.env.HOME || '/home/ubuntu';

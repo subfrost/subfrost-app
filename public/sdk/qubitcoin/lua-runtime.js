@@ -1,18 +1,56 @@
 /**
- * Lua Runtime for DevnetTestHarness — executes Lua scripts via wasmoon.
- *
- * Provides a real Lua 5.4 VM (compiled to WASM) that can execute the
- * alkanes Lua scripts (balances, spendable_utxos, multicall, etc.)
- * with full _RPC table support. Each _RPC.method() call routes back
- * into the devnet's handleRpc() for actual execution.
- *
- * This replaces the hardcoded Rust shims in alkanes-rpc-core/dispatch.rs
- * for the Node.js devnet environment.
+ * Browser-compatible Lua Runtime for DevnetTestHarness.
+ * Loads wasmoon via script injection and provides LuaRuntime class.
  */
-import { LuaFactory } from 'wasmoon';
-import { createHash } from 'crypto';
-import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
+
+// Load wasmoon UMD via script injection
+let LuaFactory = null;
+const WASMOON_URL = '/sdk/wasmoon/index.js';
+const GLUE_WASM_URL = '/sdk/wasmoon/glue.wasm';
+
+try {
+  // Inject script tag to load wasmoon UMD
+  await new Promise((resolve, reject) => {
+    if (typeof globalThis.wasmoon !== 'undefined') {
+      resolve(); // Already loaded
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = WASMOON_URL;
+    script.onload = () => resolve();
+    script.onerror = (e) => reject(new Error('Failed to load wasmoon'));
+    document.head.appendChild(script);
+  });
+  LuaFactory = globalThis.wasmoon?.LuaFactory;
+  if (LuaFactory) {
+    console.log('[lua-runtime] wasmoon loaded via script tag');
+  }
+} catch (e) {
+  console.warn('[lua-runtime] Could not load wasmoon:', e.message);
+}
+
+// Simple hash function for script IDs (replaces Node crypto)
+function createHash() {
+  return {
+    update(data) { this._data = String(data); return this; },
+    digest() {
+      let h = 5381;
+      for (let i = 0; i < this._data.length; i++) {
+        h = ((h << 5) + h + this._data.charCodeAt(i)) | 0;
+      }
+      return Math.abs(h).toString(16).padStart(8, '0');
+    }
+  };
+}
+
+// Script storage (in-memory, replaces filesystem)
+const scriptStore = new Map();
+
+// Node.js module stubs for browser
+const readFileSync = () => '';
+const existsSync = () => false;
+const pathResolve = (...args) => args.join('/');
+
 /**
  * Minimal pure-Lua JSON encoder/decoder.
  *
@@ -252,7 +290,7 @@ function sha256(content) {
  * Load all known Lua scripts from a directory into the script store.
  * Typically called with ~/alkanes-rs/lua/.
  */
-export function preloadLuaScripts(luaDir) {
+export async function preloadLuaScripts(luaDir) {
     const scripts = [
         'balances.lua',
         'spendable_utxos.lua',
@@ -260,8 +298,26 @@ export function preloadLuaScripts(luaDir) {
         'batch_utxo_balances.lua',
         'address_utxos_with_txs.lua',
     ];
+    // Browser: fetch scripts from /lua/ served directory
+    if (typeof window !== 'undefined') {
+        for (const name of scripts) {
+            try {
+                const resp = await fetch(`/lua/${name}`);
+                if (resp.ok) {
+                    const content = await resp.text();
+                    const hash = sha256(content);
+                    scriptStore.set(hash, content);
+                    console.log(`[lua-runtime] Loaded ${name} (hash: ${hash})`);
+                }
+            } catch (e) {
+                console.warn(`[lua-runtime] Failed to load ${name}:`, e.message);
+            }
+        }
+        return;
+    }
+    // Node.js: read from filesystem
     for (const name of scripts) {
-        const filePath = resolve(luaDir, name);
+        const filePath = pathResolve(luaDir, name);
         if (existsSync(filePath)) {
             const content = readFileSync(filePath, 'utf8');
             const hash = sha256(content);
@@ -298,7 +354,7 @@ export class LuaRuntime {
         this.rpcHandler = rpcHandler;
     }
     static async create(rpcHandler) {
-        const factory = new LuaFactory();
+        const factory = new LuaFactory('/sdk/wasmoon/glue.wasm');
         return new LuaRuntime(factory, rpcHandler);
     }
     /**
