@@ -126,22 +126,22 @@ export default function TokenSelectorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm"
+      className="sf-popup-overlay px-4"
       onClick={onClose}
     >
       <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        className="sf-popup h-[80vh] max-h-[600px] max-w-[480px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+        <div className="sf-popup-header px-6 py-5">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
               {title || t('tokenSelector.selectToken')}
             </h2>
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              className="sf-popup-close"
               aria-label="Close"
             >
               <X size={18} />
@@ -244,7 +244,7 @@ export default function TokenSelectorModal({
         </div>
 
         {/* Token List */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="sf-popup-body px-4 py-3">
           {filteredTokens.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm font-medium text-[color:var(--sf-text)]/50">

@@ -93,7 +93,7 @@ export default function FireDashboard() {
           { label: t('fire.circSupply'), value: heroMetrics.circSupply, unit: 'FIRE' },
           { label: t('fire.totalStaked'), value: heroMetrics.totalStaked, unit: 'LP' },
         ].map(({ label, value, unit }) => (
-          <div key={label} className="rounded-2xl bg-[color:var(--sf-surface)]/40 px-3 py-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <div key={label} className="sf-card-small px-3 py-2.5">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-0.5">{label}</div>
             <div className="text-base font-bold text-[color:var(--sf-text)] truncate">{value}</div>
             <div className="text-[10px] text-[color:var(--sf-muted)]">{unit}</div>
@@ -188,7 +188,7 @@ export default function FireDashboard() {
                   { label: t('fire.circSupply'), value: heroMetrics.circSupply, unit: 'FIRE' },
                   { label: t('fire.totalStaked'), value: heroMetrics.totalStaked, unit: 'LP' },
                 ].map(({ label, value, unit }) => (
-                  <div key={label} className="rounded-2xl bg-[color:var(--sf-surface)]/40 px-3 py-2.5 sm:px-4 sm:py-3 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+                  <div key={label} className="sf-card-small px-3 py-2.5 sm:px-4 sm:py-3">
                     <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-0.5">{label}</div>
                     <div className="text-base sm:text-lg font-bold text-[color:var(--sf-text)] truncate">{value}</div>
                     <div className="text-[10px] text-[color:var(--sf-muted)]">{unit}</div>

@@ -394,6 +394,18 @@ export default function Header() {
             >
               {t("nav.futures")}
             </Link>
+            <Link
+              href="/test"
+              className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                isActive("/test")
+                  ? theme === "light"
+                    ? "text-[color:var(--sf-text)]/60"
+                    : "text-[color:var(--sf-primary)]"
+                  : "text-[color:var(--sf-text)]"
+              }`}
+            >
+              design temp
+            </Link>
           </nav>
 
           {/* Desktop CTA */}

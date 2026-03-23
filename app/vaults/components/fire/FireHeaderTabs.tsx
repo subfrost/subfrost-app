@@ -24,16 +24,14 @@ export default function FireHeaderTabs({ activeTab, onTabChange }: FireHeaderTab
 
   return (
     <div className="overflow-x-auto -mx-1 px-1 -my-3 py-3 scrollbar-hide">
-      <div className="relative inline-flex items-center gap-2 p-1 min-w-max">
+      <div className="sf-tab-group min-w-max" style={{ '--sf-tab-active-bg': '#f97316' } as React.CSSProperties}>
         {TAB_IDS.map((id) => (
           <button
             key={id}
             type="button"
             onClick={() => onTabChange(id)}
-            className={`relative z-10 px-6 py-2 text-sm font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none rounded-md whitespace-nowrap shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${
-              activeTab === id
-                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg'
-                : 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
+            className={`sf-tab-btn px-6 py-2 text-sm ${
+              activeTab === id ? 'sf-tab-btn--active' : ''
             }`}
           >
             {t(TAB_KEYS[id])}

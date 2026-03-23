@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ArrowLeftRight, Vault, TrendingUp } from 'lucide-react';
+import { Home, ArrowLeftRight, Vault, TrendingUp, FlaskConical } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 
 export default function MobileBottomNav() {
@@ -14,6 +14,7 @@ export default function MobileBottomNav() {
     { href: '/swap', label: t('nav.swap'), icon: ArrowLeftRight },
     { href: '/vaults', label: t('nav.vaults'), icon: Vault },
     { href: '/futures', label: t('nav.futures'), icon: TrendingUp },
+    { href: '/test', label: 'Test', icon: FlaskConical },
   ];
 
   const isActive = (path: string) => {

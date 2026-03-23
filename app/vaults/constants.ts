@@ -128,6 +128,7 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     tokenSymbol: 'BTC',
     iconPath: '/tokens/btc_snowflake.svg',
     contractAddress: '4:7020',
+    badge: 'Coming Soon',
     type: 'unit-vault',
     inputAsset: 'BTC',
     outputAsset: 'dxBTC',
