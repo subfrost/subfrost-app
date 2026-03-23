@@ -42,16 +42,20 @@ export const PROTOCOL_SLOTS = {
   VX_BTCUSD_GAUGE: 7031,
   GAUGE_CONTRACT: 7032,
 
-  // Fujin difficulty futures
+  // Fujin difficulty futures — templates + MasterFujin
   FUJIN_AUTH_TOKEN: 7100,
-  FUJIN_BEACON_PROXY: 7101,
-  FUJIN_RUNTIME_POOL: 7102,
-  FUJIN_RUNTIME_FACTORY: 7103,
-  FUJIN_BEACON: 7104,
-  FUJIN_FACTORY_PROXY: 7105,
-  FUJIN_TOKEN_TEMPLATE: 7106,
-  FUJIN_ZAP: 7107,
-  FUJIN_LP_VAULT: 7108,
+  FUJIN_BEACON_PROXY: 7101,         // beacon proxy template (for pool cloning)
+  FUJIN_POOL_TEMPLATE: 7102,        // pool dispatch WASM (fujin_pool)
+  FUJIN_RUNTIME_POOL: 7103,         // pool logic implementation (fujin_runtime_pool)
+  FUJIN_RUNTIME_FACTORY: 7104,      // factory logic implementation (fujin_runtime_factory)
+  FUJIN_BEACON: 7105,               // upgradeable beacon → Pool Template
+  FUJIN_UPGRADEABLE_TEMPLATE: 7106, // upgradeable proxy template (for cloning factories)
+  FUJIN_FACTORY_LOGIC: 7107,        // factory dispatch WASM (fujin_factory)
+  FUJIN_TOKEN_TEMPLATE: 7108,       // LONG/SHORT token template
+  FUJIN_ZAP: 7109,                  // zap template
+  FUJIN_LP_VAULT: 7110,             // LP vault template
+  FUJIN_MASTER_LOGIC: 7111,         // MasterFujin logic
+  FUJIN_MASTER_PROXY: 7112,         // MasterFujin proxy (upgradeable → master logic)
 };
 
 export const PROTOCOL_IDS = Object.fromEntries(
@@ -119,6 +123,7 @@ export interface FullStackDeployResult {
   vxFuelGaugeId: string;
   vxBtcUsdGaugeId: string;
   fujinFactoryId: string;
+  fujinMasterId: string;
 }
 
 /**
@@ -204,13 +209,15 @@ export async function deployCoreProtocol(
     dxBtcNormalPoolId: PROTOCOL_IDS.DXBTC_NORMAL_POOL,
     vxFuelGaugeId: PROTOCOL_IDS.VX_FUEL_GAUGE,
     vxBtcUsdGaugeId: PROTOCOL_IDS.VX_BTCUSD_GAUGE,
-    fujinFactoryId: PROTOCOL_IDS.FUJIN_FACTORY_PROXY,
+    fujinFactoryId: PROTOCOL_IDS.FUJIN_MASTER_PROXY,
+    fujinMasterId: PROTOCOL_IDS.FUJIN_MASTER_PROXY,
   };
 }
 
 /**
  * Deploy Fujin difficulty futures system.
- * Uses the same beacon proxy pattern as AMM.
+ * Deploys all templates + MasterFujin (factory of factories).
+ * MasterFujin handles CreateMarket which clones Factory+Vault+Zap per market.
  */
 export async function deployFujin(
   provider: WebProvider,
@@ -223,56 +230,100 @@ export async function deployFujin(
 
   console.log('[full-stack] Deploying Fujin difficulty futures...');
 
-  // Step 1: Auth Token Factory (reuse from AMM or deploy new)
+  // Step 1: Auth Token Factory
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadStdWasm('alkanes_std_auth_token'), S.FUJIN_AUTH_TOKEN,
     [100], harness, 'Fujin Auth Token');
 
-  // Step 2: Beacon Proxy Template
+  // Step 2: Beacon Proxy Template (for pool cloning)
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadStdWasm('alkanes_std_beacon_proxy'), S.FUJIN_BEACON_PROXY,
-    [36863], harness, 'Fujin Beacon Proxy');
+    [0x8fff], harness, 'Fujin Beacon Proxy');
 
-  // Step 3: Runtime Factory (logic)
+  // Step 3: Pool Template (dispatch — beacon proxies delegate to this)
   await deployContract(provider, signer, segwitAddress, taprootAddress,
-    loadProtocolWasm('fujin_runtime_factory'), S.FUJIN_RUNTIME_FACTORY,
-    [50], harness, 'Fujin Runtime Factory');
+    loadProtocolWasm('fujin_pool'), S.FUJIN_POOL_TEMPLATE,
+    [50], harness, 'Fujin Pool Template');
 
-  // Step 4: Runtime Pool (logic)
+  // Step 4: Runtime Pool (logic implementation, imported by fujin_pool)
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadProtocolWasm('fujin_runtime_pool'), S.FUJIN_RUNTIME_POOL,
     [50], harness, 'Fujin Runtime Pool');
 
-  // Step 5: Factory Proxy (upgradeable) → points to Runtime Factory
+  // Step 5: Runtime Factory (logic implementation, imported by fujin_factory)
   await deployContract(provider, signer, segwitAddress, taprootAddress,
-    loadStdWasm('alkanes_std_upgradeable'), S.FUJIN_FACTORY_PROXY,
-    [0x7fff, 4, S.FUJIN_RUNTIME_FACTORY, 5],
-    harness, 'Fujin Factory Proxy');
+    loadProtocolWasm('fujin_runtime_factory'), S.FUJIN_RUNTIME_FACTORY,
+    [50], harness, 'Fujin Runtime Factory');
 
-  // Step 6: Upgradeable Beacon → points to Runtime Pool
+  // Step 6: Upgradeable Beacon → points to Pool Template
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadStdWasm('alkanes_std_upgradeable_beacon'), S.FUJIN_BEACON,
-    [0x7fff, 4, S.FUJIN_RUNTIME_POOL, 5],
+    [0x7fff, 4, S.FUJIN_POOL_TEMPLATE, 1],
     harness, 'Fujin Beacon');
 
-  // Step 7: Token Template
+  // Step 7: Upgradeable template (for MasterFujin to clone Factory proxies)
+  await deployContract(provider, signer, segwitAddress, taprootAddress,
+    loadStdWasm('alkanes_std_upgradeable'), S.FUJIN_UPGRADEABLE_TEMPLATE,
+    [0x8fff], harness, 'Fujin Upgradeable Template');
+
+  // Step 8: Factory logic (dispatch WASM — MasterFujin points cloned proxies at this)
+  await deployContract(provider, signer, segwitAddress, taprootAddress,
+    loadProtocolWasm('fujin_factory'), S.FUJIN_FACTORY_LOGIC,
+    [50], harness, 'Fujin Factory Logic');
+
+  // Step 9: Token Template
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadProtocolWasm('fujin_token_template'), S.FUJIN_TOKEN_TEMPLATE,
-    [0], harness, 'Fujin Token Template');
+    [50], harness, 'Fujin Token Template');
 
-  // Step 8: Zap
+  // Step 10: Zap template
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadProtocolWasm('fujin_zap'), S.FUJIN_ZAP,
-    [0], harness, 'Fujin Zap');
+    [50], harness, 'Fujin Zap Template');
 
-  // Step 9: LP Vault
+  // Step 11: LP Vault template
   await deployContract(provider, signer, segwitAddress, taprootAddress,
     loadProtocolWasm('fujin_lp'), S.FUJIN_LP_VAULT,
-    [0], harness, 'Fujin LP Vault');
+    [50], harness, 'Fujin LP Vault Template');
 
-  // TODO: Initialize factory with InitFactory opcode
-  // Needs auth token discovery + init call
+  // Step 12: MasterFujin logic
+  await deployContract(provider, signer, segwitAddress, taprootAddress,
+    loadProtocolWasm('fujin_master'), S.FUJIN_MASTER_LOGIC,
+    [50], harness, 'Fujin Master Logic');
 
-  console.log('[full-stack] Fujin deployed!');
-  return PROTOCOL_IDS.FUJIN_FACTORY_PROXY;
+  // Step 13: MasterFujin proxy (upgradeable → points to master logic)
+  await deployContract(provider, signer, segwitAddress, taprootAddress,
+    loadStdWasm('alkanes_std_upgradeable'), S.FUJIN_MASTER_PROXY,
+    [0x7fff, 4, S.FUJIN_MASTER_LOGIC, 1],
+    harness, 'Fujin Master Proxy');
+
+  // Step 14: Init MasterFujin with template references
+  console.log('[full-stack] Initializing MasterFujin...');
+  const initProtostone = `[4,${S.FUJIN_MASTER_PROXY},0,` +
+    `4,${S.FUJIN_FACTORY_LOGIC},` +          // factory_logic (AlkaneId — fujin_factory dispatch)
+    `${S.FUJIN_UPGRADEABLE_TEMPLATE},` +     // upgradeable_template_tx
+    `${S.FUJIN_BEACON_PROXY},` +             // pool_beacon_proxy_tx
+    `4,${S.FUJIN_BEACON},` +                 // upgradeable_beacon (AlkaneId)
+    `${S.FUJIN_TOKEN_TEMPLATE},` +           // token_template_tx
+    `${S.FUJIN_LP_VAULT},` +                 // vault_template_tx
+    `${S.FUJIN_ZAP}` +                       // zap_template_tx
+    `]:v0:v0`;
+
+  const initResult = await (provider as any).alkanesExecuteFull(
+    JSON.stringify([taprootAddress]),
+    'B:100000:v0',
+    initProtostone,
+    '1', null,
+    JSON.stringify({
+      from: [segwitAddress, taprootAddress],
+      change_address: segwitAddress,
+      alkanes_change_address: taprootAddress,
+      mine_enabled: true,
+    }),
+  );
+  harness.mineBlocks(1);
+  console.log('[full-stack] MasterFujin initialized');
+
+  console.log('[full-stack] Fujin deployed! Master at [4:%s]', S.FUJIN_MASTER_PROXY);
+  return PROTOCOL_IDS.FUJIN_MASTER_PROXY;
 }

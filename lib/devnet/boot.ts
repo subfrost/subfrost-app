@@ -212,7 +212,8 @@ export async function bootDevnetWithWasms(
     synthPoolId: '4:8202',
     frusdTokenId: '4:8201',
     frusdAuthTokenId: '4:8200',
-    fujinFactoryId: '4:7105',
+    fujinFactoryId: '4:7107',
+    fujinMasterId: '4:7112',
   };
 
   onProgress('Devnet ready!', 100);

@@ -31,6 +31,7 @@ export interface DeployedContracts {
 
   // Fujin
   fujinFactoryId: string;
+  fujinMasterId: string;
 
   // EVM Bridge Contracts
   evmUsdtAddress?: string;

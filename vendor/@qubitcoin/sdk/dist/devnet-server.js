@@ -29,6 +29,7 @@
  * ```
  */
 import { LuaRuntime, preloadLuaScripts, saveScript } from './lua-runtime.js';
+import { installMapStorageAdapter } from './external-storage-adapter.js';
 /** Default secret key (32 bytes of 0x01 — deterministic for testing). */
 const DEFAULT_SECRET_KEY = new Uint8Array(32).fill(0x01);
 /** Intercepted URL patterns — any POST to these routes to the devnet. */
@@ -63,6 +64,11 @@ export class DevnetTestHarness {
      * Optionally initializes the Lua runtime for script execution.
      */
     static async create(opts) {
+        // Install external storage adapter if requested (or default in Node.js)
+        const useExternal = opts.useExternalStorage ?? true;
+        if (useExternal && !globalThis.__qubitcoin_storage) {
+            installMapStorageAdapter();
+        }
         // Dynamic import and initialize the WASM module
         const wasm = await import('./wasm/qubitcoin_web_sys.js');
         // In Node.js, we need to pass the WASM file path since fetch() may not
@@ -92,7 +98,7 @@ export class DevnetTestHarness {
         const esploraArr = opts.esploraWasm
             ? new Uint8Array(opts.esploraWasm)
             : undefined;
-        const server = new wasm.DevnetServer(secretKey, opts.alkanesWasm, esploraArr);
+        const server = new wasm.DevnetServer(secretKey, opts.alkanesWasm, esploraArr, useExternal);
         // Load tertiary indexers (run after secondary indexers)
         if (opts.tertiaryIndexers) {
             for (const ti of opts.tertiaryIndexers) {

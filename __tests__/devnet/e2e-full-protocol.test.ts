@@ -295,28 +295,162 @@ describe('Devnet E2E: Full Protocol Stack', () => {
   });
 
   // =========================================================================
-  // Fujin Difficulty Futures
+  // Fujin Difficulty Futures (MasterFujin + CreateMarket + Trades)
   // =========================================================================
 
-  describe('Fujin Difficulty Futures', () => {
-    it('should deploy Fujin contracts', async () => {
-      const { deployFujin } = await import('./deploy-full-stack');
-      try {
-        await deployFujin(provider, signer, segwitAddress, taprootAddress, harness);
-        console.log('[protocol] Fujin deployed ✓');
+  let fujinFactoryAddr: string;
+  let fujinVaultAddr: string;
+  let fujinZapAddr: string;
 
-        // Verify factory proxy
-        const check = await simulate(PROTOCOL_IDS.FUJIN_FACTORY_PROXY, ['4']); // GetNumPools
-        const err = check?.result?.execution?.error || '';
-        if (err.includes('unexpected end of file')) {
-          console.log('[protocol] Fujin factory: NOT operational (init needed)');
-        } else {
-          console.log('[protocol] Fujin factory: operational ✓');
-        }
-      } catch (e: any) {
-        console.log('[protocol] Fujin deploy error:', e.message?.slice(0, 200));
+  describe('Fujin Difficulty Futures', () => {
+    it('should deploy Fujin contracts with MasterFujin', async () => {
+      const { deployFujin } = await import('./deploy-full-stack');
+      const masterId = await deployFujin(provider, signer, segwitAddress, taprootAddress, harness);
+      console.log('[protocol] Fujin deployed, MasterFujin at', masterId);
+
+      // Verify MasterFujin is operational (GetMarketCount = opcode 91)
+      const check = await simulate(PROTOCOL_IDS.FUJIN_MASTER_PROXY, ['91']);
+      const err = check?.result?.execution?.error || '';
+      expect(err).not.toContain('unexpected end of file');
+      const count = parseU128(check?.result?.execution?.data || '');
+      console.log('[protocol] MasterFujin market count:', count.toString());
+      expect(count).toBe(0n);
+    }, 300_000);
+
+    it('should create a DIESEL market via MasterFujin', async () => {
+      // CreateMarket: opcode 1, base_token_block, base_token_tx, duration
+      // DIESEL = 2:0, duration = 2 (default, ~2 epochs)
+      const S = PROTOCOL_SLOTS;
+      await executeAlkanes(
+        `[4,${S.FUJIN_MASTER_PROXY},1,2,0,2]:v0:v0`,
+        'B:100000:v0',
+      );
+      mineBlocks(harness, 1);
+
+      // Verify market count = 1
+      const countCheck = await simulate(PROTOCOL_IDS.FUJIN_MASTER_PROXY, ['91']);
+      const count = parseU128(countCheck?.result?.execution?.data || '');
+      console.log('[protocol] Market count after CreateMarket:', count.toString());
+      expect(count).toBe(1n);
+
+      // GetMarket for DIESEL duration=2 (opcode 90)
+      const marketCheck = await simulate(PROTOCOL_IDS.FUJIN_MASTER_PROXY, ['90', '2', '0', '2']);
+      const mData = marketCheck?.result?.execution?.data?.replace('0x', '') || '';
+      if (mData.length >= 192) {
+        const buf = Buffer.from(mData, 'hex');
+        const fBlock = Number(buf.readBigUInt64LE(0));
+        const fTx = Number(buf.readBigUInt64LE(16));
+        const vBlock = Number(buf.readBigUInt64LE(32));
+        const vTx = Number(buf.readBigUInt64LE(48));
+        const zBlock = Number(buf.readBigUInt64LE(64));
+        const zTx = Number(buf.readBigUInt64LE(80));
+        fujinFactoryAddr = `${fBlock}:${fTx}`;
+        fujinVaultAddr = `${vBlock}:${vTx}`;
+        fujinZapAddr = `${zBlock}:${zTx}`;
+        console.log('[protocol] DIESEL market — Factory:', fujinFactoryAddr, 'Vault:', fujinVaultAddr, 'Zap:', fujinZapAddr);
       }
     }, 300_000);
+
+    let fujinPoolId: string;
+    let longId: string;
+    let shortId: string;
+
+    it('should init epoch on the new Factory', async () => {
+      if (!fujinFactoryAddr) return;
+      const [fBlock, fTx] = fujinFactoryAddr.split(':');
+
+      // GetCurrentEpoch = opcode 3 (epoch = height / 2016)
+      const epochCheck = await simulate(fujinFactoryAddr, ['3']);
+      const epoch = parseU128(epochCheck?.result?.execution?.data || '');
+      console.log('[protocol] Current epoch:', epoch.toString());
+
+      // InitEpoch = opcode 1
+      await executeAlkanes(`[${fBlock},${fTx},1]:v0:v0`, 'B:100000:v0');
+      mineBlocks(harness, 1);
+
+      // GetEpochPool = opcode 2, passing the current epoch
+      const poolCheck = await simulate(fujinFactoryAddr, ['2', epoch.toString()]);
+      const pData = poolCheck?.result?.execution?.data?.replace('0x', '') || '';
+      expect(pData.length).toBeGreaterThanOrEqual(64);
+      const buf = Buffer.from(pData, 'hex');
+      fujinPoolId = `${Number(buf.readBigUInt64LE(0))}:${Number(buf.readBigUInt64LE(16))}`;
+      console.log('[protocol] InitEpoch ✓ — Pool:', fujinPoolId);
+
+      // Get token IDs from pool via GetInfo (opcode 40)
+      // Returns: epoch(16) + token_a(32) + token_b(32) + diesel(16) + base_token(32) + duration(16)
+      const infoCheck = await simulate(fujinPoolId, ['40']);
+      const iData = infoCheck?.result?.execution?.data?.replace('0x', '') || '';
+      if (iData.length >= 160) {
+        const iBuf = Buffer.from(iData, 'hex');
+        // token_a starts at offset 16, token_b at offset 48
+        longId = `${Number(iBuf.readBigUInt64LE(16))}:${Number(iBuf.readBigUInt64LE(32))}`;
+        shortId = `${Number(iBuf.readBigUInt64LE(48))}:${Number(iBuf.readBigUInt64LE(64))}`;
+        console.log('[protocol] LONG:', longId, 'SHORT:', shortId);
+      }
+    }, 300_000);
+
+    it('should mint DIESEL and MintPair (LONG + SHORT)', async () => {
+      if (!fujinPoolId) {
+        console.log('[protocol] Skipping — no pool from InitEpoch');
+        return;
+      }
+
+      // Mint fresh DIESEL
+      await executeAlkanes('[2,0,77]:v0:v0', 'B:10000:v0');
+      mineBlocks(harness, 1);
+
+      const dieselBal = await getAlkaneBalance(provider, taprootAddress, '2:0');
+      if (dieselBal === 0n) {
+        console.log('[protocol] No DIESEL for MintPair');
+        return;
+      }
+
+      // MintPair on Pool: opcode 11 (sends DIESEL, gets LONG + SHORT)
+      const mintAmount = dieselBal / 4n;
+      const [pBlock, pTx] = fujinPoolId.split(':');
+      await executeAlkanes(
+        `[${pBlock},${pTx},11]:v0:v0`,
+        `2:0:${mintAmount}`,
+      );
+      mineBlocks(harness, 1);
+      console.log('[protocol] MintPair %s DIESEL → LONG + SHORT ✓', mintAmount);
+    }, 300_000);
+
+    it('should add liquidity to the Fujin pool', async () => {
+      if (!fujinPoolId || !longId || !shortId) {
+        console.log('[protocol] Skipping — missing pool or token IDs');
+        return;
+      }
+
+      const longBal = await getAlkaneBalance(provider, taprootAddress, longId);
+      const shortBal = await getAlkaneBalance(provider, taprootAddress, shortId);
+      if (longBal === 0n || shortBal === 0n) {
+        console.log('[protocol] No LONG/SHORT for liquidity');
+        return;
+      }
+
+      const addAmount = longBal < shortBal ? longBal / 2n : shortBal / 2n;
+      const [pBlock, pTx] = fujinPoolId.split(':');
+      // AddLiquidity = opcode 1
+      await executeAlkanes(
+        `[${pBlock},${pTx},1]:v0:v0`,
+        `${longId}:${addAmount},${shortId}:${addAmount}`,
+      );
+      mineBlocks(harness, 1);
+      console.log('[protocol] Added liquidity: %s LONG + %s SHORT ✓', addAmount, addAmount);
+    }, 300_000);
+
+    it('should get all markets via GetAllMarkets', async () => {
+      // GetAllMarkets = opcode 93 on MasterFujin
+      const result = await simulate(PROTOCOL_IDS.FUJIN_MASTER_PROXY, ['93']);
+      const data = result?.result?.execution?.data?.replace('0x', '') || '';
+      if (data.length >= 32) {
+        const buf = Buffer.from(data, 'hex');
+        const count = Number(buf.readBigUInt64LE(0));
+        console.log('[protocol] GetAllMarkets: %d markets', count);
+        expect(count).toBeGreaterThanOrEqual(1);
+      }
+    }, 120_000);
   });
 
   // =========================================================================
@@ -370,6 +504,12 @@ describe('Devnet E2E: Full Protocol Stack', () => {
       console.log('    dxBTC Vault:     %s', PROTOCOL_IDS.DXBTC_VAULT);
       console.log('    vxFUEL Gauge:    %s', PROTOCOL_IDS.VX_FUEL_GAUGE);
       console.log('    vxBTCUSD Gauge:  %s', PROTOCOL_IDS.VX_BTCUSD_GAUGE);
+      console.log('    Fujin Master:    %s', PROTOCOL_IDS.FUJIN_MASTER_PROXY);
+      if (fujinFactoryAddr) {
+        console.log('    Fujin Factory:   %s (DIESEL market)', fujinFactoryAddr);
+        console.log('    Fujin Vault:     %s', fujinVaultAddr);
+        console.log('    Fujin Zap:       %s', fujinZapAddr);
+      }
     });
   });
 });

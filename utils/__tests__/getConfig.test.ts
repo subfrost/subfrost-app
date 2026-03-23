@@ -97,7 +97,8 @@ describe('getConfig', () => {
     expect(config.VX_BTCUSD_GAUGE_ID).toBe('4:7031');
     expect(config.SYNTH_POOL_ID).toBe('4:8202');
     expect(config.FRUSD_TOKEN_ID).toBe('4:8201');
-    expect(config.FUJIN_FACTORY_ID).toBe('4:7105');
+    expect(config.FUJIN_FACTORY_ID).toBe('4:7107');
+    expect(config.FUJIN_MASTER_ID).toBe('4:7112');
   });
 
   // --- Default / unknown network ---
