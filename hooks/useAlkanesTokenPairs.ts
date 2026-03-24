@@ -208,7 +208,31 @@ async function fetchPoolsFromSDK(
     }
   }
 
-  // Method 3: alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (fallback)
+  // Method 3a (devnet): Query quspo tertiary indexer for pool data
+  if (poolsArray.length === 0 && isDevnet) {
+    try {
+      const { quspoGetPools } = await import('@/lib/devnet/quspoQuery');
+      const quspoPools = await withTimeout(
+        quspoGetPools(factoryId, network), 10000, 'quspoGetPools'
+      );
+      poolsArray = quspoPools.map((p: any) => ({
+        pool_block_id: Number(p.poolId.block),
+        pool_tx_id: Number(p.poolId.tx),
+        token0_block_id: Number(p.token0.block),
+        token0_tx_id: Number(p.token0.tx),
+        token1_block_id: Number(p.token1.block),
+        token1_tx_id: Number(p.token1.tx),
+        token0_amount: p.reserve0 || '0',
+        token1_amount: p.reserve1 || '0',
+        pool_name: p.name || '',
+      }));
+      console.log('[useAlkanesTokenPairs] quspo returned', poolsArray.length, 'pools');
+    } catch (e) {
+      console.warn('[useAlkanesTokenPairs] quspo failed:', e);
+    }
+  }
+
+  // Method 3b: alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (fallback)
   if (poolsArray.length === 0) {
     try {
       const rpcResult = await withTimeout(provider.alkanesGetAllPoolsWithDetails(factoryId), 30000, 'alkanesGetAllPoolsWithDetails');

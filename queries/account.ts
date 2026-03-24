@@ -369,35 +369,50 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           let items: any[] = [];
 
           if (isDevnet) {
-            // On devnet, query alkanes_protorunesbyaddress RPC directly.
-            // The Espo data API (dataApiGetAlkanesByAddress) returns a different
-            // format that the devnet server doesn't transform correctly.
-            const rpcUrl = getRpcUrl(deps.network);
-            const resp = await fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'alkanes_protorunesbyaddress',
-                params: [{ address }],
-                id: 1,
-              }),
-            });
-            const data = await resp.json();
-            const outpoints: any[] = data?.result?.outpoints || [];
-            // Aggregate balances by alkaneId from outpoints
-            const balanceAgg = new Map<string, bigint>();
-            for (const op of outpoints) {
-              const balances = op?.balance_sheet?.cached?.balances || op?.balance_sheet?.balances || [];
-              for (const b of balances) {
-                const key = `${b.block}:${b.tx}`;
-                balanceAgg.set(key, (balanceAgg.get(key) || 0n) + BigInt(b.amount || 0));
+            // On devnet, try quspo first (enriched names/symbols), fall back to raw RPC
+            try {
+              const { quspoGetAlkanesByAddress } = await import('@/lib/devnet/quspoQuery');
+              const quspoResult = await quspoGetAlkanesByAddress(address, deps.network);
+              if (quspoResult.length > 0) {
+                items = quspoResult.map(a => ({
+                  alkaneId: { block: Number(a.alkaneId.block), tx: Number(a.alkaneId.tx) },
+                  balance: a.balance,
+                  name: a.name,
+                  symbol: a.symbol,
+                }));
               }
+            } catch (e) {
+              console.warn('[alkaneBalanceQuery] quspo failed, falling back to raw RPC:', e);
             }
-            items = Array.from(balanceAgg.entries()).map(([id, amt]) => {
-              const [block, tx] = id.split(':');
-              return { alkaneId: { block: Number(block), tx: Number(tx) }, balance: amt.toString() };
-            });
+
+            // Fallback: query alkanes_protorunesbyaddress RPC directly
+            if (items.length === 0) {
+              const rpcUrl = getRpcUrl(deps.network);
+              const resp = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  method: 'alkanes_protorunesbyaddress',
+                  params: [{ address }],
+                  id: 1,
+                }),
+              });
+              const data = await resp.json();
+              const outpoints: any[] = data?.result?.outpoints || [];
+              const balanceAgg = new Map<string, bigint>();
+              for (const op of outpoints) {
+                const balances = op?.balance_sheet?.cached?.balances || op?.balance_sheet?.balances || [];
+                for (const b of balances) {
+                  const key = `${b.block}:${b.tx}`;
+                  balanceAgg.set(key, (balanceAgg.get(key) || 0n) + BigInt(b.amount || 0));
+                }
+              }
+              items = Array.from(balanceAgg.entries()).map(([id, amt]) => {
+                const [block, tx] = id.split(':');
+                return { alkaneId: { block: Number(block), tx: Number(tx) }, balance: amt.toString() };
+              });
+            }
           } else {
             // SDK data API returns enriched metadata: name, symbol, balance, price, image.
             const result = await (provider as any).dataApiGetAlkanesByAddress(address);

@@ -624,9 +624,38 @@ export function usePools(params: UsePoolsParams = {}) {
       } else {
         // Devnet: resolve token metadata (may be empty)
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
+
+        // Devnet primary: query quspo tertiary indexer for pool data
+        try {
+          const { quspoGetPools } = await import('@/lib/devnet/quspoQuery');
+          const quspoPools = await quspoGetPools(ALKANE_FACTORY_ID, network);
+          console.log('[usePools] Quspo returned', quspoPools.length, 'pools');
+
+          for (const p of quspoPools) {
+            const poolId = `${p.poolId.block}:${p.poolId.tx}`;
+            const token0Id = `${p.token0.block}:${p.token0.tx}`;
+            const token1Id = `${p.token1.block}:${p.token1.tx}`;
+            const token0Symbol = getTokenSymbol(token0Id, '', tokenMetaMap);
+            const token1Symbol = getTokenSymbol(token1Id, '', tokenMetaMap);
+            const token0Name = getTokenName(token0Id, '', tokenMetaMap);
+            const token1Name = getTokenName(token1Id, '', tokenMetaMap);
+
+            items.push({
+              id: poolId,
+              pairLabel: `${token0Name} / ${token1Name} LP`,
+              token0: { id: token0Id, symbol: token0Symbol || 'UNK', name: token0Name },
+              token1: { id: token1Id, symbol: token1Symbol || 'UNK', name: token1Name },
+              token0Amount: p.reserve0,
+              token1Amount: p.reserve1,
+              lpTotalSupply: p.lpTokenSupply,
+            });
+          }
+        } catch (e) {
+          console.warn('[usePools] Quspo pool query failed, falling back to RPC:', e);
+        }
       }
 
-      // Fallback 3 (or devnet primary): N+1 RPC simulation calls
+      // Fallback (non-devnet or quspo failed): N+1 RPC simulation calls
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
