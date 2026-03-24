@@ -1,75 +1,72 @@
 import { NextResponse } from 'next/server';
+import { SUBFROST_API_URLS } from '@/utils/getConfig';
 
 export const dynamic = 'force-dynamic';
 
-// Binance kline intervals
-type BinanceInterval = '1h' | '4h' | '1d' | '1w';
-
-const INTERVAL_MAP: Record<string, BinanceInterval> = {
-  '1h': '1h',
-  '4h': '4h',
-  '1d': '1d',
-  '1w': '1w',
-};
-
 /**
  * GET /api/btc-candles
- * Returns BTC/USDT candlestick data from Binance
+ * Returns BTC/USDT candlestick data via subpricer (falls back to Binance)
  *
  * Query params:
  * - interval: '1h' | '4h' | '1d' | '1w' (default: '1d')
  * - limit: number of candles (default: 100, max: 500)
+ * - network: mainnet | regtest | ... (default: mainnet)
  */
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const interval = INTERVAL_MAP[searchParams.get('interval') || '1d'] || '1d';
-    const limit = Math.min(Number(searchParams.get('limit')) || 100, 500);
+  const { searchParams } = new URL(request.url);
+  const interval = searchParams.get('interval') || '1d';
+  const limit = Math.min(Number(searchParams.get('limit')) || 100, 500);
+  const network = searchParams.get('network') || 'mainnet';
+  const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
 
-    // Fetch from Binance public API (no auth required)
+  try {
+    // Primary: subpricer
     const response = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`,
-      {
-        headers: {
-          'Accept': 'application/json',
-        },
-        next: { revalidate: 60 }, // Cache for 1 minute
-      }
+      `${baseUrl}/api/v1/bitcoin-candles?interval=${interval}&limit=${limit}`,
+      { next: { revalidate: 60 } }
     );
 
-    if (!response.ok) {
-      throw new Error(`Binance API error: ${response.status}`);
+    if (response.ok) {
+      const data = await response.json();
+      // subpricer returns [{open_time, open, high, low, close, volume, close_time}]
+      const candles = (data || []).map((c: any) => ({
+        timestamp: c.open_time || c.timestamp,
+        open: parseFloat(c.open),
+        high: parseFloat(c.high),
+        low: parseFloat(c.low),
+        close: parseFloat(c.close),
+        volume: parseFloat(c.volume),
+      }));
+
+      return NextResponse.json({ symbol: 'BTC/USDT', interval, candles }, {
+        headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30' },
+      });
     }
+  } catch { /* fall through */ }
 
+  // Fallback: Binance directly
+  try {
+    const response = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`,
+      { next: { revalidate: 60 } }
+    );
+    if (!response.ok) throw new Error(`Binance ${response.status}`);
     const klines = await response.json();
-
-    // Transform Binance kline format to our candle format
-    // Binance kline: [openTime, open, high, low, close, volume, closeTime, ...]
     const candles = klines.map((k: (string | number)[]) => ({
-      timestamp: Number(k[0]), // openTime in ms
+      timestamp: Number(k[0]),
       open: parseFloat(k[1] as string),
       high: parseFloat(k[2] as string),
       low: parseFloat(k[3] as string),
       close: parseFloat(k[4] as string),
       volume: parseFloat(k[5] as string),
     }));
-
-    return NextResponse.json({
-      symbol: 'BTC/USDT',
-      interval,
-      candles,
-    }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
-      },
+    return NextResponse.json({ symbol: 'BTC/USDT', interval, candles }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30' },
     });
   } catch (error) {
-    console.error('[API /btc-candles] Error:', error);
     return NextResponse.json({
-      symbol: 'BTC/USDT',
-      interval: '1d',
-      candles: [],
-      error: error instanceof Error ? error.message : 'Failed to fetch BTC candles',
+      symbol: 'BTC/USDT', interval, candles: [],
+      error: error instanceof Error ? error.message : 'Failed to fetch candles',
     }, { status: 500 });
   }
 }

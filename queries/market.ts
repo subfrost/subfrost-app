@@ -9,6 +9,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
+import { SUBFROST_API_URLS } from '@/utils/getConfig';
 
 // Re-export the premium type so hooks can use it
 export type FrbtcPremiumData = {
@@ -52,6 +53,19 @@ export function btcPriceQueryOptions(
       if (cachedPrice && cachedPrice.usd > 0) {
         return cachedPrice.usd;
       }
+
+      // Primary: subpricer (co-deployed at same base URL)
+      const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+      try {
+        const resp = await fetch(`${baseUrl}/api/v1/bitcoin-price`);
+        if (resp.ok) {
+          const data = await resp.json();
+          const price = data?.usd ?? data?.price ?? 0;
+          if (price > 0) return price;
+        }
+      } catch { /* fall through to SDK */ }
+
+      // Fallback: SDK data API
       if (!provider) return 90000;
       try {
         const response = await provider.dataApiGetBitcoinPrice();
@@ -258,7 +272,7 @@ export function feeEstimatesQueryOptions(network: string) {
     queryKey: queryKeys.market.feeEstimates(network),
     queryFn: async () => {
       try {
-        const response = await fetch('/api/fees');
+        const response = await fetch(`/api/fees?network=${encodeURIComponent(network)}`);
         const data = await response.json();
         if (data) {
           return {
