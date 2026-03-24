@@ -50,6 +50,7 @@ const DevnetContext = createContext<DevnetContextValue>({
     faucetBtc: async () => {},
     faucetDiesel: async () => {},
     faucetFuel: async () => {},
+    faucetFrbtc: async () => {},
     faucetUsdt: async () => {},
     faucetUsdc: async () => {},
     getChainHeight: () => 0,
@@ -376,6 +377,46 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       // FUEL mint — mine blocks for now (coinbase contains BTC)
       harnessRef.current.mineBlocks(3);
       console.log('[devnet] FUEL faucet: mined 3 blocks');
+      setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+      debounceSave();
+    },
+    faucetFrbtc: async (address: string) => {
+      if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
+      // Wrap BTC → frBTC via opcode 77 on frBTC contract [32:0]
+      // First ensure we have BTC
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+
+      // Get frBTC signer address
+      let signerAddr = 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz';
+      try {
+        const signerResult = JSON.parse(harnessRef.current.server.handleRpc(JSON.stringify({
+          jsonrpc: '2.0', method: 'alkanes_simulate', id: 1,
+          params: [{ target: { block: '32', tx: '0' }, inputs: ['103'], alkanes: [],
+            transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0 }],
+        })));
+        const hex = signerResult?.result?.execution?.data?.replace('0x', '') || '';
+        if (hex.length === 64) {
+          const bitcoin = await import('bitcoinjs-lib');
+          const xOnlyPubkey = Buffer.from(hex, 'hex');
+          const payment = bitcoin.payments.p2tr({ internalPubkey: xOnlyPubkey, network: bitcoin.networks.regtest });
+          if (payment.address) signerAddr = payment.address;
+        }
+      } catch { /* use default */ }
+
+      await providerRef.current.alkanesExecuteFull(
+        JSON.stringify([signerAddr, address]),
+        'B:100000:v0',
+        '[32,0,77]:v1:v1',
+        '1', null,
+        JSON.stringify({
+          from_addresses: [address],
+          change_address: address,
+          alkanes_change_address: address,
+        }),
+      );
+      harnessRef.current.mineBlocks(1);
+      console.log('[devnet] frBTC wrapped to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },

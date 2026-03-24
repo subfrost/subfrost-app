@@ -9,6 +9,9 @@ import NumberField from '@/app/components/NumberField';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useGlobalStore } from '@/stores/global';
 import { useFeeRate, type FeeSelection } from '@/hooks/useFeeRate';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useNotification } from '@/context/NotificationContext';
+import { getConfig } from '@/utils/getConfig';
 import type { TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
 
@@ -64,11 +67,64 @@ export default function LimitOrderPanel({
     return (p * a).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [price, amount]);
 
+  const { provider: sdkProvider } = useAlkanesSDK();
+  const { showNotification } = useNotification();
+
   const handleSubmit = async () => {
-    if (!price || !amount) return;
+    if (!price || !amount || !isConnected) return;
     setIsSubmitting(true);
-    // TODO: call carbine controller PlaceLimitOrder (opcode 20)
-    setTimeout(() => setIsSubmitting(false), 1000);
+    try {
+      const config = getConfig(network || 'devnet');
+      const controllerId = (config as any).CARBINE_CONTROLLER_ID;
+      if (!controllerId) throw new Error('Carbine controller not configured for this network');
+
+      const [cBlock, cTx] = controllerId.split(':');
+      // PlaceLimitOrder: opcode 20, pair tokens, side, price, amount
+      // For now, use DIESEL (2:0) and frBTC (32:0) as the default pair
+      const pairA = fromToken?.id || '2:0';
+      const pairB = '32:0';
+      const [aBlock, aTx] = pairA.split(':');
+      const sideNum = side === 'buy' ? 0 : 1;
+      const priceScaled = Math.floor(parseFloat(price) * 1e8);
+      const amountScaled = Math.floor(parseFloat(amount) * 1e8);
+
+      const protostone = `[${cBlock},${cTx},20,${aBlock},${aTx},32,0,${sideNum},${priceScaled},${amountScaled}]:v0:v0`;
+      const inputReqs = side === 'buy'
+        ? `32:0:${Math.floor(priceScaled * amountScaled / 1e8)}` // pay in quote token
+        : `${pairA}:${amountScaled}`; // pay in base token
+
+      if (!sdkProvider) throw new Error('SDK provider not ready');
+
+      const account = (window as any).__walletAccount;
+      const fromAddrs = [];
+      const segwit = document.body.innerText.match(/bcrt1q[a-z0-9]+/)?.[0];
+      const taproot = document.body.innerText.match(/bcrt1p[a-z0-9]+/)?.[0];
+      if (segwit) fromAddrs.push(segwit);
+      if (taproot) fromAddrs.push(taproot);
+
+      const result = await sdkProvider.alkanesExecuteWithStrings(
+        JSON.stringify([taproot || segwit || 'p2tr:0']),
+        inputReqs,
+        protostone,
+        Math.round(fee.feeRate),
+        null,
+        JSON.stringify({
+          from: fromAddrs.length > 0 ? fromAddrs : ['p2wpkh:0', 'p2tr:0'],
+          change_address: segwit || 'p2wpkh:0',
+          alkanes_change_address: taproot || 'p2tr:0',
+        }),
+      );
+
+      if (result) {
+        console.log('[LimitOrder] Placed:', result);
+        showNotification(result.txid || result.reveal_txid || 'order', 'swap' as any);
+      }
+    } catch (e: any) {
+      console.error('[LimitOrder] Failed:', e);
+      window.alert?.(`Limit order failed: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Balance usage percentage

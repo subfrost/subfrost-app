@@ -54,6 +54,7 @@ export interface DevnetControls {
   faucetBtc(address: string, sats: number): Promise<void>;
   faucetDiesel(address: string): Promise<void>;
   faucetFuel(address: string): Promise<void>;
+  faucetFrbtc(address: string): Promise<void>;
   faucetUsdt(address: string): Promise<void>;
   faucetUsdc(address: string): Promise<void>;
   getChainHeight(): number;

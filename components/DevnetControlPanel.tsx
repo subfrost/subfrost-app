@@ -152,10 +152,10 @@ export function DevnetControlPanel() {
               </ActionButton>
               <ActionButton
                 action="frbtc"
-                onClick={() => runAction('frbtc', () => controls.faucetBtc(address || segwitAddress, 100_000_000))}
+                onClick={() => runAction('frbtc', () => controls.faucetFrbtc(address || segwitAddress))}
                 className="px-2 py-1.5 bg-green-900/50 hover:bg-green-800/50 text-green-300 rounded-lg text-xs border border-green-800/30"
               >
-                Wrap frBTC
+                +frBTC
               </ActionButton>
               <ActionButton
                 action="usdt"
