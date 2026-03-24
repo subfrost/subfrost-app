@@ -24,6 +24,7 @@ import {
   useBridgeState,
   getDepositAddress,
 } from "@/hooks/useBridge";
+import { useBridgeToEvm } from "@/hooks/useBridgeMutation";
 import {
   quoteStableToBtc,
   quoteBtcToStable,
@@ -141,9 +142,10 @@ export default function BridgeDepositFlow({
   amount,
   onAmountChange,
 }: Props) {
-  const { isConnected, network, onConnectModalOpenChange } = useWallet();
+  const { isConnected, network, onConnectModalOpenChange, account } = useWallet();
   const { theme } = useTheme();
   const { data: bridgeState } = useBridgeState();
+  const bridgeToEvmMutation = useBridgeToEvm();
 
   // UI state
   const [mode, setMode] = useState<BridgeMode>("qr");
@@ -289,8 +291,9 @@ export default function BridgeDepositFlow({
     }
 
     // Create a new bridge operation for the lifecycle tracker
+    const opId = `bridge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newOp: BridgeOperation = {
-      id: `bridge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: opId,
       direction: isToBtc ? "to-btc" : "to-stable",
       status: "pending",
       inputAmount: amount,
@@ -306,18 +309,45 @@ export default function BridgeDepositFlow({
 
     setOperations(prev => [newOp, ...prev]);
 
-    // Simulate deposit confirmation after a short delay
-    setTimeout(() => {
+    try {
+      if (!isToBtc) {
+        // BTC → Stable: BurnAndBridge frUSD to EVM
+        // Amount is in frUSD base units (18 decimals)
+        const frusdAmount = BigInt(Math.round(parsedAmount * 1e18)).toString();
+        // Default EVM recipient — in production this comes from MetaMask
+        const evmRecipient = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+        const result = await bridgeToEvmMutation.mutateAsync({
+          frusdAmount,
+          evmRecipient,
+          feeRate: 5,
+        });
+        console.log('[BridgeDepositFlow] BurnAndBridge tx:', result.transactionId);
+        setOperations(prev =>
+          prev.map(op =>
+            op.id === opId ? { ...op, status: "deposited" as const, btcTxId: result.transactionId } : op
+          )
+        );
+      } else {
+        // Stable → BTC: This direction requires EVM deposit first (coordinator-mediated)
+        // For devnet, mark as deposited immediately (coordinator sim processes it)
+        setOperations(prev =>
+          prev.map(op =>
+            op.id === opId ? { ...op, status: "deposited" as const } : op
+          )
+        );
+      }
+      setBridgeStep("submitted");
+      setTimeout(() => setBridgeStep("idle"), 3000);
+    } catch (e: any) {
+      console.error('[BridgeDepositFlow] Bridge failed:', e?.message || e);
       setOperations(prev =>
         prev.map(op =>
-          op.id === newOp.id ? { ...op, status: "deposited" as const } : op
+          op.id === opId ? { ...op, status: "failed" as const } : op
         )
       );
-    }, 2000);
-
-    setBridgeStep("submitted");
-    setTimeout(() => setBridgeStep("idle"), 3000);
-  }, [isConnected, onConnectModalOpenChange, amount, quote, isToBtc, fromToken, toToken]);
+      setBridgeStep("idle");
+    }
+  }, [isConnected, onConnectModalOpenChange, amount, quote, isToBtc, fromToken, toToken, bridgeToEvmMutation]);
 
   const handleConnectEvm = useCallback(() => {
     // Switch to MetaMask mode — in a real implementation this would trigger
