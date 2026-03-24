@@ -527,6 +527,9 @@ export default function SwapShell() {
     }
 
     // Helper to check if a token should be shown (by ID and symbol)
+    // Build set of protocol token IDs for always-visible check
+    const protocolTokenIds = new Set(protocolTokens.map(pt => pt.id));
+
     const shouldShowToken = (tokenId: string, symbol: string): boolean => {
       if (tokenId === fromId) return false; // Can't swap to self
       // For BTC/frBTC wrapping, always allow
@@ -534,6 +537,10 @@ export default function SwapShell() {
       if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
       // Always allow base tokens (BTC, frBTC, bUSD) - they show before pools load
       if (baseTokenIds.has(tokenId)) return true;
+      // Always allow protocol tokens (FIRE, frUSD, volBTC) — explicitly configured as swappable
+      if (protocolTokenIds.has(tokenId)) return true;
+      // Always allow DIESEL/bUSD — primary gas/stable token
+      if (BUSD_ALKANE_ID && tokenId === BUSD_ALKANE_ID) return true;
       // Show any token that has a pool with the FROM token
       const tokenIdForLookup = tokenId === 'btc' ? FRBTC_ALKANE_ID : tokenId;
       return tokensWithPoolsForFrom.has(tokenIdForLookup) || tokensWithPoolsForFrom.has(tokenId);
