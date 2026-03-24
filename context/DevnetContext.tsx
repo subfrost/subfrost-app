@@ -22,6 +22,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { DevnetState, DevnetControls, DeployedContracts } from '@/lib/devnet/types';
 import { saveDevnetState, loadDevnetState, clearDevnetState } from '@/lib/devnet/persistence';
+import { getBootAddresses } from '@/lib/devnet/boot';
 import type { DevnetEvmProvider, MockTokenAddresses } from '@/lib/devnet/evmProvider';
 import type { DevnetCoordinator } from '@/lib/devnet/coordinatorSim';
 
@@ -354,6 +355,8 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     },
     faucetDiesel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
+      // Use boot wallet to fund the tx, output DIESEL to user's address
+      const boot = getBootAddresses();
       harnessRef.current.mineBlocks(1);
       await new Promise(r => setTimeout(r, 50));
       await providerRef.current.alkanesExecuteFull(
@@ -362,8 +365,8 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         '[2,0,77]:v0:v0',
         '1', null,
         JSON.stringify({
-          from_addresses: [address],
-          change_address: address,
+          from_addresses: [boot.segwit, boot.taproot],
+          change_address: boot.segwit,
           alkanes_change_address: address,
         }),
       );
@@ -404,14 +407,16 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         }
       } catch { /* use default */ }
 
+      // Use boot wallet to fund the wrap, frBTC output goes to user's address
+      const boot = getBootAddresses();
       await providerRef.current.alkanesExecuteFull(
         JSON.stringify([signerAddr, address]),
         'B:100000:v0',
         '[32,0,77]:v1:v1',
         '1', null,
         JSON.stringify({
-          from_addresses: [address],
-          change_address: address,
+          from_addresses: [boot.segwit, boot.taproot],
+          change_address: boot.segwit,
           alkanes_change_address: address,
         }),
       );
