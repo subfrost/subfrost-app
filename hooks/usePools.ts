@@ -580,46 +580,53 @@ export function usePools(params: UsePoolsParams = {}) {
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
-      // Primary: Data API (single call with pre-calculated TVL/volume/APR)
-      try {
-        tokenMetaMap = await tokenMetaPromise;
-        console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
-        items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
-      } catch (e) {
-        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to REST:', e);
-        // Ensure token metadata is resolved even if pool fetch failed
+      const isDevnet = network === 'devnet';
+
+      // On devnet, skip REST/Espo endpoints (devnet server maps them incorrectly)
+      // and go straight to RPC simulation which queries the in-process indexer.
+      if (!isDevnet) {
+        // Primary: Data API (single call with pre-calculated TVL/volume/APR)
+        try {
+          tokenMetaMap = await tokenMetaPromise;
+          console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
+          items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+        } catch (e) {
+          console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to REST:', e);
+          try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
+        }
+
+        // Fallback 1: get-all-pools-details REST
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          } catch (e) {
+            console.warn('[usePools] get-all-pools-details REST failed:', e);
+          }
+        }
+
+        // Fallback 2: get-all-token-pairs REST
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          } catch (e) {
+            console.warn('[usePools] get-all-token-pairs REST failed:', e);
+          }
+        }
+
+        // Fallback 2b: dataApiGetAllTokenPairs
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          } catch (e) {
+            console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
+          }
+        }
+      } else {
+        // Devnet: resolve token metadata (may be empty)
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
 
-      // Fallback 1: get-all-pools-details REST (direct call to OYL Alkanode,
-      // bypasses WASM SDK deserialization — preserves 30D volume data)
-      if (items.length === 0) {
-        try {
-          items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
-          console.warn('[usePools] get-all-pools-details REST failed:', e);
-        }
-      }
-
-      // Fallback 2: get-all-token-pairs REST (single call, bypasses WASM SDK)
-      if (items.length === 0) {
-        try {
-          items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
-          console.warn('[usePools] get-all-token-pairs REST failed:', e);
-        }
-      }
-
-      // Fallback 2b: dataApiGetAllTokenPairs (no TVL/volume but faster than RPC)
-      if (items.length === 0) {
-        try {
-          items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
-          console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
-        }
-      }
-
-      // Fallback 3: N+1 RPC simulation calls (no TVL/volume data)
+      // Fallback 3 (or devnet primary): N+1 RPC simulation calls
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
