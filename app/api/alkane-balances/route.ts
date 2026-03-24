@@ -24,6 +24,7 @@ const RPC_ENDPOINTS: Record<string, string> = {
   'regtest-local': 'http://localhost:18888',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  devnet: 'http://localhost:18888', // In-browser only
 };
 
 export async function GET(request: Request) {
@@ -33,6 +34,12 @@ export async function GET(request: Request) {
 
   if (!address) {
     return NextResponse.json({ error: 'address parameter is required' }, { status: 400 });
+  }
+
+  // Devnet runs in-browser only — server can't reach it.
+  // Return empty balances; the frontend will query the in-browser devnet directly.
+  if (network === 'devnet' || network === 'regtest-local') {
+    return NextResponse.json({ balances: [] });
   }
 
   const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;

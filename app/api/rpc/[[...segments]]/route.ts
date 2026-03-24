@@ -80,6 +80,16 @@ export async function POST(
       targetUrl = pickEndpoint(body, network);
     }
 
+    // Devnet runs in-browser only — server-side API routes can't reach it.
+    // Return a JSON-RPC error so the browser fetch interceptor can handle it instead.
+    if (network === 'devnet' || network === 'regtest-local') {
+      return NextResponse.json({
+        jsonrpc: '2.0',
+        error: { code: -32603, message: 'Devnet is in-browser only; use fetch interceptor' },
+        id: body?.id ?? null,
+      }, { status: 503 });
+    }
+
     // Log for debugging UTXO fetches
     const method = Array.isArray(body) ? 'batch' : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);

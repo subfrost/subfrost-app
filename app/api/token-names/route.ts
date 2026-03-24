@@ -17,12 +17,18 @@ const RPC_ENDPOINTS: Record<string, string> = {
   'regtest-local': 'http://localhost:18888',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  devnet: 'http://localhost:18888', // In-browser only
 };
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const network = url.searchParams.get('network') || process.env.NEXT_PUBLIC_NETWORK || 'mainnet';
   const limit = Math.min(Number(url.searchParams.get('limit') || 500), 1000);
+
+  // Devnet runs in-browser only — server can't reach it
+  if (network === 'devnet' || network === 'regtest-local') {
+    return NextResponse.json({ names: {}, count: 0 });
+  }
 
   const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
 

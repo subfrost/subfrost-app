@@ -18,6 +18,7 @@ const RPC_ENDPOINTS: Record<string, string> = {
   'regtest-local': 'http://localhost:18888',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  devnet: 'http://localhost:18888', // In-browser only
 };
 
 export async function POST(request: Request) {
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     const alkaneIds: string[] = body?.alkaneIds || [];
     const network = body?.network || process.env.NEXT_PUBLIC_NETWORK || 'mainnet';
+
+    // Devnet runs in-browser only — server can't reach it
+    if (network === 'devnet' || network === 'regtest-local') {
+      return NextResponse.json({ names: {}, count: 0 });
+    }
 
     if (alkaneIds.length === 0) {
       return NextResponse.json({ names: {} });
