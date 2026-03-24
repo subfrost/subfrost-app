@@ -625,16 +625,55 @@ export function usePools(params: UsePoolsParams = {}) {
         // Devnet: resolve token metadata (may be empty)
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
 
-        // Devnet primary: query quspo tertiary indexer for pool data
+        // Devnet primary: quspo for pool discovery + alkanes_simulate for live reserves
         try {
           const { quspoGetPools } = await import('@/lib/devnet/quspoQuery');
           const quspoPools = await quspoGetPools(ALKANE_FACTORY_ID, network);
           console.log('[usePools] Quspo returned', quspoPools.length, 'pools');
 
+          // Fetch live reserves for each pool via alkanes_simulate opcode 97
+          const rpcUrl = getRpcUrl(network);
           for (const p of quspoPools) {
             const poolId = `${p.poolId.block}:${p.poolId.tx}`;
             const token0Id = `${p.token0.block}:${p.token0.tx}`;
             const token1Id = `${p.token1.block}:${p.token1.tx}`;
+
+            // Fetch reserves from pool opcode 97 (GetReserves)
+            let reserve0 = p.reserve0 || '0';
+            let reserve1 = p.reserve1 || '0';
+            let poolName = p.name || '';
+            try {
+              const [reserveResp, nameResp] = await Promise.all([
+                fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', id: 1,
+                    params: [{ target: { block: p.poolId.block, tx: p.poolId.tx }, inputs: ['97'],
+                      alkanes: [], transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0 }] }) }),
+                fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', id: 2,
+                    params: [{ target: { block: p.poolId.block, tx: p.poolId.tx }, inputs: ['99'],
+                      alkanes: [], transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0 }] }) }),
+              ]);
+              const reserveData = await reserveResp.json();
+              const nameData = await nameResp.json();
+              const rExec = reserveData?.result?.execution;
+              if (rExec?.data && !rExec.error) {
+                const hex = (rExec.data as string).replace(/^0x/, '');
+                const bytes = Array.from(Buffer.from(hex, 'hex'));
+                if (bytes.length >= 32) {
+                  let r0 = 0n, r1 = 0n;
+                  for (let i = 0; i < 16; i++) { r0 |= BigInt(bytes[i]) << BigInt(i * 8); }
+                  for (let i = 0; i < 16; i++) { r1 |= BigInt(bytes[16 + i]) << BigInt(i * 8); }
+                  reserve0 = r0.toString();
+                  reserve1 = r1.toString();
+                }
+              }
+              const nExec = nameData?.result?.execution;
+              if (nExec?.data && !nExec.error) {
+                const hex = (nExec.data as string).replace(/^0x/, '');
+                poolName = Buffer.from(hex, 'hex').toString('utf-8').replace(/\0/g, '');
+              }
+            } catch { /* use quspo values */ }
+
             const token0Symbol = getTokenSymbol(token0Id, '', tokenMetaMap);
             const token1Symbol = getTokenSymbol(token1Id, '', tokenMetaMap);
             const token0Name = getTokenName(token0Id, '', tokenMetaMap);
@@ -642,11 +681,11 @@ export function usePools(params: UsePoolsParams = {}) {
 
             items.push({
               id: poolId,
-              pairLabel: `${token0Name} / ${token1Name} LP`,
+              pairLabel: poolName || `${token0Name} / ${token1Name} LP`,
               token0: { id: token0Id, symbol: token0Symbol || 'UNK', name: token0Name },
               token1: { id: token1Id, symbol: token1Symbol || 'UNK', name: token1Name },
-              token0Amount: p.reserve0,
-              token1Amount: p.reserve1,
+              token0Amount: reserve0,
+              token1Amount: reserve1,
               lpTotalSupply: p.lpTokenSupply,
             });
           }
