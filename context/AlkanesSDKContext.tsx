@@ -183,8 +183,33 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
   };
 
   // Initialize provider based on network
+  // On devnet, wait for the fetch interceptor to be installed before creating
+  // the provider — otherwise requests to localhost:18888 go nowhere.
   useEffect(() => {
     const initProvider = async () => {
+      // Devnet: wait for fetch interceptor before making any requests
+      if (network === 'devnet') {
+        const maxWait = 120_000; // 2 min max
+        const start = Date.now();
+        while (Date.now() - start < maxWait) {
+          try {
+            const testResp = await fetch('http://localhost:18888', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_getblockcount', params: [], id: 0 }),
+            });
+            if (testResp.ok) {
+              const data = await testResp.json();
+              if (data?.result !== undefined) {
+                console.log('[AlkanesSDK] Devnet fetch interceptor ready, height:', data.result);
+                break;
+              }
+            }
+          } catch { /* interceptor not ready yet */ }
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
       try {
         console.log('[AlkanesSDK] Initializing WASM WebProvider for network:', network);
 
