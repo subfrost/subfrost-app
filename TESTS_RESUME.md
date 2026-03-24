@@ -105,3 +105,16 @@ mnemonic loaded, so UTXO discovery works correctly.
 5. Password: `testtest1`
 6. The wallet should show non-zero BTC balance immediately (from boot coinbase)
 7. Proceed with swap tests
+
+### FIX APPLIED: SDK Init Waits for Devnet (commit 9100b9f3)
+
+The AlkanesSDKProvider now polls `btc_getblockcount` via the fetch 
+interceptor before creating the WebProvider. This ensures all SDK 
+requests route through the in-process devnet.
+
+**vitest proof**: `e2e-wallet-funding.test.ts` — 9/9 passing with 
+fresh random mnemonic. Full pipeline works: generatetoaddress → 
+esplora UTXOs → SDK balance → DIESEL mint.
+
+**Next**: Deploy, then chromepilot test with fresh wallet creation.
+The balance should now show correctly and trades should execute.
