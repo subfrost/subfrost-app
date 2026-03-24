@@ -407,17 +407,11 @@ export class DevnetTestHarness {
             //   POST http://localhost:18888/get-all-pools-details
             //   {"factoryId": {"block": "4", "tx": "65498"}}
             //
-            // We translate these to JSON-RPC calls to the dispatcher.
-            const restMethod = this.resolveRestMethod(url, parsed);
-            if (restMethod) {
-                const rpcRequest = JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: restMethod.method,
-                    params: restMethod.params,
-                    id: 1,
-                });
-                const responseJson = this.server.handleRpc(rpcRequest);
-                return new Response(responseJson, {
+            // Route these through quspo tertiary indexer via metashrew_view RPC,
+            // then transform the response to match Espo's REST format.
+            const restResponse = this.handleRestViaQuspo(url, parsed);
+            if (restResponse) {
+                return new Response(JSON.stringify(restResponse), {
                     status: 200,
                     headers: { 'Content-Type': 'application/json' },
                 });
@@ -443,48 +437,91 @@ export class DevnetTestHarness {
         }
     }
     /**
-     * Resolve a REST-style URL + body into a JSON-RPC method + params.
+     * Handle REST-style data API calls by routing to quspo tertiary indexer
+     * via metashrew_view, then transforming the response to match Espo format.
      *
-     * Maps espo data API REST endpoints to the RPC dispatcher's namespace:
-     *   /get-all-pools-details    → ammdata.get_pools
-     *   /get-all-token-pairs      → ammdata.get_pools
-     *   /get-alkanes-by-address   → essentials.get_address_balances
-     *   /get-bitcoin-price        → (handled inline)
-     *   /get-all-amm-tx-history   → ammdata.get_activity
+     * REST endpoint → quspo view → Espo-compatible response
      */
-    resolveRestMethod(url, body) {
-        // Extract the path from the URL
+    handleRestViaQuspo(url, body) {
+        let path;
         try {
-            const urlObj = new URL(url);
-            const path = urlObj.pathname;
-            // Match known REST endpoints
-            if (path.endsWith('/get-all-pools-details') || path.endsWith('/get-all-token-pairs')) {
-                return {
-                    method: 'essentials.get_address_outpoints',
-                    params: [body || {}],
-                };
-            }
-            if (path.endsWith('/get-alkanes-by-address') || path.endsWith('/get-address-balances')) {
-                const address = body?.address || '';
-                return {
-                    method: 'essentials.get_address_outpoints',
-                    params: [{ address }],
-                };
-            }
-            if (path.endsWith('/get-bitcoin-price')) {
-                // Return mock price for devnet
-                return null; // Handled by catch-all below
-            }
-            if (path.endsWith('/get-all-amm-tx-history') || path.endsWith('/get-all-address-amm-tx-history')) {
-                return {
-                    method: 'essentials.get_address_outpoints',
-                    params: [body || {}],
-                };
-            }
+            path = new URL(url).pathname;
+        } catch {
+            return null;
         }
-        catch {
-            // URL parse failed — try path matching on raw string
+
+        // Helper: call quspo view and decode hex JSON response
+        const callQuspo = (viewName, inputStr) => {
+            const inputHex = '0x' + Array.from(
+                new TextEncoder().encode(inputStr)
+            ).map(b => b.toString(16).padStart(2, '0')).join('');
+            const rpcReq = JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'metashrew_view',
+                params: [viewName, inputHex, 'latest'],
+                id: 1,
+            });
+            const rpcResp = JSON.parse(this.server.handleRpc(rpcReq));
+            if (!rpcResp?.result) return null;
+            const hex = rpcResp.result.replace('0x', '');
+            if (!hex) return null;
+            try {
+                const bytes = [];
+                for (let i = 0; i < hex.length; i += 2) {
+                    bytes.push(parseInt(hex.substr(i, 2), 16));
+                }
+                return JSON.parse(String.fromCharCode(...bytes));
+            } catch {
+                return null;
+            }
+        };
+
+        // /get-alkanes-by-address → quspo get_alkanes_by_address
+        // SDK expects: { statusCode: 200, data: [{ alkaneId: {block, tx}, balance, name, symbol }] }
+        if (path.endsWith('/get-alkanes-by-address') || path.endsWith('/get-address-balances')) {
+            const address = body?.address || '';
+            if (!address) return { statusCode: 200, data: [] };
+            const result = callQuspo('get_alkanes_by_address', address);
+            // quspo returns: [{ alkaneId: {block, tx}, balance }]
+            const data = (result || []).map(item => ({
+                alkaneId: { block: Number(item.alkaneId?.block || 0), tx: Number(item.alkaneId?.tx || 0) },
+                balance: item.balance || '0',
+                name: item.name || '',
+                symbol: item.symbol || '',
+            }));
+            return { statusCode: 200, data };
         }
+
+        // /get-all-pools-details, /get-all-token-pairs → quspo get_pools
+        // SDK expects: { data: [{ poolId, token0, token1, reserve0, reserve1, ... }] }
+        if (path.endsWith('/get-all-pools-details') || path.endsWith('/get-all-token-pairs')) {
+            const factoryId = body?.factoryId || {};
+            const input = JSON.stringify({ block: String(factoryId.block || '4'), tx: String(factoryId.tx || '65522') });
+            const result = callQuspo('get_pools', input);
+            const pools = (result?.pools || []).map(p => ({
+                poolId: { block: Number(p.poolId?.block || 0), tx: Number(p.poolId?.tx || 0) },
+                token0: { alkaneId: { block: Number(p.token0?.block || 0), tx: Number(p.token0?.tx || 0) } },
+                token1: { alkaneId: { block: Number(p.token1?.block || 0), tx: Number(p.token1?.tx || 0) } },
+                token0Amount: p.reserve0 || '0',
+                token1Amount: p.reserve1 || '0',
+                poolName: p.poolName || '',
+            }));
+            return { statusCode: 200, data: pools };
+        }
+
+        // /get-bitcoin-price → quspo get_bitcoin_price
+        if (path.endsWith('/get-bitcoin-price')) {
+            const result = callQuspo('get_bitcoin_price', '');
+            return result || { usd: 100000 };
+        }
+
+        // /get-all-amm-tx-history → quspo get_activity
+        if (path.endsWith('/get-all-amm-tx-history') || path.endsWith('/get-all-address-amm-tx-history')) {
+            const limit = body?.limit || 50;
+            const result = callQuspo('get_activity', JSON.stringify({ limit }));
+            return { statusCode: 200, data: result?.items || [], total: result?.count || 0 };
+        }
+
         return null;
     }
 }
