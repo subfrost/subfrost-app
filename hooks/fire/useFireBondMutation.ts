@@ -12,6 +12,12 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
 import { FIRE_BONDING_OPCODES } from '@/constants';
+import { patchInputsOnly } from '@/lib/psbt-patching';
+import { extractPsbtBase64, getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
 
 interface BondParams {
   lpAmount: string; // LP token amount in base units
@@ -20,7 +26,7 @@ interface BondParams {
 
 export function useFireBondMutation() {
   const queryClient = useQueryClient();
-  const { network, walletType, account } = useWallet();
+  const { network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet();
   const { provider, isInitialized } = useAlkanesSDK();
 
   const config = getConfig(network || 'mainnet');
@@ -42,6 +48,7 @@ export function useFireBondMutation() {
       const protostonesStr = `[${bondingBlock},${bondingTx},${FIRE_BONDING_OPCODES.Bond}]:v0:v0`;
 
       // LP token input via inputRequirements
+      // Devnet default LP token ID — replace with dynamic pool discovery when available
       const lpTokenId = '2:6'; // regtest DIESEL/frBTC LP token
       const inputReqStr = `A:${lpTokenId}:${lpAmount}`;
 
@@ -60,10 +67,45 @@ export function useFireBondMutation() {
         ordinalsStrategy: 'burn',
       });
 
-      if (!result?.psbt) throw new Error('Failed to build bond PSBT');
+      // Auto-completed by SDK
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        return { success: true, transactionId: txId };
+      }
 
-      // Phase 1: return PSBT for now — full signing flow will be added later
-      return { psbt: result.psbt, txid: result?.txid };
+      // Need manual signing
+      if (result?.readyToSign) {
+        const btcNetwork = getBitcoinNetwork(network || 'mainnet');
+        const psbtBase64 = extractPsbtBase64(result.readyToSign.psbt);
+
+        let finalPsbtBase64 = psbtBase64;
+        if (isBrowserWallet) {
+          const patched = patchInputsOnly({
+            psbtBase64,
+            taprootAddress: account?.taproot?.address || '',
+            segwitAddress: account?.nativeSegwit?.address,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            network: btcNetwork,
+          });
+          finalPsbtBase64 = patched.psbtBase64;
+        }
+
+        let signedPsbtBase64: string;
+        if (isBrowserWallet) {
+          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+        } else {
+          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+        }
+
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+        const txHex = signedPsbt.extractTransaction().toHex();
+        const txId = await provider.broadcastTransaction(txHex);
+        return { success: true, transactionId: txId };
+      }
+
+      throw new Error('Unexpected SDK response — no txid or readyToSign in result');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fireBondingStats'] });

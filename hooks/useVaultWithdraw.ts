@@ -3,6 +3,12 @@ import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { VAULT_OPCODES } from '@/constants';
+import { patchInputsOnly } from '@/lib/psbt-patching';
+import { extractPsbtBase64, getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
 
 export type VaultWithdrawData = {
   vaultContractId: string; // e.g., "2:123" for vault contract
@@ -51,8 +57,9 @@ function buildVaultWithdrawInputRequirements(params: {
  * Uses opcode 2 (Redeem) to burn vault units and receive tokens back
  */
 export function useVaultWithdraw() {
-  const { isConnected } = useWallet();
+  const { isConnected, walletType, account, signTaprootPsbt, signSegwitPsbt, network } = useWallet();
   const provider = useSandshrewProvider();
+  const isBrowserWallet = walletType === 'browser';
 
   return useMutation({
     mutationFn: async (withdrawData: VaultWithdrawData) => {
@@ -75,26 +82,62 @@ export function useVaultWithdraw() {
         amount: new BigNumber(withdrawData.amount).toFixed(0),
       });
 
-      // Execute using alkanesExecuteTyped (handles address defaults automatically)
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+
+      const toAddresses = isBrowserWallet ? [taprootAddress || ''] : ['p2tr:0'];
+      const changeAddr = isBrowserWallet ? (segwitAddress || taprootAddress || '') : 'p2tr:0';
+      const alkanesChangeAddr = isBrowserWallet ? (taprootAddress || '') : 'p2tr:0';
+
       const result = await provider.alkanesExecuteTyped({
         inputRequirements,
         protostones: protostone,
         feeRate: withdrawData.feeRate,
-        autoConfirm: true,
-        changeAddress: 'p2tr:0',
-        alkanesChangeAddress: 'p2tr:0',
+        autoConfirm: !isBrowserWallet,
+        toAddresses,
+        changeAddress: changeAddr,
+        alkanesChangeAddress: alkanesChangeAddr,
       });
 
-      // Parse result
-      const txId = result?.txid || result?.reveal_txid;
+      // Auto-completed by SDK (keystore wallets with autoConfirm=true)
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        return { success: true, transactionId: txId };
+      }
 
-      return {
-        success: true,
-        transactionId: txId,
-      } as {
-        success: boolean;
-        transactionId?: string;
-      };
+      // Need manual signing (browser wallets)
+      if (result?.readyToSign) {
+        const btcNetwork = getBitcoinNetwork(network || 'mainnet');
+        const psbtBase64 = extractPsbtBase64(result.readyToSign.psbt);
+
+        let finalPsbtBase64 = psbtBase64;
+        if (isBrowserWallet) {
+          const patched = patchInputsOnly({
+            psbtBase64,
+            taprootAddress: account?.taproot?.address || '',
+            segwitAddress: account?.nativeSegwit?.address,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            network: btcNetwork,
+          });
+          finalPsbtBase64 = patched.psbtBase64;
+        }
+
+        let signedPsbtBase64: string;
+        if (isBrowserWallet) {
+          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+        } else {
+          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+        }
+
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+        const txHex = signedPsbt.extractTransaction().toHex();
+        const txId = await provider.broadcastTransaction(txHex);
+        return { success: true, transactionId: txId };
+      }
+
+      throw new Error('Unexpected SDK response — no txid or readyToSign in result');
     },
   });
 }
