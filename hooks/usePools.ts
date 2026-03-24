@@ -760,8 +760,8 @@ export function usePools(params: UsePoolsParams = {}) {
         console.log(`[usePools] Filtered out ${beforeCount - items.length} blacklisted pool(s)`);
       }
 
-      // Remove dust/dead pools with negligible TVL (skip on regtest where pricing is unavailable)
-      if (!network?.includes('regtest')) {
+      // Remove dust/dead pools with negligible TVL (skip on regtest/devnet where pricing is unavailable)
+      if (!network?.includes('regtest') && network !== 'devnet') {
         const MIN_TVL_USD = 5;
         items = items.filter(p => (p.tvlUsd ?? 0) >= MIN_TVL_USD);
       }
