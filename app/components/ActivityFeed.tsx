@@ -427,22 +427,16 @@ export default function ActivityFeed({
         <div className="sm:min-w-fit">
           {/* Rows */}
           {items.map((row, idx) => {
-            const time = new Date(row.timestamp);
-            const timeLabel = new Intl.DateTimeFormat(undefined, {
-              month: "2-digit",
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-            }).format(time);
-            // Separate date and time for responsive display
-            const dateLabel = new Intl.DateTimeFormat(undefined, {
-              month: "2-digit",
-              day: "2-digit",
-            }).format(time);
-            const hourMinLabel = new Intl.DateTimeFormat(undefined, {
-              hour: "2-digit",
-              minute: "2-digit",
-            }).format(time);
+            // Guard against missing/invalid timestamps (e.g. quspo activity
+            // records have `height` but no `timestamp` — use height as fallback)
+            const rawTs = row.timestamp || (row as any).height;
+            const time = rawTs ? new Date(typeof rawTs === 'number' && rawTs < 1e10 ? rawTs * 1000 : rawTs) : null;
+            const isValidTime = time && !isNaN(time.getTime());
+            const fmt = (opts: Intl.DateTimeFormatOptions) =>
+              isValidTime ? new Intl.DateTimeFormat(undefined, opts).format(time) : '—';
+            const timeLabel = fmt({ month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+            const dateLabel = fmt({ month: "2-digit", day: "2-digit" });
+            const hourMinLabel = fmt({ hour: "2-digit", minute: "2-digit" });
             const address =
               (row as any).address ||
               (row as any).sellerAddress ||
