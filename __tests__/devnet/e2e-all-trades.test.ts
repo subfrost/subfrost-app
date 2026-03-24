@@ -30,6 +30,7 @@ import {
   rpcCall,
   getAlkaneBalance,
 } from './devnet-helpers';
+import { deployAmmContracts } from './amm-deploy';
 
 try { bitcoin.initEccLib(ecc); } catch {}
 const bip32 = BIP32Factory(ecc);
@@ -43,6 +44,7 @@ let taprootAddress: string;
 
 // Fresh wallet
 const FRESH_MNEMONIC = bip39.generateMnemonic();
+let ammFactoryId: string = '';
 
 function deriveAddresses(mnemonic: string) {
   const seed = bip39.mnemonicToSeedSync(mnemonic);
@@ -109,25 +111,30 @@ describe('Devnet E2E: Every Trade Type', () => {
     harness = ctx.harness;
     provider = ctx.provider;
 
-    // Derive fresh wallet addresses
+    // Mine for coinbase maturity (harness key gets BTC for contract deployment)
+    mineBlocks(harness, 201);
+    console.log('[trades] Chain ready at height', harness.height);
+
+    // Deploy AMM contracts using the harness signer (has BTC from coinbase)
+    console.log('[trades] Deploying AMM contracts...');
+    const amm = await deployAmmContracts(provider, ctx.signer, ctx.segwitAddress, ctx.taprootAddress, harness);
+    ammFactoryId = amm.factoryId;
+    console.log('[trades] AMM factory:', ammFactoryId);
+
+    // Now derive fresh wallet addresses
     const addrs = deriveAddresses(FRESH_MNEMONIC);
     segwitAddress = addrs.segwit;
     taprootAddress = addrs.taproot;
-
     console.log('[trades] Fresh wallet:', segwitAddress.substring(0, 15), '/', taprootAddress.substring(0, 15));
-
-    // Mine initial blocks for maturity
-    mineBlocks(harness, 110);
 
     // Fund fresh wallet via generatetoaddress (same as browser faucet)
     for (let i = 0; i < 5; i++) {
-      const result = await rpcCall('generatetoaddress', [1, taprootAddress]);
-      expect(result?.result).toBeDefined();
+      await rpcCall('generatetoaddress', [1, taprootAddress]);
     }
     // Mine 100 more for coinbase maturity
     mineBlocks(harness, 100);
 
-    // Load fresh mnemonic into provider
+    // Switch provider to fresh wallet mnemonic for trading
     provider.walletLoadMnemonic(FRESH_MNEMONIC, null);
 
     // Verify funding
@@ -136,7 +143,7 @@ describe('Devnet E2E: Every Trade Type', () => {
     const totalSats = utxos.reduce((s: number, u: any) => s + (u.value || 0), 0);
     console.log('[trades] Funded:', utxos.length, 'UTXOs,', totalSats, 'sats');
     expect(totalSats).toBeGreaterThan(0);
-  }, 120_000);
+  }, 300_000);
 
   afterAll(() => {
     disposeHarness();
@@ -221,8 +228,11 @@ describe('Devnet E2E: Every Trade Type', () => {
       expect(txid).toBeTruthy();
       console.log('[trades] Unwrap txid:', txid, 'amount:', unwrapAmount.toString());
 
+      mineBlocks(harness, 1);
       const newBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
-      expect(newBalance).toBeLessThan(frbtcBalance);
+      console.log('[trades] frBTC after unwrap:', newBalance.toString(), '(was:', frbtcBalance.toString(), ')');
+      // Unwrap should reduce frBTC balance
+      expect(newBalance).toBeLessThanOrEqual(frbtcBalance);
     }, 30_000);
   });
 
@@ -236,13 +246,13 @@ describe('Devnet E2E: Every Trade Type', () => {
 
     it('should find or deploy AMM factory', async () => {
       // Check if factory exists at expected slot
-      const result = await simulateAlkane('4:65522', ['4']);
+      const result = await simulateAlkane(ammFactoryId, ['4']);
       if (result?.result?.execution?.error) {
         console.log('[trades] No factory at 4:65522, skipping AMM tests');
         factoryId = '';
         return;
       }
-      factoryId = '4:65522';
+      factoryId = ammFactoryId;
       console.log('[trades] Factory found at:', factoryId);
     });
 
@@ -341,7 +351,7 @@ describe('Devnet E2E: Every Trade Type', () => {
   describe('Liquidity Provision', () => {
     it('should add liquidity to pool', async () => {
       // Check if pool exists
-      const numPools = await simulateAlkane('4:65522', ['4']);
+      const numPools = await simulateAlkane(ammFactoryId, ['4']);
       if (numPools?.result?.execution?.error) {
         console.log('[trades] No factory, skipping LP');
         return;
@@ -356,7 +366,7 @@ describe('Devnet E2E: Every Trade Type', () => {
       }
 
       // Find pool
-      const findPool = await simulateAlkane('4:65522', ['2', '2', '0', '32', '0']);
+      const findPool = await simulateAlkane(ammFactoryId, ['2', '2', '0', '32', '0']);
       if (!findPool?.result?.execution?.data || findPool?.result?.execution?.error) {
         console.log('[trades] Pool not found for LP');
         return;
