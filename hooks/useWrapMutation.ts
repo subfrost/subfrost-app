@@ -108,8 +108,12 @@ export function useWrapMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      const wrapAmountSats = Math.floor(parseFloat(wrapData.amount) * 100000000);
-      console.log('[WRAP] Starting wrap:', wrapAmountSats, 'sats');
+      const amountStr = String(wrapData.amount).replace(/,/g, '').trim();
+      const wrapAmountSats = Math.floor(parseFloat(amountStr) * 100000000);
+      if (isNaN(wrapAmountSats) || wrapAmountSats <= 0) {
+        throw new Error(`Invalid wrap amount: "${wrapData.amount}" (parsed: ${wrapAmountSats})`);
+      }
+      console.log('[WRAP] Starting wrap:', wrapAmountSats, 'sats (from:', amountStr, ')');
 
       // Build protostone: [32,0,77]:v1:v1
       // pointer=v1 sends minted frBTC to output 1 (user)
