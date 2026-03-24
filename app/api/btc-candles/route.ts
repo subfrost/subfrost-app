@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { SUBFROST_API_URLS } from '@/utils/getConfig';
 
 export const dynamic = 'force-dynamic';
+
+// Pricing data is global — always use mainnet subpricer regardless of connected network
+const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
 /**
  * GET /api/btc-candles
@@ -10,19 +12,15 @@ export const dynamic = 'force-dynamic';
  * Query params:
  * - interval: '1h' | '4h' | '1d' | '1w' (default: '1d')
  * - limit: number of candles (default: 100, max: 500)
- * - network: mainnet | regtest | ... (default: mainnet)
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const interval = searchParams.get('interval') || '1d';
   const limit = Math.min(Number(searchParams.get('limit')) || 100, 500);
-  const network = searchParams.get('network') || 'mainnet';
-  const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
 
   try {
-    // Primary: subpricer
     const response = await fetch(
-      `${baseUrl}/api/v1/bitcoin-candles?interval=${interval}&limit=${limit}`,
+      `${SUBPRICER_BASE}/api/v1/bitcoin-candles?interval=${interval}&limit=${limit}`,
       { next: { revalidate: 60 } }
     );
 

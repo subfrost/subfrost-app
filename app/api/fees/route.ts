@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
-import { SUBFROST_API_URLS } from '@/utils/getConfig';
 
 export const revalidate = 30; // seconds
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const network = searchParams.get('network') || 'mainnet';
-  const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+// Pricing data is global — always use mainnet subpricer regardless of connected network
+const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
+export async function GET() {
   try {
-    // Primary: subpricer (co-deployed with jsonrpc at same base URL)
-    const res = await fetch(`${baseUrl}/api/v1/bitcoin-fees`, {
+    const res = await fetch(`${SUBPRICER_BASE}/api/v1/bitcoin-fees`, {
       next: { revalidate },
     });
     if (res.ok) {

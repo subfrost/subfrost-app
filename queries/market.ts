@@ -9,7 +9,8 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
-import { SUBFROST_API_URLS } from '@/utils/getConfig';
+// Pricing data is global — always use mainnet subpricer regardless of connected network
+const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
 // Re-export the premium type so hooks can use it
 export type FrbtcPremiumData = {
@@ -54,10 +55,9 @@ export function btcPriceQueryOptions(
         return cachedPrice.usd;
       }
 
-      // Primary: subpricer (co-deployed at same base URL)
-      const baseUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+      // Primary: subpricer (always mainnet — pricing is global)
       try {
-        const resp = await fetch(`${baseUrl}/api/v1/bitcoin-price`);
+        const resp = await fetch(`${SUBPRICER_BASE}/api/v1/bitcoin-price`);
         if (resp.ok) {
           const data = await resp.json();
           const price = data?.usd ?? data?.price ?? 0;
@@ -272,7 +272,7 @@ export function feeEstimatesQueryOptions(network: string) {
     queryKey: queryKeys.market.feeEstimates(network),
     queryFn: async () => {
       try {
-        const response = await fetch(`/api/fees?network=${encodeURIComponent(network)}`);
+        const response = await fetch('/api/fees');
         const data = await response.json();
         if (data) {
           return {
