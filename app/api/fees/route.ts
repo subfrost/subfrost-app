@@ -5,7 +5,15 @@ export const revalidate = 30; // seconds
 // Pricing data is global — always use mainnet subpricer regardless of connected network
 const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Devnet: fixed low fees (regtest has no real mempool)
+  try {
+    const url = new URL(request.url);
+    if (url.searchParams.get('network') === 'devnet') {
+      return NextResponse.json({ slow: 1, medium: 1, fast: 1 });
+    }
+  } catch { /* ignore */ }
+
   try {
     const res = await fetch(`${SUBPRICER_BASE}/api/v1/bitcoin-fees`, {
       next: { revalidate },

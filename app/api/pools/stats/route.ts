@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
                 timestamp: Date.now(),
               },
               tvlStats: { pools: {}, totalTvlUsd: 0, timestamp: Date.now() },
-              btcPrice: { usd: 0, timestamp: Date.now() },
+              btcPrice: { usd: 100000, timestamp: Date.now() },
               pools: {},
               timestamp: Date.now(),
             }

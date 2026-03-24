@@ -20,14 +20,31 @@ const RPC_ENDPOINTS: Record<string, string> = {
   devnet: 'http://localhost:18888', // In-browser only
 };
 
+/**
+ * Well-known devnet token names — returned directly when network=devnet
+ * since the devnet WASM runs in-browser and server-side can't reach it.
+ */
+const DEVNET_TOKEN_NAMES: Record<string, { name: string; symbol: string }> = {
+  '2:0': { name: 'DIESEL', symbol: 'DIESEL' },
+  '32:0': { name: 'frBTC', symbol: 'frBTC' },
+  '4:256': { name: 'FIRE', symbol: 'FIRE' },
+  '4:7000': { name: 'FUEL', symbol: 'FUEL' },
+  '4:7010': { name: 'ftrBTC Template', symbol: 'ftrBTC' },
+  '4:7020': { name: 'dxBTC Vault', symbol: 'dxBTC' },
+  '4:7030': { name: 'vxFUEL Gauge', symbol: 'vxFUEL' },
+  '4:7031': { name: 'vxBTCUSD Gauge', symbol: 'vxBTCUSD' },
+  '4:8201': { name: 'frUSD', symbol: 'frUSD' },
+  '4:65522': { name: 'AMM Factory', symbol: 'FACTORY' },
+};
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const network = url.searchParams.get('network') || process.env.NEXT_PUBLIC_NETWORK || 'mainnet';
   const limit = Math.min(Number(url.searchParams.get('limit') || 500), 1000);
 
-  // Devnet runs in-browser only — server can't reach it
+  // Devnet runs in-browser WASM — server can't reach it, return known tokens
   if (network === 'devnet' || network === 'regtest-local') {
-    return NextResponse.json({ names: {}, count: 0 });
+    return NextResponse.json({ names: DEVNET_TOKEN_NAMES, count: Object.keys(DEVNET_TOKEN_NAMES).length });
   }
 
   const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;

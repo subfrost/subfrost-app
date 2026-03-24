@@ -46,6 +46,11 @@ export async function GET(request: NextRequest) {
     }
     const period = periodParam as VolumePeriod;
 
+    // Devnet runs in-browser WASM — server can't reach Lua/RPC pipeline.
+    if (network === 'devnet') {
+      return NextResponse.json({ success: true, data: {} });
+    }
+
     const pools = getPools(network);
 
     // All pool volumes
