@@ -376,10 +376,24 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       debounceSave();
     },
     faucetFuel: async (address: string) => {
-      if (!harnessRef.current) throw new Error('Devnet not ready');
-      // FUEL mint — mine blocks for now (coinbase contains BTC)
-      harnessRef.current.mineBlocks(3);
-      console.log('[devnet] FUEL faucet: mined 3 blocks');
+      if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
+      // Mint FUEL via opcode 77 on FUEL token [4:7000], funded by boot wallet
+      const boot = getBootAddresses();
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      await providerRef.current.alkanesExecuteFull(
+        JSON.stringify([address]),
+        'B:10000:v0',
+        '[4,7000,77]:v0:v0',
+        '1', null,
+        JSON.stringify({
+          from_addresses: [boot.segwit, boot.taproot],
+          change_address: boot.segwit,
+          alkanes_change_address: address,
+        }),
+      );
+      harnessRef.current.mineBlocks(1);
+      console.log('[devnet] FUEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
