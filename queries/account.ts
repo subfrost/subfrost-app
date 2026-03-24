@@ -17,6 +17,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { getRpcUrl } from '@/utils/getConfig';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -361,13 +362,47 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     queryFn: async () => {
       const provider = deps.provider!;
       const alkaneMap = new Map<string, any>();
+      const isDevnet = deps.network === 'devnet';
 
       for (const address of addresses) {
         try {
-          // SDK data API returns enriched metadata: name, symbol, balance, price, image.
-          // Uses provider.dataApiGetAlkanesByAddress under the hood (Espo-backed).
-          const result = await (provider as any).dataApiGetAlkanesByAddress(address);
-          const items: any[] = result?.data || [];
+          let items: any[] = [];
+
+          if (isDevnet) {
+            // On devnet, query alkanes_protorunesbyaddress RPC directly.
+            // The Espo data API (dataApiGetAlkanesByAddress) returns a different
+            // format that the devnet server doesn't transform correctly.
+            const rpcUrl = getRpcUrl(deps.network);
+            const resp = await fetch(rpcUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'alkanes_protorunesbyaddress',
+                params: [{ address }],
+                id: 1,
+              }),
+            });
+            const data = await resp.json();
+            const outpoints: any[] = data?.result?.outpoints || [];
+            // Aggregate balances by alkaneId from outpoints
+            const balanceAgg = new Map<string, bigint>();
+            for (const op of outpoints) {
+              const balances = op?.balance_sheet?.cached?.balances || op?.balance_sheet?.balances || [];
+              for (const b of balances) {
+                const key = `${b.block}:${b.tx}`;
+                balanceAgg.set(key, (balanceAgg.get(key) || 0n) + BigInt(b.amount || 0));
+              }
+            }
+            items = Array.from(balanceAgg.entries()).map(([id, amt]) => {
+              const [block, tx] = id.split(':');
+              return { alkaneId: { block: Number(block), tx: Number(tx) }, balance: amt.toString() };
+            });
+          } else {
+            // SDK data API returns enriched metadata: name, symbol, balance, price, image.
+            const result = await (provider as any).dataApiGetAlkanesByAddress(address);
+            items = result?.data || [];
+          }
 
           console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes`);
 
@@ -401,8 +436,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
             }
           }
         } catch (error) {
-          console.error(`[alkaneBalanceQuery] SDK dataApiGetAlkanesByAddress failed for ${address}:`, error);
-          // Let React Query's retry handle transient failures
+          console.error(`[alkaneBalanceQuery] Failed for ${address}:`, error);
           throw error;
         }
       }
