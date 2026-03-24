@@ -6,14 +6,42 @@ import TokenSelect from "./TokenSelect";
 import NumberField from "./NumberField";
 import { useWallet } from "@/context/WalletContext";
 import { useBtcBalance } from "@/hooks/useBtcBalance";
+import { useVaultDeposit } from "@/hooks/useVaultDeposit";
 import { formatBtc, satsToBtc } from "@/utils/format";
+import { getConfig } from "@/utils/getConfig";
 
 export default function StakeCard() {
   const [amount, setAmount] = useState<string>("");
-  const { isConnected, onConnectModalOpenChange } = useWallet();
+  const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { data: sats = 0, isLoading } = useBtcBalance();
+  const deposit = useVaultDeposit();
   const btcAmountDisplay = isConnected ? formatBtc(satsToBtc(sats)) : "0.00000000";
   const isStakeDisabled = isConnected && (!amount || !isFinite(parseFloat(amount)) || parseFloat(amount) <= 0);
+
+  const handleStake = async () => {
+    if (!isConnected) { onConnectModalOpenChange(true); return; }
+    if (!amount || parseFloat(amount) <= 0) return;
+    const config = getConfig(network || 'mainnet');
+    const vaultId = (config as any).DXBTC_VAULT_ID;
+    if (!vaultId) { setStatus('error'); return; }
+    setStatus('pending');
+    try {
+      await deposit.mutateAsync({
+        vaultContractId: vaultId,
+        tokenId: '32:0', // frBTC as deposit asset for dxBTC vault
+        amount: Math.round(parseFloat(amount) * 1e8).toString(),
+        feeRate: 5,
+      });
+      setStatus('success');
+      setAmount('');
+      setTimeout(() => setStatus('idle'), 3000);
+    } catch (e: any) {
+      console.error('[StakeCard] Deposit failed:', e?.message);
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 3000);
+    }
+  };
 
   return (
     <section className="w-full max-w-[460px] rounded-[22px] border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-8 sm:p-10 shadow-[0_8px_36px_rgba(0,0,0,0.14)] backdrop-blur-md">
@@ -74,7 +102,7 @@ export default function StakeCard() {
             <div className="flex h-10 w-full items-center justify-center rounded-lg border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-primary)] px-3 text-sm font-semibold text-white shadow-sm">
               dxBTC
             </div>
-            <NumberField placeholder="0.00000000" disabled />
+            <NumberField placeholder="0.00000000" value={amount || undefined} disabled />
           </div>
         </div>
 
@@ -82,13 +110,11 @@ export default function StakeCard() {
         <div className="mt-8">
           <button
             type="button"
-            onClick={() => {
-              if (!isConnected) onConnectModalOpenChange(true);
-            }}
-            disabled={isStakeDisabled}
+            onClick={handleStake}
+            disabled={isStakeDisabled || status === 'pending'}
             className="w-full rounded-lg bg-[color:var(--sf-primary)] py-3 text-sm font-semibold tracking-wide text-white shadow-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none"
           >
-            {isConnected ? 'STAKE BTC' : 'CONNECT WALLET'}
+            {!isConnected ? 'CONNECT WALLET' : status === 'pending' ? 'STAKING...' : status === 'success' ? 'STAKED!' : status === 'error' ? 'FAILED — TRY AGAIN' : 'STAKE BTC'}
           </button>
         </div>
         {/* Post-CTA explanatory paragraph */}

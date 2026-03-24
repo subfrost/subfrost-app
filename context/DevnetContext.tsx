@@ -187,7 +187,12 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         quspoWasm,
         mnemonic,
         (message, percent) => {
-          setState(prev => ({ ...prev, bootProgress: message, bootPercent: percent }));
+          // Only advance — never go backwards (prevents jumpy progress bar)
+          setState(prev => ({
+            ...prev,
+            bootProgress: message,
+            bootPercent: Math.max(prev.bootPercent, percent),
+          }));
         },
         savedState,
       );

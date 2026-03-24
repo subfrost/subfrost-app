@@ -813,7 +813,7 @@ async function deployFullProtocol(
     'Fujin Master Proxy', onProgress, 92);
 
   // Step 14: Initialize MasterFujin with template references
-  onProgress('Initializing MasterFujin...', 94);
+  onProgress('Initializing MasterFujin...', 93);
   const masterInitProtostone = `[4,${S.FUJIN_MASTER_PROXY},0,` +
     `4,${S.FUJIN_FACTORY_LOGIC},` +
     `${S.FUJIN_UPGRADEABLE_TEMPLATE},` +
@@ -830,7 +830,7 @@ async function deployFullProtocol(
   // -----------------------------------------------------------------------
   // Phase 6: Verify key contracts
   // -----------------------------------------------------------------------
-  onProgress('Verifying deployments...', 96);
+  onProgress('Verifying deployments...', 94);
   console.log('[devnet-boot] Phase 6: Verifying...');
   const checks: [string, string, string][] = [
     ['AMM Factory', factoryId, '4'],
@@ -851,7 +851,7 @@ async function deployFullProtocol(
   }
 
   // ── Carbine CLOB ────────────────────────────────────────────────
-  onProgress('Deploying Carbine CLOB...', 78);
+  onProgress('Deploying Carbine CLOB...', 95);
   try {
     const [carbineControllerWasm, carbineTemplateWasm, universalRouterWasm] = await Promise.all([
       fetchWasmHex('carbine_controller'),
@@ -860,13 +860,13 @@ async function deployFullProtocol(
     ]);
     await deployWasm(provider, harness, segwit, taproot,
       carbineControllerWasm, S.CARBINE_CONTROLLER, [50],
-      'Carbine Controller', onProgress, 78);
+      'Carbine Controller', onProgress, 95);
     await deployWasm(provider, harness, segwit, taproot,
       carbineTemplateWasm, S.CARBINE_TEMPLATE, [50],
-      'Carbine Template', onProgress, 79);
+      'Carbine Template', onProgress, 96);
     await deployWasm(provider, harness, segwit, taproot,
       universalRouterWasm, S.UNIVERSAL_ROUTER, [50],
-      'Universal Router', onProgress, 80);
+      'Universal Router', onProgress, 97);
     console.log('[devnet-boot] Carbine CLOB deployed at 4:70000, 4:70001, 4:70002');
   } catch (e: any) {
     console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
