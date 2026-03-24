@@ -129,6 +129,72 @@ function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
   }
 }
 
+/**
+ * Convert a mainnet bech32/bech32m address to regtest format.
+ * Browser wallets always provide mainnet addresses (bc1p.../bc1q...).
+ * On devnet, the SDK uses regtest params and requires bcrt1 addresses.
+ * The witness program (pubkey hash) is identical — only the HRP changes.
+ *
+ * JOURNAL (2026-03-24): Added to fix "NetworkValidation(NetworkValidationError
+ * { required: Regtest })" when using browser wallets on devnet.
+ */
+function convertToRegtest(address: string): string {
+  if (!address.startsWith('bc1')) return address; // already regtest/testnet or unknown
+
+  // Bech32 character set for decoding
+  const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+  const charMap: Record<string, number> = {};
+  for (let i = 0; i < CHARSET.length; i++) charMap[CHARSET[i]] = i;
+
+  // Decode: split at last '1', convert data chars to 5-bit values
+  const lastOne = address.lastIndexOf('1');
+  const data = address.slice(lastOne + 1);
+  const values: number[] = [];
+  for (const c of data) {
+    const v = charMap[c.toLowerCase()];
+    if (v === undefined) return address; // invalid char, return as-is
+    values.push(v);
+  }
+
+  // values[0] = witness version, values[1..len-6] = witness program, values[len-6..] = checksum
+  const witnessVersion = values[0];
+  const programValues = values.slice(1, values.length - 6);
+
+  // Determine encoding: witness v0 uses bech32, v1+ uses bech32m
+  const BECH32_CONST = 1;
+  const BECH32M_CONST = 0x2bc830a3;
+  const encodingConst = witnessVersion === 0 ? BECH32_CONST : BECH32M_CONST;
+
+  // Compute new checksum for "bcrt" HRP
+  const hrp = 'bcrt';
+  const hrpExpand = [...hrp].map(c => c.charCodeAt(0) >> 5)
+    .concat([0])
+    .concat([...hrp].map(c => c.charCodeAt(0) & 31));
+
+  const polymod = (values: number[]): number => {
+    const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+    let chk = 1;
+    for (const v of values) {
+      const top = chk >> 25;
+      chk = ((chk & 0x1ffffff) << 5) ^ v;
+      for (let i = 0; i < 5; i++) {
+        if ((top >> i) & 1) chk ^= GEN[i];
+      }
+    }
+    return chk;
+  };
+
+  const dataNoChecksum = [witnessVersion, ...programValues];
+  const polyValues = [...hrpExpand, ...dataNoChecksum, 0, 0, 0, 0, 0, 0];
+  const mod = polymod(polyValues) ^ encodingConst;
+  const checksum: number[] = [];
+  for (let i = 0; i < 6; i++) checksum.push((mod >> (5 * (5 - i))) & 31);
+
+  // Encode result
+  const result = hrp + '1' + [...dataNoChecksum, ...checksum].map(v => CHARSET[v]).join('');
+  return result;
+}
+
 // Helper to create SATS Connect unsecured JWT token
 // Used by Xverse, Magic Eden, and Orange wallets which follow the SATS Connect protocol
 function createSatsConnectToken(payload: any): string {
@@ -518,18 +584,27 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         // If wallet provided explicit addresses, use them
         if (hasExplicitSegwit || hasExplicitTaproot) {
+          // On devnet, convert mainnet addresses (bc1p/bc1q) to regtest (bcrt1p/bcrt1q)
+          const devnetConvert = network === 'devnet' ? convertToRegtest : (a: string) => a;
+
+          const taprootAddress = hasExplicitTaproot ? devnetConvert(taprootAddr!.address) : '';
+          const segwitAddress = hasExplicitSegwit ? devnetConvert(segwitAddr!.address) : '';
+
           // Log addresses being used for balance queries
           console.log('[WalletContext] Using browser wallet addresses for balance queries:');
-          console.log('  Taproot:', taprootAddr?.address || '(none)');
-          console.log('  NativeSegwit:', segwitAddr?.address || '(none)');
+          console.log('  Taproot:', taprootAddress || '(none)');
+          console.log('  NativeSegwit:', segwitAddress || '(none)');
+          if (network === 'devnet') {
+            console.log('  (converted from mainnet to regtest format for devnet)');
+          }
           return {
             nativeSegwit: hasExplicitSegwit ? {
-              address: segwitAddr!.address,
+              address: segwitAddress,
               pubkey: segwitAddr!.publicKey || '',
               hdPath: ''
             } : { address: '', pubkey: '', hdPath: '' },
             taproot: hasExplicitTaproot ? {
-              address: taprootAddr!.address,
+              address: taprootAddress,
               pubkey: taprootAddr!.publicKey || '',
               pubKeyXOnly: taprootAddr!.publicKey ? taprootAddr!.publicKey.slice(2) : '',
               hdPath: ''
@@ -539,23 +614,30 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       }
 
       // Fall back to detecting address type from address format
+      // On devnet, convert mainnet addresses to regtest before detection
+      const resolvedAddress = network === 'devnet' ? convertToRegtest(primaryAddress) : primaryAddress;
+
       // bc1q... = native segwit (P2WPKH)
       // bc1p... = taproot (P2TR)
       // tb1q.../tb1p... = testnet equivalents
       // bcrt1q.../bcrt1p... = regtest equivalents
-      const isTaproot = primaryAddress.startsWith('bc1p') || primaryAddress.startsWith('tb1p') || primaryAddress.startsWith('bcrt1p');
-      const isNativeSegwit = primaryAddress.startsWith('bc1q') || primaryAddress.startsWith('tb1q') || primaryAddress.startsWith('bcrt1q');
+      const isTaproot = resolvedAddress.startsWith('bc1p') || resolvedAddress.startsWith('tb1p') || resolvedAddress.startsWith('bcrt1p');
+      const isNativeSegwit = resolvedAddress.startsWith('bc1q') || resolvedAddress.startsWith('tb1q') || resolvedAddress.startsWith('bcrt1q');
+
+      if (network === 'devnet' && resolvedAddress !== primaryAddress) {
+        console.log(`[WalletContext] Devnet: converted ${primaryAddress.slice(0, 12)}... → ${resolvedAddress.slice(0, 14)}...`);
+      }
 
       // Only assign the address to the correct type based on address format
       // This prevents the bug where a taproot address was being used for both
       return {
         nativeSegwit: isNativeSegwit ? {
-          address: primaryAddress,
+          address: resolvedAddress,
           pubkey: primaryPublicKey,
           hdPath: ''
         } : { address: '', pubkey: '', hdPath: '' },
         taproot: isTaproot ? {
-          address: primaryAddress,
+          address: resolvedAddress,
           pubkey: primaryPublicKey,
           pubKeyXOnly: primaryPublicKey ? primaryPublicKey.slice(2) : '',
           hdPath: ''
@@ -587,7 +669,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         hdPath: taprootInfo.path,
       },
     };
-  }, [wallet, browserWallet, walletType, browserWalletAddresses]);
+  }, [wallet, browserWallet, walletType, browserWalletAddresses, network]);
 
   // Build account structure
   const account: Account = useMemo(() => {

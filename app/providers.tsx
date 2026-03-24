@@ -34,9 +34,20 @@ function detectNetwork(): Network {
 
   const host = window.location.host;
 
-  // Auto-devnet on staging
-  if (DEVNET_AUTOSTART || host.includes('staging-app.subfrost.io')) {
+  // Auto-devnet: only when explicitly enabled via env var (NEXT_PUBLIC_DEVNET_AUTOSTART=1).
+  // Staging defaults to mainnet — the in-browser devnet requires ~1GB RAM and is fragile.
+  // Users can still select devnet manually from the network selector.
+  if (DEVNET_AUTOSTART) {
     return 'devnet';
+  }
+
+  // Staging mirrors production (mainnet) unless user overrides via localStorage
+  if (host.includes('staging-app.subfrost.io')) {
+    const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
+    if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
+      return stored as Network;
+    }
+    return 'mainnet';
   }
 
   // First check localStorage for user selection

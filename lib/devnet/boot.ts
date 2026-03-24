@@ -156,17 +156,12 @@ export async function bootDevnetWithWasms(
     await mineInitialBlocks(onProgress);
   }
 
-  // Now add quspo tertiary indexer AFTER initial mining is complete.
-  // This avoids OOM from processing 110 empty blocks.
-  if (quspoWasm) {
-    onProgress('Loading quspo indexer...', 52);
-    try {
-      _harness.server.addTertiary('quspo', quspoWasm);
-      console.log('[devnet-boot] quspo tertiary indexer added (post-mining)');
-    } catch (e: any) {
-      console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
-    }
-  }
+  // JOURNAL (2026-03-24): quspo tertiary indexer is deferred until AFTER all
+  // protocol deployments complete. Adding it here causes each deploy's
+  // mine+index cycle to run quspo too, which makes the metashrew indexer
+  // fall behind bitcoind by 2-3 blocks, triggering the WASM's internal
+  // "Indexer sync timed out" error (30s timeout). Deferring quspo to after
+  // deployFullProtocol avoids this.
 
   // Create provider
   const wasm = await import('@alkanes/ts-sdk/wasm');
@@ -203,6 +198,20 @@ export async function bootDevnetWithWasms(
   const contracts = await deployFullProtocol(
     _provider, _harness, segwitAddress, taprootAddress, onProgress,
   );
+
+  // Add quspo tertiary indexer AFTER all deployments complete.
+  // Adding it earlier causes indexer sync timeouts during contract deployment.
+  if (quspoWasm) {
+    onProgress('Loading quspo indexer...', 98);
+    try {
+      _harness.server.addTertiary('quspo', quspoWasm);
+      // Mine 1 block so quspo processes the current chain state
+      _harness.mineBlocks(1);
+      console.log('[devnet-boot] quspo tertiary indexer added (post-deployment)');
+    } catch (e: any) {
+      console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
+    }
+  }
 
   onProgress('Devnet ready!', 100);
 
@@ -323,7 +332,7 @@ async function deployWasm(
       }),
     );
     harness.mineBlocks(1);
-    await new Promise(r => setTimeout(r, 50)); // GC yield
+    await new Promise(r => setTimeout(r, 200)); // GC yield + let indexer catch up
     console.log(`[devnet-boot] ${label} deployed OK → [4:${slot}]`);
   } catch (e: any) {
     console.error(`[devnet-boot] ${label} deploy FAILED:`, e?.message || e);
@@ -358,7 +367,7 @@ async function executeCall(
       }),
     );
     harness.mineBlocks(1);
-    await new Promise(r => setTimeout(r, 50)); // GC yield
+    await new Promise(r => setTimeout(r, 200)); // GC yield + let indexer catch up
   } catch (e: any) {
     console.error(`[devnet-boot] executeCall failed (${protostone.slice(0, 60)}):`, e?.message || e);
   }
