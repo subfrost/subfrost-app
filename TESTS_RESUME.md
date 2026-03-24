@@ -83,3 +83,25 @@ internal `walletLoadMnemonic` uses the harness mnemonic — so it can't find UTX
 3. Have the user restore with `abandon abandon abandon...about` instead of creating new
 
 Option 1 is best UX — devnet should auto-connect a wallet with spendable funds.
+
+### KEY INSIGHT: Use Harness Mnemonic for Testing
+
+For e2e trade execution on devnet, the user should **restore** with the devnet 
+harness mnemonic instead of creating a new wallet:
+
+```
+abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+```
+
+This mnemonic's addresses already have coinbase UTXOs from the devnet boot 
+(101+ blocks mined during initialization). The SDK provider also has this 
+mnemonic loaded, so UTXO discovery works correctly.
+
+**Test sequence:**
+1. Boot devnet (wait for H:1400+)
+2. Dismiss modal
+3. Connect Wallet → Restore → Seed Phrase
+4. Enter: `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about`
+5. Password: `testtest1`
+6. The wallet should show non-zero BTC balance immediately (from boot coinbase)
+7. Proceed with swap tests
