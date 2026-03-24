@@ -305,7 +305,7 @@ describe('Quspo Tertiary Indexer Views', () => {
       expect(result).toBeDefined();
     });
 
-    it('debug: reads balance key via debug_read_raw_key', async () => {
+    it('debug: reads balance list length and latest entry', async () => {
       if (!poolId) return;
       const token_block = 2, token_tx = 0;
       const [pBlock, pTx] = poolId.split(':').map(Number);
@@ -331,13 +331,29 @@ describe('Quspo Tertiary Indexer Views', () => {
       ]);
       console.log('[debug] Balance key hex:', balanceKey.toString('hex'));
 
-      const result = await quspoView('debug_read_raw_key', toHexInput(balanceKey.toString('hex')));
-      console.log('[debug] debug_read_raw_key result:', JSON.stringify(result));
+      // Test reading known-good contract storage key for comparison
+      const factoryStorageKey = Buffer.concat([
+        Buffer.from('/alkanes/'),
+        (() => { const b = Buffer.alloc(32); b.writeBigUInt64LE(BigInt(factoryId.split(':')[0]), 0); b.writeBigUInt64LE(BigInt(factoryId.split(':')[1]), 16); return b; })(),
+        Buffer.from('/storage//all_pools_length'),
+      ]);
+      const fResult = await quspoView('debug_read_raw_key', toHexInput(factoryStorageKey.toString('hex')));
+      console.log('[debug] factory /all_pools_length via raw key:', JSON.stringify(fResult));
 
-      // Also try without /alkanes/ prefix (maybe the secondary storage strips it?)
-      const keyNoPrefix = Buffer.concat([tokenId, Buffer.from('/balances/'), poolIdBuf]);
-      const result2 = await quspoView('debug_read_raw_key', toHexInput(keyNoPrefix.toString('hex')));
-      console.log('[debug] without /alkanes/ prefix:', JSON.stringify(result2));
+      // Now try the balance key with /length suffix
+      const lengthKey = Buffer.concat([balanceKey, Buffer.from('/length')]);
+      const lResult = await quspoView('debug_read_raw_key', toHexInput(lengthKey.toString('hex')));
+      console.log('[debug] balance /length:', JSON.stringify(lResult));
+
+      // Try /0 entry
+      const entryKey = Buffer.concat([balanceKey, Buffer.from('/0')]);
+      const eResult = await quspoView('debug_read_raw_key', toHexInput(entryKey.toString('hex')));
+      console.log('[debug] balance /0:', JSON.stringify(eResult));
+
+      // Diagnostic: list all keys starting with /alkanes/ that contain /balances/
+      // Can't enumerate, but try the exact key the contract storage uses
+      console.log('[debug] balance key hex:', balanceKey.toString('hex'));
+      console.log('[debug] length key hex:', lengthKey.toString('hex'));
     });
   });
 
