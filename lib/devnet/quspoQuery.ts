@@ -144,3 +144,36 @@ export async function quspoGetFireStakingStats(
   const [block, tx] = stakingId.split(':');
   return quspoView<QuspoFireStats>('get_fire_staking_stats', { block, tx }, network);
 }
+
+// ── Pool reserve history (for candle charts) ──────────────────────
+
+export interface QuspoReservePoint {
+  height: number;
+  reserve0: string;
+  reserve1: string;
+  totalSupply: string;
+}
+
+export async function quspoGetPoolReserveHistory(
+  poolId: string,
+  factoryId: string,
+  startHeight: number,
+  endHeight: number,
+  interval: number,
+  network: string,
+): Promise<QuspoReservePoint[]> {
+  const [poolBlock, poolTx] = poolId.split(':');
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const result = await quspoView<{ points: QuspoReservePoint[] }>(
+    'get_candles',
+    {
+      pool: `${poolBlock}:${poolTx}`,
+      factory: `${factoryBlock}:${factoryTx}`,
+      startHeight,
+      endHeight,
+      interval,
+    },
+    network,
+  );
+  return result?.points || [];
+}

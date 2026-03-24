@@ -1,0 +1,203 @@
+/**
+ * useCancelOrderMutation.ts
+ *
+ * Cancels an open limit order on the Carbine order book.
+ *
+ * Contract: Carbine controller (e.g. 4:70000).
+ * Opcode 21 (CancelOrder): Simple cellpack with order_id. No tokens sent.
+ *
+ * ============================================================================
+ * CRITICAL: BROWSER WALLET OUTPUT ADDRESS BUG (2026-03-01)
+ * ============================================================================
+ * When using browser wallets, you MUST pass ACTUAL addresses to
+ * toAddresses/changeAddress/alkanesChangeAddress -- NOT symbolic addresses like
+ * 'p2tr:0' or 'p2wpkh:0'. Symbolic addresses resolve to SDK's DUMMY wallet!
+ * See useSwapMutation.ts header comment for full documentation.
+ * ============================================================================
+ */
+
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { getConfig } from '@/utils/getConfig';
+import { patchInputsOnly } from '@/lib/psbt-patching';
+import { extractPsbtBase64, getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
+
+export interface CancelOrderParams {
+  controllerId: string; // Carbine controller alkane ID e.g. "4:70000"
+  orderId: number;      // Order ID to cancel
+  feeRate: number;
+}
+
+export function useCancelOrderMutation() {
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const provider = useSandshrewProvider();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: CancelOrderParams) => {
+      console.log('[CancelOrder] ═══════════════════════════════════════════');
+      console.log('[CancelOrder] Starting CancelOrder transaction');
+      console.log('[CancelOrder] Params:', JSON.stringify(params, null, 2));
+
+      // Validation
+      if (!isConnected) throw new Error('Wallet not connected');
+      if (!provider) throw new Error('Provider not available');
+      if (!provider.walletIsLoaded()) {
+        throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
+      }
+
+      // Get addresses - support single-address wallets (UniSat, OKX)
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('No wallet address available. Please connect a wallet first.');
+      }
+      const primaryAddress = taprootAddress || segwitAddress;
+      console.log('[CancelOrder] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
+
+      // Parse controller ID
+      const [cBlock, cTx] = params.controllerId.split(':');
+
+      // Build protostone: CancelOrder opcode 21 with orderId
+      // No inputRequirements needed -- no tokens are sent for cancellation
+      const protostone = `[${cBlock},${cTx},21,${params.orderId}]:v0:v0`;
+
+      // No input requirements for cancel -- no tokens sent
+      const inputRequirements = '';
+
+      console.log('[CancelOrder] Protostone:', protostone);
+      console.log('[CancelOrder] Input requirements: (none)');
+
+      const btcNetwork = getBitcoinNetwork(network);
+      const isBrowserWallet = walletType === 'browser';
+
+      // Browser wallets need ACTUAL addresses, not symbolic
+      const fromAddresses = isBrowserWallet
+        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
+        : ['p2wpkh:0', 'p2tr:0'];
+
+      const toAddresses = isBrowserWallet
+        ? [primaryAddress!]
+        : ['p2tr:0'];
+
+      const changeAddr = isBrowserWallet
+        ? (segwitAddress || taprootAddress)
+        : 'p2wpkh:0';
+
+      const alkanesChangeAddr = isBrowserWallet
+        ? primaryAddress
+        : 'p2tr:0';
+
+      console.log('[CancelOrder] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[CancelOrder] To addresses:', toAddresses);
+
+      try {
+        const result = await provider.alkanesExecuteTyped({
+          inputRequirements,
+          protostones: protostone,
+          feeRate: params.feeRate,
+          autoConfirm: false,
+          fromAddresses,
+          toAddresses,
+          changeAddress: changeAddr,
+          alkanesChangeAddress: alkanesChangeAddr,
+          ordinalsStrategy: 'burn',
+        });
+
+        console.log('[CancelOrder] Execute result:', JSON.stringify(result, null, 2));
+
+        // Handle auto-completed transaction
+        if (result?.txid || result?.reveal_txid) {
+          const txId = result.txid || result.reveal_txid;
+          console.log('[CancelOrder] Transaction auto-completed, txid:', txId);
+          return { success: true as const, transactionId: txId };
+        }
+
+        // Handle readyToSign state (need to sign PSBT manually)
+        if (result?.readyToSign) {
+          console.log('[CancelOrder] Got readyToSign, signing PSBT...');
+          const readyToSign = result.readyToSign;
+
+          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
+
+          // Input patching for browser wallets
+          if (isBrowserWallet) {
+            const patchResult = patchInputsOnly({
+              psbtBase64,
+              network: btcNetwork,
+              taprootAddress: taprootAddress!,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = patchResult.psbtBase64;
+            if (patchResult.inputsPatched > 0) {
+              console.log(`[CancelOrder] Patched ${patchResult.inputsPatched} input(s) for browser wallet compatibility`);
+            }
+          }
+
+          // Sign PSBT -- browser wallets sign all input types in a single call
+          let signedPsbtBase64: string;
+          if (isBrowserWallet) {
+            console.log('[CancelOrder] Browser wallet: signing PSBT once (all input types)...');
+            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          } else {
+            console.log('[CancelOrder] Keystore: signing PSBT with SegWit, then Taproot...');
+            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
+            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          }
+
+          // Finalize and extract transaction
+          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+          signedPsbt.finalizeAllInputs();
+
+          const tx = signedPsbt.extractTransaction();
+          const txHex = tx.toHex();
+          const txid = tx.getId();
+
+          console.log('[CancelOrder] Transaction built:', txid);
+
+          // Broadcast
+          const broadcastTxid = await provider.broadcastTransaction(txHex);
+          console.log('[CancelOrder] Broadcast successful:', broadcastTxid);
+
+          return {
+            success: true as const,
+            transactionId: broadcastTxid || txid,
+          };
+        }
+
+        // Handle complete state
+        if (result?.complete) {
+          const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+          console.log('[CancelOrder] Complete, txid:', txId);
+          return { success: true as const, transactionId: txId };
+        }
+
+        // Fallback
+        const txId = result?.txid || result?.reveal_txid;
+        console.log('[CancelOrder] Transaction ID:', txId);
+        return { success: true as const, transactionId: txId };
+
+      } catch (error) {
+        console.error('[CancelOrder] Execution error:', error);
+        throw error;
+      }
+    },
+    onSuccess: (data) => {
+      console.log('[CancelOrder] Success! txid:', data.transactionId);
+
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['alkane-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['orderbook'] });
+      queryClient.invalidateQueries({ queryKey: ['user-orders'] });
+    },
+  });
+}
