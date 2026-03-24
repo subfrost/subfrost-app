@@ -10,7 +10,7 @@ import { useNotification } from "@/context/NotificationContext";
 import { useSwapQuotes } from "@/hooks/useSwapQuotes";
 import { useSwapMutation } from "@/hooks/useSwapMutation";
 import { useWallet } from "@/context/WalletContext";
-import { getConfig } from "@/utils/getConfig";
+import { getConfig, getRpcUrl } from "@/utils/getConfig";
 import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
 import { useGlobalStore } from "@/stores/global";
@@ -984,7 +984,7 @@ export default function SwapShell() {
 
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           try {
-            const txResp = await fetch(`/api/rpc/${encodeURIComponent(network)}`, {
+            const txResp = await fetch(getRpcUrl(network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1148,7 +1148,7 @@ export default function SwapShell() {
 
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           try {
-            const txResp = await fetch(`/api/rpc/${encodeURIComponent(network)}`, {
+            const txResp = await fetch(getRpcUrl(network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

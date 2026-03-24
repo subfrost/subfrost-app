@@ -33,6 +33,9 @@ export interface DeployedContracts {
   fujinFactoryId: string;
   fujinMasterId: string;
 
+  // Carbine CLOB
+  carbineControllerId?: string;
+
   // EVM Bridge Contracts
   evmUsdtAddress?: string;
   evmUsdcAddress?: string;

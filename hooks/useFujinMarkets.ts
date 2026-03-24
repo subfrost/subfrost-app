@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 
 export interface FujinMarket {
   marketId: string;
@@ -83,7 +83,7 @@ export function useFujinMarkets() {
       const target = { block, tx };
 
       // First try opcode 4 (GetNumMarkets) to check if factory is deployed and responsive
-      const numResp = await fetch(`/api/rpc/${network}`, {
+      const numResp = await fetch(getRpcUrl(network), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -109,7 +109,7 @@ export function useFujinMarkets() {
       // Fetch full market list via opcode 3 (GetAllMarkets)
       let markets: FujinMarket[] = [];
       try {
-        const listResp = await fetch(`/api/rpc/${network}`, {
+        const listResp = await fetch(getRpcUrl(network), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

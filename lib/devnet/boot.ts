@@ -260,6 +260,10 @@ const PROTOCOL_SLOTS = {
   FUJIN_LP_VAULT:            7110,
   FUJIN_MASTER_LOGIC:        7111,
   FUJIN_MASTER_PROXY:        7112,
+  // Carbine CLOB
+  CARBINE_CONTROLLER:        70000,
+  CARBINE_TEMPLATE:          70001,
+  UNIVERSAL_ROUTER:          70002,
 };
 
 // ===========================================================================
@@ -837,6 +841,28 @@ async function deployFullProtocol(
     }
   }
 
+  // ── Carbine CLOB ────────────────────────────────────────────────
+  onProgress('Deploying Carbine CLOB...', 78);
+  try {
+    const [carbineControllerWasm, carbineTemplateWasm, universalRouterWasm] = await Promise.all([
+      fetchWasmHex('carbine_controller'),
+      fetchWasmHex('carbine_template'),
+      fetchWasmHex('universal_router'),
+    ]);
+    await deployWasm(provider, harness, segwit, taproot,
+      carbineControllerWasm, S.CARBINE_CONTROLLER, [50],
+      'Carbine Controller', onProgress, 78);
+    await deployWasm(provider, harness, segwit, taproot,
+      carbineTemplateWasm, S.CARBINE_TEMPLATE, [50],
+      'Carbine Template', onProgress, 79);
+    await deployWasm(provider, harness, segwit, taproot,
+      universalRouterWasm, S.UNIVERSAL_ROUTER, [50],
+      'Universal Router', onProgress, 80);
+    console.log('[devnet-boot] Carbine CLOB deployed at 4:70000, 4:70001, 4:70002');
+  } catch (e: any) {
+    console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
+  }
+
   console.log('[devnet-boot] Full protocol deployment complete!');
 
   return {
@@ -858,6 +884,7 @@ async function deployFullProtocol(
     frusdAuthTokenId: '',
     fujinFactoryId: `4:${S.FUJIN_FACTORY_LOGIC}`,
     fujinMasterId: `4:${S.FUJIN_MASTER_PROXY}`,
+    carbineControllerId: `4:${S.CARBINE_CONTROLLER}`,
   };
 }
 

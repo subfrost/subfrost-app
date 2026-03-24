@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { queryKeys } from '@/queries/keys';
@@ -246,7 +246,7 @@ async function fetchPoolsFromPoolsDetailsRest(
   const [factoryBlock, factoryTx] = factoryId.split(':');
   // Route through app API proxy — never call external URLs directly from hooks
   const resp = await Promise.race([
-    fetch(`/api/rpc/${network}/get-all-pools-details`, {
+    fetch(`${getRpcUrl(network)}/get-all-pools-details`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ factoryId: { block: factoryBlock, tx: factoryTx } }),
@@ -332,7 +332,7 @@ async function fetchPoolsFromTokenPairsRest(
   tokenMetaMap?: Map<string, { name: string; symbol: string }>,
 ): Promise<PoolsListItem[]> {
   const [factoryBlock, factoryTx] = factoryId.split(':');
-  const proxyUrl = `/api/rpc/${encodeURIComponent(network)}/get-all-token-pairs`;
+  const proxyUrl = `${getRpcUrl(network)}/get-all-token-pairs`;
   const resp = await fetch(proxyUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

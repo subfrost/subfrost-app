@@ -17,7 +17,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 
 // ---- Bridge protocol constants ----
 
@@ -53,7 +53,7 @@ async function simulateCall(
   inputs: string[],
 ): Promise<{ data?: string | number[]; error?: string } | null> {
   try {
-    const resp = await fetch(`/api/rpc/${network}`, {
+    const resp = await fetch(getRpcUrl(network), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

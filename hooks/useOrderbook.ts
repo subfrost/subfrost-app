@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 
 export interface OrderLevel {
   price: string;
@@ -129,7 +129,7 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
           const [baseBlock, baseTx] = baseToken.includes(':') ? baseToken.split(':') : ['0', '0'];
           const [quoteBlock, quoteTx] = quoteToken.includes(':') ? quoteToken.split(':') : ['0', '0'];
 
-          const resp = await fetch(`/api/rpc/${network}`, {
+          const resp = await fetch(getRpcUrl(network), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

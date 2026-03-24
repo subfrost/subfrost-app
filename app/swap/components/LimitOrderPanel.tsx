@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModalStore } from '@/stores/modals';
@@ -38,11 +39,12 @@ export default function LimitOrderPanel({
   onMaxFrom,
   network,
 }: Props) {
-  const { isConnected } = useWallet();
+  const { isConnected, account } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
+  const queryClient = useQueryClient();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
@@ -95,29 +97,32 @@ export default function LimitOrderPanel({
 
       if (!sdkProvider) throw new Error('SDK provider not ready');
 
-      const account = (window as any).__walletAccount;
-      const fromAddrs = [];
-      const segwit = document.body.innerText.match(/bcrt1q[a-z0-9]+/)?.[0];
-      const taproot = document.body.innerText.match(/bcrt1p[a-z0-9]+/)?.[0];
-      if (segwit) fromAddrs.push(segwit);
-      if (taproot) fromAddrs.push(taproot);
+      const taproot = account?.taproot?.address || '';
+      const segwit = account?.nativeSegwit?.address || '';
+      if (!taproot && !segwit) throw new Error('No wallet address available');
+
+      const fromAddrs = [segwit, taproot].filter(Boolean);
 
       const result = await sdkProvider.alkanesExecuteWithStrings(
-        JSON.stringify([taproot || segwit || 'p2tr:0']),
+        JSON.stringify([taproot || segwit]),
         inputReqs,
         protostone,
         Math.round(fee.feeRate),
         null,
         JSON.stringify({
-          from: fromAddrs.length > 0 ? fromAddrs : ['p2wpkh:0', 'p2tr:0'],
-          change_address: segwit || 'p2wpkh:0',
-          alkanes_change_address: taproot || 'p2tr:0',
+          from_addresses: fromAddrs,
+          change_address: segwit || taproot,
+          alkanes_change_address: taproot || segwit,
+          mine_enabled: network === 'devnet',
         }),
       );
 
       if (result) {
         console.log('[LimitOrder] Placed:', result);
         showNotification(result.txid || result.reveal_txid || 'order', 'swap' as any);
+        // Invalidate orderbook + balance queries so UI updates
+        queryClient.invalidateQueries({ queryKey: ['orderbook'] }).catch(() => {});
+        queryClient.invalidateQueries({ queryKey: ['alkane-balances'] }).catch(() => {});
       }
     } catch (e: any) {
       console.error('[LimitOrder] Failed:', e);

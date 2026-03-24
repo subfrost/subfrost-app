@@ -30,6 +30,16 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
   devnet: '', // No external block explorer for devnet
 };
 
+/**
+ * Get the RPC URL for a network. For devnet, returns the localhost URL
+ * that the fetch interceptor routes to the in-process server.
+ * For other networks, returns the API proxy route.
+ */
+export function getRpcUrl(network: string): string {
+  if (network === 'devnet') return 'http://localhost:18888';
+  return `/api/rpc/${network}`;
+}
+
 export function getConfig(network: string) {
   const host = (typeof window !== 'undefined' && window.location?.host) || '';
 

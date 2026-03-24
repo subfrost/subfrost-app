@@ -16,7 +16,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 
 export interface NormalPoolState {
   poolId: string;
@@ -56,7 +56,7 @@ export function useNormalPool() {
 
       try {
         // Query total pool value (opcode 11)
-        const valueResp = await fetch(`/api/rpc/${network}`, {
+        const valueResp = await fetch(getRpcUrl(network), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -92,7 +92,7 @@ export function useNormalPool() {
         }
 
         // Query total supply (opcode 101)
-        const supplyResp = await fetch(`/api/rpc/${network}`, {
+        const supplyResp = await fetch(getRpcUrl(network), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -121,7 +121,7 @@ export function useNormalPool() {
         }
 
         // Query pool holdings (opcode 12)
-        const holdingsResp = await fetch(`/api/rpc/${network}`, {
+        const holdingsResp = await fetch(getRpcUrl(network), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

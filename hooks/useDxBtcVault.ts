@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { queryKeys } from '@/queries/keys';
 
 async function fetchDxBtcStats(network: string) {
@@ -9,7 +9,7 @@ async function fetchDxBtcStats(network: string) {
   if (!vaultId) return null;
 
   const [block, tx] = vaultId.split(':');
-  const rpcUrl = `/api/rpc/${network}`;
+  const rpcUrl = getRpcUrl(network);
 
   const resp = await fetch(rpcUrl, {
     method: 'POST',

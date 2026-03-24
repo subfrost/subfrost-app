@@ -50,13 +50,17 @@ async function fetchHeightViaSDK(provider: WebProvider): Promise<number> {
 }
 
 async function fetchHeightViaRPC(network: string): Promise<number> {
-  const networkSlug = network === 'mainnet' ? 'mainnet'
-    : network === 'testnet' ? 'testnet'
-    : network === 'signet' ? 'signet'
-    : network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' ? 'regtest'
-    : 'mainnet';
+  // For devnet, use localhost URL that fetch interceptor catches.
+  // For other networks, normalize to slug for API proxy.
+  const rpcUrl = network === 'devnet'
+    ? 'http://localhost:18888'
+    : `/api/rpc/${network === 'mainnet' ? 'mainnet'
+        : network === 'testnet' ? 'testnet'
+        : network === 'signet' ? 'signet'
+        : network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' ? 'regtest'
+        : 'mainnet'}`;
 
-  const res = await fetch(`/api/rpc/${networkSlug}`, {
+  const res = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

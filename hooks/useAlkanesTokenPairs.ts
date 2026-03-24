@@ -32,7 +32,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { AlkanesTokenPairsResult } from '@/lib/api-provider/apiclient/types';
 
 import { parseAlkaneId } from '@/lib/oyl/alkanes/transform';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useWallet } from '@/context/WalletContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
@@ -148,7 +148,7 @@ async function fetchPoolsFromSDK(
     try {
       const [block, tx] = factoryId.split(':');
       const response = await withTimeout(
-        fetch(`/api/rpc/${encodeURIComponent(network)}/get-all-token-pairs`, {
+        fetch(`${getRpcUrl(network)}/get-all-token-pairs`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ factoryId: { block, tx } }),
