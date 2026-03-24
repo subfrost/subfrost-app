@@ -67,3 +67,19 @@ cd ~/subfrost-app
 claude --dangerously-skip-permissions
 ```
 Then: "Resume from TESTS_RESUME.md — debug the BTC→frBTC wrap execution error and complete all trade type tests"
+
+### ROOT CAUSE FOUND (2026-03-24)
+
+**Wrap fails with "Insufficient funds: need 1001217 sats, have 0"**
+
+The SDK provider is loaded with the devnet harness mnemonic (`abandon...about`), 
+but the UI keystore wallet was created with a RANDOM new mnemonic. The faucet 
+mines coinbase to the UI wallet's `account.taproot.address`, but the SDK's 
+internal `walletLoadMnemonic` uses the harness mnemonic — so it can't find UTXOs.
+
+**Fix options:**
+1. On devnet, auto-use the harness mnemonic for the UI wallet (skip create, auto-restore)
+2. Make the SDK provider reload with the connected wallet's mnemonic
+3. Have the user restore with `abandon abandon abandon...about` instead of creating new
+
+Option 1 is best UX — devnet should auto-connect a wallet with spendable funds.
