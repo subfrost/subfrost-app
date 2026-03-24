@@ -141,10 +141,11 @@ async function fetchPoolsFromSDK(
     ]);
 
   let poolsArray: any[] = [];
+  const isDevnet = network === 'devnet';
 
   // Method 1: Direct REST call to get-all-token-pairs (bypasses broken SDK method)
-  // The SDK's dataApiGetAllTokenPairs returns empty object {} despite REST succeeding
-  if (poolsArray.length === 0) {
+  // Skip on devnet — REST endpoints map to wrong RPC methods in devnet server
+  if (poolsArray.length === 0 && !isDevnet) {
     try {
       const [block, tx] = factoryId.split(':');
       const response = await withTimeout(
@@ -170,7 +171,7 @@ async function fetchPoolsFromSDK(
   }
 
   // Method 2: SDK dataApiGetAllTokenPairs (broken - returns empty, kept as fallback)
-  if (poolsArray.length === 0) {
+  if (poolsArray.length === 0 && !isDevnet) {
     try {
       const result = await withTimeout(provider.dataApiGetAllTokenPairs(factoryId), 15000, 'dataApiGetAllTokenPairs');
       // DIAGNOSTIC: Log raw SDK return value to debug pool fetching issues
@@ -188,8 +189,8 @@ async function fetchPoolsFromSDK(
     }
   }
 
-  // Method 2: dataApiGetAllPoolsDetails — single REST call
-  if (poolsArray.length === 0) {
+  // Method 2b: dataApiGetAllPoolsDetails — single REST call
+  if (poolsArray.length === 0 && !isDevnet) {
     try {
       const result = await withTimeout(provider.dataApiGetAllPoolsDetails(factoryId), 15000, 'dataApiGetAllPoolsDetails');
       // DIAGNOSTIC: Log raw SDK return value
