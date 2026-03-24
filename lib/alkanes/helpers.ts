@@ -54,6 +54,55 @@ export function getSignerAddress(network: string): string {
 }
 
 /**
+ * Dynamically query the frBTC signer address from the contract via opcode 103.
+ * On devnet the signer key changes each boot, so the hardcoded address is stale.
+ * Falls back to the static SIGNER_ADDRESSES entry if the query fails.
+ */
+export async function getSignerAddressDynamic(network: string): Promise<string> {
+  try {
+    const { getRpcUrl } = await import('@/utils/getConfig');
+    const rpcUrl = getRpcUrl(network);
+    const resp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'alkanes_simulate',
+        params: [{
+          target: { block: '32', tx: '0' },
+          inputs: ['103'],
+          alkanes: [],
+          transaction: '0x',
+          block: '0x',
+          height: '999',
+          txindex: 0,
+          vout: 0,
+        }],
+        id: 1,
+      }),
+    });
+    const data = await resp.json();
+    const hex = data?.result?.execution?.data?.replace('0x', '') || '';
+    if (hex.length === 64) {
+      const bitcoin = await import('bitcoinjs-lib');
+      const ecc = await import('@bitcoinerlab/secp256k1');
+      bitcoin.initEccLib(ecc);
+      const xOnly = Buffer.from(hex, 'hex');
+      const btcNetwork = network.includes('regtest') || network === 'devnet'
+        ? bitcoin.networks.regtest
+        : network === 'testnet' || network === 'signet'
+          ? bitcoin.networks.testnet
+          : bitcoin.networks.bitcoin;
+      const payment = bitcoin.payments.p2tr({ internalPubkey: xOnly, network: btcNetwork });
+      if (payment.address) return payment.address;
+    }
+  } catch (e: any) {
+    console.warn('[getSignerAddressDynamic] Failed, using static fallback:', e?.message);
+  }
+  return getSignerAddress(network);
+}
+
+/**
  * Parse protostones string to find the maximum vN output index referenced.
  * Used to auto-generate the correct number of to_addresses.
  */

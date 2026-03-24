@@ -81,7 +81,7 @@ import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
-import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
 
 bitcoin.initEccLib(ecc);
@@ -134,8 +134,11 @@ export function useWrapMutation() {
       // Get bitcoin network for PSBT parsing
       const btcNetwork = getBitcoinNetwork(network);
 
-      // Get the signer address for this network
-      const signerAddress = getSignerAddress(network);
+      // Get the signer address — on devnet, query dynamically since each boot
+      // generates a new frBTC contract with a different signer key.
+      const signerAddress = (network === 'devnet')
+        ? await getSignerAddressDynamic(network)
+        : getSignerAddress(network);
 
       const isBrowserWallet = walletType === 'browser';
 

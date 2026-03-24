@@ -85,7 +85,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildWrapSwapProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -138,7 +138,9 @@ export function useWrapSwapMutation() {
       // For alkane operations, prefer taproot if available (alkanes use P2TR)
       const primaryAddress = taprootAddress || segwitAddress;
 
-      const signerAddress = getSignerAddress(network);
+      const signerAddress = (network === 'devnet')
+        ? await getSignerAddressDynamic(network)
+        : getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
       console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });
