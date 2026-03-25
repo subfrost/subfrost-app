@@ -496,11 +496,15 @@ export default function ActivityFeed({
               nameResolved(pairNames.leftId) &&
               nameResolved(pairNames.rightId);
 
+            const txExplorerHref = network === 'devnet' || network === 'regtest' || network === 'regtest-local'
+              ? '#' // No block explorer for devnet/regtest
+              : `https://espo.sh/tx/${(row as any).transactionId}`;
+
             return (
               <Link
                 key={(row as any).transactionId + "-" + idx}
-                href={`https://espo.sh/tx/${(row as any).transactionId}`}
-                target="_blank"
+                href={txExplorerHref}
+                target={txExplorerHref === '#' ? undefined : '_blank'}
                 className="block px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
               >
                 {/* Mobile layout (xs only) - 2 rows */}

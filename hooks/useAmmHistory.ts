@@ -61,16 +61,22 @@ function mapToObject(value: any): any {
  * Also fixes timestamps: quspo may return block height or epoch seconds
  * instead of milliseconds.
  */
+/** Log the first raw item once so we can see quspo's actual field names. */
+let _loggedRawSample = false;
+
 function normalizeActivityItem(item: any): any {
   if (!item || typeof item !== 'object') return item;
 
-  // If already has camelCase fields, return as-is (mainnet alkanode)
-  if (item.soldAmount !== undefined || item.transactionId !== undefined) {
-    return item;
+  // Log raw structure once for debugging
+  if (!_loggedRawSample) {
+    _loggedRawSample = true;
+    console.log('[normalizeActivityItem] RAW quspo item:', JSON.stringify(item).slice(0, 500));
+    console.log('[normalizeActivityItem] RAW keys:', Object.keys(item));
   }
 
-  // snake_case → camelCase field mapping
   const mapped: any = { ...item };
+
+  // snake_case → camelCase field mapping (always applied — handles mixed cases)
   const renames: Record<string, string> = {
     sold_amount: 'soldAmount',
     bought_amount: 'boughtAmount',
@@ -103,38 +109,95 @@ function normalizeActivityItem(item: any): any {
     }
   }
 
-  // Normalize address: quspo may use various field names
-  if (!mapped.address) {
-    mapped.address = mapped.sellerAddress || mapped.minterAddress
-      || mapped.burnerAddress || mapped.creatorAddress
-      || mapped.sender || mapped.user || '';
+  // ── Nested object normalization ──────────────────────────────────────
+  // Quspo may return alkane IDs as objects: { block: N, tx: N } or
+  // { alkaneId: { block, tx } } instead of flat blockId/txId fields.
+
+  // Sold token
+  if (!mapped.soldTokenBlockId && mapped.soldToken) {
+    const t = mapped.soldToken?.alkaneId || mapped.soldToken;
+    mapped.soldTokenBlockId = String(t.block ?? '');
+    mapped.soldTokenTxId = String(t.tx ?? '');
+  }
+  if (!mapped.soldTokenBlockId && mapped.sold_token) {
+    const t = mapped.sold_token?.alkane_id || mapped.sold_token;
+    mapped.soldTokenBlockId = String(t.block ?? '');
+    mapped.soldTokenTxId = String(t.tx ?? '');
   }
 
-  // Normalize timestamp: quspo may return height (small number), epoch
-  // seconds, or epoch milliseconds. The ActivityFeed expects something
-  // parseable by new Date().
+  // Bought token
+  if (!mapped.boughtTokenBlockId && mapped.boughtToken) {
+    const t = mapped.boughtToken?.alkaneId || mapped.boughtToken;
+    mapped.boughtTokenBlockId = String(t.block ?? '');
+    mapped.boughtTokenTxId = String(t.tx ?? '');
+  }
+  if (!mapped.boughtTokenBlockId && mapped.bought_token) {
+    const t = mapped.bought_token?.alkane_id || mapped.bought_token;
+    mapped.boughtTokenBlockId = String(t.block ?? '');
+    mapped.boughtTokenTxId = String(t.tx ?? '');
+  }
+
+  // Token0/Token1 (for mint/burn/creation)
+  if (!mapped.token0BlockId && mapped.token0) {
+    const t = mapped.token0?.alkaneId || mapped.token0;
+    mapped.token0BlockId = String(t.block ?? '');
+    mapped.token0TxId = String(t.tx ?? '');
+  }
+  if (!mapped.token1BlockId && mapped.token1) {
+    const t = mapped.token1?.alkaneId || mapped.token1;
+    mapped.token1BlockId = String(t.block ?? '');
+    mapped.token1TxId = String(t.tx ?? '');
+  }
+
+  // Pool ID
+  if (!mapped.poolBlockId && mapped.poolId) {
+    const p = mapped.poolId;
+    if (typeof p === 'object') {
+      mapped.poolBlockId = String(p.block ?? '');
+      mapped.poolTxId = String(p.tx ?? '');
+    }
+  }
+  if (!mapped.poolBlockId && mapped.pool_id) {
+    const p = mapped.pool_id;
+    if (typeof p === 'object') {
+      mapped.poolBlockId = String(p.block ?? '');
+      mapped.poolTxId = String(p.tx ?? '');
+    }
+  }
+
+  // ── Address normalization ────────────────────────────────────────────
+  if (!mapped.address) {
+    mapped.address = mapped.sellerAddress || mapped.seller_address
+      || mapped.minterAddress || mapped.minter_address
+      || mapped.burnerAddress || mapped.burner_address
+      || mapped.creatorAddress || mapped.creator_address
+      || mapped.sender || mapped.user || mapped.from || '';
+  }
+
+  // ── Timestamp normalization ──────────────────────────────────────────
   if (mapped.timestamp !== undefined) {
     const ts = Number(mapped.timestamp);
     if (!isNaN(ts)) {
       if (ts < 1e8) {
-        // Looks like a block height — convert to "now" since devnet has no
-        // real wall-clock time. Use current time minus a small offset based
-        // on how far back the height is from the latest.
+        // Block height — use current time
         mapped.timestamp = Date.now();
       } else if (ts < 1e10) {
         // Epoch seconds → milliseconds
         mapped.timestamp = ts * 1000;
       }
-      // else: already milliseconds, leave as-is
     }
   } else if (mapped.height !== undefined) {
-    // No timestamp at all — use current time
+    mapped.timestamp = Date.now();
+  } else {
+    // No timestamp at all
     mapped.timestamp = Date.now();
   }
 
-  // Ensure transactionId exists (for the Link key)
+  // ── Transaction ID normalization ─────────────────────────────────────
   if (!mapped.transactionId) {
-    mapped.transactionId = mapped.tx_id || mapped.txid || mapped.hash || `unknown-${Math.random().toString(36).slice(2)}`;
+    mapped.transactionId = mapped.transaction_id || mapped.tx_id
+      || mapped.txid || mapped.hash || mapped.tx_hash
+      || `unknown-${Math.random().toString(36).slice(2)}`;
   }
 
   return mapped;
