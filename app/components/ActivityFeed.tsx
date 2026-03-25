@@ -93,9 +93,12 @@ type AmmRow =
     };
 
 function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
-  const n = Number(raw ?? "0");
+  // If amount is missing or zero from trace data, show dash
+  if (!raw || raw === '0' || raw === '') return '—';
+
+  const n = Number(raw);
   const scaled = n / Math.pow(10, decimals);
-  if (!Number.isFinite(scaled)) return "0";
+  if (!Number.isFinite(scaled) || scaled === 0) return "—";
 
   // Use 4 decimals for BTC/frBTC, 2 for other tokens
   const fractionDigits =

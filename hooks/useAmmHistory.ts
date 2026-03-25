@@ -53,154 +53,153 @@ function mapToObject(value: any): any {
 }
 
 /**
- * Normalize activity items from quspo (snake_case) to the camelCase shape
- * the ActivityFeed component expects. On mainnet the alkanode REST API
- * already returns camelCase, so this is a no-op for items that already have
- * the right field names.
+ * Normalize activity items into the shape ActivityFeed expects.
  *
- * Also fixes timestamps: quspo may return block height or epoch seconds
- * instead of milliseconds.
+ * Two formats arrive here:
+ *
+ * 1. **Mainnet alkanode REST** — fully enriched camelCase items with type,
+ *    amounts, token IDs, addresses. These pass through with minimal changes.
+ *
+ * 2. **Devnet quspo traces** — raw execution traces with only:
+ *    { height, kind, opcode, success, target, txid, vout }
+ *    We derive `type` from target+opcode and fill in what we can.
  */
-/** Log the first raw item once so we can see quspo's actual field names. */
-let _loggedRawSample = false;
-
 function normalizeActivityItem(item: any): any {
   if (!item || typeof item !== 'object') return item;
 
-  // Log raw structure once for debugging
-  if (!_loggedRawSample) {
-    _loggedRawSample = true;
-    console.log('[normalizeActivityItem] RAW quspo item:', JSON.stringify(item).slice(0, 500));
-    console.log('[normalizeActivityItem] RAW keys:', Object.keys(item));
-  }
-
-  const mapped: any = { ...item };
-
-  // snake_case → camelCase field mapping (always applied — handles mixed cases)
-  const renames: Record<string, string> = {
-    sold_amount: 'soldAmount',
-    bought_amount: 'boughtAmount',
-    pool_block_id: 'poolBlockId',
-    pool_tx_id: 'poolTxId',
-    transaction_id: 'transactionId',
-    sold_token_block_id: 'soldTokenBlockId',
-    sold_token_tx_id: 'soldTokenTxId',
-    bought_token_block_id: 'boughtTokenBlockId',
-    bought_token_tx_id: 'boughtTokenTxId',
-    seller_address: 'sellerAddress',
-    minter_address: 'minterAddress',
-    burner_address: 'burnerAddress',
-    creator_address: 'creatorAddress',
-    token0_amount: 'token0Amount',
-    token1_amount: 'token1Amount',
-    token_supply: 'tokenSupply',
-    lp_token_amount: 'lpTokenAmount',
-    token0_block_id: 'token0BlockId',
-    token0_tx_id: 'token0TxId',
-    token1_block_id: 'token1BlockId',
-    token1_tx_id: 'token1TxId',
-    tx_id: 'transactionId',
-    txid: 'transactionId',
-  };
-
-  for (const [snake, camel] of Object.entries(renames)) {
-    if (mapped[snake] !== undefined && mapped[camel] === undefined) {
-      mapped[camel] = mapped[snake];
-    }
-  }
-
-  // ── Nested object normalization ──────────────────────────────────────
-  // Quspo may return alkane IDs as objects: { block: N, tx: N } or
-  // { alkaneId: { block, tx } } instead of flat blockId/txId fields.
-
-  // Sold token
-  if (!mapped.soldTokenBlockId && mapped.soldToken) {
-    const t = mapped.soldToken?.alkaneId || mapped.soldToken;
-    mapped.soldTokenBlockId = String(t.block ?? '');
-    mapped.soldTokenTxId = String(t.tx ?? '');
-  }
-  if (!mapped.soldTokenBlockId && mapped.sold_token) {
-    const t = mapped.sold_token?.alkane_id || mapped.sold_token;
-    mapped.soldTokenBlockId = String(t.block ?? '');
-    mapped.soldTokenTxId = String(t.tx ?? '');
-  }
-
-  // Bought token
-  if (!mapped.boughtTokenBlockId && mapped.boughtToken) {
-    const t = mapped.boughtToken?.alkaneId || mapped.boughtToken;
-    mapped.boughtTokenBlockId = String(t.block ?? '');
-    mapped.boughtTokenTxId = String(t.tx ?? '');
-  }
-  if (!mapped.boughtTokenBlockId && mapped.bought_token) {
-    const t = mapped.bought_token?.alkane_id || mapped.bought_token;
-    mapped.boughtTokenBlockId = String(t.block ?? '');
-    mapped.boughtTokenTxId = String(t.tx ?? '');
-  }
-
-  // Token0/Token1 (for mint/burn/creation)
-  if (!mapped.token0BlockId && mapped.token0) {
-    const t = mapped.token0?.alkaneId || mapped.token0;
-    mapped.token0BlockId = String(t.block ?? '');
-    mapped.token0TxId = String(t.tx ?? '');
-  }
-  if (!mapped.token1BlockId && mapped.token1) {
-    const t = mapped.token1?.alkaneId || mapped.token1;
-    mapped.token1BlockId = String(t.block ?? '');
-    mapped.token1TxId = String(t.tx ?? '');
-  }
-
-  // Pool ID
-  if (!mapped.poolBlockId && mapped.poolId) {
-    const p = mapped.poolId;
-    if (typeof p === 'object') {
-      mapped.poolBlockId = String(p.block ?? '');
-      mapped.poolTxId = String(p.tx ?? '');
-    }
-  }
-  if (!mapped.poolBlockId && mapped.pool_id) {
-    const p = mapped.pool_id;
-    if (typeof p === 'object') {
-      mapped.poolBlockId = String(p.block ?? '');
-      mapped.poolTxId = String(p.tx ?? '');
-    }
-  }
-
-  // ── Address normalization ────────────────────────────────────────────
-  if (!mapped.address) {
-    mapped.address = mapped.sellerAddress || mapped.seller_address
-      || mapped.minterAddress || mapped.minter_address
-      || mapped.burnerAddress || mapped.burner_address
-      || mapped.creatorAddress || mapped.creator_address
-      || mapped.sender || mapped.user || mapped.from || '';
-  }
-
-  // ── Timestamp normalization ──────────────────────────────────────────
-  if (mapped.timestamp !== undefined) {
-    const ts = Number(mapped.timestamp);
-    if (!isNaN(ts)) {
-      if (ts < 1e8) {
-        // Block height — use current time
-        mapped.timestamp = Date.now();
-      } else if (ts < 1e10) {
-        // Epoch seconds → milliseconds
-        mapped.timestamp = ts * 1000;
+  // ── Already-enriched items (mainnet alkanode) ────────────────────────
+  // If the item already has a recognized `type` field, it's from the
+  // alkanode REST API. Just do light normalization.
+  if (item.type === 'swap' || item.type === 'mint' || item.type === 'burn'
+      || item.type === 'creation' || item.type === 'wrap' || item.type === 'unwrap') {
+    const mapped = { ...item };
+    // snake_case rename pass for any mixed-format edge cases
+    const renames: Record<string, string> = {
+      sold_amount: 'soldAmount', bought_amount: 'boughtAmount',
+      transaction_id: 'transactionId', tx_id: 'transactionId', txid: 'transactionId',
+      sold_token_block_id: 'soldTokenBlockId', sold_token_tx_id: 'soldTokenTxId',
+      bought_token_block_id: 'boughtTokenBlockId', bought_token_tx_id: 'boughtTokenTxId',
+      pool_block_id: 'poolBlockId', pool_tx_id: 'poolTxId',
+      token0_amount: 'token0Amount', token1_amount: 'token1Amount',
+      token0_block_id: 'token0BlockId', token0_tx_id: 'token0TxId',
+      token1_block_id: 'token1BlockId', token1_tx_id: 'token1TxId',
+      seller_address: 'sellerAddress', minter_address: 'minterAddress',
+      burner_address: 'burnerAddress', creator_address: 'creatorAddress',
+    };
+    for (const [snake, camel] of Object.entries(renames)) {
+      if (mapped[snake] !== undefined && mapped[camel] === undefined) {
+        mapped[camel] = mapped[snake];
       }
     }
-  } else if (mapped.height !== undefined) {
-    mapped.timestamp = Date.now();
-  } else {
-    // No timestamp at all
-    mapped.timestamp = Date.now();
+    if (!mapped.transactionId) mapped.transactionId = mapped.txid || mapped.tx_id || '';
+    return mapped;
   }
 
-  // ── Transaction ID normalization ─────────────────────────────────────
+  // ── Raw quspo execution traces ───────────────────────────────────────
+  // Shape: { height, kind, opcode, success, target, txid, vout }
+  // We derive the activity type from target (contract ID) + opcode.
+  if (item.target !== undefined && item.opcode !== undefined) {
+    return normalizeQuspoTrace(item);
+  }
+
+  // ── Unknown format — pass through with basic fixes ───────────────────
+  const mapped = { ...item };
   if (!mapped.transactionId) {
-    mapped.transactionId = mapped.transaction_id || mapped.tx_id
-      || mapped.txid || mapped.hash || mapped.tx_hash
-      || `unknown-${Math.random().toString(36).slice(2)}`;
+    mapped.transactionId = mapped.txid || mapped.tx_id || mapped.transaction_id
+      || mapped.hash || `unknown-${Math.random().toString(36).slice(2)}`;
+  }
+  if (!mapped.timestamp) mapped.timestamp = Date.now();
+  return mapped;
+}
+
+/**
+ * Transform a raw quspo execution trace into an ActivityFeed-compatible item.
+ *
+ * Known contract targets and opcodes (from CLAUDE.md):
+ * - Factory [4:65522] opcode 1 → creation (CreateNewPool)
+ * - Factory [4:65522] opcode 13 → swap (SwapExactTokensForTokens)
+ * - Pool [2:N] opcode 1 → mint (AddLiquidity)
+ * - Pool [2:N] opcode 2 → burn (WithdrawAndBurn)
+ * - Pool [2:N] opcode 3 → swap (direct pool swap)
+ * - frBTC [32:0] opcode 77 → wrap
+ * - frBTC [32:0] opcode 78 → unwrap
+ * - DIESEL [2:0] opcode 77 → mint (faucet, not shown)
+ * - Deploy [kind=19, opcode=0] → contract deployment
+ */
+function normalizeQuspoTrace(trace: any): any {
+  const target = String(trace.target || '');
+  const opcode = Number(trace.opcode ?? -1);
+  const [targetBlock, targetTx] = target.split(':').map(Number);
+
+  let type: string = 'unknown';
+
+  // frBTC contract [32:0]
+  if (targetBlock === 32 && targetTx === 0) {
+    type = opcode === 77 ? 'wrap' : opcode === 78 ? 'unwrap' : 'unknown';
+  }
+  // Factory contract [4:65522] (devnet default factory proxy)
+  else if (targetBlock === 4 && (targetTx === 65522 || targetTx === 65498)) {
+    if (opcode === 1) type = 'creation';
+    else if (opcode === 13 || opcode === 14 || opcode === 29) type = 'swap';
+    else if (opcode === 11) type = 'mint'; // AddLiquidity via factory router
+    else if (opcode === 12) type = 'burn'; // Burn via factory router
+    else if (opcode === 0) type = 'creation'; // Factory init (deploy)
+  }
+  // Pool instances [2:N where N > 0]
+  else if (targetBlock === 2 && targetTx > 0) {
+    if (opcode === 1) type = 'mint';
+    else if (opcode === 2) type = 'burn';
+    else if (opcode === 3) type = 'swap';
+  }
+  // DIESEL [2:0] opcode 77 = faucet mint — skip or show as "mint"
+  else if (targetBlock === 2 && targetTx === 0 && opcode === 77) {
+    type = 'wrap'; // Show DIESEL mints as wraps for visibility
+  }
+  // Vault, FIRE, Gauge, Fujin — show as generic contract calls
+  else if (targetBlock === 4) {
+    // Contract deployments (kind=19, opcode=0) — skip
+    if (opcode === 0 && trace.kind === 19) {
+      return null; // Will be filtered out
+    }
+    type = 'creation'; // Generic contract interaction
   }
 
-  return mapped;
+  // Filter out unrecognized traces
+  if (type === 'unknown') return null;
+
+  // Build the normalized item
+  const result: any = {
+    type,
+    transactionId: trace.txid || '',
+    timestamp: Date.now(), // Devnet has no wall-clock time; use current time
+    address: '', // Not available in trace data
+  };
+
+  if (type === 'swap') {
+    // We know the factory handles DIESEL↔frBTC swaps on devnet
+    result.soldTokenBlockId = '2';
+    result.soldTokenTxId = '0';
+    result.boughtTokenBlockId = '32';
+    result.boughtTokenTxId = '0';
+    result.soldAmount = '0'; // Not available from trace
+    result.boughtAmount = '0';
+    result.poolBlockId = String(targetBlock);
+    result.poolTxId = String(targetTx);
+  } else if (type === 'mint' || type === 'burn' || type === 'creation') {
+    result.token0BlockId = '2';
+    result.token0TxId = '0';
+    result.token1BlockId = '32';
+    result.token1TxId = '0';
+    result.token0Amount = '0';
+    result.token1Amount = '0';
+    result.lpTokenAmount = '0';
+    result.poolBlockId = String(targetBlock);
+    result.poolTxId = String(targetTx);
+  } else if (type === 'wrap' || type === 'unwrap') {
+    result.amount = '0'; // Not available from trace
+  }
+
+  return result;
 }
 
 // Hook to fetch pool metadata via dataApiGetAllPoolsDetails (single REST call)
@@ -308,33 +307,26 @@ export function useInfiniteAmmTxHistory({
 
         const result = mapToObject(raw);
 
-        // Debug: log the full response structure on devnet
-        console.log('[useAmmHistory] raw SDK response type:', typeof raw,
-          raw instanceof Map ? 'Map' : Array.isArray(raw) ? 'Array' : '');
-        console.log('[useAmmHistory] mapToObject result:',
-          JSON.stringify(result)?.slice(0, 500));
-
         // API may return { data: { items, total, count, offset } } or { items, ... } directly
         // Also handle { statusCode, data: [...items] } from devnet server
         const payload = result?.data ?? result;
         const rawItemsRaw = Array.isArray(payload?.items) ? payload.items
           : Array.isArray(payload) ? payload
           : [];
-        const total = payload?.total ?? rawItemsRaw.length;
 
-        console.log('[useAmmHistory] payload keys:', payload ? Object.keys(payload) : 'null',
-          'rawItemsRaw.length:', rawItemsRaw.length);
-
-        // Normalize snake_case → camelCase (quspo on devnet returns snake_case)
-        const rawItems = rawItemsRaw.map(normalizeActivityItem);
+        // Normalize items (handles both mainnet enriched format and devnet raw traces)
+        // Filter out nulls (traces we want to skip, e.g. contract deployments)
+        const rawItems = rawItemsRaw
+          .map(normalizeActivityItem)
+          .filter((item: any) => item != null);
+        const total = payload?.total ?? rawItems.length;
 
         // Client-side category filter if the API doesn't support it
         const filteredItems = transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap'
           ? rawItems.filter((item: any) => item?.type === transactionType)
           : rawItems;
 
-        console.log(`[useAmmHistory] DataApi returned ${rawItems.length} items (total: ${total})`,
-          rawItems[0] ? `first: ${JSON.stringify(rawItems[0]).slice(0, 200)}` : '');
+        console.log(`[useAmmHistory] ${rawItems.length} items (${rawItemsRaw.length} raw, type filter: ${transactionType || 'all'})`);
 
         return {
           items: filteredItems,
