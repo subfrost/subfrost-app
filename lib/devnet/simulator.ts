@@ -2,13 +2,18 @@
  * DevnetSimulator — drives ~60 agents through random market actions on the
  * in-browser devnet. Each round, a subset of agents pick a weighted-random
  * action (swap, LP, vault, stake, wrap/unwrap) and execute it via the boot
- * wallet's provider. Blocks are mined between rounds so the app sees real
- * on-chain state changes.
+ * wallet's provider. A single block is mined at the end of each round so the
+ * app sees real on-chain state changes.
  *
  * All transactions go through the single boot wallet (same signing key).
  * The "agents" are logical personas that track their own state and make
  * independent decisions — the diversity comes from action types, amounts,
  * and directions, not from separate private keys.
+ *
+ * JOURNAL (2026-03-24): Performance fix — mine once per round (not per tx),
+ * cache balance checks, yield 300ms between agents to keep UI responsive.
+ * The original version mined after every executeCall including token top-ups,
+ * causing 10-15 WASM indexer runs per round and choking the main thread.
  */
 
 import type {
@@ -60,21 +65,18 @@ function weightedPick(actions: WeightedAction[]): SimActionType {
 
 // ── Random amount helpers ────────────────────────────────────────────────
 
-/** Random integer in [min, max] */
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-/** Random BigInt amount — returns a value between min and max (inclusive). */
 function randAmount(min: bigint, max: bigint): bigint {
   if (max <= min) return min;
   const range = max - min;
-  // Use float randomness (good enough for simulation)
   const r = BigInt(Math.floor(Math.random() * Number(range)));
   return min + r;
 }
 
-// ── RPC helper (reuse from boot.ts pattern) ──────────────────────────────
+// ── RPC helper ───────────────────────────────────────────────────────────
 
 let _rpcId = 100000;
 async function rpcCall(method: string, params: any[]): Promise<any> {
@@ -116,9 +118,12 @@ async function getAlkaneBalance(address: string, alkaneId: string): Promise<bigi
 
 // ── Action executors ─────────────────────────────────────────────────────
 
-async function executeCall(
+/**
+ * Execute a transaction WITHOUT mining. Mining is deferred to the end of the
+ * round to avoid running the WASM indexer after every single tx.
+ */
+async function executeTx(
   provider: any,
-  harness: any,
   segwit: string,
   taproot: string,
   protostone: string,
@@ -138,22 +143,32 @@ async function executeCall(
       mine_enabled: true,
     }),
   );
-  harness.mineBlocks(1);
-  await new Promise(r => setTimeout(r, 100));
+  // No mineBlocks here — caller batches mining at end of round
+}
+
+/** Yield to the browser event loop so React can paint / GC can run. */
+function breathe(ms = 300): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
 }
 
 // ── Core simulator class ─────────────────────────────────────────────────
 
 const NUM_AGENTS = 60;
 const MAX_LOG_ENTRIES = 200;
-const DEFAULT_INTERVAL_MS = 3000;
-const DEFAULT_AGENTS_PER_ROUND = 5;
+const DEFAULT_INTERVAL_MS = 4000;
+const DEFAULT_AGENTS_PER_ROUND = 3;
 
 export class DevnetSimulator implements SimulationControls {
   private state: SimulationState;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private contracts: DeployedContracts;
   private listeners: Set<() => void> = new Set();
+  /** Cached balance — refreshed once per round, not per agent. */
+  private _cachedDieselBal: bigint = 0n;
+  private _cachedFrbtcBal: bigint = 0n;
+  private _balanceCacheRound = -1;
+  /** Pending tx count this round (for batch mining). */
+  private _pendingTxs = 0;
 
   constructor(contracts: DeployedContracts) {
     this.contracts = contracts;
@@ -167,7 +182,7 @@ export class DevnetSimulator implements SimulationControls {
       agents: Array.from({ length: NUM_AGENTS }, (_, i) => ({
         id: i,
         name: agentName(i),
-        personality: i % 4, // 0=trader, 1=LP, 2=staker, 3=mixed
+        personality: i % 4,
         actionCount: 0,
         lastAction: 'idle' as SimActionType,
         hasLp: false,
@@ -179,7 +194,6 @@ export class DevnetSimulator implements SimulationControls {
     };
   }
 
-  /** Subscribe to state changes. Returns unsubscribe function. */
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -228,12 +242,12 @@ export class DevnetSimulator implements SimulationControls {
   }
 
   setSpeed(intervalMs: number) {
-    this.state = { ...this.state, intervalMs: Math.max(500, intervalMs) };
+    this.state = { ...this.state, intervalMs: Math.max(1000, intervalMs) };
     this.notify();
   }
 
   setAgentsPerRound(n: number) {
-    this.state = { ...this.state, agentsPerRound: Math.max(1, Math.min(20, n)) };
+    this.state = { ...this.state, agentsPerRound: Math.max(1, Math.min(10, n)) };
     this.notify();
   }
 
@@ -262,6 +276,11 @@ export class DevnetSimulator implements SimulationControls {
 
     const boot = getBootAddresses();
     const round = this.state.round + 1;
+    this._pendingTxs = 0;
+
+    // Refresh balance cache ONCE per round
+    await this.refreshBalanceCache(boot.taproot, round);
+    await breathe(100);
 
     // Pick N random agents for this round
     const shuffled = [...this.state.agents].sort(() => Math.random() - 0.5);
@@ -299,12 +318,18 @@ export class DevnetSimulator implements SimulationControls {
         success,
         timestamp: Date.now(),
       });
+
+      // Yield between agents so the browser stays responsive
+      await breathe(300);
     }
 
-    // Mine a block to confirm the round's transactions
-    try {
-      harness.mineBlocks(1);
-    } catch { /* ignore */ }
+    // Mine ONE block to confirm all this round's transactions
+    if (this._pendingTxs > 0) {
+      try {
+        harness.mineBlocks(1);
+        await breathe(200); // let indexer + GC settle
+      } catch { /* ignore */ }
+    }
 
     // Update state
     const combinedLog = [...newLog, ...this.state.log].slice(0, MAX_LOG_ENTRIES);
@@ -312,7 +337,7 @@ export class DevnetSimulator implements SimulationControls {
       ...this.state,
       round,
       log: combinedLog,
-      agents: [...this.state.agents], // trigger re-render
+      agents: [...this.state.agents],
     };
     this.notify();
 
@@ -320,37 +345,45 @@ export class DevnetSimulator implements SimulationControls {
     this.scheduleRound();
   }
 
+  // ── Balance cache ─────────────────────────────────────────────────────
+
+  private async refreshBalanceCache(taproot: string, round: number) {
+    if (this._balanceCacheRound === round) return;
+    try {
+      this._cachedDieselBal = await getAlkaneBalance(taproot, '2:0');
+      this._cachedFrbtcBal = await getAlkaneBalance(taproot, '32:0');
+    } catch {
+      // stale cache is fine
+    }
+    this._balanceCacheRound = round;
+  }
+
   // ── Action selection ──────────────────────────────────────────────────
 
   private pickAction(agent: SimAgent): SimActionType {
     const p = agent.personality;
 
-    // Base weights — everyone can do these
     const actions: WeightedAction[] = [
       { action: 'swap_diesel_to_frbtc', weight: p === 0 ? 30 : 15 },
       { action: 'swap_frbtc_to_diesel', weight: p === 0 ? 30 : 15 },
       { action: 'wrap_btc',             weight: 10 },
       { action: 'unwrap_frbtc',         weight: 5 },
-      { action: 'idle',                 weight: 10 },
+      { action: 'idle',                 weight: 15 },
     ];
 
-    // LP actions
     if (!agent.hasLp) {
       actions.push({ action: 'add_liquidity', weight: p === 1 ? 25 : 10 });
     } else {
       actions.push({ action: 'remove_liquidity', weight: p === 1 ? 15 : 8 });
-      // Keep some chance to add more
       actions.push({ action: 'add_liquidity', weight: 5 });
     }
 
-    // Vault actions
     if (!agent.hasVaultDeposit) {
       actions.push({ action: 'vault_deposit', weight: p === 2 ? 20 : 8 });
     } else {
       actions.push({ action: 'vault_withdraw', weight: p === 2 ? 12 : 6 });
     }
 
-    // FIRE staking (requires LP tokens logically)
     if (agent.hasLp && !agent.hasFireStake) {
       actions.push({ action: 'fire_stake', weight: p === 2 ? 20 : 8 });
     } else if (agent.hasFireStake) {
@@ -358,7 +391,6 @@ export class DevnetSimulator implements SimulationControls {
       actions.push({ action: 'fire_claim', weight: 10 });
     }
 
-    // Gauge staking
     if (agent.hasLp && !agent.hasGaugeStake) {
       actions.push({ action: 'gauge_stake', weight: p === 2 ? 15 : 5 });
     } else if (agent.hasGaugeStake) {
@@ -384,14 +416,11 @@ export class DevnetSimulator implements SimulationControls {
 
     switch (action) {
       case 'swap_diesel_to_frbtc': {
-        // Random DIESEL amount: 1M - 50M units
         const amount = randAmount(1_000_000n, 50_000_000n);
-        // Ensure we have DIESEL
         await this.ensureDiesel(provider, harness, segwit, taproot);
-        // Factory opcode 13: SwapExactTokensForTokens
-        // path = [DIESEL(2:0), frBTC(32:0)], amount_in, amount_out_min=1, deadline=999999
         const protostone = `[${fBlock},${fTx},13,2,2,0,32,0,${amount},1,999999]:v0:v0`;
-        await executeCall(provider, harness, segwit, taproot, protostone, `2:0:${amount}`);
+        await executeTx(provider, segwit, taproot, protostone, `2:0:${amount}`);
+        this._pendingTxs++;
         return `Swapped ${amount} DIESEL → frBTC`;
       }
 
@@ -399,7 +428,8 @@ export class DevnetSimulator implements SimulationControls {
         const amount = randAmount(100_000n, 5_000_000n);
         await this.ensureFrbtc(provider, harness, segwit, taproot);
         const protostone = `[${fBlock},${fTx},13,2,32,0,2,0,${amount},1,999999]:v0:v0`;
-        await executeCall(provider, harness, segwit, taproot, protostone, `32:0:${amount}`);
+        await executeTx(provider, segwit, taproot, protostone, `32:0:${amount}`);
+        this._pendingTxs++;
         return `Swapped ${amount} frBTC → DIESEL`;
       }
 
@@ -410,17 +440,16 @@ export class DevnetSimulator implements SimulationControls {
         await this.ensureFrbtc(provider, harness, segwit, taproot);
         if (!poolId) throw new Error('No pool');
         const [pBlock, pTx] = poolId.split(':');
-        // Pool opcode 1: AddLiquidity (direct pool call, 2 token inputs)
         const protostone = `[${pBlock},${pTx},1]:v0:v0`;
-        await executeCall(provider, harness, segwit, taproot,
+        await executeTx(provider, segwit, taproot,
           protostone, `2:0:${dieselAmt},32:0:${frbtcAmt}`);
+        this._pendingTxs++;
         agent.hasLp = true;
         return `Added LP: ${dieselAmt} DIESEL + ${frbtcAmt} frBTC`;
       }
 
       case 'remove_liquidity': {
         if (!poolId) throw new Error('No pool');
-        // Check LP balance
         const lpBal = await getAlkaneBalance(taproot, poolId);
         if (lpBal <= 0n) {
           agent.hasLp = false;
@@ -428,10 +457,10 @@ export class DevnetSimulator implements SimulationControls {
         }
         const burnAmount = randAmount(1n, lpBal / 2n > 0n ? lpBal / 2n : 1n);
         const [pBlock, pTx] = poolId.split(':');
-        // Pool opcode 2: WithdrawAndBurn (1 LP token input)
         const protostone = `[${pBlock},${pTx},2]:v0:v0`;
-        await executeCall(provider, harness, segwit, taproot,
+        await executeTx(provider, segwit, taproot,
           protostone, `${poolId}:${burnAmount}`);
+        this._pendingTxs++;
         if (burnAmount >= lpBal) agent.hasLp = false;
         return `Removed LP: burned ${burnAmount} LP tokens`;
       }
@@ -442,10 +471,10 @@ export class DevnetSimulator implements SimulationControls {
         const amount = randAmount(100_000n, 5_000_000n);
         await this.ensureFrbtc(provider, harness, segwit, taproot);
         const [vBlock, vTx] = vaultId.split(':');
-        // Vault opcode 1: Purchase (deposit frBTC)
         const protostone = `[${vBlock},${vTx},1,${amount}]:v1:v1`;
-        await executeCall(provider, harness, segwit, taproot,
+        await executeTx(provider, segwit, taproot,
           protostone, `32:0:${amount}`);
+        this._pendingTxs++;
         agent.hasVaultDeposit = true;
         return `Vault deposit: ${amount} frBTC`;
       }
@@ -453,7 +482,6 @@ export class DevnetSimulator implements SimulationControls {
       case 'vault_withdraw': {
         const vaultId = this.contracts.dxBtcVaultId;
         if (!vaultId) throw new Error('No vault');
-        // Check vault unit balance (vault tokens are at the vault's alkane ID)
         const unitBal = await getAlkaneBalance(taproot, vaultId);
         if (unitBal <= 0n) {
           agent.hasVaultDeposit = false;
@@ -461,30 +489,30 @@ export class DevnetSimulator implements SimulationControls {
         }
         const units = randAmount(1n, unitBal / 2n > 0n ? unitBal / 2n : 1n);
         const [vBlock, vTx] = vaultId.split(':');
-        // Vault opcode 2: Redeem
         const protostone = `[${vBlock},${vTx},2,${units},1]:v1:v1`;
-        await executeCall(provider, harness, segwit, taproot,
+        await executeTx(provider, segwit, taproot,
           protostone, `${vaultId}:${units}`);
+        this._pendingTxs++;
         if (units >= unitBal) agent.hasVaultDeposit = false;
         return `Vault withdraw: ${units} units`;
       }
 
       case 'wrap_btc': {
-        // Wrap BTC → frBTC
         const signerAddr = await this.getFrbtcSigner();
-        await executeCall(provider, harness, segwit, taproot,
+        await executeTx(provider, segwit, taproot,
           '[32,0,77]:v1:v1', 'B:100000:v0',
           [signerAddr, taproot]);
+        this._pendingTxs++;
         return 'Wrapped 100k sats → frBTC';
       }
 
       case 'unwrap_frbtc': {
-        const frbtcBal = await getAlkaneBalance(taproot, '32:0');
-        if (frbtcBal <= 10_000n) return 'Insufficient frBTC to unwrap (skip)';
-        const amount = randAmount(10_000n, frbtcBal / 4n > 10_000n ? frbtcBal / 4n : 10_000n);
-        // frBTC opcode 77: unwrap sends BTC back
-        await executeCall(provider, harness, segwit, taproot,
+        if (this._cachedFrbtcBal <= 10_000n) return 'Insufficient frBTC to unwrap (skip)';
+        const amount = randAmount(10_000n,
+          this._cachedFrbtcBal / 4n > 10_000n ? this._cachedFrbtcBal / 4n : 10_000n);
+        await executeTx(provider, segwit, taproot,
           '[32,0,77]:v0:v0', `32:0:${amount}`);
+        this._pendingTxs++;
         return `Unwrapped ${amount} frBTC → BTC`;
       }
 
@@ -496,13 +524,13 @@ export class DevnetSimulator implements SimulationControls {
           return 'No LP to stake in FIRE (skip)';
         }
         const stakeAmt = randAmount(1n, lpBal / 3n > 0n ? lpBal / 3n : 1n);
-        const lockTier = randInt(0, 4); // random lock duration
+        const lockTier = randInt(0, 4);
         const stakingId = this.contracts.fireStakingId;
         const [sBlock, sTx] = stakingId.split(':');
-        // FIRE Staking opcode 1: Stake(lock_duration)
         const protostone = `[${sBlock},${sTx},1,${lockTier}]:v0:v0`;
-        await executeCall(provider, harness, segwit, taproot,
+        await executeTx(provider, segwit, taproot,
           protostone, `${poolId}:${stakeAmt}`);
+        this._pendingTxs++;
         agent.hasFireStake = true;
         return `FIRE staked ${stakeAmt} LP (tier ${lockTier})`;
       }
@@ -510,11 +538,10 @@ export class DevnetSimulator implements SimulationControls {
       case 'fire_unstake': {
         const stakingId = this.contracts.fireStakingId;
         const [sBlock, sTx] = stakingId.split(':');
-        // FIRE Staking opcode 2: Unstake(position_id=0)
-        // Use position 0 — simplification for simulation
         const protostone = `[${sBlock},${sTx},2,0]:v0:v0`;
         try {
-          await executeCall(provider, harness, segwit, taproot, protostone, 'B:10000:v0');
+          await executeTx(provider, segwit, taproot, protostone, 'B:10000:v0');
+          this._pendingTxs++;
           agent.hasFireStake = false;
           return 'FIRE unstaked position 0';
         } catch {
@@ -525,9 +552,9 @@ export class DevnetSimulator implements SimulationControls {
       case 'fire_claim': {
         const stakingId = this.contracts.fireStakingId;
         const [sBlock, sTx] = stakingId.split(':');
-        // FIRE Staking opcode 3: ClaimRewards(position_id=0)
         const protostone = `[${sBlock},${sTx},3,0]:v0:v0`;
-        await executeCall(provider, harness, segwit, taproot, protostone, 'B:10000:v0');
+        await executeTx(provider, segwit, taproot, protostone, 'B:10000:v0');
+        this._pendingTxs++;
         return 'FIRE claimed rewards';
       }
 
@@ -538,10 +565,10 @@ export class DevnetSimulator implements SimulationControls {
         const stakeAmt = randAmount(1n, lpBal / 4n > 0n ? lpBal / 4n : 1n);
         const gaugeId = this.contracts.vxFuelGaugeId;
         const [gBlock, gTx] = gaugeId.split(':');
-        // Gauge opcode 1: Stake
         const protostone = `[${gBlock},${gTx},1]:v0:v0`;
-        await executeCall(provider, harness, segwit, taproot,
+        await executeTx(provider, segwit, taproot,
           protostone, `${poolId}:${stakeAmt}`);
+        this._pendingTxs++;
         agent.hasGaugeStake = true;
         return `Gauge staked ${stakeAmt} LP`;
       }
@@ -549,10 +576,10 @@ export class DevnetSimulator implements SimulationControls {
       case 'gauge_unstake': {
         const gaugeId = this.contracts.vxFuelGaugeId;
         const [gBlock, gTx] = gaugeId.split(':');
-        // Gauge opcode 2: Unstake
         const protostone = `[${gBlock},${gTx},2,0]:v0:v0`;
         try {
-          await executeCall(provider, harness, segwit, taproot, protostone, 'B:10000:v0');
+          await executeTx(provider, segwit, taproot, protostone, 'B:10000:v0');
+          this._pendingTxs++;
           agent.hasGaugeStake = false;
           return 'Gauge unstaked';
         } catch {
@@ -568,29 +595,32 @@ export class DevnetSimulator implements SimulationControls {
 
   // ── Token top-up helpers ──────────────────────────────────────────────
 
-  /** Ensure boot wallet has some DIESEL. Mints if balance is low. */
+  /**
+   * Ensure boot wallet has DIESEL. Uses cached balance to avoid redundant
+   * RPC calls. Mints into the mempool (no mining — batched at round end).
+   */
   private async ensureDiesel(
     provider: any, harness: any, segwit: string, taproot: string,
   ): Promise<void> {
-    const bal = await getAlkaneBalance(taproot, '2:0');
-    if (bal < 100_000_000n) {
-      // Mint DIESEL via opcode 77
-      await executeCall(provider, harness, segwit, taproot,
-        '[2,0,77]:v0:v0', 'B:10000:v0');
-    }
+    if (this._cachedDieselBal >= 100_000_000n) return;
+    // Need to mine so the mint confirms and the balance is spendable
+    await executeTx(provider, segwit, taproot, '[2,0,77]:v0:v0', 'B:10000:v0');
+    harness.mineBlocks(1);
+    await breathe(100);
+    this._cachedDieselBal = 500_000_000n; // approximate — avoids re-check
   }
 
-  /** Ensure boot wallet has some frBTC. Wraps if balance is low. */
   private async ensureFrbtc(
     provider: any, harness: any, segwit: string, taproot: string,
   ): Promise<void> {
-    const bal = await getAlkaneBalance(taproot, '32:0');
-    if (bal < 10_000_000n) {
-      const signerAddr = await this.getFrbtcSigner();
-      await executeCall(provider, harness, segwit, taproot,
-        '[32,0,77]:v1:v1', 'B:500000:v0',
-        [signerAddr, taproot]);
-    }
+    if (this._cachedFrbtcBal >= 10_000_000n) return;
+    const signerAddr = await this.getFrbtcSigner();
+    await executeTx(provider, segwit, taproot,
+      '[32,0,77]:v1:v1', 'B:500000:v0',
+      [signerAddr, taproot]);
+    harness.mineBlocks(1);
+    await breathe(100);
+    this._cachedFrbtcBal = 50_000_000n; // approximate
   }
 
   private _frbtcSigner: string | null = null;
@@ -615,7 +645,6 @@ export class DevnetSimulator implements SimulationControls {
         }
       }
     } catch { /* fallback */ }
-    // Fallback to boot taproot (won't actually mint but won't crash)
     return getBootAddresses().taproot;
   }
 }

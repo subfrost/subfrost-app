@@ -48,10 +48,10 @@ const ACTION_SHORT: Record<string, string> = {
 // ── Speed presets ────────────────────────────────────────────────────────
 
 const SPEED_PRESETS = [
-  { label: '0.5x', ms: 6000 },
-  { label: '1x',   ms: 3000 },
-  { label: '2x',   ms: 1500 },
-  { label: '5x',   ms: 600 },
+  { label: '0.5x', ms: 8000 },
+  { label: '1x',   ms: 4000 },
+  { label: '2x',   ms: 2000 },
+  { label: '3x',   ms: 1500 },
 ];
 
 export function DevnetControlPanel() {
@@ -333,7 +333,7 @@ export function DevnetControlPanel() {
                   {/* Agents per round */}
                   <div className="flex items-center gap-1">
                     <span className="text-[10px] text-zinc-600 w-10">Batch:</span>
-                    {[1, 3, 5, 10, 20].map(n => (
+                    {[1, 2, 3, 5, 10].map(n => (
                       <button
                         key={n}
                         onClick={() => simulator.setAgentsPerRound(n)}
