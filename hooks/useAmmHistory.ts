@@ -52,6 +52,94 @@ function mapToObject(value: any): any {
   return value;
 }
 
+/**
+ * Normalize activity items from quspo (snake_case) to the camelCase shape
+ * the ActivityFeed component expects. On mainnet the alkanode REST API
+ * already returns camelCase, so this is a no-op for items that already have
+ * the right field names.
+ *
+ * Also fixes timestamps: quspo may return block height or epoch seconds
+ * instead of milliseconds.
+ */
+function normalizeActivityItem(item: any): any {
+  if (!item || typeof item !== 'object') return item;
+
+  // If already has camelCase fields, return as-is (mainnet alkanode)
+  if (item.soldAmount !== undefined || item.transactionId !== undefined) {
+    return item;
+  }
+
+  // snake_case → camelCase field mapping
+  const mapped: any = { ...item };
+  const renames: Record<string, string> = {
+    sold_amount: 'soldAmount',
+    bought_amount: 'boughtAmount',
+    pool_block_id: 'poolBlockId',
+    pool_tx_id: 'poolTxId',
+    transaction_id: 'transactionId',
+    sold_token_block_id: 'soldTokenBlockId',
+    sold_token_tx_id: 'soldTokenTxId',
+    bought_token_block_id: 'boughtTokenBlockId',
+    bought_token_tx_id: 'boughtTokenTxId',
+    seller_address: 'sellerAddress',
+    minter_address: 'minterAddress',
+    burner_address: 'burnerAddress',
+    creator_address: 'creatorAddress',
+    token0_amount: 'token0Amount',
+    token1_amount: 'token1Amount',
+    token_supply: 'tokenSupply',
+    lp_token_amount: 'lpTokenAmount',
+    token0_block_id: 'token0BlockId',
+    token0_tx_id: 'token0TxId',
+    token1_block_id: 'token1BlockId',
+    token1_tx_id: 'token1TxId',
+    tx_id: 'transactionId',
+    txid: 'transactionId',
+  };
+
+  for (const [snake, camel] of Object.entries(renames)) {
+    if (mapped[snake] !== undefined && mapped[camel] === undefined) {
+      mapped[camel] = mapped[snake];
+    }
+  }
+
+  // Normalize address: quspo may use various field names
+  if (!mapped.address) {
+    mapped.address = mapped.sellerAddress || mapped.minterAddress
+      || mapped.burnerAddress || mapped.creatorAddress
+      || mapped.sender || mapped.user || '';
+  }
+
+  // Normalize timestamp: quspo may return height (small number), epoch
+  // seconds, or epoch milliseconds. The ActivityFeed expects something
+  // parseable by new Date().
+  if (mapped.timestamp !== undefined) {
+    const ts = Number(mapped.timestamp);
+    if (!isNaN(ts)) {
+      if (ts < 1e8) {
+        // Looks like a block height — convert to "now" since devnet has no
+        // real wall-clock time. Use current time minus a small offset based
+        // on how far back the height is from the latest.
+        mapped.timestamp = Date.now();
+      } else if (ts < 1e10) {
+        // Epoch seconds → milliseconds
+        mapped.timestamp = ts * 1000;
+      }
+      // else: already milliseconds, leave as-is
+    }
+  } else if (mapped.height !== undefined) {
+    // No timestamp at all — use current time
+    mapped.timestamp = Date.now();
+  }
+
+  // Ensure transactionId exists (for the Link key)
+  if (!mapped.transactionId) {
+    mapped.transactionId = mapped.tx_id || mapped.txid || mapped.hash || `unknown-${Math.random().toString(36).slice(2)}`;
+  }
+
+  return mapped;
+}
+
 // Hook to fetch pool metadata via dataApiGetAllPoolsDetails (single REST call)
 function usePoolsMetadata(network: string, poolIds: string[]) {
   const { ALKANE_FACTORY_ID } = getConfig(network);
@@ -159,17 +247,21 @@ export function useInfiniteAmmTxHistory({
 
         // API may return { data: { items, total, count, offset } } or { items, ... } directly
         const payload = result?.data ?? result;
-        const rawItems = Array.isArray(payload?.items) ? payload.items
+        const rawItemsRaw = Array.isArray(payload?.items) ? payload.items
           : Array.isArray(payload) ? payload
           : [];
-        const total = payload?.total ?? rawItems.length;
+        const total = payload?.total ?? rawItemsRaw.length;
+
+        // Normalize snake_case → camelCase (quspo on devnet returns snake_case)
+        const rawItems = rawItemsRaw.map(normalizeActivityItem);
 
         // Client-side category filter if the API doesn't support it
         const filteredItems = transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap'
           ? rawItems.filter((item: any) => item?.type === transactionType)
           : rawItems;
 
-        console.log(`[useAmmHistory] DataApi returned ${rawItems.length} items (total: ${total})`);
+        console.log(`[useAmmHistory] DataApi returned ${rawItems.length} items (total: ${total})`,
+          rawItems[0] ? `first: ${JSON.stringify(rawItems[0]).slice(0, 200)}` : '');
 
         return {
           items: filteredItems,
