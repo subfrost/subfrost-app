@@ -169,9 +169,13 @@ export class DevnetSimulator implements SimulationControls {
   private _balanceCacheRound = -1;
   /** Pending tx count this round (for batch mining). */
   private _pendingTxs = 0;
+  /** Discovered pool ID (may be empty from boot, resolved lazily). */
+  private _poolId: string;
+  private _poolDiscoveryAttempted = false;
 
   constructor(contracts: DeployedContracts) {
     this.contracts = contracts;
+    this._poolId = contracts.ammPoolId || '';
     this.state = {
       status: 'idle',
       round: 0,
@@ -278,6 +282,9 @@ export class DevnetSimulator implements SimulationControls {
     const round = this.state.round + 1;
     this._pendingTxs = 0;
 
+    // Discover pool if not yet known
+    await this.discoverPool();
+
     // Refresh balance cache ONCE per round
     await this.refreshBalanceCache(boot.taproot, round);
     await breathe(100);
@@ -345,6 +352,31 @@ export class DevnetSimulator implements SimulationControls {
     this.scheduleRound();
   }
 
+  // ── Pool discovery ─────────────────────────────────────────────────────
+
+  /**
+   * If poolId is empty (boot failed to discover it), try to find it via
+   * factory opcode 2 (FindExistingPoolId). Only attempts once.
+   */
+  private async discoverPool(): Promise<void> {
+    if (this._poolId || this._poolDiscoveryAttempted) return;
+    this._poolDiscoveryAttempted = true;
+    try {
+      const factoryId = this.contracts.ammFactoryId;
+      const result = await simulate(factoryId, ['2', '2', '0', '32', '0']);
+      const poolData = result?.result?.execution?.data?.replace('0x', '') || '';
+      if (poolData.length >= 64) {
+        const buf = Buffer.from(poolData, 'hex');
+        this._poolId = `${Number(buf.readBigUInt64LE(0))}:${Number(buf.readBigUInt64LE(16))}`;
+        console.log('[simulator] Discovered pool:', this._poolId);
+      } else {
+        console.warn('[simulator] No pool found via factory opcode 2');
+      }
+    } catch (e: any) {
+      console.warn('[simulator] Pool discovery failed:', e?.message?.slice(0, 60));
+    }
+  }
+
   // ── Balance cache ─────────────────────────────────────────────────────
 
   private async refreshBalanceCache(taproot: string, round: number) {
@@ -362,36 +394,39 @@ export class DevnetSimulator implements SimulationControls {
 
   private pickAction(agent: SimAgent): SimActionType {
     const p = agent.personality;
+    const hasPool = !!this._poolId;
 
     const actions: WeightedAction[] = [
-      { action: 'swap_diesel_to_frbtc', weight: p === 0 ? 30 : 15 },
-      { action: 'swap_frbtc_to_diesel', weight: p === 0 ? 30 : 15 },
-      { action: 'wrap_btc',             weight: 10 },
-      { action: 'unwrap_frbtc',         weight: 5 },
-      { action: 'idle',                 weight: 15 },
+      { action: 'swap_diesel_to_frbtc', weight: hasPool ? (p === 0 ? 30 : 15) : 0 },
+      { action: 'swap_frbtc_to_diesel', weight: hasPool ? (p === 0 ? 30 : 15) : 0 },
+      { action: 'wrap_btc',             weight: 15 },
+      { action: 'unwrap_frbtc',         weight: 8 },
+      { action: 'vault_deposit',        weight: p === 2 ? 20 : 10 },
+      { action: 'idle',                 weight: 10 },
     ];
 
-    if (!agent.hasLp) {
-      actions.push({ action: 'add_liquidity', weight: p === 1 ? 25 : 10 });
-    } else {
-      actions.push({ action: 'remove_liquidity', weight: p === 1 ? 15 : 8 });
-      actions.push({ action: 'add_liquidity', weight: 5 });
+    // LP actions only if pool exists
+    if (hasPool) {
+      if (!agent.hasLp) {
+        actions.push({ action: 'add_liquidity', weight: p === 1 ? 25 : 10 });
+      } else {
+        actions.push({ action: 'remove_liquidity', weight: p === 1 ? 15 : 8 });
+        actions.push({ action: 'add_liquidity', weight: 5 });
+      }
     }
 
-    if (!agent.hasVaultDeposit) {
-      actions.push({ action: 'vault_deposit', weight: p === 2 ? 20 : 8 });
-    } else {
+    if (agent.hasVaultDeposit) {
       actions.push({ action: 'vault_withdraw', weight: p === 2 ? 12 : 6 });
     }
 
-    if (agent.hasLp && !agent.hasFireStake) {
+    if (hasPool && agent.hasLp && !agent.hasFireStake) {
       actions.push({ action: 'fire_stake', weight: p === 2 ? 20 : 8 });
     } else if (agent.hasFireStake) {
       actions.push({ action: 'fire_unstake', weight: 5 });
       actions.push({ action: 'fire_claim', weight: 10 });
     }
 
-    if (agent.hasLp && !agent.hasGaugeStake) {
+    if (hasPool && agent.hasLp && !agent.hasGaugeStake) {
       actions.push({ action: 'gauge_stake', weight: p === 2 ? 15 : 5 });
     } else if (agent.hasGaugeStake) {
       actions.push({ action: 'gauge_unstake', weight: 5 });
@@ -411,7 +446,7 @@ export class DevnetSimulator implements SimulationControls {
     taproot: string,
   ): Promise<string> {
     const factoryId = this.contracts.ammFactoryId;
-    const poolId = this.contracts.ammPoolId;
+    const poolId = this._poolId;
     const [fBlock, fTx] = factoryId.split(':');
 
     switch (action) {
@@ -434,11 +469,11 @@ export class DevnetSimulator implements SimulationControls {
       }
 
       case 'add_liquidity': {
+        if (!poolId) return 'No pool available (skip)';
         const dieselAmt = randAmount(5_000_000n, 100_000_000n);
         const frbtcAmt = randAmount(500_000n, 10_000_000n);
         await this.ensureDiesel(provider, harness, segwit, taproot);
         await this.ensureFrbtc(provider, harness, segwit, taproot);
-        if (!poolId) throw new Error('No pool');
         const [pBlock, pTx] = poolId.split(':');
         const protostone = `[${pBlock},${pTx},1]:v0:v0`;
         await executeTx(provider, segwit, taproot,
@@ -449,7 +484,7 @@ export class DevnetSimulator implements SimulationControls {
       }
 
       case 'remove_liquidity': {
-        if (!poolId) throw new Error('No pool');
+        if (!poolId) return 'No pool available (skip)';
         const lpBal = await getAlkaneBalance(taproot, poolId);
         if (lpBal <= 0n) {
           agent.hasLp = false;
@@ -467,10 +502,11 @@ export class DevnetSimulator implements SimulationControls {
 
       case 'vault_deposit': {
         const vaultId = this.contracts.dxBtcVaultId;
-        if (!vaultId) throw new Error('No vault');
-        const amount = randAmount(100_000n, 5_000_000n);
+        if (!vaultId) return 'No vault deployed (skip)';
+        const amount = randAmount(100_000n, 2_000_000n);
         await this.ensureFrbtc(provider, harness, segwit, taproot);
         const [vBlock, vTx] = vaultId.split(':');
+        // Vault opcode 1: Purchase — send frBTC as input
         const protostone = `[${vBlock},${vTx},1,${amount}]:v1:v1`;
         await executeTx(provider, segwit, taproot,
           protostone, `32:0:${amount}`);
@@ -481,7 +517,7 @@ export class DevnetSimulator implements SimulationControls {
 
       case 'vault_withdraw': {
         const vaultId = this.contracts.dxBtcVaultId;
-        if (!vaultId) throw new Error('No vault');
+        if (!vaultId) return 'No vault deployed (skip)';
         const unitBal = await getAlkaneBalance(taproot, vaultId);
         if (unitBal <= 0n) {
           agent.hasVaultDeposit = false;
@@ -489,6 +525,7 @@ export class DevnetSimulator implements SimulationControls {
         }
         const units = randAmount(1n, unitBal / 2n > 0n ? unitBal / 2n : 1n);
         const [vBlock, vTx] = vaultId.split(':');
+        // Vault opcode 2: Redeem — send vault units as input
         const protostone = `[${vBlock},${vTx},2,${units},1]:v1:v1`;
         await executeTx(provider, segwit, taproot,
           protostone, `${vaultId}:${units}`);
@@ -510,14 +547,16 @@ export class DevnetSimulator implements SimulationControls {
         if (this._cachedFrbtcBal <= 10_000n) return 'Insufficient frBTC to unwrap (skip)';
         const amount = randAmount(10_000n,
           this._cachedFrbtcBal / 4n > 10_000n ? this._cachedFrbtcBal / 4n : 10_000n);
+        // frBTC opcode 78 = unwrap (NOT 77 which is wrap)
         await executeTx(provider, segwit, taproot,
-          '[32,0,77]:v0:v0', `32:0:${amount}`);
+          '[32,0,78]:v1:v1', `32:0:${amount}`);
         this._pendingTxs++;
+        this._cachedFrbtcBal -= amount;
         return `Unwrapped ${amount} frBTC → BTC`;
       }
 
       case 'fire_stake': {
-        if (!poolId) throw new Error('No pool');
+        if (!poolId) return 'No pool available (skip)';
         const lpBal = await getAlkaneBalance(taproot, poolId);
         if (lpBal <= 0n) {
           agent.hasLp = false;
@@ -559,7 +598,7 @@ export class DevnetSimulator implements SimulationControls {
       }
 
       case 'gauge_stake': {
-        if (!poolId) throw new Error('No pool');
+        if (!poolId) return 'No pool available (skip)';
         const lpBal = await getAlkaneBalance(taproot, poolId);
         if (lpBal <= 0n) return 'No LP for gauge (skip)';
         const stakeAmt = randAmount(1n, lpBal / 4n > 0n ? lpBal / 4n : 1n);
