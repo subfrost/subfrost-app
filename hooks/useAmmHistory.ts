@@ -308,12 +308,22 @@ export function useInfiniteAmmTxHistory({
 
         const result = mapToObject(raw);
 
+        // Debug: log the full response structure on devnet
+        console.log('[useAmmHistory] raw SDK response type:', typeof raw,
+          raw instanceof Map ? 'Map' : Array.isArray(raw) ? 'Array' : '');
+        console.log('[useAmmHistory] mapToObject result:',
+          JSON.stringify(result)?.slice(0, 500));
+
         // API may return { data: { items, total, count, offset } } or { items, ... } directly
+        // Also handle { statusCode, data: [...items] } from devnet server
         const payload = result?.data ?? result;
         const rawItemsRaw = Array.isArray(payload?.items) ? payload.items
           : Array.isArray(payload) ? payload
           : [];
         const total = payload?.total ?? rawItemsRaw.length;
+
+        console.log('[useAmmHistory] payload keys:', payload ? Object.keys(payload) : 'null',
+          'rawItemsRaw.length:', rawItemsRaw.length);
 
         // Normalize snake_case → camelCase (quspo on devnet returns snake_case)
         const rawItems = rawItemsRaw.map(normalizeActivityItem);
