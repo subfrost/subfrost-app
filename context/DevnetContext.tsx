@@ -20,11 +20,12 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import type { DevnetState, DevnetControls, DeployedContracts } from '@/lib/devnet/types';
+import type { DevnetState, DevnetControls, DeployedContracts, SimulationState } from '@/lib/devnet/types';
 import { saveDevnetState, loadDevnetState, clearDevnetState } from '@/lib/devnet/persistence';
 import { getBootAddresses } from '@/lib/devnet/boot';
 import type { DevnetEvmProvider, MockTokenAddresses } from '@/lib/devnet/evmProvider';
 import type { DevnetCoordinator } from '@/lib/devnet/coordinatorSim';
+import type { DevnetSimulator } from '@/lib/devnet/simulator';
 
 interface DevnetContextValue {
   state: DevnetState;
@@ -34,6 +35,10 @@ interface DevnetContextValue {
   shutdown: () => void;
   /** In-browser bridge coordinator (available after boot if EVM is ready) */
   coordinator: DevnetCoordinator | null;
+  /** Market simulation engine (available after boot) */
+  simulator: DevnetSimulator | null;
+  /** Reactive simulation state — updates on every round */
+  simulationState: SimulationState | null;
 }
 
 const defaultState: DevnetState = {
@@ -61,6 +66,8 @@ const DevnetContext = createContext<DevnetContextValue>({
   boot: async () => {},
   shutdown: () => {},
   coordinator: null,
+  simulator: null,
+  simulationState: null,
 });
 
 export function useDevnet() {
@@ -77,6 +84,8 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   const evmProviderRef = useRef<DevnetEvmProvider | null>(null);
   const evmTokensRef = useRef<MockTokenAddresses | null>(null);
   const coordinatorRef = useRef<DevnetCoordinator | null>(null);
+  const simulatorRef = useRef<DevnetSimulator | null>(null);
+  const [simulationState, setSimulationState] = useState<SimulationState | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDevnet = network === 'devnet';
@@ -248,6 +257,23 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         console.warn('[DevnetContext] EVM devnet init failed (non-fatal):', evmErr?.message || evmErr);
       }
 
+      // Create market simulator
+      try {
+        const { DevnetSimulator: SimClass } = await import('@/lib/devnet/simulator');
+        const sim = new SimClass(result.contracts);
+        simulatorRef.current = sim;
+        // Subscribe to state changes so React re-renders
+        sim.subscribe(() => {
+          setSimulationState(sim.getState());
+          // Also update chain height since simulation mines blocks
+          setState(prev => ({ ...prev, chainHeight: harnessRef.current?.height ?? prev.chainHeight }));
+        });
+        setSimulationState(sim.getState());
+        console.log('[DevnetContext] Simulator created with 60 agents');
+      } catch (simErr: any) {
+        console.warn('[DevnetContext] Simulator init failed (non-fatal):', simErr?.message || simErr);
+      }
+
       setState({
         status: 'ready',
         bootProgress: 'Devnet ready!',
@@ -278,6 +304,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
+    if (simulatorRef.current) {
+      simulatorRef.current.dispose();
+      simulatorRef.current = null;
+      setSimulationState(null);
+    }
     if (coordinatorRef.current) {
       coordinatorRef.current.dispose();
       coordinatorRef.current = null;
@@ -305,6 +336,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
+      }
+      if (simulatorRef.current) {
+        simulatorRef.current.dispose();
+        simulatorRef.current = null;
       }
       if (coordinatorRef.current) {
         coordinatorRef.current.dispose();
@@ -481,7 +516,12 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   };
 
   return (
-    <DevnetContext.Provider value={{ state, controls, isDevnet, boot, shutdown, coordinator: coordinatorRef.current }}>
+    <DevnetContext.Provider value={{
+      state, controls, isDevnet, boot, shutdown,
+      coordinator: coordinatorRef.current,
+      simulator: simulatorRef.current,
+      simulationState,
+    }}>
       {children}
     </DevnetContext.Provider>
   );

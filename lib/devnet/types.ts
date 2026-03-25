@@ -63,3 +63,76 @@ export interface DevnetControls {
   getChainHeight(): number;
   resetDevnet(): Promise<void>;
 }
+
+// ---------------------------------------------------------------------------
+// Simulation types
+// ---------------------------------------------------------------------------
+
+export type SimActionType =
+  | 'swap_diesel_to_frbtc'
+  | 'swap_frbtc_to_diesel'
+  | 'add_liquidity'
+  | 'remove_liquidity'
+  | 'vault_deposit'
+  | 'vault_withdraw'
+  | 'wrap_btc'
+  | 'unwrap_frbtc'
+  | 'fire_stake'
+  | 'fire_unstake'
+  | 'fire_claim'
+  | 'gauge_stake'
+  | 'gauge_unstake'
+  | 'idle';
+
+export interface SimAgent {
+  id: number;
+  name: string;
+  /** Personality bias — shifts action weights (0 = trader, 1 = LP, 2 = staker, 3 = mixed) */
+  personality: number;
+  /** Running count of successful actions */
+  actionCount: number;
+  /** Last action taken */
+  lastAction: SimActionType;
+  /** Whether this agent "holds" LP tokens (logical tracker) */
+  hasLp: boolean;
+  /** Whether this agent has an active FIRE stake position */
+  hasFireStake: boolean;
+  /** Whether this agent has an active gauge stake */
+  hasGaugeStake: boolean;
+  /** Whether this agent has a vault deposit */
+  hasVaultDeposit: boolean;
+}
+
+export interface SimLogEntry {
+  round: number;
+  agentId: number;
+  agentName: string;
+  action: SimActionType;
+  detail: string;
+  success: boolean;
+  timestamp: number;
+}
+
+export type SimulationStatus = 'idle' | 'running' | 'paused' | 'error';
+
+export interface SimulationState {
+  status: SimulationStatus;
+  round: number;
+  agentsPerRound: number;
+  intervalMs: number;
+  totalActions: number;
+  totalErrors: number;
+  agents: SimAgent[];
+  log: SimLogEntry[];
+  error?: string;
+}
+
+export interface SimulationControls {
+  start(): void;
+  stop(): void;
+  pause(): void;
+  resume(): void;
+  setSpeed(intervalMs: number): void;
+  setAgentsPerRound(n: number): void;
+  getState(): SimulationState;
+}
