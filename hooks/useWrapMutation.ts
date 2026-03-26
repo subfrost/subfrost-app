@@ -535,15 +535,17 @@ export function useWrapMutation() {
     onSuccess: (data) => {
       console.log('[WRAP] Success! txid:', data.transactionId, 'amount:', data.wrapAmountSats, 'sats');
 
-      // Invalidate balance queries
-      queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
-      queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
+      // Refetch all balance queries — invalidate alone won't bypass staleTime
+      queryClient.refetchQueries({ queryKey: ['alkane-balances'] });
+      queryClient.refetchQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.refetchQueries({ queryKey: ['btc-balance'] });
+      queryClient.refetchQueries({ queryKey: ['enriched-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[WRAP] Balance queries invalidated');
+      console.log('[WRAP] Balance queries refetched');
     },
   });
 }
