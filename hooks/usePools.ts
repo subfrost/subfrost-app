@@ -759,54 +759,57 @@ export function usePools(params: UsePoolsParams = {}) {
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
-      // Primary: Data API (single call with pre-calculated TVL/volume/APR)
-      // On devnet, the fetch interceptor routes these REST calls through quspo.
-      try {
-        tokenMetaMap = await tokenMetaPromise;
-        console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
-        items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
-      } catch (e) {
-        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to REST:', e);
-        try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
-      }
-
-      // Fallback 1: get-all-pools-details REST
-      if (items.length === 0) {
+      // On devnet, skip REST/SDK paths (they all timeout) — go direct to alkanes_simulate.
+      // On other networks, use the normal Data API → REST → SDK fallback chain.
+      if (network !== 'devnet') {
+        // Primary: Data API (single call with pre-calculated TVL/volume/APR)
         try {
-          items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          tokenMetaMap = await tokenMetaPromise;
+          console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
+          items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
-          console.warn('[usePools] get-all-pools-details REST failed:', e);
+          console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to REST:', e);
+          try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
+        }
+
+        // Fallback 1: get-all-pools-details REST
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          } catch (e) {
+            console.warn('[usePools] get-all-pools-details REST failed:', e);
+          }
+        }
+
+        // Fallback 2: get-all-token-pairs REST
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          } catch (e) {
+            console.warn('[usePools] get-all-token-pairs REST failed:', e);
+          }
+        }
+
+        // Fallback 2b: dataApiGetAllTokenPairs
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          } catch (e) {
+            console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
+          }
+        }
+
+        // Fallback 3: N+1 RPC simulation calls (no TVL/volume data)
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          } catch (e) {
+            console.warn('[usePools] SDK fallback also failed:', e);
+          }
         }
       }
 
-      // Fallback 2: get-all-token-pairs REST
-      if (items.length === 0) {
-        try {
-          items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
-          console.warn('[usePools] get-all-token-pairs REST failed:', e);
-        }
-      }
-
-      // Fallback 2b: dataApiGetAllTokenPairs
-      if (items.length === 0) {
-        try {
-          items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
-          console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
-        }
-      }
-
-      // Fallback 3: N+1 RPC simulation calls (no TVL/volume data)
-      if (items.length === 0) {
-        try {
-          items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
-          console.warn('[usePools] SDK fallback also failed:', e);
-        }
-      }
-
-      // Fallback 4: Direct alkanes_simulate RPC (parses GetAllPools + PoolDetails manually)
+      // Direct alkanes_simulate RPC — primary path for devnet, last resort for others.
       // JOURNAL (2026-03-26): On devnet, the SDK's alkanesGetAllPoolsWithDetails returns
       // "No data in response" even though the factory's opcode 3 (GetAllPools) works via
       // direct RPC. This fallback calls alkanes_simulate directly and parses the binary
