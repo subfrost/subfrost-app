@@ -145,7 +145,7 @@ describe('Devnet: Faucet → Balance', () => {
     it('should mint DIESEL and show balance', async () => {
       mineBlocks(harness, 1);
       // Mint DIESEL via opcode 77 (same as devnet faucetDiesel)
-      await (provider as any).alkanesExecuteFull(
+      const mintResult = await (provider as any).alkanesExecuteFull(
         JSON.stringify([taprootAddress]),
         'B:10000:v0',
         '[2,0,77]:v0:v0',
@@ -156,11 +156,22 @@ describe('Devnet: Faucet → Balance', () => {
           alkanes_change_address: taprootAddress,
         }),
       );
+      console.log('[faucet-balance] DIESEL mint result:', JSON.stringify(mintResult)?.slice(0, 200));
       mineBlocks(harness, 1);
 
-      // Query via alkanesByAddress (the working devnet path)
+      // Query via metashrew RPC (always works)
       const balance = await getAlkaneBalance(provider, taprootAddress, '2:0');
-      console.log('[faucet-balance] DIESEL balance:', balance.toString());
+      console.log('[faucet-balance] DIESEL balance (metashrew):', balance.toString());
+
+      // Query via quspo dataApi (what the UI uses)
+      const dataApiResult = await (provider as any).dataApiGetAlkanesByAddress(taprootAddress);
+      const dataApiItems = dataApiResult?.data || [];
+      const dieselItem = dataApiItems.find((item: any) =>
+        String(item.alkaneId?.block) === '2' && String(item.alkaneId?.tx) === '0'
+      );
+      console.log('[faucet-balance] DIESEL via quspo dataApi:', dieselItem ? dieselItem.balance : 'NOT FOUND');
+      console.log('[faucet-balance] quspo returned %d items total', dataApiItems.length);
+
       expect(balance).toBeGreaterThan(0n);
     });
 
@@ -253,5 +264,41 @@ describe('Devnet: Faucet → Balance', () => {
       console.log('[faucet-balance] frBTC balance:', balance.toString());
       expect(balance).toBeGreaterThan(0n);
     });
+
+    it('should wrap BTC via alkanesExecuteTyped (same path as UI useWrapMutation)', async () => {
+      // This mirrors exactly what useWrapMutation does for keystore wallets
+      const signerResult = await simulate('32:0', ['103']);
+      const hex = signerResult.result.execution.data.replace('0x', '');
+      const xOnly = Buffer.from(hex, 'hex');
+      const signerPayment = bitcoin.payments.p2tr({ internalPubkey: xOnly, network: bitcoin.networks.regtest });
+      const signerAddr = signerPayment.address!;
+      console.log('[faucet-balance] UI wrap test: signer=%s user=%s', signerAddr, taprootAddress);
+
+      const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, '32:0');
+
+      mineBlocks(harness, 1);
+
+      // alkanesExecuteTyped — exact same call as useWrapMutation line 186
+      const result = await (provider as any).alkanesExecuteTyped?.({
+        toAddresses: [signerAddr, taprootAddress],
+        inputRequirements: 'B:50000:v0',
+        protostones: '[32,0,77]:v1:v1',
+        feeRate: 1,
+        fromAddresses: ['p2wpkh:0', 'p2tr:0'],
+        changeAddress: 'p2wpkh:0',
+        alkanesChangeAddress: 'p2tr:0',
+        autoConfirm: true,
+        mineEnabled: true,
+      });
+      console.log('[faucet-balance] UI wrap result keys:', result ? Object.keys(result) : 'null');
+      console.log('[faucet-balance] UI wrap result:', JSON.stringify(result)?.slice(0, 300));
+
+      mineBlocks(harness, 1);
+
+      const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, '32:0');
+      console.log('[faucet-balance] frBTC before=%s after=%s delta=%s',
+        frbtcBefore.toString(), frbtcAfter.toString(), (frbtcAfter - frbtcBefore).toString());
+      expect(frbtcAfter).toBeGreaterThan(frbtcBefore);
+    }, 60_000);
   });
 });
