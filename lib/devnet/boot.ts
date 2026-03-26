@@ -133,10 +133,9 @@ export async function bootDevnetWithWasms(
   // no addSecondary() — esplora can only be loaded at creation time.
   // Possible future fix: batch mining in the WASM harness (mine N blocks
   // in a single call without creating N separate instances).
-  // Esplora DISABLED to prevent OOM. The DevnetEsploraBackend has a
-  // block-scan fallback (backends.rs:589-648) that discovers UTXOs by
-  // scanning the chain directly — no esplora indexer needed.
-  const useEsplora = false;
+  // Esplora required for SDK UTXO discovery (essentials.get_address_outpoints).
+  // OOM risk mitigated by batched mining in mineInitialBlocks.
+  const useEsplora = true;
 
   console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esplora=%s quspo=deferred',
     Math.round(alkanesWasm.length / 1024),
@@ -917,10 +916,21 @@ async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
   //
   // After mining completes, a single yield lets the browser process pending work.
   // Subsequent boots skip mining via IndexedDB importState (<1s).
-  onProgress('Mining 101 blocks for coinbase maturity...', 25);
-  _harness.mineBlocks(101);
+  // Mine in batches of 25 with GC yields between them.
+  // With esplora loaded, each block creates 2 WASM instances. 101 blocks =
+  // 202 instances. Mining all at once OOMs at ~71-80 blocks. Batching with
+  // setTimeout(0) yields lets FinalizationRegistry reclaim instances.
+  const BATCH = 25;
+  const TOTAL = 101;
+  for (let mined = 0; mined < TOTAL; ) {
+    const n = Math.min(BATCH, TOTAL - mined);
+    onProgress(`Mining blocks ${mined + 1}-${mined + n} of ${TOTAL}...`, 20 + Math.round((mined / TOTAL) * 30));
+    _harness.mineBlocks(n);
+    mined += n;
+    // Yield to let FinalizationRegistry / GC reclaim WASM instances
+    await new Promise(r => setTimeout(r, 0));
+  }
   onProgress('Mining complete', 50);
-  await new Promise(r => setTimeout(r, 100));
 }
 
 /**
