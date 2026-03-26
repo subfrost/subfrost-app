@@ -867,6 +867,30 @@ export default function SwapShell() {
     return { stepperSteps: [], currentStepIndex: 0, showStepper: false };
   }, [swapFlowStep, isBtcToTokenSwap, isTokenToBtcSwap, fromToken?.symbol, toToken?.symbol, t]);
 
+  // On devnet, ensure the indexer is synced with the chain before executing mutations.
+  // The SDK's alkanesExecute checks indexer height === chain height and times out after
+  // 30s if they diverge. This can happen when previous operations mined blocks faster
+  // than the indexer can process them.
+  const waitForDevnetSync = async () => {
+    if (network !== 'devnet') return;
+    const rpc = getRpcUrl(network);
+    for (let i = 0; i < 10; i++) {
+      try {
+        const [heightResp, countResp] = await Promise.all([
+          fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 1 }) }),
+          fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_getblockcount', params: [], id: 2 }) }),
+        ]);
+        const indexerHeight = parseInt((await heightResp.json())?.result || '0', 10);
+        const chainHeight = (await countResp.json())?.result ?? 0;
+        if (indexerHeight >= chainHeight) return;
+        console.log(`[devnet] Waiting for indexer sync: ${indexerHeight}/${chainHeight}`);
+      } catch { /* ignore */ }
+      await new Promise(r => setTimeout(r, 500));
+    }
+  };
+
   const handleSwap = async () => {
     console.log('[handleSwap] Called with:', {
       fromToken: fromToken?.id,
@@ -880,6 +904,8 @@ export default function SwapShell() {
     });
 
     if (!fromToken || !toToken) return;
+
+    await waitForDevnetSync();
 
     // Wrap/Unwrap direct pairs
     //
@@ -1473,6 +1499,7 @@ export default function SwapShell() {
     }
 
     try {
+      await waitForDevnetSync();
       // Pass poolId if we have a selected pool, so the mutation can call the pool directly
       const poolId = selectedPool?.id
         ? (() => {
@@ -1526,6 +1553,7 @@ export default function SwapShell() {
     }
 
     try {
+      await waitForDevnetSync();
       const result = await removeLiquidityMutation.mutateAsync({
         lpTokenId: selectedLPPosition.id,  // LP token's alkane ID (same as pool ID)
         lpAmount: removeAmount,
