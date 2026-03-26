@@ -133,7 +133,11 @@ export async function bootDevnetWithWasms(
   // no addSecondary() — esplora can only be loaded at creation time.
   // Possible future fix: batch mining in the WASM harness (mine N blocks
   // in a single call without creating N separate instances).
-  const useEsplora = false;
+  // Re-enabled: esplora is required for SDK UTXO discovery during swap
+  // PSBT construction (essentials.get_address_outpoints). Without it,
+  // swaps fail with "Insufficient alkanes: have 0".
+  // OOM risk during mining is mitigated by single-call mineBlocks(101).
+  const useEsplora = true;
 
   console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esplora=%s quspo=deferred',
     Math.round(alkanesWasm.length / 1024),
