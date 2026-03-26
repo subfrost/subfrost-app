@@ -881,46 +881,13 @@ export default function SwapShell() {
 
     if (!fromToken || !toToken) return;
 
-
     // Wrap/Unwrap direct pairs
-    //
-    // JOURNAL (2026-03-26): Standalone wrap/unwrap paths were missing devnet block
-    // mining. On devnet, blocks are only mined explicitly — without mining after
-    // broadcast, the tx stays unconfirmed and balance queries (which only count
-    // confirmed UTXOs) never update. The two-step swap flows already had this
-    // mining logic; the standalone paths were missed. Fixed below.
-    //
-    // NOTE: frBTC unwrap (opcode 78) does NOT work on regtest/devnet.
-    // The genesis frBTC contract [32:0] only implements opcodes 0,77,99-103.
-    // Opcode 78 returns "ALKANES: revert: Error: Unrecognized opcode".
-    // The Bitcoin tx confirms but the alkanes runtime rejects the call —
-    // no frBTC is burned, no BTC is released. The contract must be redeployed
-    // with unwrap support for frBTC→BTC to actually function.
     if (isWrapPair) {
       console.log('[handleSwap] isWrapPair=true, calling wrapMutation...');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          // On devnet/regtest, mine a block so the tx confirms and balances update
-          const isRegtestNet = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
-          if (isRegtestNet && address) {
-            try {
-              if (network === 'devnet') {
-                await fetch(getRpcUrl(network), {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-                });
-              } else {
-                await fetch('/api/regtest/mine', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ blocks: 1, address }),
-                });
-              }
-            } catch {}
-          }
           showNotification(res.transactionId, 'wrap');
           setTimeout(() => refreshWalletData(), 2000);
         }
@@ -936,28 +903,6 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          // Mine a block on devnet/regtest so the unwrap tx confirms.
-          // NOTE: On regtest/devnet, unwrap will appear to succeed (valid BTC tx)
-          // but frBTC [32:0] lacks opcode 78 — the contract reverts silently.
-          // See JOURNAL comment above for details.
-          const isRegtestNet = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
-          if (isRegtestNet && address) {
-            try {
-              if (network === 'devnet') {
-                await fetch(getRpcUrl(network), {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-                });
-              } else {
-                await fetch('/api/regtest/mine', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ blocks: 1, address }),
-                });
-              }
-            } catch {}
-          }
           showNotification(res.transactionId, 'unwrap');
           setTimeout(() => refreshWalletData(), 2000);
         }
@@ -1533,11 +1478,6 @@ export default function SwapShell() {
         lpDecimals: 8,
         minAmount0: '0',  // No slippage protection for now
         minAmount1: '0',
-        token0Id: selectedLPPosition.token0Id,
-        token1Id: selectedLPPosition.token1Id,
-        token0Symbol: selectedLPPosition.token0Symbol,
-        token1Symbol: selectedLPPosition.token1Symbol,
-        poolName: `${selectedLPPosition.token0Symbol} / ${selectedLPPosition.token1Symbol}`,
         token0Decimals: 8,
         token1Decimals: 8,
         feeRate: fee.feeRate,

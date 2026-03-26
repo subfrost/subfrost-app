@@ -42,6 +42,31 @@ export type PoolsListItem = {
 // ============================================================================
 
 /**
+ * Standard AMM swap fee (0.3%)
+ * Used for APR calculation when backend doesn't provide poolApr.
+ */
+const DEFAULT_SWAP_FEE_RATE = 0.003;
+
+/**
+ * Calculate APR from 24h volume and TVL.
+ * Formula: (vol24h × feeRate × 365 / tvl) × 100
+ *
+ * Returns 0 if TVL is too small to avoid division by zero or absurd values.
+ */
+function calculateApr(vol24hUsd: number, tvlUsd: number, feeRate: number = DEFAULT_SWAP_FEE_RATE): number {
+  // Require minimum $100 TVL to avoid division by near-zero
+  if (!tvlUsd || tvlUsd < 100) return 0;
+  if (!vol24hUsd || vol24hUsd <= 0) return 0;
+
+  const dailyFees = vol24hUsd * feeRate;
+  const annualizedFees = dailyFees * 365;
+  const apr = (annualizedFees / tvlUsd) * 100;
+
+  // Cap at 10000% APR to filter out noise from low-liquidity pools
+  return Math.min(apr, 10000);
+}
+
+/**
  * Build icon URL for a token
  */
 function getTokenIconUrl(tokenId: string, _network: string): string {
@@ -209,18 +234,23 @@ async function fetchPoolsFromDataApi(
     const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
     const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
 
+    const tvlUsd = p.poolTvlInUsd ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
+    // Use backend APR if provided, otherwise calculate from volume/TVL
+    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd: p.poolTvlInUsd ?? 0,
+      tvlUsd,
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
-      vol24hUsd: p.poolVolume1dInUsd ?? 0,
+      vol24hUsd,
       vol7dUsd: p.poolVolume7dInUsd ?? 0,
       vol30dUsd: p.poolVolume30dInUsd ?? 0,
-      apr: p.poolApr ?? 0,
+      apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
       lpTotalSupply: p.tokenSupply || undefined,
@@ -299,18 +329,22 @@ async function fetchPoolsFromPoolsDetailsRest(
     const token0Name = getTokenName(token0Id, t0Name, tokenMetaMap);
     const token1Name = getTokenName(token1Id, t1Name, tokenMetaMap);
 
+    const tvlUsd = p.poolTvlInUsd ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
+    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd: p.poolTvlInUsd ?? 0,
+      tvlUsd,
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
-      vol24hUsd: p.poolVolume1dInUsd ?? 0,
+      vol24hUsd,
       vol7dUsd: p.poolVolume7dInUsd ?? 0,
       vol30dUsd: p.poolVolume30dInUsd ?? 0,
-      apr: p.poolApr ?? 0,
+      apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
       lpTotalSupply: p.tokenSupply || undefined,
@@ -380,18 +414,22 @@ async function fetchPoolsFromTokenPairsRest(
     const token0Name = getTokenName(token0Id, t0Name, tokenMetaMap);
     const token1Name = getTokenName(token1Id, t1Name, tokenMetaMap);
 
+    const tvlUsd = p.poolTvlInUsd ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
+    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd: p.poolTvlInUsd ?? 0,
+      tvlUsd,
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
-      vol24hUsd: p.poolVolume1dInUsd ?? 0,
+      vol24hUsd,
       vol7dUsd: p.poolVolume7dInUsd ?? 0,
       vol30dUsd: p.poolVolume30dInUsd ?? 0,
-      apr: p.poolApr ?? 0,
+      apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
       lpTotalSupply: p.tokenSupply || undefined,
@@ -460,19 +498,23 @@ async function fetchPoolsFromTokenPairsApi(
     const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
     const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
 
+    const tvlUsd = p.poolTvlInUsd ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
+    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+
     // get-all-token-pairs provides TVL and volume data
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd: p.poolTvlInUsd ?? 0,
+      tvlUsd,
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
-      vol24hUsd: p.poolVolume1dInUsd ?? 0,
+      vol24hUsd,
       vol7dUsd: p.poolVolume7dInUsd ?? 0,
       vol30dUsd: p.poolVolume30dInUsd ?? 0,
-      apr: p.poolApr ?? 0,
+      apr,
       // Get reserve amounts from the token objects or top-level
       token0Amount: p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.reserve1 || p.token1?.token1Amount || '0',
