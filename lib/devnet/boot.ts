@@ -901,29 +901,23 @@ async function deployFullProtocol(
  */
 async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
   onProgress('Mining initial blocks...', 20);
-  // ⚠️ CRITICAL (2026-03-26): Each mined block creates a WebAssembly.Instance
-  // in the alkanes indexer. FinalizationRegistry must reclaim old instances
-  // before new ones are created, or the browser OOMs. The FinalizationRegistry
-  // callback only runs during idle event loop time — setTimeout(0) is not enough.
+  // ⚠️ CRITICAL (2026-03-26): The alkanes indexer creates a WebAssembly.Instance
+  // per block. Mining 101 blocks with pauses (50ms-1000ms) between individual
+  // blocks still OOMs at ~70-80 blocks. FinalizationRegistry cannot keep up
+  // regardless of pause duration.
   //
-  // Strategy: mine in batches of 5, with 500ms pause between batches to give
-  // FinalizationRegistry multiple idle ticks to drain its queue. This is slower
-  // (~10s total) but prevents OOM. Once boot completes, state is saved to
-  // IndexedDB and subsequent boots skip mining entirely via importState().
-  const TOTAL_BLOCKS = 101;
-  const BATCH_SIZE = 5;
-  const GC_PAUSE_MS = 500;
-
-  for (let mined = 0; mined < TOTAL_BLOCKS; mined += BATCH_SIZE) {
-    const count = Math.min(BATCH_SIZE, TOTAL_BLOCKS - mined);
-    for (let i = 0; i < count; i++) {
-      _harness.mineBlocks(1);
-    }
-    const pct = 20 + Math.round(((mined + count) / TOTAL_BLOCKS) * 30);
-    onProgress(`Mining blocks... ${mined + count}/${TOTAL_BLOCKS}`, pct);
-    // Long pause for FinalizationRegistry to reclaim WASM instances
-    await new Promise(r => setTimeout(r, GC_PAUSE_MS));
-  }
+  // Solution: mine ALL blocks in a single synchronous call. mineBlocks(N) runs
+  // synchronously in WASM, creating and destroying instances within the same
+  // call frame. The WASM runtime's internal allocator can reuse memory without
+  // relying on JS FinalizationRegistry. This is how the vitest harness works
+  // (createDevnetTestContext calls mineBlocks(201) in one shot without OOM).
+  //
+  // After mining completes, a single yield lets the browser process pending work.
+  // Subsequent boots skip mining via IndexedDB importState (<1s).
+  onProgress('Mining 101 blocks for coinbase maturity...', 25);
+  _harness.mineBlocks(101);
+  onProgress('Mining complete', 50);
+  await new Promise(r => setTimeout(r, 100));
 }
 
 /**
