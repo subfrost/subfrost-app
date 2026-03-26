@@ -354,9 +354,13 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       !!deps.account &&
       deps.isConnected &&
       addresses.length > 0,
-    staleTime: 30_000,
+    // On devnet, use short staleTime so faucet/wrap operations trigger
+    // immediate refetch. On other networks, 30s prevents excessive refetches.
+    staleTime: deps.network === 'devnet' ? 2_000 : 30_000,
     refetchOnMount: 'always' as const,
     refetchOnWindowFocus: true,
+    // On devnet, poll every 5s to catch balance changes from faucets/wraps
+    refetchInterval: deps.network === 'devnet' ? 5_000 : undefined,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
     queryFn: async () => {
