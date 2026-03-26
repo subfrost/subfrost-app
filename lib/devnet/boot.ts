@@ -116,22 +116,23 @@ export async function bootDevnetWithWasms(
 
   onProgress('Initializing Bitcoin node (loading WASM)...', 15);
 
-  // JOURNAL (2026-03-22): Create harness WITHOUT quspo tertiary indexer.
-  // quspo is added AFTER initial mining to avoid OOM. TertiaryRuntime::run_block
-  // creates a new WebAssembly.Instance per block, exhausting browser memory when
-  // processing 110 coinbase-maturity blocks. Deferring quspo means it only indexes
-  // blocks mined after boot — which is fine since the initial 110 blocks are empty
-  // coinbase transactions with nothing for quspo to index.
+  // JOURNAL (2026-03-26): Create harness WITHOUT esplora to prevent OOM.
+  // Both alkanes + esplora indexers create WebAssembly.Instance per block.
+  // Mining 101 blocks with both loaded = 200+ instances, exhausting memory
+  // before FinalizationRegistry can reclaim them. Without esplora, only
+  // alkanes creates instances (1 per block), which is manageable.
+  // Esplora is optional — the SDK uses lua_evalsaved for UTXO queries
+  // which doesn't require esplora. Quspo handles the data API on devnet.
+  const useEsplora = false; // Disabled to prevent OOM during mining
 
-  console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esploraWasm=%sKB quspo=%s (deferred)',
+  console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esplora=%s quspo=deferred',
     Math.round(alkanesWasm.length / 1024),
-    esploraWasm ? Math.round(esploraWasm.length / 1024) : 'none',
-    quspoWasm ? Math.round(quspoWasm.length / 1024) + 'KB' : 'deferred',
+    useEsplora ? Math.round((esploraWasm?.length || 0) / 1024) + 'KB' : 'disabled',
   );
 
   _harness = await sdk.DevnetTestHarness.create({
     alkanesWasm,
-    esploraWasm,
+    esploraWasm: useEsplora ? esploraWasm : undefined,
     secretKey,
   });
   console.log('[devnet-boot] Harness created successfully (without quspo)');
@@ -156,12 +157,9 @@ export async function bootDevnetWithWasms(
     await mineInitialBlocks(onProgress);
   }
 
-  // JOURNAL (2026-03-24): quspo tertiary indexer is deferred until AFTER all
-  // protocol deployments complete. Adding it here causes each deploy's
-  // mine+index cycle to run quspo too, which makes the metashrew indexer
-  // fall behind bitcoind by 2-3 blocks, triggering the WASM's internal
-  // "Indexer sync timed out" error (30s timeout). Deferring quspo to after
-  // deployFullProtocol avoids this.
+  // quspo tertiary indexer is deferred until AFTER all deployments.
+  // Adding it here causes each deploy's mine+index cycle to also run quspo,
+  // making the metashrew indexer fall behind and triggering sync timeouts.
 
   // Create provider
   const wasm = await import('@alkanes/ts-sdk/wasm');
