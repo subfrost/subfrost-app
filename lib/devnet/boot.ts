@@ -199,23 +199,32 @@ export async function bootDevnetWithWasms(
   _bootAddresses = { segwit: segwitAddress, taproot: taprootAddress };
 
   // =========================================================================
-  // Full protocol deployment — ported from test suite deploy scripts.
-  // Uses browser fetch() for WASMs instead of Node.js readFileSync.
+  // Full protocol deployment — only on FRESH boot (no saved state).
+  // When restoring from saved state, contracts are already deployed.
+  // Re-deploying on top of restored state would create duplicate/corrupt entries.
   // =========================================================================
 
-  const contracts = await deployFullProtocol(
-    _provider, _harness, segwitAddress, taprootAddress, onProgress,
-  );
+  let contracts: DeployedContracts;
+  if (savedState) {
+    // State restored — contracts already deployed, just need contract IDs
+    console.log('[devnet-boot] Skipping deployment (restored from saved state)');
+    onProgress('Contracts ready (from saved state)', 95);
+    // Return default contract IDs from the deployment constants
+    contracts = getDefaultContractIds();
+  } else {
+    contracts = await deployFullProtocol(
+      _provider, _harness, segwitAddress, taprootAddress, onProgress,
+    );
+  }
 
-  // Add quspo tertiary indexer AFTER all deployments complete.
-  // Adding it earlier causes indexer sync timeouts during contract deployment.
+  // Add quspo tertiary indexer AFTER deployments (or state restore).
+  // quspo processes the full chain on addTertiary, catching up instantly.
   if (quspoWasm) {
     onProgress('Loading quspo indexer...', 98);
     try {
       _harness.server.addTertiary('quspo', quspoWasm);
-      // Mine 1 block so quspo processes the current chain state
       _harness.mineBlocks(1);
-      console.log('[devnet-boot] quspo tertiary indexer added (post-deployment)');
+      console.log('[devnet-boot] quspo tertiary indexer added');
     } catch (e: any) {
       console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
     }
@@ -282,6 +291,34 @@ const PROTOCOL_SLOTS = {
   CARBINE_TEMPLATE:          70001,
   UNIVERSAL_ROUTER:          70002,
 };
+
+/**
+ * Returns default contract IDs when restoring from saved state (no deployment needed).
+ * IDs are derived from the slot constants — same slots used during fresh deployment.
+ */
+function getDefaultContractIds(): DeployedContracts {
+  return {
+    ammFactoryId: `4:${AMM_SLOTS.FACTORY_PROXY}`,
+    ammPoolId: '2:3', // Created during boot, always gets this ID
+    fireTokenId: `4:${FIRE_SLOTS.TOKEN}`,
+    fireStakingId: `4:${FIRE_SLOTS.STAKING}`,
+    fireTreasuryId: `4:${FIRE_SLOTS.TREASURY}`,
+    fireBondingId: `4:${FIRE_SLOTS.BONDING}`,
+    fireRedemptionId: `4:${FIRE_SLOTS.REDEMPTION}`,
+    fireDistributorId: `4:${FIRE_SLOTS.DISTRIBUTOR}`,
+    fuelTokenId: `4:${PROTOCOL_SLOTS.FUEL_TOKEN}`,
+    ftrBtcTemplateId: `4:${PROTOCOL_SLOTS.FTRBTC_TEMPLATE}`,
+    dxBtcVaultId: `4:${PROTOCOL_SLOTS.DXBTC_VAULT}`,
+    vxFuelGaugeId: `4:${PROTOCOL_SLOTS.VX_FUEL_GAUGE}`,
+    vxBtcUsdGaugeId: `4:${PROTOCOL_SLOTS.VX_BTCUSD_GAUGE}`,
+    synthPoolId: '',
+    frusdTokenId: '',
+    frusdAuthTokenId: '',
+    fujinFactoryId: `4:${PROTOCOL_SLOTS.FUJIN_MASTER_PROXY}`,
+    fujinMasterId: `4:${PROTOCOL_SLOTS.FUJIN_MASTER_PROXY}`,
+    carbineControllerId: `4:${PROTOCOL_SLOTS.CARBINE_CONTROLLER}`,
+  };
+}
 
 // ===========================================================================
 // Browser WASM loading + deploy helpers
