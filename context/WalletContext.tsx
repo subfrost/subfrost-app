@@ -249,18 +249,22 @@ function mapToObject(value: any): any {
 function extractEnrichedData(rawResult: any): { spendable: any[]; assets: any[]; pending: any[] } | null {
   if (!rawResult) return null;
 
+  // The SDK's getEnrichedBalances returns nested Maps (from serde_wasm_bindgen),
+  // not plain objects. mapToObject recursively converts Maps to plain objects.
   let enrichedData: any;
   if (rawResult instanceof Map) {
     const returns = rawResult.get('returns');
-    enrichedData = mapToObject(returns);
+    enrichedData = returns instanceof Map ? mapToObject(returns) : mapToObject(returns || rawResult);
   } else {
-    enrichedData = rawResult?.returns || rawResult;
+    enrichedData = rawResult?.returns || rawResult?.result?.returns || rawResult;
+    // The enrichedData itself or its children may still be Maps
+    enrichedData = mapToObject(enrichedData);
   }
 
   if (!enrichedData) return null;
 
-  // Convert any nested Maps in arrays
   const toArray = (val: any): any[] => {
+    if (val instanceof Map) return [...val.values()].map(mapToObject);
     if (Array.isArray(val)) return val.map(mapToObject);
     if (val && typeof val === 'object' && Object.keys(val).length > 0) {
       return Object.values(val).map(mapToObject);
@@ -2275,33 +2279,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           }, 0);
           console.log('[WalletContext] Address balance:', addressBalance);
           totalBalance += addressBalance;
-        }
-      }
-
-      // Devnet fallback: if enriched balances returned 0, query UTXOs
-      // directly via lua_evalsaved which always works on devnet.
-      if (totalBalance === 0 && network === 'devnet') {
-        console.log('[WalletContext] Devnet BTC fallback: enriched returned 0, trying lua_evalsaved');
-        try {
-          for (const addr of addresses) {
-            const resp = await fetch('http://localhost:18888', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0', id: 1,
-                method: 'lua_evalsaved',
-                params: ['c1e61d349c30deb20b023b70dc6641b5ada176db552bdbef24dee7cd05273e97', addr],
-              }),
-            });
-            const data = await resp.json();
-            const spendable = data?.result?.returns?.spendable || [];
-            for (const utxo of spendable) {
-              totalBalance += utxo.value || 0;
-            }
-          }
-          console.log('[WalletContext] Devnet BTC fallback total:', totalBalance);
-        } catch (fallbackErr) {
-          console.warn('[WalletContext] Devnet BTC fallback failed:', fallbackErr);
         }
       }
 

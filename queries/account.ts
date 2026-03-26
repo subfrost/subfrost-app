@@ -366,43 +366,8 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
         try {
           // SDK data API returns enriched metadata: name, symbol, balance, price, image.
           // On devnet, the fetch interceptor routes this through quspo.
-          let items: any[] = [];
-          try {
-            const result = await (provider as any).dataApiGetAlkanesByAddress(address);
-            items = result?.data || [];
-          } catch (dataApiErr) {
-            console.warn(`[alkaneBalanceQuery] dataApi failed for ${address.slice(0, 12)}...:`, dataApiErr);
-          }
-
-          // Devnet fallback: quspo may not index balances. Use direct RPC
-          // (alkanesByAddress via metashrew) which is always available.
-          if (items.length === 0 && deps.network === 'devnet') {
-            try {
-              const rpcResult = await (provider as any).alkanesByAddress(address);
-              if (rpcResult && typeof rpcResult.forEach === 'function') {
-                rpcResult.forEach((balance: any, alkaneId: string) => {
-                  const bal = String(balance);
-                  if (bal === '0') return;
-                  items.push({
-                    alkaneId: { block: alkaneId.split(':')[0], tx: alkaneId.split(':')[1] },
-                    balance: bal,
-                  });
-                });
-              } else if (rpcResult && typeof rpcResult === 'object') {
-                for (const [alkaneId, balance] of Object.entries(rpcResult)) {
-                  const bal = String(balance);
-                  if (bal === '0') continue;
-                  items.push({
-                    alkaneId: { block: alkaneId.split(':')[0], tx: alkaneId.split(':')[1] },
-                    balance: bal,
-                  });
-                }
-              }
-              console.log(`[alkaneBalanceQuery] devnet fallback: ${items.length} alkanes`);
-            } catch (rpcErr) {
-              console.warn(`[alkaneBalanceQuery] devnet RPC fallback failed:`, rpcErr);
-            }
-          }
+          const result = await (provider as any).dataApiGetAlkanesByAddress(address);
+          const items: any[] = result?.data || [];
 
           console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes`);
 
@@ -514,32 +479,24 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
         const sellBalancePromises = addresses.map(async (address) => {
           try {
-            // On devnet, /api/alkane-balances returns empty (server can't reach
-            // in-browser devnet). Query client-side via SDK instead.
+            // On devnet, the /api/alkane-balances server route returns empty
+            // because the server can't reach the in-browser devnet. Use the
+            // SDK's dataApiGetAlkanesByAddress (client-side, routes through quspo).
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
             if (deps.network === 'devnet' && deps.provider) {
-              try {
-                const rpcResult = await (deps.provider as any).alkanesByAddress(address);
-                if (rpcResult && typeof rpcResult.forEach === 'function') {
-                  rpcResult.forEach((balance: any, alkaneId: string) => {
-                    const bal = String(balance);
-                    if (bal !== '0') {
-                      const known = KNOWN_TOKENS_SELL[alkaneId];
-                      balances.push({ alkaneId, balance: bal, name: known?.name, symbol: known?.symbol });
-                    }
-                  });
-                } else if (rpcResult && typeof rpcResult === 'object') {
-                  for (const [alkaneId, balance] of Object.entries(rpcResult)) {
-                    const bal = String(balance);
-                    if (bal !== '0') {
-                      const known = KNOWN_TOKENS_SELL[alkaneId];
-                      balances.push({ alkaneId, balance: bal, name: known?.name, symbol: known?.symbol });
-                    }
-                  }
-                }
-              } catch (rpcErr) {
-                console.warn('[sellableCurrencies] devnet RPC fallback failed:', rpcErr);
+              const result = await (deps.provider as any).dataApiGetAlkanesByAddress(address);
+              const items: any[] = result?.data || [];
+              for (const item of items) {
+                const block = item.alkaneId?.block;
+                const tx = item.alkaneId?.tx;
+                if (block == null || tx == null) continue;
+                balances.push({
+                  alkaneId: `${block}:${tx}`,
+                  balance: String(item.balance || '0'),
+                  name: item.name || undefined,
+                  symbol: item.symbol || undefined,
+                });
               }
             } else {
               const resp = await fetch(

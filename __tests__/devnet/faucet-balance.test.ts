@@ -73,21 +73,56 @@ describe('Devnet: Faucet → Balance', () => {
     });
 
     it('should have BTC via getEnrichedBalances (UI path)', async () => {
-      // This is what WalletContext.getSpendableTotalBalance uses
-      try {
-        const rawResult = await (provider as any).getEnrichedBalances(taprootAddress, '1');
-        const spendable = rawResult?.returns?.spendable || rawResult?.spendable || [];
-        const totalSats = spendable.reduce((s: number, u: any) => s + (u.value || 0), 0);
-        console.log('[faucet-balance] BTC via getEnrichedBalances:', totalSats, 'sats');
-        // This may return 0 on devnet if the Lua script doesn't work — that's the bug
-        if (totalSats === 0) {
-          console.warn('[faucet-balance] WARNING: getEnrichedBalances returned 0 — UI will show no BTC');
-        }
-      } catch (err) {
-        console.warn('[faucet-balance] getEnrichedBalances failed:', err);
+      const rawResult = await (provider as any).getEnrichedBalances(taprootAddress, '1');
+
+      // Inspect every possible shape the SDK could return
+      const isMap = rawResult instanceof Map;
+      const topKeys = isMap ? [...rawResult.keys()] : Object.keys(rawResult || {});
+      console.log('[faucet-balance] getEnrichedBalances return type:', typeof rawResult);
+      console.log('[faucet-balance] isMap:', isMap);
+      console.log('[faucet-balance] top-level keys:', topKeys);
+      console.log('[faucet-balance] JSON (first 500):', JSON.stringify(rawResult)?.slice(0, 500));
+
+      // Try all known nesting patterns
+      const returns = isMap ? rawResult.get('returns') : (rawResult?.returns || rawResult?.result?.returns);
+      console.log('[faucet-balance] returns type:', typeof returns, 'isMap:', returns instanceof Map);
+      if (returns) {
+        const returnsKeys = returns instanceof Map ? [...returns.keys()] : Object.keys(returns);
+        console.log('[faucet-balance] returns keys:', returnsKeys);
       }
-      // Always passes — we're diagnosing, not asserting the broken path
-      expect(true).toBe(true);
+
+      const spendable = returns?.spendable || (returns instanceof Map ? returns.get('spendable') : null);
+      console.log('[faucet-balance] spendable type:', typeof spendable, 'isArray:', Array.isArray(spendable));
+      if (spendable) {
+        const isSpendableMap = spendable instanceof Map;
+        console.log('[faucet-balance] spendable isMap:', isSpendableMap);
+        if (Array.isArray(spendable)) {
+          console.log('[faucet-balance] spendable length:', spendable.length);
+          if (spendable.length > 0) {
+            const first = spendable[0];
+            console.log('[faucet-balance] spendable[0] type:', typeof first, 'isMap:', first instanceof Map);
+            console.log('[faucet-balance] spendable[0]:', JSON.stringify(first)?.slice(0, 200));
+            if (first instanceof Map) {
+              console.log('[faucet-balance] spendable[0] Map keys:', [...first.keys()]);
+              console.log('[faucet-balance] spendable[0].get("value"):', first.get('value'));
+            }
+          }
+        }
+      }
+
+      // Now compute balance using the correct extraction path
+      let totalSats = 0;
+      if (Array.isArray(spendable)) {
+        for (const utxo of spendable) {
+          if (utxo instanceof Map) {
+            totalSats += Number(utxo.get('value') || 0);
+          } else {
+            totalSats += Number(utxo?.value || 0);
+          }
+        }
+      }
+      console.log('[faucet-balance] BTC via getEnrichedBalances (corrected):', totalSats, 'sats');
+      expect(totalSats).toBeGreaterThan(0);
     });
 
     it('should have BTC via direct UTXO query (fallback path)', async () => {
