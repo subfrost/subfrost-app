@@ -538,6 +538,102 @@ describe('Devnet E2E: Full Swap Coverage', () => {
   });
 
   // -------------------------------------------------------------------------
+  // LP position discovery (UI flow simulation)
+  // -------------------------------------------------------------------------
+
+  describe('LP position discovery', () => {
+    it('should find LP token via alkanes_protorunesbyaddress', async () => {
+      if (!poolId) {
+        console.log('[lp-discovery] Skipping — no pool');
+        return;
+      }
+
+      // This is the same RPC call the UI uses via queries/account.ts
+      const lpBalance = await getAlkaneBalance(provider, taprootAddress, poolId);
+      console.log('[lp-discovery] LP token balance via protorunesbyaddress:', lpBalance.toString());
+      expect(lpBalance).toBeGreaterThan(0n);
+    }, 30_000);
+
+    it('should find pool via factory opcode 3 (GetAllPools)', async () => {
+      if (!poolId) {
+        console.log('[lp-discovery] Skipping — no pool');
+        return;
+      }
+
+      // This is the same RPC call usePools/SDK fallback uses
+      if (!factoryId) { console.log('[lp-discovery] Skipping — no factoryId'); return; }
+      const [fBlock, fTx] = factoryId.split(':');
+      const result = await rpcCall('alkanes_simulate', [{
+        target: { block: fBlock, tx: fTx },
+        inputs: ['3'], // opcode 3 = GetAllPools
+        alkanes: [],
+        transaction: '0x',
+        block: '0x',
+        height: '999999',
+        txindex: 0,
+        vout: 0,
+      }]);
+
+      const data = result?.result?.execution?.data?.replace('0x', '') || '';
+      const error = result?.result?.execution?.error;
+      console.log('[lp-discovery] GetAllPools error:', error || 'none');
+      console.log('[lp-discovery] GetAllPools data length:', data.length, 'chars');
+
+      expect(error).toBeFalsy();
+      // Data should be non-empty (at least 32 bytes = 64 hex chars for one pool)
+      expect(data.length).toBeGreaterThanOrEqual(32);
+    }, 30_000);
+
+    it('should match LP token ID against pool ID (UI matching logic)', async () => {
+      if (!poolId) {
+        console.log('[lp-discovery] Skipping — no pool');
+        return;
+      }
+
+      // Simulate the useLPPositions matching logic:
+      // 1. Get all user alkanes (same as alkaneBalanceQueryOptions)
+      const balanceResult = await rpcCall('alkanes_protorunesbyaddress', [
+        { address: taprootAddress, protocolTag: '1' },
+      ]);
+      const outpoints = balanceResult?.result?.outpoints || [];
+
+      // Build a set of alkane IDs the user holds
+      const userAlkaneIds = new Set<string>();
+      for (const op of outpoints) {
+        const balances = op.balance_sheet?.cached?.balances || op.runes || [];
+        for (const entry of balances) {
+          const block = parseInt(entry.block ?? '0', 10);
+          const tx = parseInt(entry.tx ?? '0', 10);
+          const amount = BigInt(entry.amount || '0');
+          if (amount > 0n) {
+            userAlkaneIds.add(`${block}:${tx}`);
+          }
+        }
+      }
+      console.log('[lp-discovery] User alkane IDs:', Array.from(userAlkaneIds));
+
+      // 2. Get pool IDs (from factory opcode 3 + pool opcode 999)
+      // Use the SDK method which is what the UI uses
+      let poolIds: string[] = [];
+      try {
+        if (!factoryId) { console.log('[lp-discovery] Skipping — no factoryId'); return; }
+        const rpcResult = await provider.alkanesGetAllPoolsWithDetails(factoryId);
+        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+        poolIds = (parsed?.pools || []).map((p: any) => `${p.pool_id_block}:${p.pool_id_tx}`);
+      } catch (e: any) {
+        console.log('[lp-discovery] alkanesGetAllPoolsWithDetails failed:', e.message?.slice(0, 200));
+      }
+      console.log('[lp-discovery] Pool IDs from factory:', poolIds);
+
+      // 3. The match: does the user hold an alkane whose ID is a pool ID?
+      const matchedLPs = Array.from(userAlkaneIds).filter(id => poolIds.includes(id));
+      console.log('[lp-discovery] Matched LP positions:', matchedLPs);
+
+      expect(matchedLPs).toContain(poolId);
+    }, 60_000);
+  });
+
+  // -------------------------------------------------------------------------
   // Final status report
   // -------------------------------------------------------------------------
 
