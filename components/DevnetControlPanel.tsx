@@ -73,9 +73,10 @@ export function DevnetControlPanel() {
     setLastResult(null);
     try {
       await fn();
-      // Invalidate React Query caches so balances refresh
-      await new Promise(r => setTimeout(r, 200));
-      queryClient.invalidateQueries().catch(() => {});
+      // Force refetch all queries — invalidateQueries alone won't refetch
+      // if staleTime hasn't expired (alkane balances use 30s staleTime).
+      await new Promise(r => setTimeout(r, 300));
+      queryClient.refetchQueries().catch(() => {});
       setLastResult('Done');
       setTimeout(() => setLastResult(null), 2000);
     } catch (e: any) {
