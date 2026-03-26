@@ -17,6 +17,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { getRpcUrl } from '@/utils/getConfig';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -374,12 +375,75 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
 
       for (const address of addresses) {
         try {
-          // SDK data API returns enriched metadata: name, symbol, balance, price, image.
-          // On devnet, routes through quspo via fetch interceptor. Quspo works
-          // reliably now that state restore skips contract redeployment (2026-03-26).
-          // On non-devnet networks, routes to the external Espo data API.
+          // Primary path: SDK data API (dataApiGetAlkanesByAddress).
+          // On non-devnet networks, this calls the external Espo data API.
+          // On devnet, this routes through quspo via the fetch interceptor.
           const result = await (provider as any).dataApiGetAlkanesByAddress(address);
-          const items: any[] = result?.data || [];
+          let items: any[] = result?.data || [];
+
+          // ⚠️ QUSPO BUG (2026-03-26): On devnet, quspo's get_alkanes_by_address
+          // returns empty arrays for addresses that DO have alkane balances.
+          //
+          // Root cause: quspo is a tertiary indexer added AFTER the initial 101-block
+          // mining and contract deployment. When quspo runs get_alkanes_by_address,
+          // it queries its own internal address→outpoint index. This index is built
+          // by processing blocks as they arrive. However:
+          //
+          // 1. Quspo is added post-deployment — it processes the full chain history
+          //    via addTertiary(), but its address index only tracks outpoints it has
+          //    seen being CREATED in blocks it processes. It does NOT retroactively
+          //    scan the alkanes indexer's existing outpoint state.
+          //
+          // 2. When the user clicks +DIESEL faucet, a new block is mined. Quspo
+          //    processes this block and sees the transaction. But its address index
+          //    lookup (get_alkanes_by_address) returns empty because the mapping
+          //    from address → outpoint was never built for addresses that received
+          //    tokens in transactions quspo processed.
+          //
+          // 3. The alkanes indexer (metashrew) has the correct data — proven by
+          //    lua_evalsaved which returns the DIESEL in the `assets[].runes[]` array.
+          //    Quspo reads from metashrew's state but doesn't correctly translate
+          //    it to per-address balance queries.
+          //
+          // Fix needed in quspo: get_alkanes_by_address should query metashrew's
+          // protorunesbyaddress view directly, not maintain its own address index.
+          //
+          // Fallback: extract alkane balances from the enriched balance response
+          // (getEnrichedBalances → lua_evalsaved) which queries metashrew directly.
+          if (items.length === 0 && deps.network === 'devnet') {
+            try {
+              const enriched = await provider.getEnrichedBalances(address, '1');
+              const mapToObj = (v: any): any => {
+                if (v instanceof Map) {
+                  const o: any = {};
+                  for (const [k, val] of v.entries()) o[k] = mapToObj(val);
+                  return o;
+                }
+                if (Array.isArray(v)) return v.map(mapToObj);
+                return v;
+              };
+              const returns = enriched instanceof Map
+                ? mapToObj(enriched.get('returns'))
+                : mapToObj(enriched?.returns || enriched);
+              const assets: any[] = returns?.assets || [];
+              const balanceAgg = new Map<string, bigint>();
+              for (const asset of assets) {
+                for (const r of (asset?.runes || [])) {
+                  const key = `${r.block}:${r.tx}`;
+                  balanceAgg.set(key, (balanceAgg.get(key) || 0n) + BigInt(r.amount || 0));
+                }
+              }
+              items = Array.from(balanceAgg.entries()).map(([id, amt]) => {
+                const [block, tx] = id.split(':');
+                return { alkaneId: { block: Number(block), tx: Number(tx) }, balance: amt.toString() };
+              });
+              if (items.length > 0) {
+                console.log('[alkaneBalanceQuery] quspo empty, enriched fallback found', items.length, 'alkanes');
+              }
+            } catch (err) {
+              console.warn('[alkaneBalanceQuery] enriched fallback failed:', err);
+            }
+          }
 
           console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes`);
 
