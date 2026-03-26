@@ -594,6 +594,143 @@ async function fetchPoolsFromSDKFallback(
 }
 
 // ============================================================================
+// Direct RPC fallback (alkanes_simulate for GetAllPools + PoolDetails)
+//
+// JOURNAL (2026-03-26): The SDK's alkanesGetAllPoolsWithDetails fails on devnet
+// with "No data in response". This function calls alkanes_simulate directly and
+// parses the binary response. GetAllPools (opcode 3) returns:
+//   [16-byte u128 LE count] + N * [16-byte u128 LE block][16-byte u128 LE tx]
+// PoolDetails (opcode 999) returns pool name, reserves, and token IDs.
+// ============================================================================
+
+async function fetchPoolsFromDirectRpc(
+  factoryId: string,
+  network: string,
+  tokenMetaMap?: Map<string, { name: string; symbol: string }>,
+): Promise<PoolsListItem[]> {
+  const rpcUrl = getRpcUrl(network);
+  const [fBlock, fTx] = factoryId.split(':');
+
+  // Step 1: Get all pool IDs via factory opcode 3
+  const poolsResp = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'alkanes_simulate',
+      params: [{
+        target: { block: fBlock, tx: fTx },
+        inputs: ['3'],
+        alkanes: [],
+        transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0,
+      }],
+      id: 1,
+    }),
+  });
+  const poolsResult = await poolsResp.json();
+  const data = poolsResult?.result?.execution?.data?.replace('0x', '') || '';
+  if (poolsResult?.result?.execution?.error || data.length < 32) {
+    console.log('[usePools] Direct RPC GetAllPools failed or empty');
+    return [];
+  }
+
+  const buf = Buffer.from(data, 'hex');
+  const count = Number(buf.readBigUInt64LE(0));
+  const poolIds: { block: number; tx: number }[] = [];
+  for (let i = 0; i < count && 16 + i * 32 + 32 <= buf.length; i++) {
+    const offset = 16 + i * 32;
+    poolIds.push({
+      block: Number(buf.readBigUInt64LE(offset)),
+      tx: Number(buf.readBigUInt64LE(offset + 16)),
+    });
+  }
+
+  console.log('[usePools] Direct RPC found', poolIds.length, 'pools:', poolIds.map(p => `${p.block}:${p.tx}`));
+
+  // Step 2: Get details for each pool via pool opcode 999
+  const items: PoolsListItem[] = [];
+  for (const pool of poolIds) {
+    try {
+      const detailResp = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'alkanes_simulate',
+          params: [{
+            target: { block: String(pool.block), tx: String(pool.tx) },
+            inputs: ['999'],
+            alkanes: [],
+            transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0,
+          }],
+          id: 1,
+        }),
+      });
+      const detailResult = await detailResp.json();
+      const dHex = detailResult?.result?.execution?.data?.replace('0x', '') || '';
+      if (detailResult?.result?.execution?.error || dHex.length < 64) {
+        console.log(`[usePools] Pool ${pool.block}:${pool.tx} details failed`);
+        continue;
+      }
+
+      // Parse PoolDetails binary: token_a (AlkaneId 32b) + token_b (AlkaneId 32b) +
+      // reserve_a (u128 16b) + reserve_b (u128 16b) + total_supply (u128 16b) + name (rest)
+      const dBuf = Buffer.from(dHex, 'hex');
+      if (dBuf.length < 112) continue; // minimum: 32+32+16+16+16 = 112
+
+      const token0Block = Number(dBuf.readBigUInt64LE(0));
+      const token0Tx = Number(dBuf.readBigUInt64LE(16));
+      const token1Block = Number(dBuf.readBigUInt64LE(32));
+      const token1Tx = Number(dBuf.readBigUInt64LE(48));
+      const reserveA = dBuf.readBigUInt64LE(64).toString();
+      const reserveB = dBuf.readBigUInt64LE(80).toString();
+
+      const poolId = `${pool.block}:${pool.tx}`;
+      const token0Id = `${token0Block}:${token0Tx}`;
+      const token1Id = `${token1Block}:${token1Tx}`;
+
+      // Try to read pool name from remaining bytes (may be length-prefixed string)
+      let poolName = '';
+      if (dBuf.length > 112) {
+        try {
+          const nameLen = Number(dBuf.readBigUInt64LE(112));
+          if (nameLen > 0 && nameLen < 256 && 128 + nameLen <= dBuf.length) {
+            poolName = dBuf.subarray(128, 128 + nameLen).toString('utf-8');
+          }
+        } catch { /* ignore name parse failures */ }
+      }
+
+      const token0Symbol = getTokenSymbol(token0Id, undefined, tokenMetaMap) || token0Id;
+      const token1Symbol = getTokenSymbol(token1Id, undefined, tokenMetaMap) || token1Id;
+      const token0Name = getTokenName(token0Id, undefined, tokenMetaMap) || token0Symbol;
+      const token1Name = getTokenName(token1Id, undefined, tokenMetaMap) || token1Symbol;
+
+      items.push({
+        id: poolId,
+        pairLabel: poolName || `${token0Name} / ${token1Name} LP`,
+        token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
+        token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
+        tvlUsd: 0,
+        token0TvlUsd: 0,
+        token1TvlUsd: 0,
+        vol24hUsd: 0,
+        vol7dUsd: 0,
+        vol30dUsd: 0,
+        apr: 0,
+        token0Amount: reserveA,
+        token1Amount: reserveB,
+      });
+
+      console.log(`[usePools] Direct RPC pool ${poolId}: ${token0Symbol}/${token1Symbol}`);
+    } catch (e) {
+      console.warn(`[usePools] Pool ${pool.block}:${pool.tx} details error:`, e);
+    }
+  }
+
+  return items;
+}
+
+// ============================================================================
 // Hook
 // ============================================================================
 
@@ -666,6 +803,19 @@ export function usePools(params: UsePoolsParams = {}) {
           items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
           console.warn('[usePools] SDK fallback also failed:', e);
+        }
+      }
+
+      // Fallback 4: Direct alkanes_simulate RPC (parses GetAllPools + PoolDetails manually)
+      // JOURNAL (2026-03-26): On devnet, the SDK's alkanesGetAllPoolsWithDetails returns
+      // "No data in response" even though the factory's opcode 3 (GetAllPools) works via
+      // direct RPC. This fallback calls alkanes_simulate directly and parses the binary
+      // response: 16-byte count prefix (u128 LE) + N * 32-byte AlkaneId entries.
+      if (items.length === 0) {
+        try {
+          items = await fetchPoolsFromDirectRpc(ALKANE_FACTORY_ID, network, tokenMetaMap);
+        } catch (e) {
+          console.warn('[usePools] Direct RPC fallback also failed:', e);
         }
       }
 

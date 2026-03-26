@@ -612,18 +612,55 @@ describe('Devnet E2E: Full Swap Coverage', () => {
       }
       console.log('[lp-discovery] User alkane IDs:', Array.from(userAlkaneIds));
 
-      // 2. Get pool IDs (from factory opcode 3 + pool opcode 999)
-      // Use the SDK method which is what the UI uses
+      // 2. Get pool IDs — try SDK method first, then direct RPC fallback
+      if (!factoryId) { console.log('[lp-discovery] Skipping — no factoryId'); return; }
       let poolIds: string[] = [];
+
+      // Method A: SDK alkanesGetAllPoolsWithDetails (what usePools fallback uses)
       try {
-        if (!factoryId) { console.log('[lp-discovery] Skipping — no factoryId'); return; }
         const rpcResult = await provider.alkanesGetAllPoolsWithDetails(factoryId);
         const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
         poolIds = (parsed?.pools || []).map((p: any) => `${p.pool_id_block}:${p.pool_id_tx}`);
+        console.log('[lp-discovery] SDK alkanesGetAllPoolsWithDetails returned', poolIds.length, 'pools:', poolIds);
       } catch (e: any) {
-        console.log('[lp-discovery] alkanesGetAllPoolsWithDetails failed:', e.message?.slice(0, 200));
+        console.log('[lp-discovery] SDK alkanesGetAllPoolsWithDetails failed:', String(e?.message || e)?.slice(0, 300));
       }
-      console.log('[lp-discovery] Pool IDs from factory:', poolIds);
+
+      // Method B: Direct RPC — parse GetAllPools opcode 3 response manually
+      // This is the fallback the UI SHOULD use if the SDK method fails
+      if (poolIds.length === 0) {
+        try {
+          const [fBlock, fTx] = factoryId.split(':');
+          const result = await rpcCall('alkanes_simulate', [{
+            target: { block: fBlock, tx: fTx },
+            inputs: ['3'],
+            alkanes: [],
+            transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0,
+          }]);
+          const data = result?.result?.execution?.data?.replace('0x', '') || '';
+          console.log('[lp-discovery] Raw GetAllPools hex:', data);
+          // GetAllPools returns a serialized Vec<AlkaneId>. Each AlkaneId is
+          // two u128 (block, tx) = 32 bytes. But the Vec has a 16-byte length prefix.
+          if (data.length >= 32) {
+            const buf = Buffer.from(data, 'hex');
+            // First 16 bytes = count as u128 LE
+            const count = Number(buf.readBigUInt64LE(0));
+            console.log('[lp-discovery] Pool count from prefix:', count);
+            // Then count * 32 bytes of AlkaneId entries
+            for (let i = 0; i < count && 16 + i * 32 + 32 <= buf.length; i++) {
+              const offset = 16 + i * 32;
+              const block = Number(buf.readBigUInt64LE(offset));
+              const tx = Number(buf.readBigUInt64LE(offset + 16));
+              poolIds.push(`${block}:${tx}`);
+            }
+          }
+          console.log('[lp-discovery] Direct RPC GetAllPools returned', poolIds.length, 'pools:', poolIds);
+        } catch (e: any) {
+          console.log('[lp-discovery] Direct RPC GetAllPools failed:', e.message?.slice(0, 200));
+        }
+      }
+
+      console.log('[lp-discovery] Final pool IDs:', poolIds);
 
       // 3. The match: does the user hold an alkane whose ID is a pool ID?
       const matchedLPs = Array.from(userAlkaneIds).filter(id => poolIds.includes(id));
