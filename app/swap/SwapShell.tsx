@@ -953,70 +953,68 @@ export default function SwapShell() {
         const wrapTxId = wrapRes.transactionId;
         console.log('[SWAP] Step 1 broadcast — wrap txid:', wrapTxId);
 
-        // Wait for wrap tx to confirm before proceeding to step 2.
-        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
+        // ⚠️ JOURNAL (2026-03-26): On devnet, the in-process indexer processes
+        // blocks synchronously — no esplora polling needed. On regtest, mine a
+        // block via the API. On all non-devnet networks, poll esplora_tx.
+        // This was first fixed in commit d3af35a, lost during revert to 69f39c8.
+        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
 
-        // On regtest, mine a block to trigger confirmation
         if (isRegtest && address) {
           console.log('[SWAP] Mining block to confirm wrap transaction...');
           try {
-            await fetch('/api/regtest/mine', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ blocks: 1, address }),
-            });
+            if (network === 'devnet') {
+              await fetch(getRpcUrl(network), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
+              });
+            } else {
+              await fetch('/api/regtest/mine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blocks: 1, address }),
+              });
+            }
           } catch (mineErr) {
             console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
           }
         }
 
-        // Poll esplora until the wrap tx is confirmed (all networks)
-        console.log('[SWAP] Waiting for wrap tx confirmation before swap step...');
-        showNotification(wrapTxId, 'wrap', 'Step 1/2');
+        if (network !== 'devnet') {
+          console.log('[SWAP] Waiting for wrap tx confirmation before swap step...');
+          showNotification(wrapTxId, 'wrap', 'Step 1/2');
 
-        const pollInterval = isRegtest ? 1500 : 15000;   // 1.5s regtest, 15s mainnet
-        const maxPollAttempts = isRegtest ? 20 : 120;     // 30s regtest, ~30min mainnet
-        let wrapConfirmed = false;
+          const pollInterval = isRegtest ? 1500 : 15000;
+          const maxPollAttempts = isRegtest ? 20 : 120;
+          let wrapConfirmed = false;
 
-        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-          // Update state with polling progress
-          setSwapFlowStep({ type: 'wrap-confirming', txId: wrapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
-
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-          try {
-            const txResp = await fetch(getRpcUrl(network), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'esplora_tx',
-                params: [wrapTxId],
-                id: 1,
-              }),
-            });
-            const txData = await txResp.json();
-            if (txData?.result?.status?.confirmed) {
-              const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
-              console.log(`[SWAP] Wrap tx confirmed after ${elapsedSec}s`);
-              // Extra wait for esplora UTXO index to update
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              wrapConfirmed = true;
-              break;
-            }
-            const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
-            console.log(`[SWAP] Polling wrap tx... attempt ${attempt + 1}/${maxPollAttempts} (${elapsed}s elapsed)`);
-          } catch {
-            // Polling error — keep retrying
+          for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+            setSwapFlowStep({ type: 'wrap-confirming', txId: wrapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            try {
+              const txResp = await fetch(getRpcUrl(network), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_tx', params: [wrapTxId], id: 1 }),
+              });
+              const txData = await txResp.json();
+              if (txData?.result?.status?.confirmed) {
+                console.log(`[SWAP] Wrap tx confirmed after ${Math.round((attempt + 1) * pollInterval / 1000)}s`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                wrapConfirmed = true;
+                break;
+              }
+            } catch { /* keep retrying */ }
           }
-        }
 
-        if (!wrapConfirmed) {
-          const timeoutMsg = `Wrap tx broadcast but did not confirm. Your frBTC is safe — retry swap manually when confirmed.`;
-          setSwapFlowStep({ type: 'error', step: 'wrap', message: timeoutMsg, wrapTxId });
-          throw new Error(
-            `Wrap tx broadcast successfully (${wrapTxId}) but did not confirm within ${Math.round(maxPollAttempts * pollInterval / 60000)} minutes. ` +
-            `Your BTC has been wrapped — once confirmed, swap frBTC → ${toToken.symbol} manually.`
-          );
+          if (!wrapConfirmed) {
+            setSwapFlowStep({ type: 'error', step: 'wrap', message: 'Wrap tx did not confirm', wrapTxId });
+            throw new Error(`Wrap tx did not confirm — swap frBTC → ${toToken.symbol} manually.`);
+          }
+        } else {
+          console.log('[SWAP] Devnet: skipping esplora polling — tx confirmed synchronously');
+          showNotification(wrapTxId, 'wrap', 'Step 1/2');
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         // Step 2: Swap frBTC → Target token
@@ -1119,22 +1117,31 @@ export default function SwapShell() {
         const swapTxId = swapRes.transactionId;
         console.log('[SWAP] Step 1 broadcast — swap txid:', swapTxId);
 
-        // Wait for swap tx to confirm before proceeding to unwrap
-        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local'].includes(network);
+        // ⚠️ JOURNAL (2026-03-26): Same devnet handling as BTC→Token flow above.
+        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
 
         if (isRegtest && address) {
           console.log('[SWAP] Mining block to confirm swap transaction...');
           try {
-            await fetch('/api/regtest/mine', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ blocks: 1, address }),
-            });
+            if (network === 'devnet') {
+              await fetch(getRpcUrl(network), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
+              });
+            } else {
+              await fetch('/api/regtest/mine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blocks: 1, address }),
+              });
+            }
           } catch (mineErr) {
             console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
           }
         }
 
+        if (network !== 'devnet') {
         console.log('[SWAP] Waiting for swap tx confirmation before unwrap step...');
         showNotification(swapTxId, 'swap', 'Step 1/2');
 
@@ -1143,20 +1150,13 @@ export default function SwapShell() {
         let swapConfirmed = false;
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-          // Update state with polling progress
           setSwapFlowStep({ type: 'swap-confirming', txId: swapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
-
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           try {
             const txResp = await fetch(getRpcUrl(network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'esplora_tx',
-                params: [swapTxId],
-                id: 1,
-              }),
+              body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_tx', params: [swapTxId], id: 1 }),
             });
             const txData = await txResp.json();
             if (txData?.result?.status?.confirmed) {
@@ -1174,12 +1174,13 @@ export default function SwapShell() {
         }
 
         if (!swapConfirmed) {
-          const timeoutMsg = `Swap tx broadcast but did not confirm. Your frBTC is safe — unwrap manually when confirmed.`;
-          setSwapFlowStep({ type: 'error', step: 'swap', message: timeoutMsg, swapTxId });
-          throw new Error(
-            `Swap tx broadcast successfully (${swapTxId}) but did not confirm within ${Math.round(maxPollAttempts * pollInterval / 60000)} minutes. ` +
-            `Your ${fromToken.symbol} has been swapped to frBTC — once confirmed, unwrap frBTC → BTC manually.`
-          );
+          setSwapFlowStep({ type: 'error', step: 'swap', message: 'Swap tx did not confirm', swapTxId });
+          throw new Error(`Swap tx did not confirm — unwrap frBTC → BTC manually.`);
+        }
+        } else {
+          console.log('[SWAP] Devnet: skipping esplora polling — tx confirmed synchronously');
+          showNotification(swapTxId, 'swap', 'Step 1/2');
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         // Step 2: Unwrap frBTC → BTC
