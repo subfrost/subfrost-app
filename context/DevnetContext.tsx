@@ -440,6 +440,15 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     faucetFrbtc: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
       // Wrap BTC → frBTC via opcode 77 on frBTC contract [32:0]
+      //
+      // ⚠️ CRITICAL (2026-03-26): The signer address MUST be queried dynamically
+      // and bitcoin.initEccLib(ecc) MUST be called BEFORE bitcoin.payments.p2tr().
+      // Without ecc init, p2tr() throws silently, the catch swallows it, and the
+      // stale hardcoded address is used. BTC goes to the wrong address, the frBTC
+      // contract sees 0 incoming BTC, and nothing mints. This bug caused hours of
+      // debugging because the transaction "succeeds" (broadcasts fine) but produces
+      // no frBTC. The signer address changes on every fresh devnet boot.
+      //
       // First ensure we have BTC
       harnessRef.current.mineBlocks(1);
       await new Promise(r => setTimeout(r, 50));

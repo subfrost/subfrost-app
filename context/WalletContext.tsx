@@ -246,11 +246,14 @@ function mapToObject(value: any): any {
 
 // Helper to extract enriched data from WASM provider response
 // Handles both Map (from serde_wasm_bindgen) and plain object responses
+// ⚠️ CRITICAL (2026-03-26): The SDK's getEnrichedBalances returns nested Maps
+// (from serde_wasm_bindgen), NOT plain objects. JSON.stringify(Map) produces "{}",
+// making it look like balances are empty. mapToObject MUST be applied to the
+// ENTIRE result tree including array items. Without this, BTC balance shows 0
+// on devnet even though the underlying lua_evalsaved RPC returns valid UTXOs.
+// Proven via faucet-balance.test.ts: spendable[0] is a Map with .get("value").
 function extractEnrichedData(rawResult: any): { spendable: any[]; assets: any[]; pending: any[] } | null {
   if (!rawResult) return null;
-
-  // The SDK's getEnrichedBalances returns nested Maps (from serde_wasm_bindgen),
-  // not plain objects. mapToObject recursively converts Maps to plain objects.
   let enrichedData: any;
   if (rawResult instanceof Map) {
     const returns = rawResult.get('returns');

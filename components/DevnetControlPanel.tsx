@@ -73,8 +73,11 @@ export function DevnetControlPanel() {
     setLastResult(null);
     try {
       await fn();
-      // Force refetch all queries — invalidateQueries alone won't refetch
-      // if staleTime hasn't expired (alkane balances use 30s staleTime).
+      // ⚠️ (2026-03-26): MUST use refetchQueries(), not invalidateQueries().
+      // invalidateQueries only marks queries as stale — it won't re-execute
+      // the queryFn if the data is within staleTime. On devnet, alkane balance
+      // queries have 2s staleTime, but even that can prevent immediate updates.
+      // refetchQueries() forces the queryFn to run regardless of staleTime.
       await new Promise(r => setTimeout(r, 300));
       queryClient.refetchQueries().catch(() => {});
       setLastResult('Done');

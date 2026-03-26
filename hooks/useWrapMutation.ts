@@ -535,7 +535,11 @@ export function useWrapMutation() {
     onSuccess: (data) => {
       console.log('[WRAP] Success! txid:', data.transactionId, 'amount:', data.wrapAmountSats, 'sats');
 
-      // Refetch all balance queries — invalidate alone won't bypass staleTime
+      // ⚠️ (2026-03-26): MUST use refetchQueries, not invalidateQueries.
+      // invalidateQueries marks as stale but won't re-execute queryFn if
+      // data is within staleTime (30s on non-devnet). refetchQueries forces
+      // immediate execution. The 'alkane-balances' key was also missing
+      // from the original list — without it, frBTC never showed after wrap.
       queryClient.refetchQueries({ queryKey: ['alkane-balances'] });
       queryClient.refetchQueries({ queryKey: ['sellable-currencies'] });
       queryClient.refetchQueries({ queryKey: ['btc-balance'] });

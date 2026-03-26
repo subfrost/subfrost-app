@@ -116,14 +116,24 @@ export async function bootDevnetWithWasms(
 
   onProgress('Initializing Bitcoin node (loading WASM)...', 15);
 
-  // JOURNAL (2026-03-26): Create harness WITHOUT esplora to prevent OOM.
-  // Both alkanes + esplora indexers create WebAssembly.Instance per block.
-  // Mining 101 blocks with both loaded = 200+ instances, exhausting memory
-  // before FinalizationRegistry can reclaim them. Without esplora, only
-  // alkanes creates instances (1 per block), which is manageable.
-  // Esplora is optional — the SDK uses lua_evalsaved for UTXO queries
-  // which doesn't require esplora. Quspo handles the data API on devnet.
-  const useEsplora = false; // Disabled to prevent OOM during mining
+  // ⚠️ CRITICAL (2026-03-26): Create harness WITHOUT esplora to prevent OOM.
+  // Each indexer creates a WebAssembly.Instance per mined block. With both
+  // alkanes + esplora loaded, mining 101 coinbase-maturity blocks creates
+  // 200+ instances. FinalizationRegistry can't reclaim them fast enough —
+  // OOM crashes at block ~71-80 ("Cannot allocate Wasm memory for new instance").
+  //
+  // Disabling esplora halves instance count to ~101, which GC can handle.
+  // Esplora is NOT needed on devnet:
+  //   - BTC balance: uses lua_evalsaved (Lua script, not esplora)
+  //   - Alkane balances: uses alkanes_protorunesbyaddress RPC (metashrew)
+  //   - Swap UTXO discovery: uses lua_evalsaved
+  //   - Data API (pool/token queries): uses quspo (tertiary indexer)
+  //
+  // DO NOT re-enable esplora without solving the OOM. The harness API has
+  // no addSecondary() — esplora can only be loaded at creation time.
+  // Possible future fix: batch mining in the WASM harness (mine N blocks
+  // in a single call without creating N separate instances).
+  const useEsplora = false;
 
   console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esplora=%s quspo=deferred',
     Math.round(alkanesWasm.length / 1024),

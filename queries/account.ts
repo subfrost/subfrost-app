@@ -354,12 +354,18 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       !!deps.account &&
       deps.isConnected &&
       addresses.length > 0,
-    // On devnet, use short staleTime so faucet/wrap operations trigger
-    // immediate refetch. On other networks, 30s prevents excessive refetches.
+    // ⚠️ CRITICAL (2026-03-26): On devnet, staleTime MUST be short and polling
+    // MUST be enabled. Without this, balances never update after faucet/wrap
+    // operations. The issue: DevnetControlPanel calls refetchQueries() after
+    // faucets, but React Query skips refetch if data is within staleTime.
+    // With 30s staleTime, clicking +DIESEL shows "Done" but balance stays at 0
+    // for up to 30 seconds. 2s staleTime + 5s polling ensures balances refresh
+    // within seconds. DO NOT increase devnet staleTime or remove polling.
+    // See faucet-e2e.test.ts which proves the queryFn itself works correctly —
+    // the issue was purely React Query caching, not the data fetching logic.
     staleTime: deps.network === 'devnet' ? 2_000 : 30_000,
     refetchOnMount: 'always' as const,
     refetchOnWindowFocus: true,
-    // On devnet, poll every 5s to catch balance changes from faucets/wraps
     refetchInterval: deps.network === 'devnet' ? 5_000 : undefined,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
@@ -374,7 +380,12 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           let items: any[] = [];
 
           if (isDevnet) {
-            console.log('[alkaneBalanceQuery] DEVNET: querying alkanes_protorunesbyaddress for', address);
+            // ⚠️ CRITICAL (2026-03-26): On devnet, MUST use alkanes_protorunesbyaddress
+            // RPC directly — NOT dataApiGetAlkanesByAddress (quspo). The quspo data API
+            // path works intermittently but fails after IndexedDB state restore or when
+            // new tokens are minted post-boot. The direct RPC via metashrew always works.
+            // This was proven in commit 5234803 and re-confirmed in faucet-e2e.test.ts.
+            // DO NOT replace this with dataApiGetAlkanesByAddress on devnet.
             // On devnet, query alkanes_protorunesbyaddress RPC directly.
             // The dataApiGetAlkanesByAddress path goes through quspo which
             // doesn't reliably return balances after restored state or new
@@ -522,9 +533,13 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
         const sellBalancePromises = addresses.map(async (address) => {
           try {
-            // On devnet, the /api/alkane-balances server route returns empty
-            // because the server can't reach the in-browser devnet. Use the
-            // SDK's dataApiGetAlkanesByAddress (client-side, routes through quspo).
+            // ⚠️ (2026-03-26): On devnet, /api/alkane-balances is a Next.js
+            // server-side route that returns empty ({ balances: [] }) because the
+            // server process can't reach the in-browser WASM devnet. The devnet
+            // runs entirely in the browser via a fetch interceptor — server-side
+            // fetch() to localhost:18888 hits nothing. Must use client-side
+            // dataApiGetAlkanesByAddress instead, which routes through quspo.
+            // This powers the 25/50/75/MAX percentage buttons on the swap page.
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
             if (deps.network === 'devnet' && deps.provider) {
