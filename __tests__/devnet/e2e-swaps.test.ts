@@ -554,6 +554,35 @@ describe('Devnet E2E: Full Swap Coverage', () => {
       expect(lpBalance).toBeGreaterThan(0n);
     }, 30_000);
 
+    it('should return pool data via quspo get_pools (same as SDK data API path)', async () => {
+      if (!factoryId) {
+        console.log('[lp-discovery] Skipping — no factoryId');
+        return;
+      }
+
+      // This is the exact call the devnet-server resolveRestMethod makes:
+      // /get-all-pools-details → metashrew_view('get_pools', hex(JSON(factoryId)), 'latest')
+      const [fBlock, fTx] = factoryId.split(':');
+      const payload = JSON.stringify({ block: fBlock, tx: fTx });
+      const hexInput = '0x' + Buffer.from(payload).toString('hex');
+
+      const result = await rpcCall('metashrew_view', ['get_pools', hexInput, 'latest']);
+      console.log('[lp-discovery] quspo get_pools raw result:', JSON.stringify(result)?.slice(0, 500));
+
+      // Decode hex response to JSON
+      if (result?.result) {
+        const hex = result.result.replace(/^0x/, '');
+        if (hex.length > 0) {
+          const decoded = Buffer.from(hex, 'hex').toString('utf-8');
+          console.log('[lp-discovery] quspo get_pools decoded:', decoded.slice(0, 500));
+        } else {
+          console.log('[lp-discovery] quspo get_pools returned empty hex');
+        }
+      } else if (result?.error) {
+        console.log('[lp-discovery] quspo get_pools error:', JSON.stringify(result.error));
+      }
+    }, 30_000);
+
     it('should find pool via factory opcode 3 (GetAllPools)', async () => {
       if (!poolId) {
         console.log('[lp-discovery] Skipping — no pool');
