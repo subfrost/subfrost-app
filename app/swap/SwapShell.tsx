@@ -871,24 +871,18 @@ export default function SwapShell() {
   // The SDK's alkanesExecute checks indexer height === chain height and times out after
   // 30s if they diverge. This can happen when previous operations mined blocks faster
   // than the indexer can process them.
+  // Ensure devnet indexer is caught up before executing mutations.
+  // The SDK checks metashrew_height === btc_getblockcount and times out after 30s
+  // if they diverge. Mining an empty block via generatetoaddress triggers
+  // mine_and_index which processes all pending blocks through the indexer.
   const waitForDevnetSync = async () => {
     if (network !== 'devnet') return;
     const rpc = getRpcUrl(network);
-    for (let i = 0; i < 10; i++) {
-      try {
-        const [heightResp, countResp] = await Promise.all([
-          fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 1 }) }),
-          fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_getblockcount', params: [], id: 2 }) }),
-        ]);
-        const indexerHeight = parseInt((await heightResp.json())?.result || '0', 10);
-        const chainHeight = (await countResp.json())?.result ?? 0;
-        if (indexerHeight >= chainHeight) return;
-        console.log(`[devnet] Waiting for indexer sync: ${indexerHeight}/${chainHeight}`);
-      } catch { /* ignore */ }
-      await new Promise(r => setTimeout(r, 500));
-    }
+    try {
+      // Mine an empty block — this forces the indexer to process any pending blocks
+      await fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address || ''], id: 1 }) });
+    } catch { /* ignore */ }
   };
 
   const handleSwap = async () => {
