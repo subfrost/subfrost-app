@@ -857,23 +857,20 @@ async function deployFullProtocol(
 async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
   onProgress('Mining initial blocks...', 20);
   // JOURNAL (2026-03-22): Mine 1 block at a time with real delays.
-  // Both alkanes and esplora indexers create a new WebAssembly.Instance per block
-  // via WebIndexerRuntime::run_block. With batch size > 1, multiple instances
-  // accumulate before GC gets a chance to reclaim them, causing browser OOM.
-  // Mining 1 block at a time with 50ms delay gives the browser GC enough time
-  // to collect the previous block's instances before creating new ones.
-  // Coinbase maturity requires 100 blocks; we mine 101 for safety.
-  // Total extra time: ~5s (101 x 50ms).
+  // Each mined block creates WebAssembly.Instance objects in the indexer.
+  // FinalizationRegistry cleans them up, but needs actual idle time to run.
+  // 50ms per block was insufficient — OOM at block ~71. Use longer pauses.
   const TOTAL_BLOCKS = 101;
   for (let mined = 0; mined < TOTAL_BLOCKS; mined++) {
     _harness.mineBlocks(1);
     if (mined % 10 === 0) {
       const pct = 20 + Math.round((mined / TOTAL_BLOCKS) * 30);
       onProgress(`Mining blocks... ${mined + 1}/${TOTAL_BLOCKS}`, pct);
+      // Longer pause every 10 blocks for FinalizationRegistry to run
+      await new Promise(r => setTimeout(r, 200));
+    } else {
+      await new Promise(r => setTimeout(r, 50));
     }
-    // Real delay (not setTimeout(0)) to allow browser GC to reclaim
-    // the WebAssembly.Instance objects created by run_block
-    await new Promise(r => setTimeout(r, 50));
   }
 }
 
