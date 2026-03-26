@@ -169,7 +169,8 @@ async function discoverAlkaneUtxos(
     }),
   });
   const utxoData = await utxoResp.json();
-  const utxos = utxoData.result || [];
+  const rawResult = utxoData?.result ?? utxoData;
+  const utxos = Array.isArray(rawResult) ? rawResult : [];
 
   // 2. Filter for dust UTXOs (<=1000 sats) - alkane tokens live on dust outputs
   const dustUtxos = utxos.filter((u: any) => u.value <= 1000);
