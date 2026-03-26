@@ -130,17 +130,48 @@ describe('Devnet: Faucet → Balance', () => {
     });
 
     it('should show DIESEL via dataApiGetAlkanesByAddress (UI primary path)', async () => {
+      // Mine an extra block to give quspo a chance to index
+      mineBlocks(harness, 1);
+      await new Promise(r => setTimeout(r, 200));
+
+      let dataApiItems = 0;
       try {
         const result = await (provider as any).dataApiGetAlkanesByAddress(taprootAddress);
         const items = result?.data || [];
+        dataApiItems = items.length;
         console.log('[faucet-balance] DIESEL via dataApi:', items.length, 'items');
-        if (items.length === 0) {
-          console.warn('[faucet-balance] WARNING: dataApi returned 0 items — UI needs fallback');
+        for (const item of items) {
+          console.log('[faucet-balance]   dataApi item:', JSON.stringify(item).slice(0, 200));
         }
-      } catch (err) {
-        console.warn('[faucet-balance] dataApi failed:', err);
+      } catch (err: any) {
+        console.warn('[faucet-balance] dataApi failed:', err?.message);
       }
-      expect(true).toBe(true);
+
+      // Also test the direct quspo REST path
+      try {
+        const resp = await fetch('http://localhost:18888/get-alkanes-by-address', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: taprootAddress }),
+        });
+        const data = await resp.json();
+        console.log('[faucet-balance] quspo REST get-alkanes-by-address:', JSON.stringify(data).slice(0, 300));
+      } catch (err: any) {
+        console.warn('[faucet-balance] quspo REST failed:', err?.message);
+      }
+
+      // Also test the direct RPC path (metashrew, always works)
+      const rpcBalance = await getAlkaneBalance(provider, taprootAddress, '2:0');
+      console.log('[faucet-balance] DIESEL via metashrew RPC:', rpcBalance.toString());
+      expect(rpcBalance).toBeGreaterThan(0n);
+
+      // Log whether quspo path works or needs fallback
+      if (dataApiItems === 0) {
+        console.warn('[faucet-balance] CONCLUSION: quspo get_alkanes_by_address returns EMPTY on devnet');
+        console.warn('[faucet-balance] The alkanesByAddress RPC fallback is REQUIRED for devnet balance display');
+      } else {
+        console.log('[faucet-balance] CONCLUSION: quspo works — fallback is not needed');
+      }
     });
   });
 
