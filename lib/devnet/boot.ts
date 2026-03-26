@@ -116,25 +116,29 @@ export async function bootDevnetWithWasms(
 
   onProgress('Initializing Bitcoin node (loading WASM)...', 15);
 
-  // ⚠️ CRITICAL (2026-03-26): Create harness WITHOUT esplora to prevent OOM.
-  // Each indexer creates a WebAssembly.Instance per mined block. With both
-  // alkanes + esplora loaded, mining 101 coinbase-maturity blocks creates
-  // 200+ instances. FinalizationRegistry can't reclaim them fast enough —
-  // OOM crashes at block ~71-80 ("Cannot allocate Wasm memory for new instance").
+  // JOURNAL (2026-03-26): Esplora + OOM — the constraints and solution.
   //
-  // Disabling esplora halves instance count to ~101, which GC can handle.
-  // Esplora is NOT needed on devnet:
-  //   - BTC balance: uses lua_evalsaved (Lua script, not esplora)
-  //   - Alkane balances: uses alkanes_protorunesbyaddress RPC (metashrew)
-  //   - Swap UTXO discovery: uses lua_evalsaved
-  //   - Data API (pool/token queries): uses quspo (tertiary indexer)
+  // Constraint 1: Esplora MUST be enabled. The SDK's alkanesExecuteTyped()
+  // internally calls essentials.get_address_outpoints() for UTXO discovery.
+  // Without esplora, swaps fail with "Insufficient alkanes: have 0".
+  // The DevnetEsploraBackend block-scan fallback does NOT satisfy this —
+  // the SDK makes a different RPC call that requires the esplora indexer.
   //
-  // DO NOT re-enable esplora without solving the OOM. The harness API has
-  // no addSecondary() — esplora can only be loaded at creation time.
-  // Possible future fix: batch mining in the WASM harness (mine N blocks
-  // in a single call without creating N separate instances).
-  // Esplora required for SDK UTXO discovery (essentials.get_address_outpoints).
-  // OOM risk mitigated by batched mining in mineInitialBlocks.
+  // Constraint 2: 101 blocks × 2 indexers = 202 WASM instances. Mining all
+  // at once OOMs at block ~71-80. FinalizationRegistry can't reclaim fast enough.
+  //
+  // Solution: Mine in batches of 25 with setTimeout(0) yields between batches.
+  // This lets GC reclaim instances from completed batches before the next starts.
+  // See mineInitialBlocks() below.
+  //
+  // Future fix: qubitcoin addSecondary('esplora') — load esplora AFTER mining.
+  // Rust source is ready but WASM can't be recompiled (alkanes-rpc-core is private).
+  // boot.ts has hasAddSecondary feature detection ready for when the WASM ships.
+  //
+  // DO NOT disable esplora — swaps will break.
+  // DO NOT remove batched mining — OOM will return.
+  // DO NOT add waitForDevnetSync / extra generatetoaddress calls — the indexer
+  // is synchronous in-process WASM, extra blocks CREATE desync, not fix it.
   const useEsplora = true;
 
   console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esplora=%s quspo=deferred',

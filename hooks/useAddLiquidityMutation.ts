@@ -169,6 +169,9 @@ async function discoverAlkaneUtxos(
     }),
   });
   const utxoData = await utxoResp.json();
+  // JOURNAL (2026-03-26): On devnet, esplora_address::utxo returns non-array
+  // result (string error or null) causing "utxos.filter is not a function".
+  // This fix was accidentally reverted once during a bulk file revert — do not remove.
   const rawResult = utxoData?.result ?? utxoData;
   const utxos = Array.isArray(rawResult) ? rawResult : [];
 
