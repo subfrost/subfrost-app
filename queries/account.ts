@@ -370,6 +370,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           let items: any[] = [];
 
           if (isDevnet) {
+            console.log('[alkaneBalanceQuery] DEVNET: querying alkanes_protorunesbyaddress for', address);
             // On devnet, query alkanes_protorunesbyaddress RPC directly.
             // The dataApiGetAlkanesByAddress path goes through quspo which
             // doesn't reliably return balances after restored state or new
@@ -400,6 +401,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
               const [block, tx] = id.split(':');
               return { alkaneId: { block: Number(block), tx: Number(tx) }, balance: amt.toString() };
             });
+            console.log('[alkaneBalanceQuery] DEVNET: found', items.length, 'alkanes from', outpoints.length, 'outpoints for', address.slice(0, 15));
           } else {
             // SDK data API returns enriched metadata: name, symbol, balance, price, image.
             const result = await (provider as any).dataApiGetAlkanesByAddress(address);
