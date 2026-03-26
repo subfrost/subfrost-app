@@ -1216,8 +1216,10 @@ export default function SwapShell() {
               }
             }
             if (totalFrbtc > 0n) {
-              frbtcAmount = totalFrbtc.toString();
-              console.log('[SWAP] Devnet: using actual frBTC balance for unwrap:', frbtcAmount);
+              // Convert from raw alkane units to display units (÷ 1e8).
+              // unwrapMutation.amount expects display units — toAlks(amount) converts back.
+              frbtcAmount = (Number(totalFrbtc) / 1e8).toFixed(8);
+              console.log('[SWAP] Devnet: using actual frBTC balance for unwrap:', frbtcAmount, '(raw:', totalFrbtc.toString(), ')');
             }
           } catch (err) {
             console.warn('[SWAP] Devnet: could not query frBTC balance, using quote:', err);
