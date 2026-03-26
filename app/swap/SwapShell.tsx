@@ -1187,8 +1187,40 @@ export default function SwapShell() {
         console.log('[SWAP] Step 2/2 — Unwrapping frBTC → BTC');
         setSwapFlowStep({ type: 'unwrapping' });
 
-        // The frBTC amount from the swap is approximately the buyAmount from the quote
-        const frbtcAmount = quote.buyAmount;
+        // ⚠️ JOURNAL (2026-03-26): On devnet, quote.buyAmount can be wildly wrong
+        // because pool reserves don't match the quote engine's expectations.
+        // Query actual frBTC balance via enriched balances (assets[].runes[])
+        // which queries the alkanes indexer directly and always returns correct data.
+        let frbtcAmount = quote.buyAmount;
+        if (network === 'devnet' && address) {
+          try {
+            // Query actual frBTC balance via enriched balances (lua_evalsaved).
+            // quote.buyAmount is unreliable on devnet — can be off by orders of magnitude.
+            const resp = await fetch(getRpcUrl(network), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0', id: 1,
+                method: 'lua_evalsaved',
+                params: ['c1e61d349c30deb20b023b70dc6641b5ada176db552bdbef24dee7cd05273e97', address],
+              }),
+            });
+            const data = await resp.json();
+            const assets = data?.result?.returns?.assets || [];
+            let totalFrbtc = 0n;
+            for (const asset of assets) {
+              for (const r of (asset?.runes || [])) {
+                if (r.block === 32 && r.tx === 0) totalFrbtc += BigInt(r.amount || 0);
+              }
+            }
+            if (totalFrbtc > 0n) {
+              frbtcAmount = totalFrbtc.toString();
+              console.log('[SWAP] Devnet: using actual frBTC balance for unwrap:', frbtcAmount);
+            }
+          } catch (err) {
+            console.warn('[SWAP] Devnet: could not query frBTC balance, using quote:', err);
+          }
+        }
 
         const unwrapRes = await unwrapMutation.mutateAsync({
           amount: frbtcAmount,
