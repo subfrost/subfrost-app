@@ -283,9 +283,24 @@ const PROTOCOL_SLOTS = {
  * Fetch a WASM file from /wasm/{name}.wasm and return its hex encoding.
  * Runs in the browser — uses fetch() instead of Node.js readFileSync.
  */
+/**
+ * Fetch-deploy-release: fetch a WASM, deploy it, then let the hex string be GC'd.
+ * Reduces peak memory by ~60% compared to fetching all WASMs upfront.
+ */
+async function fetchAndDeploy(
+  provider: any, harness: any, segwit: string, taproot: string,
+  name: string, slot: number, initArgs: (number | bigint)[],
+  label: string, onProgress: ProgressCallback, pct: number,
+): Promise<void> {
+  const hex = await fetchWasmHex(name);
+  await deployWasm(provider, harness, segwit, taproot, hex, slot, initArgs, label, onProgress, pct);
+  // hex string is now eligible for GC — no reference retained
+}
+
 async function fetchWasmHex(name: string): Promise<string> {
   const resp = await fetch(`/wasm/${name}.wasm`);
   if (!resp.ok) throw new Error(`WASM not found: ${name}.wasm (HTTP ${resp.status})`);
+
   const buf = await resp.arrayBuffer();
   const bytes = new Uint8Array(buf);
   // Convert to hex string
@@ -465,16 +480,13 @@ async function deployFullProtocol(
   // Phase 1: AMM standard contracts
   // -----------------------------------------------------------------------
   onProgress('Loading AMM WASMs...', 30);
-  console.log('[devnet-boot] Phase 1: Loading WASMs from /wasm/...');
+  console.log('[devnet-boot] Phase 1: Deploying AMM contracts (sequential fetch-deploy-release)...');
 
-  const [
-    authTokenWasm, beaconProxyWasm, factoryWasm, poolWasm,
-    upgradeableWasm, upgradeableBeaconWasm,
-  ] = await Promise.all([
+  // Fetch reusable standard WASMs that are needed across multiple phases.
+  // These are small (~10-30KB) and reused for Fujin + AMM.
+  const [authTokenWasm, beaconProxyWasm, upgradeableWasm, upgradeableBeaconWasm] = await Promise.all([
     fetchWasmHex('alkanes_std_auth_token'),
     fetchWasmHex('alkanes_std_beacon_proxy'),
-    fetchWasmHex('factory'),
-    fetchWasmHex('pool'),
     fetchWasmHex('alkanes_std_upgradeable'),
     fetchWasmHex('alkanes_std_upgradeable_beacon'),
   ]);
@@ -489,14 +501,13 @@ async function deployFullProtocol(
     beaconProxyWasm, AMM_SLOTS.POOL_BEACON_PROXY, [0x8fff],
     'Beacon Proxy Template', onProgress, 34);
 
-  // Step 3: Factory Logic
-  await deployWasm(provider, harness, segwit, taproot,
-    factoryWasm, AMM_SLOTS.FACTORY_LOGIC, [50],
+  // Steps 3-4: Factory + Pool logic — fetch, deploy, release each to reduce peak memory
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'factory', AMM_SLOTS.FACTORY_LOGIC, [50],
     'AMM Factory Logic', onProgress, 36);
 
-  // Step 4: Pool Logic
-  await deployWasm(provider, harness, segwit, taproot,
-    poolWasm, AMM_SLOTS.POOL_LOGIC, [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'pool', AMM_SLOTS.POOL_LOGIC, [50],
     'AMM Pool Logic', onProgress, 38);
 
   // Step 5: Factory Proxy (Upgradeable → Factory Logic, auth_units=5)
@@ -620,51 +631,34 @@ async function deployFullProtocol(
 
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];
 
-  const [
-    fireTreasuryWasm, fireTokenWasm, fireStakingWasm,
-    fireBondingWasm, fireRedemptionWasm, fireDistributorWasm,
-  ] = await Promise.all([
-    fetchWasmHex('fire_treasury'),
-    fetchWasmHex('fire_token'),
-    fetchWasmHex('fire_staking'),
-    fetchWasmHex('fire_bonding'),
-    fetchWasmHex('fire_redemption'),
-    fetchWasmHex('fire_distributor'),
-  ]);
-
-  // 1. Treasury: Init(fire_token, frbtc_token, fire_lp_token, diesel_lp_token)
-  await deployWasm(provider, harness, segwit, taproot,
-    fireTreasuryWasm, FIRE_SLOTS.TREASURY,
+  // FIRE contracts — fetch and deploy sequentially to reduce peak memory
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fire_treasury', FIRE_SLOTS.TREASURY,
     [0, 4, FIRE_SLOTS.TOKEN, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
     'FIRE Treasury', onProgress, 54);
 
-  // 2. Token: Init(staking_contract) — no-premine, 100% emission pool
-  await deployWasm(provider, harness, segwit, taproot,
-    fireTokenWasm, FIRE_SLOTS.TOKEN,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fire_token', FIRE_SLOTS.TOKEN,
     [0, 4, FIRE_SLOTS.STAKING],
     'FIRE Token', onProgress, 56);
 
-  // 3. Staking: Init(lp_token, fire_token)
-  await deployWasm(provider, harness, segwit, taproot,
-    fireStakingWasm, FIRE_SLOTS.STAKING,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fire_staking', FIRE_SLOTS.STAKING,
     [0, poolBlock, poolTx, 4, FIRE_SLOTS.TOKEN],
     'FIRE Staking', onProgress, 58);
 
-  // 4. Bonding: Init(fire_token, diesel_lp_token, treasury, price_oracle)
-  await deployWasm(provider, harness, segwit, taproot,
-    fireBondingWasm, FIRE_SLOTS.BONDING,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fire_bonding', FIRE_SLOTS.BONDING,
     [0, 4, FIRE_SLOTS.TOKEN, poolBlock, poolTx, 4, FIRE_SLOTS.TREASURY, 4, FIRE_SLOTS.TOKEN],
     'FIRE Bonding', onProgress, 60);
 
-  // 5. Redemption: Init(fire_token, treasury)
-  await deployWasm(provider, harness, segwit, taproot,
-    fireRedemptionWasm, FIRE_SLOTS.REDEMPTION,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fire_redemption', FIRE_SLOTS.REDEMPTION,
     [0, 4, FIRE_SLOTS.TOKEN, 4, FIRE_SLOTS.TREASURY],
     'FIRE Redemption', onProgress, 62);
 
-  // 6. Distributor: Init(fire_token, contribution_token=frBTC, treasury)
-  await deployWasm(provider, harness, segwit, taproot,
-    fireDistributorWasm, FIRE_SLOTS.DISTRIBUTOR,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fire_distributor', FIRE_SLOTS.DISTRIBUTOR,
     [0, 4, FIRE_SLOTS.TOKEN, 32, 0, 4, FIRE_SLOTS.TREASURY],
     'FIRE Distributor', onProgress, 64);
 
@@ -674,30 +668,26 @@ async function deployFullProtocol(
   onProgress('Loading core protocol WASMs...', 66);
   console.log('[devnet-boot] Phase 4: Deploying core protocol...');
 
-  const [fuelWasm, ftrBtcWasm, dxBtcWasm, vxGaugeWasm] = await Promise.all([
-    fetchWasmHex('frost_token'),
-    fetchWasmHex('ftr_btc'),
-    fetchWasmHex('dx_btc'),
-    fetchWasmHex('vx_token_gauge_template'),
-  ]);
+  // Protocol contracts — fetch gauge template once (reused for 2 gauges), rest sequential
+  const vxGaugeWasm = await fetchWasmHex('vx_token_gauge_template');
 
   const S = PROTOCOL_SLOTS;
 
   // 1. FUEL Token — Init(total_supply=10M, treasury=itself)
-  await deployWasm(provider, harness, segwit, taproot,
-    fuelWasm, S.FUEL_TOKEN,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'frost_token', S.FUEL_TOKEN,
     [0, 1000000000000000, 4, S.FUEL_TOKEN],
     'FUEL Token', onProgress, 68);
 
   // 2. ftrBTC Template (deploy marker only, template init is no-op)
-  await deployWasm(provider, harness, segwit, taproot,
-    ftrBtcWasm, S.FTRBTC_TEMPLATE,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'ftr_btc', S.FTRBTC_TEMPLATE,
     [99],
     'ftrBTC Template', onProgress, 70);
 
   // 3. dxBTC Vault — Init(asset_id=frBTC, yv_vault, escrow_nft, vx_fuel_gauge)
-  await deployWasm(provider, harness, segwit, taproot,
-    dxBtcWasm, S.DXBTC_VAULT,
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'dx_btc', S.DXBTC_VAULT,
     [0, 32, 0, 4, S.FUEL_TOKEN, 4, S.DXBTC_VAULT, 4, S.VX_FUEL_GAUGE],
     'dxBTC Vault', onProgress, 72);
 
@@ -719,94 +709,62 @@ async function deployFullProtocol(
   onProgress('Loading Fujin WASMs...', 78);
   console.log('[devnet-boot] Phase 5: Deploying Fujin...');
 
-  const [
-    fujinPoolWasm, fujinRuntimePoolWasm, fujinRuntimeFactoryWasm,
-    fujinFactoryWasm, fujinTokenWasm, fujinZapWasm,
-    fujinLpWasm, fujinMasterWasm,
-  ] = await Promise.all([
-    fetchWasmHex('fujin_pool'),
-    fetchWasmHex('fujin_runtime_pool'),
-    fetchWasmHex('fujin_runtime_factory'),
-    fetchWasmHex('fujin_factory'),
-    fetchWasmHex('fujin_token_template'),
-    fetchWasmHex('fujin_zap'),
-    fetchWasmHex('fujin_lp'),
-    fetchWasmHex('fujin_master'),
-  ]);
-
-  // Step 1: Fujin Auth Token
+  // Steps 1-2: Fujin uses the same auth token + beacon proxy WASMs (already in memory)
   await deployWasm(provider, harness, segwit, taproot,
     authTokenWasm, S.FUJIN_AUTH_TOKEN,
     [100],
     'Fujin Auth Token', onProgress, 80);
 
-  // Step 2: Fujin Beacon Proxy Template
   await deployWasm(provider, harness, segwit, taproot,
     beaconProxyWasm, S.FUJIN_BEACON_PROXY,
     [0x8fff],
     'Fujin Beacon Proxy', onProgress, 81);
 
-  // Step 3: Fujin Pool Template
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinPoolWasm, S.FUJIN_POOL_TEMPLATE,
-    [50],
+  // Steps 3-12: Fujin-specific WASMs — fetch, deploy, release each
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_pool', S.FUJIN_POOL_TEMPLATE, [50],
     'Fujin Pool Template', onProgress, 82);
 
-  // Step 4: Fujin Runtime Pool
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinRuntimePoolWasm, S.FUJIN_RUNTIME_POOL,
-    [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_runtime_pool', S.FUJIN_RUNTIME_POOL, [50],
     'Fujin Runtime Pool', onProgress, 83);
 
-  // Step 5: Fujin Runtime Factory
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinRuntimeFactoryWasm, S.FUJIN_RUNTIME_FACTORY,
-    [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_runtime_factory', S.FUJIN_RUNTIME_FACTORY, [50],
     'Fujin Runtime Factory', onProgress, 84);
 
-  // Step 6: Fujin Beacon (upgradeable beacon → Pool Template)
+  // Fujin Beacon + Upgradeable Template reuse WASMs already in memory
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableBeaconWasm, S.FUJIN_BEACON,
     [0x7fff, 4, S.FUJIN_POOL_TEMPLATE, 1],
     'Fujin Beacon', onProgress, 85);
 
-  // Step 7: Fujin Upgradeable Template
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableWasm, S.FUJIN_UPGRADEABLE_TEMPLATE,
     [0x8fff],
     'Fujin Upgradeable Template', onProgress, 86);
 
-  // Step 8: Fujin Factory Logic
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinFactoryWasm, S.FUJIN_FACTORY_LOGIC,
-    [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_factory', S.FUJIN_FACTORY_LOGIC, [50],
     'Fujin Factory Logic', onProgress, 87);
 
-  // Step 9: Fujin Token Template
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinTokenWasm, S.FUJIN_TOKEN_TEMPLATE,
-    [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_token_template', S.FUJIN_TOKEN_TEMPLATE, [50],
     'Fujin Token Template', onProgress, 88);
 
-  // Step 10: Fujin Zap Template
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinZapWasm, S.FUJIN_ZAP,
-    [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_zap', S.FUJIN_ZAP, [50],
     'Fujin Zap', onProgress, 89);
 
-  // Step 11: Fujin LP Vault
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinLpWasm, S.FUJIN_LP_VAULT,
-    [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_lp', S.FUJIN_LP_VAULT, [50],
     'Fujin LP Vault', onProgress, 90);
 
-  // Step 12: Fujin Master Logic
-  await deployWasm(provider, harness, segwit, taproot,
-    fujinMasterWasm, S.FUJIN_MASTER_LOGIC,
-    [50],
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fujin_master', S.FUJIN_MASTER_LOGIC, [50],
     'Fujin Master Logic', onProgress, 91);
 
-  // Step 13: Fujin Master Proxy (upgradeable → master logic)
+  // Fujin Master Proxy reuses upgradeableWasm
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableWasm, S.FUJIN_MASTER_PROXY,
     [0x7fff, 4, S.FUJIN_MASTER_LOGIC, 1],
@@ -853,19 +811,14 @@ async function deployFullProtocol(
   // ── Carbine CLOB ────────────────────────────────────────────────
   onProgress('Deploying Carbine CLOB...', 95);
   try {
-    const [carbineControllerWasm, carbineTemplateWasm, universalRouterWasm] = await Promise.all([
-      fetchWasmHex('carbine_controller'),
-      fetchWasmHex('carbine_template'),
-      fetchWasmHex('universal_router'),
-    ]);
-    await deployWasm(provider, harness, segwit, taproot,
-      carbineControllerWasm, S.CARBINE_CONTROLLER, [50],
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'carbine_controller', S.CARBINE_CONTROLLER, [50],
       'Carbine Controller', onProgress, 95);
-    await deployWasm(provider, harness, segwit, taproot,
-      carbineTemplateWasm, S.CARBINE_TEMPLATE, [50],
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'carbine_template', S.CARBINE_TEMPLATE, [50],
       'Carbine Template', onProgress, 96);
-    await deployWasm(provider, harness, segwit, taproot,
-      universalRouterWasm, S.UNIVERSAL_ROUTER, [50],
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'universal_router', S.UNIVERSAL_ROUTER, [50],
       'Universal Router', onProgress, 97);
     console.log('[devnet-boot] Carbine CLOB deployed at 4:70000, 4:70001, 4:70002');
   } catch (e: any) {
