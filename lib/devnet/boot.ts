@@ -901,21 +901,28 @@ async function deployFullProtocol(
  */
 async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
   onProgress('Mining initial blocks...', 20);
-  // JOURNAL (2026-03-22): Mine 1 block at a time with real delays.
-  // Each mined block creates WebAssembly.Instance objects in the indexer.
-  // FinalizationRegistry cleans them up, but needs actual idle time to run.
-  // 50ms per block was insufficient — OOM at block ~71. Use longer pauses.
+  // ⚠️ CRITICAL (2026-03-26): Each mined block creates a WebAssembly.Instance
+  // in the alkanes indexer. FinalizationRegistry must reclaim old instances
+  // before new ones are created, or the browser OOMs. The FinalizationRegistry
+  // callback only runs during idle event loop time — setTimeout(0) is not enough.
+  //
+  // Strategy: mine in batches of 5, with 500ms pause between batches to give
+  // FinalizationRegistry multiple idle ticks to drain its queue. This is slower
+  // (~10s total) but prevents OOM. Once boot completes, state is saved to
+  // IndexedDB and subsequent boots skip mining entirely via importState().
   const TOTAL_BLOCKS = 101;
-  for (let mined = 0; mined < TOTAL_BLOCKS; mined++) {
-    _harness.mineBlocks(1);
-    if (mined % 10 === 0) {
-      const pct = 20 + Math.round((mined / TOTAL_BLOCKS) * 30);
-      onProgress(`Mining blocks... ${mined + 1}/${TOTAL_BLOCKS}`, pct);
-      // Longer pause every 10 blocks for FinalizationRegistry to run
-      await new Promise(r => setTimeout(r, 200));
-    } else {
-      await new Promise(r => setTimeout(r, 50));
+  const BATCH_SIZE = 5;
+  const GC_PAUSE_MS = 500;
+
+  for (let mined = 0; mined < TOTAL_BLOCKS; mined += BATCH_SIZE) {
+    const count = Math.min(BATCH_SIZE, TOTAL_BLOCKS - mined);
+    for (let i = 0; i < count; i++) {
+      _harness.mineBlocks(1);
     }
+    const pct = 20 + Math.round(((mined + count) / TOTAL_BLOCKS) * 30);
+    onProgress(`Mining blocks... ${mined + count}/${TOTAL_BLOCKS}`, pct);
+    // Long pause for FinalizationRegistry to reclaim WASM instances
+    await new Promise(r => setTimeout(r, GC_PAUSE_MS));
   }
 }
 
