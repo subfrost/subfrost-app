@@ -1532,6 +1532,11 @@ export default function SwapShell() {
         lpDecimals: 8,
         minAmount0: '0',  // No slippage protection for now
         minAmount1: '0',
+        token0Id: selectedLPPosition.token0Id,
+        token1Id: selectedLPPosition.token1Id,
+        token0Symbol: selectedLPPosition.token0Symbol,
+        token1Symbol: selectedLPPosition.token1Symbol,
+        poolName: `${selectedLPPosition.token0Symbol} / ${selectedLPPosition.token1Symbol}`,
         token0Decimals: 8,
         token1Decimals: 8,
         feeRate: fee.feeRate,
