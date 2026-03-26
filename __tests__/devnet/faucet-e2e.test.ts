@@ -201,6 +201,79 @@ describe('Devnet: Faucet E2E', () => {
     expect(balances.get('32:0') || 0n).toBeGreaterThan(0n);
   });
 
+  // ── Test the actual alkaneBalanceQueryOptions queryFn ──────
+
+  it('alkaneBalanceQueryOptions queryFn should return balances on devnet', async () => {
+    // Import the actual query options function the UI uses
+    const { alkaneBalanceQueryOptions } = await import('@/queries/account');
+
+    const deps = {
+      provider,
+      isInitialized: true,
+      account: {
+        taproot: { address: userTaproot },
+        nativeSegwit: { address: userSegwit },
+      },
+      isConnected: true,
+      network: 'devnet',
+    };
+
+    const options = alkaneBalanceQueryOptions(deps);
+
+    // Verify the query is enabled
+    expect(options.enabled).toBe(true);
+
+    // Execute the ACTUAL queryFn — this is what runs in the browser
+    const result = await options.queryFn!({} as any);
+    console.log('[faucet-e2e] alkaneBalanceQueryOptions result:', JSON.stringify(result));
+
+    // Should have at least DIESEL and frBTC
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(2);
+
+    const diesel = result.find((a: any) => a.alkaneId === '2:0');
+    const frbtc = result.find((a: any) => a.alkaneId === '32:0');
+    console.log('[faucet-e2e] DIESEL from queryFn:', diesel?.balance);
+    console.log('[faucet-e2e] frBTC from queryFn:', frbtc?.balance);
+
+    expect(diesel).toBeTruthy();
+    expect(BigInt(diesel.balance)).toBeGreaterThan(0n);
+    expect(frbtc).toBeTruthy();
+    expect(BigInt(frbtc.balance)).toBeGreaterThan(0n);
+  });
+
+  // ── Test sellableCurrenciesQueryOptions on devnet ──────────
+
+  it('sellableCurrenciesQueryOptions queryFn should return balances on devnet', async () => {
+    const { sellableCurrenciesQueryOptions } = await import('@/queries/account');
+
+    const deps = {
+      provider,
+      isInitialized: true,
+      network: 'devnet',
+      walletAddress: userTaproot,
+      account: {
+        taproot: { address: userTaproot },
+        nativeSegwit: { address: userSegwit },
+      },
+    };
+
+    const options = sellableCurrenciesQueryOptions(deps);
+    expect(options.enabled).toBe(true);
+
+    const result = await options.queryFn!({} as any);
+    console.log('[faucet-e2e] sellableCurrencies result:', JSON.stringify(result)?.slice(0, 300));
+
+    // Should have entries with balance > 0
+    const withBalance = result.filter((c: any) => BigInt(c.balance || '0') > 0n);
+    console.log('[faucet-e2e] sellableCurrencies with balance:', withBalance.length);
+    for (const c of withBalance) {
+      console.log('[faucet-e2e]   %s (%s): %s', c.name || c.id, c.symbol, c.balance);
+    }
+
+    expect(withBalance.length).toBeGreaterThanOrEqual(1);
+  });
+
   // ── Key difference: boot wallet vs user wallet ─────────────
 
   it('boot wallet should NOT have the user tokens', async () => {
