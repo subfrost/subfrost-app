@@ -25,6 +25,16 @@
  *
  * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
  * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
+ *
+ * ## ⚠️ frBTC Unwrap (opcode 78) NOT IMPLEMENTED on regtest/devnet (2026-03-26)
+ *
+ * The genesis frBTC contract [32:0] does NOT implement opcode 78 (unwrap).
+ * Available opcodes: 0, 77 (wrap), 99-103. Calling opcode 78 returns:
+ *   "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
+ * The Bitcoin tx broadcasts and confirms, but the alkanes runtime rejects the
+ * call — no frBTC is burned, no BTC is released. UI reports "success" because
+ * the BTC transaction itself is valid.
+ * The frBTC contract must be redeployed with unwrap support for this to work.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as bitcoin from 'bitcoinjs-lib';

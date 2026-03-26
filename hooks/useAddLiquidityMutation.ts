@@ -169,7 +169,12 @@ async function discoverAlkaneUtxos(
     }),
   });
   const utxoData = await utxoResp.json();
-  const utxos = utxoData.result || [];
+  // JOURNAL (2026-03-26): On devnet, esplora_address::utxo may return the UTXO
+  // array directly or wrapped in { result: [...] }. If the dispatcher doesn't
+  // recognize the method, result can be a string/null instead of an array,
+  // causing "utxos.filter is not a function". Defensive handling below.
+  const rawResult = utxoData?.result ?? utxoData;
+  const utxos = Array.isArray(rawResult) ? rawResult : [];
 
   // 2. Filter for dust UTXOs (<=1000 sats) - alkane tokens live on dust outputs
   const dustUtxos = utxos.filter((u: any) => u.value <= 1000);
