@@ -565,6 +565,8 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
             if (deps.network === 'devnet' && deps.provider) {
+              // Same quspo bug as alkaneBalanceQueryOptions — try quspo first,
+              // fall back to enriched balance extraction when quspo returns empty.
               const result = await (deps.provider as any).dataApiGetAlkanesByAddress(address);
               const items: any[] = result?.data || [];
               for (const item of items) {
@@ -577,6 +579,29 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
                   name: item.name || undefined,
                   symbol: item.symbol || undefined,
                 });
+              }
+              // Quspo empty fallback: extract from enriched balances
+              if (balances.length === 0) {
+                try {
+                  const enriched = await deps.provider.getEnrichedBalances(address, '1');
+                  const mapToObj = (v: any): any => {
+                    if (v instanceof Map) { const o: any = {}; for (const [k, val] of v.entries()) o[k] = mapToObj(val); return o; }
+                    if (Array.isArray(v)) return v.map(mapToObj);
+                    return v;
+                  };
+                  const returns = enriched instanceof Map ? mapToObj(enriched.get('returns')) : mapToObj(enriched?.returns || enriched);
+                  for (const asset of (returns?.assets || [])) {
+                    for (const r of (asset?.runes || [])) {
+                      const known = KNOWN_TOKENS_SELL[`${r.block}:${r.tx}`];
+                      balances.push({
+                        alkaneId: `${r.block}:${r.tx}`,
+                        balance: String(r.amount || '0'),
+                        name: known?.name,
+                        symbol: known?.symbol,
+                      });
+                    }
+                  }
+                } catch {}
               }
             } else {
               const resp = await fetch(
