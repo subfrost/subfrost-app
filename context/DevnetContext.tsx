@@ -444,7 +444,9 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       harnessRef.current.mineBlocks(1);
       await new Promise(r => setTimeout(r, 50));
 
-      // Get frBTC signer address
+      // Get frBTC signer address dynamically — changes each devnet boot.
+      // CRITICAL: Must initialize ecc before p2tr(), otherwise it throws
+      // and the catch silently falls back to the stale hardcoded address.
       let signerAddr = 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz';
       try {
         const signerResult = JSON.parse(harnessRef.current.server.handleRpc(JSON.stringify({
@@ -455,11 +457,18 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         const hex = signerResult?.result?.execution?.data?.replace('0x', '') || '';
         if (hex.length === 64) {
           const bitcoin = await import('bitcoinjs-lib');
+          const ecc = await import('@bitcoinerlab/secp256k1');
+          try { bitcoin.initEccLib(ecc); } catch { /* already initialized */ }
           const xOnlyPubkey = Buffer.from(hex, 'hex');
           const payment = bitcoin.payments.p2tr({ internalPubkey: xOnlyPubkey, network: bitcoin.networks.regtest });
           if (payment.address) signerAddr = payment.address;
+        } else {
+          console.warn('[devnet] frBTC signer query returned unexpected hex length:', hex.length);
         }
-      } catch { /* use default */ }
+      } catch (e: any) {
+        console.warn('[devnet] frBTC signer query failed, using stale default:', e?.message);
+      }
+      console.log('[devnet] frBTC faucet signer address:', signerAddr);
 
       // Use boot wallet to fund the wrap, frBTC output goes to user's address
       const boot = getBootAddresses();

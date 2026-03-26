@@ -2278,13 +2278,40 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
+      // Devnet fallback: if enriched balances returned 0, query UTXOs
+      // directly via lua_evalsaved which always works on devnet.
+      if (totalBalance === 0 && network === 'devnet') {
+        console.log('[WalletContext] Devnet BTC fallback: enriched returned 0, trying lua_evalsaved');
+        try {
+          for (const addr of addresses) {
+            const resp = await fetch('http://localhost:18888', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0', id: 1,
+                method: 'lua_evalsaved',
+                params: ['c1e61d349c30deb20b023b70dc6641b5ada176db552bdbef24dee7cd05273e97', addr],
+              }),
+            });
+            const data = await resp.json();
+            const spendable = data?.result?.returns?.spendable || [];
+            for (const utxo of spendable) {
+              totalBalance += utxo.value || 0;
+            }
+          }
+          console.log('[WalletContext] Devnet BTC fallback total:', totalBalance);
+        } catch (fallbackErr) {
+          console.warn('[WalletContext] Devnet BTC fallback failed:', fallbackErr);
+        }
+      }
+
       console.log('[WalletContext] Total balance:', totalBalance);
       return totalBalance;
     } catch (error) {
       console.error('[WalletContext] Error fetching balance:', error);
       return 0;
     }
-  }, [wallet, browserWallet, walletType, account, sdkProvider, sdkInitialized]);
+  }, [wallet, browserWallet, walletType, account, sdkProvider, sdkInitialized, network]);
 
   const onConnectModalOpenChange = useCallback((isOpen: boolean) => {
     setIsConnectModalOpen(isOpen);
