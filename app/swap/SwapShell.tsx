@@ -1196,13 +1196,15 @@ export default function SwapShell() {
           try {
             // Query actual frBTC balance via enriched balances (lua_evalsaved).
             // quote.buyAmount is unreliable on devnet — can be off by orders of magnitude.
+            // Use the enriched balance Lua script (hash 4efbe0cd...) which returns
+            // assets[].runes[] — NOT the get_utxos script (c1e61d34) which only returns BTC.
             const resp = await fetch(getRpcUrl(network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 jsonrpc: '2.0', id: 1,
                 method: 'lua_evalsaved',
-                params: ['c1e61d349c30deb20b023b70dc6641b5ada176db552bdbef24dee7cd05273e97', address],
+                params: ['4efbe0cdfe14270cb72eec80bce63e44f9f926951a67a0ad7256fca39046b80f', address, '1'],
               }),
             });
             const data = await resp.json();
