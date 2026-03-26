@@ -1041,6 +1041,18 @@ export default function SwapShell() {
 
         if (swapRes?.success && swapRes.transactionId) {
           console.log('[SWAP] Step 2 complete — swap txid:', swapRes.transactionId);
+
+          // On devnet, mine a block to confirm the swap tx so balances update
+          if (network === 'devnet' && address) {
+            try {
+              await fetch(getRpcUrl(network), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
+              });
+            } catch {}
+          }
+
           setSwapFlowStep({ type: 'complete', wrapTxId, swapTxId: swapRes.transactionId });
           showNotification(swapRes.transactionId, 'swap', 'Step 2/2');
           setTimeout(() => refreshWalletData(), 2000);
@@ -1233,6 +1245,18 @@ export default function SwapShell() {
 
         if (unwrapRes?.success && unwrapRes.transactionId) {
           console.log('[SWAP] Step 2 complete — unwrap txid:', unwrapRes.transactionId);
+
+          // On devnet, mine a block to confirm the unwrap tx so BTC balance updates
+          if (network === 'devnet' && address) {
+            try {
+              await fetch(getRpcUrl(network), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
+              });
+            } catch {}
+          }
+
           setSwapFlowStep({ type: 'complete', swapTxId, unwrapTxId: unwrapRes.transactionId });
           showNotification(unwrapRes.transactionId, 'unwrap', 'Step 2/2');
           setTimeout(() => refreshWalletData(), 2000);
