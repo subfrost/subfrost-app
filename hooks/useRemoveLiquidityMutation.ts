@@ -311,15 +311,16 @@ export function useRemoveLiquidityMutation() {
             const token0Sym = getTokenSymbol(data.token0Id, data.token0Symbol);
             const token1Sym = getTokenSymbol(data.token1Id, data.token1Symbol);
 
+            // lpAmount is already in display units — don't divide by 1e8 again
             const approved = await requestConfirmation({
               type: 'removeLiquidity',
               title: 'Confirm Remove Liquidity',
-              lpAmount: (parseFloat(data.lpAmount) / 1e8).toString(),
+              lpAmount: data.lpAmount,
               poolName: data.poolName || `${token0Sym} / ${token1Sym}`,
-              token0Amount: data.minToken0Amount ? (parseFloat(data.minToken0Amount) / 1e8).toString() : undefined,
+              token0Amount: data.minToken0Amount || undefined,
               token0Symbol: token0Sym,
               token0Id: data.token0Id,
-              token1Amount: data.minToken1Amount ? (parseFloat(data.minToken1Amount) / 1e8).toString() : undefined,
+              token1Amount: data.minToken1Amount || undefined,
               token1Symbol: token1Sym,
               token1Id: data.token1Id,
               feeRate: data.feeRate,
