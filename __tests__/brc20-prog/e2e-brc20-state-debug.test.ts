@@ -59,6 +59,39 @@ describe.runIf(hasFoundry)('Debug: BRC20 State After Deploy', () => {
     }
   }, 30_000);
 
+  it('should call owner() and name() on deployed contract', async () => {
+    if (!contractAddress) return;
+    const toBytes = Array.from(Buffer.from(contractAddress.replace('0x', ''), 'hex'));
+
+    // owner() = 0x8da5cb5b
+    const ownerReq = JSON.stringify({ to: toBytes, data: Array.from(Buffer.from('8da5cb5b', 'hex')) });
+    const ownerResult = await rpcCall('metashrew_view', ['call', '0x' + Buffer.from(ownerReq).toString('hex'), 'latest']);
+    if (ownerResult.result) {
+      const decoded = JSON.parse(Buffer.from(ownerResult.result.replace('0x', ''), 'hex').toString());
+      console.log('[debug] owner() result:', JSON.stringify(decoded).slice(0, 200));
+    }
+
+    // name() = 0x06fdde03
+    const nameReq = JSON.stringify({ to: toBytes, data: Array.from(Buffer.from('06fdde03', 'hex')) });
+    const nameResult = await rpcCall('metashrew_view', ['call', '0x' + Buffer.from(nameReq).toString('hex'), 'latest']);
+    if (nameResult.result) {
+      const decoded = JSON.parse(Buffer.from(nameResult.result.replace('0x', ''), 'hex').toString());
+      console.log('[debug] name() result:', JSON.stringify(decoded).slice(0, 200));
+      if (decoded.result?.length > 0) {
+        const resultHex = decoded.result.map((b: number) => b.toString(16).padStart(2, '0')).join('');
+        console.log('[debug] name() hex:', resultHex);
+      }
+    }
+
+    // getSignerAddress() = 0xe75235b8
+    const signerReq = JSON.stringify({ to: toBytes, data: Array.from(Buffer.from('e75235b8', 'hex')) });
+    const signerResult = await rpcCall('metashrew_view', ['call', '0x' + Buffer.from(signerReq).toString('hex'), 'latest']);
+    if (signerResult.result) {
+      const decoded = JSON.parse(Buffer.from(signerResult.result.replace('0x', ''), 'hex').toString());
+      console.log('[debug] getSignerAddress():', JSON.stringify(decoded).slice(0, 200));
+    }
+  }, 30_000);
+
   it('should check if inscription was indexed by shrew-ord', async () => {
     // Check the global sequence counter to see if inscriptions were found
     const seqResult = await rpcCall('metashrew_view', ['getblockheight', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
