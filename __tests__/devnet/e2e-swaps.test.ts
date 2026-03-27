@@ -505,6 +505,53 @@ describe('Devnet E2E: Full Swap Coverage', () => {
       }
     }, 120_000);
 
+    it('should add liquidity using UI builder functions (same path as useAddLiquidityMutation)', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      const { buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
+
+      const [pBlock, pTx] = poolId.split(':').map(Number);
+      const dieselAmount = '500000000'; // 500M DIESEL in alks
+      const frbtcAmount = '25000'; // some frBTC in alks
+
+      // This is the exact code path the UI uses
+      const protostone = buildAddLiquidityToPoolProtostone({
+        poolId: { block: pBlock, tx: pTx },
+        token0Id: '2:0',
+        token1Id: '32:0',
+        amount0: dieselAmount,
+        amount1: frbtcAmount,
+      });
+      const inputRequirements = buildAddLiquidityInputRequirements({
+        token0Id: '2:0',
+        token1Id: '32:0',
+        amount0: dieselAmount,
+        amount1: frbtcAmount,
+      });
+
+      console.log('[swaps] UI builder protostone:', protostone);
+      console.log('[swaps] UI builder inputRequirements:', inputRequirements);
+
+      const lpBefore = await getAlkaneBalance(provider, taprootAddress, poolId);
+
+      try {
+        const txid = await executeAlkanes(protostone, inputRequirements);
+        console.log('[swaps] UI-path AddLiquidity txid:', txid);
+        mineBlocks(harness, 1);
+
+        const lpAfter = await getAlkaneBalance(provider, taprootAddress, poolId);
+        console.log('[swaps] LP balance: %s → %s', lpBefore.toString(), lpAfter.toString());
+        expect(lpAfter).toBeGreaterThan(lpBefore);
+      } catch (e: any) {
+        console.log('[swaps] UI-path AddLiquidity FAILED:', e.message?.slice(0, 300));
+        // If this fails but the simple protostone test passes, the builder is wrong
+        throw e;
+      }
+    }, 120_000);
+
     it('should remove liquidity / burn LP tokens', async () => {
       if (!poolId) {
         console.log('[swaps] Skipping — no pool');
