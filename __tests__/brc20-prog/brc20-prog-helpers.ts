@@ -55,20 +55,16 @@ export async function getOrCreateBrc20Harness(): Promise<any> {
   const home = process.env.HOME || '/home/ubuntu';
   const luaScriptsDir = resolve(home, 'alkanes-rs/lua');
 
-  // Load brc20shrew as a tertiary indexer.
-  // Note: brc20shrew conceptually IS a secondary (indexes blocks directly),
-  // but the vendored qubitcoin SDK's dist/devnet-server.js only exposes
-  // tertiaryIndexers, not additionalSecondaries. The tertiary runtime
-  // provides the same host functions so it works correctly.
-  const tertiaryIndexers: Array<{ label: string; wasm: Uint8Array }> = [];
+  // Load brc20shrew as an additional secondary indexer (same as alkanes)
+  const additionalSecondaries: Array<{ label: string; wasm: Uint8Array }> = [];
   if (brc20ShrewWasm) {
-    tertiaryIndexers.push({ label: 'brc20shrew', wasm: brc20ShrewWasm });
+    additionalSecondaries.push({ label: 'brc20shrew', wasm: brc20ShrewWasm });
   }
 
   const sdk = await import('@qubitcoin/sdk');
   _harness = await sdk.DevnetTestHarness.create({
     alkanesWasm,
-    tertiaryIndexers: tertiaryIndexers.length > 0 ? tertiaryIndexers : undefined,
+    additionalSecondaries: additionalSecondaries.length > 0 ? additionalSecondaries : undefined,
     secretKey,
     luaScriptsDir,
   });

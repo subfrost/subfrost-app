@@ -29,7 +29,6 @@
  * ```
  */
 import { LuaRuntime, preloadLuaScripts, saveScript } from './lua-runtime.js';
-import { installMapStorageAdapter } from './external-storage-adapter.js';
 /** Default secret key (32 bytes of 0x01 — deterministic for testing). */
 const DEFAULT_SECRET_KEY = new Uint8Array(32).fill(0x01);
 /** Intercepted URL patterns — any POST to these routes to the devnet. */
@@ -80,11 +79,6 @@ export class DevnetTestHarness {
      * Optionally initializes the Lua runtime for script execution.
      */
     static async create(opts) {
-        // Install external storage adapter if requested (or default in Node.js)
-        const useExternal = opts.useExternalStorage ?? true;
-        if (useExternal && !globalThis.__qubitcoin_storage) {
-            installMapStorageAdapter();
-        }
         // Dynamic import and initialize the WASM module
         const wasm = await import('./wasm/qubitcoin_web_sys.js');
         // In Node.js, we need to pass the WASM file path since fetch() may not
@@ -114,8 +108,14 @@ export class DevnetTestHarness {
         const esploraArr = opts.esploraWasm
             ? new Uint8Array(opts.esploraWasm)
             : undefined;
-        const server = new wasm.DevnetServer(secretKey, opts.alkanesWasm, esploraArr, useExternal);
-        // Load tertiary indexers (run after secondary indexers)
+        const server = new wasm.DevnetServer(secretKey, opts.alkanesWasm, esploraArr);
+        // Load additional secondary indexers (run after alkanes/esplora, before tertiaries)
+        if (opts.additionalSecondaries) {
+            for (const si of opts.additionalSecondaries) {
+                server.addSecondary(si.label, si.wasm);
+            }
+        }
+        // Load tertiary indexers (run after all secondary indexers)
         if (opts.tertiaryIndexers) {
             for (const ti of opts.tertiaryIndexers) {
                 server.addTertiary(ti.label, ti.wasm);
@@ -442,7 +442,8 @@ export class DevnetTestHarness {
                     id: 1,
                 });
                 const responseJson = this.server.handleRpc(rpcRequest);
-                // If this was a metashrew_view call, decode hex JSON and transform
+                // If this was a metashrew_view call, the result is hex-encoded JSON.
+                // Decode it and wrap in the REST envelope the SDK expects.
                 if (restMethod.method === 'metashrew_view') {
                     try {
                         const rpcResult = JSON.parse(responseJson);
@@ -450,13 +451,15 @@ export class DevnetTestHarness {
                             const hex = rpcResult.result.replace(/^0x/, '');
                             const decoded = new TextDecoder().decode(fromHex(hex));
                             const quspoData = JSON.parse(decoded);
+                            // Transform quspo response to match SDK REST expectations
                             const restResponse = this.transformQuspoResponse(url, quspoData);
                             return new Response(JSON.stringify(restResponse), {
                                 status: 200,
                                 headers: { 'Content-Type': 'application/json' },
                             });
                         }
-                    } catch (e) {
+                    }
+                    catch (e) {
                         // Fall through to raw response on decode failure
                     }
                 }
@@ -486,48 +489,117 @@ export class DevnetTestHarness {
         }
     }
     /**
-     * Transform decoded quspo response into REST format the SDK expects.
+     * Transform a decoded quspo response into the REST format the SDK expects.
+     *
+     * The SDK's data API clients expect specific response shapes:
+     *   get-all-pools-details → { statusCode: 200, data: [pool...] }
+     *   get-alkanes-by-address → { statusCode: 200, data: [balance...] }
+     *   get-all-amm-tx-history → { statusCode: 200, data: [tx...] }
+     *   get-alkane-details → { statusCode: 200, data: {name, symbol, ...} }
+     *   get-candles → { statusCode: 200, data: {candles: [...]} }
      */
     transformQuspoResponse(url, quspoData) {
         let path;
-        try { path = new URL(url).pathname; } catch { return { statusCode: 200, data: quspoData }; }
+        try {
+            path = new URL(url).pathname;
+        }
+        catch {
+            return { statusCode: 200, data: quspoData };
+        }
+        // ── Pool endpoints → flatten pools array with SDK-expected fields ──
         if (path.endsWith('/get-all-pools-details') || path.endsWith('/get-all-token-pairs') || path.endsWith('/get-pools') || path.endsWith('/get-pool-details')) {
             const pools = quspoData?.pools || [];
             const transformed = pools.map((p) => ({
-                poolId: p.poolId, token0: p.token0, token1: p.token1,
-                reserve0: p.reserve0 || '0', reserve1: p.reserve1 || '0',
-                poolName: p.poolName || '', fee: p.fee || '30',
+                poolId: p.poolId,
+                token0: p.token0,
+                token1: p.token1,
+                reserve0: p.reserve0 || '0',
+                reserve1: p.reserve1 || '0',
+                poolName: p.poolName || '',
+                fee: p.fee || '30',
                 lpTokenSupply: p.lpTokenSupply || '0',
-                tvlUsd: '0', volume24hUsd: '0', apr: '0',
+                // Mock TVL/volume for devnet display
+                tvlUsd: '0',
+                volume24hUsd: '0',
+                apr: '0',
             }));
             return { statusCode: 200, data: transformed };
         }
+        // ── Balance endpoints → wrap array with name/symbol enrichment ──
         if (path.endsWith('/get-alkanes-by-address') || path.endsWith('/get-address-balances')) {
+            // quspo returns [{alkaneId: {block, tx}, balance: "..."}]
             const balances = Array.isArray(quspoData) ? quspoData : [];
-            return { statusCode: 200, data: balances.map((b) => ({
-                alkaneId: b.alkaneId, name: b.name || '', symbol: b.symbol || '', balance: b.balance || '0',
-            })) };
+            const transformed = balances.map((b) => ({
+                alkaneId: b.alkaneId,
+                name: b.name || '',
+                symbol: b.symbol || '',
+                balance: b.balance || '0',
+            }));
+            return { statusCode: 200, data: transformed };
         }
+        // ── Activity / tx history → wrap items array ──
         if (path.endsWith('/get-all-amm-tx-history') || path.endsWith('/get-all-address-amm-tx-history')) {
-            return { statusCode: 200, data: quspoData?.items || [] };
+            const items = quspoData?.items || [];
+            return { statusCode: 200, data: items };
         }
+        // ── Token details → single object ──
+        if (path.endsWith('/get-alkane-details') || path.endsWith('/get-alkane-info')) {
+            return { statusCode: 200, data: quspoData };
+        }
+        // ── Candles → pass through ──
+        if (path.endsWith('/get-candles')) {
+            return { statusCode: 200, data: quspoData };
+        }
+        // ── User positions → pass through ──
+        if (path.endsWith('/get-address-positions') || path.endsWith('/address-positions')) {
+            return { statusCode: 200, data: quspoData };
+        }
+        // ── Wrap/unwrap events → pass through ──
         if (path.includes('/wrap') || path.includes('/unwrap')) {
             return { statusCode: 200, data: quspoData };
         }
+        // Default: wrap in statusCode envelope
         return { statusCode: 200, data: quspoData };
     }
     /**
      * Resolve a REST-style URL + body into a quspo metashrew_view call
      * or an inline mock response.
+     *
+     * REST endpoints from the SDK's data API are mapped to quspo tertiary
+     * indexer views via metashrew_view JSON-RPC:
+     *
+     *   /get-all-pools-details      → quspo get_pools
+     *   /get-all-token-pairs        → quspo get_pools
+     *   /get-alkanes-by-address     → quspo get_alkanes_by_address
+     *   /get-bitcoin-price          → inline mock {usd: 100000}
+     *   /get-all-amm-tx-history     → quspo get_activity
+     *   /get-alkane-details         → quspo get_token_details
+     *   /get-candles                → quspo get_candles
+     *   /get-pools                  → quspo get_pools
+     *   /get-pool-details           → quspo get_pools (single)
+     *   /get-address-positions      → quspo get_user_positions
+     *   /get-wrap-events            → quspo get_wrap_events
+     *   /get-unwrap-events          → quspo get_unwrap_events
      */
     resolveRestMethod(url, body) {
         let path;
-        try { path = new URL(url).pathname; } catch { return null; }
+        try {
+            path = new URL(url).pathname;
+        }
+        catch {
+            return null;
+        }
+        // Helper: build a metashrew_view call to a quspo view function.
+        // Input is hex-encoded UTF-8 JSON string.
         const quspoCall = (viewName, input) => {
             const payloadStr = typeof input === 'string' ? input : JSON.stringify(input);
             const hexInput = '0x' + toHex(new TextEncoder().encode(payloadStr));
-            return { method: 'metashrew_view', params: [viewName, hexInput, 'latest'] };
+            return {
+                method: 'metashrew_view',
+                params: [viewName, hexInput, 'latest'],
+            };
         };
+        // ── Pool data ────────────────────────────────────────────────
         if (path.endsWith('/get-all-pools-details') || path.endsWith('/get-all-token-pairs') || path.endsWith('/get-pools')) {
             const factoryId = body?.factoryId || body?.factory || { block: '4', tx: '65522' };
             return quspoCall('get_pools', factoryId);
@@ -536,25 +608,37 @@ export class DevnetTestHarness {
             const factoryId = body?.factoryId || body?.factory || { block: '4', tx: '65522' };
             return quspoCall('get_pools', factoryId);
         }
+        // ── Alkane balances ──────────────────────────────────────────
         if (path.endsWith('/get-alkanes-by-address') || path.endsWith('/get-address-balances')) {
-            return quspoCall('get_alkanes_by_address', body?.address || '');
+            const address = body?.address || '';
+            return quspoCall('get_alkanes_by_address', address);
         }
+        // ── Token metadata ───────────────────────────────────────────
         if (path.endsWith('/get-alkane-details') || path.endsWith('/get-alkane-info')) {
+            // Can be single ID or array
             const alkaneId = body?.alkaneId || body?.id || '';
-            const idStr = typeof alkaneId === 'object' ? `${alkaneId.block}:${alkaneId.tx}` : String(alkaneId);
+            const idStr = typeof alkaneId === 'object'
+                ? `${alkaneId.block}:${alkaneId.tx}`
+                : String(alkaneId);
             return quspoCall('get_token_details', idStr);
         }
+        // ── Activity / tx history ────────────────────────────────────
         if (path.endsWith('/get-all-amm-tx-history') || path.endsWith('/get-all-address-amm-tx-history')) {
-            const input = { limit: body?.count || body?.limit || 50 };
-            if (body?.address) input.address = body.address;
+            const limit = body?.count || body?.limit || 50;
+            const input = { limit };
+            if (body?.address)
+                input.address = body.address;
             return quspoCall('get_activity', input);
         }
+        // ── Candle data ──────────────────────────────────────────────
         if (path.endsWith('/get-candles')) {
             return quspoCall('get_candles', body || {});
         }
+        // ── User positions ───────────────────────────────────────────
         if (path.endsWith('/get-address-positions') || path.endsWith('/address-positions')) {
             return quspoCall('get_user_positions', body || {});
         }
+        // ── Wrap/unwrap events ───────────────────────────────────────
         if (path.endsWith('/get-wrap-events') || path.endsWith('/get-wrap-events-all')) {
             return quspoCall('get_wrap_events', body || {});
         }
@@ -567,12 +651,15 @@ export class DevnetTestHarness {
         if (path.endsWith('/get-unwrap-events-by-address')) {
             return quspoCall('get_unwrap_events', body || {});
         }
+        // ── Bitcoin price (mock for devnet) ──────────────────────────
         if (path.endsWith('/get-bitcoin-price') || path.endsWith('/bitcoin-price')) {
             return { inline: JSON.stringify({ usd: 100000.00 }) };
         }
+        // ── All alkanes list ─────────────────────────────────────────
         if (path.endsWith('/get-all-alkanes')) {
             return quspoCall('get_all_alkanes', '');
         }
+        // ── Contract state queries ───────────────────────────────────
         if (path.endsWith('/get-contract-state')) {
             return quspoCall('get_contract_state', body || {});
         }
