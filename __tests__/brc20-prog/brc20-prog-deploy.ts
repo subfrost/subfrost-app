@@ -42,8 +42,22 @@ export async function deployFrBtcContract(
   harness.mineBlocks(3);
 
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-  const contractAddress = parsed?.contract_address || parsed?.contractAddress || null;
-  console.log(`[brc20-deploy] Deploy result: ${JSON.stringify(parsed).slice(0, 200)}`);
+  console.log(`[brc20-deploy] Deploy result keys: ${Object.keys(parsed || {}).join(', ')}`);
+  console.log(`[brc20-deploy] Deploy result: ${JSON.stringify(parsed).slice(0, 500)}`);
+
+  // BRC20-Prog contract address is derived from the reveal inscription.
+  // The executor returns txids; the contract address is computed from the
+  // deployer address (first output of activation tx) at nonce 0.
+  // For devnet testing, we can compute it or query it from the indexer.
+  const contractAddress = parsed?.contract_address
+    || parsed?.contractAddress
+    || parsed?.activation_contract_address
+    || null;
+
+  // If no address returned, try to derive from activation txid
+  if (!contractAddress && parsed?.activation_txid) {
+    console.log(`[brc20-deploy] Contract deployed (activation: ${parsed.activation_txid}), address TBD`);
+  }
 
   return contractAddress;
 }

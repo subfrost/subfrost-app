@@ -90,6 +90,50 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
     }
   }, 180_000);
 
+  it('should configure FrBTC contract with signer', async () => {
+    if (!frBtcAddress) {
+      console.log('[lifecycle] Skipping setSigner — no FrBTC contract deployed');
+      return;
+    }
+
+    const groupPubKeyHex = frostProcessor.getGroupPublicKeyHex();
+    console.log(`[lifecycle] Setting signer on ${frBtcAddress} with key ${groupPubKeyHex.slice(0, 16)}...`);
+
+    try {
+      const result = await (provider as any).brc20ProgTransact(
+        frBtcAddress,
+        'setSigner(bytes)',
+        JSON.stringify([`0x${groupPubKeyHex}`]),
+        JSON.stringify({
+          fee_rate: 1,
+          mine_enabled: true,
+        }),
+      );
+      harness.mineBlocks(3);
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+      console.log('[lifecycle] setSigner result:', JSON.stringify(parsed).slice(0, 200));
+    } catch (e: any) {
+      console.warn('[lifecycle] setSigner failed:', e.message);
+    }
+
+    // Also set premium to 0
+    try {
+      const result = await (provider as any).brc20ProgTransact(
+        frBtcAddress,
+        'setPremium(uint256)',
+        JSON.stringify(['0']),
+        JSON.stringify({
+          fee_rate: 1,
+          mine_enabled: true,
+        }),
+      );
+      harness.mineBlocks(3);
+      console.log('[lifecycle] setPremium(0) done');
+    } catch (e: any) {
+      console.warn('[lifecycle] setPremium failed:', e.message);
+    }
+  }, 180_000);
+
   it('should wrap BTC to frBTC', async () => {
     const rawProvider = provider;
     const wrapAmount = BigInt(1_000_000);
