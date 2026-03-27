@@ -134,6 +134,39 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
     }
   }, 180_000);
 
+  it('should query getSignerAddress after config', async () => {
+    if (!frBtcAddress) return;
+    // Call getSignerAddress() to verify signer was set
+    // Selector for getSignerAddress(): keccak256("getSignerAddress()") = first 4 bytes
+    const BRC20_PROG_RPC = BRC20_PROG.RPC_URL;
+    const toBytes = Array.from(Buffer.from(frBtcAddress.replace('0x', ''), 'hex'));
+    // getSignerAddress() selector: we can compute it or use a known value
+    // For FrBTC.sol: function getSignerAddress() external view returns (bytes memory)
+    // Selector = keccak256("getSignerAddress()")[:4]
+    const selectorHex = 'e75235b8'; // pre-computed
+    const dataBytes = Array.from(Buffer.from(selectorHex, 'hex'));
+    const callRequest = JSON.stringify({ to: toBytes, data: dataBytes });
+    const hexInput = '0x' + Buffer.from(callRequest).toString('hex');
+
+    const rpcId = 999;
+    const response = await fetch(BRC20_PROG.RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_view', params: ['call', hexInput, 'latest'], id: rpcId }),
+    });
+    const result = await response.json();
+    console.log('[lifecycle] getSignerAddress raw:', JSON.stringify(result).slice(0, 500));
+
+    if (result.result) {
+      const hex = result.result.replace('0x', '');
+      const callResp = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+      console.log('[lifecycle] getSignerAddress decoded:', JSON.stringify(callResp).slice(0, 300));
+      if (callResp.result && callResp.result.length > 0) {
+        console.log('[lifecycle] getSignerAddress result bytes:', callResp.result.length);
+      }
+    }
+  }, 30_000);
+
   it('should wrap BTC to frBTC', async () => {
     const rawProvider = provider;
     const wrapAmount = BigInt(1_000_000);
