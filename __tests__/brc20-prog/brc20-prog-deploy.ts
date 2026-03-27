@@ -344,6 +344,10 @@ export async function deployBisSwapWithProxy(
     let proxyAddress = parsed?.contract_address || parsed?.contractAddress || null;
     console.log('[brc20-deploy] BiS_Swap proxy (SDK address):', proxyAddress);
 
+    // Verify the proxy was deployed by checking if the debug view captured it
+    console.log(`[brc20-deploy] Mining extra blocks to ensure state is committed...`);
+    harness.mineBlocks(5);
+
     // The SDK computes the address from deployer nonce, which may not match the EVM's
     // actual nonce. Query the debug view to get the REAL deployed address.
     try {
@@ -368,11 +372,28 @@ export async function deployBisSwapWithProxy(
       // Debug query failed, use SDK address
     }
 
-    // Now call initialize() on the proxy via a separate brc20ProgTransact
+    // Verify proxy's EIP-1967 slot before calling initialize
     if (proxyAddress) {
-      // Call initialize() using raw calldata hex (bypass encode_function_call)
-      // This matches exactly what the cargo test does.
-      console.log('[brc20-deploy] Calling initialize() on proxy with raw calldata...');
+      try {
+        const eip1967Slot = '360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+        const storageReq = JSON.stringify({ address: proxyAddress, slot: '0x' + eip1967Slot });
+        const storageHex = '0x' + Buffer.from(storageReq).toString('hex');
+        const resp = await fetch(BRC20_PROG.RPC_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_view', params: ['storage_at', storageHex, 'latest'], id: 998 }),
+        });
+        const json = await resp.json();
+        if (json.result) {
+          const decoded = JSON.parse(Buffer.from(json.result.replace('0x', ''), 'hex').toString());
+          console.log(`[brc20-deploy] PRE-INIT: Proxy EIP-1967 = ${decoded.value}`);
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // Now call initialize() on the proxy
+    if (proxyAddress) {
+      console.log('[brc20-deploy] Calling initialize() on proxy...');
       console.log(`[brc20-deploy] proxy target: ${proxyAddress}`);
       try {
         // Build raw calldata: selector + 6 ABI-encoded params

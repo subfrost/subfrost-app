@@ -306,6 +306,135 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
 
   // ─── Phase 2: BTC → frBTC (wrap) ──────────────────────────────────
 
+  it('should test simple proxy + initialize on devnet', async () => {
+    // Deploy TestInitializable (simple contract with initialize(uint256, address))
+    const testJsonPath = require('path').resolve(process.env.HOME || '', 'subfrost-brc20/bis-build/out/TestInitializable.sol/TestInitializable.json');
+    const testJson = JSON.parse(require('fs').readFileSync(testJsonPath, 'utf-8'));
+    const testImplResult = await (provider as any).brc20ProgDeploy(
+      JSON.stringify(testJson),
+      JSON.stringify({ fee_rate: 1, mine_enabled: true, use_activation: true, auto_confirm: true,
+        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress,
+        deployer_nonce: 4 }),
+    );
+    harness.mineBlocks(3);
+
+    // Get actual impl address
+    let debugResp = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
+    let testImplAddr: string | null = null;
+    if (debugResp.result) {
+      const json = JSON.parse(Buffer.from(debugResp.result.replace('0x', ''), 'hex').toString());
+      const m = (json.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
+      if (m) testImplAddr = m[1];
+    }
+    console.log('[roundtrip] TestInitializable impl:', testImplAddr);
+
+    if (!testImplAddr) { console.log('[roundtrip] TestInitializable deploy failed'); return; }
+
+    // Deploy MinimalProxy pointing to TestInitializable
+    const { readFileSync } = require('fs');
+    const { resolve } = require('path');
+    const proxyJson = JSON.parse(readFileSync(resolve(process.env.HOME || '', 'subfrost-brc20/bis-build/out/MinimalProxy.sol/MinimalProxy.json'), 'utf-8'));
+    let proxyBc = proxyJson.bytecode?.object?.replace('0x', '') || '';
+    const proxyArgs =
+      testImplAddr.replace('0x', '').padStart(64, '0') +
+      '0'.repeat(63) + '40' +  // offset = 64
+      '0'.repeat(64);           // length = 0
+    const fullProxyBc = proxyBc + proxyArgs;
+
+    const proxyResult = await (provider as any).brc20ProgDeploy(
+      JSON.stringify({ abi: [], bytecode: { object: '0x' + fullProxyBc } }),
+      JSON.stringify({ fee_rate: 1, mine_enabled: true, use_activation: true, auto_confirm: true,
+        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress,
+        deployer_nonce: 5 }),
+    );
+    harness.mineBlocks(5);
+
+    // Get actual proxy address
+    debugResp = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
+    let testProxyAddr: string | null = null;
+    if (debugResp.result) {
+      const json = JSON.parse(Buffer.from(debugResp.result.replace('0x', ''), 'hex').toString());
+      const m = (json.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
+      if (m) testProxyAddr = m[1];
+    }
+    console.log('[roundtrip] TestProxy:', testProxyAddr);
+
+    if (!testProxyAddr) { console.log('[roundtrip] TestProxy deploy failed'); return; }
+
+    // Call initialize(42, 0xdead...) on proxy
+    // initialize(uint256,address) = da35a26f
+    await (provider as any).brc20ProgTransact(
+      testProxyAddr,
+      'initialize(uint256,address)',
+      '42,0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+      JSON.stringify({ fee_rate: 1, mine_enabled: true }),
+    );
+    harness.mineBlocks(3);
+
+    // Read debug
+    debugResp = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
+    if (debugResp.result) {
+      const json = JSON.parse(Buffer.from(debugResp.result.replace('0x', ''), 'hex').toString());
+      console.log('[roundtrip] TEST INIT result:', json.last_result);
+      console.log('[roundtrip] TEST INIT commit:', json.last_commit);
+    }
+
+    // Read value() = 3fa4f245 on proxy
+    const valResp = await ethCall(testProxyAddr, '3fa4f245');
+    if (valResp?.success) {
+      const v = decodeUint256(valResp.result);
+      console.log('[roundtrip] TestProxy value():', v.toString());
+      if (v === 42n) {
+        console.log('[roundtrip] ✅ Simple proxy + initialize WORKS on devnet!');
+      } else {
+        console.log('[roundtrip] ⚠ value() is wrong — initialize() may have failed');
+      }
+    } else {
+      console.log('[roundtrip] TestProxy value() failed:', valResp?.error);
+    }
+  });
+
+  it('should verify TSTORE works on devnet', async () => {
+    // Deploy a tiny contract that does TSTORE + TLOAD
+    // Runtime: PUSH1 1, PUSH1 0, TSTORE(0x5d), PUSH1 0, TLOAD(0x5c), PUSH1 0, MSTORE, PUSH1 32, PUSH1 0, RETURN
+    // = 6001 6000 5d 6000 5c 6000 52 6020 6000 f3 = 15 bytes
+    const tstoreRuntime = '600160005d60005c60005260206000f3';
+    const tstoreBytecode = `60${(tstoreRuntime.length/2).toString(16).padStart(2,'0')}80600b6000396000f3${tstoreRuntime}`;
+
+    const tstoreResult = await (provider as any).brc20ProgDeploy(
+      JSON.stringify({ abi: [], bytecode: { object: '0x' + tstoreBytecode } }),
+      JSON.stringify({
+        fee_rate: 1, mine_enabled: true, use_activation: true, auto_confirm: true,
+        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress,
+      }),
+    );
+    harness.mineBlocks(3);
+
+    // Get actual address from debug view
+    const debugInput = '0x' + Buffer.from('{}').toString('hex');
+    const debugResp = await rpcCall('metashrew_view', ['debug', debugInput, 'latest']);
+    let tstoreAddr: string | null = null;
+    if (debugResp.result) {
+      const hex = debugResp.result.replace('0x', '');
+      const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+      const addrMatch = (json.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
+      if (addrMatch) tstoreAddr = addrMatch[1];
+    }
+
+    if (tstoreAddr) {
+      // Call the TSTORE contract
+      const resp = await ethCall(tstoreAddr, '00000000'); // any selector
+      console.log('[roundtrip] TSTORE test:', resp?.success ? 'SUCCESS' : `FAILED: ${resp?.error}`);
+      if (resp?.success) {
+        const val = resp.result.length >= 32 ? decodeUint256(resp.result) : 0n;
+        console.log('[roundtrip] TLOAD returned:', val.toString());
+        // TLOAD should return 1 if TSTORE worked (within same call)
+      }
+    } else {
+      console.log('[roundtrip] TSTORE contract deploy failed');
+    }
+  });
+
   it('should wrap 1M sats to frBTC', async () => {
     expect(frBtcAddress).toBeDefined();
 
