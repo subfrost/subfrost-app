@@ -6,6 +6,7 @@ import { Flame } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useFuelAllocation } from '@/hooks/useFuelAllocation';
 import { useDemoGate } from '@/hooks/useDemoGate';
+import Brc20BalancesCard from './Brc20BalancesCard';
 
 export default function BalancesPanel() {
   const { network } = useWallet() as any;
@@ -42,10 +43,16 @@ export default function BalancesPanel() {
           ))}
         </div>
 
-        <div className="text-center py-2 text-[color:var(--sf-text)]/60">
-          <span className="text-sm font-medium">
-            {inscriptionFilter === 'brc20' ? t('balances.brc20ComingSoon') : inscriptionFilter === 'runes' ? t('balances.runesComingSoon') : t('balances.ordinalsComingSoon')}
-          </span>
+        <div>
+          {inscriptionFilter === 'brc20' ? (
+            <Brc20BalancesCard />
+          ) : (
+            <div className="text-center py-2 text-[color:var(--sf-text)]/60">
+              <span className="text-sm font-medium">
+                {inscriptionFilter === 'runes' ? t('balances.runesComingSoon') : t('balances.ordinalsComingSoon')}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
