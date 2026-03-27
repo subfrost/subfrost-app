@@ -290,18 +290,20 @@ export async function deployBisSwapWithProxy(
   //   word 1: offset to _data (= 0x40 = 64, since 2 head slots × 32 bytes)
   //   word 2: length of _data in bytes
   //   word 3+: _data padded to 32-byte boundary
-  const initCalldataBytes = Buffer.from(initCalldata, 'hex');
-  const initCalldataLen = initCalldataBytes.length; // 196 bytes
-  const paddedLen = Math.ceil(initCalldataLen / 32) * 32; // 224 bytes (7 words)
-  const initCalldataPadded = initCalldata + '0'.repeat((paddedLen - initCalldataLen) * 2);
-
+  // Deploy proxy with EMPTY _data first (no initialize in constructor).
+  // We'll call initialize() separately via brc20ProgTransact.
+  // This avoids issues with complex constructor delegatecall + nested CREATEs.
   const constructorArgs =
     abiAddress(implAddress) +     // _logic
     abiUint256(64) +              // offset to _data (2 head words × 32)
-    abiUint256(initCalldataLen) + // length of _data
-    initCalldataPadded;           // _data (padded)
+    abiUint256(0);                // length of _data = 0 (empty bytes)
 
   const fullBytecode = proxyBytecode + constructorArgs;
+  console.log(`[brc20-deploy] Proxy bytecode: ${proxyBytecode.length/2} bytes`);
+  console.log(`[brc20-deploy] Constructor args: ${constructorArgs.length/2} bytes`);
+  console.log(`[brc20-deploy] Init calldata: ${initCalldata.length/2} bytes (to be called separately)`);
+  console.log(`[brc20-deploy] Full deploy: ${fullBytecode.length/2} bytes`);
+  console.log(`[brc20-deploy] Args start: ${constructorArgs.slice(0, 128)}...`);
 
   // Create synthetic Foundry JSON with constructor args baked into bytecode
   const syntheticJson = {
@@ -330,7 +332,32 @@ export async function deployBisSwapWithProxy(
 
     const parsed = typeof result === 'string' ? JSON.parse(result) : result;
     const proxyAddress = parsed?.contract_address || parsed?.contractAddress || null;
-    console.log('[brc20-deploy] BiS_Swap proxy:', proxyAddress);
+    console.log('[brc20-deploy] BiS_Swap proxy deployed:', proxyAddress);
+
+    // Now call initialize() on the proxy via a separate brc20ProgTransact
+    if (proxyAddress) {
+      console.log('[brc20-deploy] Calling initialize() on proxy...');
+      try {
+        await (provider as any).brc20ProgTransact(
+          proxyAddress,
+          'initialize(address,address,address,address,uint256,address)',
+          [
+            `0x${params.adminAddress.replace('0x','')}`,
+            `0x${params.adminAddress.replace('0x','')}`,
+            `0x${params.adminAddress.replace('0x','')}`,
+            `0x${params.frBtcAddress.replace('0x','')}`,
+            '1',
+            `0x${params.adminAddress.replace('0x','')}`,
+          ].join(','),
+          JSON.stringify({ fee_rate: 1, mine_enabled: true }),
+        );
+        harness.mineBlocks(3);
+        console.log('[brc20-deploy] initialize() success');
+      } catch (e: any) {
+        console.warn('[brc20-deploy] initialize() failed:', e?.message ?? String(e));
+      }
+    }
+
     return { implAddress, proxyAddress };
   } catch (e: any) {
     console.warn('[brc20-deploy] Proxy deploy failed:', e?.message ?? String(e));
