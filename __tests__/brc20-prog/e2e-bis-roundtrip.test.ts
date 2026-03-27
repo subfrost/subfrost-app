@@ -76,6 +76,9 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
   let bisSwapImpl: string | null = null;
   let bisSwapProxy: string | null = null;
   let federation: SubzeroFrostFederation;
+  let devDexAddr: string | null = null;
+  let mockTokenAddr: string | null = null;
+  const deployerEvmAddr = '0xfc6a88db99fbe3e6b7890a9063db23343dd50a32';
 
   beforeAll(async () => {
     const ctx = await createBrc20DevnetContext();
@@ -722,156 +725,193 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     }
   }, 300_000);
 
-  it('should deploy DevDEX and add liquidity', async () => {
+  it('should deploy DevDEX + MockERC20 and add liquidity', async () => {
     if (!frBtcAddress) return;
 
-    const deployerAddr = '0xfc6a88db99fbe3e6b7890a9063db23343dd50a32';
-
-    // Deploy DevDEX (creates its own Factory, no owner restrictions)
-    const devDexJsonPath = require('path').resolve(process.env.HOME || '', 'subfrost-brc20/bis-build/out/DevBiS_Swap.sol/DevDEX.json');
-    const devDexJson = JSON.parse(require('fs').readFileSync(devDexJsonPath, 'utf-8'));
-
-    const devDexResult = await (provider as any).brc20ProgDeploy(
-      JSON.stringify(devDexJson),
-      JSON.stringify({ fee_rate: 1, mine_enabled: true, use_activation: true, auto_confirm: true,
-        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress }),
-    );
-    harness.mineBlocks(5);
-
-    // Get actual DevDEX address
-    let devDexAddr: string | null = null;
-    const debugResp = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
-    if (debugResp.result) {
-      const json = JSON.parse(Buffer.from(debugResp.result.replace('0x', ''), 'hex').toString());
-      const m = (json.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
-      if (m) devDexAddr = m[1];
+    // Helper to get actual address from debug view after deploy
+    async function getLastDeployAddress(): Promise<string | null> {
+      const resp = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
+      if (resp.result) {
+        const json = JSON.parse(Buffer.from(resp.result.replace('0x', ''), 'hex').toString());
+        const m = (json.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
+        return m ? m[1] : null;
+      }
+      return null;
     }
-    console.log('[roundtrip] DevDEX deployed at:', devDexAddr);
-    if (!devDexAddr) return;
 
-    // Get MockERC20 address from earlier deploy
-    // We need to track it — for now query all debug deploys
-    // Actually, let's just use a fixed approach: query code_at for known addresses
-    // OR deploy a new MockERC20 here
-    const mockJsonPath = require('path').resolve(process.env.HOME || '', 'subfrost-brc20/bis-build/out/MockERC20.sol/MockERC20.json');
-    const mockJson = JSON.parse(require('fs').readFileSync(mockJsonPath, 'utf-8'));
-    await (provider as any).brc20ProgDeploy(
-      JSON.stringify(mockJson),
+    // Deploy DevDEX
+    const devDexJson = JSON.parse(require('fs').readFileSync(
+      require('path').resolve(process.env.HOME || '', 'subfrost-brc20/bis-build/out/DevBiS_Swap.sol/DevDEX.json'), 'utf-8'));
+    await (provider as any).brc20ProgDeploy(JSON.stringify(devDexJson),
       JSON.stringify({ fee_rate: 1, mine_enabled: true, use_activation: true, auto_confirm: true,
-        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress }),
-    );
+        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress }));
     harness.mineBlocks(5);
+    devDexAddr = await getLastDeployAddress();
+    console.log('[roundtrip] DevDEX:', devDexAddr);
 
-    let mockAddr: string | null = null;
-    const debugResp2 = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
-    if (debugResp2.result) {
-      const json = JSON.parse(Buffer.from(debugResp2.result.replace('0x', ''), 'hex').toString());
-      const m = (json.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
-      if (m) mockAddr = m[1];
-    }
-    console.log('[roundtrip] New MockERC20 at:', mockAddr);
-    if (!mockAddr) return;
+    // Deploy MockERC20
+    const mockJson = JSON.parse(require('fs').readFileSync(
+      require('path').resolve(process.env.HOME || '', 'subfrost-brc20/bis-build/out/MockERC20.sol/MockERC20.json'), 'utf-8'));
+    await (provider as any).brc20ProgDeploy(JSON.stringify(mockJson),
+      JSON.stringify({ fee_rate: 1, mine_enabled: true, use_activation: true, auto_confirm: true,
+        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress }));
+    harness.mineBlocks(5);
+    mockTokenAddr = await getLastDeployAddress();
+    console.log('[roundtrip] MockERC20:', mockTokenAddr);
 
-    // Mint MockERC20
-    await (provider as any).brc20ProgTransact(mockAddr, 'mint(address,uint256)',
-      `${deployerAddr},1000000000000000000000000`, JSON.stringify({ fee_rate: 1, mine_enabled: true }));
+    if (!devDexAddr || !mockTokenAddr) return;
+
+    // Mint + approve
+    await (provider as any).brc20ProgTransact(mockTokenAddr, 'mint(address,uint256)',
+      `${deployerEvmAddr},1000000000000000000000000`, JSON.stringify({ fee_rate: 1, mine_enabled: true }));
     harness.mineBlocks(3);
 
-    // Approve DevDEX for both tokens
-    await (provider as any).brc20ProgTransact(mockAddr, 'approve(address,uint256)',
-      `${devDexAddr},115792089237316195423570985008687907853269984665640564039457584007913129639935`,
-      JSON.stringify({ fee_rate: 1, mine_enabled: true }));
+    const MAX_UINT = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+    await (provider as any).brc20ProgTransact(mockTokenAddr, 'approve(address,uint256)',
+      `${devDexAddr},${MAX_UINT}`, JSON.stringify({ fee_rate: 1, mine_enabled: true }));
     harness.mineBlocks(3);
 
     await (provider as any).brc20ProgTransact(frBtcAddress!, 'approve(address,uint256)',
-      `${devDexAddr},115792089237316195423570985008687907853269984665640564039457584007913129639935`,
-      JSON.stringify({ fee_rate: 1, mine_enabled: true, contract_address: frBtcAddress }));
+      `${devDexAddr},${MAX_UINT}`, JSON.stringify({ fee_rate: 1, mine_enabled: true, contract_address: frBtcAddress }));
     harness.mineBlocks(3);
 
     // Add liquidity: 250K frBTC + 500K * 10^18 MockERC20
-    console.log('[roundtrip] Adding liquidity via DevDEX...');
+    console.log('[roundtrip] Adding liquidity...');
     await (provider as any).brc20ProgTransact(devDexAddr,
       'addLiquidity(address,address,uint256,uint256,address)',
-      `${frBtcAddress},${mockAddr},250000,500000000000000000000000,${deployerAddr}`,
+      `${frBtcAddress},${mockTokenAddr},250000,500000000000000000000000,${deployerEvmAddr}`,
       JSON.stringify({ fee_rate: 1, mine_enabled: true }));
     harness.mineBlocks(3);
 
-    // Check result
-    const debugResp3 = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
-    if (debugResp3.result) {
-      const json = JSON.parse(Buffer.from(debugResp3.result.replace('0x', ''), 'hex').toString());
-      console.log('[roundtrip] addLiquidity result:', json.last_result?.slice(0, 120));
-    }
-
-    // Check pair
+    // Verify pair created
     const pairResp = await ethCall(devDexAddr, 'e6a43905' +
       frBtcAddress!.replace('0x', '').padStart(64, '0') +
-      mockAddr.replace('0x', '').padStart(64, '0'));
-    if (pairResp?.success) {
-      const pairAddr = decodeAddress(pairResp.result);
-      console.log('[roundtrip] LP Pair:', pairAddr);
-      if (pairAddr !== '0x' + '0'.repeat(40)) {
-        console.log('[roundtrip] ✅ Liquidity pool created!');
-        // Check LP balance
-        const lpBal = await ethCall(pairAddr, '70a08231' + deployerAddr.replace('0x', '').padStart(64, '0'));
-        if (lpBal?.success) console.log('[roundtrip] LP balance:', decodeUint256(lpBal.result).toString());
-      }
+      mockTokenAddr.replace('0x', '').padStart(64, '0'));
+    expect(pairResp?.success).toBe(true);
+    const pairAddr = decodeAddress(pairResp.result);
+    console.log('[roundtrip] LP Pair:', pairAddr);
+    expect(pairAddr).not.toBe('0x' + '0'.repeat(40));
+    console.log('[roundtrip] ✅ Liquidity pool created!');
+
+    // Check LP balance
+    const lpBal = await ethCall(pairAddr, '70a08231' + deployerEvmAddr.replace('0x', '').padStart(64, '0'));
+    if (lpBal?.success) {
+      const bal = decodeUint256(lpBal.result);
+      console.log('[roundtrip] LP balance:', bal.toString());
+      expect(bal).toBeGreaterThan(0n);
     }
   }, 600_000);
 
-  it('should swap frBTC for MockERC20 via DevDEX', async () => {
-    if (!frBtcAddress) return;
-    const deployerAddr = '0xfc6a88db99fbe3e6b7890a9063db23343dd50a32';
-
-    // Find the DevDEX and MockERC20 addresses
-    // We'll query the debug view for the most recent deploys
-    // DevDEX and MockERC20 are the last two deploys
-    // For simplicity, query the DevDEX factory for the pair
-    // We need to store these addresses across tests — use a global
-
-    // Query devDEX address via admin() check on known addresses
-    // Actually, let's just query code_at for a range of recent addresses
-    // OR use the debug deploy history
-
-    // Simplest: query the known DevDEX admin
-    const debugResp = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
-    if (!debugResp.result) return;
-    const debugJson = JSON.parse(Buffer.from(debugResp.result.replace('0x', ''), 'hex').toString());
-    const lastResult = debugJson.last_result || '';
-
-    // If addLiquidity succeeded, the last_result has the success info
-    // The pair address was logged. Let me query reserves instead.
-    if (!lastResult.startsWith('success')) {
-      console.log('[roundtrip] Last result not success, skipping swap');
+  it('should swap frBTC → MockERC20 via DevDEX', async () => {
+    if (!devDexAddr || !mockTokenAddr || !frBtcAddress) {
+      console.log('[roundtrip] Skipping swap — DEX not deployed');
       return;
     }
 
-    // We know from earlier test that DevDEX is at an address we can query
-    // For now, use the hardcoded approach from the test output
-    // TODO: properly pass addresses between tests
-    console.log('[roundtrip] Swap test: checking reserves...');
+    // Check frBTC balance before swap
+    const frbtcBefore = await ethCall(frBtcAddress, '70a08231' + deployerEvmAddr.replace('0x', '').padStart(64, '0'));
+    const frbtcBalBefore = frbtcBefore?.success ? decodeUint256(frbtcBefore.result) : 0n;
+    console.log('[roundtrip] frBTC before swap:', frbtcBalBefore.toString());
 
-    // Actually, we need the devDex address to call swap(). Since we can't easily
-    // pass state between `it()` blocks, let's just verify the liquidity was added
-    // by checking the pair's reserves via the debug view.
-    console.log('[roundtrip] ✅ DEX swap infrastructure verified — addLiquidity succeeded with LP balance');
-    console.log('[roundtrip] (Full swap flow requires passing addresses between test steps)');
-  });
+    // Check MockERC20 balance before swap
+    const mockBefore = await ethCall(mockTokenAddr, '70a08231' + deployerEvmAddr.replace('0x', '').padStart(64, '0'));
+    const mockBalBefore = mockBefore?.success ? decodeUint256(mockBefore.result) : 0n;
+    console.log('[roundtrip] MockERC20 before swap:', mockBalBefore.toString());
 
-  it('should query getPairAddress for frBTC/MockToken (should be zero before first liquidity)', async () => {
-    if (!bisSwapProxy || !frBtcAddress) return;
-
-    // getPairAddress(address,address) = b4f69a2f
-    // We need the mock token address... but we don't have it in this test step.
-    // For now just verify the function is callable
-    const pairResp = await ethCall(bisSwapProxy, 'b4f69a2f' +
+    // Verify pair exists before swap
+    const pairCheck = await ethCall(devDexAddr, 'e6a43905' +
       frBtcAddress!.replace('0x', '').padStart(64, '0') +
-      '0000000000000000000000000000000000000000'.padStart(64, '0'));
-    if (pairResp?.success) {
-      const pairAddr = decodeAddress(pairResp.result);
-      console.log('[roundtrip] Pair address (frBTC/zero):', pairAddr);
+      mockTokenAddr!.replace('0x', '').padStart(64, '0'));
+    if (pairCheck?.success) {
+      const pair = decodeAddress(pairCheck.result);
+      console.log('[roundtrip] Pair exists:', pair !== '0x' + '0'.repeat(40) ? pair : 'NO');
     }
-  });
+
+    // Check frBTC allowance for DevDEX
+    const allowResp = await ethCall(frBtcAddress!, 'dd62ed3e' +
+      deployerEvmAddr.replace('0x', '').padStart(64, '0') +
+      devDexAddr!.replace('0x', '').padStart(64, '0'));
+    if (allowResp?.success) {
+      console.log('[roundtrip] frBTC allowance for DevDEX:', decodeUint256(allowResp.result).toString());
+    }
+
+    // Get expected output
+    // getAmountOut(uint256,address,address) = 5e1e6325
+    const quoteResp = await ethCall(devDexAddr, '5e1e6325' +
+      '00000000000000000000000000000000000000000000000000000000000186a0' + // 100000 sats
+      frBtcAddress!.replace('0x', '').padStart(64, '0') +
+      mockTokenAddr!.replace('0x', '').padStart(64, '0'));
+    if (quoteResp?.success) {
+      const expectedOut = decodeUint256(quoteResp.result);
+      console.log('[roundtrip] Expected output for 100K frBTC:', expectedOut.toString(), 'MockERC20');
+    }
+
+    // Swap 100K sats of frBTC for MockERC20
+    // swap(address,address,uint256,uint256,address) = d5bcb9b5
+    console.log('[roundtrip] Swapping 100000 frBTC → MockERC20...');
+    await (provider as any).brc20ProgTransact(devDexAddr,
+      'swap(address,address,uint256,uint256,address)',
+      `${frBtcAddress},${mockTokenAddr},100000,1,${deployerEvmAddr}`,
+      JSON.stringify({ fee_rate: 1, mine_enabled: true }));
+    harness.mineBlocks(3);
+
+    // Check debug result
+    const debugResp = await rpcCall('metashrew_view', ['debug', '0x' + Buffer.from('{}').toString('hex'), 'latest']);
+    if (debugResp.result) {
+      const json = JSON.parse(Buffer.from(debugResp.result.replace('0x', ''), 'hex').toString());
+      const result = json.last_result || '';
+      console.log('[roundtrip] Swap result:', result.slice(0, 100));
+      if (result.startsWith('success')) {
+        console.log('[roundtrip] ✅ Swap succeeded!');
+      }
+    }
+
+    // Check balances after swap
+    const frbtcAfter = await ethCall(frBtcAddress!, '70a08231' + deployerEvmAddr.replace('0x', '').padStart(64, '0'));
+    const frbtcBalAfter = frbtcAfter?.success ? decodeUint256(frbtcAfter.result) : 0n;
+    console.log('[roundtrip] frBTC after swap:', frbtcBalAfter.toString());
+
+    const mockAfter = await ethCall(mockTokenAddr!, '70a08231' + deployerEvmAddr.replace('0x', '').padStart(64, '0'));
+    const mockBalAfter = mockAfter?.success ? decodeUint256(mockAfter.result) : 0n;
+    console.log('[roundtrip] MockERC20 after swap:', mockBalAfter.toString());
+
+    if (frbtcBalAfter < frbtcBalBefore) {
+      console.log('[roundtrip] ✅ frBTC decreased (sent to pool)');
+    }
+    if (mockBalAfter > mockBalBefore) {
+      console.log('[roundtrip] ✅ MockERC20 increased (received from pool)');
+      const gained = mockBalAfter - mockBalBefore;
+      console.log('[roundtrip] Gained:', gained.toString(), 'MockERC20');
+    }
+  }, 300_000);
+
+  it('should swap MockERC20 → frBTC (reverse direction)', async () => {
+    if (!devDexAddr || !mockTokenAddr || !frBtcAddress) return;
+
+    const frbtcBefore = await ethCall(frBtcAddress!, '70a08231' + deployerEvmAddr.replace('0x', '').padStart(64, '0'));
+    const frbtcBalBefore = frbtcBefore?.success ? decodeUint256(frbtcBefore.result) : 0n;
+
+    // Swap 100K MockERC20 → frBTC
+    console.log('[roundtrip] Swapping MockERC20 → frBTC...');
+    await (provider as any).brc20ProgTransact(devDexAddr,
+      'swap(address,address,uint256,uint256,address)',
+      `${mockTokenAddr},${frBtcAddress},100000000000000000000000,1,${deployerEvmAddr}`,
+      JSON.stringify({ fee_rate: 1, mine_enabled: true }));
+    harness.mineBlocks(3);
+
+    const frbtcAfter = await ethCall(frBtcAddress!, '70a08231' + deployerEvmAddr.replace('0x', '').padStart(64, '0'));
+    const frbtcBalAfter = frbtcAfter?.success ? decodeUint256(frbtcAfter.result) : 0n;
+
+    console.log('[roundtrip] frBTC before reverse swap:', frbtcBalBefore.toString());
+    console.log('[roundtrip] frBTC after reverse swap:', frbtcBalAfter.toString());
+
+    if (frbtcBalAfter > frbtcBalBefore) {
+      console.log('[roundtrip] ✅ Reverse swap: frBTC increased!');
+      console.log('[roundtrip] Gained:', (frbtcBalAfter - frbtcBalBefore).toString(), 'sats');
+    }
+  }, 300_000);
+
+  // (Swap tests are above — they use shared devDexAddr/mockTokenAddr variables)
 
   it('should verify complete round-trip summary', () => {
     console.log('\n[roundtrip] ═══════════════════════════════════════════');
