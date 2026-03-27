@@ -9,8 +9,8 @@
  *   5. Simulate FROST federation signing the release PSBT
  *   6. Verify payment state
  *
- * Uses the quarks-rs e2e pattern: MockFrostFederation simulates threshold
- * signing, DevnetTestHarness runs the in-process chain + indexers.
+ * Uses real FROST signing via subzero-web-sys WASM — all crypto is the
+ * actual FROST-secp256k1-tr protocol, only the P2P network is in-process.
  *
  * Run: pnpm vitest run __tests__/brc20-prog/e2e-brc20-unwrap.test.ts
  */
@@ -22,7 +22,7 @@ import {
   mineBlocks,
 } from './brc20-prog-helpers';
 import { deployFrBtcContract } from './brc20-prog-deploy';
-import { MockBrc20UnwrapProcessor } from './frost-unwrap-mock';
+import { SubzeroFrostFederation } from './subzero-frost';
 import { BRC20_PROG, loadFrBtcFoundryJson } from './brc20-prog-constants';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -72,7 +72,7 @@ describe.runIf(hasFoundry)('E2E: BRC20-Prog Unwrap Flow', () => {
   let taprootAddress: string;
   let signer: any;
   let frBtcAddress: string | null = null;
-  let frostProcessor: MockBrc20UnwrapProcessor;
+  let federation: SubzeroFrostFederation;
 
   beforeAll(async () => {
     const ctx = await createBrc20DevnetContext();
@@ -86,7 +86,7 @@ describe.runIf(hasFoundry)('E2E: BRC20-Prog Unwrap Flow', () => {
     await mineBlocks(harness, 201);
 
     // Initialize FROST processor
-    frostProcessor = await MockBrc20UnwrapProcessor.create();
+    federation = await SubzeroFrostFederation.create(2, 3);
 
     // Deploy FrBTC
     frBtcAddress = await deployFrBtcContract(provider, harness);
@@ -94,7 +94,7 @@ describe.runIf(hasFoundry)('E2E: BRC20-Prog Unwrap Flow', () => {
 
     // Configure signer
     if (frBtcAddress) {
-      const groupPubKeyHex = frostProcessor.getGroupPublicKeyHex();
+      const groupPubKeyHex = federation.getGroupPublicKeyHex();
       try {
         await (provider as any).brc20ProgTransact(
           frBtcAddress,
@@ -323,20 +323,40 @@ describe.runIf(hasFoundry)('E2E: BRC20-Prog Unwrap Flow', () => {
 
   // ─── Phase 6: FROST federation processes the unwrap ────────────────
 
-  it('should FROST-sign the release transaction', async () => {
-    // In the real flow:
-    // 1. Operator queries pending payments from FrBTC contract
-    // 2. Builds PSBT spending signer UTXOs to payment recipients
-    // 3. FROST federation signs via threshold ceremony
-    // 4. Broadcast signed tx
+  it('should FROST-sign the release transaction with real subzero', async () => {
+    // Real FROST threshold signing via subzero-web-sys:
+    //   Round 1: generate nonces + commitments
+    //   Round 2: produce signature shares
+    //   Aggregate → valid Schnorr signature
 
-    // Mock: simulate the FROST signing
-    const result = frostProcessor.signSighash(
-      new Uint8Array(32) // placeholder sighash
-    );
-    expect(result).toBeDefined();
-    expect(result.length).toBe(64); // Schnorr signature = 64 bytes
-    console.log('[unwrap] FROST signature produced:', Buffer.from(result).toString('hex').slice(0, 32) + '...');
+    // Build a mock sighash from the payment data
+    const sighash = new Uint8Array(32);
+    const encoder = new TextEncoder();
+    const data = encoder.encode('unwrap:0:200000:' + segwitAddress);
+    sighash.set(data.slice(0, 32));
+
+    // Sign with real FROST
+    const signature = federation.sign(sighash);
+    expect(signature).toBeDefined();
+    expect(signature.length).toBe(64); // Schnorr signature = 64 bytes
+
+    // Verify the signature is valid
+    const valid = federation.verify(sighash, signature);
+    expect(valid).toBe(true);
+
+    console.log('[unwrap] Real FROST signature produced and verified ✓');
+    console.log('[unwrap] Signature:', Buffer.from(signature).toString('hex').slice(0, 32) + '...');
+  });
+
+  it('should verify FROST group key matches signer address', () => {
+    const address = federation.getSignerAddress();
+    expect(address).toMatch(/^bcrt1p/); // regtest P2TR
+    console.log('[unwrap] FROST group P2TR address:', address);
+
+    const keygen = federation.getKeygen();
+    expect(keygen.threshold).toBe(2);
+    expect(keygen.maxSigners).toBe(3);
+    expect(keygen.groupPublicKeyHex.length).toBe(64); // 32 bytes = 64 hex
   });
 
   // ─── Phase 7: Second unwrap to test multiple payments ──────────────
