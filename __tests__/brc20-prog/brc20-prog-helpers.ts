@@ -129,5 +129,10 @@ export async function mineBlocks(
   harness: any,
   count: number,
 ): Promise<void> {
-  harness.mineBlocks(count);
+  try {
+    harness.mineBlocks(count);
+  } catch (e: any) {
+    console.error(`[brc20-helpers] mineBlocks(${count}) error:`, e?.message || String(e));
+    throw e;
+  }
 }
