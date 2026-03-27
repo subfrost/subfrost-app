@@ -150,6 +150,60 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
         // Both return 0 — so either delegation works and impl has 0 (it does, _disableInitializers),
         // OR the proxy delegates to the wrong address which also has 0.
 
+        // Read the EIP-1967 implementation slot from the proxy
+        if (bisSwapProxy) {
+          const eip1967Slot = '360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+          const storageReq = JSON.stringify({ address: bisSwapProxy, slot: '0x' + eip1967Slot });
+          const storageHex = '0x' + Buffer.from(storageReq).toString('hex');
+          const storageResp = await rpcCall('metashrew_view', ['storage_at', storageHex, 'latest']);
+          if (storageResp.result) {
+            const hex = storageResp.result.replace('0x', '');
+            const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+            console.log('[roundtrip] PROXY EIP-1967 impl slot:', json.value);
+            console.log('[roundtrip] Expected impl address:', bisSwapImpl);
+          } else {
+            console.log('[roundtrip] storage_at failed:', storageResp.error);
+          }
+
+          // Check if the proxy address has code by reading runtime bytecode length via EXTCODESIZE
+          // We can check this via a view call to a function — if it returns, there's code
+          // BTC_UPSCALE() = 099e7b8d — should return 32 bytes if proxy delegates correctly
+          const checkResp = await ethCall(bisSwapProxy, '099e7b8d');
+          console.log('[roundtrip] PROXY code check:', checkResp?.success ? `success, ${checkResp.result.length} bytes` : `failed: ${checkResp?.error}`);
+
+          // Also check the IMPL's EIP-1967 slot to make sure we're not confusing addresses
+          const implSlotReq = JSON.stringify({ address: bisSwapImpl, slot: '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc' });
+          const implSlotHex = '0x' + Buffer.from(implSlotReq).toString('hex');
+          const implSlotResp = await rpcCall('metashrew_view', ['storage_at', implSlotHex, 'latest']);
+          if (implSlotResp.result) {
+            const hex = implSlotResp.result.replace('0x', '');
+            const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+            console.log('[roundtrip] IMPL EIP-1967 slot:', json.value);
+          }
+
+          // Check Initializable storage (EIP-7201 namespaced slot)
+          const initSlot = 'f0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00';
+          const initSlotReq = JSON.stringify({ address: bisSwapProxy, slot: '0x' + initSlot });
+          const initSlotHex = '0x' + Buffer.from(initSlotReq).toString('hex');
+          const initSlotResp = await rpcCall('metashrew_view', ['storage_at', initSlotHex, 'latest']);
+          if (initSlotResp.result) {
+            const hex = initSlotResp.result.replace('0x', '');
+            const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+            console.log('[roundtrip] PROXY Initializable slot:', json.value);
+            // If this is non-zero, the proxy was already "initialized" somehow
+          }
+
+          // Also check slot 0
+          const slot0Req = JSON.stringify({ address: bisSwapProxy, slot: '0x00' });
+          const slot0Hex = '0x' + Buffer.from(slot0Req).toString('hex');
+          const slot0Resp = await rpcCall('metashrew_view', ['storage_at', slot0Hex, 'latest']);
+          if (slot0Resp.result) {
+            const hex = slot0Resp.result.replace('0x', '');
+            const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+            console.log('[roundtrip] PROXY slot 0:', json.value);
+          }
+        }
+
         // Query debug view RIGHT AFTER initialize() on proxy
         {
           const debugInput = '0x' + Buffer.from('{}').toString('hex');
@@ -162,38 +216,7 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
           }
         }
 
-        // Actually, let's try calling initialize() WITHOUT the proxy,
-        // directly on a FRESH impl (not the one with _disableInitializers)
-        // This tests if the PROXY is the issue vs the FUNCTION
-
-        // Deploy a second impl at nonce 3
-        try {
-          const { deployBisSwapImpl } = await import('./brc20-prog-deploy');
-          const impl2 = await deployBisSwapImpl(provider, harness, 3);
-          console.log('[roundtrip] Second BiS_Swap impl:', impl2);
-
-          // Call initialize on impl2 directly (it has _disableInitializers in constructor)
-          // This SHOULD revert — confirming _disableInitializers works
-          if (impl2) {
-            await (provider as any).brc20ProgTransact(
-              impl2,
-              'initialize(address,address,address,address,uint256,address)',
-              [
-                `0x${deployerEvmAddress.replace('0x','')}`,
-                `0x${deployerEvmAddress.replace('0x','')}`,
-                `0x${deployerEvmAddress.replace('0x','')}`,
-                `0x${frBtcAddress!.replace('0x','')}`,
-                '1',
-                `0x${deployerEvmAddress.replace('0x','')}`,
-              ].join(','),
-              JSON.stringify({ fee_rate: 1, mine_enabled: true }),
-            );
-            harness.mineBlocks(3);
-            console.log('[roundtrip] Called initialize() on bare impl');
-          }
-        } catch (e: any) {
-          console.warn('[roundtrip] Second impl test:', e?.message ?? String(e));
-        }
+        // No second impl deploy — keep debug state clean for proxy analysis
       } catch (e: any) {
         console.warn('[roundtrip] BiS deploy:', e?.message ?? String(e));
       }
@@ -225,6 +248,9 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
         console.log('[roundtrip] DEBUG last_inscription:', json.last_inscription);
         console.log('[roundtrip] DEBUG last_result:', json.last_result);
         console.log('[roundtrip] DEBUG last_commit:', json.last_commit);
+        console.log('[roundtrip] DEBUG last_deploy:', json.last_deploy);
+        console.log('[roundtrip] DEBUG proxy_deploy:', json.proxy_deploy || '(not found)');
+        console.log('[roundtrip] DEBUG last_deploy_result:', json.last_deploy_result || '(not found)');
       } catch (e) {
         console.log('[roundtrip] DEBUG raw hex:', hex.slice(0, 200));
       }

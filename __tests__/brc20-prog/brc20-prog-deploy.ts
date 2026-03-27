@@ -310,11 +310,16 @@ export async function deployBisSwapWithProxy(
   console.log(`[brc20-deploy] Full deploy: ${fullBytecode.length/2} bytes`);
   console.log(`[brc20-deploy] Args start: ${constructorArgs.slice(0, 128)}...`);
 
-  // Create synthetic Foundry JSON with constructor args baked into bytecode
+  // Create a minimal Foundry JSON with the full bytecode (init code + constructor args)
   const syntheticJson = {
-    ...proxyJson,
-    bytecode: { object: '0x' + fullBytecode },
+    abi: proxyJson.abi || [],
+    bytecode: {
+      object: '0x' + fullBytecode,
+      sourceMap: '',
+      linkReferences: {},
+    },
   };
+  console.log(`[brc20-deploy] Synthetic JSON bytecode length: ${fullBytecode.length / 2} bytes`);
 
   try {
     const addresses = provider.walletGetAddresses('p2wpkh', 0, 1);
@@ -336,8 +341,32 @@ export async function deployBisSwapWithProxy(
     harness.mineBlocks(3);
 
     const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-    const proxyAddress = parsed?.contract_address || parsed?.contractAddress || null;
-    console.log('[brc20-deploy] BiS_Swap proxy deployed:', proxyAddress);
+    let proxyAddress = parsed?.contract_address || parsed?.contractAddress || null;
+    console.log('[brc20-deploy] BiS_Swap proxy (SDK address):', proxyAddress);
+
+    // The SDK computes the address from deployer nonce, which may not match the EVM's
+    // actual nonce. Query the debug view to get the REAL deployed address.
+    try {
+      const debugInput = '0x' + Buffer.from('{}').toString('hex');
+      const debugResp = await fetch(BRC20_PROG.RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_view', params: ['debug', debugInput, 'latest'], id: 999 }),
+      });
+      const debugJson = await debugResp.json();
+      if (debugJson.result) {
+        const hex = debugJson.result.replace('0x', '');
+        const debug = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+        const deployResult = debug.last_deploy_result || '';
+        const addrMatch = deployResult.match(/addr=(0x[0-9a-f]+)/);
+        if (addrMatch && addrMatch[1] !== proxyAddress) {
+          console.log(`[brc20-deploy] BiS_Swap proxy (ACTUAL EVM address): ${addrMatch[1]}`);
+          proxyAddress = addrMatch[1];
+        }
+      }
+    } catch (e) {
+      // Debug query failed, use SDK address
+    }
 
     // Now call initialize() on the proxy via a separate brc20ProgTransact
     if (proxyAddress) {
