@@ -46,16 +46,15 @@ describe('E2E: BRC20-Prog Deployment', () => {
   it.runIf(hasFoundryJson)(
     'should deploy FrBTC.sol via commit-reveal-activation',
     async () => {
-      const rawProvider = provider;
       const foundryJson = loadFrBtcFoundryJson();
 
-      const result = await rawProvider.brc20_prog_deploy_contract(
-        'regtest',
+      const result = await (provider as any).brc20ProgDeploy(
         JSON.stringify(foundryJson),
         JSON.stringify({
           fee_rate: 1,
           mine_enabled: true,
           use_activation: true,
+          auto_confirm: true,
         }),
       );
 

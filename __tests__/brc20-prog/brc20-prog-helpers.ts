@@ -90,6 +90,7 @@ export async function createBrc20DevnetProvider(): Promise<WebProvider> {
   const provider = new wasm.WebProvider(BRC20_PROG.PROVIDER_NETWORK, {
     jsonrpc_url: BRC20_PROG.RPC_URL,
     data_api_url: BRC20_PROG.RPC_URL,
+    qubitcoin_rpc_url: BRC20_PROG.RPC_URL, // Enable qubitcoin mode for brc20-prog routing
   });
 
   provider.walletLoadMnemonic(TEST_MNEMONIC, null);

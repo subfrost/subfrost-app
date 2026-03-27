@@ -29,25 +29,21 @@ export async function deployFrBtcContract(
 
   console.log('[brc20-deploy] Deploying FrBTC.sol via BRC20-Prog...');
 
-  const rawProvider = provider.rawProvider;
-  const result = await rawProvider.brc20_prog_deploy_contract(
-    'regtest',
+  const result = await (provider as any).brc20ProgDeploy(
     JSON.stringify(foundryJson),
     JSON.stringify({
       fee_rate: 1,
       mine_enabled: true,
       use_activation: true,
+      auto_confirm: true,
     }),
   );
 
+  harness.mineBlocks(3);
+
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-  const contractAddress = parsed.contract_address || parsed.contractAddress;
-
-  if (contractAddress) {
-    console.log(`[brc20-deploy] FrBTC.sol deployed at ${contractAddress}`);
-  }
-
-  harness.mineBlocks(3); // mine commit, reveal, activation
+  const contractAddress = parsed?.contract_address || parsed?.contractAddress || null;
+  console.log(`[brc20-deploy] Deploy result: ${JSON.stringify(parsed).slice(0, 200)}`);
 
   return contractAddress;
 }
