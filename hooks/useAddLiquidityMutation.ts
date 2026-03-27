@@ -98,45 +98,56 @@ async function findPoolId(
   factoryId: string,
   token0Id: string,
   token1Id: string,
+  network: string,
 ): Promise<{ block: number; tx: number } | null> {
-  const [t0Block, t0Tx] = token0Id.split(':').map(Number);
-  const [t1Block, t1Tx] = token1Id.split(':').map(Number);
+  const [fBlock, fTx] = factoryId.split(':');
+  const [t0Block, t0Tx] = token0Id.split(':');
+  const [t1Block, t1Tx] = token1Id.split(':');
 
   try {
-    const context = JSON.stringify({
-      alkanes: [],
-      calldata: encodeSimulateCalldata(factoryId, [2, t0Block, t0Tx, t1Block, t1Tx]), // opcode 2 = FindPoolId
-      height: 1000000,
-      txindex: 0,
-      pointer: 0,
-      refund_pointer: 0,
-      vout: 0,
-      transaction: [],
-      block: [],
+    // Use alkanes_simulate JSON-RPC directly — the SDK's alkanesSimulate returns
+    // raw protobuf on devnet which doesn't match the expected { status, execution }
+    // shape. The JSON-RPC path returns the structured response on all networks.
+    const rpcUrl = getRpcUrl(network);
+
+    const resp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'alkanes_simulate',
+        params: [{
+          target: { block: fBlock, tx: fTx },
+          inputs: ['2', t0Block, t0Tx, t1Block, t1Tx], // opcode 2 = FindPoolId
+          alkanes: [],
+          transaction: '0x',
+          block: '0x',
+          height: '999999',
+          txindex: 0,
+          vout: 0,
+        }],
+        id: 1,
+      }),
     });
 
-    const result = await provider.alkanesSimulate(factoryId, context, 'latest');
+    const rpcResult = await resp.json();
+    const execution = rpcResult?.result?.execution;
 
-    // If there's an error containing "doesn't exist", pool doesn't exist
-    if (result?.execution?.error) {
-      console.log('[AddLiquidity] Pool does not exist:', result.execution.error);
+    if (execution?.error) {
+      console.log('[AddLiquidity] Pool does not exist:', execution.error);
       return null;
     }
-    // status 0 = success, pool exists - parse pool ID from response data
-    if (result?.status === 0 && result?.execution?.data) {
-      const hexData = (result.execution.data as string).replace('0x', '');
-      if (hexData.length >= 32) {
-        // AlkaneId is 2 u128s (block, tx) in little-endian
-        const blockHex = hexData.substring(0, 32);
-        const txHex = hexData.substring(32, 64);
-        const block = Number(BigInt('0x' + blockHex.match(/../g)!.reverse().join('')));
-        const tx = Number(BigInt('0x' + txHex.match(/../g)!.reverse().join('')));
-        console.log('[AddLiquidity] Pool found:', `${block}:${tx}`);
-        return { block, tx };
-      }
-      console.log('[AddLiquidity] Pool exists (status 0) but could not parse ID');
-      return null;
+
+    const hexData = (execution?.data || '').replace('0x', '');
+    if (hexData.length >= 64) {
+      const buf = Buffer.from(hexData, 'hex');
+      const block = Number(buf.readBigUInt64LE(0));
+      const tx = Number(buf.readBigUInt64LE(16));
+      console.log('[AddLiquidity] Pool found:', `${block}:${tx}`);
+      return { block, tx };
     }
+
+    console.log('[AddLiquidity] FindPoolId returned no data');
     return null;
   } catch (error) {
     console.warn('[AddLiquidity] Pool existence check failed:', error);
@@ -341,6 +352,7 @@ export function useAddLiquidityMutation() {
           ALKANE_FACTORY_ID,
           data.token0Id,
           data.token1Id,
+          network,
         );
       }
 
