@@ -19,6 +19,7 @@ type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 export async function deployFrBtcContract(
   provider: WebProvider,
   harness: any,
+  deployerNonce?: number,
 ): Promise<string> {
   const foundryJson = loadFrBtcFoundryJson();
   if (!foundryJson) {
@@ -27,7 +28,7 @@ export async function deployFrBtcContract(
     );
   }
 
-  console.log('[brc20-deploy] Deploying FrBTC.sol via BRC20-Prog...');
+  console.log(`[brc20-deploy] Deploying FrBTC.sol via BRC20-Prog (nonce=${deployerNonce ?? 0})...`);
 
   // Get wallet addresses for from_addresses / change_address
   const addresses = provider.walletGetAddresses('p2wpkh', 0, 1);
@@ -42,6 +43,7 @@ export async function deployFrBtcContract(
       auto_confirm: true,
       from_addresses: walletAddress ? [walletAddress] : undefined,
       change_address: walletAddress || undefined,
+      deployer_nonce: deployerNonce ?? 0,
     }),
   );
 
@@ -171,6 +173,7 @@ export async function deployBrc20ProgStack(
 export async function deployBisSwapImpl(
   provider: WebProvider,
   harness: any,
+  deployerNonce?: number,
 ): Promise<string | null> {
   const foundryJson = loadBisSwapFoundryJson();
   if (!foundryJson) {
@@ -178,7 +181,7 @@ export async function deployBisSwapImpl(
     return null;
   }
 
-  console.log('[brc20-deploy] Deploying BiS_Swap implementation...');
+  console.log(`[brc20-deploy] Deploying BiS_Swap implementation (nonce=${deployerNonce ?? 0})...`);
 
   const addresses = provider.walletGetAddresses('p2wpkh', 0, 1);
   const walletAddress = addresses?.[0]?.address;
@@ -192,6 +195,7 @@ export async function deployBisSwapImpl(
       auto_confirm: true,
       from_addresses: walletAddress ? [walletAddress] : undefined,
       change_address: walletAddress || undefined,
+      deployer_nonce: deployerNonce ?? 0,
     }),
   );
 

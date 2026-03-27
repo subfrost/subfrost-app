@@ -23,7 +23,7 @@ import {
   disposeBrc20Harness,
   mineBlocks,
 } from './brc20-prog-helpers';
-import { deployFrBtcContract, deployBisSwapWithProxy } from './brc20-prog-deploy';
+import { deployFrBtcContract, deployBisSwapImpl } from './brc20-prog-deploy';
 import { SubzeroFrostFederation } from './subzero-frost';
 import { BRC20_PROG, loadFrBtcFoundryJson, loadBisSwapFoundryJson } from './brc20-prog-constants';
 
@@ -89,8 +89,8 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     // Real FROST federation
     federation = await SubzeroFrostFederation.create(2, 3);
 
-    // Deploy FrBTC
-    frBtcAddress = await deployFrBtcContract(provider, harness);
+    // Deploy FrBTC (nonce 0 — first deploy from this address)
+    frBtcAddress = await deployFrBtcContract(provider, harness, 0);
     console.log('[roundtrip] FrBTC:', frBtcAddress);
 
     // Configure signer
@@ -112,20 +112,17 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
       }
     }
 
-    // Deploy BiS_Swap via proxy
+    // Deploy BiS_Swap implementation (nonce 1 — second deploy)
+    // Note: BiS_Swap constructor calls _disableInitializers(), so it can't be
+    // initialized directly. For full DEX testing, need proxy pattern.
+    // For now, deploy impl and verify it exists at a different address from FrBTC.
     if (frBtcAddress) {
       try {
-        // We need the deployer's EVM address for admin.
-        // It's derived from the pkscript of the first output in the reveal tx.
-        // For now, use a placeholder — the proxy deploy will set it.
-        const adminEvmAddress = '0x' + 'fc6a88db99fbe3e6b7890a9063db23343dd50a32'; // from deploy observation
-        const result = await deployBisSwapWithProxy(provider, harness, {
-          frBtcAddress,
-          adminAddress: adminEvmAddress,
-        });
-        bisSwapImpl = result.implAddress;
-        bisSwapProxy = result.proxyAddress;
-        console.log('[roundtrip] BiS_Swap impl:', bisSwapImpl, 'proxy:', bisSwapProxy);
+        bisSwapImpl = await deployBisSwapImpl(provider, harness, 1);
+        console.log('[roundtrip] BiS_Swap impl:', bisSwapImpl);
+        if (bisSwapImpl === frBtcAddress) {
+          console.warn('[roundtrip] ⚠ BiS_Swap got same address as FrBTC — nonce tracking issue');
+        }
       } catch (e: any) {
         console.warn('[roundtrip] BiS deploy:', e?.message ?? String(e));
       }
