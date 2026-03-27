@@ -393,6 +393,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
+    // JOURNAL (2026-03-27): Faucets require mine_enabled:true in the options JSON.
+    // Without it, alkanesExecuteFull broadcasts the tx but never mines it into a
+    // block (devnet has no external miner). The tx "succeeds" (no exception) but
+    // tokens never appear. The post-call mineBlocks(1) mines an EMPTY block.
+    // With mine_enabled:true, the SDK mines the commit+reveal blocks internally.
     faucetDiesel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
       // Use boot wallet to fund the tx, output DIESEL to user's address
@@ -408,6 +413,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           from_addresses: [boot.segwit, boot.taproot],
           change_address: boot.segwit,
           alkanes_change_address: address,
+          mine_enabled: true,
         }),
       );
       harnessRef.current.mineBlocks(1);
@@ -430,6 +436,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           from_addresses: [boot.segwit, boot.taproot],
           change_address: boot.segwit,
           alkanes_change_address: address,
+          mine_enabled: true,
         }),
       );
       harnessRef.current.mineBlocks(1);
@@ -490,6 +497,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           from_addresses: [boot.segwit, boot.taproot],
           change_address: boot.segwit,
           alkanes_change_address: address,
+          mine_enabled: true,
         }),
       );
       harnessRef.current.mineBlocks(1);

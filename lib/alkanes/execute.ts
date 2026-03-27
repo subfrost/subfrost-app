@@ -7,17 +7,34 @@
  * NOTE: This file uses relative imports only (no @/ alias) so it works in
  * both Next.js and vitest without path resolution issues.
  *
- * **CRITICAL: THIS IS THE ACTUAL CODE PATH FOR FRONTEND WRAP/SWAP OPERATIONS**
- * Despite the existence of alkanesExecuteFull in the SDK, the frontend uses this older
- * alkanesExecuteWithStrings path. Call chain:
- *   useWrapMutation.ts → this file (line 62) → WASM alkanes_execute_with_strings_js → Rust execute()
+ * JOURNAL (2026-03-27): DEVNET EXECUTION PATH — alkanesExecuteFull vs alkanesExecuteWithStrings
  *
- * **WRAP TRANSACTION BUG INVESTIGATION (2026-02-20)**
- * Bug: Both outputs go to user address instead of [signer, user]
- * Frontend logs (line 56) show CORRECT addresses being passed: ['bcrt1p466...', 'bcrt1pvu3...']
- * WASM diagnostic logs at provider.rs:674-679 will show if addresses survive TypeScript→WASM boundary
- * If WASM logs show wrong addresses, bug is in this file or SDK serialization
- * If WASM logs show correct addresses, bug is in Rust create_outputs() (execute.rs:1278)
+ * On devnet, this function auto-detects the in-browser environment (localhost:18888)
+ * and switches from alkanesExecuteWithStrings → alkanesExecuteFull. This is critical
+ * because the two SDK methods use DIFFERENT UTXO discovery paths:
+ *
+ *   alkanesExecuteWithStrings:
+ *     - Queries UTXOs via the SDK's data API (REST endpoints like /get-alkanes-by-address)
+ *     - On devnet, these route through the fetch interceptor → quspo tertiary indexer
+ *     - quspo may have INCOMPLETE data (only indexes blocks after it's loaded)
+ *     - Result: "Insufficient alkanes: need X, have 0" even when balance exists
+ *
+ *   alkanesExecuteFull:
+ *     - Queries UTXOs via the PRIMARY alkanes indexer (alkanes_protorunesbyaddress RPC)
+ *     - This indexer has complete data for ALL blocks since genesis
+ *     - Also handles signing + broadcasting + mining internally (no manual PSBT flow)
+ *     - This is the same path used by boot deploys, faucets, and the vitest suite
+ *
+ * The devnet path sets mine_enabled:true + auto_confirm:true so the SDK mines the
+ * transaction into a block automatically. Without mine_enabled, the tx would sit in
+ * the mempool with no miner to confirm it (devnet has no external miner).
+ *
+ * This centralized detection means ALL mutation hooks (swap, add/remove liquidity,
+ * wrap, unwrap, limit orders, gauge staking, etc.) automatically use the correct
+ * path on devnet without per-hook changes.
+ *
+ * On mainnet/regtest (non-devnet), the original alkanesExecuteWithStrings path is
+ * used, returning a PSBT for the wallet to sign externally.
  */
 
 import { parseMaxVoutFromProtostones } from './helpers';
@@ -70,6 +87,36 @@ export async function alkanesExecuteTyped(
   console.log('[alkanesExecuteTyped] protostones:', params.protostones);
   console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
   console.log('[alkanesExecuteTyped] options:', optionsJson);
+
+  // On devnet, use alkanesExecuteFull which handles signing + mining internally.
+  // alkanesExecuteWithStrings relies on the SDK's data API for UTXO discovery,
+  // which routes through quspo on devnet. Quspo may not have indexed all blocks,
+  // causing "Insufficient alkanes" errors when the wallet has enough balance.
+  // alkanesExecuteFull uses the primary alkanes indexer directly.
+  // Detect devnet by checking if the fetch interceptor is installed (localhost:18888).
+  let isDevnet = false;
+  try {
+    const rpcUrl = (provider as any).sandshrew_rpc_url?.();
+    isDevnet = typeof rpcUrl === 'string' && rpcUrl.includes('localhost:18888');
+  } catch { /* not devnet */ }
+
+  if (isDevnet && typeof (provider as any).alkanesExecuteFull === 'function') {
+    // Force mine_enabled + auto_confirm for devnet so alkanesExecuteFull
+    // handles signing, broadcasting, and mining in one call.
+    options.mine_enabled = true;
+    options.auto_confirm = true;
+    const devnetOptionsJson = JSON.stringify(options);
+    console.log('[alkanesExecuteTyped] Devnet: using alkanesExecuteFull (auto_confirm + mine_enabled)');
+    const result = await (provider as any).alkanesExecuteFull(
+      toAddressesJson,
+      params.inputRequirements,
+      params.protostones,
+      params.feeRate ?? null,
+      params.envelopeHex ?? null,
+      devnetOptionsJson
+    );
+    return typeof result === 'string' ? JSON.parse(result) : result;
+  }
 
   const result = await provider.alkanesExecuteWithStrings(
     toAddressesJson,

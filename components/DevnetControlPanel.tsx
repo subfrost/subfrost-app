@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDevnet } from '@/context/DevnetContext';
 import { useWallet } from '@/context/WalletContext';
+import { getBootAddresses } from '@/lib/devnet/boot';
 import { Loader2, RotateCcw, Play, Pause, Square, Activity } from 'lucide-react';
 import type { SimLogEntry } from '@/lib/devnet/types';
 
@@ -63,8 +64,18 @@ export function DevnetControlPanel() {
   const [busy, setBusy] = useState<BusyAction>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
 
-  const address = account?.taproot?.address || '';
-  const segwitAddress = account?.nativeSegwit?.address || '';
+  // On devnet, always use the boot wallet addresses for faucets.
+  // The boot wallet holds pre-funded UTXOs and the SDK provider is loaded
+  // with the boot mnemonic, so p2tr:0/p2wpkh:0 resolve to these addresses.
+  // Using connected wallet addresses would mint tokens to addresses the SDK
+  // can't spend from (different mnemonic → different UTXO set).
+  let address = account?.taproot?.address || '';
+  let segwitAddress = account?.nativeSegwit?.address || '';
+  try {
+    const boot = getBootAddresses();
+    address = boot.taproot;
+    segwitAddress = boot.segwit;
+  } catch { /* boot not ready yet */ }
 
   // Run an async action with loading state + query invalidation
   const runAction = useCallback(async (action: BusyAction, fn: () => Promise<void>) => {

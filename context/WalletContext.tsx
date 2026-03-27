@@ -533,12 +533,32 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   // (separate from main init so it doesn't re-trigger browser wallet reconnect)
   useEffect(() => {
     if (!sdkInitialized || !loadWallet) return;
+
+    // On devnet, auto-connect the boot wallet so faucets, swaps, and balance
+    // queries all use the same address set. Without this, the user must manually
+    // import the boot mnemonic — and if they don't, faucet-minted tokens land at
+    // addresses the SDK can't spend from.
+    if (network === 'devnet' && !wallet) {
+      const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+      try {
+        const bootWallet = createWalletFromMnemonic(BOOT_MNEMONIC, toSdkNetwork(network));
+        setWallet(bootWallet);
+        setWalletType('keystore');
+        loadWallet(BOOT_MNEMONIC);
+        sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, BOOT_MNEMONIC);
+        console.log('[WalletContext] Devnet: auto-connected boot wallet');
+      } catch (e) {
+        console.warn('[WalletContext] Devnet auto-connect failed:', e);
+      }
+      return;
+    }
+
     const sessionMnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
     const storedWalletType = localStorage.getItem(STORAGE_KEYS.WALLET_TYPE);
     if (sessionMnemonic && storedWalletType === 'keystore') {
       loadWallet(sessionMnemonic);
     }
-  }, [sdkInitialized, loadWallet]);
+  }, [sdkInitialized, loadWallet, network, wallet]);
 
   // Track previous network to detect changes
   const prevNetworkRef = useRef<string | null>(null);

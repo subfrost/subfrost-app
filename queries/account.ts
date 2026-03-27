@@ -445,7 +445,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
             }
           }
 
-          console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes`);
+          console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
 
           for (const item of items) {
             const block = item.alkaneId?.block;
@@ -474,6 +474,56 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
               } catch {
                 existing.balance = String(Number(existing.balance || 0) + Number(balance));
               }
+            }
+          }
+
+          // Fallback: if data API returned nothing, try raw RPC (alkanes_protorunesbyaddress).
+          // This is the same method the vitest suite uses successfully on devnet.
+          // The data API routes through quspo which may not have indexed all blocks.
+          if (items.length === 0) {
+            console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: dataApi empty, falling back to RPC`);
+            try {
+              const rpcResult = await fetch('http://localhost:18888', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0', method: 'alkanes_protorunesbyaddress',
+                  params: [{ address, protocolTag: '1' }], id: 1,
+                }),
+              }).then(r => r.json());
+
+              const outpoints = rpcResult?.result?.outpoints || [];
+              for (const outpoint of outpoints) {
+                const balances = outpoint.balance_sheet?.cached?.balances
+                  || outpoint.runes || outpoint.balances || [];
+                for (const entry of balances) {
+                  const block = parseInt(entry.block ?? '0', 10);
+                  const tx = parseInt(entry.tx ?? '0', 10);
+                  const amount = String(entry.amount || entry.value || '0');
+                  if (block === 0 && tx === 0 && amount === '0') continue;
+                  const alkaneId = `${block}:${tx}`;
+                  const knownInfo = KNOWN_TOKENS[alkaneId];
+                  if (!alkaneMap.has(alkaneId)) {
+                    alkaneMap.set(alkaneId, {
+                      alkaneId,
+                      name: knownInfo?.name || `Token ${alkaneId}`,
+                      symbol: knownInfo?.symbol || '',
+                      balance: amount,
+                      decimals: knownInfo?.decimals ?? 8,
+                    });
+                  } else {
+                    const existing = alkaneMap.get(alkaneId)!;
+                    try {
+                      existing.balance = (BigInt(existing.balance) + BigInt(amount)).toString();
+                    } catch {
+                      existing.balance = String(Number(existing.balance || 0) + Number(amount));
+                    }
+                  }
+                }
+              }
+              console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: RPC fallback found ${alkaneMap.size} alkanes`);
+            } catch (rpcErr) {
+              console.warn(`[alkaneBalanceQuery] RPC fallback also failed:`, rpcErr);
             }
           }
         } catch (error) {

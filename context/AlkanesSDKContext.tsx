@@ -237,9 +237,18 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         // 2. Check if we can load a wallet from the browser wallet's public keys only
         // 3. Consider using raw PSBT building instead of the SDK's execution methods
         try {
-          providerInstance.walletCreate();
+          if (network === 'devnet') {
+            // On devnet, load the boot mnemonic so the SDK provider can find
+            // UTXOs minted by faucets and boot deploys. A dummy wallet would
+            // resolve p2tr:0/p2wpkh:0 to unrelated addresses with no balance.
+            const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+            providerInstance.walletLoadMnemonic(BOOT_MNEMONIC, null);
+            console.log('[AlkanesSDK] Boot mnemonic loaded for devnet');
+          } else {
+            providerInstance.walletCreate();
+            console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
+          }
           setIsWalletLoaded(true);
-          console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
         } catch (e) {
           console.warn('[AlkanesSDK] walletCreate failed (non-fatal):', e);
         }
