@@ -103,7 +103,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
       const result = await (provider as any).brc20ProgTransact(
         frBtcAddress,
         'setSigner(bytes)',
-        JSON.stringify([`0x${groupPubKeyHex}`]),
+        `0x${groupPubKeyHex}`,
         JSON.stringify({
           fee_rate: 1,
           mine_enabled: true,
@@ -113,7 +113,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
       const parsed = typeof result === 'string' ? JSON.parse(result) : result;
       console.log('[lifecycle] setSigner result:', JSON.stringify(parsed).slice(0, 200));
     } catch (e: any) {
-      console.warn('[lifecycle] setSigner failed:', e.message);
+      console.warn('[lifecycle] setSigner failed:', e?.message || String(e));
     }
 
     // Also set premium to 0
@@ -121,7 +121,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
       const result = await (provider as any).brc20ProgTransact(
         frBtcAddress,
         'setPremium(uint256)',
-        JSON.stringify(['0']),
+        '0',
         JSON.stringify({
           fee_rate: 1,
           mine_enabled: true,
@@ -130,7 +130,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
       harness.mineBlocks(3);
       console.log('[lifecycle] setPremium(0) done');
     } catch (e: any) {
-      console.warn('[lifecycle] setPremium failed:', e.message);
+      console.warn('[lifecycle] setPremium failed:', e?.message || String(e));
     }
   }, 180_000);
 

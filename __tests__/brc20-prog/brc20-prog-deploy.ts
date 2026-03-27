@@ -29,6 +29,10 @@ export async function deployFrBtcContract(
 
   console.log('[brc20-deploy] Deploying FrBTC.sol via BRC20-Prog...');
 
+  // Get wallet addresses for from_addresses / change_address
+  const addresses = provider.walletGetAddresses('p2wpkh', 0, 1);
+  const walletAddress = addresses?.[0]?.address;
+
   const result = await (provider as any).brc20ProgDeploy(
     JSON.stringify(foundryJson),
     JSON.stringify({
@@ -36,6 +40,8 @@ export async function deployFrBtcContract(
       mine_enabled: true,
       use_activation: true,
       auto_confirm: true,
+      from_addresses: walletAddress ? [walletAddress] : undefined,
+      change_address: walletAddress || undefined,
     }),
   );
 
