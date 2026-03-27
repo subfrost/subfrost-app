@@ -201,9 +201,32 @@ export async function deployBisSwapImpl(
 
   harness.mineBlocks(3);
 
+  harness.mineBlocks(5); // extra blocks to ensure state commit
+
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-  const addr = parsed?.contract_address || parsed?.contractAddress || null;
-  console.log('[brc20-deploy] BiS_Swap impl:', addr);
+  let addr = parsed?.contract_address || parsed?.contractAddress || null;
+  console.log('[brc20-deploy] BiS_Swap impl (SDK):', addr);
+
+  // Query actual EVM address from debug view
+  try {
+    const debugInput = '0x' + Buffer.from('{}').toString('hex');
+    const debugResp = await fetch(BRC20_PROG.RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_view', params: ['debug', debugInput, 'latest'], id: 997 }),
+    });
+    const debugJson = await debugResp.json();
+    if (debugJson.result) {
+      const hex = debugJson.result.replace('0x', '');
+      const debug = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+      const m = (debug.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
+      if (m && m[1] !== addr) {
+        console.log(`[brc20-deploy] BiS_Swap impl (ACTUAL): ${m[1]}`);
+        addr = m[1];
+      }
+    }
+  } catch (e) { /* ignore */ }
+
   return addr;
 }
 

@@ -236,6 +236,33 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     console.log('[roundtrip] BiS_Swap impl address:', bisSwapImpl);
   });
 
+  it('should verify proxy has code in MetashrewDB', async () => {
+    // Query code_at for both the BiS proxy and the test proxy
+    async function queryCodeAt(addr: string): Promise<any> {
+      const req = JSON.stringify({ address: addr });
+      const hex = '0x' + Buffer.from(req).toString('hex');
+      const resp = await rpcCall('metashrew_view', ['code_at', hex, 'latest']);
+      if (resp.result) {
+        return JSON.parse(Buffer.from(resp.result.replace('0x', ''), 'hex').toString());
+      }
+      return null;
+    }
+
+    if (bisSwapProxy) {
+      const info = await queryCodeAt(bisSwapProxy);
+      console.log('[roundtrip] BiS Proxy code_at:', JSON.stringify(info));
+    }
+    if (bisSwapImpl) {
+      const info = await queryCodeAt(bisSwapImpl);
+      console.log('[roundtrip] BiS Impl code_at:', JSON.stringify(info));
+    }
+    // Also check the FrBTC contract (known to work)
+    if (frBtcAddress) {
+      const info = await queryCodeAt(frBtcAddress);
+      console.log('[roundtrip] FrBTC code_at:', JSON.stringify(info));
+    }
+  });
+
   it('should query debug view for last inscription result (after all setup)', async () => {
     // Query the brc20shrew debug view to see what the last processed
     // inscription was and whether it succeeded or reverted.
