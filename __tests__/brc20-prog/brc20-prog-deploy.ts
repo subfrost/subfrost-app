@@ -284,6 +284,11 @@ export async function deployBisSwapWithProxy(
   let proxyBytecode = proxyJson.bytecode?.object || '';
   if (proxyBytecode.startsWith('0x')) proxyBytecode = proxyBytecode.slice(2);
 
+  // Foundry includes CBOR metadata in bytecode.object. Constructor args are
+  // appended AFTER the full bytecode (including CBOR). The Solidity compiler
+  // generates code that reads args from offset `codesize - init_code_size`
+  // where init_code_size is a compile-time constant that includes CBOR.
+
   // ABI-encode constructor args: MinimalProxy(address _logic, bytes _data)
   // For (address, bytes), the encoding is:
   //   word 0: _logic (address padded to 32 bytes)

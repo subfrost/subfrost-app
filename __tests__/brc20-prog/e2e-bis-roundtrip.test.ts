@@ -132,8 +132,68 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
         console.log('[roundtrip] BiS_Swap impl:', bisSwapImpl);
         console.log('[roundtrip] BiS_Swap proxy:', bisSwapProxy);
 
-        // Don't call any more functions on the proxy here —
-        // let the debug view capture the initialize() result.
+        // Call initialize() then also try setBTCUpscale(uint256) = 31a89480
+        // setBTCUpscale is onlyOwner — if owner is set, this should work
+        // If owner isn't set, try calling it anyway — the revert will show in debug
+
+        // Check the EIP-1967 implementation slot via the brc20prog API
+        // Storage slot: 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc
+        // We can read it by constructing a minimal contract that does SLOAD and returns
+        // But easier: use the debug view approach
+        // Actually, let's just query via brc20progCall (eth_call)
+        // We'll call eth_getStorageAt equivalent via metashrew_view
+        // But brc20shrew doesn't have getStorageAt. Let's deploy a tiny contract
+        // that reads slot 0x360894... and returns the value.
+        //
+        // Actually simplest: check if the uniswapRouter() view returns 0 on both proxy and impl.
+        // If proxy returns same as impl, the proxy IS delegating correctly.
+        // Both return 0 — so either delegation works and impl has 0 (it does, _disableInitializers),
+        // OR the proxy delegates to the wrong address which also has 0.
+
+        // Query debug view RIGHT AFTER initialize() on proxy
+        {
+          const debugInput = '0x' + Buffer.from('{}').toString('hex');
+          const debugResp = await rpcCall('metashrew_view', ['debug', debugInput, 'latest']);
+          if (debugResp.result) {
+            const hex = debugResp.result.replace('0x', '');
+            const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+            console.log('[roundtrip] PROXY INIT last_result:', json.last_result);
+            console.log('[roundtrip] PROXY INIT last_commit:', json.last_commit);
+          }
+        }
+
+        // Actually, let's try calling initialize() WITHOUT the proxy,
+        // directly on a FRESH impl (not the one with _disableInitializers)
+        // This tests if the PROXY is the issue vs the FUNCTION
+
+        // Deploy a second impl at nonce 3
+        try {
+          const { deployBisSwapImpl } = await import('./brc20-prog-deploy');
+          const impl2 = await deployBisSwapImpl(provider, harness, 3);
+          console.log('[roundtrip] Second BiS_Swap impl:', impl2);
+
+          // Call initialize on impl2 directly (it has _disableInitializers in constructor)
+          // This SHOULD revert — confirming _disableInitializers works
+          if (impl2) {
+            await (provider as any).brc20ProgTransact(
+              impl2,
+              'initialize(address,address,address,address,uint256,address)',
+              [
+                `0x${deployerEvmAddress.replace('0x','')}`,
+                `0x${deployerEvmAddress.replace('0x','')}`,
+                `0x${deployerEvmAddress.replace('0x','')}`,
+                `0x${frBtcAddress!.replace('0x','')}`,
+                '1',
+                `0x${deployerEvmAddress.replace('0x','')}`,
+              ].join(','),
+              JSON.stringify({ fee_rate: 1, mine_enabled: true }),
+            );
+            harness.mineBlocks(3);
+            console.log('[roundtrip] Called initialize() on bare impl');
+          }
+        } catch (e: any) {
+          console.warn('[roundtrip] Second impl test:', e?.message ?? String(e));
+        }
       } catch (e: any) {
         console.warn('[roundtrip] BiS deploy:', e?.message ?? String(e));
       }
@@ -164,6 +224,7 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
         const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
         console.log('[roundtrip] DEBUG last_inscription:', json.last_inscription);
         console.log('[roundtrip] DEBUG last_result:', json.last_result);
+        console.log('[roundtrip] DEBUG last_commit:', json.last_commit);
       } catch (e) {
         console.log('[roundtrip] DEBUG raw hex:', hex.slice(0, 200));
       }
