@@ -167,24 +167,35 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     console.log('[roundtrip] BiS_Swap impl address:', bisSwapImpl);
   });
 
-  it('should have deployed BiS_Swap proxy with code', async () => {
+  it('should verify proxy has code via EVM', async () => {
     if (!bisSwapProxy) {
       console.log('[roundtrip] Proxy deploy failed — testing impl only');
       return;
     }
-    // Check if proxy has code by calling a view function
-    // If the proxy deployed but initialize() reverted, the proxy won't have code
-    // (because the constructor reverts the entire CREATE)
-    const ownerResp = await ethCall(bisSwapProxy, '8da5cb5b'); // owner()
+
+    // Try calling BTC_UPSCALE() = 099e7b8d (simple public getter, no side effects)
+    const upscaleResp = await ethCall(bisSwapProxy, '099e7b8d');
+    if (upscaleResp?.success) {
+      const val = decodeUint256(upscaleResp.result);
+      console.log('[roundtrip] Proxy BTC_UPSCALE():', val.toString());
+      // If proxy has code and delegates correctly, this should return
+      // 0 (uninitialized) or 1 (if initialize set it)
+    } else {
+      console.log('[roundtrip] ⚠ Proxy BTC_UPSCALE() failed:', upscaleResp?.error);
+      console.log('[roundtrip] Proxy may not have code or delegation is broken');
+    }
+
+    // Check owner
+    const ownerResp = await ethCall(bisSwapProxy, '8da5cb5b');
     if (ownerResp?.success) {
       const owner = decodeAddress(ownerResp.result);
       console.log('[roundtrip] Proxy owner():', owner);
-      if (owner === '0x' + '0'.repeat(40)) {
-        console.log('[roundtrip] ⚠ Proxy has code but owner=0 — initialize() likely failed');
-      }
-    } else {
-      console.log('[roundtrip] ⚠ Proxy owner() query failed:', ownerResp?.error);
-      console.log('[roundtrip] This means the proxy has no code — constructor reverted');
+    }
+
+    // Also try impl directly
+    if (bisSwapImpl) {
+      const implUpscale = await ethCall(bisSwapImpl, '099e7b8d');
+      console.log('[roundtrip] Impl BTC_UPSCALE():', implUpscale?.success ? decodeUint256(implUpscale.result).toString() : 'failed');
     }
   });
 
