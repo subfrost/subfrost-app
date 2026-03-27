@@ -105,6 +105,56 @@ export class WasmHealthTracker {
 if (Symbol.dispose) WasmHealthTracker.prototype[Symbol.dispose] = WasmHealthTracker.prototype.free;
 
 /**
+ * Process frBTC aggregate unwrap requests with fee premium.
+ *
+ * * `unwrap_requests_json` - JSON array of `[{ id, amount_sats, destination }]`
+ * * `utxos_json` - JSON array of `[{ txid, vout, value_sats, script_pubkey }]`
+ * * `premium_bps` - Fee premium in basis points (e.g., 10 = 0.1%)
+ * * `max_batch_size` - Maximum unwraps per batch (0 = unlimited)
+ *
+ * Returns a JS object with aggregated tx data, sighash, and premium info.
+ * @param {string} unwrap_requests_json
+ * @param {string} utxos_json
+ * @param {bigint} premium_bps
+ * @param {number} max_batch_size
+ * @returns {any}
+ */
+export function frbtc_aggregate_unwrap_process(unwrap_requests_json, utxos_json, premium_bps, max_batch_size) {
+    const ptr0 = passStringToWasm0(unwrap_requests_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.frbtc_aggregate_unwrap_process(ptr0, len0, ptr1, len1, premium_bps, max_batch_size);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Process frBTC unwrap requests: builds a PSBT and extracts the sighash.
+ *
+ * * `unwrap_requests_json` - JSON array of `[{ id, amount_sats, destination }]`
+ * * `utxos_json` - JSON array of `[{ txid, vout, value_sats, script_pubkey }]`
+ *
+ * Returns a JS object: `{ psbt: Uint8Array, sighash: Uint8Array, request_ids: string[], metadata: {...} }`
+ * @param {string} unwrap_requests_json
+ * @param {string} utxos_json
+ * @returns {any}
+ */
+export function frbtc_unwrap_process(unwrap_requests_json, utxos_json) {
+    const ptr0 = passStringToWasm0(unwrap_requests_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.frbtc_unwrap_process(ptr0, len0, ptr1, len1);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Derive a BIP-341 P2TR Bitcoin address from a FROST group public key.
  *
  * * `pub_key_package_json` - JSON-serialized `PublicKeyPackage`

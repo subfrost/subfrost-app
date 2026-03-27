@@ -323,29 +323,29 @@ describe.runIf(hasFoundry)('E2E: BRC20-Prog Unwrap Flow', () => {
 
   // ─── Phase 6: FROST federation processes the unwrap ────────────────
 
-  it('should FROST-sign the release transaction with real subzero', async () => {
-    // Real FROST threshold signing via subzero-web-sys:
-    //   Round 1: generate nonces + commitments
-    //   Round 2: produce signature shares
-    //   Aggregate → valid Schnorr signature
+  it('should run frbtc-unwrap program + FROST sign the release', async () => {
+    // Full pipeline using the REAL frbtc-unwrap consensus program from subzero-rs:
+    //   1. frbtc_unwrap_process: builds PSBT from payments + UTXOs
+    //   2. Extracts SHA-256d sighash from PSBT
+    //   3. FROST signs the sighash (real threshold ceremony)
+    //   4. Verifies the Schnorr signature
 
-    // Build a mock sighash from the payment data
-    const sighash = new Uint8Array(32);
-    const encoder = new TextEncoder();
-    const data = encoder.encode('unwrap:0:200000:' + segwitAddress);
-    sighash.set(data.slice(0, 32));
+    const payments = [
+      { id: 'unwrap-0', amount_sats: 200000, destination: segwitAddress },
+    ];
+    const utxos = [
+      { txid: 'a'.repeat(64), vout: 0, value_sats: 500000, script_pubkey: [0x51, 0x20] },
+    ];
 
-    // Sign with real FROST
-    const signature = federation.sign(sighash);
-    expect(signature).toBeDefined();
-    expect(signature.length).toBe(64); // Schnorr signature = 64 bytes
+    const result = federation.processUnwrapsWithProgram(payments, utxos);
 
-    // Verify the signature is valid
-    const valid = federation.verify(sighash, signature);
-    expect(valid).toBe(true);
+    expect(result.psbt.length).toBeGreaterThan(8); // PSBT has magic + data
+    expect(result.sighash.length).toBe(32);
+    expect(result.signature.length).toBe(64);
+    expect(result.requestIds).toContain('unwrap-0');
+    expect(result.verified).toBe(true);
 
-    console.log('[unwrap] Real FROST signature produced and verified ✓');
-    console.log('[unwrap] Signature:', Buffer.from(signature).toString('hex').slice(0, 32) + '...');
+    console.log('[unwrap] Full pipeline: frbtc-unwrap program → PSBT → sighash → FROST sign → verify ✓');
   });
 
   it('should verify FROST group key matches signer address', () => {

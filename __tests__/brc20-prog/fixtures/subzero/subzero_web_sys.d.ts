@@ -45,6 +45,28 @@ export class WasmHealthTracker {
 }
 
 /**
+ * Process frBTC aggregate unwrap requests with fee premium.
+ *
+ * * `unwrap_requests_json` - JSON array of `[{ id, amount_sats, destination }]`
+ * * `utxos_json` - JSON array of `[{ txid, vout, value_sats, script_pubkey }]`
+ * * `premium_bps` - Fee premium in basis points (e.g., 10 = 0.1%)
+ * * `max_batch_size` - Maximum unwraps per batch (0 = unlimited)
+ *
+ * Returns a JS object with aggregated tx data, sighash, and premium info.
+ */
+export function frbtc_aggregate_unwrap_process(unwrap_requests_json: string, utxos_json: string, premium_bps: bigint, max_batch_size: number): any;
+
+/**
+ * Process frBTC unwrap requests: builds a PSBT and extracts the sighash.
+ *
+ * * `unwrap_requests_json` - JSON array of `[{ id, amount_sats, destination }]`
+ * * `utxos_json` - JSON array of `[{ txid, vout, value_sats, script_pubkey }]`
+ *
+ * Returns a JS object: `{ psbt: Uint8Array, sighash: Uint8Array, request_ids: string[], metadata: {...} }`
+ */
+export function frbtc_unwrap_process(unwrap_requests_json: string, utxos_json: string): any;
+
+/**
  * Derive a BIP-341 P2TR Bitcoin address from a FROST group public key.
  *
  * * `pub_key_package_json` - JSON-serialized `PublicKeyPackage`
@@ -120,6 +142,8 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_wasmhealthtracker_free: (a: number, b: number) => void;
+    readonly frbtc_aggregate_unwrap_process: (a: number, b: number, c: number, d: number, e: bigint, f: number) => [number, number, number];
+    readonly frbtc_unwrap_process: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly frost_derive_taproot_address: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_dkg_part1: (a: number, b: number, c: number) => [number, number, number];
     readonly frost_keygen_dealer: (a: number, b: number) => [number, number, number];

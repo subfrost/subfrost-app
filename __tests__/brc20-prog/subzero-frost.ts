@@ -23,6 +23,9 @@ interface SubzeroModule {
   frost_dkg_part1(identifier_index: number, max_signers: number, min_signers: number): any;
   signal_parse_manifest(manifest_toml: string): any;
   WasmHealthTracker: new (threshold: number, max_signers: number) => any;
+  // Consensus programs
+  frbtc_unwrap_process(unwrap_requests_json: string, utxos_json: string): any;
+  frbtc_aggregate_unwrap_process(unwrap_requests_json: string, utxos_json: string, premium_bps: bigint, max_batch_size: number): any;
   initSync(wasmBytes: BufferSource): void;
 }
 
@@ -229,5 +232,45 @@ export class SubzeroFrostFederation {
   /** Check if a payment has been processed. */
   isProcessed(paymentId: number): boolean {
     return this.processedPayments.has(paymentId);
+  }
+
+  /**
+   * Run the frbtc-unwrap consensus program: build PSBT, extract sighash, FROST sign.
+   *
+   * This is the full pipeline that would run on the subzero federation nodes:
+   *   1. frbtc_unwrap_process: builds PSBT from pending payments + UTXOs
+   *   2. Extract sighash from PSBT
+   *   3. FROST sign the sighash
+   *   4. Verify signature
+   *
+   * @param payments - Pending unwrap payment entries from FrBTC contract
+   * @param utxos - Available UTXOs at the signer address
+   * @returns The signed unwrap result with PSBT, sighash, and signature
+   */
+  processUnwrapsWithProgram(
+    payments: Array<{ id: string; amount_sats: number; destination: string }>,
+    utxos: Array<{ txid: string; vout: number; value_sats: number; script_pubkey: number[] }>,
+  ): { psbt: Uint8Array; sighash: Uint8Array; signature: Uint8Array; requestIds: string[]; verified: boolean } {
+    const requestsJson = JSON.stringify(payments);
+    const utxosJson = JSON.stringify(utxos);
+
+    // Step 1: Run the frbtc-unwrap consensus program
+    const result = this.mod.frbtc_unwrap_process(requestsJson, utxosJson);
+
+    const sighash = new Uint8Array(result.sighash);
+    const psbt = new Uint8Array(result.psbt);
+    const requestIds = result.request_ids as string[];
+
+    console.log(`[subzero] frbtc-unwrap: built PSBT (${psbt.length} bytes), sighash: ${result.sighash_hex}`);
+
+    // Step 2: FROST sign the sighash
+    const signature = this.sign(sighash);
+
+    // Step 3: Verify
+    const verified = this.verify(sighash, signature);
+
+    console.log(`[subzero] FROST signed unwrap batch (${requestIds.length} payments), verified: ${verified}`);
+
+    return { psbt, sighash, signature, requestIds, verified };
   }
 }
