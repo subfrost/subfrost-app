@@ -132,22 +132,8 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
         console.log('[roundtrip] BiS_Swap impl:', bisSwapImpl);
         console.log('[roundtrip] BiS_Swap proxy:', bisSwapProxy);
 
-        // Try calling a simple setter on the proxy to verify delegatecall works
-        if (bisSwapProxy) {
-          // setWrappedBTCAddress(address) = ed09c31b
-          try {
-            await (provider as any).brc20ProgTransact(
-              bisSwapProxy,
-              'setWrappedBTCAddress(address)',
-              `0x${frBtcAddress.replace('0x','')}`,
-              JSON.stringify({ fee_rate: 1, mine_enabled: true }),
-            );
-            harness.mineBlocks(3);
-            console.log('[roundtrip] setWrappedBTCAddress called on proxy');
-          } catch (e: any) {
-            console.warn('[roundtrip] setWrappedBTCAddress:', e?.message ?? String(e));
-          }
-        }
+        // Don't call any more functions on the proxy here —
+        // let the debug view capture the initialize() result.
       } catch (e: any) {
         console.warn('[roundtrip] BiS deploy:', e?.message ?? String(e));
       }
@@ -165,6 +151,25 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
   it('should have deployed BiS_Swap implementation', () => {
     expect(bisSwapImpl).toBeDefined();
     console.log('[roundtrip] BiS_Swap impl address:', bisSwapImpl);
+  });
+
+  it('should query debug view for last inscription result (after all setup)', async () => {
+    // Query the brc20shrew debug view to see what the last processed
+    // inscription was and whether it succeeded or reverted.
+    const debugInput = '0x' + Buffer.from('{}').toString('hex');
+    const debugResp = await rpcCall('metashrew_view', ['debug', debugInput, 'latest']);
+    if (debugResp.result) {
+      const hex = debugResp.result.replace('0x', '');
+      try {
+        const json = JSON.parse(Buffer.from(hex, 'hex').toString('utf-8'));
+        console.log('[roundtrip] DEBUG last_inscription:', json.last_inscription);
+        console.log('[roundtrip] DEBUG last_result:', json.last_result);
+      } catch (e) {
+        console.log('[roundtrip] DEBUG raw hex:', hex.slice(0, 200));
+      }
+    } else {
+      console.log('[roundtrip] DEBUG view not available:', debugResp.error);
+    }
   });
 
   it('should verify proxy has code via EVM', async () => {
@@ -196,6 +201,19 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     if (bisSwapImpl) {
       const implUpscale = await ethCall(bisSwapImpl, '099e7b8d');
       console.log('[roundtrip] Impl BTC_UPSCALE():', implUpscale?.success ? decodeUint256(implUpscale.result).toString() : 'failed');
+    }
+
+    // Check the EIP-1967 implementation slot on the proxy
+    if (bisSwapProxy) {
+      const db = await import('../../__tests__/brc20-prog/brc20-prog-constants');
+      // We can't read storage directly from JS, but we can check the
+      // implementation address by looking at a known behavior:
+      // If the proxy delegates correctly, calling a BiS_Swap-specific function
+      // should work. BTC_UPSCALE() returning 0 (success) means delegation works.
+      // The issue is that initialize() returns with very low gas (26K total).
+      console.log('[roundtrip] Note: initialize() gas=26110 suggests early return');
+      console.log('[roundtrip] This is ~4.3K execution gas — too low for nested CREATEs');
+      console.log('[roundtrip] Possible: initializer modifier passes but function exits early');
     }
   });
 
