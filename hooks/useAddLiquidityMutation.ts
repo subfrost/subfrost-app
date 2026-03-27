@@ -98,56 +98,71 @@ async function findPoolId(
   factoryId: string,
   token0Id: string,
   token1Id: string,
-  network: string,
 ): Promise<{ block: number; tx: number } | null> {
-  const [fBlock, fTx] = factoryId.split(':');
-  const [t0Block, t0Tx] = token0Id.split(':');
-  const [t1Block, t1Tx] = token1Id.split(':');
+  const [t0Block, t0Tx] = token0Id.split(':').map(Number);
+  const [t1Block, t1Tx] = token1Id.split(':').map(Number);
 
   try {
-    // Use alkanes_simulate JSON-RPC directly — the SDK's alkanesSimulate returns
-    // raw protobuf on devnet which doesn't match the expected { status, execution }
-    // shape. The JSON-RPC path returns the structured response on all networks.
-    const rpcUrl = getRpcUrl(network);
-
-    const resp = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'alkanes_simulate',
-        params: [{
-          target: { block: fBlock, tx: fTx },
-          inputs: ['2', t0Block, t0Tx, t1Block, t1Tx], // opcode 2 = FindPoolId
-          alkanes: [],
-          transaction: '0x',
-          block: '0x',
-          height: '999999',
-          txindex: 0,
-          vout: 0,
-        }],
-        id: 1,
-      }),
+    const context = JSON.stringify({
+      alkanes: [],
+      calldata: encodeSimulateCalldata(factoryId, [2, t0Block, t0Tx, t1Block, t1Tx]),
+      height: 1000000,
+      txindex: 0,
+      pointer: 0,
+      refund_pointer: 0,
+      vout: 0,
+      transaction: [],
+      block: [],
     });
 
-    const rpcResult = await resp.json();
-    const execution = rpcResult?.result?.execution;
+    const result = await provider.alkanesSimulate(factoryId, context, 'latest');
 
-    if (execution?.error) {
-      console.log('[AddLiquidity] Pool does not exist:', execution.error);
+    // The SDK returns different formats depending on the network/provider:
+    // - Structured: { status: 0, execution: { data: "0x...", error: null } }
+    // - Raw hex string: "0x0a221a20..." (protobuf-encoded, contains AlkaneId at known offset)
+    // Handle both.
+
+    // Case 1: Structured response (non-devnet)
+    if (result?.execution?.error) {
+      console.log('[AddLiquidity] Pool does not exist:', result.execution.error);
       return null;
     }
-
-    const hexData = (execution?.data || '').replace('0x', '');
-    if (hexData.length >= 64) {
-      const buf = Buffer.from(hexData, 'hex');
-      const block = Number(buf.readBigUInt64LE(0));
-      const tx = Number(buf.readBigUInt64LE(16));
-      console.log('[AddLiquidity] Pool found:', `${block}:${tx}`);
-      return { block, tx };
+    if (result?.status === 0 && result?.execution?.data) {
+      const hexData = (result.execution.data as string).replace('0x', '');
+      if (hexData.length >= 64) {
+        const buf = Buffer.from(hexData, 'hex');
+        const block = Number(buf.readBigUInt64LE(0));
+        const tx = Number(buf.readBigUInt64LE(16));
+        console.log('[AddLiquidity] Pool found (structured):', `${block}:${tx}`);
+        return { block, tx };
+      }
     }
 
-    console.log('[AddLiquidity] FindPoolId returned no data');
+    // Case 2: Raw hex/protobuf string (devnet SDK returns this)
+    // Format: protobuf envelope wrapping the execution result.
+    // The data field contains the AlkaneId (32 bytes).
+    // Protobuf structure: field 1 (outer) → field 3 (data) → 32 bytes of AlkaneId.
+    // Header is typically 0a XX 1a 20 where XX is outer length and 20 = 32 bytes.
+    if (typeof result === 'string') {
+      const hex = result.replace('0x', '');
+      const buf = Buffer.from(hex, 'hex');
+      // Find the 0x1a20 marker (field 3, 32 bytes) — the data field
+      for (let i = 0; i + 34 <= buf.length; i++) {
+        if (buf[i] === 0x1a && buf[i + 1] === 0x20) {
+          const dataStart = i + 2;
+          if (dataStart + 32 <= buf.length) {
+            const block = Number(buf.readBigUInt64LE(dataStart));
+            const tx = Number(buf.readBigUInt64LE(dataStart + 16));
+            if (block > 0 && block < 100000 && tx >= 0 && tx < 100000) {
+              console.log('[AddLiquidity] Pool found (protobuf):', `${block}:${tx}`);
+              return { block, tx };
+            }
+          }
+        }
+      }
+      console.log('[AddLiquidity] Could not find pool ID in protobuf response');
+    }
+
     return null;
   } catch (error) {
     console.warn('[AddLiquidity] Pool existence check failed:', error);
@@ -352,7 +367,6 @@ export function useAddLiquidityMutation() {
           ALKANE_FACTORY_ID,
           data.token0Id,
           data.token1Id,
-          network,
         );
       }
 

@@ -565,35 +565,44 @@ describe('Devnet E2E: Full Swap Coverage', () => {
       // 4. sign + broadcast
 
       const { buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
+      const { encodeSimulateCalldata } = await import('@/utils/simulateCalldata');
 
       const FACTORY_ID = factoryId;
       const [t0Block, t0Tx] = [2, 0]; // DIESEL
       const [t1Block, t1Tx] = [32, 0]; // frBTC
 
-      // Step 1: findPoolId via JSON-RPC alkanes_simulate (same path as the fixed findPoolId)
-      console.log('[ui-path] Step 1: findPoolId via alkanes_simulate RPC...');
-      const [fBlock, fTx] = FACTORY_ID.split(':');
-      const simResp = await rpcCall('alkanes_simulate', [{
-        target: { block: fBlock, tx: fTx },
-        inputs: ['2', String(t0Block), String(t0Tx), String(t1Block), String(t1Tx)],
+      // Step 1: findPoolId via SDK alkanesSimulate — same as useAddLiquidityMutation
+      console.log('[ui-path] Step 1: findPoolId via SDK alkanesSimulate...');
+      const context = JSON.stringify({
         alkanes: [],
-        transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0,
-      }]);
-      console.log('[ui-path] alkanes_simulate result:', JSON.stringify(simResp?.result?.execution)?.slice(0, 300));
+        calldata: encodeSimulateCalldata(FACTORY_ID, [2, t0Block, t0Tx, t1Block, t1Tx]),
+        height: 1000000, txindex: 0, pointer: 0, refund_pointer: 0, vout: 0,
+        transaction: [], block: [],
+      });
+      const simResult = await provider.alkanesSimulate(FACTORY_ID, context, 'latest');
+      console.log('[ui-path] SDK alkanesSimulate raw result:', JSON.stringify(simResult)?.slice(0, 300));
 
+      // Parse — handles both structured { status, execution } and raw protobuf string
       let resolvedPoolId: { block: number; tx: number } | null = null;
-      const execution = simResp?.result?.execution;
-      if (!execution?.error) {
-        const hexData = (execution?.data || '').replace('0x', '');
+      if (simResult?.status === 0 && simResult?.execution?.data) {
+        const hexData = (simResult.execution.data as string).replace('0x', '');
         if (hexData.length >= 64) {
           const buf = Buffer.from(hexData, 'hex');
-          resolvedPoolId = {
-            block: Number(buf.readBigUInt64LE(0)),
-            tx: Number(buf.readBigUInt64LE(16)),
-          };
+          resolvedPoolId = { block: Number(buf.readBigUInt64LE(0)), tx: Number(buf.readBigUInt64LE(16)) };
         }
-      } else {
-        console.log('[ui-path] findPoolId error:', execution.error);
+      } else if (typeof simResult === 'string') {
+        // Protobuf response — find 0x1a20 marker (field 3, 32 bytes = data field)
+        const buf = Buffer.from(simResult.replace('0x', ''), 'hex');
+        for (let i = 0; i + 34 <= buf.length; i++) {
+          if (buf[i] === 0x1a && buf[i + 1] === 0x20) {
+            const block = Number(buf.readBigUInt64LE(i + 2));
+            const tx = Number(buf.readBigUInt64LE(i + 18));
+            if (block > 0 && block < 100000 && tx >= 0 && tx < 100000) {
+              resolvedPoolId = { block, tx };
+              break;
+            }
+          }
+        }
       }
 
       console.log('[ui-path] Resolved pool ID:', resolvedPoolId);
