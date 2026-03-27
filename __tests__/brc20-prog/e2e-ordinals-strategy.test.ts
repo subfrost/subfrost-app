@@ -15,6 +15,8 @@ import {
   disposeBrc20Harness,
   mineBlocks,
 } from './brc20-prog-helpers';
+import { loadFrBtcFoundryJson } from './brc20-prog-constants';
+import { deployFrBtcContract } from './brc20-prog-deploy';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -23,6 +25,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
   let provider: WebProvider;
   let segwitAddress: string;
   let taprootAddress: string;
+  let frBtcAddress: string | null = null;
 
   beforeAll(async () => {
     const ctx = await createBrc20DevnetContext();
@@ -32,6 +35,16 @@ describe('E2E: Ordinals Strategy Regression', () => {
     taprootAddress = ctx.taprootAddress;
 
     await mineBlocks(harness, 201);
+
+    // Deploy FrBTC contract to get a dynamic contract address for regtest
+    if (loadFrBtcFoundryJson()) {
+      try {
+        frBtcAddress = await deployFrBtcContract(provider, harness);
+        console.log('[ordinals] Deployed FrBTC at:', frBtcAddress);
+      } catch (e: any) {
+        console.warn('[ordinals] FrBTC deploy failed:', e.message);
+      }
+    }
   }, 300_000);
 
   afterAll(() => {
@@ -54,8 +67,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
 
       const result = await rawProvider.frbtcWrap(
         BigInt(100_000),
-        taprootAddress,
-        JSON.stringify(params),
+        JSON.stringify({ ...params, contract_address: frBtcAddress }),
       );
 
       const parsed = typeof result === 'string' ? JSON.parse(result) : result;
@@ -80,6 +92,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
           fee_rate: 1,
           ordinals_strategy: 'preserve',
           mine_enabled: true,
+          contract_address: frBtcAddress,
         }),
       );
 
@@ -100,6 +113,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
           fee_rate: 1,
           ordinals_strategy: 'burn',
           mine_enabled: true,
+          contract_address: frBtcAddress,
         }),
       );
 
@@ -128,6 +142,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
             mempool_indexer: false,
             ordinals_strategy: 'exclude',
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -137,10 +152,11 @@ describe('E2E: Ordinals Strategy Regression', () => {
       } catch (e: any) {
         // On devnet without a deployed contract target, the call may fail
         // but it should NOT fail on parameter parsing
-        expect(e.message).not.toContain('ordinals_strategy');
-        expect(e.message).not.toContain('Invalid value');
-        expect(e.message).not.toContain('Wallet not loaded');
-        console.log('[ordinals-regression] Expected devnet error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).not.toContain('ordinals_strategy');
+        expect(msg).not.toContain('Invalid value');
+        expect(msg).not.toContain('Wallet not loaded');
+        console.log('[ordinals-regression] Expected devnet error:', msg);
       }
     }, 120_000);
 
@@ -158,6 +174,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
             change_address: segwitAddress,
             fee_rate: 10,  // High fee rate — should not crash
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -165,8 +182,9 @@ describe('E2E: Ordinals Strategy Regression', () => {
         harness.mineBlocks(2);
         expect(parsed).toBeDefined();
       } catch (e: any) {
-        expect(e.message).not.toContain('fee_rate');
-        console.log('[ordinals-regression] Expected devnet error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).not.toContain('fee_rate');
+        console.log('[ordinals-regression] Expected devnet error:', msg);
       }
     }, 120_000);
   });
@@ -185,6 +203,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
             fee_rate: 1,
             mempool_indexer: true,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -210,6 +229,7 @@ describe('E2E: Ordinals Strategy Regression', () => {
           fee_rate: 1,
           mempool_indexer: false,
           mine_enabled: true,
+          contract_address: frBtcAddress,
         }),
       );
 

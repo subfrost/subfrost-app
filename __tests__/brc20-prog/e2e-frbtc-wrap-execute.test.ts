@@ -19,7 +19,8 @@ import {
   disposeBrc20Harness,
   mineBlocks,
 } from './brc20-prog-helpers';
-import { BRC20_PROG } from './brc20-prog-constants';
+import { BRC20_PROG, loadFrBtcFoundryJson } from './brc20-prog-constants';
+import { deployFrBtcContract } from './brc20-prog-deploy';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -28,6 +29,7 @@ describe('E2E: frBTC Wrap and Execute', () => {
   let provider: WebProvider;
   let segwitAddress: string;
   let taprootAddress: string;
+  let frBtcAddress: string | null = null;
 
   beforeAll(async () => {
     const ctx = await createBrc20DevnetContext();
@@ -37,6 +39,16 @@ describe('E2E: frBTC Wrap and Execute', () => {
     taprootAddress = ctx.taprootAddress;
 
     await mineBlocks(harness, 201);
+
+    // Deploy FrBTC contract to get a dynamic contract address for regtest
+    if (loadFrBtcFoundryJson()) {
+      try {
+        frBtcAddress = await deployFrBtcContract(provider, harness);
+        console.log('[wrap-execute] Deployed FrBTC at:', frBtcAddress);
+      } catch (e: any) {
+        console.warn('[wrap-execute] FrBTC deploy failed:', e.message);
+      }
+    }
   }, 300_000);
 
   afterAll(() => {
@@ -56,6 +68,7 @@ describe('E2E: frBTC Wrap and Execute', () => {
           change_address: segwitAddress,
           fee_rate: 1,
           mine_enabled: true,
+          contract_address: frBtcAddress,
         }),
       );
 
@@ -81,6 +94,7 @@ describe('E2E: frBTC Wrap and Execute', () => {
           change_address: segwitAddress,
           fee_rate: 5,
           mine_enabled: true,
+          contract_address: frBtcAddress,
         }),
       );
 
@@ -100,6 +114,7 @@ describe('E2E: frBTC Wrap and Execute', () => {
           change_address: segwitAddress,
           fee_rate: 50,
           mine_enabled: true,
+          contract_address: frBtcAddress,
         }),
       );
 
@@ -122,6 +137,7 @@ describe('E2E: frBTC Wrap and Execute', () => {
         mempool_indexer: false,
         ordinals_strategy: 'exclude',
         mine_enabled: true,
+        contract_address: frBtcAddress,
       };
 
       try {
@@ -139,9 +155,10 @@ describe('E2E: frBTC Wrap and Execute', () => {
       } catch (e: any) {
         // On devnet without a real brc20-prog target, this may fail
         // but it should NOT fail with "Wallet not loaded" or param errors
-        expect(e.message).not.toContain('Wallet not loaded');
-        expect(e.message).not.toContain('Wallet error');
-        console.log('[wrap-execute2] Expected devnet error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).not.toContain('Wallet not loaded');
+        expect(msg).not.toContain('Wallet error');
+        console.log('[wrap-execute2] Expected devnet error:', msg);
       }
     }, 120_000);
 
@@ -158,13 +175,14 @@ describe('E2E: frBTC Wrap and Execute', () => {
         await freshProvider.frbtcWrap(
         BigInt(100_000),
         JSON.stringify({
-          to_address: taprootAddress, fee_rate: 1 }),
+          to_address: taprootAddress, fee_rate: 1, contract_address: frBtcAddress }),
         );
         // If it doesn't throw, that's also acceptable
       } catch (e: any) {
         // Should give a clear error, not a cryptic crash
-        expect(e.message).toBeDefined();
-        console.log('[wrap-execute2] No-wallet error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).toBeDefined();
+        console.log('[wrap-execute2] No-wallet error:', msg);
       }
     }, 30_000);
   });
@@ -183,6 +201,7 @@ describe('E2E: frBTC Wrap and Execute', () => {
             fee_rate: 1,
             ordinals_strategy: 'exclude',
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         const parsed = typeof result === 'string' ? JSON.parse(result) : result;
@@ -208,6 +227,7 @@ describe('E2E: frBTC Wrap and Execute', () => {
             fee_rate: 1,
             ordinals_strategy: 'preserve',
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         const parsed = typeof result === 'string' ? JSON.parse(result) : result;

@@ -21,9 +21,9 @@ import {
   disposeBrc20Harness,
   mineBlocks,
 } from './brc20-prog-helpers';
-import { deployVaultContract } from './brc20-prog-deploy';
+import { deployVaultContract, deployFrBtcContract } from './brc20-prog-deploy';
 import { MockBrc20UnwrapProcessor } from './frost-unwrap-mock';
-import { BRC20_PROG, loadVaultWasm } from './brc20-prog-constants';
+import { BRC20_PROG, loadVaultWasm, loadFrBtcFoundryJson } from './brc20-prog-constants';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -37,6 +37,7 @@ describe.runIf(hasVaultWasm)('E2E: BRC20 Unwrap Flow', () => {
   let segwitAddress: string;
   let taprootAddress: string;
   let vaultId: string;
+  let frBtcAddress: string | null = null;
   let frostProcessor: MockBrc20UnwrapProcessor;
 
   beforeAll(async () => {
@@ -48,6 +49,16 @@ describe.runIf(hasVaultWasm)('E2E: BRC20 Unwrap Flow', () => {
     taprootAddress = ctx.taprootAddress;
 
     await mineBlocks(harness, 201);
+
+    // Deploy FrBTC contract to get a dynamic contract address for regtest
+    if (loadFrBtcFoundryJson()) {
+      try {
+        frBtcAddress = await deployFrBtcContract(provider, harness);
+        console.log('[unwrap] Deployed FrBTC at:', frBtcAddress);
+      } catch (e: any) {
+        console.warn('[unwrap] FrBTC deploy failed:', e.message);
+      }
+    }
 
     // Deploy vault
     vaultId = await deployVaultContract(
@@ -78,6 +89,7 @@ describe.runIf(hasVaultWasm)('E2E: BRC20 Unwrap Flow', () => {
         change_address: segwitAddress,
         fee_rate: 1,
         mine_enabled: true,
+        contract_address: frBtcAddress,
       }),
     );
 

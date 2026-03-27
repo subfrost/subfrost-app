@@ -15,6 +15,8 @@ import {
   disposeBrc20Harness,
   mineBlocks,
 } from './brc20-prog-helpers';
+import { loadFrBtcFoundryJson } from './brc20-prog-constants';
+import { deployFrBtcContract } from './brc20-prog-deploy';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -23,6 +25,7 @@ describe('E2E: Fee Rate Regression', () => {
   let provider: WebProvider;
   let segwitAddress: string;
   let taprootAddress: string;
+  let frBtcAddress: string | null = null;
 
   beforeAll(async () => {
     const ctx = await createBrc20DevnetContext();
@@ -32,6 +35,16 @@ describe('E2E: Fee Rate Regression', () => {
     taprootAddress = ctx.taprootAddress;
 
     await mineBlocks(harness, 201);
+
+    // Deploy FrBTC contract to get a dynamic contract address for regtest
+    if (loadFrBtcFoundryJson()) {
+      try {
+        frBtcAddress = await deployFrBtcContract(provider, harness);
+        console.log('[fee-rate] Deployed FrBTC at:', frBtcAddress);
+      } catch (e: any) {
+        console.warn('[fee-rate] FrBTC deploy failed:', e.message);
+      }
+    }
   }, 300_000);
 
   afterAll(() => {
@@ -53,6 +66,7 @@ describe('E2E: Fee Rate Regression', () => {
             change_address: segwitAddress,
             fee_rate: feeRate,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -114,6 +128,7 @@ describe('E2E: Fee Rate Regression', () => {
             change_address: segwitAddress,
             fee_rate: 0,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         harness.mineBlocks(2);
@@ -131,12 +146,13 @@ describe('E2E: Fee Rate Regression', () => {
       try {
         const result = await rawProvider.frbtcWrap(
         BigInt(500_000), // More sats to cover the high fee
-          taprootAddress,
           JSON.stringify({
+            to_address: taprootAddress,
             from_addresses: [segwitAddress, taprootAddress],
             change_address: segwitAddress,
             fee_rate: 500,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         const parsed = typeof result === 'string' ? JSON.parse(result) : result;
@@ -144,8 +160,9 @@ describe('E2E: Fee Rate Regression', () => {
         expect(parsed).toBeDefined();
       } catch (e: any) {
         // High fee rate may fail if insufficient funds, but should not crash
-        expect(e.message).toBeDefined();
-        console.log('[fee-rate] fee_rate=500 error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).toBeDefined();
+        console.log('[fee-rate] fee_rate=500 error:', msg);
       }
     }, 60_000);
   });

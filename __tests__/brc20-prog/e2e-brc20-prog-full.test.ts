@@ -143,7 +143,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
     // getSignerAddress() selector: we can compute it or use a known value
     // For FrBTC.sol: function getSignerAddress() external view returns (bytes memory)
     // Selector = keccak256("getSignerAddress()")[:4]
-    const selectorHex = 'e75235b8'; // pre-computed
+    const selectorHex = '1a296e02'; // keccak256("getSignerAddress()")[:4]
     const dataBytes = Array.from(Buffer.from(selectorHex, 'hex'));
     const callRequest = JSON.stringify({ to: toBytes, data: dataBytes });
     const hexInput = '0x' + Buffer.from(callRequest).toString('hex');
@@ -179,6 +179,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
         change_address: segwitAddress,
         fee_rate: 1,
         mine_enabled: true,
+        contract_address: frBtcAddress,
       }),
     );
 
@@ -220,6 +221,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
             change_address: segwitAddress,
             fee_rate: feeRate,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         harness.mineBlocks(2);

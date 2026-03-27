@@ -22,7 +22,8 @@ import {
   disposeBrc20Harness,
   mineBlocks,
 } from './brc20-prog-helpers';
-import { BRC20_PROG } from './brc20-prog-constants';
+import { BRC20_PROG, loadFrBtcFoundryJson } from './brc20-prog-constants';
+import { deployFrBtcContract } from './brc20-prog-deploy';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -31,6 +32,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
   let provider: WebProvider;
   let segwitAddress: string;
   let taprootAddress: string;
+  let frBtcAddress: string | null = null;
 
   beforeAll(async () => {
     const ctx = await createBrc20DevnetContext();
@@ -40,6 +42,16 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
     taprootAddress = ctx.taprootAddress;
 
     await mineBlocks(harness, 201);
+
+    // Deploy FrBTC contract to get a dynamic contract address for regtest
+    if (loadFrBtcFoundryJson()) {
+      try {
+        frBtcAddress = await deployFrBtcContract(provider, harness);
+        console.log('[trading] Deployed FrBTC at:', frBtcAddress);
+      } catch (e: any) {
+        console.warn('[trading] FrBTC deploy failed:', e.message);
+      }
+    }
   }, 300_000);
 
   afterAll(() => {
@@ -79,13 +91,14 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
 
       try {
         await p.frbtcWrap(
-        BigInt(100_000), taprootAddress, JSON.stringify({ fee_rate: 1 }));
+        BigInt(100_000), JSON.stringify({ to_address: taprootAddress, fee_rate: 1, contract_address: frBtcAddress }));
         // If this succeeds, that's also OK (some methods may not require wallet)
       } catch (e: any) {
         // Should give a helpful error, not "Wallet not loaded" with no context
-        expect(e.message).toBeDefined();
-        expect(e.message.length).toBeGreaterThan(5);
-        console.log('[trading] No-wallet error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).toBeDefined();
+        expect(msg.length).toBeGreaterThan(5);
+        console.log('[trading] No-wallet error:', msg);
       }
     });
   });
@@ -102,6 +115,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
           change_address: segwitAddress,
           fee_rate: 1,
           mine_enabled: true,
+          contract_address: frBtcAddress,
         }),
       );
 
@@ -123,6 +137,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
             change_address: segwitAddress,
             fee_rate: 1,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -156,6 +171,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
             mempool_indexer: false,
             ordinals_strategy: 'preserve',
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -166,9 +182,10 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
       } catch (e: any) {
         // Expected to fail on devnet (no real BRC20-prog target)
         // but must not fail on parameter issues
-        expect(e.message).not.toContain('Wallet not loaded');
-        expect(e.message).not.toContain('ordinals_strategy');
-        console.log('[trading] wrapAndApprove devnet error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).not.toContain('Wallet not loaded');
+        expect(msg).not.toContain('ordinals_strategy');
+        console.log('[trading] wrapAndApprove devnet error:', msg);
       }
     }, 120_000);
 
@@ -186,6 +203,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
             change_address: segwitAddress,
             fee_rate: 1,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -193,8 +211,9 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
         harness.mineBlocks(2);
         expect(parsed).toBeDefined();
       } catch (e: any) {
-        expect(e.message).not.toContain('Wallet not loaded');
-        console.log('[trading] wrapAndDeposit error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).not.toContain('Wallet not loaded');
+        console.log('[trading] wrapAndDeposit error:', msg);
       }
     }, 120_000);
 
@@ -218,6 +237,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
             change_address: segwitAddress,
             fee_rate: 1,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
 
@@ -226,8 +246,9 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
         expect(parsed).toBeDefined();
       } catch (e: any) {
         // Complex calldata encoding may fail, but should not crash the SDK
-        expect(e.message).not.toContain('Wallet not loaded');
-        console.log('[trading] Complex swap calldata error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).not.toContain('Wallet not loaded');
+        console.log('[trading] Complex swap calldata error:', msg);
       }
     }, 120_000);
   });
@@ -312,6 +333,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
             use_rebar: true,
             rebar_tier: 1,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         harness.mineBlocks(2);
@@ -336,6 +358,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
             fee_rate: 1,
             use_slipstream: true,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         harness.mineBlocks(2);
@@ -361,13 +384,15 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
             fee_rate: 1,
             mint_diesel: true,
             mine_enabled: true,
+            contract_address: frBtcAddress,
           }),
         );
         harness.mineBlocks(2);
         expect(result).toBeDefined();
       } catch (e: any) {
-        expect(e.message).not.toContain('mint_diesel');
-        console.log('[trading] mint_diesel error:', e.message);
+        const msg = e?.message ?? String(e);
+        expect(msg).not.toContain('mint_diesel');
+        console.log('[trading] mint_diesel error:', msg);
       }
     }, 120_000);
   });

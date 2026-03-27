@@ -83,8 +83,8 @@ describe.runIf(hasFoundry)('Debug: BRC20 State After Deploy', () => {
       }
     }
 
-    // getSignerAddress() = 0xe75235b8
-    const signerReq = JSON.stringify({ to: toBytes, data: Array.from(Buffer.from('e75235b8', 'hex')) });
+    // getSignerAddress() = 0x1a296e02 (keccak256("getSignerAddress()")[:4])
+    const signerReq = JSON.stringify({ to: toBytes, data: Array.from(Buffer.from('1a296e02', 'hex')) });
     const signerResult = await rpcCall('metashrew_view', ['call', '0x' + Buffer.from(signerReq).toString('hex'), 'latest']);
     if (signerResult.result) {
       const decoded = JSON.parse(Buffer.from(signerResult.result.replace('0x', ''), 'hex').toString());
