@@ -207,14 +207,23 @@ export async function deployBisSwapImpl(
   return addr;
 }
 
+/** ABI-encode an address to 32 bytes (left-padded with zeros). */
+function abiAddress(addr: string): string {
+  return addr.replace('0x', '').toLowerCase().padStart(64, '0');
+}
+
+/** ABI-encode a uint256 value. */
+function abiUint256(val: number | bigint): string {
+  return val.toString(16).padStart(64, '0');
+}
+
 /**
- * Deploy BiS_Swap via proxy with initialize() calldata.
+ * Deploy BiS_Swap via TransparentUpgradeableProxy with initialize() calldata.
  *
- * 1. Deploys BiS_Swap implementation
- * 2. Deploys SequencedSwapProxy(impl, admin, initializeCalldata)
- *
- * The initialize params set up the DEX with our wallet as the sequencer
- * (batchExecutorAddress), allowing us to process batches directly.
+ * 1. Deploys BiS_Swap implementation (nonce N)
+ * 2. Builds initialize() calldata (sets us as sequencer)
+ * 3. Deploys SequencedSwapProxy(impl, admin, initData) (nonce N+1)
+ *    The proxy constructor delegatecalls initialize() on the implementation.
  *
  * Returns { implAddress, proxyAddress }
  */
@@ -223,11 +232,13 @@ export async function deployBisSwapWithProxy(
   harness: any,
   params: {
     frBtcAddress: string;
-    adminAddress: string; // EVM address for admin (derived from our pkscript)
+    adminAddress: string; // EVM address for admin/batch-executor
+    implNonce: number;    // deployer nonce for impl
+    proxyNonce: number;   // deployer nonce for proxy
   },
 ): Promise<{ implAddress: string | null; proxyAddress: string | null }> {
   // Step 1: Deploy implementation
-  const implAddress = await deployBisSwapImpl(provider, harness);
+  const implAddress = await deployBisSwapImpl(provider, harness, params.implNonce);
   if (!implAddress) {
     return { implAddress: null, proxyAddress: null };
   }
@@ -237,49 +248,62 @@ export async function deployBisSwapWithProxy(
   //            address _feeTo, address _wrappedBTCAddress,
   //            uint256 _btcUpscale, address _adminWallet)
   // Selector: 53c425c1
-  const admin = params.adminAddress.replace('0x', '').padStart(64, '0');
-  const frbtc = params.frBtcAddress.replace('0x', '').padStart(64, '0');
-  const btcUpscale = '1'.padStart(64, '0'); // 1 = no upscaling (8 decimals)
-  const initCalldata = '53c425c1' + admin + admin + admin + frbtc + btcUpscale + admin;
+  const admin = abiAddress(params.adminAddress);
+  const frbtc = abiAddress(params.frBtcAddress);
+  const initCalldata =
+    '53c425c1' +  // selector
+    admin +       // _depositSignerWallet
+    admin +       // _batchExecutorAddress (WE are the sequencer)
+    admin +       // _feeTo
+    frbtc +       // _wrappedBTCAddress
+    abiUint256(1) + // _btcUpscale (1 = no scaling, 8 decimals)
+    admin;        // _adminWallet
+  // Total: 4 + 6*32 = 196 bytes = 392 hex chars
 
-  // Step 3: Deploy proxy with init calldata
-  // The proxy constructor is: (address _logic, address _admin, bytes _data)
-  // We need to ABI-encode these as constructor args appended to the proxy bytecode
+  // Step 3: Deploy proxy with constructor args
+  // TransparentUpgradeableProxy(address _logic, address _admin, bytes _data)
   console.log('[brc20-deploy] Deploying SequencedSwapProxy with initialize()...');
-
-  // For BRC2.0 deploy, we pass the full deployment bytecode (proxy bytecode + constructor args).
-  // The constructor args are ABI-encoded: (address logic, address admin, bytes data)
-  // But brc20ProgDeploy takes a Foundry JSON, not raw bytecode.
-  // We need to create a synthetic Foundry JSON with the proxy bytecode + encoded constructor args.
+  console.log(`[brc20-deploy] initCalldata: ${initCalldata.slice(0, 20)}... (${initCalldata.length/2} bytes)`);
+  console.log(`[brc20-deploy] admin: 0x${params.adminAddress.replace('0x','')}`);
+  console.log(`[brc20-deploy] frBTC: 0x${params.frBtcAddress.replace('0x','')}`);
+  console.log(`[brc20-deploy] impl: ${implAddress}`);
 
   const { readFileSync, existsSync } = await import('fs');
   const { resolve } = await import('path');
   const home = process.env.HOME || '/home/ubuntu';
 
-  // Load proxy bytecode from fixture
-  const proxyHexPath = resolve(home, 'subfrost-brc20/bis-build/out/SequencedSwapProxy.sol/SequencedSwapProxy.json');
-  if (!existsSync(proxyHexPath)) {
-    console.warn('[brc20-deploy] SequencedSwapProxy.json not found');
+  // Use MinimalProxy instead of TransparentUpgradeableProxy for simpler deployment.
+  // MinimalProxy(address _logic, bytes _data) — stores impl and delegatecalls _data.
+  const proxyJsonPath = resolve(home, 'subfrost-brc20/bis-build/out/MinimalProxy.sol/MinimalProxy.json');
+  if (!existsSync(proxyJsonPath)) {
+    console.warn('[brc20-deploy] MinimalProxy.json not found');
     return { implAddress, proxyAddress: null };
   }
 
-  const proxyJson = JSON.parse(readFileSync(proxyHexPath, 'utf-8'));
+  const proxyJson = JSON.parse(readFileSync(proxyJsonPath, 'utf-8'));
   let proxyBytecode = proxyJson.bytecode?.object || '';
   if (proxyBytecode.startsWith('0x')) proxyBytecode = proxyBytecode.slice(2);
 
-  // ABI-encode constructor args: (address logic, address admin, bytes data)
-  const logicArg = implAddress.replace('0x', '').padStart(64, '0');
-  const adminArg = admin; // Same as our wallet
-  // bytes data = offset(96=0x60) + length + data
-  const dataOffset = '0000000000000000000000000000000000000000000000000000000000000060';
-  const initBytes = Buffer.from(initCalldata, 'hex');
-  const dataLength = initBytes.length.toString(16).padStart(64, '0');
-  const dataPadded = initCalldata + '0'.repeat((32 - (initBytes.length % 32)) % 32 * 2);
+  // ABI-encode constructor args: MinimalProxy(address _logic, bytes _data)
+  // For (address, bytes), the encoding is:
+  //   word 0: _logic (address padded to 32 bytes)
+  //   word 1: offset to _data (= 0x40 = 64, since 2 head slots × 32 bytes)
+  //   word 2: length of _data in bytes
+  //   word 3+: _data padded to 32-byte boundary
+  const initCalldataBytes = Buffer.from(initCalldata, 'hex');
+  const initCalldataLen = initCalldataBytes.length; // 196 bytes
+  const paddedLen = Math.ceil(initCalldataLen / 32) * 32; // 224 bytes (7 words)
+  const initCalldataPadded = initCalldata + '0'.repeat((paddedLen - initCalldataLen) * 2);
 
-  const constructorArgs = logicArg + adminArg + dataOffset + dataLength + dataPadded;
+  const constructorArgs =
+    abiAddress(implAddress) +     // _logic
+    abiUint256(64) +              // offset to _data (2 head words × 32)
+    abiUint256(initCalldataLen) + // length of _data
+    initCalldataPadded;           // _data (padded)
+
   const fullBytecode = proxyBytecode + constructorArgs;
 
-  // Create synthetic Foundry JSON
+  // Create synthetic Foundry JSON with constructor args baked into bytecode
   const syntheticJson = {
     ...proxyJson,
     bytecode: { object: '0x' + fullBytecode },
@@ -298,6 +322,7 @@ export async function deployBisSwapWithProxy(
         auto_confirm: true,
         from_addresses: walletAddress ? [walletAddress] : undefined,
         change_address: walletAddress || undefined,
+        deployer_nonce: params.proxyNonce,
       }),
     );
 

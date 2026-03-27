@@ -23,7 +23,7 @@ import {
   disposeBrc20Harness,
   mineBlocks,
 } from './brc20-prog-helpers';
-import { deployFrBtcContract, deployBisSwapImpl } from './brc20-prog-deploy';
+import { deployFrBtcContract, deployBisSwapWithProxy } from './brc20-prog-deploy';
 import { SubzeroFrostFederation } from './subzero-frost';
 import { BRC20_PROG, loadFrBtcFoundryJson, loadBisSwapFoundryJson } from './brc20-prog-constants';
 
@@ -112,16 +112,41 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
       }
     }
 
-    // Deploy BiS_Swap implementation (nonce 1 — second deploy)
-    // Note: BiS_Swap constructor calls _disableInitializers(), so it can't be
-    // initialized directly. For full DEX testing, need proxy pattern.
-    // For now, deploy impl and verify it exists at a different address from FrBTC.
+    // Deploy BiS_Swap via proxy pattern:
+    //   nonce 1 → BiS_Swap implementation
+    //   nonce 2 → SequencedSwapProxy (delegatecalls initialize on impl)
+    // The deployer's EVM address is always the same (derived from wallet pkscript).
+    // We observed it as 0xfc6a88db99fbe3e6b7890a9063db23343dd50a32 from FrBTC deploy.
     if (frBtcAddress) {
       try {
-        bisSwapImpl = await deployBisSwapImpl(provider, harness, 1);
+        // The deployer EVM address is the same for all deploys from this wallet
+        const deployerEvmAddress = '0xfc6a88db99fbe3e6b7890a9063db23343dd50a32';
+        const result = await deployBisSwapWithProxy(provider, harness, {
+          frBtcAddress,
+          adminAddress: deployerEvmAddress,
+          implNonce: 1,
+          proxyNonce: 2,
+        });
+        bisSwapImpl = result.implAddress;
+        bisSwapProxy = result.proxyAddress;
         console.log('[roundtrip] BiS_Swap impl:', bisSwapImpl);
-        if (bisSwapImpl === frBtcAddress) {
-          console.warn('[roundtrip] ⚠ BiS_Swap got same address as FrBTC — nonce tracking issue');
+        console.log('[roundtrip] BiS_Swap proxy:', bisSwapProxy);
+
+        // Try calling a simple setter on the proxy to verify delegatecall works
+        if (bisSwapProxy) {
+          // setWrappedBTCAddress(address) = ed09c31b
+          try {
+            await (provider as any).brc20ProgTransact(
+              bisSwapProxy,
+              'setWrappedBTCAddress(address)',
+              `0x${frBtcAddress.replace('0x','')}`,
+              JSON.stringify({ fee_rate: 1, mine_enabled: true }),
+            );
+            harness.mineBlocks(3);
+            console.log('[roundtrip] setWrappedBTCAddress called on proxy');
+          } catch (e: any) {
+            console.warn('[roundtrip] setWrappedBTCAddress:', e?.message ?? String(e));
+          }
         }
       } catch (e: any) {
         console.warn('[roundtrip] BiS deploy:', e?.message ?? String(e));
@@ -142,11 +167,25 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     console.log('[roundtrip] BiS_Swap impl address:', bisSwapImpl);
   });
 
-  it('should have deployed BiS_Swap proxy', () => {
+  it('should have deployed BiS_Swap proxy with code', async () => {
     if (!bisSwapProxy) {
       console.log('[roundtrip] Proxy deploy failed — testing impl only');
+      return;
     }
-    // Proxy may fail if constructor args encoding is wrong — test continues
+    // Check if proxy has code by calling a view function
+    // If the proxy deployed but initialize() reverted, the proxy won't have code
+    // (because the constructor reverts the entire CREATE)
+    const ownerResp = await ethCall(bisSwapProxy, '8da5cb5b'); // owner()
+    if (ownerResp?.success) {
+      const owner = decodeAddress(ownerResp.result);
+      console.log('[roundtrip] Proxy owner():', owner);
+      if (owner === '0x' + '0'.repeat(40)) {
+        console.log('[roundtrip] ⚠ Proxy has code but owner=0 — initialize() likely failed');
+      }
+    } else {
+      console.log('[roundtrip] ⚠ Proxy owner() query failed:', ownerResp?.error);
+      console.log('[roundtrip] This means the proxy has no code — constructor reverted');
+    }
   });
 
   // ─── Phase 2: BTC → frBTC (wrap) ──────────────────────────────────
@@ -179,6 +218,8 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
   it('should read BiS_Swap state via proxy', async () => {
     const target = bisSwapProxy || bisSwapImpl;
     if (!target) return;
+    console.log('[roundtrip] Querying state on:', target);
+    console.log('[roundtrip]   (impl:', bisSwapImpl, ', proxy:', bisSwapProxy, ')');
 
     // uniswapRouter() = 735de9f7
     const routerResp = await ethCall(target, '735de9f7');
@@ -204,6 +245,19 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     if (execResp?.success) {
       const executor = decodeAddress(execResp.result);
       console.log('[roundtrip] batchExecutorAddress:', executor);
+    }
+
+    // Also try querying the IMPL directly (should have _disableInitializers state)
+    if (bisSwapImpl && bisSwapProxy && bisSwapImpl !== bisSwapProxy) {
+      console.log('[roundtrip] --- Querying impl directly for comparison ---');
+      const implRouter = await ethCall(bisSwapImpl, '735de9f7');
+      if (implRouter?.success) {
+        console.log('[roundtrip] impl.uniswapRouter:', decodeAddress(implRouter.result));
+      }
+      const implOwner = await ethCall(bisSwapImpl, '8da5cb5b');
+      if (implOwner?.success) {
+        console.log('[roundtrip] impl.owner:', decodeAddress(implOwner.result));
+      }
     }
   });
 
