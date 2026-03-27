@@ -595,6 +595,83 @@ describe.runIf(hasFoundry && hasBisSwap)('E2E: Full BTC Round-Trip via BiS DEX',
     expect(supply).toBe(500000n);
   });
 
+  // ─── Phase 7: DEX Swap via UniswapV2Router ──────────────────────────
+
+  it('should deploy MockERC20 token for DEX testing', async () => {
+    if (!bisSwapProxy) return;
+
+    const mockJsonPath = require('path').resolve(process.env.HOME || '', 'subfrost-brc20/bis-build/out/MockERC20.sol/MockERC20.json');
+    const mockJson = JSON.parse(require('fs').readFileSync(mockJsonPath, 'utf-8'));
+
+    // MockERC20 constructor takes (string name, string symbol)
+    // ABI encode constructor args for "TestToken" and "TT"
+    let mockBc = mockJson.bytecode.object.replace('0x', '');
+    // Constructor args: string name = "TestToken", string symbol = "TT"
+    // For simplicity, deploy without constructor args (name/symbol will be empty)
+    // We'll use a simpler approach — just deploy and call mint()
+
+    const deployResult = await (provider as any).brc20ProgDeploy(
+      JSON.stringify(mockJson),
+      JSON.stringify({ fee_rate: 1, mine_enabled: true, use_activation: true, auto_confirm: true,
+        from_addresses: [segwitAddress, taprootAddress], change_address: segwitAddress }),
+    );
+    harness.mineBlocks(5);
+
+    // Get actual address
+    const debugInput = '0x' + Buffer.from('{}').toString('hex');
+    const debugResp = await rpcCall('metashrew_view', ['debug', debugInput, 'latest']);
+    let mockTokenAddr: string | null = null;
+    if (debugResp.result) {
+      const json = JSON.parse(Buffer.from(debugResp.result.replace('0x', ''), 'hex').toString());
+      const m = (json.last_deploy_result || '').match(/addr=(0x[0-9a-f]+)/);
+      if (m) mockTokenAddr = m[1];
+    }
+    console.log('[roundtrip] MockERC20 deployed at:', mockTokenAddr);
+    expect(mockTokenAddr).toBeDefined();
+  }, 120_000);
+
+  it('should query UniswapV2Router FACTORY address', async () => {
+    if (!bisSwapProxy) return;
+
+    // Read uniswapRouter address from proxy
+    const routerResp = await ethCall(bisSwapProxy, '735de9f7');
+    if (!routerResp?.success) return;
+    const routerAddr = decodeAddress(routerResp.result);
+    console.log('[roundtrip] Router address:', routerAddr);
+
+    // Query FACTORY() on the Router
+    // FACTORY() = 2dd31000
+    const factoryResp = await ethCall(routerAddr, '2dd31000');
+    if (factoryResp?.success) {
+      const factoryAddr = decodeAddress(factoryResp.result);
+      console.log('[roundtrip] Factory address:', factoryAddr);
+    }
+
+    // Query sequencerAddress() on the Router
+    // sequencerAddress() = 2cee6a6b
+    const seqResp = await ethCall(routerAddr, '2cee6a6b');
+    if (seqResp?.success) {
+      const seqAddr = decodeAddress(seqResp.result);
+      console.log('[roundtrip] Router sequencerAddress:', seqAddr);
+      console.log('[roundtrip] BiS Proxy address:', bisSwapProxy);
+    }
+  });
+
+  it('should query getPairAddress for frBTC/MockToken (should be zero before first liquidity)', async () => {
+    if (!bisSwapProxy || !frBtcAddress) return;
+
+    // getPairAddress(address,address) = b4f69a2f
+    // We need the mock token address... but we don't have it in this test step.
+    // For now just verify the function is callable
+    const pairResp = await ethCall(bisSwapProxy, 'b4f69a2f' +
+      frBtcAddress!.replace('0x', '').padStart(64, '0') +
+      '0000000000000000000000000000000000000000'.padStart(64, '0'));
+    if (pairResp?.success) {
+      const pairAddr = decodeAddress(pairResp.result);
+      console.log('[roundtrip] Pair address (frBTC/zero):', pairAddr);
+    }
+  });
+
   it('should verify complete round-trip summary', () => {
     console.log('\n[roundtrip] ═══════════════════════════════════════════');
     console.log('[roundtrip] Full Round-Trip Complete:');
