@@ -7,7 +7,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
-import { BRC20_PROG, loadVaultWasm, loadFrBtcFoundryJson } from './brc20-prog-constants';
+import { BRC20_PROG, loadVaultWasm, loadFrBtcFoundryJson, loadBisSwapFoundryJson } from './brc20-prog-constants';
 import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -159,4 +159,152 @@ export async function deployBrc20ProgStack(
   }
 
   return { frBtcAddress, vaultId };
+}
+
+/**
+ * Deploy BiS_Swap implementation contract.
+ * Returns the implementation contract address.
+ *
+ * Note: BiS_Swap uses Initializable with _disableInitializers() in constructor,
+ * so this implementation cannot be used directly. Deploy a proxy on top.
+ */
+export async function deployBisSwapImpl(
+  provider: WebProvider,
+  harness: any,
+): Promise<string | null> {
+  const foundryJson = loadBisSwapFoundryJson();
+  if (!foundryJson) {
+    console.warn('[brc20-deploy] BiS_Swap.json not found. Run: cd ~/subfrost-brc20/bis-build && forge build');
+    return null;
+  }
+
+  console.log('[brc20-deploy] Deploying BiS_Swap implementation...');
+
+  const addresses = provider.walletGetAddresses('p2wpkh', 0, 1);
+  const walletAddress = addresses?.[0]?.address;
+
+  const result = await (provider as any).brc20ProgDeploy(
+    JSON.stringify(foundryJson),
+    JSON.stringify({
+      fee_rate: 1,
+      mine_enabled: true,
+      use_activation: true,
+      auto_confirm: true,
+      from_addresses: walletAddress ? [walletAddress] : undefined,
+      change_address: walletAddress || undefined,
+    }),
+  );
+
+  harness.mineBlocks(3);
+
+  const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+  const addr = parsed?.contract_address || parsed?.contractAddress || null;
+  console.log('[brc20-deploy] BiS_Swap impl:', addr);
+  return addr;
+}
+
+/**
+ * Deploy BiS_Swap via proxy with initialize() calldata.
+ *
+ * 1. Deploys BiS_Swap implementation
+ * 2. Deploys SequencedSwapProxy(impl, admin, initializeCalldata)
+ *
+ * The initialize params set up the DEX with our wallet as the sequencer
+ * (batchExecutorAddress), allowing us to process batches directly.
+ *
+ * Returns { implAddress, proxyAddress }
+ */
+export async function deployBisSwapWithProxy(
+  provider: WebProvider,
+  harness: any,
+  params: {
+    frBtcAddress: string;
+    adminAddress: string; // EVM address for admin (derived from our pkscript)
+  },
+): Promise<{ implAddress: string | null; proxyAddress: string | null }> {
+  // Step 1: Deploy implementation
+  const implAddress = await deployBisSwapImpl(provider, harness);
+  if (!implAddress) {
+    return { implAddress: null, proxyAddress: null };
+  }
+
+  // Step 2: Build initialize() calldata
+  // initialize(address _depositSignerWallet, address _batchExecutorAddress,
+  //            address _feeTo, address _wrappedBTCAddress,
+  //            uint256 _btcUpscale, address _adminWallet)
+  // Selector: 53c425c1
+  const admin = params.adminAddress.replace('0x', '').padStart(64, '0');
+  const frbtc = params.frBtcAddress.replace('0x', '').padStart(64, '0');
+  const btcUpscale = '1'.padStart(64, '0'); // 1 = no upscaling (8 decimals)
+  const initCalldata = '53c425c1' + admin + admin + admin + frbtc + btcUpscale + admin;
+
+  // Step 3: Deploy proxy with init calldata
+  // The proxy constructor is: (address _logic, address _admin, bytes _data)
+  // We need to ABI-encode these as constructor args appended to the proxy bytecode
+  console.log('[brc20-deploy] Deploying SequencedSwapProxy with initialize()...');
+
+  // For BRC2.0 deploy, we pass the full deployment bytecode (proxy bytecode + constructor args).
+  // The constructor args are ABI-encoded: (address logic, address admin, bytes data)
+  // But brc20ProgDeploy takes a Foundry JSON, not raw bytecode.
+  // We need to create a synthetic Foundry JSON with the proxy bytecode + encoded constructor args.
+
+  const { readFileSync, existsSync } = await import('fs');
+  const { resolve } = await import('path');
+  const home = process.env.HOME || '/home/ubuntu';
+
+  // Load proxy bytecode from fixture
+  const proxyHexPath = resolve(home, 'subfrost-brc20/bis-build/out/SequencedSwapProxy.sol/SequencedSwapProxy.json');
+  if (!existsSync(proxyHexPath)) {
+    console.warn('[brc20-deploy] SequencedSwapProxy.json not found');
+    return { implAddress, proxyAddress: null };
+  }
+
+  const proxyJson = JSON.parse(readFileSync(proxyHexPath, 'utf-8'));
+  let proxyBytecode = proxyJson.bytecode?.object || '';
+  if (proxyBytecode.startsWith('0x')) proxyBytecode = proxyBytecode.slice(2);
+
+  // ABI-encode constructor args: (address logic, address admin, bytes data)
+  const logicArg = implAddress.replace('0x', '').padStart(64, '0');
+  const adminArg = admin; // Same as our wallet
+  // bytes data = offset(96=0x60) + length + data
+  const dataOffset = '0000000000000000000000000000000000000000000000000000000000000060';
+  const initBytes = Buffer.from(initCalldata, 'hex');
+  const dataLength = initBytes.length.toString(16).padStart(64, '0');
+  const dataPadded = initCalldata + '0'.repeat((32 - (initBytes.length % 32)) % 32 * 2);
+
+  const constructorArgs = logicArg + adminArg + dataOffset + dataLength + dataPadded;
+  const fullBytecode = proxyBytecode + constructorArgs;
+
+  // Create synthetic Foundry JSON
+  const syntheticJson = {
+    ...proxyJson,
+    bytecode: { object: '0x' + fullBytecode },
+  };
+
+  try {
+    const addresses = provider.walletGetAddresses('p2wpkh', 0, 1);
+    const walletAddress = addresses?.[0]?.address;
+
+    const result = await (provider as any).brc20ProgDeploy(
+      JSON.stringify(syntheticJson),
+      JSON.stringify({
+        fee_rate: 1,
+        mine_enabled: true,
+        use_activation: true,
+        auto_confirm: true,
+        from_addresses: walletAddress ? [walletAddress] : undefined,
+        change_address: walletAddress || undefined,
+      }),
+    );
+
+    harness.mineBlocks(3);
+
+    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+    const proxyAddress = parsed?.contract_address || parsed?.contractAddress || null;
+    console.log('[brc20-deploy] BiS_Swap proxy:', proxyAddress);
+    return { implAddress, proxyAddress };
+  } catch (e: any) {
+    console.warn('[brc20-deploy] Proxy deploy failed:', e?.message ?? String(e));
+    return { implAddress, proxyAddress: null };
+  }
 }
