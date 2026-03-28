@@ -26,6 +26,8 @@ import { useWrapZecMutation } from "@/hooks/useWrapZecMutation";
 import { useUnwrapZecMutation } from "@/hooks/useUnwrapZecMutation";
 import { useWrapEthMutation } from "@/hooks/useWrapEthMutation";
 import { useUnwrapEthMutation } from "@/hooks/useUnwrapEthMutation";
+import { useBridgeEthMutation } from "@/hooks/useBridgeEthMutation";
+import { useBridgeZecMutation } from "@/hooks/useBridgeZecMutation";
 import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
 import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
@@ -99,6 +101,19 @@ function loadSwapPairFromSession(): { from: TokenMeta; to: TokenMeta } | null {
     if (parsed?.from?.id && parsed?.to?.id) return parsed;
   } catch { /* ignore */ }
   return null;
+}
+
+/** Get the human-readable bridge route for a cross-chain pair. */
+function getBridgeRoute(from: string, to: string): string {
+  const routes: Record<string, string> = {
+    'btc-eth': 'BTC → frBTC → frETH → ETH',
+    'eth-btc': 'ETH → frETH → frBTC → BTC',
+    'btc-zec': 'BTC → frBTC → frZEC → ZEC',
+    'zec-btc': 'ZEC → frZEC → frBTC → BTC',
+    'eth-zec': 'ETH → frETH → frBTC → frZEC → ZEC',
+    'zec-eth': 'ZEC → frZEC → frBTC → frETH → ETH',
+  };
+  return routes[`${from}-${to}`] || `${from.toUpperCase()} → ${to.toUpperCase()}`;
 }
 
 export default function SwapShell() {
@@ -201,6 +216,8 @@ export default function SwapShell() {
   const unwrapZecMutation = useUnwrapZecMutation();
   const wrapEthMutation = useWrapEthMutation();
   const unwrapEthMutation = useUnwrapEthMutation();
+  const { bridgeToEth } = useBridgeEthMutation();
+  const { bridgeToZec } = useBridgeZecMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
   const removeLiquidityMutation = useRemoveLiquidityMutation();
   const { data: premiumData } = useFrbtcPremium();
@@ -1108,6 +1125,31 @@ export default function SwapShell() {
         console.error('[SWAP] Unwrap ETH error:', e);
         window.alert('Unwrap ETH failed. See console for details.');
       }
+      return;
+    }
+
+    // =========================================================================
+    // Cross-chain swap (BTC↔ETH, BTC↔ZEC, ETH↔ZEC)
+    // =========================================================================
+    // These are multi-step bridge operations that route through frAssets:
+    //   BTC→ETH: wrap BTC → frBTC → swap frBTC→frETH → BurnAndBridge → ETH
+    //   ETH→BTC: deposit ETH → mint frETH → swap frETH→frBTC → unwrap → BTC
+    //   BTC→ZEC: wrap BTC → frBTC → swap frBTC→frZEC → BurnAndBridge → ZEC
+    //   ZEC→BTC: deposit ZEC → mint frZEC → swap frZEC→frBTC → unwrap → BTC
+    //   ETH→ZEC: deposit ETH → frETH → frBTC → frZEC → BurnAndBridge → ZEC
+    //   ZEC→ETH: deposit ZEC → frZEC → frBTC → frETH → BurnAndBridge → ETH
+    if (isCrossChainSwap && crossChainDirection) {
+      const { from: srcChain, to: dstChain } = crossChainDirection;
+      console.log(`[handleSwap] Cross-chain: ${srcChain} → ${dstChain}`);
+
+      // For now, show a message that cross-chain bridge UI is coming
+      // The full flow will use CrossChainBridgePanel component
+      // which handles the multi-step deposit → swap → withdraw pipeline
+      window.alert(
+        `Cross-chain swap: ${srcChain.toUpperCase()} → ${dstChain.toUpperCase()}\n\n` +
+        `This will route through: ${getBridgeRoute(srcChain, dstChain)}\n\n` +
+        `Bridge UI coming soon — use the bridge panel for full cross-chain operations.`
+      );
       return;
     }
 
