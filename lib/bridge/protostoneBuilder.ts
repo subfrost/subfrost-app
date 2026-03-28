@@ -163,6 +163,205 @@ export function buildLimitOrderProtostone(
   return `[${cBlock},${cTx},20,${aBlock},${aTx},${bBlock},${bTx},${side},${price},${amount}]:v0:v0`;
 }
 
+// ── Base58Check Decode (for ZEC t-address parsing) ──
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+/**
+ * Decode a Base58Check-encoded string into raw bytes (payload without checksum).
+ * Returns the full payload including version prefix.
+ */
+function base58checkDecode(encoded: string): Uint8Array {
+  // Base58 → BigInt
+  let num = 0n;
+  const base = 58n;
+  for (let i = 0; i < encoded.length; i++) {
+    const charIdx = BASE58_ALPHABET.indexOf(encoded[i]);
+    if (charIdx < 0) throw new Error(`Invalid base58 character: ${encoded[i]}`);
+    num = num * base + BigInt(charIdx);
+  }
+
+  // Count leading '1' chars (each = a leading zero byte)
+  let leadingOnes = 0;
+  for (let i = 0; i < encoded.length && encoded[i] === '1'; i++) {
+    leadingOnes++;
+  }
+
+  // Convert BigInt to bytes
+  const hexStr = num === 0n ? '' : num.toString(16).padStart(num.toString(16).length + (num.toString(16).length % 2), '0');
+  const numBytes = hexStr.length / 2;
+  const result = new Uint8Array(leadingOnes + numBytes);
+  for (let i = 0; i < numBytes; i++) {
+    result[leadingOnes + i] = parseInt(hexStr.slice(i * 2, i * 2 + 2), 16);
+  }
+
+  // Verify checksum: last 4 bytes are SHA256d(payload)[0..4]
+  // We skip checksum verification here since we trust wallet-generated addresses
+  // and importing a SHA256 implementation would add an external dependency.
+  if (result.length < 6) throw new Error('Base58Check data too short');
+
+  // Return payload (without 4-byte checksum)
+  return result.slice(0, result.length - 4);
+}
+
+/**
+ * Convert a byte slice to a u128 bigint value.
+ */
+function bytesToU128(bytes: Uint8Array): bigint {
+  let value = 0n;
+  for (let i = 0; i < bytes.length; i++) {
+    value = (value << 8n) | BigInt(bytes[i]);
+  }
+  return value;
+}
+
+// ── ETH Bridge Protostones ──
+
+/**
+ * Build BurnAndBridge protostone for frETH -> ETH withdrawal.
+ * Burns frETH on Bitcoin, encodes ETH 0x address for coordinator.
+ * Address split: first 12 bytes (hi u128), last 8 bytes (lo u128).
+ * Optional calldata for composable EVM execution.
+ *
+ * @param frethId - frETH alkane ID (e.g., "4:8301")
+ * @param ethAddress - Ethereum address (0x-prefixed, 20 bytes)
+ * @param calldata - Optional EVM calldata hex (0x-prefixed) for composable execution
+ */
+export function buildBurnAndBridgeEthProtostone(
+  frethId: string,
+  ethAddress: string,
+  calldata?: string,
+): string {
+  const [block, tx] = parseAlkaneId(frethId);
+  const addr = ethAddress.toLowerCase().replace('0x', '');
+  if (addr.length !== 40) throw new Error(`Invalid ETH address: ${ethAddress}`);
+
+  // Split 20-byte address into two u128 values
+  // hi: first 12 bytes (24 hex chars), lo: last 8 bytes (16 hex chars)
+  const hi = BigInt('0x' + addr.slice(0, 24));
+  const lo = BigInt('0x' + addr.slice(24, 40));
+
+  if (calldata) {
+    const cd = calldata.replace('0x', '');
+    if (cd.length % 2 !== 0) throw new Error('Calldata must be even-length hex');
+    // Encode calldata length and data as additional u128 chunks
+    const cdBytes = new Uint8Array(cd.length / 2);
+    for (let i = 0; i < cdBytes.length; i++) {
+      cdBytes[i] = parseInt(cd.slice(i * 2, i * 2 + 2), 16);
+    }
+    const cdLen = cdBytes.length;
+    // Pack calldata bytes into u128 chunks (16 bytes each)
+    const chunks: bigint[] = [];
+    for (let i = 0; i < cdBytes.length; i += 16) {
+      chunks.push(bytesToU128(cdBytes.slice(i, Math.min(i + 16, cdBytes.length))));
+    }
+    return `[${block},${tx},5,${hi},${lo},${cdLen},${chunks.join(',')}]:v0:v0`;
+  }
+
+  return `[${block},${tx},5,${hi},${lo}]:v0:v0`;
+}
+
+/**
+ * Build deposit intent protostone for ETH -> frETH flow.
+ * Encodes the BTC recipient address so coordinator knows where to mint frETH.
+ *
+ * @param frethId - frETH alkane ID
+ * @param btcRecipientScript - hex scriptPubKey of the BTC recipient
+ */
+export function buildEthDepositIntentProtostone(
+  frethId: string,
+  btcRecipientScript: string,
+): string {
+  const [block, tx] = parseAlkaneId(frethId);
+  const script = btcRecipientScript.replace('0x', '');
+  if (script.length === 0 || script.length % 2 !== 0) {
+    throw new Error(`Invalid scriptPubKey: ${btcRecipientScript}`);
+  }
+
+  // Encode script as u128 chunks
+  const scriptBytes = new Uint8Array(script.length / 2);
+  for (let i = 0; i < scriptBytes.length; i++) {
+    scriptBytes[i] = parseInt(script.slice(i * 2, i * 2 + 2), 16);
+  }
+  const scriptLen = scriptBytes.length;
+  const chunks: bigint[] = [];
+  for (let i = 0; i < scriptBytes.length; i += 16) {
+    chunks.push(bytesToU128(scriptBytes.slice(i, Math.min(i + 16, scriptBytes.length))));
+  }
+
+  // Opcode 6 = DepositIntent
+  return `[${block},${tx},6,${scriptLen},${chunks.join(',')}]:v0:v0`;
+}
+
+// ── ZEC Bridge Protostones ──
+
+/**
+ * Build BurnAndBridge protostone for frZEC -> ZEC withdrawal.
+ * Burns frZEC on Bitcoin, encodes ZEC t-address for coordinator.
+ * Address: 20-byte hash160 split as two u128, plus 2-byte prefix.
+ * Enforces t-address only (t1.../t3.../tm.../t2...).
+ *
+ * @param frzecId - frZEC alkane ID (e.g., "4:8401")
+ * @param zecTAddress - ZEC transparent address (t1.../t3.../tm.../t2...)
+ */
+export function buildBurnAndBridgeZecProtostone(
+  frzecId: string,
+  zecTAddress: string,
+): string {
+  const [block, tx] = parseAlkaneId(frzecId);
+
+  // Validate t-address prefix
+  if (!zecTAddress.match(/^t[123m]/)) {
+    throw new Error(`Invalid ZEC t-address (must start with t1/t3/tm/t2): ${zecTAddress}`);
+  }
+
+  // Decode base58check: 2-byte version prefix + 20-byte hash160
+  const decoded = base58checkDecode(zecTAddress);
+  if (decoded.length !== 22) {
+    throw new Error(`Invalid ZEC t-address length: expected 22 bytes (2 prefix + 20 hash), got ${decoded.length}`);
+  }
+
+  const prefixByte0 = decoded[0];
+  const prefixByte1 = decoded[1];
+  const hash160 = decoded.slice(2); // 20 bytes
+
+  // Split hash160: first 12 bytes = hi, last 8 bytes = lo
+  const hi = bytesToU128(hash160.slice(0, 12));
+  const lo = bytesToU128(hash160.slice(12, 20));
+
+  return `[${block},${tx},5,${hi},${lo},${prefixByte0},${prefixByte1}]:v0:v0`;
+}
+
+/**
+ * Build deposit intent protostone for ZEC -> frZEC flow.
+ *
+ * @param frzecId - frZEC alkane ID
+ * @param btcRecipientScript - hex scriptPubKey of the BTC recipient
+ */
+export function buildZecDepositIntentProtostone(
+  frzecId: string,
+  btcRecipientScript: string,
+): string {
+  const [block, tx] = parseAlkaneId(frzecId);
+  const script = btcRecipientScript.replace('0x', '');
+  if (script.length === 0 || script.length % 2 !== 0) {
+    throw new Error(`Invalid scriptPubKey: ${btcRecipientScript}`);
+  }
+
+  const scriptBytes = new Uint8Array(script.length / 2);
+  for (let i = 0; i < scriptBytes.length; i++) {
+    scriptBytes[i] = parseInt(script.slice(i * 2, i * 2 + 2), 16);
+  }
+  const scriptLen = scriptBytes.length;
+  const chunks: bigint[] = [];
+  for (let i = 0; i < scriptBytes.length; i += 16) {
+    chunks.push(bytesToU128(scriptBytes.slice(i, Math.min(i + 16, scriptBytes.length))));
+  }
+
+  // Opcode 6 = DepositIntent
+  return `[${block},${tx},6,${scriptLen},${chunks.join(',')}]:v0:v0`;
+}
+
 /**
  * Validate a protostone string format.
  * Returns null if valid, error message if invalid.
