@@ -12,12 +12,11 @@ import * as bip39 from 'bip39';
 import BIP32Factory from 'bip32';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { createHash } from 'crypto';
-// @ts-ignore — bs58check has inconsistent default export across bundlers
-import bs58checkModule from 'bs58check';
 
-const bs58check: { encode: (payload: Buffer) => string } =
-  (bs58checkModule as any).default || bs58checkModule;
 const bip32 = BIP32Factory(ecc);
+
+// Base58 alphabet (Bitcoin/Zcash standard)
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 /** Zcash network address prefixes (2-byte Base58Check) */
 export const ZEC_PREFIXES = {
@@ -77,7 +76,49 @@ function pubkeyToZcashAddress(pubkey: Buffer, prefix: readonly [number, number])
   payload[1] = prefix[1];
   hash160.copy(payload, 2);
 
-  return bs58check.encode(payload);
+  return base58checkEncode(payload);
+}
+
+/**
+ * Base58Check encoding (no external dependency).
+ * Format: base58(payload + sha256d(payload)[0..4])
+ */
+function base58checkEncode(payload: Buffer): string {
+  const checksum = sha256d(payload).slice(0, 4);
+  const data = Buffer.concat([payload, checksum]);
+  return base58Encode(data);
+}
+
+function sha256d(data: Buffer): Buffer {
+  const first = createHash('sha256').update(data).digest();
+  return createHash('sha256').update(first).digest();
+}
+
+function base58Encode(data: Buffer): string {
+  // Count leading zeros
+  let leadingZeros = 0;
+  for (let i = 0; i < data.length && data[i] === 0; i++) {
+    leadingZeros++;
+  }
+
+  // Convert to base58
+  // Use BigInt for the conversion
+  let num = BigInt('0x' + data.toString('hex'));
+  const chars: string[] = [];
+  const base = BigInt(58);
+
+  while (num > 0n) {
+    const remainder = Number(num % base);
+    chars.unshift(BASE58_ALPHABET[remainder]);
+    num = num / base;
+  }
+
+  // Add leading '1's for each leading zero byte
+  for (let i = 0; i < leadingZeros; i++) {
+    chars.unshift('1');
+  }
+
+  return chars.join('');
 }
 
 /**
