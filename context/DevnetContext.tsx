@@ -271,9 +271,9 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         try {
           const frostResp = await fetch('/wasm/frost_web_sys_bg.wasm');
           if (frostResp.ok) {
-            const { initSync, generate_frost_keys, sign_sighash } = await import(
-              /* webpackIgnore: true */ '/wasm/frost_web_sys.js'
-            );
+            // @ts-ignore — runtime URL import for FROST WASM JS bindings
+            const frostModule = await import(/* webpackIgnore: true */ '/wasm/frost_web_sys.js');
+            const { initSync, generate_frost_keys, sign_sighash } = frostModule;
             const frostBytes = new Uint8Array(await frostResp.arrayBuffer());
             initSync(frostBytes);
             // Generate test keys (2-of-3 threshold)
