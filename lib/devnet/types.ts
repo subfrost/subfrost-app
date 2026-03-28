@@ -2,32 +2,56 @@
  * Types for the in-browser devnet system.
  */
 
+/**
+ * Proxy info for an upgradeable contract.
+ * proxyId is the user-facing slot, implId is the implementation slot.
+ * authTokenId is the [2:N] token that authorizes upgrades.
+ */
+export interface UpgradeableInfo {
+  proxyId: string;     // User-facing ID (upgradeable proxy)
+  implId: string;      // Implementation slot
+  authTokenId: string; // [2:N] auth token for upgrades
+}
+
+/**
+ * Beacon info for a template contract with multiple instances.
+ * Upgrade the beacon once → all instances get the new implementation.
+ */
+export interface BeaconInfo {
+  implId: string;       // Implementation slot
+  beaconId: string;     // Beacon slot (holds impl pointer)
+  authTokenId: string;  // [2:N] auth token for beacon upgrades
+  instances: Record<string, string>; // name → beacon proxy instance ID
+}
+
 export interface DeployedContracts {
-  // AMM
+  // AMM (already has proxy/beacon pattern)
   ammFactoryId: string;
   ammPoolId: string; // DIESEL/frBTC pool
 
-  // FIRE Protocol
-  fireTokenId: string;
-  fireStakingId: string;
-  fireTreasuryId: string;
-  fireBondingId: string;
-  fireRedemptionId: string;
-  fireDistributorId: string;
+  // FIRE Protocol — each wrapped in upgradeable proxy
+  fireToken: UpgradeableInfo;
+  fireStaking: UpgradeableInfo;
+  fireTreasury: UpgradeableInfo;
+  fireBonding: UpgradeableInfo;
+  fireRedemption: UpgradeableInfo;
+  fireDistributor: UpgradeableInfo;
 
-  // Core Protocol
-  fuelTokenId: string;
-  ftrBtcTemplateId: string;
-  dxBtcVaultId: string;
-  vxFuelGaugeId: string;
-  vxBtcUsdGaugeId: string;
+  // Core Protocol — standalone proxies
+  fuelToken: UpgradeableInfo;
+  dxBtcVault: UpgradeableInfo;
+  carbineController: UpgradeableInfo;
+  universalRouter: UpgradeableInfo;
+  frzec: UpgradeableInfo;
+  freth: UpgradeableInfo;
 
-  // frZEC (deployed, CGGMP21 wrapped Zcash)
-  frzecId: string;
-  // frETH (deployed, FROST wrapped ETH)
-  frethId: string;
+  // Template contracts — beacon pattern (upgrade once → all instances)
+  ftrBtcTemplate: BeaconInfo;      // ftrBTC instances
+  vxGaugeTemplate: BeaconInfo;     // vxFUEL, vxBTCUSD instances
+  synthPoolTemplate: BeaconInfo;   // 6 synth pool instances
+  carbineTemplate: BeaconInfo;     // carbine instances
 
-  // Synth pools — all StableSwap with tuned A coefficients
+  // Synth pool instance IDs (convenience accessors)
   synthPools: {
     frbtcFrzec: string;  // A=100 (pegged)
     frbtcFreth: string;  // A=15  (volatile)
@@ -44,11 +68,25 @@ export interface DeployedContracts {
   frusdTokenId: string;
   frusdAuthTokenId: string;
 
-  // Fujin
+  // Fujin (already has proxy/beacon pattern)
   fujinFactoryId: string;
   fujinMasterId: string;
 
-  // Carbine CLOB
+  // Legacy flat IDs — kept for backwards compatibility with existing code.
+  // These point to the PROXY (user-facing) IDs.
+  fireTokenId: string;
+  fireStakingId: string;
+  fireTreasuryId: string;
+  fireBondingId: string;
+  fireRedemptionId: string;
+  fireDistributorId: string;
+  fuelTokenId: string;
+  ftrBtcTemplateId: string;
+  dxBtcVaultId: string;
+  vxFuelGaugeId: string;
+  vxBtcUsdGaugeId: string;
+  frzecId: string;
+  frethId: string;
   carbineControllerId?: string;
 
   // EVM Bridge Contracts

@@ -248,11 +248,26 @@ export async function bootDevnetWithWasms(
 }
 
 // ===========================================================================
-// Deployment Constants — match __tests__/devnet/amm-deploy.ts and
-// __tests__/devnet/deploy-full-stack.ts exactly.
+// Deployment Constants
+//
+// UPGRADE ARCHITECTURE (2026-03-28):
+// Every contract except fr-btc is deployed behind an upgradeable proxy.
+//
+// Standalone contracts: impl at IMPL slot, upgradeable proxy at PROXY slot.
+//   - Users interact with PROXY slot. Proxy delegatecalls to impl.
+//   - Upgrade: send auth token + call opcode 32766 on proxy with new impl ID.
+//
+// Template contracts (multiple instances): impl at IMPL slot, beacon at BEACON slot,
+//   instances are beacon-proxy contracts pointing to the beacon.
+//   - Upgrade beacon once (opcode 32766) → all instances get new impl.
+//
+// Slot convention:
+//   PROXY/instance slots = user-facing IDs (unchanged from before)
+//   IMPL slots = original + 10000
+//   BEACON slots = original + 20000
 // ===========================================================================
 
-// AMM slot assignments (from amm-deploy.ts / deploy-subfrost-regtest.sh)
+// AMM slot assignments (already has proxy/beacon — unchanged)
 const AMM_SLOTS = {
   AUTH_TOKEN_FACTORY: 0xffed,   // 65517
   POOL_BEACON_PROXY: 780993,
@@ -262,23 +277,42 @@ const AMM_SLOTS = {
   BEACON:            0xfff3,    // 65523
 };
 
-// FIRE contract slots (from fire-deploy.ts)
+// FIRE contract slots — proxy at original, impl at +10000
 const FIRE_SLOTS = {
-  TOKEN:       256,
-  STAKING:     257,
-  TREASURY:    258,
-  BONDING:     259,
-  REDEMPTION:  260,
-  DISTRIBUTOR: 261,
+  TOKEN_PROXY:       256,   TOKEN_IMPL:       10256,
+  STAKING_PROXY:     257,   STAKING_IMPL:     10257,
+  TREASURY_PROXY:    258,   TREASURY_IMPL:    10258,
+  BONDING_PROXY:     259,   BONDING_IMPL:     10259,
+  REDEMPTION_PROXY:  260,   REDEMPTION_IMPL:  10260,
+  DISTRIBUTOR_PROXY: 261,   DISTRIBUTOR_IMPL: 10261,
 };
 
-// Core protocol + Fujin slots (from deploy-full-stack.ts)
+// Core protocol + Fujin slots
 const PROTOCOL_SLOTS = {
-  FUEL_TOKEN:                7000,
-  FTRBTC_TEMPLATE:           7010,
-  DXBTC_VAULT:               7020,
-  VX_FUEL_GAUGE:             7030,
-  VX_BTCUSD_GAUGE:           7031,
+  // Standalone: proxy at original, impl at +10000
+  FUEL_TOKEN_PROXY:    7000,  FUEL_TOKEN_IMPL:    17000,
+  DXBTC_VAULT_PROXY:   7020,  DXBTC_VAULT_IMPL:   17020,
+  CARBINE_CTRL_PROXY:  70000, CARBINE_CTRL_IMPL:  80000,
+  UNIVERSAL_ROUTER_PROXY: 70002, UNIVERSAL_ROUTER_IMPL: 80002,
+  FRZEC_PROXY:         43520, FRZEC_IMPL:         53520,  // 0xAA00 / 0xD130
+  FRETH_PROXY:         52224, FRETH_IMPL:         62224,  // 0xCC00 / 0xF330
+
+  // Template: impl at +10000, beacon at +20000, instances at original
+  FTRBTC_IMPL:         17010, FTRBTC_BEACON:      27010,
+  VX_GAUGE_IMPL:       17030, VX_GAUGE_BEACON:    27030,
+  VX_FUEL_GAUGE:       7030,  // beacon proxy instance
+  VX_BTCUSD_GAUGE:     7031,  // beacon proxy instance
+  CARBINE_TMPL_IMPL:   80001, CARBINE_TMPL_BEACON: 90001,
+  CARBINE_TEMPLATE:    70001, // beacon proxy instance
+  SYNTH_POOL_IMPL:     66576, SYNTH_POOL_BEACON:  76576,  // impl/beacon for all synth pools
+  SYNTH_FRBTC_FRZEC:   0xDD00, // 56576 — beacon proxy instance, A=100
+  SYNTH_FRBTC_FRETH:   0xDD01, // 56577 — A=15
+  SYNTH_FRBTC_FRUSD:   0xDD02, // 56578 — A=8
+  SYNTH_FRZEC_FRUSD:   0xDD03, // 56579 — A=8
+  SYNTH_FRZEC_FRETH:   0xDD04, // 56580 — A=30
+  SYNTH_FRETH_FRUSD:   0xDD05, // 56581 — A=8
+
+  // Fujin (already has proxy/beacon — unchanged)
   FUJIN_AUTH_TOKEN:           7100,
   FUJIN_BEACON_PROXY:        7101,
   FUJIN_POOL_TEMPLATE:       7102,
@@ -292,59 +326,94 @@ const PROTOCOL_SLOTS = {
   FUJIN_LP_VAULT:            7110,
   FUJIN_MASTER_LOGIC:        7111,
   FUJIN_MASTER_PROXY:        7112,
-  // Carbine CLOB
-  CARBINE_CONTROLLER:        70000,
-  CARBINE_TEMPLATE:          70001,
-  UNIVERSAL_ROUTER:          70002,
-  // ZEC bridge
-  FRZEC:                     43520,  // 0xAA00
-  // ETH bridge
-  FRETH:                     52224,  // 0xCC00
-  // Synth pools (StableSwap with tuned A coefficients)
-  // All 6 pairs between frBTC, frZEC, frETH, frUSD
-  SYNTH_FRBTC_FRZEC:        0xDD00, // 56576 — A=100 (pegged, both BTC-denominated)
-  SYNTH_FRBTC_FRETH:        0xDD01, // 56577 — A=15  (volatile, BTC/ETH)
-  SYNTH_FRBTC_FRUSD:        0xDD02, // 56578 — A=8   (volatile, BTC/USD)
-  SYNTH_FRZEC_FRUSD:        0xDD03, // 56579 — A=8   (volatile, ZEC/USD)
-  SYNTH_FRZEC_FRETH:        0xDD04, // 56580 — A=30  (correlated, crypto-to-crypto)
-  SYNTH_FRETH_FRUSD:        0xDD05, // 56581 — A=8   (volatile, ETH/USD)
 };
+
+/**
+ * Helper to build an UpgradeableInfo with empty auth token (filled during deploy).
+ */
+function upgradeableInfo(proxySlot: number, implSlot: number): import('./types').UpgradeableInfo {
+  return { proxyId: `4:${proxySlot}`, implId: `4:${implSlot}`, authTokenId: '' };
+}
+
+/**
+ * Helper to build a BeaconInfo.
+ */
+function beaconInfo(
+  implSlot: number, beaconSlot: number, instances: Record<string, number>,
+): import('./types').BeaconInfo {
+  const inst: Record<string, string> = {};
+  for (const [k, v] of Object.entries(instances)) inst[k] = `4:${v}`;
+  return { implId: `4:${implSlot}`, beaconId: `4:${beaconSlot}`, authTokenId: '', instances: inst };
+}
 
 /**
  * Returns default contract IDs when restoring from saved state (no deployment needed).
  * IDs are derived from the slot constants — same slots used during fresh deployment.
  */
 function getDefaultContractIds(): DeployedContracts {
+  const S = PROTOCOL_SLOTS;
   return {
     ammFactoryId: `4:${AMM_SLOTS.FACTORY_PROXY}`,
-    ammPoolId: '2:3', // Created during boot, always gets this ID
-    fireTokenId: `4:${FIRE_SLOTS.TOKEN}`,
-    fireStakingId: `4:${FIRE_SLOTS.STAKING}`,
-    fireTreasuryId: `4:${FIRE_SLOTS.TREASURY}`,
-    fireBondingId: `4:${FIRE_SLOTS.BONDING}`,
-    fireRedemptionId: `4:${FIRE_SLOTS.REDEMPTION}`,
-    fireDistributorId: `4:${FIRE_SLOTS.DISTRIBUTOR}`,
-    fuelTokenId: `4:${PROTOCOL_SLOTS.FUEL_TOKEN}`,
-    ftrBtcTemplateId: `4:${PROTOCOL_SLOTS.FTRBTC_TEMPLATE}`,
-    dxBtcVaultId: `4:${PROTOCOL_SLOTS.DXBTC_VAULT}`,
-    vxFuelGaugeId: `4:${PROTOCOL_SLOTS.VX_FUEL_GAUGE}`,
-    vxBtcUsdGaugeId: `4:${PROTOCOL_SLOTS.VX_BTCUSD_GAUGE}`,
-    frzecId: `4:${PROTOCOL_SLOTS.FRZEC}`,
-    frethId: `4:${PROTOCOL_SLOTS.FRETH}`,
+    ammPoolId: '2:3',
+
+    // Upgradeable standalone contracts
+    fireToken:       upgradeableInfo(FIRE_SLOTS.TOKEN_PROXY,       FIRE_SLOTS.TOKEN_IMPL),
+    fireStaking:     upgradeableInfo(FIRE_SLOTS.STAKING_PROXY,     FIRE_SLOTS.STAKING_IMPL),
+    fireTreasury:    upgradeableInfo(FIRE_SLOTS.TREASURY_PROXY,    FIRE_SLOTS.TREASURY_IMPL),
+    fireBonding:     upgradeableInfo(FIRE_SLOTS.BONDING_PROXY,     FIRE_SLOTS.BONDING_IMPL),
+    fireRedemption:  upgradeableInfo(FIRE_SLOTS.REDEMPTION_PROXY,  FIRE_SLOTS.REDEMPTION_IMPL),
+    fireDistributor: upgradeableInfo(FIRE_SLOTS.DISTRIBUTOR_PROXY, FIRE_SLOTS.DISTRIBUTOR_IMPL),
+    fuelToken:       upgradeableInfo(S.FUEL_TOKEN_PROXY,           S.FUEL_TOKEN_IMPL),
+    dxBtcVault:      upgradeableInfo(S.DXBTC_VAULT_PROXY,         S.DXBTC_VAULT_IMPL),
+    carbineController: upgradeableInfo(S.CARBINE_CTRL_PROXY,       S.CARBINE_CTRL_IMPL),
+    universalRouter: upgradeableInfo(S.UNIVERSAL_ROUTER_PROXY,     S.UNIVERSAL_ROUTER_IMPL),
+    frzec:           upgradeableInfo(S.FRZEC_PROXY,                S.FRZEC_IMPL),
+    freth:           upgradeableInfo(S.FRETH_PROXY,                S.FRETH_IMPL),
+
+    // Beacon templates
+    ftrBtcTemplate: beaconInfo(S.FTRBTC_IMPL, S.FTRBTC_BEACON, {}),
+    vxGaugeTemplate: beaconInfo(S.VX_GAUGE_IMPL, S.VX_GAUGE_BEACON, {
+      vxFuel: S.VX_FUEL_GAUGE, vxBtcUsd: S.VX_BTCUSD_GAUGE,
+    }),
+    synthPoolTemplate: beaconInfo(S.SYNTH_POOL_IMPL, S.SYNTH_POOL_BEACON, {
+      frbtcFrzec: S.SYNTH_FRBTC_FRZEC, frbtcFreth: S.SYNTH_FRBTC_FRETH,
+      frbtcFrusd: S.SYNTH_FRBTC_FRUSD, frzecFrusd: S.SYNTH_FRZEC_FRUSD,
+      frzecFreth: S.SYNTH_FRZEC_FRETH, frethFrusd: S.SYNTH_FRETH_FRUSD,
+    }),
+    carbineTemplate: beaconInfo(S.CARBINE_TMPL_IMPL, S.CARBINE_TMPL_BEACON, {
+      default: S.CARBINE_TEMPLATE,
+    }),
+
     synthPools: {
-      frbtcFrzec: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRZEC}`,
-      frbtcFreth: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRETH}`,
-      frbtcFrusd: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRUSD}`,
-      frzecFrusd: `4:${PROTOCOL_SLOTS.SYNTH_FRZEC_FRUSD}`,
-      frzecFreth: `4:${PROTOCOL_SLOTS.SYNTH_FRZEC_FRETH}`,
-      frethFrusd: `4:${PROTOCOL_SLOTS.SYNTH_FRETH_FRUSD}`,
+      frbtcFrzec: `4:${S.SYNTH_FRBTC_FRZEC}`,
+      frbtcFreth: `4:${S.SYNTH_FRBTC_FRETH}`,
+      frbtcFrusd: `4:${S.SYNTH_FRBTC_FRUSD}`,
+      frzecFrusd: `4:${S.SYNTH_FRZEC_FRUSD}`,
+      frzecFreth: `4:${S.SYNTH_FRZEC_FRETH}`,
+      frethFrusd: `4:${S.SYNTH_FRETH_FRUSD}`,
     },
-    synthPoolId: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRUSD}`,
+    synthPoolId: `4:${S.SYNTH_FRBTC_FRUSD}`,
+
     frusdTokenId: '4:8201',
     frusdAuthTokenId: '',
-    fujinFactoryId: `4:${PROTOCOL_SLOTS.FUJIN_MASTER_PROXY}`,
-    fujinMasterId: `4:${PROTOCOL_SLOTS.FUJIN_MASTER_PROXY}`,
-    carbineControllerId: `4:${PROTOCOL_SLOTS.CARBINE_CONTROLLER}`,
+    fujinFactoryId: `4:${S.FUJIN_FACTORY_LOGIC}`,
+    fujinMasterId: `4:${S.FUJIN_MASTER_PROXY}`,
+
+    // Legacy flat IDs — point to proxy (user-facing) slots
+    fireTokenId:       `4:${FIRE_SLOTS.TOKEN_PROXY}`,
+    fireStakingId:     `4:${FIRE_SLOTS.STAKING_PROXY}`,
+    fireTreasuryId:    `4:${FIRE_SLOTS.TREASURY_PROXY}`,
+    fireBondingId:     `4:${FIRE_SLOTS.BONDING_PROXY}`,
+    fireRedemptionId:  `4:${FIRE_SLOTS.REDEMPTION_PROXY}`,
+    fireDistributorId: `4:${FIRE_SLOTS.DISTRIBUTOR_PROXY}`,
+    fuelTokenId:       `4:${S.FUEL_TOKEN_PROXY}`,
+    ftrBtcTemplateId:  `4:${S.FTRBTC_BEACON}`, // beacon is the user-facing entry point for templates
+    dxBtcVaultId:      `4:${S.DXBTC_VAULT_PROXY}`,
+    vxFuelGaugeId:     `4:${S.VX_FUEL_GAUGE}`,
+    vxBtcUsdGaugeId:   `4:${S.VX_BTCUSD_GAUGE}`,
+    frzecId:           `4:${S.FRZEC_PROXY}`,
+    frethId:           `4:${S.FRETH_PROXY}`,
+    carbineControllerId: `4:${S.CARBINE_CTRL_PROXY}`,
   };
 }
 
@@ -542,6 +611,112 @@ async function discoverAuthTokens(address: string): Promise<string[]> {
 // Full Protocol Deployment
 // ===========================================================================
 
+/**
+ * Deploy an implementation WASM + upgradeable proxy pointing to it.
+ * Returns the auth token ID discovered after proxy deployment.
+ */
+async function deployWithProxy(
+  provider: any, harness: any, segwit: string, taproot: string,
+  upgradeableWasm: string,
+  wasmName: string, implSlot: number, proxySlot: number,
+  label: string, onProgress: ProgressCallback, pct: number,
+): Promise<string> {
+  // Step 1: Deploy implementation with marker init (opcode 50 = forward/no-op)
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    wasmName, implSlot, [50],
+    `${label} Impl`, onProgress, pct);
+
+  // Step 2: Deploy upgradeable proxy → impl, mint 1 auth token
+  await deployWasm(provider, harness, segwit, taproot,
+    upgradeableWasm, proxySlot,
+    [0x7fff, 4, implSlot, 1],
+    `${label} Proxy`, onProgress, pct);
+
+  // Step 3: Discover auth token
+  const tokens = await discoverAuthTokens(taproot);
+  const authToken = tokens.length > 0 ? tokens[tokens.length - 1] : '';
+  if (authToken) {
+    console.log(`[devnet-boot]   ${label} auth token: ${authToken}`);
+  }
+  return authToken;
+}
+
+/**
+ * Deploy an implementation WASM + upgradeable beacon for it.
+ * Used for template contracts where multiple beacon-proxy instances share one impl.
+ * Returns the auth token ID for the beacon.
+ */
+async function deployWithBeacon(
+  provider: any, harness: any, segwit: string, taproot: string,
+  upgradeableBeaconWasm: string,
+  wasmName: string, implSlot: number, beaconSlot: number,
+  label: string, onProgress: ProgressCallback, pct: number,
+): Promise<string> {
+  // Step 1: Deploy implementation with marker init
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    wasmName, implSlot, [50],
+    `${label} Impl`, onProgress, pct);
+
+  // Step 2: Deploy upgradeable beacon → impl, mint 1 auth token
+  await deployWasm(provider, harness, segwit, taproot,
+    upgradeableBeaconWasm, beaconSlot,
+    [0x7fff, 4, implSlot, 1],
+    `${label} Beacon`, onProgress, pct);
+
+  const tokens = await discoverAuthTokens(taproot);
+  const authToken = tokens.length > 0 ? tokens[tokens.length - 1] : '';
+  if (authToken) {
+    console.log(`[devnet-boot]   ${label} beacon auth token: ${authToken}`);
+  }
+  return authToken;
+}
+
+/**
+ * Deploy a beacon-proxy instance pointing to an existing beacon.
+ * Used for each instance of a template (e.g., each synth pool, each gauge).
+ */
+async function deployBeaconInstance(
+  provider: any, harness: any, segwit: string, taproot: string,
+  beaconProxyWasm: string, instanceSlot: number, beaconSlot: number,
+  label: string, onProgress: ProgressCallback, pct: number,
+): Promise<void> {
+  await deployWasm(provider, harness, segwit, taproot,
+    beaconProxyWasm, instanceSlot,
+    [0x7fff, 4, beaconSlot],
+    `${label} (beacon-proxy)`, onProgress, pct);
+}
+
+/**
+ * Initialize a contract THROUGH its proxy using delegatecall.
+ * The proxy's fallback routes all unknown opcodes to the implementation.
+ */
+async function initThroughProxy(
+  provider: any, harness: any, segwit: string, taproot: string,
+  proxySlot: number, initArgs: (number | bigint)[],
+  label: string,
+): Promise<void> {
+  const argsStr = initArgs.map(a => a.toString()).join(',');
+  const protostone = `[4,${proxySlot},${argsStr}]:v0:v0`;
+  console.log(`[devnet-boot]   Init ${label} through proxy: ${protostone.slice(0, 80)}`);
+  await executeCall(provider, harness, segwit, taproot,
+    protostone, 'B:100000:v0');
+}
+
+/**
+ * Initialize a beacon-proxy instance (business init routed through beacon → impl).
+ */
+async function initBeaconInstance(
+  provider: any, harness: any, segwit: string, taproot: string,
+  instanceSlot: number, initArgs: (number | bigint)[],
+  label: string,
+): Promise<void> {
+  const argsStr = initArgs.map(a => a.toString()).join(',');
+  const protostone = `[4,${instanceSlot},${argsStr}]:v0:v0`;
+  console.log(`[devnet-boot]   Init ${label} instance: ${protostone.slice(0, 80)}`);
+  await executeCall(provider, harness, segwit, taproot,
+    protostone, 'B:100000:v0');
+}
+
 async function deployFullProtocol(
   provider: any,
   harness: any,
@@ -549,14 +724,13 @@ async function deployFullProtocol(
   taproot: string,
   onProgress: ProgressCallback,
 ): Promise<DeployedContracts> {
-  // -----------------------------------------------------------------------
-  // Phase 1: AMM standard contracts
-  // -----------------------------------------------------------------------
-  onProgress('Loading AMM WASMs...', 30);
-  console.log('[devnet-boot] Phase 1: Deploying AMM contracts (sequential fetch-deploy-release)...');
+  const S = PROTOCOL_SLOTS;
+  const contracts = getDefaultContractIds();
 
-  // Fetch reusable standard WASMs that are needed across multiple phases.
-  // These are small (~10-30KB) and reused for Fujin + AMM.
+  // -----------------------------------------------------------------------
+  // Phase 0: Fetch reusable standard WASMs (small, reused across all phases)
+  // -----------------------------------------------------------------------
+  onProgress('Loading standard WASMs...', 30);
   const [authTokenWasm, beaconProxyWasm, upgradeableWasm, upgradeableBeaconWasm] = await Promise.all([
     fetchWasmHex('alkanes_std_auth_token'),
     fetchWasmHex('alkanes_std_beacon_proxy'),
@@ -564,65 +738,58 @@ async function deployFullProtocol(
     fetchWasmHex('alkanes_std_upgradeable_beacon'),
   ]);
 
-  // Step 1: Auth Token Factory
+  // -----------------------------------------------------------------------
+  // Phase 1: AMM Infrastructure (already has proxy/beacon — unchanged)
+  // -----------------------------------------------------------------------
+  console.log('[devnet-boot] Phase 1: Deploying AMM contracts...');
+
   await deployWasm(provider, harness, segwit, taproot,
     authTokenWasm, AMM_SLOTS.AUTH_TOKEN_FACTORY, [100],
     'Auth Token Factory', onProgress, 32);
 
-  // Step 2: Beacon Proxy Template
   await deployWasm(provider, harness, segwit, taproot,
     beaconProxyWasm, AMM_SLOTS.POOL_BEACON_PROXY, [0x8fff],
-    'Beacon Proxy Template', onProgress, 34);
+    'Beacon Proxy Template', onProgress, 33);
 
-  // Steps 3-4: Factory + Pool logic — fetch, deploy, release each to reduce peak memory
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'factory', AMM_SLOTS.FACTORY_LOGIC, [50],
-    'AMM Factory Logic', onProgress, 36);
+    'AMM Factory Logic', onProgress, 34);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'pool', AMM_SLOTS.POOL_LOGIC, [50],
-    'AMM Pool Logic', onProgress, 38);
+    'AMM Pool Logic', onProgress, 35);
 
-  // Step 5: Factory Proxy (Upgradeable → Factory Logic, auth_units=5)
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableWasm, AMM_SLOTS.FACTORY_PROXY,
     [0x7fff, 4, AMM_SLOTS.FACTORY_LOGIC, 5],
-    'AMM Factory Proxy', onProgress, 40);
+    'AMM Factory Proxy', onProgress, 36);
 
-  // Step 6: Upgradeable Beacon (→ Pool Logic, auth_units=5)
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableBeaconWasm, AMM_SLOTS.BEACON,
     [0x7fff, 4, AMM_SLOTS.POOL_LOGIC, 5],
-    'AMM Beacon', onProgress, 42);
+    'AMM Beacon', onProgress, 37);
 
-  // Step 7: Initialize Factory
-  onProgress('Initializing AMM factory...', 44);
-  console.log('[devnet-boot] Discovering auth tokens...');
+  // Initialize AMM Factory
+  onProgress('Initializing AMM factory...', 38);
   let authTokens = await discoverAuthTokens(taproot);
-  if (authTokens.length === 0) {
-    authTokens = await discoverAuthTokens(segwit);
-  }
+  if (authTokens.length === 0) authTokens = await discoverAuthTokens(segwit);
   if (authTokens.length > 0) {
     const factoryAuthToken = authTokens[0];
     console.log('[devnet-boot] Factory auth token:', factoryAuthToken);
-    const fpBlock = 4, fpTx = AMM_SLOTS.FACTORY_PROXY;
-    const initProtostone = `[${fpBlock},${fpTx},0,${AMM_SLOTS.POOL_BEACON_PROXY},4,${AMM_SLOTS.BEACON}]:v0:v0`;
     await executeCall(provider, harness, segwit, taproot,
-      initProtostone, `${factoryAuthToken}:1`);
-    console.log('[devnet-boot] Factory initialized');
-  } else {
-    console.warn('[devnet-boot] No auth tokens found — factory init skipped');
+      `[4,${AMM_SLOTS.FACTORY_PROXY},0,${AMM_SLOTS.POOL_BEACON_PROXY},4,${AMM_SLOTS.BEACON}]:v0:v0`,
+      `${factoryAuthToken}:1`);
   }
 
   const factoryId = `4:${AMM_SLOTS.FACTORY_PROXY}`;
+  contracts.ammFactoryId = factoryId;
 
   // -----------------------------------------------------------------------
-  // Phase 2: Mint DIESEL + wrap frBTC + create pool
+  // Phase 2: Mint DIESEL + wrap frBTC + create AMM pool
   // -----------------------------------------------------------------------
-  onProgress('Minting DIESEL...', 46);
+  onProgress('Minting DIESEL...', 40);
   console.log('[devnet-boot] Phase 2: Seeding tokens...');
 
-  // Mint DIESEL 3 times to accumulate balance
   for (let i = 0; i < 3; i++) {
     harness.mineBlocks(1);
     await executeCall(provider, harness, segwit, taproot,
@@ -632,8 +799,7 @@ async function deployFullProtocol(
   await new Promise(r => setTimeout(r, 50));
 
   // Wrap BTC → frBTC
-  onProgress('Wrapping BTC to frBTC...', 48);
-  // Get frBTC signer address from opcode 103
+  onProgress('Wrapping BTC to frBTC...', 42);
   let signerAddr = taproot;
   try {
     const signerResult = await simulate('32:0', ['103']);
@@ -654,20 +820,16 @@ async function deployFullProtocol(
   } catch (e: any) {
     console.warn('[devnet-boot] Failed to get frBTC signer, using taproot:', e?.message);
   }
-  console.log('[devnet-boot] frBTC signer address:', signerAddr);
-
-  // Wrap BTC: send 1M sats to signer at v0, user gets frBTC at v1
   await executeCall(provider, harness, segwit, taproot,
-    '[32,0,77]:v1:v1', 'B:1000000:v0',
-    [signerAddr, taproot]);
+    '[32,0,77]:v1:v1', 'B:1000000:v0', [signerAddr, taproot]);
   harness.mineBlocks(1);
   await new Promise(r => setTimeout(r, 50));
 
-  // Create DIESEL/frBTC pool
-  onProgress('Creating AMM pool...', 50);
+  // Create AMM pool
+  onProgress('Creating AMM pool...', 44);
   const dieselBal = await getAlkaneBalance(provider, taproot, '2:0');
   const frbtcBal = await getAlkaneBalance(provider, taproot, '32:0');
-  console.log('[devnet-boot] DIESEL balance:', dieselBal.toString(), 'frBTC balance:', frbtcBal.toString());
+  console.log('[devnet-boot] DIESEL:', dieselBal.toString(), 'frBTC:', frbtcBal.toString());
 
   let poolId = '';
   if (dieselBal > BigInt(0) && frbtcBal > BigInt(0)) {
@@ -680,7 +842,6 @@ async function deployFullProtocol(
     harness.mineBlocks(1);
     await new Promise(r => setTimeout(r, 50));
 
-    // Discover pool ID via factory opcode 2 (FindExistingPoolId)
     try {
       const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
       const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
@@ -692,160 +853,193 @@ async function deployFullProtocol(
     } catch (e: any) {
       console.warn('[devnet-boot] Pool discovery failed:', e?.message);
     }
-  } else {
-    console.warn('[devnet-boot] Insufficient tokens for pool creation');
   }
-
-  // -----------------------------------------------------------------------
-  // Phase 3: FIRE Protocol (6 contracts)
-  // -----------------------------------------------------------------------
-  onProgress('Loading FIRE WASMs...', 52);
-  console.log('[devnet-boot] Phase 3: Deploying FIRE protocol...');
-
+  contracts.ammPoolId = poolId;
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];
 
-  // FIRE contracts — fetch and deploy sequentially to reduce peak memory
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_treasury', FIRE_SLOTS.TREASURY,
-    [0, 4, FIRE_SLOTS.TOKEN, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
-    'FIRE Treasury', onProgress, 54);
+  // -----------------------------------------------------------------------
+  // Phase 3: FIRE Protocol — 6 contracts, each behind upgradeable proxy
+  // Deploy impl at +10000 slot, proxy at original slot.
+  // Business init happens THROUGH proxy (delegatecall).
+  // -----------------------------------------------------------------------
+  onProgress('Deploying FIRE protocol...', 46);
+  console.log('[devnet-boot] Phase 3: FIRE protocol (impl+proxy for each)...');
+  const F = FIRE_SLOTS;
 
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_token', FIRE_SLOTS.TOKEN,
-    [0, 4, FIRE_SLOTS.STAKING],
-    'FIRE Token', onProgress, 56);
+  // Deploy all 6 FIRE impls + proxies
+  contracts.fireTreasury.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_treasury', F.TREASURY_IMPL, F.TREASURY_PROXY,
+    'FIRE Treasury', onProgress, 47);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.TREASURY_PROXY,
+    [0, 4, F.TOKEN_PROXY, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
+    'FIRE Treasury');
 
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_staking', FIRE_SLOTS.STAKING,
-    [0, poolBlock, poolTx, 4, FIRE_SLOTS.TOKEN],
-    'FIRE Staking', onProgress, 58);
+  contracts.fireToken.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_token', F.TOKEN_IMPL, F.TOKEN_PROXY,
+    'FIRE Token', onProgress, 49);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.TOKEN_PROXY,
+    [0, 4, F.STAKING_PROXY],
+    'FIRE Token');
 
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_bonding', FIRE_SLOTS.BONDING,
-    [0, 4, FIRE_SLOTS.TOKEN, poolBlock, poolTx, 4, FIRE_SLOTS.TREASURY, 4, FIRE_SLOTS.TOKEN],
-    'FIRE Bonding', onProgress, 60);
+  contracts.fireStaking.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_staking', F.STAKING_IMPL, F.STAKING_PROXY,
+    'FIRE Staking', onProgress, 51);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.STAKING_PROXY,
+    [0, poolBlock, poolTx, 4, F.TOKEN_PROXY],
+    'FIRE Staking');
 
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_redemption', FIRE_SLOTS.REDEMPTION,
-    [0, 4, FIRE_SLOTS.TOKEN, 4, FIRE_SLOTS.TREASURY],
-    'FIRE Redemption', onProgress, 62);
+  contracts.fireBonding.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_bonding', F.BONDING_IMPL, F.BONDING_PROXY,
+    'FIRE Bonding', onProgress, 53);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.BONDING_PROXY,
+    [0, 4, F.TOKEN_PROXY, poolBlock, poolTx, 4, F.TREASURY_PROXY, 4, F.TOKEN_PROXY],
+    'FIRE Bonding');
 
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_distributor', FIRE_SLOTS.DISTRIBUTOR,
-    [0, 4, FIRE_SLOTS.TOKEN, 32, 0, 4, FIRE_SLOTS.TREASURY],
-    'FIRE Distributor', onProgress, 64);
+  contracts.fireRedemption.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_redemption', F.REDEMPTION_IMPL, F.REDEMPTION_PROXY,
+    'FIRE Redemption', onProgress, 55);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.REDEMPTION_PROXY,
+    [0, 4, F.TOKEN_PROXY, 4, F.TREASURY_PROXY],
+    'FIRE Redemption');
+
+  contracts.fireDistributor.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_distributor', F.DISTRIBUTOR_IMPL, F.DISTRIBUTOR_PROXY,
+    'FIRE Distributor', onProgress, 57);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.DISTRIBUTOR_PROXY,
+    [0, 4, F.TOKEN_PROXY, 32, 0, 4, F.TREASURY_PROXY],
+    'FIRE Distributor');
 
   // -----------------------------------------------------------------------
-  // Phase 4: Core Protocol (FUEL, ftrBTC, dxBTC, gauges)
+  // Phase 4: Core Protocol — standalone proxies + template beacons
   // -----------------------------------------------------------------------
-  onProgress('Loading core protocol WASMs...', 66);
-  console.log('[devnet-boot] Phase 4: Deploying core protocol...');
+  onProgress('Deploying core protocol...', 60);
+  console.log('[devnet-boot] Phase 4: Core protocol (proxied)...');
 
-  // Protocol contracts — fetch gauge template once (reused for 2 gauges), rest sequential
-  const vxGaugeWasm = await fetchWasmHex('vx_token_gauge_template');
+  // FUEL Token — standalone proxy
+  contracts.fuelToken.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'frost_token', S.FUEL_TOKEN_IMPL, S.FUEL_TOKEN_PROXY,
+    'FUEL Token', onProgress, 61);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    S.FUEL_TOKEN_PROXY,
+    [0, 1000000000000000, 4, S.FUEL_TOKEN_PROXY],
+    'FUEL Token');
 
-  const S = PROTOCOL_SLOTS;
+  // ftrBTC — beacon template (instances created on demand)
+  contracts.ftrBtcTemplate.authTokenId = await deployWithBeacon(
+    provider, harness, segwit, taproot, upgradeableBeaconWasm,
+    'ftr_btc', S.FTRBTC_IMPL, S.FTRBTC_BEACON,
+    'ftrBTC Template', onProgress, 63);
 
-  // 1. FUEL Token — Init(total_supply=10M, treasury=itself)
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'frost_token', S.FUEL_TOKEN,
-    [0, 1000000000000000, 4, S.FUEL_TOKEN],
-    'FUEL Token', onProgress, 68);
+  // dxBTC Vault — standalone proxy
+  contracts.dxBtcVault.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'dx_btc', S.DXBTC_VAULT_IMPL, S.DXBTC_VAULT_PROXY,
+    'dxBTC Vault', onProgress, 65);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    S.DXBTC_VAULT_PROXY,
+    [0, 32, 0, 4, S.FUEL_TOKEN_PROXY, 4, S.DXBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE],
+    'dxBTC Vault');
 
-  // 2. ftrBTC Template (deploy marker only, template init is no-op)
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'ftr_btc', S.FTRBTC_TEMPLATE,
-    [99],
-    'ftrBTC Template', onProgress, 70);
+  // vx gauge template — beacon (shared impl for vxFUEL + vxBTCUSD instances)
+  contracts.vxGaugeTemplate.authTokenId = await deployWithBeacon(
+    provider, harness, segwit, taproot, upgradeableBeaconWasm,
+    'vx_token_gauge_template', S.VX_GAUGE_IMPL, S.VX_GAUGE_BEACON,
+    'vxGauge Template', onProgress, 67);
 
-  // 3. dxBTC Vault — Init(asset_id=frBTC, yv_vault, escrow_nft, vx_fuel_gauge)
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'dx_btc', S.DXBTC_VAULT,
-    [0, 32, 0, 4, S.FUEL_TOKEN, 4, S.DXBTC_VAULT, 4, S.VX_FUEL_GAUGE],
-    'dxBTC Vault', onProgress, 72);
+  // vxFUEL gauge — beacon proxy instance
+  await deployBeaconInstance(provider, harness, segwit, taproot,
+    beaconProxyWasm, S.VX_FUEL_GAUGE, S.VX_GAUGE_BEACON,
+    'vxFUEL Gauge', onProgress, 68);
+  await initBeaconInstance(provider, harness, segwit, taproot,
+    S.VX_FUEL_GAUGE,
+    [0, poolBlock, poolTx, 4, S.DXBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE, 100000, 4, S.VX_FUEL_GAUGE],
+    'vxFUEL Gauge');
 
-  // 4. vxFUEL Gauge — Init(lp_token, reward_token, yve_token, rate, sigil)
-  await deployWasm(provider, harness, segwit, taproot,
-    vxGaugeWasm, S.VX_FUEL_GAUGE,
-    [0, poolBlock, poolTx, 4, S.DXBTC_VAULT, 4, S.VX_FUEL_GAUGE, 100000, 4, S.VX_FUEL_GAUGE],
-    'vxFUEL Gauge', onProgress, 74);
-
-  // 5. vxBTCUSD Gauge
-  await deployWasm(provider, harness, segwit, taproot,
-    vxGaugeWasm, S.VX_BTCUSD_GAUGE,
-    [0, poolBlock, poolTx, 4, FIRE_SLOTS.TOKEN, 4, S.VX_BTCUSD_GAUGE, 100000, 4, S.VX_BTCUSD_GAUGE],
-    'vxBTCUSD Gauge', onProgress, 76);
+  // vxBTCUSD gauge — beacon proxy instance
+  await deployBeaconInstance(provider, harness, segwit, taproot,
+    beaconProxyWasm, S.VX_BTCUSD_GAUGE, S.VX_GAUGE_BEACON,
+    'vxBTCUSD Gauge', onProgress, 69);
+  await initBeaconInstance(provider, harness, segwit, taproot,
+    S.VX_BTCUSD_GAUGE,
+    [0, poolBlock, poolTx, 4, F.TOKEN_PROXY, 4, S.VX_BTCUSD_GAUGE, 100000, 4, S.VX_BTCUSD_GAUGE],
+    'vxBTCUSD Gauge');
 
   // -----------------------------------------------------------------------
-  // Phase 5: Fujin Difficulty Futures (13 contracts + init)
+  // Phase 5: Fujin Difficulty Futures (already has proxy/beacon — unchanged)
   // -----------------------------------------------------------------------
-  onProgress('Loading Fujin WASMs...', 78);
+  onProgress('Deploying Fujin...', 72);
   console.log('[devnet-boot] Phase 5: Deploying Fujin...');
 
-  // Steps 1-2: Fujin uses the same auth token + beacon proxy WASMs (already in memory)
   await deployWasm(provider, harness, segwit, taproot,
-    authTokenWasm, S.FUJIN_AUTH_TOKEN,
-    [100],
-    'Fujin Auth Token', onProgress, 80);
+    authTokenWasm, S.FUJIN_AUTH_TOKEN, [100],
+    'Fujin Auth Token', onProgress, 73);
 
   await deployWasm(provider, harness, segwit, taproot,
-    beaconProxyWasm, S.FUJIN_BEACON_PROXY,
-    [0x8fff],
-    'Fujin Beacon Proxy', onProgress, 81);
+    beaconProxyWasm, S.FUJIN_BEACON_PROXY, [0x8fff],
+    'Fujin Beacon Proxy', onProgress, 74);
 
-  // Steps 3-12: Fujin-specific WASMs — fetch, deploy, release each
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_pool', S.FUJIN_POOL_TEMPLATE, [50],
-    'Fujin Pool Template', onProgress, 82);
+    'Fujin Pool Template', onProgress, 75);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_runtime_pool', S.FUJIN_RUNTIME_POOL, [50],
-    'Fujin Runtime Pool', onProgress, 83);
+    'Fujin Runtime Pool', onProgress, 76);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_runtime_factory', S.FUJIN_RUNTIME_FACTORY, [50],
-    'Fujin Runtime Factory', onProgress, 84);
+    'Fujin Runtime Factory', onProgress, 77);
 
-  // Fujin Beacon + Upgradeable Template reuse WASMs already in memory
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableBeaconWasm, S.FUJIN_BEACON,
     [0x7fff, 4, S.FUJIN_POOL_TEMPLATE, 1],
-    'Fujin Beacon', onProgress, 85);
+    'Fujin Beacon', onProgress, 78);
 
   await deployWasm(provider, harness, segwit, taproot,
-    upgradeableWasm, S.FUJIN_UPGRADEABLE_TEMPLATE,
-    [0x8fff],
-    'Fujin Upgradeable Template', onProgress, 86);
+    upgradeableWasm, S.FUJIN_UPGRADEABLE_TEMPLATE, [0x8fff],
+    'Fujin Upgradeable Template', onProgress, 79);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_factory', S.FUJIN_FACTORY_LOGIC, [50],
-    'Fujin Factory Logic', onProgress, 87);
+    'Fujin Factory Logic', onProgress, 80);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_token_template', S.FUJIN_TOKEN_TEMPLATE, [50],
-    'Fujin Token Template', onProgress, 88);
+    'Fujin Token Template', onProgress, 81);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_zap', S.FUJIN_ZAP, [50],
-    'Fujin Zap', onProgress, 89);
+    'Fujin Zap', onProgress, 82);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_lp', S.FUJIN_LP_VAULT, [50],
-    'Fujin LP Vault', onProgress, 90);
+    'Fujin LP Vault', onProgress, 83);
 
   await fetchAndDeploy(provider, harness, segwit, taproot,
     'fujin_master', S.FUJIN_MASTER_LOGIC, [50],
-    'Fujin Master Logic', onProgress, 91);
+    'Fujin Master Logic', onProgress, 84);
 
-  // Fujin Master Proxy reuses upgradeableWasm
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableWasm, S.FUJIN_MASTER_PROXY,
     [0x7fff, 4, S.FUJIN_MASTER_LOGIC, 1],
-    'Fujin Master Proxy', onProgress, 92);
+    'Fujin Master Proxy', onProgress, 85);
 
-  // Step 14: Initialize MasterFujin with template references
-  onProgress('Initializing MasterFujin...', 93);
-  const masterInitProtostone = `[4,${S.FUJIN_MASTER_PROXY},0,` +
+  onProgress('Initializing MasterFujin...', 86);
+  await executeCall(provider, harness, segwit, taproot,
+    `[4,${S.FUJIN_MASTER_PROXY},0,` +
     `4,${S.FUJIN_FACTORY_LOGIC},` +
     `${S.FUJIN_UPGRADEABLE_TEMPLATE},` +
     `${S.FUJIN_BEACON_PROXY},` +
@@ -853,21 +1047,116 @@ async function deployFullProtocol(
     `${S.FUJIN_TOKEN_TEMPLATE},` +
     `${S.FUJIN_LP_VAULT},` +
     `${S.FUJIN_ZAP}` +
-    `]:v0:v0`;
-  await executeCall(provider, harness, segwit, taproot,
-    masterInitProtostone, 'B:100000:v0');
+    `]:v0:v0`,
+    'B:100000:v0');
   console.log('[devnet-boot] MasterFujin initialized');
 
   // -----------------------------------------------------------------------
-  // Phase 6: Verify key contracts
+  // Phase 6: Carbine CLOB — controller proxy + template beacon
   // -----------------------------------------------------------------------
-  onProgress('Verifying deployments...', 94);
-  console.log('[devnet-boot] Phase 6: Verifying...');
+  onProgress('Deploying Carbine CLOB...', 88);
+  console.log('[devnet-boot] Phase 6: Carbine CLOB (proxied)...');
+  try {
+    contracts.carbineController.authTokenId = await deployWithProxy(
+      provider, harness, segwit, taproot, upgradeableWasm,
+      'carbine_controller', S.CARBINE_CTRL_IMPL, S.CARBINE_CTRL_PROXY,
+      'Carbine Controller', onProgress, 88);
+
+    contracts.carbineTemplate.authTokenId = await deployWithBeacon(
+      provider, harness, segwit, taproot, upgradeableBeaconWasm,
+      'carbine_template', S.CARBINE_TMPL_IMPL, S.CARBINE_TMPL_BEACON,
+      'Carbine Template', onProgress, 89);
+
+    // Deploy one beacon-proxy instance for the default carbine
+    await deployBeaconInstance(provider, harness, segwit, taproot,
+      beaconProxyWasm, S.CARBINE_TEMPLATE, S.CARBINE_TMPL_BEACON,
+      'Carbine Default', onProgress, 89);
+
+    contracts.universalRouter.authTokenId = await deployWithProxy(
+      provider, harness, segwit, taproot, upgradeableWasm,
+      'universal_router', S.UNIVERSAL_ROUTER_IMPL, S.UNIVERSAL_ROUTER_PROXY,
+      'Universal Router', onProgress, 90);
+
+    console.log('[devnet-boot] Carbine CLOB deployed (proxied)');
+  } catch (e: any) {
+    console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase 7: Bridge contracts — each behind upgradeable proxy
+  // -----------------------------------------------------------------------
+  onProgress('Deploying bridge contracts...', 91);
+  console.log('[devnet-boot] Phase 7: Bridge contracts (proxied)...');
+  try {
+    contracts.frzec.authTokenId = await deployWithProxy(
+      provider, harness, segwit, taproot, upgradeableWasm,
+      'fr_zec', S.FRZEC_IMPL, S.FRZEC_PROXY,
+      'frZEC', onProgress, 91);
+
+    contracts.freth.authTokenId = await deployWithProxy(
+      provider, harness, segwit, taproot, upgradeableWasm,
+      'fr_eth', S.FRETH_IMPL, S.FRETH_PROXY,
+      'frETH', onProgress, 92);
+  } catch (e: any) {
+    console.warn('[devnet-boot] Bridge deployment failed (non-fatal):', e?.message?.substring(0, 80));
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase 8: Synth Pools — beacon template + 6 beacon-proxy instances
+  // All pools share one synth_pool implementation via a single beacon.
+  // Upgrade the beacon once → all 6 pools get the new implementation.
+  // -----------------------------------------------------------------------
+  onProgress('Deploying synth pools...', 94);
+  console.log('[devnet-boot] Phase 8: Synth pools (beacon pattern)...');
+
+  const FRUSD_BLOCK = 4;
+  const FRUSD_TX = 8201;
+
+  try {
+    // Deploy synth_pool impl + beacon
+    contracts.synthPoolTemplate.authTokenId = await deployWithBeacon(
+      provider, harness, segwit, taproot, upgradeableBeaconWasm,
+      'synth_pool', S.SYNTH_POOL_IMPL, S.SYNTH_POOL_BEACON,
+      'Synth Pool', onProgress, 94);
+
+    // Deploy 6 beacon-proxy instances + initialize each with its token pair + A coefficient
+    const poolDefs: [number, number, number, number, number, number, string][] = [
+      [S.SYNTH_FRBTC_FRZEC, 32, 0, 4, S.FRZEC_PROXY, 100, 'frBTC/frZEC'],
+      [S.SYNTH_FRBTC_FRETH, 32, 0, 4, S.FRETH_PROXY, 15,  'frBTC/frETH'],
+      [S.SYNTH_FRBTC_FRUSD, 32, 0, FRUSD_BLOCK, FRUSD_TX, 8, 'frBTC/frUSD'],
+      [S.SYNTH_FRZEC_FRUSD, 4, S.FRZEC_PROXY, FRUSD_BLOCK, FRUSD_TX, 8, 'frZEC/frUSD'],
+      [S.SYNTH_FRZEC_FRETH, 4, S.FRZEC_PROXY, 4, S.FRETH_PROXY, 30, 'frZEC/frETH'],
+      [S.SYNTH_FRETH_FRUSD, 4, S.FRETH_PROXY, FRUSD_BLOCK, FRUSD_TX, 8, 'frETH/frUSD'],
+    ];
+
+    for (const [slot, aBlk, aTx, bBlk, bTx, amp, label] of poolDefs) {
+      try {
+        await deployBeaconInstance(provider, harness, segwit, taproot,
+          beaconProxyWasm, slot, S.SYNTH_POOL_BEACON,
+          label, onProgress, 96);
+        await initBeaconInstance(provider, harness, segwit, taproot,
+          slot, [0, aBlk, aTx, bBlk, bTx, amp], label);
+        console.log(`[devnet-boot]   Pool ${label} at 4:${slot}`);
+      } catch (poolErr: any) {
+        console.warn(`[devnet-boot] Pool ${label} failed:`, poolErr?.message?.substring(0, 60));
+      }
+    }
+    console.log('[devnet-boot] Synth pools deployed (beacon pattern)');
+  } catch (e: any) {
+    console.warn('[devnet-boot] Synth pool deployment failed (non-fatal):', e?.message?.substring(0, 80));
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase 9: Verify key contracts
+  // -----------------------------------------------------------------------
+  onProgress('Verifying deployments...', 98);
+  console.log('[devnet-boot] Phase 9: Verifying...');
   const checks: [string, string, string][] = [
     ['AMM Factory', factoryId, '4'],
-    ['FIRE Token', `4:${FIRE_SLOTS.TOKEN}`, '99'],
-    ['FUEL Token', `4:${S.FUEL_TOKEN}`, '99'],
+    ['FIRE Token (proxy)', `4:${F.TOKEN_PROXY}`, '99'],
+    ['FUEL Token (proxy)', `4:${S.FUEL_TOKEN_PROXY}`, '99'],
     ['Fujin Master', `4:${S.FUJIN_MASTER_PROXY}`, '32765'],
+    ['vxFUEL (beacon-proxy)', `4:${S.VX_FUEL_GAUGE}`, '99'],
   ];
   for (const [name, id, opcode] of checks) {
     try {
@@ -881,117 +1170,29 @@ async function deployFullProtocol(
     }
   }
 
-  // ── Carbine CLOB ────────────────────────────────────────────────
-  onProgress('Deploying Carbine CLOB...', 95);
-  try {
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'carbine_controller', S.CARBINE_CONTROLLER, [50],
-      'Carbine Controller', onProgress, 95);
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'carbine_template', S.CARBINE_TEMPLATE, [50],
-      'Carbine Template', onProgress, 96);
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'universal_router', S.UNIVERSAL_ROUTER, [50],
-      'Universal Router', onProgress, 97);
-    console.log('[devnet-boot] Carbine CLOB deployed at 4:70000, 4:70001, 4:70002');
-  } catch (e: any) {
-    console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
-  }
+  console.log('[devnet-boot] Full protocol deployment complete (all contracts upgradeable)!');
 
-  // -----------------------------------------------------------------------
-  // Phase 6: Bridge contracts (frZEC + frETH)
-  // -----------------------------------------------------------------------
-  let frzecId = `4:${S.FRZEC}`;
-  let frethId = `4:${S.FRETH}`;
-  try {
-    onProgress('Deploying bridge contracts...', 96);
-    console.log('[devnet-boot] Phase 6: Deploying frZEC + frETH...');
+  // Fill in legacy flat IDs
+  contracts.fireTokenId       = contracts.fireToken.proxyId;
+  contracts.fireStakingId     = contracts.fireStaking.proxyId;
+  contracts.fireTreasuryId    = contracts.fireTreasury.proxyId;
+  contracts.fireBondingId     = contracts.fireBonding.proxyId;
+  contracts.fireRedemptionId  = contracts.fireRedemption.proxyId;
+  contracts.fireDistributorId = contracts.fireDistributor.proxyId;
+  contracts.fuelTokenId       = contracts.fuelToken.proxyId;
+  contracts.dxBtcVaultId      = contracts.dxBtcVault.proxyId;
+  contracts.frzecId           = contracts.frzec.proxyId;
+  contracts.frethId           = contracts.freth.proxyId;
+  contracts.vxFuelGaugeId     = `4:${S.VX_FUEL_GAUGE}`;
+  contracts.vxBtcUsdGaugeId   = `4:${S.VX_BTCUSD_GAUGE}`;
+  contracts.ftrBtcTemplateId  = `4:${S.FTRBTC_BEACON}`;
+  contracts.carbineControllerId = contracts.carbineController.proxyId;
+  contracts.fujinFactoryId    = `4:${S.FUJIN_FACTORY_LOGIC}`;
+  contracts.fujinMasterId     = `4:${S.FUJIN_MASTER_PROXY}`;
+  contracts.frusdTokenId      = `${FRUSD_BLOCK}:${FRUSD_TX}`;
+  contracts.frusdAuthTokenId  = '';
 
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'fr_zec', S.FRZEC, [50],
-      'frZEC Contract', onProgress, 96);
-    console.log('[devnet-boot] frZEC at', frzecId);
-
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'fr_eth', S.FRETH, [50],
-      'frETH Contract', onProgress, 97);
-    console.log('[devnet-boot] frETH at', frethId);
-  } catch (e: any) {
-    console.warn('[devnet-boot] Bridge contract deployment failed (non-fatal):', e?.message?.substring(0, 80));
-  }
-
-  // -----------------------------------------------------------------------
-  // Phase 7: All 6 synth pools (StableSwap with tuned A coefficients)
-  // -----------------------------------------------------------------------
-  // frBTC = [32:0], frZEC = [4:FRZEC], frETH = [4:FRETH], frUSD = [4:8201]
-  const synthPools = {
-    frbtcFrzec: `4:${S.SYNTH_FRBTC_FRZEC}`,
-    frbtcFreth: `4:${S.SYNTH_FRBTC_FRETH}`,
-    frbtcFrusd: `4:${S.SYNTH_FRBTC_FRUSD}`,
-    frzecFrusd: `4:${S.SYNTH_FRZEC_FRUSD}`,
-    frzecFreth: `4:${S.SYNTH_FRZEC_FRETH}`,
-    frethFrusd: `4:${S.SYNTH_FRETH_FRUSD}`,
-  };
-
-  const FRUSD_BLOCK = 4;
-  const FRUSD_TX = 8201; // frUSD token slot from earlier deployment
-
-  // Pool definitions: [slot, tokenA_block, tokenA_tx, tokenB_block, tokenB_tx, amplification, label]
-  const poolDefs: [number, number, number, number, number, number, string][] = [
-    [S.SYNTH_FRBTC_FRZEC, 32, 0, 4, S.FRZEC, 100, 'frBTC/frZEC (A=100, pegged)'],
-    [S.SYNTH_FRBTC_FRETH, 32, 0, 4, S.FRETH, 15,  'frBTC/frETH (A=15, volatile)'],
-    [S.SYNTH_FRBTC_FRUSD, 32, 0, FRUSD_BLOCK, FRUSD_TX, 8, 'frBTC/frUSD (A=8, volatile)'],
-    [S.SYNTH_FRZEC_FRUSD, 4, S.FRZEC, FRUSD_BLOCK, FRUSD_TX, 8, 'frZEC/frUSD (A=8, volatile)'],
-    [S.SYNTH_FRZEC_FRETH, 4, S.FRZEC, 4, S.FRETH, 30, 'frZEC/frETH (A=30, correlated)'],
-    [S.SYNTH_FRETH_FRUSD, 4, S.FRETH, FRUSD_BLOCK, FRUSD_TX, 8, 'frETH/frUSD (A=8, volatile)'],
-  ];
-
-  try {
-    onProgress('Deploying 6 synth pools...', 98);
-    console.log('[devnet-boot] Phase 7: Deploying 6 synth pools...');
-
-    for (const [slot, aBlk, aTx, bBlk, bTx, amp, label] of poolDefs) {
-      try {
-        await fetchAndDeploy(provider, harness, segwit, taproot,
-          'synth_pool', slot,
-          [0, aBlk, aTx, bBlk, bTx, amp],
-          label, onProgress, 98);
-        console.log(`[devnet-boot] Pool ${label} at 4:${slot}`);
-      } catch (poolErr: any) {
-        console.warn(`[devnet-boot] Pool ${label} failed:`, poolErr?.message?.substring(0, 60));
-      }
-    }
-    console.log('[devnet-boot] Synth pools deployed');
-  } catch (e: any) {
-    console.warn('[devnet-boot] Synth pool deployment failed (non-fatal):', e?.message?.substring(0, 80));
-  }
-
-  console.log('[devnet-boot] Full protocol deployment complete!');
-
-  return {
-    ammFactoryId: factoryId,
-    ammPoolId: poolId,
-    fireTokenId: `4:${FIRE_SLOTS.TOKEN}`,
-    fireStakingId: `4:${FIRE_SLOTS.STAKING}`,
-    fireTreasuryId: `4:${FIRE_SLOTS.TREASURY}`,
-    fireBondingId: `4:${FIRE_SLOTS.BONDING}`,
-    fireRedemptionId: `4:${FIRE_SLOTS.REDEMPTION}`,
-    fireDistributorId: `4:${FIRE_SLOTS.DISTRIBUTOR}`,
-    fuelTokenId: `4:${S.FUEL_TOKEN}`,
-    ftrBtcTemplateId: `4:${S.FTRBTC_TEMPLATE}`,
-    dxBtcVaultId: `4:${S.DXBTC_VAULT}`,
-    vxFuelGaugeId: `4:${S.VX_FUEL_GAUGE}`,
-    vxBtcUsdGaugeId: `4:${S.VX_BTCUSD_GAUGE}`,
-    frzecId,
-    frethId,
-    synthPools,
-    synthPoolId: synthPools.frbtcFrusd, // legacy compat
-    frusdTokenId: `${FRUSD_BLOCK}:${FRUSD_TX}`,
-    frusdAuthTokenId: '',
-    fujinFactoryId: `4:${S.FUJIN_FACTORY_LOGIC}`,
-    fujinMasterId: `4:${S.FUJIN_MASTER_PROXY}`,
-    carbineControllerId: `4:${S.CARBINE_CONTROLLER}`,
-  };
+  return contracts;
 }
 
 /**
