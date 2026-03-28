@@ -95,6 +95,51 @@ export function disposeHarness(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Snapshot / Restore (for test isolation)
+// ---------------------------------------------------------------------------
+
+/** Cached snapshots keyed by a user-chosen label. */
+const _snapshots = new Map<string, Uint8Array>();
+
+/**
+ * Take a snapshot of the current devnet state.
+ *
+ * Call this after expensive setup (mining 201 blocks, deploying contracts)
+ * to capture a checkpoint. Then call `restoreSnapshot()` in beforeEach
+ * to get each test a clean, isolated copy of the chain.
+ *
+ * @param label - Unique name for this snapshot (e.g., 'after-setup')
+ */
+export function takeSnapshot(label: string = 'default'): void {
+  if (!_harness) throw new Error('No harness — call getOrCreateHarness() first');
+  const blob = _harness.exportState();
+  _snapshots.set(label, blob);
+  console.log(`[devnet] Snapshot "${label}" taken (${(blob.byteLength / 1024).toFixed(0)} KB, height ${_harness.height})`);
+}
+
+/**
+ * Restore the devnet to a previously taken snapshot.
+ *
+ * This is fast (binary copy, no re-mining) and gives each test
+ * a clean baseline without recreating the entire harness.
+ *
+ * @param label - Snapshot to restore (must match a previous takeSnapshot call)
+ */
+export function restoreSnapshot(label: string = 'default'): void {
+  if (!_harness) throw new Error('No harness — call getOrCreateHarness() first');
+  const blob = _snapshots.get(label);
+  if (!blob) throw new Error(`No snapshot "${label}" — call takeSnapshot("${label}") first`);
+  _harness.importState(blob);
+}
+
+/**
+ * Check if a snapshot exists.
+ */
+export function hasSnapshot(label: string = 'default'): boolean {
+  return _snapshots.has(label);
+}
+
 /**
  * Create a WebProvider configured for the devnet with fetch interceptor active.
  */

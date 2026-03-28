@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createEvmDevnet, type EvmDevnetWrapper } from './evm-helpers';
+import { takeSnapshot, restoreSnapshot } from './devnet-helpers';
 
 // Test addresses (Anvil defaults)
 const DEPLOYER = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -33,6 +34,8 @@ describe('Devnet E2E: EVM (revm)', () => {
     evm.fundAccount(USER1, '1000');
     evm.fundAccount(USER2, '1000');
     console.log('[evm] Accounts funded');
+    // Note: EVM devnet uses its own runtime (createEvmDevnet), not the qubitcoin harness.
+    // Snapshot/restore is not applicable here.
   }, 30_000);
 
   describe('Basic EVM Operations', () => {

@@ -22,6 +22,8 @@ import {
   disposeHarness,
   mineBlocks,
   rpcCall,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -85,6 +87,7 @@ describe('Devnet E2E: Bridge UI', () => {
     taprootAddress = ctx.taprootAddress;
     mineBlocks(harness, 201);
     console.log('[bridge-ui] Devnet ready');
+    takeSnapshot('setup');
   }, 120_000);
 
   afterAll(() => { disposeHarness(); });

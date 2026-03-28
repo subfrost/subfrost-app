@@ -33,6 +33,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -233,6 +235,7 @@ describe('Devnet E2E: Carbine CLOB', () => {
     // For now we test the simulation/query opcodes which work without deployment
     // once the WASMs are built and placed in fixtures/
     console.log('[clob] Setup complete');
+    takeSnapshot('setup');
   }, 600_000);
 
   afterAll(() => {

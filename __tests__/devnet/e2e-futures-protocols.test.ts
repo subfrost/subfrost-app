@@ -46,6 +46,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { deployAmmContracts } from './amm-deploy';
 import { PROTOCOL_SLOTS, PROTOCOL_IDS } from './deploy-full-stack';
@@ -277,6 +279,7 @@ describe('Devnet E2E: Futures / Predictions / Volatility Protocols', () => {
 
     expect(dieselBal).toBeGreaterThan(0n);
     expect(frbtcBal).toBeGreaterThan(0n);
+    takeSnapshot('setup');
   }, 300_000);
 
   afterAll(() => {

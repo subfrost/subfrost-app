@@ -16,6 +16,21 @@ export const FRBTC_WRAP_OPCODE = 77;
 export const FRBTC_UNWRAP_OPCODE = 78;
 
 /**
+ * frZEC wrap opcode (deposit ZEC, mint frZEC on BTC alkanes).
+ *
+ * frZEC is a deployed contract at [4:n], NOT a genesis alkane.
+ * It exists on BOTH chains:
+ *   - BTC alkanes: frZEC at [4:n] — CGGMP21 signer watches ZEC chain, mints frZEC on BTC
+ *   - ZEC alkanes: frBTC at [4:m] — FROST signer watches BTC chain, mints frBTC on ZEC
+ *
+ * The actual alkane ID comes from getConfig(network).FRZEC_ALKANE_ID.
+ */
+export const FRZEC_WRAP_OPCODE = 77;
+
+/** frZEC unwrap opcode (burn frZEC, queue ZEC payment via CGGMP21) */
+export const FRZEC_UNWRAP_OPCODE = 78;
+
+/**
  * Pool contract opcodes (NOT factory opcodes).
  * These are used when calling the pool contract directly.
  */
@@ -42,4 +57,21 @@ export const SIGNER_ADDRESSES: Record<string, string> = {
   'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   oylnet: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   devnet: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+};
+
+/**
+ * frZEC signer addresses per network — derived from frZEC contract opcode 103 (GET_SIGNER).
+ *
+ * Unlike frBTC (P2TR), frZEC uses P2PKH addresses (t1...) because Zcash uses ECDSA.
+ * The CGGMP21 threshold signing group controls this address.
+ *
+ * If the frZEC contract is redeployed with a different CGGMP21 key, update here.
+ */
+export const FRZEC_SIGNER_ADDRESSES: Record<string, string> = {
+  // Zcash mainnet t1... address (CGGMP21 group key)
+  // TODO: Set after mainnet deployment
+  mainnet: '',
+  // Devnet uses a deterministic test key
+  devnet: '',
+  regtest: '',
 };

@@ -22,6 +22,8 @@ import { useModalStore } from "@/stores/modals";
 import BigNumber from 'bignumber.js';
 import { useWrapMutation } from "@/hooks/useWrapMutation";
 import { useUnwrapMutation } from "@/hooks/useUnwrapMutation";
+import { useWrapZecMutation } from "@/hooks/useWrapZecMutation";
+import { useUnwrapZecMutation } from "@/hooks/useUnwrapZecMutation";
 import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
 import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
@@ -193,6 +195,8 @@ export default function SwapShell() {
   const swapMutation = useSwapMutation();
   const wrapMutation = useWrapMutation();
   const unwrapMutation = useUnwrapMutation();
+  const wrapZecMutation = useWrapZecMutation();
+  const unwrapZecMutation = useUnwrapZecMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
   const removeLiquidityMutation = useRemoveLiquidityMutation();
   const { data: premiumData } = useFrbtcPremium();
@@ -201,6 +205,7 @@ export default function SwapShell() {
   const { address, network } = useWallet();
   const config = getConfig(network);
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = config;
+  const FRZEC_ALKANE_ID = (config as any).FRZEC_ALKANE_ID as string | undefined;
   const FIRE_TOKEN_ID = (config as any).FIRE_TOKEN_ID as string | undefined;
   const FRUSD_TOKEN_ID = (config as any).FRUSD_TOKEN_ID as string | undefined;
   const VOLBTC_POOL_ID = (config as any).DXBTC_NORMAL_POOL_ID as string | undefined;
@@ -441,6 +446,17 @@ export default function SwapShell() {
       seen.add(FRBTC_ALKANE_ID);
     }
 
+    // Always add frZEC (BTC <-> frZEC wrapping via CGGMP21)
+    if (FRZEC_ALKANE_ID && !seen.has(FRZEC_ALKANE_ID) && shouldShowToken(FRZEC_ALKANE_ID, 'frZEC')) {
+      opts.push({
+        id: FRZEC_ALKANE_ID,
+        symbol: 'frZEC',
+        name: 'frZEC',
+        isAvailable: true
+      });
+      seen.add(FRZEC_ALKANE_ID);
+    }
+
     // Add bUSD/DIESEL (available before pools load)
     if (BUSD_ALKANE_ID) {
       // Use poolTokenMap for correct symbol if available, otherwise use network-appropriate default
@@ -566,6 +582,17 @@ export default function SwapShell() {
         isAvailable: true
       });
       seen.add(FRBTC_ALKANE_ID);
+    }
+
+    // Add frZEC (BTC <-> frZEC wrapping via CGGMP21)
+    if (FRZEC_ALKANE_ID && !seen.has(FRZEC_ALKANE_ID) && shouldShowToken(FRZEC_ALKANE_ID, 'frZEC')) {
+      opts.push({
+        id: FRZEC_ALKANE_ID,
+        symbol: 'frZEC',
+        name: 'frZEC',
+        isAvailable: true
+      });
+      seen.add(FRZEC_ALKANE_ID);
     }
 
     // Add bUSD if it should be shown
@@ -761,6 +788,10 @@ export default function SwapShell() {
   const isWrapPair = useMemo(() => fromToken?.id === 'btc' && toToken?.id === FRBTC_ALKANE_ID, [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
   const isUnwrapPair = useMemo(() => fromToken?.id === FRBTC_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRBTC_ALKANE_ID]);
 
+  // frZEC wrap/unwrap pair detection (CGGMP21 wrapped Zcash)
+  const isWrapZecPair = useMemo(() => fromToken?.id === 'btc' && toToken?.id === FRZEC_ALKANE_ID, [fromToken?.id, toToken?.id, FRZEC_ALKANE_ID]);
+  const isUnwrapZecPair = useMemo(() => fromToken?.id === FRZEC_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRZEC_ALKANE_ID]);
+
   // Check if this is a BTC → token swap (not direct wrap to frBTC)
   const isBtcToTokenSwap = useMemo(() =>
     fromToken?.id === 'btc' && toToken?.id !== FRBTC_ALKANE_ID && toToken?.id !== 'btc',
@@ -909,6 +940,39 @@ export default function SwapShell() {
       } catch (e: any) {
         console.error('[SWAP] Unwrap error:', e);
         window.alert('Unwrap failed. See console for details.');
+      }
+      return;
+    }
+
+    // frZEC wrap (BTC → frZEC) — CGGMP21 wrapped Zcash
+    if (isWrapZecPair) {
+      console.log('[handleSwap] isWrapZecPair=true, calling wrapZecMutation...');
+      try {
+        const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
+        const res = await wrapZecMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
+        if (res?.success && res.transactionId) {
+          showNotification(res.transactionId, 'wrap');
+          setTimeout(() => refreshWalletData(), 2000);
+        }
+      } catch (e: any) {
+        console.error('[SWAP] Wrap ZEC error:', e);
+        window.alert('Wrap ZEC failed. See console for details.');
+      }
+      return;
+    }
+
+    // frZEC unwrap (frZEC → BTC)
+    if (isUnwrapZecPair) {
+      try {
+        const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
+        const res = await unwrapZecMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
+        if (res?.success && res.transactionId) {
+          showNotification(res.transactionId, 'unwrap');
+          setTimeout(() => refreshWalletData(), 2000);
+        }
+      } catch (e: any) {
+        console.error('[SWAP] Unwrap ZEC error:', e);
+        window.alert('Unwrap ZEC failed. See console for details.');
       }
       return;
     }
@@ -1520,6 +1584,13 @@ export default function SwapShell() {
       return true;
     }
 
+    // Special case: BTC <-> frZEC wrap/unwrap is always allowed
+    if (FRZEC_ALKANE_ID &&
+        ((token1Id === 'btc' && token2Id === FRZEC_ALKANE_ID) ||
+         (token1Id === FRZEC_ALKANE_ID && token2Id === 'btc'))) {
+      return true;
+    }
+
     // Map BTC to frBTC for pool checking (BTC multi-hops via frBTC)
     const id1 = token1Id === 'btc' ? FRBTC_ALKANE_ID : token1Id;
     const id2 = token2Id === 'btc' ? FRBTC_ALKANE_ID : token2Id;
@@ -1529,7 +1600,7 @@ export default function SwapShell() {
       (p.token0.id === id1 && p.token1.id === id2) ||
       (p.token0.id === id2 && p.token1.id === id1)
     );
-  }, [markets, FRBTC_ALKANE_ID]);
+  }, [markets, FRBTC_ALKANE_ID, FRZEC_ALKANE_ID]);
 
   // Custom sort function for token options: BTC, DIESEL/bUSD, frBTC, then alphabetical
   const sortTokenOptions = (options: TokenOption[]): TokenOption[] => {
@@ -1840,7 +1911,7 @@ export default function SwapShell() {
         const amt = Number(cur.balance) / 1e8;
         setDirection('sell');
         // Use 8 decimals for frBTC, 2 for other tokens
-        const decimals = fromToken.id === FRBTC_ALKANE_ID ? 8 : 2;
+        const decimals = (fromToken.id === FRBTC_ALKANE_ID || fromToken.id === FRZEC_ALKANE_ID) ? 8 : 2;
         setFromAmount(amt.toFixed(decimals));
       }
     }
@@ -1860,7 +1931,7 @@ export default function SwapShell() {
         const amt = (Number(cur.balance) * percent) / 1e8;
         setDirection('sell');
         // Use 8 decimals for frBTC, 2 for other tokens
-        const decimals = fromToken.id === FRBTC_ALKANE_ID ? 8 : 2;
+        const decimals = (fromToken.id === FRBTC_ALKANE_ID || fromToken.id === FRZEC_ALKANE_ID) ? 8 : 2;
         setFromAmount(amt.toFixed(decimals));
       }
     }
@@ -2053,7 +2124,7 @@ export default function SwapShell() {
 
         {/* Chart — desktop only (7 cols) */}
         <div className="hidden lg:flex lg:col-span-7 lg:order-1 flex-col min-h-0" style={{ minHeight: '450px' }}>
-          <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)} />
+          <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair || isWrapZecPair || isUnwrapZecPair)} />
         </div>
 
         {/* Mobile data panels — collapsible chart (below trade form on mobile) */}
@@ -2061,7 +2132,7 @@ export default function SwapShell() {
           <MobileDataPanels
             chartPool={chartPool}
             chartTokenId={chartTokenId}
-            isWrapPair={!chartPool && (isWrapPair || isUnwrapPair)}
+            isWrapPair={!chartPool && (isWrapPair || isUnwrapPair || isWrapZecPair || isUnwrapZecPair)}
           />
         </div>
       </div>

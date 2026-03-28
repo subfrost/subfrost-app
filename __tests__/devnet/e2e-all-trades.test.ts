@@ -29,6 +29,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { deployAmmContracts } from './amm-deploy';
 
@@ -143,6 +145,7 @@ describe('Devnet E2E: Every Trade Type', () => {
     const totalSats = utxos.reduce((s: number, u: any) => s + (u.value || 0), 0);
     console.log('[trades] Funded:', utxos.length, 'UTXOs,', totalSats, 'sats');
     expect(totalSats).toBeGreaterThan(0);
+    takeSnapshot('setup');
   }, 300_000);
 
   afterAll(() => {

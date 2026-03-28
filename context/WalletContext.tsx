@@ -290,6 +290,8 @@ type WalletAddresses = {
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
   nativeSegwit?: { address: string; pubkey: string; hdPath: string };
+  /** Zcash transparent address — derived from same mnemonic via BIP44 m/44'/133'/0'/0/0 */
+  zcash?: { address: string; pubkey: string; hdPath: string };
   spendStrategy: { addressOrder: string[]; utxoSortGreatestToLeast: boolean; changeAddress: string };
   network: any;
 };
@@ -683,6 +685,23 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const segwitInfo = wallet.deriveAddress(AddressType.P2WPKH, 0, 0);
     const taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
 
+    // Derive Zcash address from the same mnemonic (BIP44 m/44'/133'/0'/0/0)
+    // On mainnet, show the real ZEC address alongside BTC addresses
+    let zcashInfo: { address: string; pubkey: string; hdPath: string } | null = null;
+    try {
+      const sessionMnemonic = typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem(SESSION_MNEMONIC_KEY)
+        : null;
+      if (sessionMnemonic) {
+        const { deriveZcashAddress, toZcashNetwork } = require('@/lib/zcash/address');
+        const zcashNet = toZcashNetwork(network);
+        zcashInfo = deriveZcashAddress(sessionMnemonic, zcashNet);
+      }
+    } catch (e) {
+      // ZEC derivation is optional — don't break the wallet if it fails
+      console.debug('[WalletContext] ZEC address derivation skipped:', (e as Error).message);
+    }
+
     return {
       nativeSegwit: {
         address: segwitInfo.address,
@@ -695,6 +714,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         pubKeyXOnly: taprootInfo.publicKey.slice(2), // Remove prefix for x-only
         hdPath: taprootInfo.path,
       },
+      zcash: zcashInfo || undefined,
     };
   }, [wallet, browserWallet, walletType, browserWalletAddresses, network]);
 
@@ -703,6 +723,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     return {
       nativeSegwit: addresses.nativeSegwit.address ? addresses.nativeSegwit : undefined,
       taproot: addresses.taproot.address ? addresses.taproot : undefined,
+      zcash: addresses.zcash?.address ? addresses.zcash : undefined,
       spendStrategy: {
         addressOrder: ['nativeSegwit', 'taproot'],
         utxoSortGreatestToLeast: true,

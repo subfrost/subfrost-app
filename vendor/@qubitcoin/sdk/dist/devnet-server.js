@@ -224,6 +224,20 @@ export class DevnetTestHarness {
             this.originalFetch = null;
         }
     }
+    // -- Snapshot / Restore ----------------------------------------------------
+    /**
+     * Export full devnet state to a binary blob.
+     * Captures chain, alkanes, esplora, and tertiary indexer state.
+     */
+    exportState() {
+        return this.server.exportState();
+    }
+    /**
+     * Restore devnet from a previously exported state blob.
+     */
+    importState(data) {
+        this.server.importState(data);
+    }
     /** Clean up: restore fetch and free WASM resources. */
     dispose() {
         this.restoreFetch();

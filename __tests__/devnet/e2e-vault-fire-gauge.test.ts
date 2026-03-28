@@ -31,6 +31,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -196,6 +198,7 @@ describe('Devnet E2E: Vault, FIRE, and Gauge', () => {
     await deployCoreProtocol(provider, signer, segwitAddress, taprootAddress, harness, poolId);
 
     console.log('[vault-fire-gauge] Setup complete');
+    takeSnapshot('setup');
   }, 900_000);
 
   afterAll(() => { disposeHarness(); });

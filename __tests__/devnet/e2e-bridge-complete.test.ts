@@ -25,6 +25,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { createEvmDevnet, type EvmDevnetWrapper } from './evm-helpers';
@@ -196,6 +198,7 @@ describe('Complete Bridge Lifecycle E2E', () => {
     evm.send(EVM_DEPLOYER, mockUsdcAddr, '40c10f19', encodeAddress(EVM_USER_2), encodeUint256(mintAmount));
 
     console.log('[complete-bridge] EVM devnet ready — USDT: %s, USDC: %s', mockUsdtAddr, mockUsdcAddr);
+    takeSnapshot('setup');
   }, 120_000);
 
   afterAll(() => { disposeHarness(); });

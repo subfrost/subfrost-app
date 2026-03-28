@@ -23,6 +23,8 @@ import {
   disposeHarness,
   mineBlocks,
   rpcCall,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 
 try { bitcoin.initEccLib(ecc); } catch { /* already initialized */ }
@@ -81,6 +83,7 @@ describe('Devnet E2E: Fresh Wallet Funding', () => {
     console.log('[funding] Fresh mnemonic:', FRESH_MNEMONIC.split(' ').slice(0, 3).join(' ') + '...');
     console.log('[funding] Segwit:', freshSegwit);
     console.log('[funding] Taproot:', freshTaproot);
+    takeSnapshot('setup');
   }, 120_000);
 
   afterAll(() => {

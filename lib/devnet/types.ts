@@ -22,7 +22,12 @@ export interface DeployedContracts {
   vxFuelGaugeId: string;
   vxBtcUsdGaugeId: string;
 
-  // Synth Pool
+  // frZEC (deployed, CGGMP21 wrapped Zcash)
+  frzecId: string;
+  // frBTC/frZEC synth pool (StableSwap)
+  frbtcFrzecPoolId: string;
+
+  // Synth Pool (frBTC/frUSD or frZEC/frUSD)
   synthPoolId: string;
 
   // frUSD Bridge
@@ -77,6 +82,10 @@ export type SimActionType =
   | 'vault_withdraw'
   | 'wrap_btc'
   | 'unwrap_frbtc'
+  | 'wrap_zec'
+  | 'unwrap_frzec'
+  | 'swap_frbtc_to_frzec'
+  | 'swap_frzec_to_frbtc'
   | 'fire_stake'
   | 'fire_unstake'
   | 'fire_claim'

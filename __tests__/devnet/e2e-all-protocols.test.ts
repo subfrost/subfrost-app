@@ -27,6 +27,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -416,6 +418,7 @@ describe('Devnet E2E: All Protocols', () => {
     console.log('[protocols]   FIRE:         %s', fireDeployed);
     console.log('[protocols]   dxBTC:        %s', dxBtcDeployed);
     console.log('[protocols]   Carbine:      %s', carbineDeployed);
+    takeSnapshot('setup');
   }, 900_000);
 
   afterAll(() => {

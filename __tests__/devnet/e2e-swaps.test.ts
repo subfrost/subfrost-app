@@ -33,6 +33,8 @@ import {
   rpcCall,
   getAlkaneBalance,
   getBtcBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -327,6 +329,7 @@ describe('Devnet E2E: Full Swap Coverage', () => {
       console.log('[swaps] Pool creation error:', e.message?.slice(0, 200));
       console.log('[swaps] NOTE: Pool creation may fail if factory init or deployment is wrong');
     }
+    takeSnapshot('setup');
   }, 600_000);
 
   afterAll(() => {

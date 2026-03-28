@@ -15,6 +15,8 @@ import {
   FACTORY_SWAP_OPCODE,
   FRBTC_WRAP_OPCODE,
   FRBTC_UNWRAP_OPCODE,
+  FRZEC_WRAP_OPCODE,
+  FRZEC_UNWRAP_OPCODE,
   POOL_OPCODES,
 } from './constants';
 
@@ -144,6 +146,62 @@ export function buildUnwrapInputRequirements(params: {
   amount: string;
 }): string {
   const [block, tx] = params.frbtcId.split(':');
+  return `${block}:${tx}:${params.amount}`;
+}
+
+// ---------------------------------------------------------------------------
+// Wrap ZEC (ZEC → frZEC)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for ZEC → frZEC wrap operation.
+ *
+ * frZEC [42:0] uses the same wrap opcode (77) as frBTC [32:0], but the
+ * signer address is a P2PKH t-address (ECDSA/CGGMP21) instead of P2TR (Schnorr/FROST).
+ *
+ * Output ordering:
+ *   - Output 0 (v0): CGGMP21 signer t-address (receives ZEC)
+ *   - Output 1 (v1): user address (receives minted frZEC via pointer=v1)
+ */
+export function buildWrapZecProtostone(params: {
+  frzecId: string;
+}): string {
+  const [block, tx] = params.frzecId.split(':');
+  const cellpack = `${block},${tx},${FRZEC_WRAP_OPCODE}`;
+  return `[${cellpack}]:v1:v1`;
+}
+
+// ---------------------------------------------------------------------------
+// Unwrap ZEC (frZEC → ZEC)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for frZEC → ZEC unwrap operation.
+ *
+ * Burns frZEC and queues a ZEC payment via CGGMP21 threshold ECDSA signing.
+ * The pointer MUST resolve to a Zcash t-address (P2PKH or P2SH).
+ * Z-address pointers trigger the fallback chain (see docs/zcash.md).
+ */
+export function buildUnwrapZecProtostone(params: {
+  frzecId: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { frzecId, pointer = 'v1', refund = 'v1' } = params;
+  const [block, tx] = frzecId.split(':');
+  const cellpack = [block, tx, FRZEC_UNWRAP_OPCODE].join(',');
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build input requirements for frZEC unwrap.
+ * Format: "42:0:amount"
+ */
+export function buildUnwrapZecInputRequirements(params: {
+  frzecId: string;
+  amount: string;
+}): string {
+  const [block, tx] = params.frzecId.split(':');
   return `${block}:${tx}:${params.amount}`;
 }
 

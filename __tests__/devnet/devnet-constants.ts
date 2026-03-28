@@ -16,6 +16,13 @@ export const DEVNET = {
   DIESEL_ID: '2:0',
   FACTORY_ID: '4:65498',
 
+  // frZEC is a DEPLOYED contract [4:n], not a genesis alkane.
+  // On devnet, deployed to slot 0xAA00 (43520) → indexed as 4:43520.
+  // On the ZEC alkanes index (quzec), there's a corresponding vault that
+  // tracks ZEC deposits and associates them to BTC-side frZEC minting.
+  FRZEC_DEPLOY_SLOT: 0xAA00,
+  FRZEC_ID: '4:43520',
+
   FACTORY_OPCODES: {
     InitFactory: 0,
     CreateNewPool: 1,
@@ -34,6 +41,11 @@ export const DEVNET = {
   },
 
   FRBTC_OPCODES: {
+    Wrap: 77,
+    Unwrap: 78,
+  },
+
+  FRZEC_OPCODES: {
     Wrap: 77,
     Unwrap: 78,
   },

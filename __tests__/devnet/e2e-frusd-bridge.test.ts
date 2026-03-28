@@ -25,6 +25,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { createEvmDevnet, type EvmDevnetWrapper } from './evm-helpers';
@@ -130,6 +132,7 @@ describe('Devnet E2E: frUSD Bridge (BTC↔USDC)', () => {
     evm.fundAccount(EVM_DEPLOYER, '10000');
     evm.fundAccount(EVM_USER, '1000');
     console.log('[bridge] EVM devnet ready');
+    takeSnapshot('setup');
   }, 120_000);
 
   afterAll(() => { disposeHarness(); });

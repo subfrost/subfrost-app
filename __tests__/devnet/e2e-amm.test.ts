@@ -28,6 +28,8 @@ import {
   rpcCall,
   getAlkaneBalance,
   getBtcBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
@@ -162,6 +164,9 @@ describe('Devnet E2E: AMM Workflow', () => {
 
     const h = (await rpcCall('btc_getblockcount', [])).result;
     console.log('[e2e] Chain height after setup:', h);
+
+    // Snapshot after expensive setup (mining 201 blocks)
+    takeSnapshot('setup');
   }, 300_000);
 
   afterAll(() => {

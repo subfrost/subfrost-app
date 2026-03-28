@@ -27,6 +27,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { createEvmDevnet, type EvmDevnetWrapper } from './evm-helpers';
@@ -147,6 +149,7 @@ describe('Bridge Flow E2E', () => {
     mockUsdtAddr = mockTokens.usdtAddress;
     mockUsdcAddr = mockTokens.usdcAddress;
     console.log('[bridge-flow] DevnetEvmProvider ready — USDT:', mockUsdtAddr, 'USDC:', mockUsdcAddr);
+    takeSnapshot('setup');
   }, 120_000);
 
   afterAll(() => { disposeHarness(); });

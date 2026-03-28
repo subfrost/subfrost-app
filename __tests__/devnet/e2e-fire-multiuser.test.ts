@@ -30,6 +30,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -304,6 +306,7 @@ describe('Devnet E2E: FIRE Multi-User', () => {
 
     console.log('[multiuser] User A LP:', (await getAlkaneBalance(providerA, taprootA, poolId)).toString());
     console.log('[multiuser] Setup complete');
+    takeSnapshot('setup');
   }, 900_000);
 
   afterAll(() => { disposeHarness(); });

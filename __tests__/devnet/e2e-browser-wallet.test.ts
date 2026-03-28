@@ -23,6 +23,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -221,6 +223,7 @@ describe('Devnet E2E: Browser Wallet Integration', () => {
     }
 
     console.log('[browser-wallet] Setup complete. Pool:', poolId);
+    takeSnapshot('setup');
   }, 900_000);
 
   afterAll(() => {

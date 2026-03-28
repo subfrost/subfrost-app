@@ -30,6 +30,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -166,6 +168,7 @@ describe('Devnet E2E: FIRE Security & Multi-User', () => {
     // Deploy FIRE
     await deployFireContracts(provider, signer, segwitAddress, taprootAddress, harness, poolId);
     console.log('[security] Setup complete');
+    takeSnapshot('setup');
   }, 900_000);
 
   afterAll(() => { disposeHarness(); });

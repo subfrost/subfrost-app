@@ -24,6 +24,8 @@ import {
   mineBlocks,
   rpcCall,
   getBtcBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { loadFrost, type FrostHelpers } from './frost-helpers';
 import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
@@ -57,6 +59,7 @@ describe('Devnet E2E: FROST Threshold Signing', () => {
     // Load FROST WASM
     frost = await loadFrost();
     console.log('[frost] FROST WASM loaded');
+    takeSnapshot('setup');
   }, 120_000);
 
   afterAll(() => { disposeHarness(); });

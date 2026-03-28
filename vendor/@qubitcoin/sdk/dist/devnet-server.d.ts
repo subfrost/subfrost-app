@@ -109,6 +109,16 @@ export declare class DevnetTestHarness {
     installFetchInterceptor(): void;
     /** Restore the original fetch function. */
     restoreFetch(): void;
+    /**
+     * Export full devnet state to a binary blob for snapshot/restore.
+     * Captures chain, alkanes, esplora, and tertiary indexer state.
+     */
+    exportState(): Uint8Array;
+    /**
+     * Restore devnet from a previously exported state blob.
+     * Replaces all state — chain continues from the restored height.
+     */
+    importState(data: Uint8Array): void;
     /** Clean up: restore fetch and free WASM resources. */
     dispose(): void;
     /**

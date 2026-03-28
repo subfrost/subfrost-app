@@ -296,6 +296,9 @@ const PROTOCOL_SLOTS = {
   CARBINE_CONTROLLER:        70000,
   CARBINE_TEMPLATE:          70001,
   UNIVERSAL_ROUTER:          70002,
+  // ZEC bridge
+  FRZEC:                     43520,  // 0xAA00
+  FRBTC_FRZEC_SYNTH_POOL:   43521,  // 0xAA01
 };
 
 /**
@@ -317,6 +320,8 @@ function getDefaultContractIds(): DeployedContracts {
     dxBtcVaultId: `4:${PROTOCOL_SLOTS.DXBTC_VAULT}`,
     vxFuelGaugeId: `4:${PROTOCOL_SLOTS.VX_FUEL_GAUGE}`,
     vxBtcUsdGaugeId: `4:${PROTOCOL_SLOTS.VX_BTCUSD_GAUGE}`,
+    frzecId: `4:${PROTOCOL_SLOTS.FRZEC}`,
+    frbtcFrzecPoolId: `4:${PROTOCOL_SLOTS.FRBTC_FRZEC_SYNTH_POOL}`,
     synthPoolId: '',
     frusdTokenId: '',
     frusdAuthTokenId: '',
@@ -876,6 +881,34 @@ async function deployFullProtocol(
     console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
 
+  // -----------------------------------------------------------------------
+  // Phase 6: frZEC + frBTC/frZEC synth-pool
+  // -----------------------------------------------------------------------
+  let frzecId = '';
+  let frbtcFrzecPoolId = '';
+  try {
+    onProgress('Deploying frZEC bridge...', 97);
+    console.log('[devnet-boot] Phase 6: Deploying frZEC + synth-pool...');
+
+    // Deploy fr_zec.wasm — the frZEC contract on BTC alkanes
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'fr_zec', S.FRZEC, [50],
+      'frZEC Contract', onProgress, 97);
+    frzecId = `4:${S.FRZEC}`;
+    console.log('[devnet-boot] frZEC deployed at', frzecId);
+
+    // Deploy frBTC/frZEC synth-pool (StableSwap A=100)
+    // Init params: [0, frBTC_block, frBTC_tx, frZEC_block, frZEC_tx, amplification]
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'synth_pool', S.FRBTC_FRZEC_SYNTH_POOL,
+      [0, 32, 0, 4, S.FRZEC, 100],
+      'frBTC/frZEC Synth Pool', onProgress, 98);
+    frbtcFrzecPoolId = `4:${S.FRBTC_FRZEC_SYNTH_POOL}`;
+    console.log('[devnet-boot] frBTC/frZEC synth-pool at', frbtcFrzecPoolId);
+  } catch (e: any) {
+    console.warn('[devnet-boot] frZEC deployment failed (non-fatal):', e?.message?.substring(0, 80));
+  }
+
   console.log('[devnet-boot] Full protocol deployment complete!');
 
   return {
@@ -892,6 +925,8 @@ async function deployFullProtocol(
     dxBtcVaultId: `4:${S.DXBTC_VAULT}`,
     vxFuelGaugeId: `4:${S.VX_FUEL_GAUGE}`,
     vxBtcUsdGaugeId: `4:${S.VX_BTCUSD_GAUGE}`,
+    frzecId,
+    frbtcFrzecPoolId,
     synthPoolId: '',
     frusdTokenId: '',
     frusdAuthTokenId: '',

@@ -22,6 +22,8 @@ import {
   mineBlocks,
   rpcCall,
   getAlkaneBalance,
+  takeSnapshot,
+  restoreSnapshot,
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
@@ -147,6 +149,7 @@ describe('Devnet E2E: Full Protocol Stack', () => {
     // Deploy core protocol
     await deployCoreProtocol(provider, signer, segwitAddress, taprootAddress, harness, poolId);
     console.log('[protocol] Full stack setup complete');
+    takeSnapshot('setup');
   }, 900_000);
 
   afterAll(() => { disposeHarness(); });
