@@ -440,6 +440,28 @@ export default function SwapShell() {
       seen.add('btc');
     }
 
+    // Add native ETH (cross-chain bridge to/from Ethereum)
+    if (shouldShowToken('eth', 'ETH')) {
+      opts.push({
+        id: 'eth',
+        symbol: 'ETH',
+        name: 'Ethereum',
+        isAvailable: true,
+      });
+      seen.add('eth');
+    }
+
+    // Add native ZEC (cross-chain bridge to/from Zcash)
+    if (shouldShowToken('zec', 'ZEC')) {
+      opts.push({
+        id: 'zec',
+        symbol: 'ZEC',
+        name: 'Zcash',
+        isAvailable: true,
+      });
+      seen.add('zec');
+    }
+
     // Always add frBTC (BTC <-> frBTC wrapping is always allowed)
     if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID, 'frBTC')) {
       opts.push({
@@ -573,6 +595,13 @@ export default function SwapShell() {
       // For BTC/frETH wrapping, always allow
       if (FRETH_ALKANE_ID && fromId === 'btc' && tokenId === FRETH_ALKANE_ID) return true;
       if (FRETH_ALKANE_ID && fromId === FRETH_ALKANE_ID && tokenId === 'btc') return true;
+      // Cross-chain: native ETH and ZEC are always available as destinations from BTC
+      if (fromId === 'btc' && (tokenId === 'eth' || tokenId === 'zec')) return true;
+      // Cross-chain: BTC is always available as destination from ETH or ZEC
+      if ((fromId === 'eth' || fromId === 'zec') && tokenId === 'btc') return true;
+      // Cross-chain: ETH ↔ ZEC
+      if (fromId === 'eth' && tokenId === 'zec') return true;
+      if (fromId === 'zec' && tokenId === 'eth') return true;
       // Always allow base tokens (BTC, frBTC, bUSD) - they show before pools load
       if (baseTokenIds.has(tokenId)) return true;
       // Always allow protocol tokens (FIRE, frUSD, volBTC) — explicitly configured as swappable
@@ -593,6 +622,28 @@ export default function SwapShell() {
         isAvailable: true
       });
       seen.add('btc');
+    }
+
+    // Add native ETH as cross-chain destination
+    if (!seen.has('eth') && shouldShowToken('eth', 'ETH')) {
+      opts.push({
+        id: 'eth',
+        symbol: 'ETH',
+        name: 'Ethereum',
+        isAvailable: true,
+      });
+      seen.add('eth');
+    }
+
+    // Add native ZEC as cross-chain destination
+    if (!seen.has('zec') && shouldShowToken('zec', 'ZEC')) {
+      opts.push({
+        id: 'zec',
+        symbol: 'ZEC',
+        name: 'Zcash',
+        isAvailable: true,
+      });
+      seen.add('zec');
     }
 
     // Add frBTC (BTC <-> frBTC wrapping is always allowed)
@@ -828,6 +879,20 @@ export default function SwapShell() {
   // frETH wrap/unwrap pair detection (FROST wrapped ETH)
   const isWrapEthPair = useMemo(() => fromToken?.id === 'btc' && toToken?.id === FRETH_ALKANE_ID, [fromToken?.id, toToken?.id, FRETH_ALKANE_ID]);
   const isUnwrapEthPair = useMemo(() => fromToken?.id === FRETH_ALKANE_ID && toToken?.id === 'btc', [fromToken?.id, toToken?.id, FRETH_ALKANE_ID]);
+
+  // Cross-chain bridge detection — native ETH/ZEC as swap endpoints
+  const isCrossChainSwap = useMemo(() => {
+    const fromId = fromToken?.id;
+    const toId = toToken?.id;
+    if (!fromId || !toId) return false;
+    const nativeChains = new Set(['btc', 'eth', 'zec']);
+    return nativeChains.has(fromId) && nativeChains.has(toId) && fromId !== toId;
+  }, [fromToken?.id, toToken?.id]);
+
+  const crossChainDirection = useMemo(() => {
+    if (!isCrossChainSwap) return null;
+    return { from: fromToken!.id, to: toToken!.id };
+  }, [isCrossChainSwap, fromToken?.id, toToken?.id]);
 
   // Check if this is a BTC → token swap (not direct wrap to frBTC)
   const isBtcToTokenSwap = useMemo(() =>
@@ -1664,6 +1729,12 @@ export default function SwapShell() {
     if (FRETH_ALKANE_ID &&
         ((token1Id === 'btc' && token2Id === FRETH_ALKANE_ID) ||
          (token1Id === FRETH_ALKANE_ID && token2Id === 'btc'))) {
+      return true;
+    }
+
+    // Cross-chain: any native chain pair is always allowed (BTC, ETH, ZEC)
+    const nativeChains = new Set(['btc', 'eth', 'zec']);
+    if (nativeChains.has(token1Id) && nativeChains.has(token2Id)) {
       return true;
     }
 
