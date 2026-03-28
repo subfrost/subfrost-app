@@ -292,12 +292,49 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           null, // CGGMP21 WASM — loaded from subzero-web-sys when available
         );
 
-        // Store callbacks for potential WasmBridgeCoordinator use
-        // The full WASM coordinator integration depends on the subzero-web-sys
-        // WASM being served from /wasm/. For now, store the callbacks so they're
-        // ready when the WASM is loaded.
-        (window as any).__bridgeAdapterCallbacks = callbacks;
-        console.log('[DevnetContext] Bridge adapter callbacks ready (poll/height/sign/broadcast)');
+        // Load subzero-web-sys WASM and create the coordinator
+        try {
+          // @ts-ignore — runtime URL import for subzero WASM JS bindings
+          const subzeroModule = await import(/* webpackIgnore: true */ '/wasm/subzero/subzero_web_sys.js');
+          // Initialize WASM
+          await subzeroModule.default('/wasm/subzero/subzero_web_sys_bg.wasm');
+
+          // Create the WASM bridge coordinator with our JS callbacks
+          const wasmCoordinator = new subzeroModule.WasmBridgeCoordinator(
+            callbacks.poll,
+            callbacks.height,
+            callbacks.sign,
+            callbacks.broadcast,
+          );
+          console.log('[DevnetContext] WasmBridgeCoordinator created — running coordinator loop');
+
+          // Run coordinator on 5-second interval
+          const coordInterval = setInterval(async () => {
+            try {
+              const roundResult = await wasmCoordinator.run_round();
+              if (roundResult) {
+                const parsed = typeof roundResult === 'string' ? JSON.parse(roundResult) : roundResult;
+                if (parsed.events_processed > 0 || parsed.txs_broadcast > 0) {
+                  console.log('[DevnetContext] Coordinator round:', parsed);
+                }
+              }
+            } catch (roundErr: any) {
+              // Non-fatal — coordinator retries next round
+              if (!roundErr?.message?.includes('no events')) {
+                console.debug('[DevnetContext] Coordinator round error:', roundErr?.message);
+              }
+            }
+          }, 5000);
+
+          // Store interval for cleanup on shutdown
+          (window as any).__bridgeCoordinatorInterval = coordInterval;
+          (window as any).__bridgeCoordinator = wasmCoordinator;
+          console.log('[DevnetContext] Bridge coordinator loop started (5s interval)');
+        } catch (wasmErr: any) {
+          // WASM coordinator is optional — fall back to JS simulation
+          console.warn('[DevnetContext] WASM coordinator not available, using JS sim:', wasmErr?.message);
+          (window as any).__bridgeAdapterCallbacks = callbacks;
+        }
       } catch (bridgeErr: any) {
         console.warn('[DevnetContext] WASM bridge adapter init failed (non-fatal):', bridgeErr?.message);
       }
@@ -357,6 +394,15 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     if (coordinatorRef.current) {
       coordinatorRef.current.dispose();
       coordinatorRef.current = null;
+    }
+    // Clean up WASM bridge coordinator interval
+    if ((window as any).__bridgeCoordinatorInterval) {
+      clearInterval((window as any).__bridgeCoordinatorInterval);
+      (window as any).__bridgeCoordinatorInterval = null;
+    }
+    if ((window as any).__bridgeCoordinator) {
+      try { (window as any).__bridgeCoordinator.free(); } catch { /* already freed */ }
+      (window as any).__bridgeCoordinator = null;
     }
     import('@/lib/devnet/boot').then(({ disposeDevnet }) => {
       disposeDevnet();
