@@ -24,14 +24,20 @@ export interface DeployedContracts {
 
   // frZEC (deployed, CGGMP21 wrapped Zcash)
   frzecId: string;
-  // frBTC/frZEC synth pool (StableSwap)
-  frbtcFrzecPoolId: string;
   // frETH (deployed, FROST wrapped ETH)
   frethId: string;
-  // frBTC/frETH synth pool (StableSwap)
-  frbtcFrethPoolId: string;
 
-  // Synth Pool (frBTC/frUSD or frZEC/frUSD)
+  // Synth pools — all StableSwap with tuned A coefficients
+  synthPools: {
+    frbtcFrzec: string;  // A=100 (pegged)
+    frbtcFreth: string;  // A=15  (volatile)
+    frbtcFrusd: string;  // A=8   (volatile)
+    frzecFrusd: string;  // A=8   (volatile)
+    frzecFreth: string;  // A=30  (correlated)
+    frethFrusd: string;  // A=8   (volatile)
+  };
+
+  // Legacy synth pool ID (for backwards compat)
   synthPoolId: string;
 
   // frUSD Bridge

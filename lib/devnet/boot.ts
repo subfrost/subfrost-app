@@ -298,10 +298,16 @@ const PROTOCOL_SLOTS = {
   UNIVERSAL_ROUTER:          70002,
   // ZEC bridge
   FRZEC:                     43520,  // 0xAA00
-  FRBTC_FRZEC_SYNTH_POOL:   43521,  // 0xAA01
   // ETH bridge
   FRETH:                     52224,  // 0xCC00
-  FRBTC_FRETH_SYNTH_POOL:   52225,  // 0xCC01
+  // Synth pools (StableSwap with tuned A coefficients)
+  // All 6 pairs between frBTC, frZEC, frETH, frUSD
+  SYNTH_FRBTC_FRZEC:        0xDD00, // 56576 — A=100 (pegged, both BTC-denominated)
+  SYNTH_FRBTC_FRETH:        0xDD01, // 56577 — A=15  (volatile, BTC/ETH)
+  SYNTH_FRBTC_FRUSD:        0xDD02, // 56578 — A=8   (volatile, BTC/USD)
+  SYNTH_FRZEC_FRUSD:        0xDD03, // 56579 — A=8   (volatile, ZEC/USD)
+  SYNTH_FRZEC_FRETH:        0xDD04, // 56580 — A=30  (correlated, crypto-to-crypto)
+  SYNTH_FRETH_FRUSD:        0xDD05, // 56581 — A=8   (volatile, ETH/USD)
 };
 
 /**
@@ -324,11 +330,17 @@ function getDefaultContractIds(): DeployedContracts {
     vxFuelGaugeId: `4:${PROTOCOL_SLOTS.VX_FUEL_GAUGE}`,
     vxBtcUsdGaugeId: `4:${PROTOCOL_SLOTS.VX_BTCUSD_GAUGE}`,
     frzecId: `4:${PROTOCOL_SLOTS.FRZEC}`,
-    frbtcFrzecPoolId: `4:${PROTOCOL_SLOTS.FRBTC_FRZEC_SYNTH_POOL}`,
     frethId: `4:${PROTOCOL_SLOTS.FRETH}`,
-    frbtcFrethPoolId: `4:${PROTOCOL_SLOTS.FRBTC_FRETH_SYNTH_POOL}`,
-    synthPoolId: '',
-    frusdTokenId: '',
+    synthPools: {
+      frbtcFrzec: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRZEC}`,
+      frbtcFreth: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRETH}`,
+      frbtcFrusd: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRUSD}`,
+      frzecFrusd: `4:${PROTOCOL_SLOTS.SYNTH_FRZEC_FRUSD}`,
+      frzecFreth: `4:${PROTOCOL_SLOTS.SYNTH_FRZEC_FRETH}`,
+      frethFrusd: `4:${PROTOCOL_SLOTS.SYNTH_FRETH_FRUSD}`,
+    },
+    synthPoolId: `4:${PROTOCOL_SLOTS.SYNTH_FRBTC_FRUSD}`,
+    frusdTokenId: '4:8201',
     frusdAuthTokenId: '',
     fujinFactoryId: `4:${PROTOCOL_SLOTS.FUJIN_MASTER_PROXY}`,
     fujinMasterId: `4:${PROTOCOL_SLOTS.FUJIN_MASTER_PROXY}`,
@@ -887,59 +899,71 @@ async function deployFullProtocol(
   }
 
   // -----------------------------------------------------------------------
-  // Phase 6: frZEC + frBTC/frZEC synth-pool
+  // Phase 6: Bridge contracts (frZEC + frETH)
   // -----------------------------------------------------------------------
-  let frzecId = '';
-  let frbtcFrzecPoolId = '';
+  let frzecId = `4:${S.FRZEC}`;
+  let frethId = `4:${S.FRETH}`;
   try {
-    onProgress('Deploying frZEC bridge...', 97);
-    console.log('[devnet-boot] Phase 6: Deploying frZEC + synth-pool...');
+    onProgress('Deploying bridge contracts...', 96);
+    console.log('[devnet-boot] Phase 6: Deploying frZEC + frETH...');
 
-    // Deploy fr_zec.wasm — the frZEC contract on BTC alkanes
     await fetchAndDeploy(provider, harness, segwit, taproot,
       'fr_zec', S.FRZEC, [50],
-      'frZEC Contract', onProgress, 97);
-    frzecId = `4:${S.FRZEC}`;
-    console.log('[devnet-boot] frZEC deployed at', frzecId);
+      'frZEC Contract', onProgress, 96);
+    console.log('[devnet-boot] frZEC at', frzecId);
 
-    // Deploy frBTC/frZEC synth-pool (StableSwap A=100)
-    // Init params: [0, frBTC_block, frBTC_tx, frZEC_block, frZEC_tx, amplification]
     await fetchAndDeploy(provider, harness, segwit, taproot,
-      'synth_pool', S.FRBTC_FRZEC_SYNTH_POOL,
-      [0, 32, 0, 4, S.FRZEC, 100],
-      'frBTC/frZEC Synth Pool', onProgress, 98);
-    frbtcFrzecPoolId = `4:${S.FRBTC_FRZEC_SYNTH_POOL}`;
-    console.log('[devnet-boot] frBTC/frZEC synth-pool at', frbtcFrzecPoolId);
+      'fr_eth', S.FRETH, [50],
+      'frETH Contract', onProgress, 97);
+    console.log('[devnet-boot] frETH at', frethId);
   } catch (e: any) {
-    console.warn('[devnet-boot] frZEC deployment failed (non-fatal):', e?.message?.substring(0, 80));
+    console.warn('[devnet-boot] Bridge contract deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
 
   // -----------------------------------------------------------------------
-  // Phase 7: frETH + frBTC/frETH synth-pool
+  // Phase 7: All 6 synth pools (StableSwap with tuned A coefficients)
   // -----------------------------------------------------------------------
-  let frethId = '';
-  let frbtcFrethPoolId = '';
+  // frBTC = [32:0], frZEC = [4:FRZEC], frETH = [4:FRETH], frUSD = [4:8201]
+  const synthPools = {
+    frbtcFrzec: `4:${S.SYNTH_FRBTC_FRZEC}`,
+    frbtcFreth: `4:${S.SYNTH_FRBTC_FRETH}`,
+    frbtcFrusd: `4:${S.SYNTH_FRBTC_FRUSD}`,
+    frzecFrusd: `4:${S.SYNTH_FRZEC_FRUSD}`,
+    frzecFreth: `4:${S.SYNTH_FRZEC_FRETH}`,
+    frethFrusd: `4:${S.SYNTH_FRETH_FRUSD}`,
+  };
+
+  const FRUSD_BLOCK = 4;
+  const FRUSD_TX = 8201; // frUSD token slot from earlier deployment
+
+  // Pool definitions: [slot, tokenA_block, tokenA_tx, tokenB_block, tokenB_tx, amplification, label]
+  const poolDefs: [number, number, number, number, number, number, string][] = [
+    [S.SYNTH_FRBTC_FRZEC, 32, 0, 4, S.FRZEC, 100, 'frBTC/frZEC (A=100, pegged)'],
+    [S.SYNTH_FRBTC_FRETH, 32, 0, 4, S.FRETH, 15,  'frBTC/frETH (A=15, volatile)'],
+    [S.SYNTH_FRBTC_FRUSD, 32, 0, FRUSD_BLOCK, FRUSD_TX, 8, 'frBTC/frUSD (A=8, volatile)'],
+    [S.SYNTH_FRZEC_FRUSD, 4, S.FRZEC, FRUSD_BLOCK, FRUSD_TX, 8, 'frZEC/frUSD (A=8, volatile)'],
+    [S.SYNTH_FRZEC_FRETH, 4, S.FRZEC, 4, S.FRETH, 30, 'frZEC/frETH (A=30, correlated)'],
+    [S.SYNTH_FRETH_FRUSD, 4, S.FRETH, FRUSD_BLOCK, FRUSD_TX, 8, 'frETH/frUSD (A=8, volatile)'],
+  ];
+
   try {
-    onProgress('Deploying frETH bridge...', 98);
-    console.log('[devnet-boot] Phase 7: Deploying frETH + synth-pool...');
+    onProgress('Deploying 6 synth pools...', 98);
+    console.log('[devnet-boot] Phase 7: Deploying 6 synth pools...');
 
-    // Deploy fr_eth.wasm — same FROST-based wrap/unwrap as frBTC, different slot
-    // Uses fr_btc.wasm binary (same opcodes, name/signer set at init time)
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'fr_eth', S.FRETH, [50],
-      'frETH Contract', onProgress, 98);
-    frethId = `4:${S.FRETH}`;
-    console.log('[devnet-boot] frETH deployed at', frethId);
-
-    // Deploy frBTC/frETH synth-pool (StableSwap A=100)
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'synth_pool', S.FRBTC_FRETH_SYNTH_POOL,
-      [0, 32, 0, 4, S.FRETH, 100],
-      'frBTC/frETH Synth Pool', onProgress, 99);
-    frbtcFrethPoolId = `4:${S.FRBTC_FRETH_SYNTH_POOL}`;
-    console.log('[devnet-boot] frBTC/frETH synth-pool at', frbtcFrethPoolId);
+    for (const [slot, aBlk, aTx, bBlk, bTx, amp, label] of poolDefs) {
+      try {
+        await fetchAndDeploy(provider, harness, segwit, taproot,
+          'synth_pool', slot,
+          [0, aBlk, aTx, bBlk, bTx, amp],
+          label, onProgress, 98);
+        console.log(`[devnet-boot] Pool ${label} at 4:${slot}`);
+      } catch (poolErr: any) {
+        console.warn(`[devnet-boot] Pool ${label} failed:`, poolErr?.message?.substring(0, 60));
+      }
+    }
+    console.log('[devnet-boot] Synth pools deployed');
   } catch (e: any) {
-    console.warn('[devnet-boot] frETH deployment failed (non-fatal):', e?.message?.substring(0, 80));
+    console.warn('[devnet-boot] Synth pool deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
 
   console.log('[devnet-boot] Full protocol deployment complete!');
@@ -959,11 +983,10 @@ async function deployFullProtocol(
     vxFuelGaugeId: `4:${S.VX_FUEL_GAUGE}`,
     vxBtcUsdGaugeId: `4:${S.VX_BTCUSD_GAUGE}`,
     frzecId,
-    frbtcFrzecPoolId,
-    frethId: frethId || `4:${S.FRETH}`,
-    frbtcFrethPoolId: frbtcFrethPoolId || `4:${S.FRBTC_FRETH_SYNTH_POOL}`,
-    synthPoolId: '',
-    frusdTokenId: '',
+    frethId,
+    synthPools,
+    synthPoolId: synthPools.frbtcFrusd, // legacy compat
+    frusdTokenId: `${FRUSD_BLOCK}:${FRUSD_TX}`,
     frusdAuthTokenId: '',
     fujinFactoryId: `4:${S.FUJIN_FACTORY_LOGIC}`,
     fujinMasterId: `4:${S.FUJIN_MASTER_PROXY}`,
