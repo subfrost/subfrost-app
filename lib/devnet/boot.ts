@@ -914,6 +914,34 @@ async function deployFullProtocol(
     console.warn('[devnet-boot] frZEC deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
 
+  // -----------------------------------------------------------------------
+  // Phase 7: frETH + frBTC/frETH synth-pool
+  // -----------------------------------------------------------------------
+  let frethId = '';
+  let frbtcFrethPoolId = '';
+  try {
+    onProgress('Deploying frETH bridge...', 98);
+    console.log('[devnet-boot] Phase 7: Deploying frETH + synth-pool...');
+
+    // Deploy fr_eth.wasm — same FROST-based wrap/unwrap as frBTC, different slot
+    // Uses fr_btc.wasm binary (same opcodes, name/signer set at init time)
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'fr_eth', S.FRETH, [50],
+      'frETH Contract', onProgress, 98);
+    frethId = `4:${S.FRETH}`;
+    console.log('[devnet-boot] frETH deployed at', frethId);
+
+    // Deploy frBTC/frETH synth-pool (StableSwap A=100)
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'synth_pool', S.FRBTC_FRETH_SYNTH_POOL,
+      [0, 32, 0, 4, S.FRETH, 100],
+      'frBTC/frETH Synth Pool', onProgress, 99);
+    frbtcFrethPoolId = `4:${S.FRBTC_FRETH_SYNTH_POOL}`;
+    console.log('[devnet-boot] frBTC/frETH synth-pool at', frbtcFrethPoolId);
+  } catch (e: any) {
+    console.warn('[devnet-boot] frETH deployment failed (non-fatal):', e?.message?.substring(0, 80));
+  }
+
   console.log('[devnet-boot] Full protocol deployment complete!');
 
   return {
@@ -932,8 +960,8 @@ async function deployFullProtocol(
     vxBtcUsdGaugeId: `4:${S.VX_BTCUSD_GAUGE}`,
     frzecId,
     frbtcFrzecPoolId,
-    frethId: `4:${S.FRETH}`,
-    frbtcFrethPoolId: `4:${S.FRBTC_FRETH_SYNTH_POOL}`,
+    frethId: frethId || `4:${S.FRETH}`,
+    frbtcFrethPoolId: frbtcFrethPoolId || `4:${S.FRBTC_FRETH_SYNTH_POOL}`,
     synthPoolId: '',
     frusdTokenId: '',
     frusdAuthTokenId: '',
