@@ -258,7 +258,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
       const rawProvider = provider;
 
       try {
-        const result = await rawProvider.brc20_prog_transact(
+        const result = await (rawProvider as any).brc20_prog_transact(
           'regtest',
           taprootAddress, // dummy contract
           'transfer(address,uint256)',
@@ -282,7 +282,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
       const rawProvider = provider;
 
       try {
-        const result = await rawProvider.brc20_prog_transact(
+        const result = await (rawProvider as any).brc20_prog_transact(
           'regtest',
           taprootAddress,
           'approve(address,uint256)',
@@ -305,7 +305,7 @@ describe('E2E: BRC20-Prog Trading & aBTC', () => {
       const rawProvider = provider;
 
       try {
-        const result = await rawProvider.brc20_prog_call(
+        const result = await (rawProvider as any).brc20_prog_call(
           'regtest',
           taprootAddress,
           'balanceOf(address)',

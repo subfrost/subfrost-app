@@ -194,7 +194,7 @@ describe('E2E: Full BRC20-Prog Lifecycle', () => {
     // Query alkane balance for frBTC (AlkaneId 32:0)
     try {
       const rawProvider = provider;
-      const balanceResult = await rawProvider.protorunesbyaddress(
+      const balanceResult = await (rawProvider as any).protorunesbyaddress(
         taprootAddress,
         '1', // protocol_tag for alkanes
       );

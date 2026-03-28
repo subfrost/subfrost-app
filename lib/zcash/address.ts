@@ -12,9 +12,11 @@ import * as bip39 from 'bip39';
 import BIP32Factory from 'bip32';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { createHash } from 'crypto';
+// @ts-ignore — bs58check has inconsistent default export across bundlers
 import bs58checkModule from 'bs58check';
 
-const bs58check = bs58checkModule.default || bs58checkModule;
+const bs58check: { encode: (payload: Buffer) => string } =
+  (bs58checkModule as any).default || bs58checkModule;
 const bip32 = BIP32Factory(ecc);
 
 /** Zcash network address prefixes (2-byte Base58Check) */

@@ -28,6 +28,13 @@
  * harness.dispose();
  * ```
  */
+/** An additional secondary indexer WASM to load into the devnet. */
+export interface SecondaryIndexerConfig {
+    /** Unique label for this secondary indexer (e.g., "brc20shrew"). */
+    label: string;
+    /** Compiled secondary indexer WASM module bytes. */
+    wasm: Uint8Array;
+}
 /** A tertiary indexer WASM to load into the devnet. */
 export interface TertiaryIndexerConfig {
     /** Unique label for this tertiary indexer (e.g., "quspo", "qusprey"). */
@@ -40,6 +47,11 @@ export interface DevnetTestHarnessOptions {
     alkanesWasm: Uint8Array;
     /** Optional compiled esplora indexer WASM module bytes. */
     esploraWasm?: Uint8Array;
+    /**
+     * Optional additional secondary indexer WASMs. These run after alkanes/esplora
+     * but before tertiary indexers.
+     */
+    additionalSecondaries?: SecondaryIndexerConfig[];
     /**
      * Optional tertiary indexer WASMs. Tertiary indexers run after secondary
      * indexers and can read their state via __secondary_get host functions.

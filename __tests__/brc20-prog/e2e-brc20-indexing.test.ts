@@ -64,7 +64,7 @@ describe('E2E: BRC20-Prog Indexer', () => {
       // brc20-prog EVM layer should be available if the indexer loaded
       try {
         const rawProvider = provider;
-        const blockNumber = await rawProvider.brc20_prog_block_number(
+        const blockNumber = await (rawProvider as any).brc20_prog_block_number(
           'regtest'
         );
         expect(Number(blockNumber)).toBeGreaterThanOrEqual(0);

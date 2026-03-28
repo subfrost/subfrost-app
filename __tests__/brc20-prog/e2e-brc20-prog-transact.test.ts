@@ -59,7 +59,7 @@ describe.runIf(hasFoundryJson)('E2E: BRC20-Prog Transact', () => {
     const rawProvider = provider;
 
     try {
-      const result = await rawProvider.brc20_prog_call(
+      const result = await (rawProvider as any).brc20_prog_call(
         'regtest',
         contractAddress,
         'decimals()',
@@ -81,7 +81,7 @@ describe.runIf(hasFoundryJson)('E2E: BRC20-Prog Transact', () => {
     const groupPubKeyHex = frostProcessor.getGroupPublicKeyHex();
 
     try {
-      const result = await rawProvider.brc20_prog_transact(
+      const result = await (rawProvider as any).brc20_prog_transact(
         'regtest',
         contractAddress,
         'setSigner(bytes)',
@@ -104,7 +104,7 @@ describe.runIf(hasFoundryJson)('E2E: BRC20-Prog Transact', () => {
     const rawProvider = provider;
 
     try {
-      const result = await rawProvider.brc20_prog_transact(
+      const result = await (rawProvider as any).brc20_prog_transact(
         'regtest',
         contractAddress,
         'setPremium(uint256)',
@@ -126,7 +126,7 @@ describe.runIf(hasFoundryJson)('E2E: BRC20-Prog Transact', () => {
     const rawProvider = provider;
 
     try {
-      const result = await rawProvider.brc20_prog_call(
+      const result = await (rawProvider as any).brc20_prog_call(
         'regtest',
         contractAddress,
         'getSignerAddress()',

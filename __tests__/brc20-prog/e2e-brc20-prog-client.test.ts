@@ -48,23 +48,23 @@ describe('E2E: BRC20-Prog Client API', () => {
 
   describe('Brc20ProgClient read methods', () => {
     it.skip('getBlockNumber should return current height (needs AlkanesProvider)', async () => {
-      const blockNumber = await provider.brc20prog.getBlockNumber();
+      const blockNumber = await (provider as any).brc20prog.getBlockNumber();
       expect(blockNumber).toBeGreaterThan(0);
     }, 30_000);
 
     it.skip('getChainId should return a number (needs AlkanesProvider)', async () => {
-      const chainId = await provider.brc20prog.getChainId();
+      const chainId = await (provider as any).brc20prog.getChainId();
       expect(typeof chainId).toBe('number');
     }, 30_000);
 
     it.skip('getBalance (needs AlkanesProvider)', async () => {
-      const balance = await provider.brc20prog.getBalance(taprootAddress);
+      const balance = await (provider as any).brc20prog.getBalance(taprootAddress);
       expect(balance).toBeDefined();
     }, 30_000);
 
     it.skip('getCode (needs AlkanesProvider)', async () => {
       try {
-        const code = await provider.brc20prog.getCode(taprootAddress);
+        const code = await (provider as any).brc20prog.getCode(taprootAddress);
         // Non-contract address should return "0x" or empty
         expect(code === '0x' || code === '' || code === null).toBe(true);
       } catch (e: any) {
@@ -74,19 +74,19 @@ describe('E2E: BRC20-Prog Client API', () => {
     }, 30_000);
 
     it.skip('getBlock (needs AlkanesProvider)', async () => {
-      const block = await provider.brc20prog.getBlock('latest');
+      const block = await (provider as any).brc20prog.getBlock('latest');
       expect(block).toBeDefined();
     }, 30_000);
 
     it.skip('getTxReceipt (needs AlkanesProvider)', async () => {
       const fakeHash = '0x' + '0'.repeat(64);
-      const receipt = await provider.brc20prog.getTxReceipt(fakeHash);
+      const receipt = await (provider as any).brc20prog.getTxReceipt(fakeHash);
       expect(receipt === null || receipt === undefined).toBe(true);
     }, 30_000);
 
     it.skip('call (needs AlkanesProvider)', async () => {
       try {
-        const result = await provider.brc20prog.call(
+        const result = await (provider as any).brc20prog.call(
           taprootAddress,
           '0x',
           undefined,
@@ -101,7 +101,7 @@ describe('E2E: BRC20-Prog Client API', () => {
 
     it.skip('estimateGas (needs AlkanesProvider)', async () => {
       try {
-        const gas = await provider.brc20prog.estimateGas(
+        const gas = await (provider as any).brc20prog.estimateGas(
           taprootAddress,
           '0x',
           segwitAddress
@@ -115,9 +115,9 @@ describe('E2E: BRC20-Prog Client API', () => {
 
   describe('Brc20ProgClient after mining', () => {
     it.skip('blockNumber should advance with mining (needs AlkanesProvider)', async () => {
-      const before = await provider.brc20prog.getBlockNumber();
+      const before = await (provider as any).brc20prog.getBlockNumber();
       await mineBlocks(harness, 3);
-      const after = await provider.brc20prog.getBlockNumber();
+      const after = await (provider as any).brc20prog.getBlockNumber();
       expect(after).toBe(before + 3);
     }, 30_000);
   });
