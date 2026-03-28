@@ -30,6 +30,24 @@ export const FRZEC_WRAP_OPCODE = 77;
 /** frZEC unwrap opcode (burn frZEC, queue ZEC payment via CGGMP21) */
 export const FRZEC_UNWRAP_OPCODE = 78;
 
+/** frETH wrap opcode (deposit ETH to vault, mint frETH on BTC alkanes) — contract at [4:n] */
+export const FRETH_WRAP_OPCODE = 77;
+
+/** frETH unwrap opcode (burn frETH, release ETH from vault via FROST) */
+export const FRETH_UNWRAP_OPCODE = 78;
+
+/**
+ * frETH FROST signer addresses per network.
+ *
+ * Unlike frZEC (CGGMP21/P2PKH), frETH uses FROST (Schnorr/P2TR) because
+ * the Ethereum vault authenticates via BIP340 Schnorr verification.
+ */
+export const FRETH_SIGNER_ADDRESSES: Record<string, string> = {
+  mainnet: '',
+  devnet: '',
+  regtest: '',
+};
+
 /**
  * Pool contract opcodes (NOT factory opcodes).
  * These are used when calling the pool contract directly.

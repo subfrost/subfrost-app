@@ -53,7 +53,8 @@ export function getConfig(network: string) {
         ALKANE_FACTORY_ID: '4:65522',
         BUSD_ALKANE_ID: '2:8',
         FRBTC_ALKANE_ID: '32:0',
-        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after mainnet deployment
+        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after deployment
+        FRETH_ALKANE_ID: '', // Deployed frETH contract [4:n] — set after deployment
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:2082',
         FIRE_TOKEN_ID: '4:256',
         FIRE_STAKING_ID: '4:257',
@@ -71,7 +72,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:571',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:2088',
         FRBTC_ALKANE_ID: '32:0',
-        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after mainnet deployment
+        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after deployment
+        FRETH_ALKANE_ID: '', // Deployed frETH contract [4:n] — set after deployment
         FIRE_TOKEN_ID: '4:256',
         FIRE_STAKING_ID: '4:257',
         FIRE_TREASURY_ID: '4:258',
@@ -108,6 +110,7 @@ export function getConfig(network: string) {
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0',
         FRZEC_ALKANE_ID: '4:43520', // Deployed fr_zec.wasm at slot 0xAA00 on devnet
+        FRETH_ALKANE_ID: '4:52224', // Deployed fr_eth.wasm at slot 0xCC00 on devnet
         FIRE_TOKEN_ID: '4:256',
         FIRE_STAKING_ID: '4:257',
         FIRE_TREASURY_ID: '4:258',
@@ -137,7 +140,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0',
-        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after mainnet deployment // frBTC (hardcoded in indexer)
+        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after deployment
+        FRETH_ALKANE_ID: '', // Deployed frETH contract [4:n] — set after deployment // frBTC (hardcoded in indexer)
         FIRE_TOKEN_ID: '4:256',
         FIRE_STAKING_ID: '4:257',
         FIRE_TREASURY_ID: '4:258',
@@ -155,7 +159,8 @@ export function getConfig(network: string) {
           BUSD_SPLITTER_ID: '4:76',
           BUSD_ALKANE_ID: '2:56801',
           FRBTC_ALKANE_ID: '32:0',
-        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after mainnet deployment
+        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after deployment
+        FRETH_ALKANE_ID: '', // Deployed frETH contract [4:n] — set after deployment
           DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:70003',
           FIRE_TOKEN_ID: '4:256',
           FIRE_STAKING_ID: '4:257',
@@ -174,7 +179,8 @@ export function getConfig(network: string) {
         BUSD_ALKANE_ID: '2:56801',
         BUSD_SPLITTER_ID: '4:76',
         FRBTC_ALKANE_ID: '32:0',
-        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after mainnet deployment
+        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after deployment
+        FRETH_ALKANE_ID: '', // Deployed frETH contract [4:n] — set after deployment
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:70003',
         FIRE_TOKEN_ID: '4:256',
         FIRE_STAKING_ID: '4:257',

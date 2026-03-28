@@ -299,6 +299,9 @@ const PROTOCOL_SLOTS = {
   // ZEC bridge
   FRZEC:                     43520,  // 0xAA00
   FRBTC_FRZEC_SYNTH_POOL:   43521,  // 0xAA01
+  // ETH bridge
+  FRETH:                     52224,  // 0xCC00
+  FRBTC_FRETH_SYNTH_POOL:   52225,  // 0xCC01
 };
 
 /**
@@ -322,6 +325,8 @@ function getDefaultContractIds(): DeployedContracts {
     vxBtcUsdGaugeId: `4:${PROTOCOL_SLOTS.VX_BTCUSD_GAUGE}`,
     frzecId: `4:${PROTOCOL_SLOTS.FRZEC}`,
     frbtcFrzecPoolId: `4:${PROTOCOL_SLOTS.FRBTC_FRZEC_SYNTH_POOL}`,
+    frethId: `4:${PROTOCOL_SLOTS.FRETH}`,
+    frbtcFrethPoolId: `4:${PROTOCOL_SLOTS.FRBTC_FRETH_SYNTH_POOL}`,
     synthPoolId: '',
     frusdTokenId: '',
     frusdAuthTokenId: '',
@@ -927,6 +932,8 @@ async function deployFullProtocol(
     vxBtcUsdGaugeId: `4:${S.VX_BTCUSD_GAUGE}`,
     frzecId,
     frbtcFrzecPoolId,
+    frethId: `4:${S.FRETH}`,
+    frbtcFrethPoolId: `4:${S.FRBTC_FRETH_SYNTH_POOL}`,
     synthPoolId: '',
     frusdTokenId: '',
     frusdAuthTokenId: '',

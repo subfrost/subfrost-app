@@ -17,6 +17,8 @@ import {
   FRBTC_UNWRAP_OPCODE,
   FRZEC_WRAP_OPCODE,
   FRZEC_UNWRAP_OPCODE,
+  FRETH_WRAP_OPCODE,
+  FRETH_UNWRAP_OPCODE,
   POOL_OPCODES,
 } from './constants';
 
@@ -482,4 +484,55 @@ export function buildRemoveLiquidityInputRequirements(params: {
 }): string {
   const [block, tx] = params.lpTokenId.split(':');
   return `${block}:${tx}:${params.lpAmount}`;
+}
+
+// ---------------------------------------------------------------------------
+// Wrap ETH (ETH → frETH on BTC alkanes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for ETH → frETH wrap.
+ *
+ * frETH is deployed at [4:n] on BTC alkanes. The FROST signer (P2TR) holds
+ * the key that authenticates the ETH vault on Ethereum.
+ *
+ * Uses same opcode 77 as frBTC and frZEC wraps.
+ */
+export function buildWrapEthProtostone(params: {
+  frethId: string;
+}): string {
+  const [block, tx] = params.frethId.split(':');
+  return `[${block},${tx},${FRETH_WRAP_OPCODE}]:v1:v1`;
+}
+
+// ---------------------------------------------------------------------------
+// Unwrap ETH (frETH → ETH via vault release)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for frETH → ETH unwrap (BurnAndBridge).
+ *
+ * Burns frETH on BTC alkanes and queues a vault release on Ethereum.
+ * The coordinator detects the pending bridge and sends an authenticated
+ * call to ETHVault to release ETH to the user's Ethereum address.
+ */
+export function buildUnwrapEthProtostone(params: {
+  frethId: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { frethId, pointer = 'v1', refund = 'v1' } = params;
+  const [block, tx] = frethId.split(':');
+  return `[${block},${tx},${FRETH_UNWRAP_OPCODE}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build input requirements for frETH unwrap.
+ */
+export function buildUnwrapEthInputRequirements(params: {
+  frethId: string;
+  amount: string;
+}): string {
+  const [block, tx] = params.frethId.split(':');
+  return `${block}:${tx}:${params.amount}`;
 }

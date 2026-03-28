@@ -26,6 +26,10 @@ export interface DeployedContracts {
   frzecId: string;
   // frBTC/frZEC synth pool (StableSwap)
   frbtcFrzecPoolId: string;
+  // frETH (deployed, FROST wrapped ETH)
+  frethId: string;
+  // frBTC/frETH synth pool (StableSwap)
+  frbtcFrethPoolId: string;
 
   // Synth Pool (frBTC/frUSD or frZEC/frUSD)
   synthPoolId: string;
