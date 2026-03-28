@@ -124,12 +124,12 @@ describe('E2E: BRC20-Prog Client API', () => {
 
   describe('rawProvider BRC20-Prog methods', () => {
     it('should expose brc20ProgDeploy', () => {
-      const rawProvider = provider;
+      const rawProvider = provider as any;
       expect(typeof rawProvider.brc20ProgDeploy).toBe('function');
     });
 
     it('should expose brc20ProgTransact', () => {
-      const rawProvider = provider;
+      const rawProvider = provider as any;
       expect(typeof rawProvider.brc20ProgTransact).toBe('function');
     });
 
