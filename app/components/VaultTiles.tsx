@@ -22,8 +22,8 @@ export default function VaultTiles() {
   const filteredVaults = AVAILABLE_VAULTS
     .filter(vault => vault.id !== 'yv-frbtc')
     .sort((a, b) => {
-      if (a.id === 'dx-btc') return -1;
-      if (b.id === 'dx-btc') return 1;
+      if (a.id === 've-diesel') return -1;
+      if (b.id === 've-diesel') return 1;
       return 0;
     });
   const featured = filteredVaults.slice(0, 3);

@@ -32,7 +32,7 @@ function OrderRow({
   return (
     <button
       onClick={onSelect}
-      className="sf-row grid grid-cols-3 w-full text-right text-[11px] leading-[18px] px-2 relative group cursor-pointer"
+      className="sf-row grid grid-cols-3 w-full text-right text-[11px] leading-[20px] px-3 py-1.5 relative group cursor-pointer"
     >
       {/* Depth bar */}
       <div
@@ -46,10 +46,10 @@ function OrderRow({
       <span className={`relative z-10 tabular-nums ${side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
         {level.price}
       </span>
-      <span className="relative z-10 text-[color:var(--sf-text)]/80 tabular-nums">
+      <span className={`relative z-10 tabular-nums ${side === 'bid' ? 'text-green-400' : 'text-red-400'}`}>
         {level.amount}
       </span>
-      <span className="relative z-10 text-[color:var(--sf-text)]/40 tabular-nums">
+      <span className="relative z-10 text-[color:var(--sf-text)]/25 tabular-nums">
         {level.total}
       </span>
     </button>
@@ -105,7 +105,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
             <button
               ref={groupingTriggerRef}
               onClick={() => setShowGroupingMenu(!showGroupingMenu)}
-              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono text-[color:var(--sf-text)]/50 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-surface)]/80 transition-colors"
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] tabular-nums text-[color:var(--sf-text)]/50 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-surface)]/80 transition-colors"
             >
               {grouping}
               <ChevronDown size={10} />
@@ -127,7 +127,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
                     <button
                       key={g}
                       onClick={() => { setGrouping(g); setShowGroupingMenu(false); }}
-                      className={`w-full px-3 py-1.5 text-left text-[10px] font-mono transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                      className={`w-full px-3 py-1.5 text-left text-[11px] tabular-nums transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
                         g === grouping ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/60 hover:bg-[color:var(--sf-primary)]/5'
                       }`}
                     >
@@ -165,7 +165,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
       </div>
 
       {/* Column headers */}
-      <div className="sf-table-header grid grid-cols-3 text-right px-2 py-1">
+      <div className="sf-table-header grid grid-cols-3 text-right px-3 py-2">
         <span>Price ({quoteToken})</span>
         <span>Size ({baseToken})</span>
         <span>Total</span>
@@ -199,10 +199,10 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
           {displayMode === 'both' && (
             <div
               ref={spreadRef}
-              className="flex items-center justify-between px-2 py-2 bg-[color:var(--sf-surface)]/50 border-y border-[color:var(--sf-glass-border)]/30"
+              className="flex items-center justify-between px-3 py-2 bg-[color:var(--sf-surface)]/50 border-y border-[color:var(--sf-glass-border)]/30"
             >
               <div className="flex items-center gap-1.5">
-                <span className={`text-sm font-bold tabular-nums ${spreadColor}`}>
+                <span className={`text-[11px] font-bold tabular-nums ${spreadColor}`}>
                   {orderbook.midPrice}
                 </span>
                 <span className="text-[10px] text-[color:var(--sf-text)]/25">

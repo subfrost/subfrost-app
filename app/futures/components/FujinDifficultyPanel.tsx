@@ -77,7 +77,7 @@ export default function FujinDifficultyPanel() {
   return (
     <div className="space-y-4">
       {/* Hero Stats */}
-      <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm px-4 py-3 sm:px-6 sm:py-4">
+      <div className="sf-card-small px-4 py-3 sm:px-6 sm:py-4">
         <div className="grid grid-cols-2 gap-3 sm:gap-0 sm:grid-cols-4 sm:divide-x divide-[color:var(--sf-glass-border)]">
           <div className="text-center px-1 sm:px-4">
             <div className="text-[10px] sm:text-xs text-[color:var(--sf-text)]/50 mb-0.5">Block Height</div>
@@ -115,7 +115,7 @@ export default function FujinDifficultyPanel() {
       </div>
 
       {/* Swap Panel -- LONG/SHORT */}
-      <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-6">
+      <div className="sf-card p-4 sm:p-6">
         {/* Direction toggle */}
         <div className="flex gap-1 p-1 bg-[color:var(--sf-surface)] rounded-lg mb-4">
           <button
@@ -151,18 +151,18 @@ export default function FujinDifficultyPanel() {
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
               placeholder="0.00"
-              className="flex-1 px-4 py-4 bg-transparent text-2xl font-medium text-[color:var(--sf-text)] outline-none tabular-nums min-w-0 placeholder:text-[color:var(--sf-text)]/30"
+              className="sf-input flex-1 px-4 py-4 !bg-transparent text-2xl font-medium text-[color:var(--sf-text)] tabular-nums min-w-0 placeholder:text-[color:var(--sf-text)]/30 !rounded-none !shadow-none"
             />
             <div className="flex items-center gap-1 shrink-0 mr-3">
               {[25, 50, 75].map(pct => (
                 <button
                   key={pct}
-                  className="hidden sm:block px-1.5 py-0.5 text-xs font-semibold rounded-md bg-white/10 text-[color:var(--sf-text)]/70 border border-white/20 hover:bg-white/20 transition-colors"
+                  className="sf-percent-btn-pill hidden sm:block"
                 >
                   {pct}%
                 </button>
               ))}
-              <button className="px-2 py-0.5 text-xs font-semibold rounded-md bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)] border border-[color:var(--sf-primary)]/30 hover:bg-[color:var(--sf-primary)]/30 transition-colors">
+              <button className="sf-percent-btn-pill">
                 MAX
               </button>
             </div>
@@ -200,7 +200,7 @@ export default function FujinDifficultyPanel() {
         {/* Action button */}
         <button
           disabled={!isConnected || !amount}
-          className="w-full py-3.5 text-sm font-semibold bg-[color:var(--sf-primary)] text-white rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="sf-btn-primary w-full py-3.5"
         >
           {isConnected ? `Buy ${swapDirection}` : 'Connect Wallet'}
         </button>

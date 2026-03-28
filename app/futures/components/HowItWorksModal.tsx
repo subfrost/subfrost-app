@@ -62,7 +62,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
         <div className="overflow-y-auto p-4 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             {/* Block 1: Buy */}
-            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+            <div className="sf-panel p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-3">{t('howItWorks.buy')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 {t('howItWorks.buyDesc')}
@@ -78,7 +78,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
             </div>
 
             {/* Block 2: Hold */}
-            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+            <div className="sf-panel p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-3">{t('howItWorks.hold')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 {t('howItWorks.holdDesc')}
@@ -94,7 +94,7 @@ export default function HowItWorksModal({ onClose }: HowItWorksModalProps) {
             </div>
 
             {/* Block 3: Exercise */}
-            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+            <div className="sf-panel p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-[color:var(--sf-text)] mb-3">{t('howItWorks.exercise')}</h3>
               <p className="text-sm text-[color:var(--sf-text)]/80 mb-4">
                 {t('howItWorks.exerciseDesc')}

@@ -73,7 +73,7 @@ function PremiumCurveSection({ coefficients, selectedT }: { coefficients: CubicC
   const currentPremium = p(selectedT);
 
   return (
-    <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4">
+    <div className="sf-card-small p-4">
       <h4 className="text-sm font-bold text-[color:var(--sf-text)] mb-3">Premium Curve for Selected ftrBTC</h4>
 
       <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full h-auto" style={{ maxWidth: CHART_W }}>
@@ -261,7 +261,7 @@ export default function VolatilityView() {
       {/* ================================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Pool Stats */}
-        <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-5">
+        <div className="sf-card p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base sm:text-lg font-bold text-[color:var(--sf-text)]">volBTC Pool</h3>
             <div className="flex items-center gap-1.5">
@@ -304,61 +304,114 @@ export default function VolatilityView() {
         </div>
 
         {/* Your Holdings + Deposit */}
-        <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-5">
-          <h3 className="text-base sm:text-lg font-bold text-[color:var(--sf-text)] mb-3">
-            Your ftrBTC Holdings
-          </h3>
-
-          <div className="text-[11px] font-semibold text-[color:var(--sf-text)]/60 mb-2 uppercase tracking-wide">
-            Select ftrBTC to deposit:
+        <div className="sf-card overflow-hidden flex flex-col">
+          <div className="sf-card-header">
+            <h3 className="text-base font-bold text-[color:var(--sf-text)]">My ftrBTC Holdings</h3>
           </div>
 
-          {/* ftrBTC selection list */}
-          <div className="space-y-1.5 max-h-48 overflow-y-auto mb-4">
-            {userFtrHoldings.map((h: { ftrId: string; amount: string; dxBtcValue: string }) => {
-              const isSelected = selectedFtr === h.ftrId;
-              return (
-                <button
-                  key={h.ftrId}
-                  type="button"
-                  onClick={() => setSelectedFtr(h.ftrId)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                    isSelected
-                      ? 'bg-[color:var(--sf-primary)]/15 border border-[color:var(--sf-primary)]/40'
-                      : 'bg-[color:var(--sf-surface)] border border-transparent hover:bg-[color:var(--sf-surface)]/80'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
-                      isSelected ? 'border-[color:var(--sf-primary)]' : 'border-[color:var(--sf-text)]/30'
-                    }`}>
-                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[color:var(--sf-primary)]" />}
-                    </div>
-                    <span className="font-mono text-xs text-[color:var(--sf-text)]">ftr[{h.ftrId}]</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold tabular-nums text-[color:var(--sf-text)]">
-                      {formatCompact(h.amount)}
-                    </div>
-                    {h.dxBtcValue && h.dxBtcValue !== '0' && (
-                      <div className="text-[10px] tabular-nums text-[color:var(--sf-text)]/40">
-                        {formatValue(h.dxBtcValue)} dxBTC/token
-                      </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-            {userFtrHoldings.length === 0 && (
-              <div className="text-center py-4 text-xs text-[color:var(--sf-text)]/40">
-                No ftrBTC holdings found
+          {!isConnected ? (
+            <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+              Connect wallet to view holdings
+            </div>
+          ) : userFtrHoldings.length === 0 ? (
+            <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+              No ftrBTC holdings found in wallet
+            </div>
+          ) : (
+            <>
+              {/* Desktop header */}
+              <div className="sf-table-header hidden sm:grid grid-cols-4 gap-2 px-6">
+                <div>Contract</div>
+                <div>Amount</div>
+                <div>Value (dxBTC)</div>
+                <div className="text-right">Actions</div>
               </div>
-            )}
-          </div>
+
+              {/* Mobile header */}
+              <div className="sf-table-header sm:hidden grid grid-cols-3 gap-2 px-4">
+                <div>Contract</div>
+                <div>Amount</div>
+                <div className="text-right">Actions</div>
+              </div>
+
+              <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
+                {userFtrHoldings.map((h: { ftrId: string; amount: string; dxBtcValue: string }) => {
+                  const isSelected = selectedFtr === h.ftrId;
+                  return (
+                    <div key={h.ftrId}>
+                      {/* Desktop row */}
+                      <div
+                        className={`sf-row hidden sm:grid grid-cols-4 items-center gap-2 px-6 py-4 cursor-pointer ${
+                          isSelected ? 'bg-[color:var(--sf-primary)]/10' : ''
+                        }`}
+                        onClick={() => setSelectedFtr(h.ftrId)}
+                      >
+                        <div className="text-sm font-bold text-[color:var(--sf-primary)] truncate">
+                          ftr[{h.ftrId}]
+                        </div>
+                        <div className="text-sm font-bold text-[color:var(--sf-text)]">
+                          {formatCompact(h.amount)}
+                        </div>
+                        <div className="text-sm font-bold text-[color:var(--sf-primary)]">
+                          {h.dxBtcValue && h.dxBtcValue !== '0' ? formatValue(h.dxBtcValue) : '--'}
+                        </div>
+                        <div className="text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedFtr(h.ftrId);
+                            }}
+                            className="sf-btn-primary px-3 py-1.5 text-[10px]"
+                          >
+                            Deposit
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Mobile row */}
+                      <div
+                        className={`sf-row sm:hidden grid grid-cols-3 items-center gap-2 px-4 py-4 cursor-pointer ${
+                          isSelected ? 'bg-[color:var(--sf-primary)]/10' : ''
+                        }`}
+                        onClick={() => setSelectedFtr(h.ftrId)}
+                      >
+                        <div>
+                          <div className="text-sm font-bold text-[color:var(--sf-primary)] truncate">
+                            ftr[{h.ftrId}]
+                          </div>
+                          {h.dxBtcValue && h.dxBtcValue !== '0' && (
+                            <div className="text-[10px] text-[color:var(--sf-text)]/50 mt-0.5">
+                              {formatValue(h.dxBtcValue)} dxBTC
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-sm font-bold text-[color:var(--sf-text)]">
+                          {formatCompact(h.amount)}
+                        </div>
+                        <div className="text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedFtr(h.ftrId);
+                            }}
+                            className="sf-btn-primary px-2.5 py-1.5 text-[10px]"
+                          >
+                            Deposit
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* Selected info + deposit form */}
           {selectedFtr && (
-            <div className="space-y-3">
+            <div className="p-4 sm:p-5 space-y-3 border-t border-[color:var(--sf-row-border)]">
               <div className="rounded-xl bg-[color:var(--sf-surface)] p-3">
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[color:var(--sf-text)]/50">Selected</span>
@@ -377,7 +430,7 @@ export default function VolatilityView() {
                     value={depositAmount}
                     onChange={(e) => setDepositAmount(e.target.value.replace(/[^0-9.]/g, ''))}
                     placeholder="0.0"
-                    className="w-full px-3 py-2.5 pr-16 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] outline-none placeholder:text-[color:var(--sf-text)]/30 border border-[color:var(--sf-glass-border)] focus:border-[color:var(--sf-primary)]/50 transition-colors"
+                    className="w-full px-3 py-2.5 pr-16 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] sf-input placeholder:text-[color:var(--sf-text)]/30"
                   />
                   <button
                     type="button"
@@ -404,7 +457,7 @@ export default function VolatilityView() {
               <button
                 type="button"
                 disabled={!depositAmount || parseFloat(depositAmount) <= 0}
-                className="w-full py-3 text-sm font-bold uppercase tracking-wide rounded-xl bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+                className="sf-btn-primary w-full py-3"
               >
                 Deposit to Pool
               </button>
@@ -422,21 +475,21 @@ export default function VolatilityView() {
       {/* Row 3: Pool Composition Table                                      */}
       {/* ================================================================== */}
       {compositionData.length > 0 && (
-        <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-5">
+        <div className="sf-card p-4 sm:p-5">
           <h4 className="text-sm font-bold text-[color:var(--sf-text)] mb-3">Pool Composition</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[color:var(--sf-text)]/50 border-b border-[color:var(--sf-glass-border)]">
-                  <th className="text-left py-2 px-3 font-semibold uppercase tracking-wide text-[10px]">ftrBTC ID</th>
-                  <th className="text-right py-2 px-3 font-semibold uppercase tracking-wide text-[10px]">Amount</th>
-                  <th className="text-right py-2 px-3 font-semibold uppercase tracking-wide text-[10px]">Value (dxBTC)</th>
-                  <th className="text-right py-2 px-3 font-semibold uppercase tracking-wide text-[10px]">% of Pool</th>
+                <tr className="sf-table-header">
+                  <th className="text-left py-2 px-3">ftrBTC ID</th>
+                  <th className="text-right py-2 px-3">Amount</th>
+                  <th className="text-right py-2 px-3">Value (dxBTC)</th>
+                  <th className="text-right py-2 px-3">% of Pool</th>
                 </tr>
               </thead>
               <tbody>
                 {compositionData.map((row) => (
-                  <tr key={row.ftrId} className="border-b border-[color:var(--sf-glass-border)]/30 hover:bg-[color:var(--sf-surface)]/50 transition-colors">
+                  <tr key={row.ftrId} className="sf-row">
                     <td className="py-2.5 px-3 font-mono text-[color:var(--sf-text)]">{row.ftrId}</td>
                     <td className="py-2.5 px-3 text-right tabular-nums font-semibold text-[color:var(--sf-text)]">{row.amount}</td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-[color:var(--sf-text)]/70">{row.value}</td>
@@ -463,7 +516,7 @@ export default function VolatilityView() {
       {/* Row 4: Swap Between ftrBTC                                         */}
       {/* ================================================================== */}
       {holdingIds.length >= 2 && (
-        <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-5">
+        <div className="sf-card p-4 sm:p-5">
           <h4 className="text-sm font-bold text-[color:var(--sf-text)] mb-4">Swap Between ftrBTC</h4>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -472,7 +525,7 @@ export default function VolatilityView() {
               <select
                 value={swapIn}
                 onChange={(e) => setSwapIn(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] border border-[color:var(--sf-glass-border)] outline-none focus:border-[color:var(--sf-primary)]/50 transition-colors"
+                className="w-full px-3 py-2.5 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] sf-input"
               >
                 <option value="">Select ftrBTC</option>
                 {holdingIds.map((id) => (
@@ -485,7 +538,7 @@ export default function VolatilityView() {
               <select
                 value={swapOut}
                 onChange={(e) => setSwapOut(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] border border-[color:var(--sf-glass-border)] outline-none focus:border-[color:var(--sf-primary)]/50 transition-colors"
+                className="w-full px-3 py-2.5 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] sf-input"
               >
                 <option value="">Select ftrBTC</option>
                 {holdingIds.filter((id) => id !== swapIn).map((id) => (
@@ -503,7 +556,7 @@ export default function VolatilityView() {
               value={swapAmount}
               onChange={(e) => setSwapAmount(e.target.value.replace(/[^0-9.]/g, ''))}
               placeholder="0.0"
-              className="w-full px-3 py-2.5 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] outline-none placeholder:text-[color:var(--sf-text)]/30 border border-[color:var(--sf-glass-border)] focus:border-[color:var(--sf-primary)]/50 transition-colors"
+              className="w-full px-3 py-2.5 text-sm rounded-xl bg-[color:var(--sf-surface)] text-[color:var(--sf-text)] sf-input placeholder:text-[color:var(--sf-text)]/30"
             />
           </div>
 
@@ -537,7 +590,7 @@ export default function VolatilityView() {
           <button
             type="button"
             disabled={!swapIn || !swapOut || !swapAmount || parseFloat(swapAmount) <= 0}
-            className="w-full py-3 text-sm font-bold uppercase tracking-wide rounded-xl bg-[color:var(--sf-primary)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+            className="sf-btn-primary w-full py-3"
           >
             Execute Swap
           </button>
@@ -547,36 +600,41 @@ export default function VolatilityView() {
       {/* ================================================================== */}
       {/* Row 5: Utilization & Coefficients                                  */}
       {/* ================================================================== */}
-      <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4 sm:p-5">
+      <div className="sf-card p-4 sm:p-5">
         <h4 className="text-sm font-bold text-[color:var(--sf-text)] mb-4">Utilization & Coefficients</h4>
 
         {/* Slider */}
-        <div className="mb-5">
-          <div className="flex justify-between text-xs text-[color:var(--sf-text)]/50 mb-2">
-            <span>Pool Utilization</span>
-            <span className="font-bold tabular-nums text-[color:var(--sf-text)]">
-              {(utilization * 100).toFixed(0)}%
-            </span>
+        <div className="mb-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
+              Pool Utilization
+            </label>
           </div>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={utilization}
-            onChange={(e) => setUtilization(parseFloat(e.target.value))}
-            className="w-full h-2 rounded-full appearance-none cursor-pointer"
-            style={{
-              background: `linear-gradient(to right,
-                var(--sf-primary) 0%,
-                var(--sf-primary) ${utilization * 100}%,
-                var(--sf-surface) ${utilization * 100}%,
-                var(--sf-surface) 100%)`,
-            }}
-          />
-          <div className="flex justify-between text-[10px] text-[color:var(--sf-text)]/30 mt-1">
-            <span>0%</span>
-            <span>100%</span>
+          <div className="flex items-center gap-4">
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={utilization}
+              onChange={(e) => setUtilization(parseFloat(e.target.value))}
+              className="flex-1 h-2 rounded-lg appearance-none bg-[color:var(--sf-glass-border)] cursor-pointer accent-[color:var(--sf-primary)]"
+            />
+            <div className="flex items-center gap-2 min-w-[120px]">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={Math.round(utilization * 100)}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10) || 0;
+                  setUtilization(Math.max(0, Math.min(1, value / 100)));
+                }}
+                style={{ outline: 'none', border: 'none' }}
+                className="sf-input h-10 w-20 px-3 text-base font-semibold text-center"
+              />
+              <span className="text-base text-[color:var(--sf-text)]/70">%</span>
+            </div>
           </div>
         </div>
 

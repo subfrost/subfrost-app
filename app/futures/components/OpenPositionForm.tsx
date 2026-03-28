@@ -106,16 +106,16 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   const btnInactiveClass = `${btnBase} hover:bg-white/6`;
 
   const inputPanelClass = inputFocused
-    ? 'group rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-    : 'group rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]';
+    ? 'group sf-panel p-4 cursor-text transition-shadow duration-[200ms] shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+    : 'group sf-panel p-4 cursor-text transition-shadow duration-[200ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]';
 
   const lockPeriodInputClass = lockPeriodFocused
-    ? 'h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-    : 'h-10 w-20 rounded-lg bg-[color:var(--sf-input-bg)] px-3 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]';
+    ? 'sf-input h-10 w-20 px-3 text-base font-semibold text-center shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
+    : 'sf-input h-10 w-20 px-3 text-base font-semibold text-center';
 
   const buyBtnClass = isConnected && isDemoGated
-    ? 'h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
-    : 'h-12 w-full rounded-xl font-bold text-base uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]';
+    ? 'sf-btn-secondary h-12 w-full text-[color:var(--sf-text)]/30 cursor-not-allowed'
+    : 'sf-btn-primary h-12 w-full';
 
   // Calculate maximum blocks left among available contracts
   const maxBlocksLeft = contracts
@@ -320,7 +320,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
       {/* 2-Column Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Side: User Inputs */}
-        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] space-y-6">
+        <div className="sf-card p-6 space-y-6">
           {/* Investment Amount */}
           <div className="space-y-3">
             <div
@@ -483,11 +483,11 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
         </div>
 
         {/* Right Side: Auto-calculated Values */}
-        <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] space-y-6">
+        <div className="sf-card p-6 space-y-6">
           {payoutMarkers.length > 0 ? (
             <>
               {/* Total Yield Card */}
-              <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] space-y-4">
+              <div className="sf-panel p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 shrink-0">
                     <div className="text-sm sm:text-base text-[color:var(--sf-text)]/70 mb-1 whitespace-nowrap">{t('openPosition.totalYield')}</div>
@@ -621,7 +621,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                     {payoutMarkers.map((marker, index) => (
                       <div
                         key={`summary-${marker.contractId}-${index}`}
-                        className="rounded-2xl bg-[color:var(--sf-surface)]/40 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-primary)]/10 focus:outline-none cursor-pointer"
+                        className="sf-tile p-5"
                         onClick={() => {
                           const contract = contracts.find(c => c.id === marker.contractId);
                           if (contract && onContractSelect) {

@@ -30,7 +30,7 @@ const DEVNET_AUTOSTART = process.env.NEXT_PUBLIC_DEVNET_AUTOSTART === '1';
 
 // Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'subfrost-regtest';
+  if (typeof window === 'undefined') return 'mainnet';
 
   const host = window.location.host;
 
@@ -62,8 +62,6 @@ function detectNetwork(): Network {
       return 'signet';
     } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
       return 'subfrost-regtest';
-    } else if (host.includes('localhost') || host.includes('127.0.0.1')) {
-      return 'devnet';
     }
     return 'mainnet';
   }
@@ -72,7 +70,7 @@ function detectNetwork(): Network {
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const [network, setNetwork] = useState<Network>('subfrost-regtest');
+  const [network, setNetwork] = useState<Network>('mainnet');
 
   // Memoize QueryClient to prevent recreation on re-renders
   // All queries use staleTime: Infinity and never self-refresh.

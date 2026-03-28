@@ -129,7 +129,7 @@ export default function ContractDetailModal({
 
         <div className="overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Chart Section */}
-          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+          <div className="sf-panel p-4 sm:p-6">
             <h3 className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)] mb-4">
               {t('contractModal.unlockValueOverTime')}
             </h3>
@@ -179,7 +179,7 @@ export default function ContractDetailModal({
 
           {/* Buy / Sell Panel */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-            <div className="sm:col-span-2 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-4">
+            <div className="sm:col-span-2 sf-panel p-4 sm:p-6 space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">{t('contractModal.exercisePrice')}</span>
@@ -195,7 +195,7 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div className="relative rounded-2xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <div className="relative sf-panel p-4">
                 {/* Token display - floating top-right */}
                 <div className="absolute right-4 top-4 z-10">
                   <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
@@ -224,7 +224,7 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div className="rounded-xl bg-[color:var(--sf-primary)]/20 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
+              <div className="sf-panel p-4 bg-[color:var(--sf-primary)]/10">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">{t('contractModal.estimatedCost')}</span>
                   <span className="font-medium text-[color:var(--sf-text)]">
@@ -246,7 +246,7 @@ export default function ContractDetailModal({
                       setTimeout(() => setShowBuyComingSoon(false), 1000);
                     }
                   }}
-                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)]'}`}
+                  className={`px-4 sm:px-6 py-3 ${isDemoGated ? 'sf-btn-secondary text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'sf-btn-primary'}`}
                 >
                   {showBuyComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -266,7 +266,7 @@ export default function ContractDetailModal({
                       setTimeout(() => setShowSellComingSoon(false), 1000);
                     }
                   }}
-                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]'}`}
+                  className={`px-4 sm:px-6 py-3 ${isDemoGated ? 'sf-btn-secondary text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'sf-btn-secondary'}`}
                 >
                   {showSellComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -278,7 +278,7 @@ export default function ContractDetailModal({
             </div>
 
             {/* Advanced Info */}
-            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)] self-end">
+            <div className="sf-panel p-4 sm:p-6 self-end">
               {/* Dropdown toggle - only visible on small screens */}
               <button
                 type="button"

@@ -57,10 +57,12 @@ export default function VaultShell() {
   // Show yv-frbtc on regtest/oylnet for testing, hide on mainnet
   const isTestNetwork = network === 'regtest' || network === 'oylnet' || network === 'devnet' || network === 'subfrost-regtest';
 
+  const HIDDEN_VAULT_IDS = ['vx-fuel', 'vx-btcusd'];
+
   const filteredVaults = useMemo(() => {
     let vaults = isTestNetwork
-      ? AVAILABLE_VAULTS
-      : AVAILABLE_VAULTS.filter(vault => vault.id !== 'yv-frbtc');
+      ? AVAILABLE_VAULTS.filter(vault => !HIDDEN_VAULT_IDS.includes(vault.id))
+      : AVAILABLE_VAULTS.filter(vault => vault.id !== 'yv-frbtc' && !HIDDEN_VAULT_IDS.includes(vault.id));
     
     // Apply vault category filter
     if (vaultFilter === 'mains') {
@@ -103,11 +105,12 @@ export default function VaultShell() {
         return sortDirection === 'asc' ? compareValue : -compareValue;
       });
     } else {
-      // Default sorting: dx-btc first
+      // Default sorting: FIRE first, then dxBTC, then the rest
+      const order: Record<string, number> = { 've-diesel': 0, 'dx-btc': 1 };
       vaults = vaults.sort((a, b) => {
-        if (a.id === 'dx-btc') return -1;
-        if (b.id === 'dx-btc') return 1;
-        return 0;
+        const oa = order[a.id] ?? 99;
+        const ob = order[b.id] ?? 99;
+        return oa - ob;
       });
     }
     
