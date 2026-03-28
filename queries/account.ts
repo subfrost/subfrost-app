@@ -375,76 +375,11 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
 
       for (const address of addresses) {
         try {
-          // Primary path: SDK data API (dataApiGetAlkanesByAddress).
-          // On non-devnet networks, this calls the external Espo data API.
-          // On devnet, this routes through quspo via the fetch interceptor.
+          // SDK data API — on mainnet this hits Espo server, on devnet this routes
+          // through the fetch interceptor to the espo tertiary indexer WASM
+          // (subfrost/espo kungfuflex/fujin branch, loaded as quspo.wasm).
           const result = await (provider as any).dataApiGetAlkanesByAddress(address);
-          let items: any[] = result?.data || [];
-
-          // ⚠️ QUSPO BUG (2026-03-26): On devnet, quspo's get_alkanes_by_address
-          // returns empty arrays for addresses that DO have alkane balances.
-          //
-          // Root cause: quspo is a tertiary indexer added AFTER the initial 101-block
-          // mining and contract deployment. When quspo runs get_alkanes_by_address,
-          // it queries its own internal address→outpoint index. This index is built
-          // by processing blocks as they arrive. However:
-          //
-          // 1. Quspo is added post-deployment — it processes the full chain history
-          //    via addTertiary(), but its address index only tracks outpoints it has
-          //    seen being CREATED in blocks it processes. It does NOT retroactively
-          //    scan the alkanes indexer's existing outpoint state.
-          //
-          // 2. When the user clicks +DIESEL faucet, a new block is mined. Quspo
-          //    processes this block and sees the transaction. But its address index
-          //    lookup (get_alkanes_by_address) returns empty because the mapping
-          //    from address → outpoint was never built for addresses that received
-          //    tokens in transactions quspo processed.
-          //
-          // 3. The alkanes indexer (metashrew) has the correct data — proven by
-          //    lua_evalsaved which returns the DIESEL in the `assets[].runes[]` array.
-          //    Quspo reads from metashrew's state but doesn't correctly translate
-          //    it to per-address balance queries.
-          //
-          // Fix needed in quspo: get_alkanes_by_address should query metashrew's
-          // protorunesbyaddress view directly, not maintain its own address index.
-          //
-          // Fallback: extract alkane balances from the enriched balance response
-          // (getEnrichedBalances → lua_evalsaved) which queries metashrew directly.
-          if (items.length === 0 && deps.network === 'devnet') {
-            try {
-              const enriched = await provider.getEnrichedBalances(address, '1');
-              const mapToObj = (v: any): any => {
-                if (v instanceof Map) {
-                  const o: any = {};
-                  for (const [k, val] of v.entries()) o[k] = mapToObj(val);
-                  return o;
-                }
-                if (Array.isArray(v)) return v.map(mapToObj);
-                return v;
-              };
-              const returns = enriched instanceof Map
-                ? mapToObj(enriched.get('returns'))
-                : mapToObj(enriched?.returns || enriched);
-              const assets: any[] = returns?.assets || [];
-              const balanceAgg = new Map<string, bigint>();
-              for (const asset of assets) {
-                for (const r of (asset?.runes || [])) {
-                  const key = `${r.block}:${r.tx}`;
-                  balanceAgg.set(key, (balanceAgg.get(key) || 0n) + BigInt(r.amount || 0));
-                }
-              }
-              items = Array.from(balanceAgg.entries()).map(([id, amt]) => {
-                const [block, tx] = id.split(':');
-                return { alkaneId: { block: Number(block), tx: Number(tx) }, balance: amt.toString() };
-              });
-              if (items.length > 0) {
-                console.log('[alkaneBalanceQuery] quspo empty, enriched fallback found', items.length, 'alkanes');
-              }
-            } catch (err) {
-              console.warn('[alkaneBalanceQuery] enriched fallback failed:', err);
-            }
-          }
-
+          const items: any[] = result?.data || [];
           console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
 
           for (const item of items) {
@@ -474,56 +409,6 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
               } catch {
                 existing.balance = String(Number(existing.balance || 0) + Number(balance));
               }
-            }
-          }
-
-          // Fallback: if data API returned nothing, try raw RPC (alkanes_protorunesbyaddress).
-          // This is the same method the vitest suite uses successfully on devnet.
-          // The data API routes through quspo which may not have indexed all blocks.
-          if (items.length === 0) {
-            console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: dataApi empty, falling back to RPC`);
-            try {
-              const rpcResult = await fetch('http://localhost:18888', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0', method: 'alkanes_protorunesbyaddress',
-                  params: [{ address, protocolTag: '1' }], id: 1,
-                }),
-              }).then(r => r.json());
-
-              const outpoints = rpcResult?.result?.outpoints || [];
-              for (const outpoint of outpoints) {
-                const balances = outpoint.balance_sheet?.cached?.balances
-                  || outpoint.runes || outpoint.balances || [];
-                for (const entry of balances) {
-                  const block = parseInt(entry.block ?? '0', 10);
-                  const tx = parseInt(entry.tx ?? '0', 10);
-                  const amount = String(entry.amount || entry.value || '0');
-                  if (block === 0 && tx === 0 && amount === '0') continue;
-                  const alkaneId = `${block}:${tx}`;
-                  const knownInfo = KNOWN_TOKENS[alkaneId];
-                  if (!alkaneMap.has(alkaneId)) {
-                    alkaneMap.set(alkaneId, {
-                      alkaneId,
-                      name: knownInfo?.name || `Token ${alkaneId}`,
-                      symbol: knownInfo?.symbol || '',
-                      balance: amount,
-                      decimals: knownInfo?.decimals ?? 8,
-                    });
-                  } else {
-                    const existing = alkaneMap.get(alkaneId)!;
-                    try {
-                      existing.balance = (BigInt(existing.balance) + BigInt(amount)).toString();
-                    } catch {
-                      existing.balance = String(Number(existing.balance || 0) + Number(amount));
-                    }
-                  }
-                }
-              }
-              console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: RPC fallback found ${alkaneMap.size} alkanes`);
-            } catch (rpcErr) {
-              console.warn(`[alkaneBalanceQuery] RPC fallback also failed:`, rpcErr);
             }
           }
         } catch (error) {

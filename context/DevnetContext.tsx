@@ -479,8 +479,16 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       if (parsed.error) {
         console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
       }
+      // CRITICAL: Coinbase outputs require 100 confirmations before they're spendable.
+      // Without these extra blocks, the BTC appears in the UTXO set but lua_evalsaved
+      // (getEnrichedBalances) filters it as immature, so the UI shows 0 BTC.
+      // Mine in batches of 25 with yields to prevent OOM (same pattern as boot).
+      for (let b = 0; b < 4; b++) {
+        harnessRef.current.mineBlocks(25);
+        await new Promise(r => setTimeout(r, 0));
+      }
       await new Promise(r => setTimeout(r, 50));
-      console.log('[devnet] BTC faucet: mined block with coinbase to', devnetAddr);
+      console.log('[devnet] BTC faucet: mined block with coinbase to', devnetAddr, '(+100 maturity blocks)');
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
