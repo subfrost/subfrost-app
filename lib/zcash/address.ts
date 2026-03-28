@@ -6,12 +6,16 @@
  *
  * The address uses a 2-byte version prefix [0x1c, 0xb8] for mainnet (t1...)
  * and [0x1d, 0x25] for testnet (tm...), encoded as Base58Check.
+ *
+ * NOTE: This module is imported by both server (Node.js) and client (browser)
+ * code paths. All crypto primitives use bitcoinjs-lib (which works in both)
+ * instead of Node's `crypto` module (which Turbopack can't bundle).
  */
 
 import * as bip39 from 'bip39';
 import BIP32Factory from 'bip32';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { createHash } from 'crypto';
+import * as bitcoin from 'bitcoinjs-lib';
 
 const bip32 = BIP32Factory(ecc);
 
@@ -66,9 +70,8 @@ export function deriveZcashAddress(
  * Hash160 = RIPEMD160(SHA256(pubkey)), then Base58Check with 2-byte prefix.
  */
 function pubkeyToZcashAddress(pubkey: Buffer, prefix: readonly [number, number]): string {
-  // Hash160: RIPEMD160(SHA256(pubkey))
-  const sha256 = createHash('sha256').update(pubkey).digest();
-  const hash160 = createHash('ripemd160').update(sha256).digest();
+  // Hash160: RIPEMD160(SHA256(pubkey)) — using bitcoinjs-lib's hash functions
+  const hash160 = Buffer.from(bitcoin.crypto.hash160(pubkey));
 
   // 2-byte prefix + 20-byte hash160
   const payload = Buffer.alloc(22);
@@ -84,14 +87,10 @@ function pubkeyToZcashAddress(pubkey: Buffer, prefix: readonly [number, number])
  * Format: base58(payload + sha256d(payload)[0..4])
  */
 function base58checkEncode(payload: Buffer): string {
-  const checksum = sha256d(payload).slice(0, 4);
+  // SHA256d checksum using bitcoinjs-lib (works in both Node.js and browser)
+  const checksum = bitcoin.crypto.hash256(payload).slice(0, 4);
   const data = Buffer.concat([payload, checksum]);
   return base58Encode(data);
-}
-
-function sha256d(data: Buffer): Buffer {
-  const first = createHash('sha256').update(data).digest();
-  return createHash('sha256').update(first).digest();
 }
 
 function base58Encode(data: Buffer): string {
@@ -101,8 +100,7 @@ function base58Encode(data: Buffer): string {
     leadingZeros++;
   }
 
-  // Convert to base58
-  // Use BigInt for the conversion
+  // Convert to base58 using BigInt
   let num = BigInt('0x' + data.toString('hex'));
   const chars: string[] = [];
   const base = BigInt(58);
