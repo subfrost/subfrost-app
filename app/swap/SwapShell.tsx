@@ -567,6 +567,12 @@ export default function SwapShell() {
       // For BTC/frBTC wrapping, always allow
       if (fromId === 'btc' && tokenId === FRBTC_ALKANE_ID) return true;
       if (fromId === FRBTC_ALKANE_ID && tokenId === 'btc') return true;
+      // For BTC/frZEC wrapping, always allow
+      if (FRZEC_ALKANE_ID && fromId === 'btc' && tokenId === FRZEC_ALKANE_ID) return true;
+      if (FRZEC_ALKANE_ID && fromId === FRZEC_ALKANE_ID && tokenId === 'btc') return true;
+      // For BTC/frETH wrapping, always allow
+      if (FRETH_ALKANE_ID && fromId === 'btc' && tokenId === FRETH_ALKANE_ID) return true;
+      if (FRETH_ALKANE_ID && fromId === FRETH_ALKANE_ID && tokenId === 'btc') return true;
       // Always allow base tokens (BTC, frBTC, bUSD) - they show before pools load
       if (baseTokenIds.has(tokenId)) return true;
       // Always allow protocol tokens (FIRE, frUSD, volBTC) — explicitly configured as swappable
