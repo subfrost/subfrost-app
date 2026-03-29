@@ -259,7 +259,7 @@ describe('Browser wallet address handling in useAddLiquidityMutation', () => {
   let src: string;
 
   beforeEach(() => {
-    src = fs.readFileSync(path.resolve(__dirname, '../../useAddLiquidityMutation.ts'), 'utf-8');
+    src = fs.readFileSync(path.resolve(__dirname, '../../useAddLiquidityMutation.ts'), 'utf-8').replace(/\r\n/g, '\n');
   });
 
   it('should define isBrowserWallet check', () => {
@@ -304,7 +304,7 @@ describe('Pool existence check in useAddLiquidityMutation', () => {
   let src: string;
 
   beforeEach(() => {
-    src = fs.readFileSync(path.resolve(__dirname, '../../useAddLiquidityMutation.ts'), 'utf-8');
+    src = fs.readFileSync(path.resolve(__dirname, '../../useAddLiquidityMutation.ts'), 'utf-8').replace(/\r\n/g, '\n');
   });
 
   it('should check pool existence via factory opcode 2', () => {

@@ -34,12 +34,14 @@ function readHook(filename: string): string {
  *   2. key: isBrowserWallet ? value : fallback,  (inline in object literal)
  */
 function extractBrowserBranch(src: string, varName: string): string | null {
+  // Normalize line endings to \n so regex works on both LF and CRLF files
+  const normalized = src.replace(/\r\n/g, '\n');
   const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Pattern 1: multiline assignment
   const assignPattern = new RegExp(
     `${escaped}\\s*=\\s*isBrowserWallet\\s*\\n\\s*\\?\\s*(.+)\\n\\s*:`,
   );
-  const assignMatch = src.match(assignPattern);
+  const assignMatch = normalized.match(assignPattern);
   if (assignMatch) return assignMatch[1].trim();
 
   // Pattern 2: inline property ternary (changeAddress: isBrowserWallet ? x : y)
@@ -48,7 +50,7 @@ function extractBrowserBranch(src: string, varName: string): string | null {
   const inlinePattern = new RegExp(
     `${propEscaped}\\s*:\\s*isBrowserWallet\\s*\\?\\s*(.+?)\\s*:`,
   );
-  const inlineMatch = src.match(inlinePattern);
+  const inlineMatch = normalized.match(inlinePattern);
   if (inlineMatch) return inlineMatch[1].trim();
 
   return null;
@@ -58,12 +60,14 @@ function extractBrowserBranch(src: string, varName: string): string | null {
  * Extract the keystore (falsy) branch from a ternary using isBrowserWallet.
  */
 function extractKeystoreBranch(src: string, varName: string): string | null {
+  // Normalize line endings to \n so regex works on both LF and CRLF files
+  const normalized = src.replace(/\r\n/g, '\n');
   const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Pattern 1: multiline assignment
   const assignPattern = new RegExp(
     `${escaped}\\s*=\\s*isBrowserWallet\\s*\\n\\s*\\?.+\\n\\s*:\\s*(.+?)\\s*;`,
   );
-  const assignMatch = src.match(assignPattern);
+  const assignMatch = normalized.match(assignPattern);
   if (assignMatch) return assignMatch[1].trim();
 
   // Pattern 2: inline property ternary
@@ -72,7 +76,7 @@ function extractKeystoreBranch(src: string, varName: string): string | null {
   const inlinePattern = new RegExp(
     `${propEscaped}\\s*:\\s*isBrowserWallet\\s*\\?.+?:\\s*(.+?)\\s*[,}]`,
   );
-  const inlineMatch = src.match(inlinePattern);
+  const inlineMatch = normalized.match(inlinePattern);
   if (inlineMatch) return inlineMatch[1].trim();
 
   return null;

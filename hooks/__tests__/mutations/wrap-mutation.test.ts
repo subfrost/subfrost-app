@@ -145,7 +145,7 @@ describe('Wrap output ordering', () => {
   let src: string;
 
   beforeEach(() => {
-    src = fs.readFileSync(path.resolve(__dirname, '../../useWrapMutation.ts'), 'utf-8');
+    src = fs.readFileSync(path.resolve(__dirname, '../../useWrapMutation.ts'), 'utf-8').replace(/\r\n/g, '\n');
   });
 
   it('should place signer address at output 0 (v0)', () => {
@@ -182,7 +182,7 @@ describe('Browser wallet address handling in useWrapMutation', () => {
   let src: string;
 
   beforeEach(() => {
-    src = fs.readFileSync(path.resolve(__dirname, '../../useWrapMutation.ts'), 'utf-8');
+    src = fs.readFileSync(path.resolve(__dirname, '../../useWrapMutation.ts'), 'utf-8').replace(/\r\n/g, '\n');
   });
 
   it('should define isBrowserWallet check', () => {

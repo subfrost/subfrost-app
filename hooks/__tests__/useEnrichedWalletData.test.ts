@@ -22,7 +22,7 @@ import * as path from 'path';
 const root = path.resolve(__dirname, '../..');
 
 function readSrc(relPath: string): string {
-  return fs.readFileSync(path.join(root, relPath), 'utf-8');
+  return fs.readFileSync(path.join(root, relPath), 'utf-8').replace(/\r\n/g, '\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,8 @@ describe('useEnrichedWalletData', () => {
 
   it('falls back to EMPTY_BALANCES when data is null', () => {
     expect(src).toContain('EMPTY_BALANCES');
-    expect(src).toMatch(/data\?\.balances\s*\?\?\s*EMPTY_BALANCES/);
+    // btcQuery.data ? { ...btcQuery.data.balances, alkanes: ... } : EMPTY_BALANCES
+    expect(src).toMatch(/:\s*EMPTY_BALANCES/);
   });
 
   it('falls back to EMPTY_UTXOS when data is null', () => {
@@ -196,14 +197,14 @@ describe('useEnrichedWalletData', () => {
       expect(querySrc).toContain('esplora fallback');
     });
 
-    it('fetches alkane balances via SDK alkanesByAddress in separate query', () => {
+    it('fetches alkane balances via SDK dataApiGetAlkanesByAddress in separate query', () => {
       expect(querySrc).toContain('alkaneBalanceQueryOptions');
-      expect(querySrc).toContain('alkanesByAddress');
+      expect(querySrc).toContain('dataApiGetAlkanesByAddress');
     });
 
     it('aggregates alkane balances across multiple addresses using BigInt', () => {
       expect(querySrc).toContain('BigInt(existing.balance)');
-      expect(querySrc).toContain('BigInt(balanceStr');
+      expect(querySrc).toContain('BigInt(balance)');
     });
 
     it('processes spendable, assets, and pending UTXO categories', () => {

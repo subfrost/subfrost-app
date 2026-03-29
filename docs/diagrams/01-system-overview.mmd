@@ -1,0 +1,39 @@
+graph TB
+    subgraph Browser["Browser (User)"]
+        UI[React UI]
+        SDK[WASM SDK Provider]
+        RQ[TanStack React Query Cache]
+        WC[Wallet Context]
+    end
+
+    subgraph NextJS["Next.js Server"]
+        RPC_PROXY["/api/rpc/{network}"]
+        ESP_PROXY["/api/esplora/{path}"]
+        BAL_PROXY["/api/alkane-balances"]
+    end
+
+    subgraph Infra["Subfrost Infrastructure"]
+        SUBFROST_RPC["subfrost RPC\n{network}.subfrost.io/v4/subfrost"]
+        ESPO_EXPLORER["Espo Block Explorer\nespo.subfrost.io/{network}"]
+        MEMPOOL["mempool.space\n(mainnet fallback)"]
+    end
+
+    subgraph Chain["Bitcoin + Alkanes"]
+        METASHREW[Metashrew Indexer]
+        ESPLORA_IDX[Esplora Indexer]
+        ALKANES_IDX[Alkanes Indexer]
+    end
+
+    UI --> RQ
+    RQ --> SDK
+    SDK --> RPC_PROXY
+    UI --> ESP_PROXY
+    UI --> BAL_PROXY
+    RPC_PROXY --> SUBFROST_RPC
+    ESP_PROXY --> ESPO_EXPLORER
+    ESP_PROXY -.->|mainnet 404 fallback| MEMPOOL
+    BAL_PROXY --> SUBFROST_RPC
+    SUBFROST_RPC --> METASHREW
+    SUBFROST_RPC --> ESPLORA_IDX
+    SUBFROST_RPC --> ALKANES_IDX
+    ESPO_EXPLORER --> ESPLORA_IDX

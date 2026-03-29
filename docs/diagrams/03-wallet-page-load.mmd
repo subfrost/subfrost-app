@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant UI as Wallet UI
+    participant RQ as React Query
+    participant SDK as WASM SDK
+    participant Proxy as /api/rpc
+    participant RPC as subfrost RPC
+
+    Note over UI,RPC: Page Mount — 6 upstream calls
+
+    par BTC Balance (per address x 2)
+        RQ->>SDK: getEnrichedBalances(segwit)
+        SDK->>Proxy: POST lua_evalsaved
+        Proxy->>RPC: lua_evalsaved
+        RPC-->>Proxy: spendable + assets + pending
+        Proxy-->>SDK: response
+        SDK-->>RQ: enriched data
+    and Mempool Check (per address x 2)
+        RQ->>Proxy: POST esplora_address txs mempool
+        Proxy->>RPC: esplora_address txs mempool
+        RPC-->>Proxy: mempool txs
+        Proxy-->>RQ: pending spend amount
+    and Alkane Balances (per address x 2)
+        RQ->>SDK: dataApiGetAlkanesByAddress(taproot)
+        SDK->>Proxy: POST /get-alkanes-by-address
+        Proxy->>RPC: REST to Espo
+        RPC-->>Proxy: alkaneId + balance + name + symbol
+        Proxy-->>SDK: token array
+        SDK-->>RQ: alkane balances
+    end
+
+    RQ->>UI: WalletBalances with bitcoin + alkanes + runes

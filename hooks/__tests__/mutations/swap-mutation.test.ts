@@ -233,7 +233,7 @@ describe('Browser wallet address handling in useSwapMutation', () => {
   let src: string;
 
   beforeEach(() => {
-    src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8');
+    src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8').replace(/\r\n/g, '\n');
   });
 
   it('should define isBrowserWallet check', () => {
@@ -281,7 +281,7 @@ describe('BTC→Token two-step guard', () => {
   let src: string;
 
   beforeEach(() => {
-    src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8');
+    src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8').replace(/\r\n/g, '\n');
   });
 
   it('should reject BTC→non-frBTC swaps', () => {
@@ -413,7 +413,7 @@ describe('ordinalsStrategy in swap hook', () => {
   let src: string;
 
   beforeEach(() => {
-    src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8');
+    src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8').replace(/\r\n/g, '\n');
   });
 
   it('should set ordinalsStrategy to burn', () => {

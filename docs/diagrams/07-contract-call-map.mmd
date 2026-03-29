@@ -1,0 +1,33 @@
+graph TD
+    subgraph Factory["Factory Proxy 4:65498"]
+        F1["op 1: CreateNewPool"]
+        F2["op 2: FindExistingPoolId"]
+        F3["op 3: GetAllPools"]
+        F13["op 13: SwapExactTokensForTokens"]
+        F14["op 14: SwapTokensForExactTokens"]
+    end
+
+    subgraph Pool["Pool Instance 2:N"]
+        P1["op 1: AddLiquidity"]
+        P2["op 2: WithdrawAndBurn"]
+        P97["op 97: GetReserves"]
+        P999["op 999: PoolDetails"]
+    end
+
+    subgraph FrBTC["frBTC 32:0"]
+        W77["op 77: Wrap BTC"]
+        W78["op 78: Unwrap frBTC"]
+        W103["op 103: GET_SIGNER"]
+        W104["op 104: GET_PREMIUM"]
+    end
+
+    subgraph Carbine["Carbine CLOB 4:70000"]
+        C20["op 20: PlaceLimitOrder"]
+        C24["op 24: GetOrderbookDepth"]
+        C25["op 25: GetUserOrders"]
+    end
+
+    F13 -->|internal delegatecall| Pool
+    F1 -->|deploys via beacon| Pool
+
+    style F13 fill:#059669,color:#fff

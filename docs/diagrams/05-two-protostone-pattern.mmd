@@ -1,0 +1,20 @@
+graph LR
+    subgraph Transaction
+        subgraph p0["p0 — Edict Protostone"]
+            E1["Edict: token0 amount to p1"]
+            E2["Edict: token1 amount to p1"]
+        end
+        subgraph p1["p1 — Cellpack Protostone"]
+            CC["Cellpack: pool opcode 1\n(AddLiquidity)"]
+            IA["incomingAlkanes:\ntoken0 + token1\n(received from p0)"]
+        end
+        p0 -->|tokens flow| p1
+    end
+
+    subgraph Outputs
+        V0["v0: BTC change to user segwit"]
+        V1["v1: alkane change to user taproot"]
+    end
+
+    p1 --> V0
+    p1 --> V1

@@ -1,0 +1,37 @@
+graph TD
+    subgraph Browser
+        SDK_CALL["SDK fetch()"]
+        DIRECT["Direct fetch()"]
+    end
+
+    subgraph NextJS["Next.js API Routes"]
+        RPC["/api/rpc/network\n(JSON-RPC + REST)"]
+        ESP["/api/esplora/path\n(Block Explorer)"]
+        BAL["/api/alkane-balances\n(Balance Aggregation)"]
+    end
+
+    subgraph Upstream["Upstream Endpoints"]
+        SF_M["mainnet.subfrost.io"]
+        SF_S["signet.subfrost.io"]
+        SF_R["regtest.subfrost.io"]
+        ESPO_M["espo.subfrost.io/mainnet"]
+        ESPO_S["espo.subfrost.io/signet"]
+        MP["mempool.space (fallback)"]
+    end
+
+    SDK_CALL --> RPC
+    DIRECT --> ESP
+    DIRECT --> BAL
+
+    RPC -->|mainnet| SF_M
+    RPC -->|signet| SF_S
+    RPC -->|regtest| SF_R
+    BAL --> SF_M
+
+    ESP -->|mainnet| ESPO_M
+    ESP -->|signet| ESPO_S
+    ESP -.->|mainnet 404| MP
+
+    style RPC fill:#2563eb,color:#fff
+    style ESP fill:#059669,color:#fff
+    style BAL fill:#d97706,color:#fff

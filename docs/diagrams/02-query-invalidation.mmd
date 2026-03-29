@@ -1,0 +1,15 @@
+graph LR
+    HP["HeightPoller\n(10s interval)"]
+    HP -->|height changed| INV["invalidateQueries()"]
+    INV --> BTC[BTC Balances]
+    INV --> ALK[Alkane Balances]
+    INV --> POOLS[Pool Data]
+    INV --> PRICE[BTC Price]
+    INV --> VAULT[Vault Data]
+    INV --> CANDLE[Candle Data]
+
+    OB["Orderbook\n(5s interval)"]
+
+    style HP fill:#2563eb,color:#fff
+    style OB fill:#dc2626,color:#fff
+    style INV fill:#7c3aed,color:#fff

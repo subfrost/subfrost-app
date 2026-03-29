@@ -1,0 +1,43 @@
+sequenceDiagram
+    participant User
+    participant UI as Swap UI
+    participant SDK as WASM SDK
+    participant Proxy as /api/rpc
+    participant RPC as subfrost RPC
+    participant BTC as Bitcoin Network
+
+    User->>UI: Click Swap
+
+    Note over UI,SDK: Build Transaction
+
+    UI->>SDK: alkanesExecuteTyped with protostones + inputRequirements
+
+    Note over SDK: SDK internally discovers UTXOs via esplora then builds PSBT with auto-edict p0 and cellpack p1 (factory opcode 13)
+
+    SDK->>Proxy: POST alkanes_simulate (dry run)
+    Proxy->>RPC: simulate swap
+    RPC-->>SDK: expected output
+
+    SDK-->>UI: unsigned PSBT
+
+    Note over UI,User: Sign Transaction
+
+    alt Browser Wallet (Xverse/UniSat/OKX)
+        UI->>UI: patchTapInternalKeys with userPubKey
+        UI->>User: Wallet popup for signing
+        User-->>UI: signed PSBT
+    else Keystore Wallet
+        UI->>SDK: signSegwitPsbt then signTaprootPsbt
+        SDK-->>UI: signed PSBT
+    end
+
+    Note over UI,BTC: Broadcast
+
+    UI->>SDK: finalize and broadcast
+    SDK->>Proxy: POST sendrawtransaction
+    Proxy->>RPC: broadcast
+    RPC->>BTC: propagate tx
+    BTC-->>RPC: txid
+    RPC-->>UI: txid
+
+    Note over UI: Invalidate queries and balances refresh

@@ -16,7 +16,7 @@ const WALLET_DIR = path.resolve(__dirname, '..');
 const COMPONENTS_DIR = path.join(WALLET_DIR, 'components');
 
 function readSource(filePath: string): string {
-  return fs.readFileSync(filePath, 'utf-8');
+  return fs.readFileSync(filePath, 'utf-8').replace(/\r\n/g, '\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -548,7 +548,8 @@ describe('BalancesPanel', () => {
   });
 
   it('shows coming soon messages for inscription tabs', () => {
-    expect(src).toMatch(/brc20ComingSoon/);
+    // BRC20 now renders Brc20BalancesCard instead of coming soon
+    expect(src).toMatch(/Brc20BalancesCard/);
     expect(src).toMatch(/runesComingSoon/);
     expect(src).toMatch(/ordinalsComingSoon/);
   });
