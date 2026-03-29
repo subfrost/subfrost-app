@@ -135,22 +135,25 @@ export class DevnetEvmProvider {
       }
     }
 
+    // Dynamic import helper that bypasses Vite's static import analysis.
+    // Vite rejects `import('/public/...')` at transform time. Using indirect
+    // `new Function` prevents Vite from seeing the import path.
+    const dynamicImport = (url: string) =>
+      new Function('url', 'return import(url)')(url) as Promise<any>;
+
     // Initialize revm WASM
-    // Dynamic import for browser compatibility (ES module)
     let evmModule: EvmDevnetModule;
     try {
       // In browser, use dynamic import from the public dir
-      // @ts-ignore — runtime URL import
-      const mod = await import(/* webpackIgnore: true */ '/wasm/revm_web_sys.js');
+      const mod = await dynamicImport('/wasm/revm_web_sys.js');
       mod.initSync(evmWasm);
       evmModule = mod as unknown as EvmDevnetModule;
     } catch {
       // Fallback: try Node.js-style import (tests)
       try {
-        const { readFileSync } = await import('fs');
         const { resolve } = await import('path');
         const fixturesDir = resolve(__dirname, '../../__tests__/devnet/fixtures/evm');
-        const mod = await import(/* webpackIgnore: true */ `${fixturesDir}/revm_web_sys.js`);
+        const mod = await dynamicImport(`${fixturesDir}/revm_web_sys.js`);
         mod.initSync(evmWasm);
         evmModule = mod as unknown as EvmDevnetModule;
       } catch (e2) {
@@ -162,15 +165,14 @@ export class DevnetEvmProvider {
     let coordModule: CoordinatorCoreModule | null = null;
     if (coordWasm) {
       try {
-        // @ts-ignore
-        const mod = await import(/* webpackIgnore: true */ '/wasm/coordinator_core_wasm.js');
+        const mod = await dynamicImport('/wasm/coordinator_core_wasm.js');
         mod.initSync(coordWasm);
         coordModule = mod as unknown as CoordinatorCoreModule;
       } catch {
         try {
           const { resolve } = await import('path');
           const fixturesDir = resolve(__dirname, '../../__tests__/devnet/fixtures/evm');
-          const mod = await import(/* webpackIgnore: true */ `${fixturesDir}/coordinator_core_wasm.js`);
+          const mod = await dynamicImport(`${fixturesDir}/coordinator_core_wasm.js`);
           mod.initSync(coordWasm);
           coordModule = mod as unknown as CoordinatorCoreModule;
         } catch {
