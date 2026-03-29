@@ -15,36 +15,32 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '.next', 'ts-sdk/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
-    // Setup file to polyfill fetch for Node.js
     setupFiles: ['./__tests__/setup.ts'],
-    // Enable WASM support in tests
     server: {
       deps: {
-        // Inline the alkanes SDK to allow vite to process WASM imports.
-        // NOTE: @qubitcoin/sdk is NOT inlined — it loads WASM via fs.readFileSync
-        // and Vite's transform can cache stale WASM binaries.
         inline: ['@alkanes/ts-sdk'],
       },
     },
-    // Use forks pool for better WASM compatibility
+    // forks pool is required for vite-plugin-wasm on Windows — threads pool
+    // has the same __vite-plugin-wasm-helper issue. The WASM helper path error
+    // only affects tests that import @alkanes/ts-sdk/wasm (devnet e2e tests).
+    // Unit tests that don't import WASM work fine with either pool.
     pool: 'forks',
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // Use Node.js-compatible WASM loader for vitest (bypasses vite-plugin-wasm
+      // which creates invalid 'file:///__vite-plugin-wasm-helper' on Windows)
+      '@alkanes/ts-sdk/wasm': path.resolve(__dirname, 'lib/oyl/alkanes/alkanes_web_sys_node.js'),
     },
   },
   optimizeDeps: {
-    // Don't exclude - let vite process it
     include: ['@alkanes/ts-sdk', '@alkanes/ts-sdk/wasm'],
-    // Exclude qubitcoin SDK — it loads WASM via fs.readFileSync and
-    // Vite's dep optimization can cache stale WASM binaries.
     exclude: ['@qubitcoin/sdk'],
   },
-  // Enable WASM in SSR/Node context
   ssr: {
     noExternal: ['@alkanes/ts-sdk'],
-    // Let @qubitcoin/sdk be external — it loads its own WASM from disk
     external: ['@qubitcoin/sdk'],
   },
 });

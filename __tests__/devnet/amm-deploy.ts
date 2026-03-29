@@ -21,10 +21,16 @@ import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
-// All WASMs from ~/alkanes-rs (develop branch) prod_wasms/.
-// The indexer is prod_indexer/alkanes_v2.1.6_regtest.wasm and these WASMs match it.
-// Deployment pattern must exactly match scripts/deploy-subfrost-regtest.sh.
-const PROD_WASMS = resolve(process.env.HOME || '~', 'alkanes-rs/prod_wasms');
+// WASMs from repo prod_wasms/ directory (checked in).
+// Fallback to ~/alkanes-rs/prod_wasms/ if repo dir doesn't exist.
+import { existsSync } from 'fs';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __amm_dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_WASMS = resolve(__amm_dirname, '../../prod_wasms');
+const HOME_WASMS = resolve(process.env.HOME || process.env.USERPROFILE || '~', 'alkanes-rs/prod_wasms');
+const PROD_WASMS = existsSync(REPO_WASMS) ? REPO_WASMS : HOME_WASMS;
 const STD_WASMS = PROD_WASMS;
 
 // Slot assignments — match scripts/deploy-subfrost-regtest.sh exactly

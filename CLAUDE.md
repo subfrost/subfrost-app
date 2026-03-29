@@ -1,4 +1,4 @@
-# Claude Code Context for Subfrost App
+alright # Claude Code Context for Subfrost App
 
 > This file provides context for Claude Code (and other LLM instances) working on this codebase.
 > It is the single source of truth for architecture, debugging, and operational knowledge.
