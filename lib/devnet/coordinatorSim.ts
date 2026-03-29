@@ -18,6 +18,7 @@
  */
 
 import type { DevnetEvmProvider, MockTokenAddresses } from './evmProvider';
+import type { CoordinatorWallet } from './coordinatorWallet';
 
 // ---- Types ----
 
@@ -90,6 +91,12 @@ export class DevnetCoordinator {
   private evmTokens: MockTokenAddresses;
   private config: CoordinatorConfig;
 
+  /** Optional: real vault address (when deployed). Falls back to mock transfers. */
+  private vaultAddress: string | null = null;
+
+  /** Optional: wallet state tracker for rebalancing. */
+  private wallet: CoordinatorWallet | null = null;
+
   /** Deposit records (EVM -> BTC direction) */
   private deposits: DepositRecord[] = [];
   /** Withdrawal records (BTC -> EVM direction) */
@@ -113,6 +120,18 @@ export class DevnetCoordinator {
     this.evmProvider = evmProvider;
     this.evmTokens = evmTokens;
     this.config = config;
+  }
+
+  /** Attach a real vault address. When set, withdrawals use vault.withdrawFromBridge(). */
+  setVaultAddress(address: string): void {
+    this.vaultAddress = address;
+    console.log('[DevnetCoordinator] Vault address set:', address);
+  }
+
+  /** Attach a CoordinatorWallet for rebalancing. */
+  setWallet(wallet: CoordinatorWallet): void {
+    this.wallet = wallet;
+    console.log('[DevnetCoordinator] Wallet tracker attached');
   }
 
   // =========================================================================
@@ -204,6 +223,11 @@ export class DevnetCoordinator {
       record.status = 'complete';
       this.notifyListeners();
 
+      // Record fee in wallet tracker
+      if (this.wallet) {
+        this.wallet.recordFee(payment.amount);
+      }
+
       console.log(`[DevnetCoordinator] Deposit ${depositId} complete. Minted ${frusdAmount} frUSD.`);
 
       return { depositId, frUsdMinted: frusdAmount };
@@ -225,7 +249,16 @@ export class DevnetCoordinator {
     amount: bigint;
     evmRecipient: string;
     token?: 'USDT' | 'USDC';
-  }): Promise<{ withdrawalId: string; evmTxHash: string }> {
+    /** Basis points of output to swap to ETH (0-5000). 0 = all stables. */
+    ethSplitBps?: number;
+  }): Promise<{
+    withdrawalId: string;
+    evmTxHash: string;
+    /** If ethSplitBps > 0, how much ETH was delivered */
+    ethDelivered?: bigint;
+    /** USDC actually delivered (after ETH split) */
+    usdcDelivered?: bigint;
+  }> {
     const withdrawalId = `wd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const token = bridgeRecord.token || 'USDC';
 
@@ -255,28 +288,67 @@ export class DevnetCoordinator {
         `[DevnetCoordinator] Processing withdrawal ${withdrawalId}: ${bridgeRecord.amount} frUSD -> ${stableAmount} ${token} to ${bridgeRecord.evmRecipient}`
       );
 
-      // On the EVM side, mint the stablecoins to the recipient.
-      // In production, this would be a vault.withdraw() call signed by FROST.
-      // In devnet, we use the mock token's mint function directly.
+      // On the EVM side, release stablecoins to the recipient.
+      // If a real vault is deployed, use vault.withdrawFromBridge().
+      // Otherwise, fall back to mock token transfer.
       const tokenAddress = token === 'USDT'
         ? this.evmTokens.usdtAddress
         : this.evmTokens.usdcAddress;
 
-      // Fund the deployer if needed (mock tokens have public mint)
-      const DEFAULT_DEPLOYER = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+      let evmTxHash: string;
 
-      // Mint stablecoins to recipient via mock ERC20
-      this.evmProvider.transfer(
-        tokenAddress,
-        DEFAULT_DEPLOYER,
-        bridgeRecord.evmRecipient,
-        stableAmount,
-      );
+      if (this.vaultAddress && token === 'USDC') {
+        // Real vault path: vault.withdrawFromBridge(recipient, amount)
+        const receipt = this.evmProvider.withdrawFromBridge(
+          this.vaultAddress,
+          bridgeRecord.evmRecipient,
+          stableAmount,
+        );
+        const parsed = JSON.parse(receipt);
+        evmTxHash = parsed.tx_hash || `vault-wd-${withdrawalId}`;
+      } else {
+        // Mock path: direct transfer from deployer
+        const DEFAULT_DEPLOYER = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+        this.evmProvider.transfer(
+          tokenAddress,
+          DEFAULT_DEPLOYER,
+          bridgeRecord.evmRecipient,
+          stableAmount,
+        );
+        evmTxHash = `0x${Array.from({ length: 64 }, () =>
+          Math.floor(Math.random() * 16).toString(16)
+        ).join('')}`;
+      }
 
-      // Generate a mock EVM tx hash
-      const evmTxHash = `0x${Array.from({ length: 64 }, () =>
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('')}`;
+      // Record fee in wallet tracker
+      if (this.wallet) {
+        this.wallet.recordFee(rawStable);
+      }
+
+      // If user requested ETH split, route portion through DEX
+      let ethDelivered: bigint | undefined;
+      let usdcDelivered: bigint | undefined;
+      const ethSplitBps = bridgeRecord.ethSplitBps ?? 0;
+
+      if (ethSplitBps > 0 && token === 'USDC') {
+        try {
+          const splitResult = this.evmProvider.splitBridgeOutput(
+            bridgeRecord.evmRecipient,
+            stableAmount,
+            ethSplitBps,
+            this.evmTokens.usdcAddress,
+          );
+          ethDelivered = splitResult.ethDelivered;
+          usdcDelivered = splitResult.usdcDelivered;
+          console.log(
+            `[DevnetCoordinator] Output split: ${usdcDelivered} USDC + ${ethDelivered} ETH ` +
+            `(${(Number(ethDelivered) / 1e18).toFixed(6)} ETH) @ $${splitResult.ethPrice}/ETH`
+          );
+        } catch (splitErr: any) {
+          console.warn(`[DevnetCoordinator] ETH split failed, delivering all as USDC:`, splitErr?.message);
+          usdcDelivered = stableAmount;
+        }
+      }
 
       record.evmTxHash = evmTxHash;
       record.status = 'complete';
@@ -284,7 +356,7 @@ export class DevnetCoordinator {
 
       console.log(`[DevnetCoordinator] Withdrawal ${withdrawalId} complete. Sent ${stableAmount} ${token} to ${bridgeRecord.evmRecipient}.`);
 
-      return { withdrawalId, evmTxHash };
+      return { withdrawalId, evmTxHash, ethDelivered, usdcDelivered };
     } catch (e: any) {
       record.status = 'failed';
       record.error = e?.message || 'Unknown error';
@@ -349,6 +421,24 @@ export class DevnetCoordinator {
         console.log(
           `[DevnetCoordinator] Poll: processed ${depositsProcessed} deposits, ${withdrawalsProcessed} withdrawals`
         );
+      }
+
+      // Check rebalancing after processing all events
+      if (this.wallet) {
+        try {
+          const rebalanceResult = await this.wallet.checkAndRebalance();
+          if (rebalanceResult) {
+            const summary = this.wallet.getSummary();
+            console.log(
+              `[DevnetCoordinator] Rebalance ${rebalanceResult.direction}: ` +
+              `success=${rebalanceResult.success}, ` +
+              `BTC=$${summary.btcValueUsdc}, EVM=$${summary.evmValueUsdc}, ` +
+              `fees=$${summary.feesCollected}, profitable=${summary.profitable}`
+            );
+          }
+        } catch (e: any) {
+          console.debug('[DevnetCoordinator] Rebalance check error:', e?.message?.slice(0, 60));
+        }
       }
     } finally {
       this.isProcessing = false;

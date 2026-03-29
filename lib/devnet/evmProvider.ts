@@ -433,6 +433,296 @@ export class DevnetEvmProvider {
   }
 
   // =========================================================================
+  // Vault Deployment & Operations
+  // =========================================================================
+
+  /**
+   * Deploy the USDCVault contract for real bridge operations.
+   *
+   * The vault holds USDC and processes bridge deposits/withdrawals.
+   * In production, withdrawals require FROST-signed auth messages.
+   * In devnet, the deployer can call vault functions directly.
+   *
+   * @param usdcAddress - Address of the USDC ERC20 token
+   * @param coordinatorPubKey - BIP340 public key (hex, 64 chars) for auth verification
+   * @returns Deployed vault address
+   */
+  async deployVault(usdcAddress: string, coordinatorPubKey?: string): Promise<string> {
+    // Deploy Bip340Ecrec helper first (required by USDCVault)
+    const bip340Artifact = await this.loadArtifact('Bip340Ecrec');
+    const bip340Address = this.deployContract(DEFAULT_DEPLOYER, bip340Artifact);
+    console.log('[DevnetEvmProvider] Bip340Ecrec deployed at:', bip340Address);
+
+    // Deploy USDCVault
+    const vaultArtifact = await this.loadArtifact('USDCVault');
+    const vaultAddress = this.deployContract(DEFAULT_DEPLOYER, vaultArtifact);
+    console.log('[DevnetEvmProvider] USDCVault deployed at:', vaultAddress);
+
+    // Initialize vault: initialize(address _asset, address _bip340, bytes32 _defaultPubKey)
+    const pubKeyHex = coordinatorPubKey || '00'.repeat(32);
+    const initCalldata = encodeFunctionCall(
+      'c0c53b8b', // initialize(address,address,bytes32) — placeholder selector
+      encodeAddress(usdcAddress),
+      encodeAddress(bip340Address),
+      pubKeyHex.padStart(64, '0'),
+    );
+    this.evm.eth_send_transaction(DEFAULT_DEPLOYER, vaultAddress, initCalldata, '0x0');
+    this.evm.mine_block();
+
+    console.log('[DevnetEvmProvider] USDCVault initialized with USDC:', usdcAddress);
+    return vaultAddress;
+  }
+
+  /**
+   * Seed the vault with USDC for bridge liquidity.
+   * The coordinator needs USDC in the vault to process BTC→USDC withdrawals.
+   */
+  async seedVault(vaultAddress: string, usdcAddress: string, amount: bigint): Promise<void> {
+    // Approve vault to spend deployer's USDC
+    this.approve(usdcAddress, DEFAULT_DEPLOYER, vaultAddress, amount);
+    // Deposit USDC into vault
+    const depositCalldata = encodeFunctionCall(
+      '6e553f65', // deposit(uint256,address)
+      encodeUint256(amount),
+      encodeAddress(DEFAULT_DEPLOYER),
+    );
+    this.evm.eth_send_transaction(DEFAULT_DEPLOYER, vaultAddress, depositCalldata, '0x0');
+    this.evm.mine_block();
+    console.log('[DevnetEvmProvider] Vault seeded with', amount.toString(), 'USDC');
+  }
+
+  /**
+   * Get the number of unprocessed payment records in the vault.
+   */
+  getPaymentsLength(vaultAddress: string): bigint {
+    // getPaymentsLength() → uint256
+    const result = this.call(vaultAddress, '5e0e1284');
+    return BigInt(result || '0x0');
+  }
+
+  /**
+   * Get a payment record by index.
+   * Returns { depositor, amount, btcRecipient, processed }.
+   */
+  getPayment(vaultAddress: string, index: number): {
+    depositor: string;
+    amount: bigint;
+    btcRecipient: string;
+    processed: boolean;
+  } {
+    // getPayment(uint256) → (address, uint256, bytes32, bool)
+    const result = this.call(vaultAddress, 'e2e1e8e9', encodeUint256(index));
+    const hex = result.replace('0x', '');
+    return {
+      depositor: '0x' + hex.slice(24, 64),
+      amount: BigInt('0x' + hex.slice(64, 128)),
+      btcRecipient: hex.slice(128, 192),
+      processed: hex.slice(192, 256) !== '0'.repeat(64),
+    };
+  }
+
+  /**
+   * Execute withdrawFromBridge on the vault.
+   * In devnet, called directly by deployer. In production, requires FROST auth.
+   */
+  withdrawFromBridge(
+    vaultAddress: string,
+    recipient: string,
+    amount: bigint,
+  ): string {
+    // withdrawFromBridge(address,uint256)
+    return this.send(
+      DEFAULT_DEPLOYER, vaultAddress, 'c8be6b66',
+      encodeAddress(recipient), encodeUint256(amount),
+    );
+  }
+
+  /**
+   * Execute depositAndBridge on the vault.
+   * User deposits USDC and specifies a BTC recipient for the bridge.
+   */
+  depositAndBridge(
+    vaultAddress: string,
+    from: string,
+    usdcAddress: string,
+    amount: bigint,
+    btcRecipient: string,
+  ): string {
+    // First approve vault to spend USDC
+    this.approve(usdcAddress, from, vaultAddress, amount);
+    // depositAndBridge(uint256,bytes32)
+    const btcRecipientHex = Buffer.from(btcRecipient).toString('hex').padEnd(64, '0');
+    return this.send(
+      from, vaultAddress, 'a1903d08',
+      encodeUint256(amount), btcRecipientHex,
+    );
+  }
+
+  /** Public read-only eth_call wrapper. */
+  ethCall(to: string, calldata: string): string {
+    return this.evm.eth_call(to, calldata);
+  }
+
+  // =========================================================================
+  // Bridge Output Splitter — ETH gas provisioning for cold wallets
+  // =========================================================================
+
+  /**
+   * Mock USDC/WETH pool for devnet DEX simulation.
+   * In production, this routes through Uniswap V3 SwapRouter.
+   *
+   * The pool uses a constant-product formula (x*y=k) with:
+   * - 10M USDC initial liquidity
+   * - 3,000 WETH initial liquidity (~$3,333/ETH for mock)
+   */
+  private mockPoolState = {
+    usdcReserve: 10_000_000n * 10n ** 6n,   // 10M USDC (6 dec)
+    wethReserve: 3_000n * 10n ** 18n,         // 3,000 WETH (18 dec)
+  };
+
+  /**
+   * Quote how much ETH the user would receive for a given USDC amount.
+   * Uses constant-product formula with 0.3% fee (matching Uniswap V2).
+   */
+  quoteUsdcToEth(usdcAmount: bigint): { ethAmount: bigint; priceImpact: number } {
+    const { usdcReserve, wethReserve } = this.mockPoolState;
+    // Uniswap V2 formula: amountOut = (amountIn * 997 * reserveOut) / (reserveIn * 1000 + amountIn * 997)
+    const amountInWithFee = usdcAmount * 997n;
+    const numerator = amountInWithFee * wethReserve;
+    const denominator = usdcReserve * 1000n + amountInWithFee;
+    const ethAmount = numerator / denominator;
+
+    // Price impact: compare effective price vs spot price
+    const spotPrice = (wethReserve * 10n ** 6n) / usdcReserve; // ETH per USDC (scaled)
+    const effectivePrice = usdcAmount > 0n ? (ethAmount * 10n ** 6n) / usdcAmount : 0n;
+    const priceImpact = spotPrice > 0n
+      ? Number(spotPrice - effectivePrice) / Number(spotPrice)
+      : 0;
+
+    return { ethAmount, priceImpact };
+  }
+
+  /**
+   * Execute a USDC → ETH swap on the mock DEX.
+   * Updates pool reserves (constant product) and returns ETH amount.
+   *
+   * In devnet: directly adjusts reserves and funds recipient with ETH.
+   * In production: would call Uniswap V3 SwapRouter.exactInputSingle().
+   */
+  swapUsdcToEth(
+    usdcAmount: bigint,
+    recipient: string,
+    minEthOut?: bigint,
+  ): { ethReceived: bigint; txHash: string } {
+    const { ethAmount } = this.quoteUsdcToEth(usdcAmount);
+
+    if (minEthOut && ethAmount < minEthOut) {
+      throw new Error(
+        `Slippage: would receive ${ethAmount} ETH but minimum is ${minEthOut}`
+      );
+    }
+
+    // Update pool reserves
+    this.mockPoolState.usdcReserve += usdcAmount;
+    this.mockPoolState.wethReserve -= ethAmount;
+
+    // Fund recipient with ETH
+    this.evm.fund_account(recipient, '0x' + ethAmount.toString(16));
+    this.evm.mine_block();
+
+    const txHash = `0xswap-${Date.now().toString(16)}`;
+    console.log(
+      `[DevnetEvmProvider] Swapped ${usdcAmount} USDC → ${ethAmount} ETH (${(Number(ethAmount) / 1e18).toFixed(6)} ETH) to ${recipient}`
+    );
+
+    return { ethReceived: ethAmount, txHash };
+  }
+
+  /**
+   * Split bridge output: deliver USDC + ETH to recipient.
+   *
+   * This is the core function for the "receive ETH with your stables" feature.
+   * Called by the coordinator after vault releases USDC.
+   *
+   * @param recipient - EVM address to receive both tokens
+   * @param totalUsdc - Total USDC amount from bridge
+   * @param ethSplitBps - Basis points of USDC to swap to ETH (0-10000, e.g., 500 = 5%)
+   * @param minEthOut - Minimum ETH to receive (slippage protection)
+   * @returns Breakdown of what was delivered
+   */
+  splitBridgeOutput(
+    recipient: string,
+    totalUsdc: bigint,
+    ethSplitBps: number,
+    usdcTokenAddress: string,
+    minEthOut?: bigint,
+  ): {
+    usdcDelivered: bigint;
+    ethDelivered: bigint;
+    ethPrice: string;
+    swapTxHash: string | null;
+  } {
+    if (ethSplitBps < 0 || ethSplitBps > 5000) {
+      throw new Error('ETH split must be 0-5000 bps (0-50%)');
+    }
+
+    const usdcForEth = (totalUsdc * BigInt(ethSplitBps)) / 10000n;
+    const usdcRemaining = totalUsdc - usdcForEth;
+
+    let ethDelivered = 0n;
+    let swapTxHash: string | null = null;
+
+    // Transfer USDC remainder to recipient
+    if (usdcRemaining > 0n) {
+      this.transfer(usdcTokenAddress, DEFAULT_DEPLOYER, recipient, usdcRemaining);
+    }
+
+    // Swap portion to ETH if requested
+    if (usdcForEth > 0n) {
+      const result = this.swapUsdcToEth(usdcForEth, recipient, minEthOut);
+      ethDelivered = result.ethReceived;
+      swapTxHash = result.txHash;
+    }
+
+    // Compute effective ETH price for display
+    const ethPrice = usdcForEth > 0n && ethDelivered > 0n
+      ? (Number(usdcForEth) / Number(ethDelivered / 10n ** 12n)).toFixed(2)
+      : '0';
+
+    console.log(
+      `[DevnetEvmProvider] Bridge output split: ${usdcRemaining} USDC + ${ethDelivered} ETH to ${recipient}`
+    );
+
+    return { usdcDelivered: usdcRemaining, ethDelivered, ethPrice, swapTxHash };
+  }
+
+  /**
+   * Estimate how much ETH a user would receive for gas provisioning.
+   * Used by the UI to show the breakdown before the user confirms.
+   */
+  estimateEthForGas(totalUsdc: bigint, ethSplitBps: number): {
+    usdcKept: bigint;
+    ethReceived: bigint;
+    ethInUsd: string;
+    coversApproxTxs: number;
+  } {
+    const usdcForEth = (totalUsdc * BigInt(ethSplitBps)) / 10000n;
+    const usdcKept = totalUsdc - usdcForEth;
+    const { ethAmount } = this.quoteUsdcToEth(usdcForEth);
+
+    // Estimate tx coverage: ~0.001 ETH per tx at ~30 gwei
+    const avgTxCostWei = 10n ** 15n; // 0.001 ETH
+    const coversApproxTxs = avgTxCostWei > 0n ? Number(ethAmount / avgTxCostWei) : 0;
+
+    // ETH value in USD
+    const { usdcReserve, wethReserve } = this.mockPoolState;
+    const ethPriceUsdc = Number(usdcReserve) / Number(wethReserve / 10n ** 12n);
+    const ethInUsd = (Number(ethAmount) / 1e18 * ethPriceUsdc).toFixed(2);
+
+    return { usdcKept, ethReceived: ethAmount, ethInUsd, coversApproxTxs };
+  }
+
+  // =========================================================================
   // Coordinator / Bridge Helpers
   // =========================================================================
 

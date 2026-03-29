@@ -21,7 +21,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { ArrowRight, AlertCircle, Check, Loader2, X } from 'lucide-react';
+import { ArrowRight, AlertCircle, Check, Loader2, X, Fuel, ChevronDown, ChevronUp } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { deriveZcashAddress, toZcashNetwork } from '@/lib/zcash/address';
 
@@ -67,6 +67,10 @@ export function CrossChainBridgePanel({
   const [ethRecipient, setEthRecipient] = useState('');
   const [step, setStep] = useState<BridgeStep>('input');
   const [errorMessage, setErrorMessage] = useState('');
+  // ETH gas provisioning — when bridging TO eth/stables
+  const [ethSplitEnabled, setEthSplitEnabled] = useState(false);
+  const [ethSplitPct, setEthSplitPct] = useState(5); // default 5%
+  const [showEthSplitDetails, setShowEthSplitDetails] = useState(false);
 
   const { account, network, isConnected, walletType } = useWallet();
 
@@ -134,11 +138,13 @@ export function CrossChainBridgePanel({
     setStep('confirm');
     // In a full implementation this would call the appropriate bridge mutation
     // (useBridgeZecMutation or useBridgeEthMutation) depending on the route.
+    const ethSplitBps = ethSplitEnabled ? ethSplitPct * 100 : 0; // pct → bps
     console.log('[CrossChainBridgePanel] Submit:', {
       fromChain,
       toChain,
       amount,
       destinationAddress,
+      ethSplitBps,
     });
   }, [canSubmit, fromChain, toChain, amount, destinationAddress]);
 
@@ -290,6 +296,126 @@ export function CrossChainBridgePanel({
             </div>
           )}
         </div>
+
+        {/* ETH Gas Provisioning — shown when target is ETH/stables */}
+        {toChain === 'eth' && hasValidAmount && step === 'input' && (
+          <div className="sf-panel p-0 overflow-hidden">
+            <button
+              className="sf-collapsible-trigger w-full flex items-center justify-between p-3"
+              onClick={() => setShowEthSplitDetails(!showEthSplitDetails)}
+            >
+              <div className="flex items-center gap-2">
+                <Fuel size={14} className="text-[color:var(--sf-primary)]" />
+                <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                  ETH for Gas
+                </span>
+                {ethSplitEnabled && (
+                  <span className="sf-badge-apy text-[10px]">
+                    {ethSplitPct}%
+                  </span>
+                )}
+              </div>
+              {showEthSplitDetails
+                ? <ChevronUp size={14} className="text-[color:var(--sf-text)]/40" />
+                : <ChevronDown size={14} className="text-[color:var(--sf-text)]/40" />
+              }
+            </button>
+
+            {showEthSplitDetails && (
+              <div className="px-3 pb-3 space-y-3 border-t border-[color:var(--sf-outline)]/10">
+                {/* Toggle */}
+                <label className="flex items-center justify-between pt-3 cursor-pointer select-none">
+                  <span className="text-xs text-[color:var(--sf-text)]/80">
+                    Receive some ETH for gas fees
+                  </span>
+                  <div
+                    className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
+                      ethSplitEnabled ? 'bg-[color:var(--sf-primary)]' : 'bg-[color:var(--sf-surface)]'
+                    }`}
+                    onClick={() => setEthSplitEnabled(!ethSplitEnabled)}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                        ethSplitEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </div>
+                </label>
+
+                {ethSplitEnabled && (
+                  <>
+                    {/* Percentage selector */}
+                    <div>
+                      <label className="text-[10px] font-bold tracking-wider uppercase text-[color:var(--sf-text)]/50 mb-1.5 block">
+                        Portion swapped to ETH
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {[2, 5, 10, 20].map((pct) => (
+                          <button
+                            key={pct}
+                            className={`sf-percent-btn-pill ${
+                              ethSplitPct === pct
+                                ? 'bg-[color:var(--sf-primary)] text-white'
+                                : ''
+                            }`}
+                            onClick={() => setEthSplitPct(pct)}
+                          >
+                            {pct}%
+                          </button>
+                        ))}
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          className="sf-pill-input"
+                          value={ethSplitPct}
+                          onChange={(e) => {
+                            const v = Math.min(50, Math.max(1, parseInt(e.target.value) || 5));
+                            setEthSplitPct(v);
+                          }}
+                        />
+                        <span className="text-xs text-[color:var(--sf-text)]/50">%</span>
+                      </div>
+                    </div>
+
+                    {/* Estimated breakdown */}
+                    <div className="sf-panel p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[color:var(--sf-text)]/50">USDC received</span>
+                        <span className="font-mono text-[color:var(--sf-text)]/80">
+                          ~${(parsedAmount * (100 - ethSplitPct) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[color:var(--sf-text)]/50">ETH received</span>
+                        <span className="font-mono text-[color:var(--sf-primary)]">
+                          ~{(parsedAmount * ethSplitPct / 100 / 3333).toFixed(4)} ETH
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[color:var(--sf-text)]/50">Covers approx.</span>
+                        <span className="font-mono text-[color:var(--sf-text)]/80">
+                          ~{Math.floor(parsedAmount * ethSplitPct / 100 / 3333 / 0.001)} txs
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Info note */}
+                    <div className="sf-alert sf-alert-blue text-[10px]">
+                      <div className="flex items-start gap-1.5">
+                        <AlertCircle size={10} className="flex-shrink-0 mt-0.5" />
+                        <span>
+                          A portion of your USDC output is swapped to ETH via Uniswap
+                          so you have gas for your first transactions. Swap has a 0.3% DEX fee.
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Fee / info notice */}
         {hasValidAmount && bridgeRoute.length > 3 && (
