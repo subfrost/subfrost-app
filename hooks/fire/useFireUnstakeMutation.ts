@@ -39,6 +39,7 @@ export function useFireUnstakeMutation() {
       }
 
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
 
@@ -47,9 +48,9 @@ export function useFireUnstakeMutation() {
       const [stakingBlock, stakingTx] = stakingId.split(':').map(Number);
       const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Unstake},${positionId}]:v0:v0`;
 
-      const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
-      const changeAddr = isBrowserWallet ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
-      const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+      const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
+      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
+      const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
       const result = await (provider as any).alkanesExecuteTyped({
         inputRequirements: '',

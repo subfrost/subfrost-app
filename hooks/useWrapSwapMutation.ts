@@ -15,9 +15,9 @@
  *
  * REQUIRED PATTERN:
  * ```typescript
- * const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
- * const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
- * const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+ * const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
+ * const changeAddr = useActualAddresses ? segwitAddress : 'p2wpkh:0';
+ * const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
  * ```
  * ============================================================================
  *
@@ -194,6 +194,7 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
@@ -201,21 +202,21 @@ export function useWrapSwapMutation() {
       // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
       // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
       // ============================================================================
-      const fromAddresses = isBrowserWallet
+      const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
       // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [primaryAddress!, primaryAddress!]
         : ['p2tr:0', 'p2tr:0'];
 
-      const changeAddr = isBrowserWallet
+      const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
-      const alkanesChangeAddr = isBrowserWallet
+      const alkanesChangeAddr = useActualAddresses
         ? primaryAddress
         : 'p2tr:0';
 

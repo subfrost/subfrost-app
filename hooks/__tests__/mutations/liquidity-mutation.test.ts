@@ -267,19 +267,19 @@ describe('Browser wallet address handling in useAddLiquidityMutation', () => {
   });
 
   it('should use actual addresses for browser wallet toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*isBrowserWallet\s*\n\s*\?\s*(.+)\n/);
+    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
     expect(match).toBeTruthy();
     expect(match![1]).not.toContain("'p2tr:0'");
   });
 
   it('should use actual addresses for browser wallet changeAddr', () => {
-    const match = src.match(/changeAddr\s*=\s*isBrowserWallet\s*\n\s*\?\s*(.+)\n/);
+    const match = src.match(/changeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
     expect(match).toBeTruthy();
     expect(match![1]).not.toContain("'p2wpkh:0'");
   });
 
   it('should use actual addresses for browser wallet alkanesChangeAddr', () => {
-    const match = src.match(/alkanesChangeAddr\s*=\s*isBrowserWallet\s*\n\s*\?\s*(.+)\n/);
+    const match = src.match(/alkanesChangeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
     expect(match).toBeTruthy();
     expect(match![1]).not.toContain("'p2tr:0'");
   });

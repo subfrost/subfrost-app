@@ -28,10 +28,10 @@ function readHook(filename: string): string {
 }
 
 /**
- * Extract the browser (truthy) branch from a ternary using isBrowserWallet.
+ * Extract the browser (truthy) branch from a ternary using (?:isBrowserWallet|useActualAddresses).
  * Handles two patterns:
- *   1. const x = isBrowserWallet\n  ? [value]\n  : [fallback];
- *   2. key: isBrowserWallet ? value : fallback,  (inline in object literal)
+ *   1. const x = (?:isBrowserWallet|useActualAddresses)\n  ? [value]\n  : [fallback];
+ *   2. key: (?:isBrowserWallet|useActualAddresses) ? value : fallback,  (inline in object literal)
  */
 function extractBrowserBranch(src: string, varName: string): string | null {
   // Normalize line endings to \n so regex works on both LF and CRLF files
@@ -39,16 +39,16 @@ function extractBrowserBranch(src: string, varName: string): string | null {
   const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Pattern 1: multiline assignment
   const assignPattern = new RegExp(
-    `${escaped}\\s*=\\s*isBrowserWallet\\s*\\n\\s*\\?\\s*(.+)\\n\\s*:`,
+    `${escaped}\\s*=\\s*(?:isBrowserWallet|useActualAddresses)\\s*\\n\\s*\\?\\s*(.+)\\n\\s*:`,
   );
   const assignMatch = normalized.match(assignPattern);
   if (assignMatch) return assignMatch[1].trim();
 
-  // Pattern 2: inline property ternary (changeAddress: isBrowserWallet ? x : y)
+  // Pattern 2: inline property ternary (changeAddress: (?:isBrowserWallet|useActualAddresses) ? x : y)
   const propName = varName.replace(/^const\s+/, '');
   const propEscaped = propName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const inlinePattern = new RegExp(
-    `${propEscaped}\\s*:\\s*isBrowserWallet\\s*\\?\\s*(.+?)\\s*:`,
+    `${propEscaped}\\s*:\\s*(?:isBrowserWallet|useActualAddresses)\\s*\\?\\s*(.+?)\\s*:`,
   );
   const inlineMatch = normalized.match(inlinePattern);
   if (inlineMatch) return inlineMatch[1].trim();
@@ -57,7 +57,7 @@ function extractBrowserBranch(src: string, varName: string): string | null {
 }
 
 /**
- * Extract the keystore (falsy) branch from a ternary using isBrowserWallet.
+ * Extract the keystore (falsy) branch from a ternary using (?:isBrowserWallet|useActualAddresses).
  */
 function extractKeystoreBranch(src: string, varName: string): string | null {
   // Normalize line endings to \n so regex works on both LF and CRLF files
@@ -65,7 +65,7 @@ function extractKeystoreBranch(src: string, varName: string): string | null {
   const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Pattern 1: multiline assignment
   const assignPattern = new RegExp(
-    `${escaped}\\s*=\\s*isBrowserWallet\\s*\\n\\s*\\?.+\\n\\s*:\\s*(.+?)\\s*;`,
+    `${escaped}\\s*=\\s*(?:isBrowserWallet|useActualAddresses)\\s*\\n\\s*\\?.+\\n\\s*:\\s*(.+?)\\s*;`,
   );
   const assignMatch = normalized.match(assignPattern);
   if (assignMatch) return assignMatch[1].trim();
@@ -74,7 +74,7 @@ function extractKeystoreBranch(src: string, varName: string): string | null {
   const propName = varName.replace(/^const\s+/, '');
   const propEscaped = propName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const inlinePattern = new RegExp(
-    `${propEscaped}\\s*:\\s*isBrowserWallet\\s*\\?.+?:\\s*(.+?)\\s*[,}]`,
+    `${propEscaped}\\s*:\\s*(?:isBrowserWallet|useActualAddresses)\\s*\\?.+?:\\s*(.+?)\\s*[,}]`,
   );
   const inlineMatch = normalized.match(inlinePattern);
   if (inlineMatch) return inlineMatch[1].trim();
@@ -125,16 +125,16 @@ describe('Browser wallet address handling', () => {
     });
 
     it('should have a browser-wallet conditional for toAddresses', () => {
-      expect(src).toMatch(/toAddresses\s*=\s*isBrowserWallet/);
+      expect(src).toMatch(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)/);
     });
 
     it('should have a browser-wallet conditional for changeAddress', () => {
       // Some hooks use inline ternary, some use multiline
-      expect(src).toMatch(/changeAddr(ess)?\s*[:=].*isBrowserWallet|changeAddr\s*=\s*isBrowserWallet/);
+      expect(src).toMatch(/changeAddr(ess)?\s*[:=].*(?:isBrowserWallet|useActualAddresses)|changeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)/);
     });
 
     it('should have a browser-wallet conditional for alkanesChangeAddress', () => {
-      expect(src).toMatch(/alkanesChangeAddr(ess)?\s*[:=].*isBrowserWallet|alkanesChangeAddr\s*=\s*isBrowserWallet/);
+      expect(src).toMatch(/alkanesChangeAddr(ess)?\s*[:=].*(?:isBrowserWallet|useActualAddresses)|alkanesChangeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)/);
     });
 
     it('should use actual address variables (not symbolic) in browser wallet path for toAddresses', () => {
@@ -150,13 +150,13 @@ describe('Browser wallet address handling', () => {
     });
 
     it('should use actual address variables (not symbolic) in browser wallet path for changeAddr', () => {
-      // Most hooks: `const changeAddr = isBrowserWallet ? ... : ...;`
-      // useWrapMutation: inline `changeAddress: isBrowserWallet ? ... : 'p2wpkh:0'`
+      // Most hooks: `const changeAddr = (?:isBrowserWallet|useActualAddresses) ? ... : ...;`
+      // useWrapMutation: inline `changeAddress: (?:isBrowserWallet|useActualAddresses) ? ... : 'p2wpkh:0'`
       let browserBranch = extractBrowserBranch(src, 'const changeAddr');
       if (!browserBranch) {
         // Inline pattern in alkanesExecuteTyped call
         const inlineMatch = src.match(
-          /changeAddress:\s*isBrowserWallet\s*\?\s*(.+?)\s*:\s*'p2wpkh:0'/
+          /changeAddress:\s*(?:isBrowserWallet|useActualAddresses)\s*\?\s*(.+?)\s*:\s*'p2wpkh:0'/
         );
         expect(inlineMatch).toBeTruthy();
         browserBranch = inlineMatch![1];
@@ -173,7 +173,7 @@ describe('Browser wallet address handling', () => {
       if (!browserBranch) {
         // Inline pattern in alkanesExecuteTyped call
         const inlineMatch = src.match(
-          /alkanesChangeAddress:\s*isBrowserWallet\s*\?\s*(.+?)\s*:\s*'p2tr:0'/
+          /alkanesChangeAddress:\s*(?:isBrowserWallet|useActualAddresses)\s*\?\s*(.+?)\s*:\s*'p2tr:0'/
         );
         expect(inlineMatch).toBeTruthy();
         browserBranch = inlineMatch![1];
@@ -198,13 +198,13 @@ describe('Browser wallet address handling', () => {
 
     it('should pass changeAddress to alkanesExecuteTyped', () => {
       expect(src).toMatch(
-        /alkanesExecuteTyped\s*\(\s*\{[\s\S]*?changeAddress:\s*(changeAddr|isBrowserWallet)/
+        /alkanesExecuteTyped\s*\(\s*\{[\s\S]*?changeAddress:\s*(changeAddr|(?:isBrowserWallet|useActualAddresses))/
       );
     });
 
     it('should pass alkanesChangeAddress to alkanesExecuteTyped', () => {
       expect(src).toMatch(
-        /alkanesExecuteTyped\s*\(\s*\{[\s\S]*?alkanesChangeAddress:\s*(alkanesChangeAddr|isBrowserWallet)/
+        /alkanesExecuteTyped\s*\(\s*\{[\s\S]*?alkanesChangeAddress:\s*(alkanesChangeAddr|(?:isBrowserWallet|useActualAddresses))/
       );
     });
   });
@@ -356,7 +356,7 @@ describe('fromAddresses browser wallet handling', () => {
     });
 
     it('should define fromAddresses with browser wallet conditional', () => {
-      expect(src).toMatch(/fromAddresses\s*=\s*isBrowserWallet/);
+      expect(src).toMatch(/fromAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)/);
     });
 
     it('should use actual addresses for browser wallet fromAddresses', () => {
@@ -406,13 +406,13 @@ describe('Browser wallet signing pattern', () => {
 
 describe('No symbolic address leaks in browser wallet code paths', () => {
   describe.each(ACTIVE_HOOKS)('%s', (hookFile) => {
-    it('should not have symbolic addresses in any isBrowserWallet truthy branch', () => {
+    it('should not have symbolic addresses in any (?:isBrowserWallet|useActualAddresses) truthy branch', () => {
       const src = readHook(hookFile);
 
-      // Find all multiline ternary patterns with isBrowserWallet
-      // Pattern: = isBrowserWallet\n  ? <browser branch>\n  : <keystore branch>
+      // Find all multiline ternary patterns with (?:isBrowserWallet|useActualAddresses)
+      // Pattern: = (?:isBrowserWallet|useActualAddresses)\n  ? <browser branch>\n  : <keystore branch>
       const ternaryPattern =
-        /=\s*isBrowserWallet\s*\n\s*\?\s*(.+)\n\s*:/g;
+        /=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n\s*:/g;
       let match;
       while ((match = ternaryPattern.exec(src)) !== null) {
         const browserBranch = match[1].trim();

@@ -385,23 +385,25 @@ export function useSwapMutation() {
       // For keystore wallets, symbolic addresses work because the user's mnemonic
       // is loaded into the provider, so p2tr:0 resolves to their actual address.
       // ============================================================================
-      const fromAddresses = isBrowserWallet
+      // On devnet, the SDK provider's walletLoadMnemonic derives different addresses
+      // than WalletContext's createWalletFromMnemonic — same mnemonic, different keys.
+      // Symbolic addresses (p2tr:0) resolve to the SDK provider's derivation, not
+      // the connected wallet's. Use actual addresses on devnet to match faucet outputs.
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
+
+      const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      // Output addresses: where swapped tokens and BTC change should go
-      // JOURNAL ENTRY (2026-03-01): For single-address wallets (UniSat, OKX), use
-      // the available address. Prefer taproot for alkane outputs but fall back to segwit.
-      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [primaryAddress!]
         : ['p2tr:0'];
 
-      const changeAddr = isBrowserWallet
+      const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
-      const alkanesChangeAddr = isBrowserWallet
+      const alkanesChangeAddr = useActualAddresses
         ? primaryAddress
         : 'p2tr:0';
 

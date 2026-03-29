@@ -241,21 +241,21 @@ describe('Browser wallet address handling in useSwapMutation', () => {
   });
 
   it('should use actual primaryAddress for browser wallet toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*isBrowserWallet\s*\n\s*\?\s*(.+)\n/);
+    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
     expect(match).toBeTruthy();
     expect(match![1]).toContain('primaryAddress');
     expect(match![1]).not.toContain("'p2tr:0'");
   });
 
   it('should use segwitAddress fallback for browser wallet changeAddr', () => {
-    const match = src.match(/changeAddr\s*=\s*isBrowserWallet\s*\n\s*\?\s*(.+)\n/);
+    const match = src.match(/changeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
     expect(match).toBeTruthy();
     expect(match![1]).toContain('segwitAddress');
     expect(match![1]).toContain('taprootAddress');
   });
 
   it('should use symbolic p2tr:0 for keystore wallet toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*isBrowserWallet\s*\n\s*\?.+\n\s*:\s*(.+);/);
+    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?.+\n\s*:\s*(.+);/);
     expect(match).toBeTruthy();
     expect(match![1]).toContain("'p2tr:0'");
   });

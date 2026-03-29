@@ -80,21 +80,22 @@ export function useFujinSellMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
 
       // Browser wallets need ACTUAL addresses, not symbolic
-      const fromAddresses = isBrowserWallet
+      const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [primaryAddress!]
         : ['p2tr:0'];
 
-      const changeAddr = isBrowserWallet
+      const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
-      const alkanesChangeAddr = isBrowserWallet
+      const alkanesChangeAddr = useActualAddresses
         ? primaryAddress
         : 'p2tr:0';
 
