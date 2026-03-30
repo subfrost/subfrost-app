@@ -28,7 +28,6 @@ import { useWrapEthMutation } from "@/hooks/useWrapEthMutation";
 import { useUnwrapEthMutation } from "@/hooks/useUnwrapEthMutation";
 import { useBridgeEthMutation } from "@/hooks/useBridgeEthMutation";
 import { useBridgeZecMutation } from "@/hooks/useBridgeZecMutation";
-import { CrossChainBridgePanel } from "./components/CrossChainBridgePanel";
 import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
 import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
@@ -2195,18 +2194,6 @@ export default function SwapShell() {
         {/* Trade Form — FIRST on mobile (order matters), RIGHT on desktop */}
         <div className="lg:col-span-5 lg:order-2 order-1 min-h-0">
           <div className="flex flex-col gap-3">
-            {/* Cross-chain bridge panel replaces TradeForm for native chain pairs */}
-            {isCrossChainSwap && crossChainDirection ? (
-              <CrossChainBridgePanel
-                fromChain={crossChainDirection.from}
-                toChain={crossChainDirection.to}
-                onClose={() => {
-                  // Reset to default pair
-                  setFromToken({ id: 'btc', symbol: 'BTC', name: 'BTC' });
-                  setToToken(undefined);
-                }}
-              />
-            ) : (
             <TradeForm
               fromToken={fromToken}
               toToken={toToken}
@@ -2251,6 +2238,7 @@ export default function SwapShell() {
                     isCalculating={!!isCalculating}
                     feeRate={fee.feeRate}
                     isCrossChainFrom={['ETH', 'ZEC', 'USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
+                    isCrossChainTo={['ETH', 'ZEC', 'USDT', 'USDC'].includes(toToken?.symbol ?? '')}
                     feeSelection={fee.selection}
                     setFeeSelection={fee.setSelection}
                     customFee={fee.custom}
@@ -2265,7 +2253,6 @@ export default function SwapShell() {
               onLimitPriceSelect={setLimitSelectedPrice}
               onOpenLiquidity={() => setIsLiquidityModalOpen(true)}
             />
-            )}
 
             {/* Transaction Stepper - shows during multi-step swaps */}
             {showStepper && stepperSteps.length > 0 && (

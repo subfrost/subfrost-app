@@ -76,6 +76,7 @@ export default function SwapInputs({
   // Refs for focusing inputs when clicking the container
   const fromInputRef = useRef<HTMLInputElement>(null);
   const toInputRef = useRef<HTMLInputElement>(null);
+  const ethAddrInputRef = useRef<HTMLInputElement>(null);
 
   // Track which input is focused for glow effect
   const [fromFocused, setFromFocused] = useState(false);
@@ -560,6 +561,30 @@ export default function SwapInputs({
         </div>
       </div>
 
+      {/* Destination address input for cross-chain FROM BTC/Alkane (to bridge token) */}
+      {isToBridgeToken && !bridgeActive && (
+        <div
+          className="sf-input group relative z-10 px-4 pb-4 pt-6 cursor-text"
+          onClick={() => ethAddrInputRef.current?.focus()}
+        >
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
+              {to?.id === 'zec' ? t("swap.enterZcashAddress") : t("swap.enterEthereumAddress")}
+            </span>
+            <input
+              ref={ethAddrInputRef}
+              type="text"
+              value={ethereumAddress ?? ""}
+              onChange={(e) => onChangeEthereumAddress?.(e.target.value)}
+              onFocus={() => setEthAddressFocused(true)}
+              onBlur={() => setEthAddressFocused(false)}
+              placeholder={to?.id === 'zec' ? 't...' : '0x...'}
+              className="w-full bg-transparent text-sm font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 outline-none"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Summary - hidden when bridge is active */}
       <div
         className={`relative z-20 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
@@ -570,29 +595,6 @@ export default function SwapInputs({
       >
         {summary}
       </div>
-
-      {/* Ethereum Wallet Address for cross-chain tokens (when sending TO bridge token) */}
-      {isToBridgeToken && !bridgeActive && (
-        <div
-          className="sf-input relative z-10 p-4"
-        >
-          <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-            {t("swap.ethWalletAddress")}
-          </label>
-          <input
-            type="text"
-            value={ethereumAddress ?? ""}
-            onChange={(e) => onChangeEthereumAddress?.(e.target.value)}
-            onFocus={() => setEthAddressFocused(true)}
-            onBlur={() => setEthAddressFocused(false)}
-            placeholder={t("swap.enterUsdtRecipient")}
-            className="sf-input w-full px-4 py-3 text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40"
-          />
-          <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
-            {t("swap.enterEthAddress")}
-          </p>
-        </div>
-      )}
 
       {/* ActivateBridge component - grows up from button area when active */}
       <ActivateBridge

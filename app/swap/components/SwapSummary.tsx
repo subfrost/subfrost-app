@@ -29,6 +29,7 @@ type Props = {
   feeRate: number;
   network?: 'mainnet' | 'testnet';
   isCrossChainFrom?: boolean;
+  isCrossChainTo?: boolean;
   feeSelection?: FeeSelection;
   setFeeSelection?: (s: FeeSelection) => void;
   customFee?: string;
@@ -36,12 +37,13 @@ type Props = {
   feePresets?: { slow: number; medium: number; fast: number };
 };
 
-export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp, isCrossChainFrom, feeSelection = 'medium', setFeeSelection, customFee = '', setCustomFee, feePresets = { slow: 2, medium: 8, fast: 25 } }: Props) {
+export default function SwapSummary({ sellId, buyId, sellName, buyName, direction, quote, isCalculating, feeRate, network: networkProp, isCrossChainFrom, isCrossChainTo, feeSelection = 'medium', setFeeSelection, customFee = '', setCustomFee, feePresets = { slow: 2, medium: 8, fast: 25 } }: Props) {
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
   const { t } = useTranslation();
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
+  const isCrossChain = isCrossChainFrom || isCrossChainTo;
 
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
@@ -262,7 +264,8 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 return formatAlks(quote.maximumSent, decimals, decimals);
               })()} ${sellName ?? sellId}`} />
             )}
-            {/* Deadline (blocks) row */}
+            {/* Deadline (blocks) row — hidden for cross-chain swaps */}
+            {!isCrossChain && (
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
                 {t('swapSummary.deadlineBlocks')}
@@ -294,7 +297,8 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 </div>
               </div>
             </div>
-            {/* Slippage Tolerance row */}
+            )}
+            {!isCrossChain && (
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
                 {t('swapSummary.slippageTolerance')}
@@ -348,15 +352,15 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 )}
               </div>
             </div>
-            {/* Miner Fee Rate row */}
+            )}
+            {/* Miner Fee Rate row — hidden for cross-chain TO BTC/Alkane (isCrossChainFrom) */}
+            {!isCrossChainFrom && (
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                {isCrossChainFrom ? t('swapSummary.btcAndEthFee') : t('swapSummary.minerFeeRate')}
+                {t('swapSummary.minerFeeRate')}
               </span>
               <div className="flex items-center gap-2">
-                {isCrossChainFrom ? (
-                  <span className="font-semibold text-[color:var(--sf-text)]">$0.00 USDT</span>
-                ) : feeSelection === 'custom' && setCustomFee ? (
+                {feeSelection === 'custom' && setCustomFee ? (
                   <div className="relative">
                     <input
                       aria-label="Custom miner fee rate"
@@ -382,18 +386,17 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                     {Math.round(feeRate)}
                   </span>
                 )}
-                {!isCrossChainFrom && (
-                  <MinerFeeButton
-                    selection={feeSelection}
-                    setSelection={setFeeSelection}
-                    customFee={customFee}
-                    setCustomFee={setCustomFee}
-                    feeRate={feeRate}
-                    presets={feePresets}
-                  />
-                )}
+                <MinerFeeButton
+                  selection={feeSelection}
+                  setSelection={setFeeSelection}
+                  customFee={customFee}
+                  setCustomFee={setCustomFee}
+                  feeRate={feeRate}
+                  presets={feePresets}
+                />
               </div>
             </div>
+            )}
             {poolFeeText && <Row label={t('swapSummary.poolFee')} value={poolFeeText} />}
           </div>
           

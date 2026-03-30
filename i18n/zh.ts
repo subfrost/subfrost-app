@@ -61,9 +61,11 @@ const zh: Record<string, string> = {
   'swap.showChart': '\u663e\u793a\u56fe\u8868',
   'swap.swapTab': '\u5151\u6362',
   'swap.liquidityTab': '\u6d41\u52a8\u6027',
-  'swap.ethWalletAddress': '\u4ee5\u592a\u574a\u94b1\u5305\u5730\u5740',
-  'swap.enterUsdtRecipient': '\u8f93\u5165 USDT \u63a5\u6536\u5730\u5740 (0x...)',
-  'swap.enterEthAddress': '\u8f93\u5165\u60a8\u5e0c\u671b\u63a5\u6536 USDT \u7684\u4ee5\u592a\u574a\u5730\u5740\u3002',
+  'swap.ethWalletAddress': '接收地址 (ETH 地址)',
+  'swap.enterUsdtRecipient': '输入接收地址 (0x...)',
+  'swap.enterEthAddress': '输入您希望接收代币的以太坊地址。',
+  'swap.enterEthereumAddress': '输入以太坊地址',
+  'swap.enterZcashAddress': '输入 Zcash 地址',
 
   // Swap Summary
   'swapSummary.multiHopRoute': '\u591a\u8df3\u5151\u6362\u8def\u7ebf',

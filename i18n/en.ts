@@ -61,9 +61,11 @@ const en: Record<string, string> = {
   'swap.showChart': 'Show Chart',
   'swap.swapTab': 'SWAP',
   'swap.liquidityTab': 'LIQUIDITY',
-  'swap.ethWalletAddress': 'Ethereum Wallet Address',
-  'swap.enterUsdtRecipient': 'Enter USDT recipient address (0x...)',
-  'swap.enterEthAddress': 'Enter the Ethereum address where you want to receive USDT.',
+  'swap.ethWalletAddress': 'Receive At (ETH Address)',
+  'swap.enterUsdtRecipient': 'Enter recipient address (0x...)',
+  'swap.enterEthAddress': 'Enter the Ethereum address where you want to receive your tokens.',
+  'swap.enterEthereumAddress': 'Enter Ethereum Address',
+  'swap.enterZcashAddress': 'Enter Zcash Address',
 
   // Swap Summary
   'swapSummary.multiHopRoute': 'Multi-Hop Swap Route',
