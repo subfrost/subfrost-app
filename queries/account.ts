@@ -22,6 +22,12 @@ import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
+// Debug logging — only enabled when NEXT_PUBLIC_DEBUG_QUERIES is set
+const DEBUG = typeof window !== 'undefined'
+  && (new URLSearchParams(window.location?.search)).has('debug');
+const debugLog = DEBUG ? console.log.bind(console) : () => {};
+const debugWarn = DEBUG ? console.warn.bind(console) : () => {};
+
 // ---------------------------------------------------------------------------
 // Enriched wallet data
 // ---------------------------------------------------------------------------
@@ -60,7 +66,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
   const addressKey = addresses.sort().join(',');
 
   // Debug: log wallet state for balance queries
-  console.log('[enrichedWalletQueryOptions] Wallet state:', {
+  debugLog('[enrichedWalletQueryOptions] Wallet state:', {
     isConnected: deps.isConnected,
     isInitialized: deps.isInitialized,
     hasProvider: !!deps.provider,
@@ -98,7 +104,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           promise,
           new Promise<T>((resolve) =>
             setTimeout(() => {
-              console.log(`[BALANCE] Request timed out after ${timeoutMs}ms, using fallback`);
+              debugLog(`[BALANCE] Request timed out after ${timeoutMs}ms, using fallback`);
               resolve(fallback);
             }, timeoutMs),
           ),
@@ -190,7 +196,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           }
           return { address, data: enrichedData };
         } catch (error) {
-          console.warn(`[BALANCE] getEnrichedBalances failed for ${address}, trying esplora fallback:`, error);
+          debugWarn(`[BALANCE] getEnrichedBalances failed for ${address}, trying esplora fallback:`, error);
           try {
             const spendable = await fetchUtxosViaEsplora(address);
             if (spendable && spendable.length > 0) {
@@ -380,7 +386,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           // (subfrost/espo kungfuflex/fujin branch, loaded as quspo.wasm).
           const result = await (provider as any).dataApiGetAlkanesByAddress(address);
           const items: any[] = result?.data || [];
-          console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
+          debugLog(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
 
           for (const item of items) {
             const block = item.alkaneId?.block;
@@ -417,7 +423,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
         }
       }
 
-      console.log(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`, Array.from(alkaneMap.values()).map(a => `${a.name}(${a.alkaneId})=${a.balance}`).join(', '));
+      debugLog(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`, Array.from(alkaneMap.values()).map(a => `${a.name}(${a.alkaneId})=${a.balance}`).join(', '));
       return Array.from(alkaneMap.values());
     },
   });
