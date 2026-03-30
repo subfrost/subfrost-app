@@ -633,6 +633,8 @@ function __wbg_get_imports() {
             return ret;
         }, arguments); },
         __wbg_error_8d9a8e04cd1d3588: function(arg0) {
+            const s = typeof arg0 === 'string' ? arg0 : '';
+            if (s.includes('__get_len') || s.includes('__flush') || s.includes('get_count') || s.includes('MISS')) return;
             console.error(arg0);
         },
         __wbg_exports_166644897be74f9d: function(arg0) {
@@ -670,6 +672,8 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbg_log_524eedafa26daa59: function(arg0) {
+            const s = typeof arg0 === 'string' ? arg0 : '';
+            if (s.includes('__get_len') || s.includes('__flush') || s.includes('get_count') || s.includes('MISS') || s.includes('[DEBUG]') || s.includes('[INFO]')) return;
             console.log(arg0);
         },
         __wbg_new_592b75079b91788e: function() { return handleError(function (arg0, arg1) {
