@@ -52,17 +52,14 @@
   console.log = function() { if (isAllowed(arguments)) origLog.apply(console, arguments); };
   console.warn = function() { if (isAllowed(arguments)) origWarn.apply(console, arguments); };
   console.debug = function() {};
-  // Always allow console.error through (real errors matter)
-  // but filter the WASM noise that uses console.error
+  // console.error: allowlist same as log/warn, plus actual Error objects
   console.error = function() {
     if (arguments.length === 0) return;
     var first = arguments[0];
-    if (typeof first === 'string' && first.length < 10) return;
-    if (typeof first === 'string' && (
-      first.indexOf('__get') !== -1 ||
-      first.indexOf('__flush') !== -1 ||
-      first.indexOf('[ioredis]') !== -1
-    )) return;
-    origError.apply(console, arguments);
+    // Always pass Error objects and stack traces
+    if (first instanceof Error) { origError.apply(console, arguments); return; }
+    // Pass if matches allowlist
+    if (isAllowed(arguments)) { origError.apply(console, arguments); return; }
+    // Block everything else (WASM noise, SDK debug, struct fields)
   };
 })();
