@@ -20,7 +20,6 @@ async function fetchTokenNames(
   try {
     const resp = await fetch(`/api/token-names?network=${encodeURIComponent(network)}&limit=500`);
     if (!resp.ok) {
-      console.warn(`[useTokenNames] /api/token-names failed: ${resp.status}`);
       return map;
     }
     const data = await resp.json();
@@ -30,9 +29,7 @@ async function fetchTokenNames(
       map.set(alkaneId, entry as TokenNameEntry);
     }
 
-    console.log(`[useTokenNames] Loaded ${map.size} token names`);
   } catch (err) {
-    console.warn('[useTokenNames] Failed to fetch token names:', err);
   }
 
   return map;

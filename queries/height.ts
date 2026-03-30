@@ -115,7 +115,6 @@ export function HeightPoller({ network }: { network: string }) {
     // data and nothing triggers a retry until the next block.
     if (prevHeight.current === null) {
       prevHeight.current = height;
-      console.log(`[HeightPoller] Initial height: ${height}, triggering first invalidation`);
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
@@ -133,7 +132,6 @@ export function HeightPoller({ network }: { network: string }) {
     // heights, causing oscillation (e.g. 870001 → 870000 → 870001) that would
     // otherwise trigger spurious invalidations every poll cycle.
     if (height > prevHeight.current) {
-      console.log(
         `[HeightPoller] Height changed ${prevHeight.current} → ${height}, invalidating queries`,
       );
       prevHeight.current = height;

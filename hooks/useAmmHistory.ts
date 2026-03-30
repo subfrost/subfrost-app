@@ -239,7 +239,6 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
           };
         }
       } catch (e) {
-        console.warn('[usePoolsMetadata] dataApiGetAllPoolsDetails failed:', e);
       }
 
       // Fallback: per-pool ammGetPoolDetails (single simulate each) for any missing
@@ -326,7 +325,6 @@ export function useInfiniteAmmTxHistory({
           ? rawItems.filter((item: any) => item?.type === transactionType)
           : rawItems;
 
-        console.log(`[useAmmHistory] ${rawItems.length} items (${rawItemsRaw.length} raw, type filter: ${transactionType || 'all'})`);
 
         return {
           items: filteredItems,

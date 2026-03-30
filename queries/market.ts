@@ -151,7 +151,6 @@ export function frbtcPremiumQueryOptions(
           isLive: true,
         };
       } catch (error) {
-        console.warn('[frbtcPremium] Using fallback:', error instanceof Error ? error.message : 'Unknown error');
         return {
           premium: 100_000,
           wrapFeePerThousand: FRBTC_WRAP_FEE_PER_1000,

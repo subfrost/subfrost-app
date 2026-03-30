@@ -15,7 +15,6 @@ async function fetchDxBtcStats(network: string) {
       const stats = await quspoGetDxBtcStats(vaultId, network);
       if (stats) return { totalSupply: stats.totalSupply, feesDeposited: stats.feesDeposited, vaultId };
     } catch (e) {
-      console.warn('[useDxBtcVault] quspo failed, falling back to RPC:', e);
     }
   }
 

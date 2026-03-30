@@ -61,7 +61,6 @@ function getTokenSymbol(tokenId: string, rawName?: string): string {
 
 function normalizePoolArray(raw: any): any[] {
   if (!raw) {
-    console.log('[normalizePoolArray] raw is falsy:', raw);
     return [];
   }
 
@@ -74,32 +73,21 @@ function normalizePoolArray(raw: any): any[] {
   }
 
   // DIAGNOSTIC: Log what we're working with
-  console.log('[normalizePoolArray] parsed type:', typeof parsed);
-  console.log('[normalizePoolArray] parsed keys:', parsed ? Object.keys(parsed) : 'N/A');
-  console.log('[normalizePoolArray] parsed.pools?:', parsed?.pools?.length ?? 'undefined');
-  console.log('[normalizePoolArray] parsed.data?.pools?:', parsed?.data?.pools?.length ?? 'undefined');
-  console.log('[normalizePoolArray] Array.isArray(parsed.data)?:', Array.isArray(parsed?.data), 'length:', parsed?.data?.length);
-  console.log('[normalizePoolArray] Array.isArray(parsed)?:', Array.isArray(parsed), 'length:', Array.isArray(parsed) ? parsed.length : 'N/A');
 
   // Try multiple possible response shapes
   if (parsed?.pools && Array.isArray(parsed.pools)) {
-    console.log('[normalizePoolArray] Using parsed.pools');
     return parsed.pools;
   }
   if (parsed?.data?.pools && Array.isArray(parsed.data.pools)) {
-    console.log('[normalizePoolArray] Using parsed.data.pools');
     return parsed.data.pools;
   }
   if (Array.isArray(parsed?.data)) {
-    console.log('[normalizePoolArray] Using parsed.data (array)');
     return parsed.data;
   }
   if (Array.isArray(parsed)) {
-    console.log('[normalizePoolArray] Using parsed (array)');
     return parsed;
   }
 
-  console.log('[normalizePoolArray] No valid pool array found, returning empty');
   return [];
 }
 
@@ -130,9 +118,6 @@ async function fetchPoolsFromSDK(
   factoryId: string,
   network: string,
 ): Promise<AlkanesTokenPair[]> {
-  console.log('[fetchPoolsFromSDK] ENTRY - factoryId:', factoryId, 'network:', network);
-  console.log('[fetchPoolsFromSDK] provider available:', !!provider);
-  console.log('[fetchPoolsFromSDK] provider.dataApiGetAllTokenPairs:', typeof provider?.dataApiGetAllTokenPairs);
 
   const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
     Promise.race([
@@ -157,15 +142,11 @@ async function fetchPoolsFromSDK(
         'direct-get-all-token-pairs'
       );
       const result = await response.json();
-      console.log('[useAlkanesTokenPairs] Direct REST result:', JSON.stringify(result)?.slice(0, 300));
       const pools = normalizePoolArray(result);
-      console.log('[useAlkanesTokenPairs] Direct REST normalized pools count:', pools.length);
       if (pools.length > 0) {
         poolsArray = pools.map(toPoolRow);
-        console.log('[useAlkanesTokenPairs] Direct REST returned', poolsArray.length, 'pools');
       }
     } catch (e) {
-      console.warn('[useAlkanesTokenPairs] Direct REST get-all-token-pairs failed:', e);
     }
   }
 
@@ -174,17 +155,12 @@ async function fetchPoolsFromSDK(
     try {
       const result = await withTimeout(provider.dataApiGetAllTokenPairs(factoryId), 15000, 'dataApiGetAllTokenPairs');
       // DIAGNOSTIC: Log raw SDK return value to debug pool fetching issues
-      console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs RAW result type:', typeof result);
-      console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs RAW result:',
         typeof result === 'string' ? result.slice(0, 500) : JSON.stringify(result)?.slice(0, 500));
       const pools = normalizePoolArray(result);
-      console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs normalized pools count:', pools.length);
       if (pools.length > 0) {
         poolsArray = pools.map(toPoolRow);
-        console.log('[useAlkanesTokenPairs] dataApiGetAllTokenPairs returned', poolsArray.length, 'pools');
       }
     } catch (e) {
-      console.warn('[useAlkanesTokenPairs] dataApiGetAllTokenPairs failed:', e);
     }
   }
 
@@ -193,17 +169,12 @@ async function fetchPoolsFromSDK(
     try {
       const result = await withTimeout(provider.dataApiGetAllPoolsDetails(factoryId), 15000, 'dataApiGetAllPoolsDetails');
       // DIAGNOSTIC: Log raw SDK return value
-      console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails RAW result type:', typeof result);
-      console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails RAW result:',
         typeof result === 'string' ? result.slice(0, 500) : JSON.stringify(result)?.slice(0, 500));
       const pools = normalizePoolArray(result);
-      console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails normalized pools count:', pools.length);
       if (pools.length > 0) {
         poolsArray = pools.map(toPoolRow);
-        console.log('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails returned', poolsArray.length, 'pools');
       }
     } catch (e) {
-      console.warn('[useAlkanesTokenPairs] dataApiGetAllPoolsDetails failed:', e);
     }
   }
 
@@ -224,9 +195,7 @@ async function fetchPoolsFromSDK(
         token1_amount: p.details?.reserve_b || '0',
         pool_name: p.details?.pool_name || '',
       }));
-      console.log('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails returned', poolsArray.length, 'pools');
     } catch (e) {
-      console.warn('[useAlkanesTokenPairs] alkanesGetAllPoolsWithDetails failed:', e);
     }
   }
 
@@ -307,7 +276,6 @@ export function useAlkanesTokenPairs(
       }
 
       const allPools = await fetchPoolsFromSDK(provider, ALKANE_FACTORY_ID, network);
-      console.log('[useAlkanesTokenPairs] SDK returned', allPools.length, 'pools');
 
       if (allPools.length === 0) {
         throw new Error('Failed to fetch pools from SDK');

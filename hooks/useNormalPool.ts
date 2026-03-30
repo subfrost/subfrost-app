@@ -168,7 +168,6 @@ export function useNormalPool() {
 
         return { poolId, totalValue, totalSupply, holdings, hasLiquidity };
       } catch (err) {
-        console.warn('[useNormalPool] Query failed:', err);
         return { poolId, totalValue: '0', totalSupply: '0', holdings: [], hasLiquidity: false };
       }
     },

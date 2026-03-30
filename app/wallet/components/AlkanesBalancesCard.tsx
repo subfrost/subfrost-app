@@ -106,7 +106,6 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
     const timer = setTimeout(() => {
       if (balances.alkanes.length === 0 && retryCountRef.current < MAX_AUTO_RETRIES) {
         retryCountRef.current += 1;
-        console.log(`[AlkanesBalancesCard] Auto-retry ${retryCountRef.current}/${MAX_AUTO_RETRIES} — alkanes empty after ${delay}ms`);
         handleRefresh();
       }
     }, delay);

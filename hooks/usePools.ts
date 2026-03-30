@@ -197,7 +197,6 @@ async function fetchPoolsFromDataApi(
     || parsed?.data?.pools
     || (Array.isArray(parsed?.data) ? parsed.data : []);
 
-  console.log('[usePools] dataApiGetAllPoolsDetails returned', pools.length, 'pools');
 
   if (pools.length === 0) {
     throw new Error('dataApiGetAllPoolsDetails returned 0 pools (API may be down)');
@@ -291,7 +290,6 @@ async function fetchPoolsFromPoolsDetailsRest(
   const json = await resp.json();
   const pools: any[] = json?.data?.pools || json?.pools || [];
 
-  console.log('[usePools] get-all-pools-details REST returned', pools.length, 'pools');
 
   if (pools.length === 0) {
     throw new Error('get-all-pools-details REST returned 0 pools');
@@ -380,7 +378,6 @@ async function fetchPoolsFromTokenPairsRest(
   const json = await resp.json();
   const pools: any[] = json?.data?.pools || (Array.isArray(json?.data) ? json.data : null) || json?.pools || [];
 
-  console.log('[usePools] get-all-token-pairs REST returned', pools.length, 'pools');
 
   const items: PoolsListItem[] = [];
 
@@ -461,7 +458,6 @@ async function fetchPoolsFromTokenPairsApi(
   // API returns { data: [...] } with pool objects
   const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : []) || (Array.isArray(parsed) ? parsed : []);
 
-  console.log('[usePools] dataApiGetAllTokenPairs returned', pools.length, 'pools');
 
   if (pools.length === 0) {
     throw new Error('dataApiGetAllTokenPairs returned 0 pools');
@@ -546,7 +542,6 @@ async function fetchPoolsFromSDKFallback(
   const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
   const rpcPools = parsed?.pools || [];
 
-  console.log('[usePools] SDK fallback returned', rpcPools.length, 'pools');
 
   const items: PoolsListItem[] = [];
 
@@ -614,7 +609,6 @@ export function usePools(params: UsePoolsParams = {}) {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!network && !!ALKANE_FACTORY_ID && !!provider,
     queryFn: async () => {
-      console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID);
 
       if (!provider) {
         throw new Error('SDK provider not available');
@@ -630,10 +624,8 @@ export function usePools(params: UsePoolsParams = {}) {
       // On devnet, the fetch interceptor routes these REST calls through quspo.
       try {
         tokenMetaMap = await tokenMetaPromise;
-        console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
         items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
       } catch (e) {
-        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to REST:', e);
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
 
@@ -642,7 +634,6 @@ export function usePools(params: UsePoolsParams = {}) {
         try {
           items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
-          console.warn('[usePools] get-all-pools-details REST failed:', e);
         }
       }
 
@@ -651,7 +642,6 @@ export function usePools(params: UsePoolsParams = {}) {
         try {
           items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
-          console.warn('[usePools] get-all-token-pairs REST failed:', e);
         }
       }
 
@@ -660,7 +650,6 @@ export function usePools(params: UsePoolsParams = {}) {
         try {
           items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
-          console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
         }
       }
 
@@ -669,7 +658,6 @@ export function usePools(params: UsePoolsParams = {}) {
         try {
           items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
-          console.warn('[usePools] SDK fallback also failed:', e);
         }
       }
 
@@ -694,7 +682,6 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
       if (missingIds.size > 0) {
-        console.log('[usePools] Fetching metadata for', missingIds.size, 'tokens with numeric names:', [...missingIds]);
         await fetchMissingTokenMetadata([...missingIds], network, tokenMetaMap);
         // Re-apply proper names from the updated metadata map
         // Use name as fallback for symbol (and vice versa) when one is empty
@@ -727,7 +714,6 @@ export function usePools(params: UsePoolsParams = {}) {
       const beforeCount = items.length;
       items = items.filter(p => !isBlacklistedPool(p));
       if (items.length < beforeCount) {
-        console.log(`[usePools] Filtered out ${beforeCount - items.length} blacklisted pool(s)`);
       }
 
       // Remove dust/dead pools with negligible TVL (skip on regtest/devnet where pricing is unavailable)

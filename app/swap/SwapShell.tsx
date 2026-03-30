@@ -343,7 +343,6 @@ export default function SwapShell() {
           (p.token0.id === saved.to.id && p.token1.id === saved.from.id)
       );
       if (matchingPool) {
-        console.log('[SwapShell] Restoring saved pair from session:', saved.from.symbol, '→', saved.to.symbol);
         setFromToken(saved.from);
         setToToken(saved.to);
         setSelectedPool(matchingPool);
@@ -354,7 +353,6 @@ export default function SwapShell() {
       // Saved pair no longer in markets — also check for wrap pairs (BTC/frBTC)
       const isSavedWrapPair = (saved.from.id === 'btc' || saved.to.id === 'btc');
       if (isSavedWrapPair) {
-        console.log('[SwapShell] Restoring saved wrap pair from session:', saved.from.symbol, '→', saved.to.symbol);
         setFromToken(saved.from);
         setToToken(saved.to);
         trendingPoolInitializedRef.current = true;
@@ -366,7 +364,6 @@ export default function SwapShell() {
 
     // First visit: use trending (highest volume) pool — or first pool by TVL if no volume data yet
     if (topVolumePool) {
-      console.log('[SwapShell] Initializing trending pool:', topVolumePool.pairLabel, {
         vol24h: topVolumePool.vol24hUsd,
         vol30d: topVolumePool.vol30dUsd,
         tvl: topVolumePool.tvlUsd,
@@ -388,7 +385,6 @@ export default function SwapShell() {
 
     // Check if trending pool changed now that volume data is available
     if (topVolumePool.id !== selectedPool?.id) {
-      console.log('[SwapShell] Refining to volume-based trending pool:', topVolumePool.pairLabel, {
         vol24h: topVolumePool.vol24hUsd,
         vol30d: topVolumePool.vol30dUsd,
       });
@@ -1019,7 +1015,6 @@ export default function SwapShell() {
   }, [swapFlowStep, isBtcToTokenSwap, isTokenToBtcSwap, fromToken?.symbol, toToken?.symbol, t]);
 
   const handleSwap = async () => {
-    console.log('[handleSwap] Called with:', {
       fromToken: fromToken?.id,
       toToken: toToken?.id,
       FRBTC_ALKANE_ID,
@@ -1034,7 +1029,6 @@ export default function SwapShell() {
 
     // Wrap/Unwrap direct pairs
     if (isWrapPair) {
-      console.log('[handleSwap] isWrapPair=true, calling wrapMutation...');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
@@ -1066,7 +1060,6 @@ export default function SwapShell() {
 
     // frZEC wrap (BTC → frZEC) — CGGMP21 wrapped Zcash
     if (isWrapZecPair) {
-      console.log('[handleSwap] isWrapZecPair=true, calling wrapZecMutation...');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapZecMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
@@ -1141,7 +1134,6 @@ export default function SwapShell() {
     //   ZEC→ETH: deposit ZEC → frZEC → frBTC → frETH → BurnAndBridge → ETH
     if (isCrossChainSwap && crossChainDirection) {
       const { from: srcChain, to: dstChain } = crossChainDirection;
-      console.log(`[handleSwap] Cross-chain: ${srcChain} → ${dstChain}`);
 
       // For now, show a message that cross-chain bridge UI is coming
       // The full flow will use CrossChainBridgePanel component
@@ -1175,7 +1167,6 @@ export default function SwapShell() {
       }
 
       try {
-        console.log('[SWAP] BTC →', toToken.symbol, ': Step 1/2 — Wrapping BTC to frBTC');
         const btcAmount = fromAmount;
 
         // Update state: wrapping
@@ -1192,7 +1183,6 @@ export default function SwapShell() {
           throw new Error('Wrap step failed — no transaction ID returned');
         }
         const wrapTxId = wrapRes.transactionId;
-        console.log('[SWAP] Step 1 broadcast — wrap txid:', wrapTxId);
 
         // ⚠️ JOURNAL (2026-03-26): On devnet, the in-process indexer processes
         // blocks synchronously — no esplora polling needed. On regtest, mine a
@@ -1201,7 +1191,6 @@ export default function SwapShell() {
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
 
         if (isRegtest && address) {
-          console.log('[SWAP] Mining block to confirm wrap transaction...');
           try {
             if (network === 'devnet') {
               await fetch(getRpcUrl(network), {
@@ -1217,12 +1206,10 @@ export default function SwapShell() {
               });
             }
           } catch (mineErr) {
-            console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
           }
         }
 
         if (network !== 'devnet') {
-          console.log('[SWAP] Waiting for wrap tx confirmation before swap step...');
           showNotification(wrapTxId, 'wrap', 'Step 1/2');
 
           const pollInterval = isRegtest ? 1500 : 15000;
@@ -1240,7 +1227,6 @@ export default function SwapShell() {
               });
               const txData = await txResp.json();
               if (txData?.result?.status?.confirmed) {
-                console.log(`[SWAP] Wrap tx confirmed after ${Math.round((attempt + 1) * pollInterval / 1000)}s`);
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 wrapConfirmed = true;
                 break;
@@ -1253,13 +1239,11 @@ export default function SwapShell() {
             throw new Error(`Wrap tx did not confirm — swap frBTC → ${toToken.symbol} manually.`);
           }
         } else {
-          console.log('[SWAP] Devnet: skipping esplora polling — tx confirmed synchronously');
           showNotification(wrapTxId, 'wrap', 'Step 1/2');
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         // Step 2: Swap frBTC → Target token
-        console.log('[SWAP] Step 2/2 — Swapping frBTC →', toToken.symbol);
         setSwapFlowStep({ type: 'swapping' });
 
         // Calculate frBTC amount after wrap fee (same logic as useWrapSwapMutation)
@@ -1281,7 +1265,6 @@ export default function SwapShell() {
         });
 
         if (swapRes?.success && swapRes.transactionId) {
-          console.log('[SWAP] Step 2 complete — swap txid:', swapRes.transactionId);
 
           // On devnet, mine a block to confirm the swap tx so balances update
           if (network === 'devnet' && address) {
@@ -1346,7 +1329,6 @@ export default function SwapShell() {
 
       try {
         // Step 1: Swap Token → frBTC
-        console.log('[SWAP]', fromToken.symbol, '→ BTC : Step 1/2 — Swapping', fromToken.symbol, '→ frBTC');
         setSwapFlowStep({ type: 'swapping' });
 
         const sellAmount = quote.sellAmount;
@@ -1368,13 +1350,11 @@ export default function SwapShell() {
           throw new Error('Swap step failed — no transaction ID returned');
         }
         const swapTxId = swapRes.transactionId;
-        console.log('[SWAP] Step 1 broadcast — swap txid:', swapTxId);
 
         // ⚠️ JOURNAL (2026-03-26): Same devnet handling as BTC→Token flow above.
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
 
         if (isRegtest && address) {
-          console.log('[SWAP] Mining block to confirm swap transaction...');
           try {
             if (network === 'devnet') {
               await fetch(getRpcUrl(network), {
@@ -1390,12 +1370,10 @@ export default function SwapShell() {
               });
             }
           } catch (mineErr) {
-            console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
           }
         }
 
         if (network !== 'devnet') {
-        console.log('[SWAP] Waiting for swap tx confirmation before unwrap step...');
         showNotification(swapTxId, 'swap', 'Step 1/2');
 
         const pollInterval = isRegtest ? 1500 : 15000;
@@ -1414,13 +1392,11 @@ export default function SwapShell() {
             const txData = await txResp.json();
             if (txData?.result?.status?.confirmed) {
               const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
-              console.log(`[SWAP] Swap tx confirmed after ${elapsedSec}s`);
               await new Promise(resolve => setTimeout(resolve, 2000));
               swapConfirmed = true;
               break;
             }
             const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
-            console.log(`[SWAP] Polling swap tx... attempt ${attempt + 1}/${maxPollAttempts} (${elapsed}s elapsed)`);
           } catch {
             // Polling error — keep retrying
           }
@@ -1431,13 +1407,11 @@ export default function SwapShell() {
           throw new Error(`Swap tx did not confirm — unwrap frBTC → BTC manually.`);
         }
         } else {
-          console.log('[SWAP] Devnet: skipping esplora polling — tx confirmed synchronously');
           showNotification(swapTxId, 'swap', 'Step 1/2');
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         // Step 2: Unwrap frBTC → BTC
-        console.log('[SWAP] Step 2/2 — Unwrapping frBTC → BTC');
         setSwapFlowStep({ type: 'unwrapping' });
 
         // ⚠️ JOURNAL (2026-03-26): On devnet, quote.buyAmount can be wildly wrong
@@ -1472,10 +1446,8 @@ export default function SwapShell() {
               // Convert from raw alkane units to display units (÷ 1e8).
               // unwrapMutation.amount expects display units — toAlks(amount) converts back.
               frbtcAmount = (Number(totalFrbtc) / 1e8).toFixed(8);
-              console.log('[SWAP] Devnet: using actual frBTC balance for unwrap:', frbtcAmount, '(raw:', totalFrbtc.toString(), ')');
             }
           } catch (err) {
-            console.warn('[SWAP] Devnet: could not query frBTC balance, using quote:', err);
           }
         }
 
@@ -1485,7 +1457,6 @@ export default function SwapShell() {
         });
 
         if (unwrapRes?.success && unwrapRes.transactionId) {
-          console.log('[SWAP] Step 2 complete — unwrap txid:', unwrapRes.transactionId);
 
           // On devnet, mine a block to confirm the unwrap tx so BTC balance updates
           if (network === 'devnet' && address) {
@@ -1542,7 +1513,6 @@ export default function SwapShell() {
     // Multi-hop swaps use the factory's opcode 13 with a token path, not a single poolId.
     // The quote.route array indicates multi-hop (e.g., [DIESEL, bUSD, frBTC]).
     const hasValidRoute = quote.route && quote.route.length >= 2;
-    console.log('[SWAP] Quote validation:', {
       poolId: quote.poolId,
       route: quote.route,
       hasValidRoute,
@@ -1636,7 +1606,6 @@ export default function SwapShell() {
   };
 
   const handleAddLiquidity = async () => {
-    console.log('[handleAddLiquidity] Starting...', { poolToken0, poolToken1, poolToken0Amount, poolToken1Amount });
 
     if (!poolToken0 || !poolToken1) {
       window.alert('Please select both tokens');
@@ -1682,7 +1651,6 @@ export default function SwapShell() {
       });
 
       if (result?.success && result.transactionId) {
-        console.log('[handleAddLiquidity] Success! txid:', result.transactionId);
         showNotification(result.transactionId, 'addLiquidity');
         // Clear amounts after success
         setPoolToken0Amount('');
@@ -1695,7 +1663,6 @@ export default function SwapShell() {
   };
 
   const handleRemoveLiquidity = async () => {
-    console.log('[handleRemoveLiquidity] Starting...', { selectedLPPosition, removeAmount });
 
     if (!selectedLPPosition) {
       window.alert('Please select an LP position to remove');
@@ -1726,7 +1693,6 @@ export default function SwapShell() {
       });
 
       if (result?.success && result.transactionId) {
-        console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
         showNotification(result.transactionId, 'removeLiquidity');
         // Clear state after success
         setRemoveAmount('');
@@ -1822,7 +1788,6 @@ export default function SwapShell() {
   // Diagnostic: log token name data sources (runs once per data change, not every render)
   useEffect(() => {
     if (!tokenNamesMap || tokenNamesMap.size === 0) return;
-    console.log(`[SwapShell] tokenNamesMap loaded: ${tokenNamesMap.size} token names from /get-alkanes`);
   }, [tokenNamesMap]);
 
   const fromTokenOptions = useMemo<TokenOption[]>(() => {
