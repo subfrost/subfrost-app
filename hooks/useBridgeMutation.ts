@@ -95,9 +95,6 @@ export function useBridgeToEvm() {
 
   return useMutation({
     mutationFn: async (params: BridgeToEvmParams) => {
-      console.log('[useBridgeToEvm] Starting BurnAndBridge');
-      console.log('[useBridgeToEvm] frusdAmount:', params.frusdAmount);
-      console.log('[useBridgeToEvm] evmRecipient:', params.evmRecipient);
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
@@ -119,11 +116,9 @@ export function useBridgeToEvm() {
       if (!frusdTokenId) throw new Error('frUSD token not configured for this network');
 
       const protostone = buildBurnAndBridgeProtostone(frusdTokenId, params.evmRecipient);
-      console.log('[useBridgeToEvm] Protostone:', protostone);
 
       // frUSD tokens must be sent as incomingAlkanes via inputRequirements
       const inputRequirements = `${frusdTokenId}:${params.frusdAmount}`;
-      console.log('[useBridgeToEvm] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
       const useActualAddresses = isBrowserWallet || network === 'devnet';
@@ -162,7 +157,6 @@ export function useBridgeToEvm() {
       // Auto-completed by SDK
       if (result?.txid || result?.reveal_txid) {
         const txId = result.txid || result.reveal_txid;
-        console.log('[useBridgeToEvm] Transaction completed:', txId);
         return { success: true, transactionId: txId };
       }
 
@@ -196,7 +190,6 @@ export function useBridgeToEvm() {
         signedPsbt.finalizeAllInputs();
         const txHex = signedPsbt.extractTransaction().toHex();
         const txId = await provider.broadcastTransaction(txHex);
-        console.log('[useBridgeToEvm] Broadcast txid:', txId);
 
         return { success: true, transactionId: txId };
       }
@@ -219,8 +212,6 @@ export function useBridgeFromEvm() {
 
   return useMutation({
     mutationFn: async (params: BridgeFromEvmParams) => {
-      console.log('[useBridgeFromEvm] Starting frUSD mint');
-      console.log('[useBridgeFromEvm] frusdAmount:', params.frusdAmount);
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
@@ -237,7 +228,6 @@ export function useBridgeFromEvm() {
       if (!frusdTokenId) throw new Error('frUSD token not configured for this network');
 
       const protostone = buildMintProtostone(frusdTokenId, params.frusdAmount);
-      console.log('[useBridgeFromEvm] Protostone:', protostone);
 
       // In production, the coordinator calls this with the auth token.
       // For devnet, the deployer wallet holds the auth token.
@@ -277,7 +267,6 @@ export function useBridgeFromEvm() {
 
       if (result?.txid || result?.reveal_txid) {
         const txId = result.txid || result.reveal_txid;
-        console.log('[useBridgeFromEvm] Transaction completed:', txId);
         return { success: true, transactionId: txId };
       }
 
@@ -308,7 +297,6 @@ export function useBridgeFromEvm() {
         signedPsbt.finalizeAllInputs();
         const txHex = signedPsbt.extractTransaction().toHex();
         const txId = await provider.broadcastTransaction(txHex);
-        console.log('[useBridgeFromEvm] Broadcast txid:', txId);
 
         return { success: true, transactionId: txId };
       }

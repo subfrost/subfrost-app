@@ -76,11 +76,6 @@ export function useGaugeClaimMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[useGaugeClaimMutation] Executing gauge claim:', {
-        gaugeId: params.gaugeId,
-        isBrowserWallet,
-        toAddresses,
-      });
 
       const result = await provider.alkanesExecuteTyped({
         inputRequirements: '',
@@ -94,18 +89,15 @@ export function useGaugeClaimMutation() {
         ordinalsStrategy: 'burn',
       });
 
-      console.log('[useGaugeClaimMutation] Execute result:', JSON.stringify(result, null, 2));
 
       // Handle auto-completed transaction
       if (result?.txid || result?.reveal_txid) {
         const txId = result.txid || result.reveal_txid;
-        console.log('[useGaugeClaimMutation] Transaction auto-completed, txid:', txId);
         return { success: true, transactionId: txId };
       }
 
       // Handle readyToSign state
       if (result?.readyToSign) {
-        console.log('[useGaugeClaimMutation] Got readyToSign, signing PSBT...');
         const readyToSign = result.readyToSign;
         const psbtBase64 = extractPsbtBase64(readyToSign.psbt);
 
@@ -120,7 +112,6 @@ export function useGaugeClaimMutation() {
           });
           finalPsbtBase64 = patchResult.psbtBase64;
           if (patchResult.inputsPatched > 0) {
-            console.log(`[useGaugeClaimMutation] Patched ${patchResult.inputsPatched} input(s)`);
           }
         }
 
@@ -154,9 +145,7 @@ export function useGaugeClaimMutation() {
         const txHex = tx.toHex();
         const txid = tx.getId();
 
-        console.log('[useGaugeClaimMutation] Broadcasting:', txid);
         const broadcastTxid = await provider.broadcastTransaction(txHex);
-        console.log('[useGaugeClaimMutation] Broadcast successful:', broadcastTxid);
 
         return { success: true, transactionId: broadcastTxid || txid };
       }
@@ -172,7 +161,6 @@ export function useGaugeClaimMutation() {
       return { success: true, transactionId: txId };
     },
     onSuccess: () => {
-      console.log('[useGaugeClaimMutation] Claim successful, invalidating queries...');
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });

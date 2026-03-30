@@ -101,7 +101,6 @@ export function useUserOrders(enabled: boolean = true) {
         const result = await provider.alkanesSimulate(controllerId, context, 'latest');
 
         if (result?.execution?.error) {
-          console.warn('[useUserOrders] Simulation error:', result.execution.error);
           return [];
         }
 
@@ -118,12 +117,10 @@ export function useUserOrders(enabled: boolean = true) {
           } else if (Array.isArray(data)) {
             bytes = data;
           } else {
-            console.warn('[useUserOrders] Unexpected data format:', typeof data);
             return [];
           }
 
           const orders = parseOrderList(bytes);
-          console.log('[useUserOrders] Parsed', orders.length, 'orders');
           return orders;
         }
 

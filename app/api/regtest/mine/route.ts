@@ -5,7 +5,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { blocks = 1, address } = body;
 
-    console.log('[API /regtest/mine] Request:', { blocks, address, network: process.env.NEXT_PUBLIC_NETWORK });
 
     if (!address) {
       return NextResponse.json(
@@ -47,7 +46,6 @@ export async function POST(request: NextRequest) {
       ? (Array.isArray(result.result) ? result.result : [result.result])
       : [];
 
-    console.log('[API /regtest/mine] Mined', allBlockHashes.length, 'blocks');
 
     return NextResponse.json({
       success: true,

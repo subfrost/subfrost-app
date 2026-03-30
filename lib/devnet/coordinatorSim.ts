@@ -125,13 +125,11 @@ export class DevnetCoordinator {
   /** Attach a real vault address. When set, withdrawals use vault.withdrawFromBridge(). */
   setVaultAddress(address: string): void {
     this.vaultAddress = address;
-    console.log('[DevnetCoordinator] Vault address set:', address);
   }
 
   /** Attach a CoordinatorWallet for rebalancing. */
   setWallet(wallet: CoordinatorWallet): void {
     this.wallet = wallet;
-    console.log('[DevnetCoordinator] Wallet tracker attached');
   }
 
   // =========================================================================
@@ -178,9 +176,6 @@ export class DevnetCoordinator {
       record.status = 'minting';
       this.notifyListeners();
 
-      console.log(
-        `[DevnetCoordinator] Processing deposit ${depositId}: ${payment.amount} ${payment.token} -> ${frusdAmount} frUSD`
-      );
 
       // Step 2: Mint frUSD on Bitcoin
       // In devnet, we simulate the mint by calling the frUSD contract directly.
@@ -217,7 +212,6 @@ export class DevnetCoordinator {
       } catch (e: any) {
         // Mint execution may fail in devnet (no auth token in wallet).
         // We still mark the deposit as complete for simulation purposes.
-        console.warn(`[DevnetCoordinator] Mint execution warning (non-fatal): ${e?.message?.slice(0, 80)}`);
       }
 
       record.status = 'complete';
@@ -228,7 +222,6 @@ export class DevnetCoordinator {
         this.wallet.recordFee(payment.amount);
       }
 
-      console.log(`[DevnetCoordinator] Deposit ${depositId} complete. Minted ${frusdAmount} frUSD.`);
 
       return { depositId, frUsdMinted: frusdAmount };
     } catch (e: any) {
@@ -284,9 +277,6 @@ export class DevnetCoordinator {
       record.status = 'processing';
       this.notifyListeners();
 
-      console.log(
-        `[DevnetCoordinator] Processing withdrawal ${withdrawalId}: ${bridgeRecord.amount} frUSD -> ${stableAmount} ${token} to ${bridgeRecord.evmRecipient}`
-      );
 
       // On the EVM side, release stablecoins to the recipient.
       // If a real vault is deployed, use vault.withdrawFromBridge().
@@ -340,12 +330,7 @@ export class DevnetCoordinator {
           );
           ethDelivered = splitResult.ethDelivered;
           usdcDelivered = splitResult.usdcDelivered;
-          console.log(
-            `[DevnetCoordinator] Output split: ${usdcDelivered} USDC + ${ethDelivered} ETH ` +
-            `(${(Number(ethDelivered) / 1e18).toFixed(6)} ETH) @ $${splitResult.ethPrice}/ETH`
-          );
         } catch (splitErr: any) {
-          console.warn(`[DevnetCoordinator] ETH split failed, delivering all as USDC:`, splitErr?.message);
           usdcDelivered = stableAmount;
         }
       }
@@ -354,7 +339,6 @@ export class DevnetCoordinator {
       record.status = 'complete';
       this.notifyListeners();
 
-      console.log(`[DevnetCoordinator] Withdrawal ${withdrawalId} complete. Sent ${stableAmount} ${token} to ${bridgeRecord.evmRecipient}.`);
 
       return { withdrawalId, evmTxHash, ethDelivered, usdcDelivered };
     } catch (e: any) {
@@ -396,7 +380,6 @@ export class DevnetCoordinator {
             });
             depositsProcessed++;
           } catch (e: any) {
-            console.warn(`[DevnetCoordinator] Failed to process deposit ${dep.id}:`, e?.message);
           }
         }
       }
@@ -412,15 +395,11 @@ export class DevnetCoordinator {
             });
             withdrawalsProcessed++;
           } catch (e: any) {
-            console.warn(`[DevnetCoordinator] Failed to process withdrawal ${wd.id}:`, e?.message);
           }
         }
       }
 
       if (depositsProcessed > 0 || withdrawalsProcessed > 0) {
-        console.log(
-          `[DevnetCoordinator] Poll: processed ${depositsProcessed} deposits, ${withdrawalsProcessed} withdrawals`
-        );
       }
 
       // Check rebalancing after processing all events
@@ -429,15 +408,8 @@ export class DevnetCoordinator {
           const rebalanceResult = await this.wallet.checkAndRebalance();
           if (rebalanceResult) {
             const summary = this.wallet.getSummary();
-            console.log(
-              `[DevnetCoordinator] Rebalance ${rebalanceResult.direction}: ` +
-              `success=${rebalanceResult.success}, ` +
-              `BTC=$${summary.btcValueUsdc}, EVM=$${summary.evmValueUsdc}, ` +
-              `fees=$${summary.feesCollected}, profitable=${summary.profitable}`
-            );
           }
         } catch (e: any) {
-          console.debug('[DevnetCoordinator] Rebalance check error:', e?.message?.slice(0, 60));
         }
       }
     } finally {
@@ -455,10 +427,8 @@ export class DevnetCoordinator {
     if (this.pollInterval) return;
     this.pollInterval = setInterval(() => {
       this.poll().catch((e) => {
-        console.warn('[DevnetCoordinator] Poll error:', e);
       });
     }, intervalMs);
-    console.log(`[DevnetCoordinator] Polling started (every ${intervalMs}ms)`);
   }
 
   /**
@@ -468,7 +438,6 @@ export class DevnetCoordinator {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
-      console.log('[DevnetCoordinator] Polling stopped');
     }
   }
 

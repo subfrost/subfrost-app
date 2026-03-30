@@ -32,20 +32,14 @@ export async function executeLuaScript(
 ): Promise<any> {
   const hash = computeScriptHash(script);
   
-  console.log('[executeLuaScript] Script hash:', hash);
-  console.log('[executeLuaScript] Args:', args);
   
   try {
     // Try cached version first
-    console.log('[executeLuaScript] Trying lua_evalsaved with hash...');
     const result = await rpcClient.lua_evalsaved(hash, ...args);
-    console.log('[executeLuaScript] ✅ lua_evalsaved succeeded');
     return result;
   } catch (error) {
     // Cache miss or error, upload full script
-    console.log('[executeLuaScript] lua_evalsaved failed, trying lua_evalscript...', error);
     const result = await rpcClient.lua_evalscript(script, ...args);
-    console.log('[executeLuaScript] ✅ lua_evalscript succeeded');
     return result;
   }
 }

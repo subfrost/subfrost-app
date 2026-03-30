@@ -63,7 +63,6 @@ function simulateUnwrapQuote({ amount, direction, unwrapFeePerThousand }: { amou
   }
 }
 
-console.log('🧪 Running wrap/unwrap short-circuit tests');
 
 function expect(actual: any) {
   return {
@@ -116,4 +115,3 @@ function expect(actual: any) {
   expect(Number(quote.sellAmount)).toBeGreaterThan(Number(toAlks('1')));
 }
 
-console.log('✅ Wrap/unwrap tests completed\n');

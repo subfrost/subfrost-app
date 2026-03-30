@@ -209,19 +209,16 @@ describe('wallet-state lua script via RPC', () => {
       });
 
       if (!response.ok) {
-        console.warn(`[walletState.lua.test] RPC returned ${response.status}, skipping integration test`);
         return;
       }
 
       const json = await response.json();
       if (json.error) {
-        console.warn(`[walletState.lua.test] RPC error: ${json.error.message}, skipping integration test`);
         return;
       }
 
       result = json.result?.returns ?? json.result;
     } catch (err) {
-      console.warn('[walletState.lua.test] Cannot reach RPC endpoint, skipping integration test:', err);
       return;
     }
 

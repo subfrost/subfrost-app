@@ -22,12 +22,10 @@ export default function GaugeVault() {
   };
 
   const handleExecute = () => {
-    console.log(`${mode}:`, amount);
     // TODO: Implement gauge interaction
   };
 
   const handleClaim = () => {
-    console.log("Claim gauge rewards");
     // TODO: Implement claim logic
   };
 

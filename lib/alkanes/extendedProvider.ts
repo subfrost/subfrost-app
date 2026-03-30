@@ -64,9 +64,7 @@ export async function alkanesExecuteTyped(
   if (protostoneStr && protostoneStr.includes('[') && protostoneStr.includes(']')) {
     const cellpackMatch = protostoneStr.match(/\[([^\]]+)\]/);
     if (cellpackMatch) {
-      console.log('[alkanesExecuteTyped]   Detected cellpack in protostone:', cellpackMatch[1]);
     } else {
-      console.warn('[alkanesExecuteTyped]   WARNING: No cellpack found in protostone!');
     }
   }
 

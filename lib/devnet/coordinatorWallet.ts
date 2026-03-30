@@ -253,10 +253,6 @@ export class CoordinatorWallet {
     // Profitability check: fees must exceed gas costs
     const gasCost = this.config.estimatedGasCostPerRebalance;
     if (this.fees.operationalReserve < gasCost + this.config.minFeeRevenueForRebalance) {
-      console.log(
-        `[CoordinatorWallet] Imbalance detected (${direction}) but insufficient fee revenue.` +
-        ` Reserve: ${this.fees.operationalReserve}, needed: ${gasCost + this.config.minFeeRevenueForRebalance}`
-      );
       this.state = 'idle';
       this.notify();
       return null;
@@ -304,10 +300,6 @@ export class CoordinatorWallet {
       this.fees.lastRebalanceCost = estimatedGas;
       this.fees.rebalanceCount++;
 
-      console.log(
-        `[CoordinatorWallet] Rebalance ${direction} complete: moved ${amount} USDC-equiv.` +
-        ` Gas cost: ${estimatedGas}. Txs: ${event.txIds.join(', ')}`
-      );
     } catch (e: any) {
       event.error = e?.message || 'Unknown error';
       console.error(`[CoordinatorWallet] Rebalance ${direction} failed:`, event.error);

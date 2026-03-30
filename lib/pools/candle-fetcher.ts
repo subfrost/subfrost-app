@@ -306,7 +306,6 @@ export async function fetchPoolDataPoints(
   const pools = getPools(network);
   const pool = pools[poolKey];
   if (!pool) {
-    console.warn(`[CandleFetcher] Unknown pool: ${poolKey}`);
     return [];
   }
 

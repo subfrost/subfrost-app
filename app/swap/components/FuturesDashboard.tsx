@@ -41,7 +41,6 @@ export default function FuturesDashboard({ activeTab }: FuturesDashboardProps) {
   );
 
   const handleDeposit = (ftrId: string) => {
-    console.log('[FuturesDashboard] Deposit requested for ftrBTC:', ftrId);
   };
 
   return (

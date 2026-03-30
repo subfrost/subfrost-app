@@ -21,7 +21,6 @@ export default function YveDieselVault() {
   };
 
   const handleExecute = () => {
-    console.log(`${mode}:`, stats);
   };
 
   return (
@@ -44,7 +43,6 @@ export default function YveDieselVault() {
         onModeChange={setMode}
         vault={dieselVault}
         onVaultChange={(newVault) => {
-          console.log('Vault changed to:', newVault.id);
         }}
         userBalance={stats.userBalance}
         apy={stats.apy}

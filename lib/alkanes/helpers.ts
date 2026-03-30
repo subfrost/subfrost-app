@@ -97,7 +97,6 @@ export async function getSignerAddressDynamic(network: string): Promise<string> 
       if (payment.address) return payment.address;
     }
   } catch (e: any) {
-    console.warn('[getSignerAddressDynamic] Failed, using static fallback:', e?.message);
   }
   return getSignerAddress(network);
 }

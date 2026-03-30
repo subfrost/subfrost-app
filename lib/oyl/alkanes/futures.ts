@@ -73,7 +73,6 @@ export async function getAllFutures(
   provider: any,
   currentBlock: number
 ): Promise<FutureToken[]> {
-  console.log(`[getAllFutures] Checking futures from block ${Math.max(1, currentBlock - 100)} to ${currentBlock}`);
   
   // ftrBTC futures are at [31, n] where n is the block height
   const futures: FutureToken[] = [];
@@ -92,7 +91,6 @@ export async function getAllFutures(
       
       // Debug logging for key blocks
       if (height >= 50 && height <= 55) {
-        console.log(`[getAllFutures] Checking [31:${height}], params: ${params}`);
       }
       
       // Call metashrew_view to get bytecode
@@ -105,12 +103,10 @@ export async function getAllFutures(
       
       // Debug the result
       if (height >= 50 && height <= 55) {
-        console.log(`[getAllFutures] Result for [31:${height}]: ${result ? result.substring(0, 20) + '...' : 'null'} (length: ${result ? result.length : 0})`);
       }
       
       // If we got bytecode, this is a future
       if (result && result !== '0x' && result.length > 100) {
-        console.log(`[getAllFutures] ✅ Found future at [31:${height}] with bytecode length: ${(result.length - 2) / 2}`);
         const blocksLeft = Math.max(0, height + 100 - currentBlock); // Assume 100 block expiry
         const timeLeft = formatBlocksToTime(blocksLeft);
         
@@ -167,13 +163,11 @@ export async function getAllFutures(
       if (height >= 50 && height <= 55) {
         console.error(`[getAllFutures] Error at [31:${height}]:`, error);
       } else if (height % 10 === 0) {
-        console.log(`[getAllFutures] No future at [31:${height}]`);
       }
       continue;
     }
   }
   
-  console.log(`[getAllFutures] Found ${futures.length} total futures`);
   return futures;
 }
 

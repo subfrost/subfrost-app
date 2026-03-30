@@ -46,7 +46,6 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
 
   const handleStake = () => {
     if (isDemoGated) return;
-    console.log('[FireStakingPanel] Stake:', { amount, lockTier });
   };
 
 

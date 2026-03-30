@@ -59,7 +59,6 @@ export function useWrapZecMutation() {
       if (isNaN(wrapAmountSats) || wrapAmountSats <= 0) {
         throw new Error(`Invalid wrap amount: "${wrapData.amount}"`);
       }
-      console.log('[WRAP-ZEC] Starting wrap:', wrapAmountSats, 'sats');
 
       const protostone = buildWrapZecProtostone({ frzecId: FRZEC_ALKANE_ID });
       const inputRequirements = `B:${wrapAmountSats}:v0`;
@@ -84,7 +83,6 @@ export function useWrapZecMutation() {
         ? [signerAddress, userTaprootAddress]
         : [signerAddress, 'p2tr:0'];
 
-      console.log('[WRAP-ZEC] signer:', signerAddress, 'user:', userTaprootAddress);
 
       const result = await provider.alkanesExecuteTyped({
         toAddresses,
@@ -161,7 +159,6 @@ export function useWrapZecMutation() {
         const tx = signedPsbt.extractTransaction();
         const txid = tx.getId();
         const broadcastTxid = await provider.broadcastTransaction(tx.toHex());
-        console.log('[WRAP-ZEC] Broadcast:', broadcastTxid || txid);
 
         return { success: true, transactionId: broadcastTxid || txid, wrapAmountSats };
       }
@@ -170,7 +167,6 @@ export function useWrapZecMutation() {
       return { success: true, transactionId: txId, wrapAmountSats };
     },
     onSuccess: (data) => {
-      console.log('[WRAP-ZEC] Success:', data.transactionId);
       queryClient.refetchQueries({ queryKey: ['alkane-balances'] });
       queryClient.refetchQueries({ queryKey: ['sellable-currencies'] });
       queryClient.refetchQueries({ queryKey: ['btc-balance'] });

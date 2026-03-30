@@ -368,12 +368,9 @@ export class DevnetSimulator implements SimulationControls {
       if (poolData.length >= 64) {
         const buf = Buffer.from(poolData, 'hex');
         this._poolId = `${Number(buf.readBigUInt64LE(0))}:${Number(buf.readBigUInt64LE(16))}`;
-        console.log('[simulator] Discovered pool:', this._poolId);
       } else {
-        console.warn('[simulator] No pool found via factory opcode 2');
       }
     } catch (e: any) {
-      console.warn('[simulator] Pool discovery failed:', e?.message?.slice(0, 60));
     }
   }
 

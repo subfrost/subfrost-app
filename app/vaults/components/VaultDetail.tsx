@@ -64,7 +64,6 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           amount,
           feeRate,
         });
-        console.log('Deposit successful:', result.transactionId);
         // TODO: Show success toast
       } catch (error) {
         console.error('Deposit failed:', error);
@@ -85,7 +84,6 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           amount: '1', // Vault units are typically 1 per deposit
           feeRate,
         });
-        console.log('Withdraw successful:', result.transactionId);
         // TODO: Show success toast
         setSelectedUnitId(''); // Reset selection
       } catch (error) {

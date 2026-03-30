@@ -166,7 +166,6 @@ export function clearDriveAccess(): void {
     const google = (window as any).google;
     if (google && google.accounts) {
       google.accounts.oauth2.revoke(currentAccessToken, () => {
-        console.log('Token revoked');
       });
     }
   }
@@ -358,7 +357,6 @@ export async function listWalletBackups(): Promise<WalletBackupInfo[]> {
       );
 
       if (!keystoreResponse.ok) {
-        console.warn(`Failed to read keystore from folder ${folder.name}`);
         continue;
       }
 
@@ -380,7 +378,6 @@ export async function listWalletBackups(): Promise<WalletBackupInfo[]> {
         folderUrl: folder.webViewLink,
       });
     } catch (error) {
-      console.warn(`Error processing folder ${folder.name}:`, error);
       // Continue with other folders
     }
   }
@@ -445,7 +442,6 @@ export async function restoreWalletFromDrive(
       }
     }
   } catch (error) {
-    console.warn('Could not retrieve password hint:', error);
     // Continue without hint
   }
 

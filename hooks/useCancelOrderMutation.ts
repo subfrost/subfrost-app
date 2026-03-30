@@ -41,9 +41,6 @@ export function useCancelOrderMutation() {
 
   return useMutation({
     mutationFn: async (params: CancelOrderParams) => {
-      console.log('[CancelOrder] ═══════════════════════════════════════════');
-      console.log('[CancelOrder] Starting CancelOrder transaction');
-      console.log('[CancelOrder] Params:', JSON.stringify(params, null, 2));
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
@@ -59,7 +56,6 @@ export function useCancelOrderMutation() {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
       const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[CancelOrder] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Parse controller ID
       const [cBlock, cTx] = params.controllerId.split(':');
@@ -71,8 +67,6 @@ export function useCancelOrderMutation() {
       // No input requirements for cancel -- no tokens sent
       const inputRequirements = '';
 
-      console.log('[CancelOrder] Protostone:', protostone);
-      console.log('[CancelOrder] Input requirements: (none)');
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
@@ -95,8 +89,6 @@ export function useCancelOrderMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[CancelOrder] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[CancelOrder] To addresses:', toAddresses);
 
       try {
         const result = await provider.alkanesExecuteTyped({
@@ -111,18 +103,15 @@ export function useCancelOrderMutation() {
           ordinalsStrategy: 'burn',
         });
 
-        console.log('[CancelOrder] Execute result:', JSON.stringify(result, null, 2));
 
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[CancelOrder] Transaction auto-completed, txid:', txId);
           return { success: true as const, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[CancelOrder] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
@@ -138,17 +127,14 @@ export function useCancelOrderMutation() {
             });
             psbtBase64 = patchResult.psbtBase64;
             if (patchResult.inputsPatched > 0) {
-              console.log(`[CancelOrder] Patched ${patchResult.inputsPatched} input(s) for browser wallet compatibility`);
             }
           }
 
           // Sign PSBT -- browser wallets sign all input types in a single call
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[CancelOrder] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           } else {
-            console.log('[CancelOrder] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
@@ -161,11 +147,9 @@ export function useCancelOrderMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[CancelOrder] Transaction built:', txid);
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[CancelOrder] Broadcast successful:', broadcastTxid);
 
           return {
             success: true as const,
@@ -176,13 +160,11 @@ export function useCancelOrderMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[CancelOrder] Complete, txid:', txId);
           return { success: true as const, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[CancelOrder] Transaction ID:', txId);
         return { success: true as const, transactionId: txId };
 
       } catch (error) {
@@ -191,7 +173,6 @@ export function useCancelOrderMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[CancelOrder] Success! txid:', data.transactionId);
 
       // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });

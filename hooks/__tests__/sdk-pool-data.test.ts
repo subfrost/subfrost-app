@@ -36,15 +36,11 @@ describe('usePools data sources', () => {
     // SDK returns raw API response: { data: { pools: [...], ... } }
     const pools = parsed?.pools || parsed?.data?.pools || [];
 
-    console.log(`[test] dataApiGetAllPoolsDetails: ${pools.length} pools`);
-    console.log('[test] Top-level keys:', Object.keys(parsed || {}));
     if (parsed?.data) console.log('[test] data keys:', Object.keys(parsed.data));
     expect(pools.length).toBeGreaterThan(0);
 
     // Verify the shape matches what fetchPoolsFromDataApi expects
     const first = pools[0];
-    console.log('[test] First pool keys:', Object.keys(first));
-    console.log('[test] First pool sample:', JSON.stringify(first).slice(0, 600));
 
     // poolId must be { block, tx }
     expect(first).toHaveProperty('poolId');
@@ -66,22 +62,17 @@ describe('usePools data sources', () => {
     // Pool name for symbol extraction
     expect(first).toHaveProperty('poolName');
     if (first.poolName) {
-      console.log('[test] Pool name:', first.poolName);
     }
 
     // Pre-calculated TVL (the whole point of using this endpoint)
     expect(first).toHaveProperty('poolTvlInUsd');
     expect(typeof first.poolTvlInUsd).toBe('number');
-    console.log('[test] Pool TVL:', first.poolTvlInUsd);
 
     // Check at least one pool in the set has non-zero TVL
     const anyWithTvl = pools.some((p: any) => (p.poolTvlInUsd ?? 0) > 0);
     expect(anyWithTvl).toBe(true);
 
     // Log volume/APR fields
-    console.log('[test] Volume 1d:', first.poolVolume1dInUsd);
-    console.log('[test] Volume 30d:', first.poolVolume30dInUsd);
-    console.log('[test] APR:', first.poolApr);
   }, 60000);
 
   // NOTE: alkanesGetAllPoolsWithDetails fails with "No data in response" in Node.js
@@ -106,7 +97,6 @@ describe('usePools data sources', () => {
     const parsed = typeof result === 'string' ? JSON.parse(result) : result;
 
     const safeStringify = (obj: any) => JSON.stringify(obj, (_k, v) => typeof v === 'bigint' ? v.toString() : v);
-    console.log(`[test] alkanesReflect(2:0):`, safeStringify(parsed).slice(0, 300));
     expect(parsed).toHaveProperty('name');
     expect(parsed).toHaveProperty('symbol');
     expect(parsed.name || parsed.symbol).toBeTruthy();
@@ -127,21 +117,15 @@ describe('useAmmHistory data sources', () => {
 
     expect(res.ok).toBe(true);
     const json = await res.json();
-    console.log('[test] /get-all-amm-tx-history top keys:', Object.keys(json));
 
     // API returns { data: { items, total, count, offset } }
     const payload = json?.data ?? json;
-    console.log('[test] payload keys:', Object.keys(payload || {}));
-    console.log('[test] payload sample:', JSON.stringify(payload).slice(0, 800));
 
     const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
     expect(items.length).toBeGreaterThan(0);
-    console.log(`[test] /get-all-amm-tx-history: ${items.length} items, total: ${payload?.total}`);
 
     // Verify first item has required fields
     const first = items[0];
-    console.log('[test] First tx keys:', Object.keys(first));
-    console.log('[test] First tx:', JSON.stringify(first).slice(0, 400));
     expect(first).toHaveProperty('type');
     expect(['swap', 'mint', 'burn', 'creation']).toContain(first.type);
     expect(first).toHaveProperty('transactionId');
@@ -177,7 +161,6 @@ describe('useAmmHistory data sources', () => {
     const json = await res.json();
     const payload = json?.data ?? json;
     const items = Array.isArray(payload?.items) ? payload.items : [];
-    console.log(`[test] /get-all-amm-tx-history (swap only): ${items.length} items`);
 
     // All returned items should be swaps
     for (const item of items) {
@@ -198,10 +181,8 @@ describe('useAmmHistory data sources', () => {
     expect(allItems.length).toBeGreaterThan(0);
 
     const testAddress = allItems[0].address;
-    console.log(`[test] Testing address filter with: ${testAddress}`);
 
     if (!testAddress) {
-      console.log('[test] No address on first tx, skipping address filter test');
       return;
     }
 
@@ -215,7 +196,6 @@ describe('useAmmHistory data sources', () => {
     const json = await res.json();
     const payload = json?.data ?? json;
     const items = Array.isArray(payload?.items) ? payload.items : [];
-    console.log(`[test] /get-all-address-amm-tx-history: ${items.length} items for ${testAddress}`);
 
     // All returned items should belong to the address
     for (const item of items) {
@@ -238,12 +218,10 @@ describe('useAmmHistory data sources', () => {
 
     const itemWithPool = items.find((i: any) => i.poolBlockId && i.poolTxId);
     if (!itemWithPool) {
-      console.log('[test] No items with poolBlockId/poolTxId found, skipping');
       return;
     }
 
     const poolId = `${itemWithPool.poolBlockId}:${itemWithPool.poolTxId}`;
-    console.log(`[test] ammGetPoolDetails for pool ${poolId}`);
 
     const details = await provider.ammGetPoolDetails(poolId);
     // ammGetPoolDetails may return a hex-encoded revert string for pools
@@ -252,12 +230,10 @@ describe('useAmmHistory data sources', () => {
     try {
       detailsParsed = typeof details === 'string' ? JSON.parse(details) : details;
     } catch {
-      console.log('[test] ammGetPoolDetails returned non-JSON (expected for some pools):', String(details).slice(0, 200));
       // This is acceptable — the hook's try/catch handles it gracefully
       return;
     }
 
-    console.log('[test] ammGetPoolDetails:', JSON.stringify(detailsParsed).slice(0, 500));
     expect(detailsParsed).toBeDefined();
     // Used by usePoolsMetadata to enrich mint/burn/creation txs
     expect(detailsParsed).toHaveProperty('token_a_block');

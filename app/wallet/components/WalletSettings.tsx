@@ -229,15 +229,6 @@ export default function WalletSettings() {
   ];
 
   const handleSave = () => {
-    console.log('Saving settings:', {
-      network,
-      customDataApiUrl,
-      customSandshrewUrl,
-      taprootPath,
-      segwitPath,
-      taprootConfig,
-      segwitConfig,
-    });
 
     // Save network to localStorage
     localStorage.setItem('subfrost_selected_network', network);

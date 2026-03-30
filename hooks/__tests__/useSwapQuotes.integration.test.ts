@@ -96,7 +96,6 @@ function calculateSwapPrice(
 }
 
 // Test Suite
-console.log('🧪 Running Multi-Hop Swap Routing Integration Tests\n');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -104,11 +103,8 @@ let testsFailed = 0;
 function test(name: string, fn: () => void) {
   try {
     fn();
-    console.log(`✅ ${name}`);
     testsPassed++;
   } catch (error) {
-    console.log(`❌ ${name}`);
-    console.log(`   Error: ${(error as Error).message}`);
     testsFailed++;
   }
 }
@@ -151,7 +147,6 @@ function expect(actual: any) {
 // ==========================================
 // TEST 1: Dynamic Fee Parsing
 // ==========================================
-console.log('📦 Test Suite 1: Dynamic Fee Parsing\n');
 
 test('Should parse zero premium', () => {
   const data = new Uint8Array(16).fill(0);
@@ -188,12 +183,10 @@ test('Should parse 0.2% premium (200,000)', () => {
   expect(feePerThousand).toBe(2);
 });
 
-console.log('');
 
 // ==========================================
 // TEST 2: Direct Swap Calculations
 // ==========================================
-console.log('📦 Test Suite 2: Direct Swap Calculations\n');
 
 test('Should calculate direct swap correctly', () => {
   const amountIn = 100_000_000; // 1 token (8 decimals)
@@ -233,12 +226,10 @@ test('Should apply unwrap fee for BTC purchases', () => {
   expect(Number(quote.buyAmount)).toBeLessThan(Number(quoteWithoutFee.buyAmount));
 });
 
-console.log('');
 
 // ==========================================
 // TEST 3: Multi-Hop Routing
 // ==========================================
-console.log('📦 Test Suite 3: Multi-Hop Routing Logic\n');
 
 test('Should calculate 2-hop swap (DIESEL → BUSD → ALKAMIST)', () => {
   const amountIn = 100_000_000; // 1 DIESEL
@@ -279,7 +270,6 @@ test('Should simulate route comparison (BUSD vs frBTC bridge)', () => {
   const bestRoute = busdRouteOutput > frbtcRouteOutput ? 'BUSD' : 'frBTC';
   expect(bestRoute).toBeDefined();
   
-  console.log(`   Best route: ${bestRoute} (BUSD: ${busdRouteOutput}, frBTC: ${frbtcRouteOutput})`);
 });
 
 test('Should handle BTC → alkane multi-hop (wrap + swap)', () => {
@@ -310,12 +300,10 @@ test('Should handle alkane → BTC multi-hop (swap + unwrap)', () => {
   expect(afterUnwrap).toBeLessThan(Number(swapQuote.buyAmount)); // Less due to unwrap fee
 });
 
-console.log('');
 
 // ==========================================
 // TEST 4: Edge Cases
 // ==========================================
-console.log('📦 Test Suite 4: Edge Cases\n');
 
 test('Should throw error for zero input', () => {
   try {
@@ -364,12 +352,10 @@ test('Should handle large amounts', () => {
   expect(Number(quote.buyAmount)).toBeLessThan(amountIn); // Should have price impact
 });
 
-console.log('');
 
 // ==========================================
 // TEST 5: Fee Calculations
 // ==========================================
-console.log('📦 Test Suite 5: Fee Calculations\n');
 
 test('Should calculate total fees for multi-hop correctly', () => {
   const poolFee = 0.01; // 1% per hop
@@ -401,24 +387,13 @@ test('Should apply dynamic fee correctly', () => {
   expect(difference).toBe(100_000); // 0.1% difference on 100M = 100K
 });
 
-console.log('');
 
 // ==========================================
 // SUMMARY
 // ==========================================
-console.log('═══════════════════════════════════════');
-console.log('📊 Test Results Summary');
-console.log('═══════════════════════════════════════');
-console.log(`✅ Passed: ${testsPassed}`);
-console.log(`❌ Failed: ${testsFailed}`);
-console.log(`📈 Total: ${testsPassed + testsFailed}`);
-console.log(`🎯 Success Rate: ${((testsPassed / (testsPassed + testsFailed)) * 100).toFixed(1)}%`);
-console.log('═══════════════════════════════════════\n');
 
 if (testsFailed === 0) {
-  console.log('🎉 ALL TESTS PASSED! Multi-hop routing implementation verified!\n');
   process.exit(0);
 } else {
-  console.log('⚠️  Some tests failed. Review errors above.\n');
   process.exit(1);
 }

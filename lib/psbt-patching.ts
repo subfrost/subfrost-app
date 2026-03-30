@@ -310,7 +310,6 @@ export function patchInputWitnessScripts(
     if (input.tapInternalKey) {
       // P2TR input without witnessUtxo — we can't know the value, so we
       // can only log a warning. The wallet will likely fail on this input.
-      console.warn(`[patchInputWitnessScripts] Input ${i} has tapInternalKey but no witnessUtxo or nonWitnessUtxo`);
     }
   }
 
@@ -445,7 +444,6 @@ export function patchPsbtForBrowserWallet(params: PatchPsbtParams): {
       network,
     });
     if (witnessPatched > 0) {
-      console.log(`[patchPsbtForBrowserWallet] Patched witnessUtxo.script on ${witnessPatched} input(s)`);
     }
 
     // 3. Inject redeemScripts for P2SH-P2WPKH inputs (Xverse)
@@ -515,7 +513,6 @@ export function patchInputsOnly(params: PatchInputsOnlyParams): {
     network,
   });
   if (witnessPatched > 0) {
-    console.log(`[patchInputsOnly] Patched witnessUtxo.script on ${witnessPatched} input(s)`);
     totalPatched += witnessPatched;
   }
 
@@ -527,7 +524,6 @@ export function patchInputsOnly(params: PatchInputsOnlyParams): {
       network,
     });
     if (redeemPatched > 0) {
-      console.log(`[patchInputsOnly] Injected redeemScript into ${redeemPatched} P2SH input(s)`);
       totalPatched += redeemPatched;
     }
   }

@@ -95,15 +95,12 @@ export async function bootDevnetWithWasms(
 }> {
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
-  console.log('[devnet-boot] Importing SDK from /sdk/qubitcoin/index.js...');
   // @ts-ignore — runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
-  console.log('[devnet-boot] SDK imported, exports:', Object.keys(sdk));
 
   onProgress('Deriving wallet keys...', 10);
 
   // Derive coinbase key from mnemonic
-  console.log('[devnet-boot] Importing crypto libs...');
   const bip39 = await import('bip39');
   const bip32Lib = await import('bip32');
   const ecc = await import('@bitcoinerlab/secp256k1');
@@ -112,7 +109,6 @@ export async function bootDevnetWithWasms(
   const root = bip32.fromSeed(seed);
   const child = root.derivePath("m/84'/1'/0'/0/0");
   const secretKey = new Uint8Array(child.privateKey!);
-  console.log('[devnet-boot] Keys derived, creating harness...');
 
   onProgress('Initializing Bitcoin node (loading WASM)...', 15);
 
@@ -141,17 +137,12 @@ export async function bootDevnetWithWasms(
   // is synchronous in-process WASM, extra blocks CREATE desync, not fix it.
   const useEsplora = true;
 
-  console.log('[devnet-boot] Creating DevnetTestHarness with alkanesWasm=%dKB esplora=%s quspo=deferred',
-    Math.round(alkanesWasm.length / 1024),
-    useEsplora ? Math.round((esploraWasm?.length || 0) / 1024) + 'KB' : 'disabled',
-  );
 
   _harness = await sdk.DevnetTestHarness.create({
     alkanesWasm,
     esploraWasm: useEsplora ? esploraWasm : undefined,
     secretKey,
   });
-  console.log('[devnet-boot] Harness created successfully (without quspo)');
 
   // Install fetch interceptor — all RPC calls now go in-process
   _harness.installFetchInterceptor();
@@ -159,13 +150,10 @@ export async function bootDevnetWithWasms(
   // If we have a saved state, import it instead of mining blocks
   if (savedState) {
     onProgress('Restoring saved state...', 20);
-    console.log('[devnet-boot] Importing saved state (%d KB)...', Math.round(savedState.length / 1024));
     try {
       _harness.server.importState(savedState);
-      console.log('[devnet-boot] State imported, chain height:', _harness.height);
       onProgress('State restored!', 50);
     } catch (e: any) {
-      console.warn('[devnet-boot] Failed to import saved state, falling back to fresh boot:', e?.message || e);
       // Fall through to normal mining path
       await mineInitialBlocks(onProgress);
     }
@@ -213,7 +201,6 @@ export async function bootDevnetWithWasms(
   let contracts: DeployedContracts;
   if (savedState) {
     // State restored — contracts already deployed, just need contract IDs
-    console.log('[devnet-boot] Skipping deployment (restored from saved state)');
     onProgress('Contracts ready (from saved state)', 95);
     // Return default contract IDs from the deployment constants
     contracts = getDefaultContractIds();
@@ -230,9 +217,7 @@ export async function bootDevnetWithWasms(
     try {
       _harness.server.addTertiary('quspo', quspoWasm);
       _harness.mineBlocks(1);
-      console.log('[devnet-boot] quspo tertiary indexer added');
     } catch (e: any) {
-      console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
     }
   }
 
@@ -472,7 +457,6 @@ async function deployWasm(
   onProgress(`Deploying ${label}...`, pct);
   const argsStr = initArgs.map(a => a.toString()).join(',');
   const protostone = `[3,${slot},${argsStr}]:v0:v0`;
-  console.log(`[devnet-boot] Deploy ${label} → [4:${slot}] protostone=${protostone.slice(0, 100)}`);
 
   try {
     await provider.alkanesExecuteFull(
@@ -490,7 +474,6 @@ async function deployWasm(
     );
     harness.mineBlocks(1);
     await new Promise(r => setTimeout(r, 200)); // GC yield + let indexer catch up
-    console.log(`[devnet-boot] ${label} deployed OK → [4:${slot}]`);
   } catch (e: any) {
     console.error(`[devnet-boot] ${label} deploy FAILED:`, e?.message || e);
   }
@@ -636,7 +619,6 @@ async function deployWithProxy(
   const tokens = await discoverAuthTokens(taproot);
   const authToken = tokens.length > 0 ? tokens[tokens.length - 1] : '';
   if (authToken) {
-    console.log(`[devnet-boot]   ${label} auth token: ${authToken}`);
   }
   return authToken;
 }
@@ -666,7 +648,6 @@ async function deployWithBeacon(
   const tokens = await discoverAuthTokens(taproot);
   const authToken = tokens.length > 0 ? tokens[tokens.length - 1] : '';
   if (authToken) {
-    console.log(`[devnet-boot]   ${label} beacon auth token: ${authToken}`);
   }
   return authToken;
 }
@@ -697,7 +678,6 @@ async function initThroughProxy(
 ): Promise<void> {
   const argsStr = initArgs.map(a => a.toString()).join(',');
   const protostone = `[4,${proxySlot},${argsStr}]:v0:v0`;
-  console.log(`[devnet-boot]   Init ${label} through proxy: ${protostone.slice(0, 80)}`);
   await executeCall(provider, harness, segwit, taproot,
     protostone, 'B:100000:v0');
 }
@@ -712,7 +692,6 @@ async function initBeaconInstance(
 ): Promise<void> {
   const argsStr = initArgs.map(a => a.toString()).join(',');
   const protostone = `[4,${instanceSlot},${argsStr}]:v0:v0`;
-  console.log(`[devnet-boot]   Init ${label} instance: ${protostone.slice(0, 80)}`);
   await executeCall(provider, harness, segwit, taproot,
     protostone, 'B:100000:v0');
 }
@@ -741,7 +720,6 @@ async function deployFullProtocol(
   // -----------------------------------------------------------------------
   // Phase 1: AMM Infrastructure (already has proxy/beacon — unchanged)
   // -----------------------------------------------------------------------
-  console.log('[devnet-boot] Phase 1: Deploying AMM contracts...');
 
   await deployWasm(provider, harness, segwit, taproot,
     authTokenWasm, AMM_SLOTS.AUTH_TOKEN_FACTORY, [100],
@@ -775,7 +753,6 @@ async function deployFullProtocol(
   if (authTokens.length === 0) authTokens = await discoverAuthTokens(segwit);
   if (authTokens.length > 0) {
     const factoryAuthToken = authTokens[0];
-    console.log('[devnet-boot] Factory auth token:', factoryAuthToken);
     await executeCall(provider, harness, segwit, taproot,
       `[4,${AMM_SLOTS.FACTORY_PROXY},0,${AMM_SLOTS.POOL_BEACON_PROXY},4,${AMM_SLOTS.BEACON}]:v0:v0`,
       `${factoryAuthToken}:1`);
@@ -788,7 +765,6 @@ async function deployFullProtocol(
   // Phase 2: Mint DIESEL + wrap frBTC + create AMM pool
   // -----------------------------------------------------------------------
   onProgress('Minting DIESEL...', 40);
-  console.log('[devnet-boot] Phase 2: Seeding tokens...');
 
   for (let i = 0; i < 3; i++) {
     harness.mineBlocks(1);
@@ -818,7 +794,6 @@ async function deployFullProtocol(
       }
     }
   } catch (e: any) {
-    console.warn('[devnet-boot] Failed to get frBTC signer, using taproot:', e?.message);
   }
   await executeCall(provider, harness, segwit, taproot,
     '[32,0,77]:v1:v1', 'B:1000000:v0', [signerAddr, taproot]);
@@ -829,7 +804,6 @@ async function deployFullProtocol(
   onProgress('Creating AMM pool...', 44);
   const dieselBal = await getAlkaneBalance(provider, taproot, '2:0');
   const frbtcBal = await getAlkaneBalance(provider, taproot, '32:0');
-  console.log('[devnet-boot] DIESEL:', dieselBal.toString(), 'frBTC:', frbtcBal.toString());
 
   let poolId = '';
   if (dieselBal > BigInt(0) && frbtcBal > BigInt(0)) {
@@ -848,10 +822,8 @@ async function deployFullProtocol(
       if (poolData.length >= 64) {
         const buf = Buffer.from(poolData, 'hex');
         poolId = `${Number(buf.readBigUInt64LE(0))}:${Number(buf.readBigUInt64LE(16))}`;
-        console.log('[devnet-boot] AMM pool created:', poolId);
       }
     } catch (e: any) {
-      console.warn('[devnet-boot] Pool discovery failed:', e?.message);
     }
   }
   contracts.ammPoolId = poolId;
@@ -863,7 +835,6 @@ async function deployFullProtocol(
   // Business init happens THROUGH proxy (delegatecall).
   // -----------------------------------------------------------------------
   onProgress('Deploying FIRE protocol...', 46);
-  console.log('[devnet-boot] Phase 3: FIRE protocol (impl+proxy for each)...');
   const F = FIRE_SLOTS;
 
   // Deploy all 6 FIRE impls + proxies
@@ -925,7 +896,6 @@ async function deployFullProtocol(
   // Phase 4: Core Protocol — standalone proxies + template beacons
   // -----------------------------------------------------------------------
   onProgress('Deploying core protocol...', 60);
-  console.log('[devnet-boot] Phase 4: Core protocol (proxied)...');
 
   // FUEL Token — standalone proxy
   contracts.fuelToken.authTokenId = await deployWithProxy(
@@ -981,7 +951,6 @@ async function deployFullProtocol(
   // Phase 5: Fujin Difficulty Futures (already has proxy/beacon — unchanged)
   // -----------------------------------------------------------------------
   onProgress('Deploying Fujin...', 72);
-  console.log('[devnet-boot] Phase 5: Deploying Fujin...');
 
   await deployWasm(provider, harness, segwit, taproot,
     authTokenWasm, S.FUJIN_AUTH_TOKEN, [100],
@@ -1049,13 +1018,11 @@ async function deployFullProtocol(
     `${S.FUJIN_ZAP}` +
     `]:v0:v0`,
     'B:100000:v0');
-  console.log('[devnet-boot] MasterFujin initialized');
 
   // -----------------------------------------------------------------------
   // Phase 6: Carbine CLOB — controller proxy + template beacon
   // -----------------------------------------------------------------------
   onProgress('Deploying Carbine CLOB...', 88);
-  console.log('[devnet-boot] Phase 6: Carbine CLOB (proxied)...');
   try {
     contracts.carbineController.authTokenId = await deployWithProxy(
       provider, harness, segwit, taproot, upgradeableWasm,
@@ -1077,16 +1044,13 @@ async function deployFullProtocol(
       'universal_router', S.UNIVERSAL_ROUTER_IMPL, S.UNIVERSAL_ROUTER_PROXY,
       'Universal Router', onProgress, 90);
 
-    console.log('[devnet-boot] Carbine CLOB deployed (proxied)');
   } catch (e: any) {
-    console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
 
   // -----------------------------------------------------------------------
   // Phase 7: Bridge contracts — each behind upgradeable proxy
   // -----------------------------------------------------------------------
   onProgress('Deploying bridge contracts...', 91);
-  console.log('[devnet-boot] Phase 7: Bridge contracts (proxied)...');
   try {
     contracts.frzec.authTokenId = await deployWithProxy(
       provider, harness, segwit, taproot, upgradeableWasm,
@@ -1098,7 +1062,6 @@ async function deployFullProtocol(
       'fr_eth', S.FRETH_IMPL, S.FRETH_PROXY,
       'frETH', onProgress, 92);
   } catch (e: any) {
-    console.warn('[devnet-boot] Bridge deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
 
   // -----------------------------------------------------------------------
@@ -1107,7 +1070,6 @@ async function deployFullProtocol(
   // Upgrade the beacon once → all 6 pools get the new implementation.
   // -----------------------------------------------------------------------
   onProgress('Deploying synth pools...', 94);
-  console.log('[devnet-boot] Phase 8: Synth pools (beacon pattern)...');
 
   const FRUSD_BLOCK = 4;
   const FRUSD_TX = 8201;
@@ -1136,21 +1098,16 @@ async function deployFullProtocol(
           label, onProgress, 96);
         await initBeaconInstance(provider, harness, segwit, taproot,
           slot, [0, aBlk, aTx, bBlk, bTx, amp], label);
-        console.log(`[devnet-boot]   Pool ${label} at 4:${slot}`);
       } catch (poolErr: any) {
-        console.warn(`[devnet-boot] Pool ${label} failed:`, poolErr?.message?.substring(0, 60));
       }
     }
-    console.log('[devnet-boot] Synth pools deployed (beacon pattern)');
   } catch (e: any) {
-    console.warn('[devnet-boot] Synth pool deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
 
   // -----------------------------------------------------------------------
   // Phase 9: Verify key contracts
   // -----------------------------------------------------------------------
   onProgress('Verifying deployments...', 98);
-  console.log('[devnet-boot] Phase 9: Verifying...');
   const checks: [string, string, string][] = [
     ['AMM Factory', factoryId, '4'],
     ['FIRE Token (proxy)', `4:${F.TOKEN_PROXY}`, '99'],
@@ -1164,13 +1121,10 @@ async function deployFullProtocol(
       const err = check?.result?.execution?.error || '';
       const status = err.includes('unexpected end of file') ? 'NOT DEPLOYED' :
                      err ? 'deployed' : 'OK';
-      console.log(`[devnet-boot]   ${name} [${id}]: ${status}`);
     } catch {
-      console.log(`[devnet-boot]   ${name} [${id}]: check failed`);
     }
   }
 
-  console.log('[devnet-boot] Full protocol deployment complete (all contracts upgradeable)!');
 
   // Fill in legacy flat IDs
   contracts.fireTokenId       = contracts.fireToken.proxyId;

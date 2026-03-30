@@ -119,7 +119,6 @@ export default function ConnectWalletModal() {
 
       const data = await response.json();
       const elapsed = Math.round(performance.now() - t0);
-      console.log(`[InviteCode] Validation took ${elapsed}ms, valid=${data.valid}`);
 
       if (!data.valid) {
         setError(`${data.error || t('wallet.invalidInviteCode')} (${elapsed}ms)`);
@@ -979,7 +978,6 @@ export default function ConnectWalletModal() {
                                   setError(null);
                                   try {
                                     await connectBrowserWalletFromContext(wallet.id);
-                                    console.log('Connected to browser wallet:', wallet.name);
                                     handleCloseAndNavigate();
                                   } catch (err) {
                                     console.error('Wallet connection error:', err);

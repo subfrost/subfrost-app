@@ -52,9 +52,6 @@ export function useBridgeEthMutation() {
 
   const bridgeToEth = useMutation({
     mutationFn: async (params: BridgeToEthParams) => {
-      console.log('[useBridgeEth] Starting BurnAndBridge frETH -> ETH');
-      console.log('[useBridgeEth] frethAmount:', params.frethAmount);
-      console.log('[useBridgeEth] ethRecipient:', params.ethRecipient);
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
@@ -97,11 +94,9 @@ export function useBridgeEthMutation() {
         params.ethRecipient,
         params.calldata,
       );
-      console.log('[useBridgeEth] Protostone:', protostone);
 
       // frETH tokens must be sent as incomingAlkanes via inputRequirements
       const inputRequirements = `${frethTokenId}:${burnAmount}`;
-      console.log('[useBridgeEth] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
       const useActualAddresses = isBrowserWallet || network === 'devnet';
@@ -138,7 +133,6 @@ export function useBridgeEthMutation() {
       // Auto-completed by SDK
       if (result?.txid || result?.reveal_txid) {
         const txId = result.txid || result.reveal_txid;
-        console.log('[useBridgeEth] Transaction completed:', txId);
         return { success: true as const, transactionId: txId };
       }
 
@@ -192,7 +186,6 @@ export function useBridgeEthMutation() {
 
         const tx = signedPsbt.extractTransaction();
         const broadcastTxid = await provider.broadcastTransaction(tx.toHex());
-        console.log('[useBridgeEth] Broadcast:', broadcastTxid || tx.getId());
 
         return { success: true as const, transactionId: broadcastTxid || tx.getId() };
       }

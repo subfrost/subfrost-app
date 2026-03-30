@@ -156,7 +156,6 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
             if (parsed) return parsed;
           }
         } catch (err) {
-          console.warn('[useOrderbook] Carbine controller query failed, returning empty orderbook:', err);
         }
       }
 

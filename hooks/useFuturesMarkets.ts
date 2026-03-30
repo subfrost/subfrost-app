@@ -46,10 +46,6 @@ export function useFuturesMarkets(params: UseFuturesMarketsParams = {}) {
       }
 
       try {
-        console.log('[useFuturesMarkets] Fetching from provider...', {
-          network,
-          ...params,
-        });
 
         // Try to call the method if available
         if (typeof (provider as any).getFuturesMarkets === 'function') {
@@ -83,7 +79,6 @@ export function useFuturesMarkets(params: UseFuturesMarketsParams = {}) {
         }
 
         // Fallback: return empty array if method not available
-        console.log('[useFuturesMarkets] getFuturesMarkets not available on provider');
         return [];
       } catch (error) {
         console.error('[useFuturesMarkets] Error fetching markets:', error);
@@ -109,7 +104,6 @@ export function useFuturesMarket(marketId: string) {
       }
 
       try {
-        console.log('[useFuturesMarket] Fetching market:', marketId);
 
         // Try to call the method if available
         if (typeof (provider as any).getFuturesMarket === 'function') {
@@ -140,7 +134,6 @@ export function useFuturesMarket(marketId: string) {
         }
 
         // Fallback: return null if method not available
-        console.log('[useFuturesMarket] getFuturesMarket not available on provider');
         return null;
       } catch (error) {
         console.error('[useFuturesMarket] Error fetching market:', error);

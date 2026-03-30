@@ -39,10 +39,8 @@ function usePizzaFunSymbol(alkaneId?: string) {
         const data = await res.json();
         const seriesId = data?.result?.series_id;
         if (typeof seriesId === 'string' && seriesId) return seriesId;
-        console.warn('[PoolDetailsCard] No series_id in response for', alkaneId, data);
         return null;
       } catch (err) {
-        console.warn('[PoolDetailsCard] Failed to fetch series ID for', alkaneId, err);
         return null;
       }
     },

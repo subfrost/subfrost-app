@@ -92,7 +92,6 @@ export async function fetchAlkane(id: string, network: Network) {
       }
     } catch (reflectError) {
       // Reflection may not be supported by all contracts, use defaults
-      console.log(`[fetchAlkane] Reflection failed for ${contractId}:`, reflectError);
     }
 
     // Calculate mint status

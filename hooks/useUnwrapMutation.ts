@@ -79,7 +79,6 @@ export function useUnwrapMutation() {
       }
       // For alkane operations, prefer taproot if available (alkanes use P2TR)
       const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[useUnwrapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Verify wallet is loaded in provider
       if (!provider.walletIsLoaded()) {
@@ -106,12 +105,6 @@ export function useUnwrapMutation() {
       // Determine btcNetwork for PSBT operations
       const btcNetwork = getBitcoinNetwork(network);
 
-      console.log('[useUnwrapMutation] Executing unwrap:', {
-        amount: unwrapAmount,
-        frbtcId: FRBTC_ALKANE_ID,
-        recipient: recipientAddress,
-        feeRate: unwrapData.feeRate,
-      });
 
       const isBrowserWallet = walletType === 'browser';
       const useActualAddresses = isBrowserWallet || network === 'devnet';
@@ -141,9 +134,6 @@ export function useUnwrapMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[useUnwrapMutation] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[useUnwrapMutation] To addresses:', toAddresses);
-      console.log('[useUnwrapMutation] Change address:', changeAddr);
 
       const result = await provider.alkanesExecuteTyped({
         toAddresses,
@@ -156,20 +146,16 @@ export function useUnwrapMutation() {
         alkanesChangeAddress: alkanesChangeAddr,
       });
 
-      console.log('[useUnwrapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 
-      console.log('[useUnwrapMutation] Execute result:', JSON.stringify(result, null, 2));
 
       // Handle auto-completed transaction
       if (result?.txid || result?.reveal_txid) {
         const txId = result.txid || result.reveal_txid;
-        console.log('[useUnwrapMutation] Transaction auto-completed, txid:', txId);
         return { success: true, transactionId: txId };
       }
 
       // Handle readyToSign state (need to sign PSBT manually)
       if (result?.readyToSign) {
-        console.log('[useUnwrapMutation] Got readyToSign, signing PSBT...');
         const readyToSign = result.readyToSign;
 
         // Convert PSBT to base64
@@ -185,7 +171,6 @@ export function useUnwrapMutation() {
         // patchPsbtForBrowserWallet was CORRUPTING these addresses.
         // ============================================================================
 
-        console.log('[useUnwrapMutation] Using PSBT from SDK (addresses already correct, no patching needed)');
 
         // ============================================================================
         // Input patching for ALL browser wallet types
@@ -209,13 +194,11 @@ export function useUnwrapMutation() {
           });
           finalPsbtBase64 = result.psbtBase64;
           if (result.inputsPatched > 0) {
-            console.log(`[useUnwrapMutation] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
           }
         }
 
         // For keystore wallets, request user confirmation before signing
         if (walletType === 'keystore') {
-          console.log('[useUnwrapMutation] Keystore wallet - requesting user confirmation...');
           const approved = await requestConfirmation({
             type: 'unwrap',
             title: 'Confirm Unwrap',
@@ -227,20 +210,16 @@ export function useUnwrapMutation() {
           });
 
           if (!approved) {
-            console.log('[useUnwrapMutation] User rejected transaction');
             throw new Error('Transaction rejected by user');
           }
-          console.log('[useUnwrapMutation] User approved transaction');
         }
 
         // Sign PSBT — browser wallets sign all input types in a single call,
         // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
         let signedPsbtBase64: string;
         if (isBrowserWallet) {
-          console.log('[useUnwrapMutation] Browser wallet: signing PSBT once (all input types)...');
           signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
         } else {
-          console.log('[useUnwrapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
           signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
           signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
         }
@@ -253,11 +232,9 @@ export function useUnwrapMutation() {
         const txHex = tx.toHex();
         const txid = tx.getId();
 
-        console.log('[useUnwrapMutation] Transaction built:', txid);
 
         // Broadcast
         const broadcastTxid = await provider.broadcastTransaction(txHex);
-        console.log('[useUnwrapMutation] Broadcast successful:', broadcastTxid);
 
         return {
           success: true,
@@ -268,17 +245,14 @@ export function useUnwrapMutation() {
       // Handle complete state
       if (result?.complete) {
         const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-        console.log('[useUnwrapMutation] Complete, txid:', txId);
         return { success: true, transactionId: txId };
       }
 
       // Fallback
       const txId = result?.txid || result?.reveal_txid;
-      console.log('[useUnwrapMutation] Transaction ID:', txId);
       return { success: true, transactionId: txId };
     },
     onSuccess: (data) => {
-      console.log('[useUnwrapMutation] Unwrap successful, invalidating balance queries...');
 
       // Invalidate all balance-related queries to refresh UI immediately
       const walletAddress = account?.taproot?.address;
@@ -298,7 +272,6 @@ export function useUnwrapMutation() {
       // Invalidate activity feed so it shows the new unwrap transaction
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[useUnwrapMutation] Balance queries invalidated for address:', walletAddress);
     },
   });
 }

@@ -76,7 +76,6 @@ export default function RegtestControls() {
         const minedCount = result.count || result.blocks?.length || 1;
         totalMined += minedCount;
 
-        console.log(`[RegtestControls] Mined ${minedCount} blocks (${totalMined}/${count} total):`, result);
 
         // Small delay between mining calls to allow indexer to process
         if (totalMined < count) {
@@ -92,7 +91,6 @@ export default function RegtestControls() {
       // Invalidate queries but don't wait for refetch to complete (fire and forget)
       // This prevents hanging if some queries take too long
       queryClient.invalidateQueries().catch((err) => {
-        console.warn('[RegtestControls] Query invalidation error (non-fatal):', err);
       });
 
       showMessage(`✅ Mined ${totalMined} block(s)!`);
@@ -122,12 +120,10 @@ export default function RegtestControls() {
       // The address parameter is ignored - it will call frBTC [32:0] GET_SIGNER to get the address
       const result = await provider.bitcoindGenerateFuture('');
       
-      console.log('[RegtestControls] Generated future:', result);
       showMessage(`✅ Generated future block with Subfrost address!`);
 
       // Invalidate queries (fire and forget to prevent hanging)
       queryClient.invalidateQueries().catch((err) => {
-        console.warn('[RegtestControls] Query invalidation error (non-fatal):', err);
       });
     } catch (error) {
       console.error('Generate future error:', error);
@@ -152,7 +148,6 @@ export default function RegtestControls() {
         throw new Error('No taproot address available');
       }
 
-      console.log('[DIESEL] Starting DIESEL mint for:', taprootAddress);
 
       // Build protostone: [2,0,77]:v0:v0
       // - [2,0,77]: call DIESEL contract (2:0) with opcode 77 (mint)
@@ -161,7 +156,6 @@ export default function RegtestControls() {
       const [dieselBlock, dieselTx] = DIESEL_ID.split(':');
       const protostone = `[${dieselBlock},${dieselTx},${DIESEL_MINT_OPCODE}]:v0:v0`;
 
-      console.log('[DIESEL] Protostone:', protostone);
 
       if (!extendedProvider) {
         throw new Error('Extended provider not initialized');
@@ -179,7 +173,6 @@ export default function RegtestControls() {
         autoConfirm: false, // We'll handle signing ourselves
       });
 
-      console.log('[DIESEL] Execution result:', result);
 
       // Handle readyToSign response
       if (result?.readyToSign) {
@@ -195,7 +188,6 @@ export default function RegtestControls() {
           throw new Error('Unexpected PSBT format');
         }
 
-        console.log('[DIESEL] Signing PSBT...');
 
         // Sign with taproot key
         const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
@@ -209,17 +201,14 @@ export default function RegtestControls() {
         const txHex = tx.toHex();
         const txid = tx.getId();
 
-        console.log('[DIESEL] Transaction built:', txid);
 
         // Broadcast the transaction
         const broadcastTxid = await provider.broadcastTransaction(txHex);
-        console.log('[DIESEL] Broadcast successful:', broadcastTxid);
 
         showMessage(`✅ DIESEL minted! TX: ${(broadcastTxid || txid).slice(0, 16)}... Mine a block to confirm.`);
 
       } else if (result?.complete) {
         const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-        console.log('[DIESEL] Complete, txid:', txId);
         showMessage(`✅ DIESEL minted! TX: ${txId?.slice(0, 16)}...`);
       } else {
         throw new Error('Unexpected result format');
@@ -227,7 +216,6 @@ export default function RegtestControls() {
 
       // Refresh balances (fire and forget to prevent hanging)
       queryClient.invalidateQueries().catch((err) => {
-        console.warn('[DIESEL] Query invalidation error (non-fatal):', err);
       });
 
     } catch (error) {

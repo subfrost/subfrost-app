@@ -126,7 +126,6 @@ export function useFujinMarkets() {
           markets = parseMarketsList(listExec.data);
         }
       } catch (err) {
-        console.warn('[useFujinMarkets] Failed to fetch market list (opcode 3):', err);
       }
 
       return { factoryId, markets, numMarkets, error: null };

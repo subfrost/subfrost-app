@@ -79,13 +79,6 @@ export function useGaugeStakeMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[useGaugeStakeMutation] Executing gauge stake:', {
-        gaugeId: params.gaugeId,
-        lpTokenId: params.lpTokenId,
-        amount: params.amount,
-        isBrowserWallet,
-        toAddresses,
-      });
 
       const result = await provider.alkanesExecuteTyped({
         inputRequirements,
@@ -99,18 +92,15 @@ export function useGaugeStakeMutation() {
         ordinalsStrategy: 'burn',
       });
 
-      console.log('[useGaugeStakeMutation] Execute result:', JSON.stringify(result, null, 2));
 
       // Handle auto-completed transaction
       if (result?.txid || result?.reveal_txid) {
         const txId = result.txid || result.reveal_txid;
-        console.log('[useGaugeStakeMutation] Transaction auto-completed, txid:', txId);
         return { success: true, transactionId: txId };
       }
 
       // Handle readyToSign state
       if (result?.readyToSign) {
-        console.log('[useGaugeStakeMutation] Got readyToSign, signing PSBT...');
         const readyToSign = result.readyToSign;
         const psbtBase64 = extractPsbtBase64(readyToSign.psbt);
 
@@ -125,7 +115,6 @@ export function useGaugeStakeMutation() {
           });
           finalPsbtBase64 = patchResult.psbtBase64;
           if (patchResult.inputsPatched > 0) {
-            console.log(`[useGaugeStakeMutation] Patched ${patchResult.inputsPatched} input(s)`);
           }
         }
 
@@ -159,9 +148,7 @@ export function useGaugeStakeMutation() {
         const txHex = tx.toHex();
         const txid = tx.getId();
 
-        console.log('[useGaugeStakeMutation] Broadcasting:', txid);
         const broadcastTxid = await provider.broadcastTransaction(txHex);
-        console.log('[useGaugeStakeMutation] Broadcast successful:', broadcastTxid);
 
         return { success: true, transactionId: broadcastTxid || txid };
       }
@@ -177,7 +164,6 @@ export function useGaugeStakeMutation() {
       return { success: true, transactionId: txId };
     },
     onSuccess: () => {
-      console.log('[useGaugeStakeMutation] Stake successful, invalidating queries...');
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });

@@ -113,7 +113,6 @@ export function useWrapMutation() {
       if (isNaN(wrapAmountSats) || wrapAmountSats <= 0) {
         throw new Error(`Invalid wrap amount: "${wrapData.amount}" (parsed: ${wrapAmountSats})`);
       }
-      console.log('[WRAP] Starting wrap:', wrapAmountSats, 'sats (from:', amountStr, ')');
 
       // Build protostone: [32,0,77]:v1:v1
       // pointer=v1 sends minted frBTC to output 1 (user)
@@ -169,19 +168,6 @@ export function useWrapMutation() {
         ? [signerAddress, userTaprootAddress]
         : [signerAddress, 'p2tr:0'];
 
-      console.log('[WRAP] ============ alkanesExecuteTyped CALL ============');
-      console.log('[WRAP] DIAGNOSTIC: signerAddress =', signerAddress);
-      console.log('[WRAP] DIAGNOSTIC: userTaprootAddress =', userTaprootAddress);
-      console.log('[WRAP] DIAGNOSTIC: isBrowserWallet =', isBrowserWallet);
-      console.log('[WRAP] to_addresses:', JSON.stringify(toAddresses));
-      console.log('[WRAP] to_addresses[0] (should be signer):', toAddresses[0]);
-      console.log('[WRAP] to_addresses[1] (should be user):', toAddresses[1]);
-      console.log('[WRAP] from_addresses:', fromAddresses);
-      console.log('[WRAP] input_requirements:', inputRequirements);
-      console.log('[WRAP] protostone:', protostone);
-      console.log('[WRAP] fee_rate:', wrapData.feeRate);
-      console.log('[WRAP] wallet_type:', walletType);
-      console.log('[WRAP] ===================================================');
 
       try {
         const result = await provider.alkanesExecuteTyped({
@@ -202,12 +188,10 @@ export function useWrapMutation() {
           mineEnabled: false,
         });
 
-        console.log('[WRAP] Execute result:', result);
 
         // Check if execution completed (auto_confirm: true path)
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[WRAP] Complete (auto_confirm), txid:', txId);
           return {
             success: true,
             transactionId: txId,
@@ -254,7 +238,6 @@ export function useWrapMutation() {
 
           // Log per-input details for debugging
           const logInputDetails = (psbt: bitcoin.Psbt, label: string) => {
-            console.log(`[WRAP-DIAG] === ${label} — ${psbt.data.inputs.length} inputs, ${psbt.txOutputs.length} outputs ===`);
             psbt.data.inputs.forEach((input, idx) => {
               const witnessScript = input.witnessUtxo?.script;
               const scriptHex = witnessScript ? Buffer.from(witnessScript).toString('hex') : 'NONE';
@@ -263,19 +246,15 @@ export function useWrapMutation() {
               const hasRedeemScript = !!input.redeemScript;
               const hasTapInternalKey = !!input.tapInternalKey;
               const tapKeyHex = input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'NONE';
-              console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex} nonWitnessUtxo=${hasNonWitness} redeemScript=${hasRedeemScript} tapInternalKey=${tapKeyHex}`);
             });
             psbt.txOutputs.forEach((out, idx) => {
               try {
                 const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
               } catch {
-                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or non-standard]`);
               }
             });
           };
 
-          console.log('[DIAGNOSTIC] BEFORE patching:');
           {
             const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
             logInputDetails(tempPsbt, 'BEFORE PATCHING');
@@ -333,7 +312,6 @@ export function useWrapMutation() {
           // - ~/.claude/plans/stateless-roaming-tide.md: Complete investigation
           // - ~/.claude/plans/WRAP_BUG_INVESTIGATION_COMPLETE.md: Full timeline
           // ============================================================================
-          console.log('[WRAP] Using PSBT from SDK (output addresses already correct, no output patching needed)');
 
           // INPUT-ONLY patching (no output patching — SDK outputs are correct):
           // 1. patchInputWitnessScripts: fix witnessUtxo.script where SDK dummy wallet
@@ -349,7 +327,6 @@ export function useWrapMutation() {
               network: btcNetwork,
             });
             if (inputsPatched > 0) {
-              console.log(`[WRAP] Patched witnessUtxo.script on ${inputsPatched} input(s)`);
             }
 
             // Inject redeemScript for P2SH-P2WPKH wallets (Xverse: address starts with '3')
@@ -361,7 +338,6 @@ export function useWrapMutation() {
                 network: btcNetwork,
               });
               if (redeemScriptsInjected > 0) {
-                console.log(`[WRAP] Injected redeemScript on ${redeemScriptsInjected} P2SH-P2WPKH input(s)`);
               }
             }
 
@@ -369,7 +345,6 @@ export function useWrapMutation() {
           }
 
           // DIAGNOSTIC: Log PSBT details after input patching
-          console.log('[DIAGNOSTIC] AFTER input patching:');
           {
             const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
             logInputDetails(tempPsbt, 'AFTER PATCHING');
@@ -378,7 +353,6 @@ export function useWrapMutation() {
           // For keystore wallets, request user confirmation before signing
           // Browser wallets have their own confirmation UI from the wallet extension
           if (walletType === 'keystore') {
-            console.log('[WRAP] Keystore wallet - requesting user confirmation...');
             const approved = await requestConfirmation({
               type: 'wrap',
               title: 'Confirm Wrap',
@@ -390,10 +364,8 @@ export function useWrapMutation() {
             });
 
             if (!approved) {
-              console.log('[WRAP] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[WRAP] User approved transaction');
           }
 
           // Sign the PSBT with both SegWit and Taproot keys
@@ -403,12 +375,10 @@ export function useWrapMutation() {
           // signPsbt call. Calling both signSegwitPsbt and signTaprootPsbt causes "Site origin must
           // be connected first" on the second call. For OYL and other browser wallets, only call
           // signTaprootPsbt once (it patches tapInternalKey and signs all inputs).
-          console.log('[WRAP] Signing PSBT...');
 
           // Log PSBT details for debugging wallet signing issues
           const tempPsbtForCheck = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
           const inputCount = tempPsbtForCheck.data.inputs.length;
-          console.log(`[WRAP] PSBT has ${inputCount} inputs, ${tempPsbtForCheck.txOutputs.length} outputs`);
 
           let signedPsbtBase64: string;
           if (walletType === 'browser') {
@@ -425,20 +395,10 @@ export function useWrapMutation() {
           // (with finalScriptWitness already set) instead of adding intermediate signature fields.
           // Check if already finalized before attempting finalization.
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-          console.log(`[WRAP-DIAG] === AFTER SIGNING — ${signedPsbt.data.inputs.length} inputs ===`);
           signedPsbt.data.inputs.forEach((inp, idx) => {
             const witnessScript = inp.witnessUtxo?.script;
             const scriptType = witnessScript ? classifyScript(witnessScript) : 'NO_WITNESS_UTXO';
             const scriptHex = witnessScript ? Buffer.from(witnessScript).toString('hex') : 'NONE';
-            console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex}`, {
-              tapKeySig: inp.tapKeySig ? `${Buffer.from(inp.tapKeySig).length}B` : undefined,
-              tapScriptSig: inp.tapScriptSig?.length || undefined,
-              partialSig: inp.partialSig?.length || undefined,
-              finalScriptWitness: inp.finalScriptWitness ? `${Buffer.from(inp.finalScriptWitness).length}B` : undefined,
-              finalScriptSig: inp.finalScriptSig ? `${Buffer.from(inp.finalScriptSig).length}B` : undefined,
-              redeemScript: inp.redeemScript ? `${Buffer.from(inp.redeemScript).length}B` : undefined,
-              tapInternalKey: inp.tapInternalKey ? Buffer.from(inp.tapInternalKey).toString('hex') : undefined,
-            });
           });
 
           // Check if OYL already finalized the PSBT
@@ -447,9 +407,7 @@ export function useWrapMutation() {
           );
 
           if (alreadyFinalized) {
-            console.log('[WRAP] PSBT is already finalized by wallet, skipping finalization');
           } else {
-            console.log('[WRAP] PSBT not finalized, attempting to finalize...');
             try {
               signedPsbt.finalizeAllInputs();
             } catch (e: any) {
@@ -464,7 +422,6 @@ export function useWrapMutation() {
               });
               // Try manual finalization for taproot key-path spend
               if (signedPsbt.data.inputs[0]?.tapKeySig) {
-                console.log('[WRAP] Attempting manual finalization for taproot key-path spend');
                 for (let i = 0; i < signedPsbt.data.inputs.length; i++) {
                   const input = signedPsbt.data.inputs[i];
                   if (input.tapKeySig) {
@@ -488,28 +445,21 @@ export function useWrapMutation() {
           const txid = tx.getId();
 
           // Log transaction outputs for debugging
-          console.log('[WRAP] Transaction built:', txid);
-          console.log('[WRAP] Outputs:');
           tx.outs.forEach((output, idx) => {
             const script = Buffer.from(output.script).toString('hex');
             if (script.startsWith('6a')) {
-              console.log(`  [${idx}] OP_RETURN (protostone)`);
-              console.log(`        Script hex: ${script}`);
             } else {
               try {
                 const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
                 const label = addr === signerAddress ? 'SIGNER (BTC)' :
                              addr === userTaprootAddress ? 'USER (frBTC)' : 'OTHER';
-                console.log(`  [${idx}] ${label}: ${output.value} sats -> ${addr}`);
               } catch {
-                console.log(`  [${idx}] Unknown: ${output.value} sats`);
               }
             }
           });
 
           // Broadcast the transaction
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[WRAP] Broadcast successful:', broadcastTxid);
 
           return {
             success: true,
@@ -521,7 +471,6 @@ export function useWrapMutation() {
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[WRAP] Transaction ID:', txId);
 
         return {
           success: true,
@@ -534,7 +483,6 @@ export function useWrapMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[WRAP] Success! txid:', data.transactionId, 'amount:', data.wrapAmountSats, 'sats');
 
       // ⚠️ (2026-03-26): MUST use refetchQueries, not invalidateQueries.
       // invalidateQueries marks as stale but won't re-execute queryFn if
@@ -550,7 +498,6 @@ export function useWrapMutation() {
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[WRAP] Balance queries refetched');
     },
   });
 }

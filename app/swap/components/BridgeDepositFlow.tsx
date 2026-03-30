@@ -238,7 +238,6 @@ export default function BridgeDepositFlow({
         }
         setQuote(computed);
       } catch (e) {
-        console.warn("[BridgeDepositFlow] Quote computation failed:", e);
         setQuote(null);
       } finally {
         setQuoteLoading(false);
@@ -321,7 +320,6 @@ export default function BridgeDepositFlow({
           evmRecipient,
           feeRate: 5,
         });
-        console.log('[BridgeDepositFlow] BurnAndBridge tx:', result.transactionId);
         setOperations(prev =>
           prev.map(op =>
             op.id === opId ? { ...op, status: "deposited" as const, btcTxId: result.transactionId } : op

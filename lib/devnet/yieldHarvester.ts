@@ -144,7 +144,6 @@ export class YieldHarvester {
           const event = await this.harvestYieldSurplus(source);
           if (event) events.push(event);
         } catch (e: any) {
-          console.warn(`[YieldHarvester] ${source.source} harvest failed:`, e?.message?.slice(0, 80));
         }
       }
 
@@ -154,16 +153,11 @@ export class YieldHarvester {
           const event = await this.harvestPoolFees(pool);
           if (event) events.push(event);
         } catch (e: any) {
-          console.warn(`[YieldHarvester] ${pool.label} fee harvest failed:`, e?.message?.slice(0, 80));
         }
       }
 
       if (events.length > 0) {
         const totalDeposited = events.reduce((sum, e) => sum + (e.success ? e.frbtcDeposited : 0n), 0n);
-        console.log(
-          `[YieldHarvester] Cycle complete: ${events.length} harvests, ` +
-          `${totalDeposited} frBTC deposited into dxBTC`
-        );
       }
     } finally {
       this.isProcessing = false;
@@ -177,10 +171,8 @@ export class YieldHarvester {
     if (this.pollInterval) return;
     this.pollInterval = setInterval(() => {
       this.harvestAll().catch((e) => {
-        console.warn('[YieldHarvester] Poll error:', e);
       });
     }, this.config.intervalMs);
-    console.log(`[YieldHarvester] Started (every ${this.config.intervalMs}ms)`);
   }
 
   /** Stop periodic harvesting. */
@@ -188,7 +180,6 @@ export class YieldHarvester {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
-      console.log('[YieldHarvester] Stopped');
     }
   }
 
@@ -215,10 +206,6 @@ export class YieldHarvester {
       return null; // No actionable surplus
     }
 
-    console.log(
-      `[YieldHarvester] ${source.source} surplus detected: ` +
-      `vault=${vaultAssets}, supply=${frSupply}, surplus=${surplus}`
-    );
 
     const event: HarvestEvent = {
       timestamp: Date.now(),
@@ -313,7 +300,6 @@ export class YieldHarvester {
       return null; // No fees accumulated
     }
 
-    console.log(`[YieldHarvester] ${pool.label} admin fees: ${adminFees}`);
 
     const event: HarvestEvent = {
       timestamp: Date.now(),

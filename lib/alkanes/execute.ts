@@ -82,11 +82,6 @@ export async function alkanesExecuteTyped(
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);
 
-  console.log('[alkanesExecuteTyped] to_addresses:', toAddressesJson);
-  console.log('[alkanesExecuteTyped] input_requirements:', params.inputRequirements);
-  console.log('[alkanesExecuteTyped] protostones:', params.protostones);
-  console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
-  console.log('[alkanesExecuteTyped] options:', optionsJson);
 
   // On devnet, use alkanesExecuteFull which handles signing + mining internally.
   // alkanesExecuteWithStrings relies on the SDK's data API for UTXO discovery,
@@ -106,7 +101,6 @@ export async function alkanesExecuteTyped(
     options.mine_enabled = true;
     options.auto_confirm = true;
     const devnetOptionsJson = JSON.stringify(options);
-    console.log('[alkanesExecuteTyped] Devnet: using alkanesExecuteFull (auto_confirm + mine_enabled)');
     const result = await (provider as any).alkanesExecuteFull(
       toAddressesJson,
       params.inputRequirements,

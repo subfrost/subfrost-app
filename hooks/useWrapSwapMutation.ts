@@ -115,13 +115,6 @@ export function useWrapSwapMutation() {
 
   return useMutation({
     mutationFn: async (data: WrapSwapTransactionData) => {
-      console.log('═════════════════════════════════════════════════════════');
-      console.log('[WrapSwap] ████ ONE-CLICK BTC → TOKEN MUTATION STARTED ████');
-      console.log('═══════════════════════════════════════════════════════════');
-      console.log('[WrapSwap] Input data:', JSON.stringify(data, null, 2));
-      console.log('[WrapSwap] Network:', network);
-      console.log('[WrapSwap] FRBTC_ALKANE_ID:', FRBTC_ALKANE_ID);
-      console.log('[WrapSwap] wrapFee:', wrapFee);
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
@@ -143,7 +136,6 @@ export function useWrapSwapMutation() {
         : getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
-      console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });
 
       // Convert BTC to sats
       const btcAmountSats = new BigNumber(data.btcAmount)
@@ -151,7 +143,6 @@ export function useWrapSwapMutation() {
         .integerValue(BigNumber.ROUND_FLOOR)
         .toString();
 
-      console.log('[WrapSwap] BTC amount:', data.btcAmount, '=', btcAmountSats, 'sats');
 
       // Calculate frBTC amount after wrap fee
       const frbtcAmountAfterFee = new BigNumber(btcAmountSats)
@@ -160,7 +151,6 @@ export function useWrapSwapMutation() {
         .integerValue(BigNumber.ROUND_FLOOR)
         .toString();
 
-      console.log('[WrapSwap] frBTC after wrap fee:', frbtcAmountAfterFee, 'alks');
 
       // Calculate minimum output with slippage
       const minAmountOut = calculateMinimumFromSlippage({
@@ -168,14 +158,11 @@ export function useWrapSwapMutation() {
         maxSlippage: data.maxSlippage,
       });
 
-      console.log('[WrapSwap] Expected output:', data.buyAmount);
-      console.log('[WrapSwap] Min output (after slippage):', minAmountOut);
 
       // Get deadline block height (regtest uses large offset so deadline never expires)
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
       const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
-      console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       // Build combined protostone
       const protostone = buildWrapSwapProtostone({
@@ -187,11 +174,9 @@ export function useWrapSwapMutation() {
         deadline: deadline.toString(),
       });
 
-      console.log('[WrapSwap] Built protostone:', protostone);
 
       // Input requirements: BTC to signer (v1)
       const inputRequirements = `B:${btcAmountSats}:v1`;
-      console.log('[WrapSwap] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
       const useActualAddresses = isBrowserWallet || network === 'devnet';
@@ -220,13 +205,7 @@ export function useWrapSwapMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[WrapSwap] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[WrapSwap] To addresses:', toAddresses);
-      console.log('[WrapSwap] Change address:', changeAddr);
 
-      console.log('═════════════════════════════════════════════════════════');
-      console.log('[WrapSwap] ████ EXECUTING ATOMIC WRAP+SWAP ████');
-      console.log('═══════════════════════════════════════════════════════════');
 
       try {
         // Execute using alkanesExecuteTyped
@@ -241,18 +220,15 @@ export function useWrapSwapMutation() {
           alkanesChangeAddress: alkanesChangeAddr,
         });
 
-        console.log('[WrapSwap] Execute result:', JSON.stringify(result, null, 2));
 
         // Check if SDK auto-completed
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[WrapSwap] Transaction auto-completed, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Handle readyToSign state
         if (result?.readyToSign) {
-          console.log('[WrapSwap] Got readyToSign state, signing...');
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
@@ -268,7 +244,6 @@ export function useWrapSwapMutation() {
           // patchPsbtForBrowserWallet was CORRUPTING these addresses.
           // ============================================================================
 
-          console.log('[WrapSwap] Using PSBT from SDK (addresses already correct, no patching needed)');
 
           // ============================================================================
           // Input patching for ALL browser wallet types
@@ -292,13 +267,11 @@ export function useWrapSwapMutation() {
             });
             finalPsbtBase64 = result.psbtBase64;
             if (result.inputsPatched > 0) {
-              console.log(`[WrapSwap] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
             }
           }
 
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
-            console.log('[WrapSwap] Keystore wallet - requesting user confirmation...');
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm BTC Swap',
@@ -312,20 +285,16 @@ export function useWrapSwapMutation() {
             });
 
             if (!approved) {
-              console.log('[WrapSwap] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[WrapSwap] User approved transaction');
           }
 
           // Sign PSBT — browser wallets sign all input types in a single call,
           // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[WrapSwap] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
           } else {
-            console.log('[WrapSwap] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
@@ -338,30 +307,23 @@ export function useWrapSwapMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[WrapSwap] Transaction ID:', txid);
 
           // Log outputs for debugging
-          console.log('[WrapSwap] Transaction outputs:');
           tx.outs.forEach((output, idx) => {
             const script = Buffer.from(output.script).toString('hex');
             if (script.startsWith('6a')) {
-              console.log(`  [${idx}] OP_RETURN (protostone)`);
             } else {
               try {
                 const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
                 const label = addr === taprootAddress ? 'USER' :
                               addr === signerAddress ? 'SIGNER' : 'OTHER';
-                console.log(`  [${idx}] ${label}: ${output.value} sats -> ${addr}`);
               } catch {
-                console.log(`  [${idx}] Unknown: ${output.value} sats`);
               }
             }
           });
 
           // Broadcast
-          console.log('[WrapSwap] Broadcasting transaction...');
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[WrapSwap] Broadcast successful:', broadcastTxid);
 
           return { success: true, transactionId: broadcastTxid || txid };
         }
@@ -369,7 +331,6 @@ export function useWrapSwapMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[WrapSwap] Execution complete, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
@@ -384,7 +345,6 @@ export function useWrapSwapMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[WrapSwap] ✓ Success! txid:', data.transactionId);
 
       // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
@@ -397,7 +357,6 @@ export function useWrapSwapMutation() {
       queryClient.invalidateQueries({ queryKey: ['alkanesTokenPairs'] });
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[WrapSwap] Queries invalidated - UI will refresh when indexer processes block');
     },
   });
 }

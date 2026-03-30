@@ -38,7 +38,6 @@ const WALLET_MOCKS: Record<string, string> = {
     window.XverseProviders = {
       BitcoinProvider: {
         request: async (method, params) => {
-          console.log('[MOCK Xverse] request:', method, JSON.stringify(params));
           if (method === 'getAccounts') {
             return {
               result: [
@@ -48,7 +47,6 @@ const WALLET_MOCKS: Record<string, string> = {
             };
           }
           if (method === 'signPsbt') {
-            console.log('[MOCK Xverse] signPsbt called — returning input PSBT unchanged');
             return { result: { psbt: params?.psbt || '' } };
           }
           throw new Error('[MOCK Xverse] Unexpected method: ' + method);
@@ -57,55 +55,45 @@ const WALLET_MOCKS: Record<string, string> = {
         removeListener: () => {},
       },
     };
-    console.log('[MOCK] Xverse wallet injected');
   `,
   oyl: `
     window.oyl = {
       getAddresses: async () => {
-        console.log('[MOCK OYL] getAddresses called');
         return {
           taproot: { address: '${TEST_TAPROOT}', publicKey: '${TEST_TAPROOT_PUBKEY}' },
           nativeSegwit: { address: '${TEST_SEGWIT}', publicKey: '${TEST_SEGWIT_PUBKEY}' },
         };
       },
       signPsbt: async (psbtHex) => {
-        console.log('[MOCK OYL] signPsbt called');
         return psbtHex;
       },
       on: () => {},
       removeListener: () => {},
     };
-    console.log('[MOCK] OYL wallet injected');
   `,
   unisat: `
     window.unisat = {
       requestAccounts: async () => {
-        console.log('[MOCK Unisat] requestAccounts called');
         return ['${TEST_TAPROOT}'];
       },
       getPublicKey: async () => {
-        console.log('[MOCK Unisat] getPublicKey called');
         return '${TEST_TAPROOT_PUBKEY}';
       },
       signPsbt: async (psbtHex) => {
-        console.log('[MOCK Unisat] signPsbt called');
         return psbtHex;
       },
       getAccounts: async () => ['${TEST_TAPROOT}'],
       on: () => {},
       removeListener: () => {},
     };
-    console.log('[MOCK] Unisat wallet injected');
   `,
   okx: `
     window.okxwallet = {
       bitcoin: {
         connect: async () => {
-          console.log('[MOCK OKX] bitcoin.connect called');
           return { address: '${TEST_TAPROOT}', publicKey: '${TEST_TAPROOT_PUBKEY}' };
         },
         signPsbt: async (psbtHex) => {
-          console.log('[MOCK OKX] signPsbt called');
           return psbtHex;
         },
         on: () => {},
@@ -114,7 +102,6 @@ const WALLET_MOCKS: Record<string, string> = {
       on: () => {},
       removeListener: () => {},
     };
-    console.log('[MOCK] OKX wallet injected');
   `,
 };
 
@@ -238,18 +225,15 @@ async function screenshotOnFailure(page: any, testName: string) {
     if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
     const filename = `${SCREENSHOTS_DIR}/wallet-ui-${testName}-${Date.now()}.png`;
     await page.screenshot({ path: filename, fullPage: true });
-    console.log(`  Screenshot saved: ${filename}`);
   } catch {}
 }
 
 // Helper: dump console logs on failure
 function dumpLogs(logs: string[], label: string) {
-  console.log(`\n--- ${label} console logs (${logs.length}) ---`);
   // Show last 30 logs
   const tail = logs.slice(-30);
   tail.forEach(l => console.log(`  ${l}`));
   if (logs.length > 30) console.log(`  ... (${logs.length - 30} earlier logs omitted)`);
-  console.log('--- end logs ---\n');
 }
 
 describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () => {
@@ -290,16 +274,12 @@ describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () =
 
     await setupPage(page, walletId);
 
-    console.log(`[${walletId}] Clicking Connect Wallet...`);
     await clickButtonByText(page, 'Connect Wallet');
 
-    console.log(`[${walletId}] Clicking Connect Browser Extension...`);
     await clickButtonByText(page, 'Connect Browser Extension');
 
-    console.log(`[${walletId}] Clicking ${displayName}...`);
     await clickWalletButton(page, displayName);
 
-    console.log(`[${walletId}] Waiting for connection...`);
     await waitForConnected(page);
 
     return logs;
@@ -331,7 +311,6 @@ describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () =
     expect(parsed.taproot?.address).toBe(TEST_TAPROOT);
     expect(parsed.nativeSegwit?.address).toBe(TEST_SEGWIT);
 
-    console.log('[Xverse] PASSED — taproot + segwit addresses cached');
   }, 45000);
 
   it('connects OYL wallet through the UI', async () => {
@@ -354,7 +333,6 @@ describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () =
     expect(parsed.taproot?.address).toBe(TEST_TAPROOT);
     expect(parsed.nativeSegwit?.address).toBe(TEST_SEGWIT);
 
-    console.log('[OYL] PASSED — taproot + segwit addresses cached');
   }, 45000);
 
   it('connects Unisat wallet through the UI', async () => {
@@ -376,7 +354,6 @@ describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () =
     const parsed = JSON.parse(await page.evaluate(() => localStorage.getItem('subfrost_browser_wallet_addresses'))!);
     expect(parsed.taproot?.address).toBe(TEST_TAPROOT);
 
-    console.log('[Unisat] PASSED — taproot address cached');
   }, 45000);
 
   it('connects OKX wallet through the UI', async () => {
@@ -398,7 +375,6 @@ describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () =
     const parsed = JSON.parse(await page.evaluate(() => localStorage.getItem('subfrost_browser_wallet_addresses'))!);
     expect(parsed.taproot?.address).toBe(TEST_TAPROOT);
 
-    console.log('[OKX] PASSED — taproot address cached');
   }, 45000);
 
   it('wallet persists after page reload (auto-reconnect from cache)', async () => {
@@ -407,7 +383,6 @@ describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () =
       logs = await connectWalletViaUI('xverse');
 
       // Reload the page (wallet mock persists via evaluateOnNewDocument)
-      console.log('[AutoReconnect] Reloading page...');
       await page.reload({ waitUntil: 'load', timeout: 30000 });
       await page.waitForFunction(
         () => document.querySelector('header button') !== null,
@@ -429,6 +404,5 @@ describe.skipIf(!INTEGRATION)('Browser wallet connection UI (INTEGRATION)', () =
     const getAccountsCalls = logs.filter(l => l.includes('[MOCK Xverse] request: getAccounts'));
     expect(getAccountsCalls.length).toBe(1); // Only the initial connect
 
-    console.log('[AutoReconnect] PASSED — wallet restored from cache without extension prompt');
   }, 60000);
 });

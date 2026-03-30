@@ -96,7 +96,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<RedeemRes
     // Invalidate cache for this code
     await cache.del(`invite:valid:${code}`);
 
-    console.log(`[API /invite-codes/redeem] Recorded: ${code} -> ${taprootAddress} (user: ${result.userId})`);
 
     return NextResponse.json({ success: true, userId: result.userId });
   } catch (error) {

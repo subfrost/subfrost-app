@@ -33,7 +33,6 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
 
   const handleBond = () => {
     if (isDemoGated) return;
-    console.log('[FireBondingPanel] Bond:', { amount });
   };
 
 

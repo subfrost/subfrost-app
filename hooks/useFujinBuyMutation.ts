@@ -42,9 +42,6 @@ export function useFujinBuyMutation() {
 
   return useMutation({
     mutationFn: async (params: FujinBuyParams) => {
-      console.log('[FujinBuy] ═══════════════════════════════════════════');
-      console.log('[FujinBuy] Starting MintPair transaction');
-      console.log('[FujinBuy] Params:', JSON.stringify(params, null, 2));
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
@@ -60,7 +57,6 @@ export function useFujinBuyMutation() {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
       const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[FujinBuy] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Parse pool ID
       const [poolBlock, poolTx] = params.poolId.split(':');
@@ -72,8 +68,6 @@ export function useFujinBuyMutation() {
       // Input requirements: DIESEL (2:0) tokens
       const inputRequirements = `2:0:${params.dieselAmount}`;
 
-      console.log('[FujinBuy] Protostone:', protostone);
-      console.log('[FujinBuy] Input requirements:', inputRequirements);
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
@@ -96,8 +90,6 @@ export function useFujinBuyMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[FujinBuy] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[FujinBuy] To addresses:', toAddresses);
 
       try {
         const result = await provider.alkanesExecuteTyped({
@@ -112,18 +104,15 @@ export function useFujinBuyMutation() {
           ordinalsStrategy: 'burn',
         });
 
-        console.log('[FujinBuy] Execute result:', JSON.stringify(result, null, 2));
 
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[FujinBuy] Transaction auto-completed, txid:', txId);
           return { success: true as const, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[FujinBuy] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
@@ -139,17 +128,14 @@ export function useFujinBuyMutation() {
             });
             psbtBase64 = patchResult.psbtBase64;
             if (patchResult.inputsPatched > 0) {
-              console.log(`[FujinBuy] Patched ${patchResult.inputsPatched} input(s) for browser wallet compatibility`);
             }
           }
 
           // Sign PSBT -- browser wallets sign all input types in a single call
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[FujinBuy] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           } else {
-            console.log('[FujinBuy] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
@@ -162,11 +148,9 @@ export function useFujinBuyMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[FujinBuy] Transaction built:', txid);
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[FujinBuy] Broadcast successful:', broadcastTxid);
 
           return {
             success: true as const,
@@ -177,13 +161,11 @@ export function useFujinBuyMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[FujinBuy] Complete, txid:', txId);
           return { success: true as const, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[FujinBuy] Transaction ID:', txId);
         return { success: true as const, transactionId: txId };
 
       } catch (error) {
@@ -192,7 +174,6 @@ export function useFujinBuyMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[FujinBuy] Success! txid:', data.transactionId);
 
       // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });

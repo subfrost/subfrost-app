@@ -59,7 +59,6 @@ export function AlkanesWalletExample() {
 
     try {
       const signed = wallet.signPsbt(psbtBase64);
-      console.log('Signed PSBT:', signed);
       alert('PSBT signed! Check console for output.');
     } catch (error) {
       console.error('Failed to sign PSBT:', error);

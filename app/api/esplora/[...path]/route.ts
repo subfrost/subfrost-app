@@ -29,9 +29,6 @@ export async function GET(
     const esploraUrl = config.BLOCK_EXPLORER_URL_BTC;
     const targetUrl = `${esploraUrl}/api/${pathString}`;
 
-    console.log(`[Esplora Proxy] Network: ${network}`);
-    console.log(`[Esplora Proxy] Base URL: ${esploraUrl}`);
-    console.log(`[Esplora Proxy] Forwarding: ${pathString} -> ${targetUrl}`);
 
     const response = await fetch(targetUrl, {
       method: 'GET',
@@ -43,7 +40,6 @@ export async function GET(
     // If primary esplora fails with 404 on mainnet, try mempool.space fallback
     if (!response.ok && response.status === 404 && network === 'mainnet') {
       const fallbackUrl = `${MAINNET_FALLBACK_URL}/api/${pathString}`;
-      console.log(`[Esplora Proxy] Primary 404, trying fallback: ${fallbackUrl}`);
 
       const fallbackResponse = await fetch(fallbackUrl, {
         method: 'GET',
@@ -70,7 +66,6 @@ export async function GET(
       );
     }
 
-    console.log(`[Esplora Proxy] Success: ${response.status}`);
     return handleSuccessResponse(response, pathString);
   } catch (error) {
     console.error('[Esplora Proxy] Error:', error);

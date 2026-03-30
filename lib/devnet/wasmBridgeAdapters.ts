@@ -133,13 +133,11 @@ function createPollCallback(
               }
 
               if (numRecords > 0) {
-                console.log(`[bridge-adapter] Detected ${numRecords} pending bridges on ${alkaneId}`);
               }
             }
           }
         } catch (e: any) {
           // Non-fatal — contract may not support opcode 6
-          console.debug(`[bridge-adapter] Poll ${alkaneId} opcode 6:`, e?.message?.slice(0, 60));
         }
       }
     }
@@ -185,7 +183,6 @@ function createPollCallback(
                 }
 
                 if (count > 0) {
-                  console.log(`[bridge-adapter] Detected ${count} unprocessed EVM deposits`);
                 }
               }
             } catch {
@@ -195,7 +192,6 @@ function createPollCallback(
             evmVaultConfig.lastEvmBlock = currentBlock;
           }
         } catch (e: any) {
-          console.debug('[bridge-adapter] EVM poll error:', e?.message?.slice(0, 60));
         }
       }
     }
@@ -245,7 +241,6 @@ function createSignCallback(
         const sigBytes = frostWasm.sign_sighash(frostWasm.keys_json, sighashBytes);
         return bytesToHex(sigBytes);
       } catch (e: any) {
-        console.warn('[bridge-adapter] FROST sign failed:', e?.message);
       }
     }
 
@@ -255,7 +250,6 @@ function createSignCallback(
         const sigBytes = cggmp21Wasm.sign_sighash(sighashBytes);
         return bytesToHex(sigBytes);
       } catch (e: any) {
-        console.warn('[bridge-adapter] CGGMP21 sign failed:', e?.message);
       }
     }
 
@@ -342,10 +336,8 @@ export function createBridgeAdapterCallbacks(
       try {
         const result = await wallet.checkAndRebalance();
         if (result) {
-          console.log(`[bridge-adapter] Rebalance triggered: ${result.direction}, success=${result.success}`);
         }
       } catch (e: any) {
-        console.debug('[bridge-adapter] Rebalance check failed:', e?.message?.slice(0, 60));
       }
     }
 

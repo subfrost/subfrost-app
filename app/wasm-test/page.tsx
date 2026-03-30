@@ -13,7 +13,6 @@ export default function WasmTestPage() {
 
   const addLog = (message: string) => {
     setLogs(prev => [...prev, `${new Date().toISOString()}: ${message}`]);
-    console.log(message);
   };
 
   const testWasmInit = async () => {

@@ -84,7 +84,6 @@ export function useUnwrapZecMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[UNWRAP-ZEC] amount:', unwrapAmount, 'from:', fromAddresses);
 
       const result = await provider.alkanesExecuteTyped({
         toAddresses,
@@ -148,7 +147,6 @@ export function useUnwrapZecMutation() {
 
         const tx = signedPsbt.extractTransaction();
         const broadcastTxid = await provider.broadcastTransaction(tx.toHex());
-        console.log('[UNWRAP-ZEC] Broadcast:', broadcastTxid || tx.getId());
 
         return { success: true, transactionId: broadcastTxid || tx.getId() };
       }
@@ -161,7 +159,6 @@ export function useUnwrapZecMutation() {
       return { success: true, transactionId: result?.txid || result?.reveal_txid };
     },
     onSuccess: () => {
-      console.log('[UNWRAP-ZEC] Success, refetching balances');
       queryClient.refetchQueries({ queryKey: ['alkane-balances'] });
       queryClient.refetchQueries({ queryKey: ['sellable-currencies'] });
       queryClient.refetchQueries({ queryKey: ['btc-balance'] });

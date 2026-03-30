@@ -8,7 +8,6 @@
 const SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL;
 
 if (!SCRIPT_URL && typeof window !== 'undefined') {
-  console.warn('⚠️ NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL not configured - Google Drive backup disabled');
 }
 
 export interface BackupWalletParams {

@@ -35,10 +35,8 @@ function timestamp(): string {
 export function logRpcRequest(method: string, params: unknown, url?: string) {
   const verbose = isVerbose();
 
-  console.log(`${LOG_PREFIX} [${timestamp()}] → ${method}`, url ? `(${url})` : '');
 
   if (verbose && params) {
-    console.log(`${LOG_PREFIX}   params:`, JSON.stringify(params, null, 2));
   }
 }
 
@@ -49,15 +47,12 @@ export function logRpcResponse(method: string, result: unknown, durationMs?: num
   const verbose = isVerbose();
   const duration = durationMs ? ` (${durationMs}ms)` : '';
 
-  console.log(`${LOG_PREFIX} [${timestamp()}] ← ${method}${duration} OK`);
 
   if (verbose && result !== undefined) {
     // Truncate large responses
     const resultStr = JSON.stringify(result);
     if (resultStr.length > 2000) {
-      console.log(`${LOG_PREFIX}   result: ${resultStr.slice(0, 2000)}... (truncated, ${resultStr.length} chars)`);
     } else {
-      console.log(`${LOG_PREFIX}   result:`, result);
     }
   }
 }
@@ -101,15 +96,12 @@ export function logRpcError(method: string, error: unknown, params?: unknown, ur
 export function logWasmCall(methodName: string, args: unknown[]) {
   const verbose = isVerbose();
 
-  console.log(`${LOG_PREFIX} [${timestamp()}] WASM.${methodName}`);
 
   if (verbose && args.length > 0) {
     args.forEach((arg, i) => {
       const argStr = typeof arg === 'string' ? arg : JSON.stringify(arg);
       if (argStr.length > 500) {
-        console.log(`${LOG_PREFIX}   arg[${i}]: ${argStr.slice(0, 500)}... (truncated)`);
       } else {
-        console.log(`${LOG_PREFIX}   arg[${i}]:`, arg);
       }
     });
   }
@@ -122,14 +114,11 @@ export function logWasmResult(methodName: string, result: unknown, durationMs?: 
   const verbose = isVerbose();
   const duration = durationMs ? ` (${durationMs}ms)` : '';
 
-  console.log(`${LOG_PREFIX} [${timestamp()}] WASM.${methodName}${duration} OK`);
 
   if (verbose && result !== undefined) {
     const resultStr = JSON.stringify(result);
     if (resultStr && resultStr.length > 1000) {
-      console.log(`${LOG_PREFIX}   result: ${resultStr.slice(0, 1000)}... (truncated)`);
     } else {
-      console.log(`${LOG_PREFIX}   result:`, result);
     }
   }
 }
@@ -205,7 +194,6 @@ export function createLoggingFetch(baseUrl: string) {
 export function enableRpcDebug() {
   if (typeof window !== 'undefined') {
     localStorage.setItem('RPC_DEBUG', 'true');
-    console.log(`${LOG_PREFIX} Verbose logging ENABLED. Reload page to take full effect.`);
   }
 }
 
@@ -215,7 +203,6 @@ export function enableRpcDebug() {
 export function disableRpcDebug() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('RPC_DEBUG');
-    console.log(`${LOG_PREFIX} Verbose logging DISABLED.`);
   }
 }
 

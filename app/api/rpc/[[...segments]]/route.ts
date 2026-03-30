@@ -92,7 +92,6 @@ export async function POST(
 
     // Log for debugging UTXO fetches
     const method = Array.isArray(body) ? 'batch' : body?.method;
-    console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 
     const response = await fetch(targetUrl, {
       method: 'POST',
@@ -126,10 +125,7 @@ export async function POST(
     // Log UTXO fetch results for debugging
     if (method === 'esplora_address::utxo') {
       const resultCount = Array.isArray(data?.result) ? data.result.length : 0;
-      console.log(`[RPC Proxy] esplora_address::utxo returned ${resultCount} UTXOs`);
       if (resultCount === 0) {
-        console.log(`[RPC Proxy] esplora_address::utxo params:`, body?.params);
-        console.log(`[RPC Proxy] Full response:`, JSON.stringify(data).slice(0, 200));
       }
     }
 

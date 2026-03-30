@@ -81,7 +81,6 @@ function extractVaultUnits(
 }
 
 // Test Suite
-console.log('🧪 Testing UTXO Parsing and Vault Unit Detection\n');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -89,11 +88,8 @@ let testsFailed = 0;
 function runTest(name: string, fn: () => void) {
   try {
     fn();
-    console.log(`✅ ${name}`);
     testsPassed++;
   } catch (error) {
-    console.log(`❌ ${name}`);
-    console.log(`   Error: ${(error as Error).message}`);
     testsFailed++;
   }
 }
@@ -138,7 +134,6 @@ function assertThat(actual: unknown) {
 // ==========================================
 // TEST 1: UTXO Structure Parsing
 // ==========================================
-console.log('📦 Test Suite 1: UTXO Structure Parsing\n');
 
 runTest('Should correctly parse alkanes Record from UTXO', () => {
   const mockUtxo: FormattedUtxo = {
@@ -191,12 +186,10 @@ runTest('Should handle UTXO with no alkanes', () => {
   assertThat(alkaneIds).toHaveLength(0);
 });
 
-console.log('');
 
 // ==========================================
 // TEST 2: Vault Unit Detection
 // ==========================================
-console.log('📦 Test Suite 2: Vault Unit Detection Logic\n');
 
 runTest('Should detect vault units in same block as template', () => {
   const mockUtxos: FormattedUtxo[] = [
@@ -280,12 +273,10 @@ runTest('Should handle empty UTXO array', () => {
   assertThat(vaultUnits).toHaveLength(0);
 });
 
-console.log('');
 
 // ==========================================
 // TEST 3: Sorting and Ordering
 // ==========================================
-console.log('📦 Test Suite 3: Unit Sorting Logic\n');
 
 runTest('Should sort units by tx number descending (newest first)', () => {
   const mockUtxos: FormattedUtxo[] = [
@@ -311,12 +302,10 @@ runTest('Should sort units by tx number descending (newest first)', () => {
   assertThat(vaultUnits[2].alkaneId).toBe('2:100'); // Oldest
 });
 
-console.log('');
 
 // ==========================================
 // TEST 4: Edge Cases
 // ==========================================
-console.log('📦 Test Suite 4: Edge Cases\n');
 
 runTest('Should handle malformed alkane IDs gracefully', () => {
   const mockUtxos: FormattedUtxo[] = [
@@ -382,12 +371,10 @@ runTest('Should handle zero value alkanes', () => {
   assertThat(vaultUnits[0].amount).toBe('0');
 });
 
-console.log('');
 
 // ==========================================
 // TEST 5: AlkaneId Parsing
 // ==========================================
-console.log('📦 Test Suite 5: AlkaneId Parsing\n');
 
 runTest('Should correctly parse valid alkane ID', () => {
   const id = '2:100';
@@ -415,24 +402,13 @@ runTest('Should throw on empty parts', () => {
   }
 });
 
-console.log('');
 
 // ==========================================
 // SUMMARY
 // ==========================================
-console.log('═══════════════════════════════════════');
-console.log('📊 UTXO Parsing Test Summary');
-console.log('═══════════════════════════════════════');
-console.log(`✅ Passed: ${testsPassed}`);
-console.log(`❌ Failed: ${testsFailed}`);
-console.log(`📈 Total: ${testsPassed + testsFailed}`);
-console.log(`🎯 Success Rate: ${((testsPassed / (testsPassed + testsFailed)) * 100).toFixed(1)}%`);
-console.log('═══════════════════════════════════════\n');
 
 if (testsFailed === 0) {
-  console.log('✅ All UTXO parsing logic matches alkanes SDK structure!\n');
   process.exit(0);
 } else {
-  console.log('⚠️  Some tests failed. Review errors above.\n');
   process.exit(1);
 }

@@ -157,10 +157,6 @@ describe('Xverse connection via SDK WalletConnector', () => {
     expect(account.paymentAddress).toBe(TEST_SEGWIT_ADDRESS);
     expect(account.paymentPublicKey).toBe(TEST_SEGWIT_PUBKEY);
 
-    console.log('[TEST] Xverse connection successful:', {
-      primary: connected.address,
-      payment: account.paymentAddress,
-    });
   });
 
   it('handles Xverse returning only ordinals account (no payment)', async () => {
@@ -260,7 +256,6 @@ describe('OYL connection via direct API', () => {
     expect(additionalAddresses.taproot.address).toBe(TEST_TAPROOT_ADDRESS);
     expect(additionalAddresses.nativeSegwit.address).toBe(TEST_SEGWIT_ADDRESS);
 
-    console.log('[TEST] OYL connection successful:', additionalAddresses);
   });
 
   it('also works through SDK WalletConnector', async () => {
@@ -337,7 +332,6 @@ describe('Unisat connection via direct API', () => {
     expect(additionalAddresses.taproot.address).toBe(TEST_TAPROOT_ADDRESS);
     expect(additionalAddresses.taproot.publicKey).toBe(TEST_TAPROOT_PUBKEY);
 
-    console.log('[TEST] Unisat connection successful:', additionalAddresses);
   });
 
   it('connects with segwit address (user has wallet in segwit mode)', async () => {
@@ -442,7 +436,6 @@ describe('OKX connection via direct API', () => {
 
     expect(additionalAddresses.taproot.address).toBe(TEST_TAPROOT_ADDRESS);
 
-    console.log('[TEST] OKX connection successful:', additionalAddresses);
   });
 
   it('connects with segwit address', async () => {

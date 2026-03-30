@@ -66,7 +66,6 @@ function buildVaultBalanceQueryCalldata(
 }
 
 // Test Suite
-console.log('🧪 Testing Vault Calldata Structure Against Contract Expectations\n');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -74,11 +73,8 @@ let testsFailed = 0;
 function test(name: string, fn: () => void) {
   try {
     fn();
-    console.log(`✅ ${name}`);
     testsPassed++;
   } catch (error) {
-    console.log(`❌ ${name}`);
-    console.log(`   Error: ${(error as Error).message}`);
     testsFailed++;
   }
 }
@@ -111,7 +107,6 @@ function expect(actual: any) {
 // ==========================================
 // TEST 1: Deposit (Purchase) Calldata
 // ==========================================
-console.log('📦 Test Suite 1: Deposit Calldata Structure\n');
 
 test('Should build correct calldata for vault deposit (opcode 1)', () => {
   const vaultId = '2:123'; // Example vault contract
@@ -146,12 +141,10 @@ test('Should handle small deposit amounts correctly', () => {
   expect(calldata[3]).toBe(BigInt(1));
 });
 
-console.log('');
 
 // ==========================================
 // TEST 2: Withdraw (Redeem) Calldata
 // ==========================================
-console.log('📦 Test Suite 2: Withdraw Calldata Structure\n');
 
 test('Should build correct calldata for vault withdraw (opcode 2)', () => {
   const vaultId = '2:123';
@@ -178,12 +171,10 @@ test('Should use same structure for different vault contracts', () => {
   expect(calldata[2]).toBe(BigInt(2));
 });
 
-console.log('');
 
 // ==========================================
 // TEST 3: Balance Query Calldata
 // ==========================================
-console.log('📦 Test Suite 3: Balance Query Calldata Structure\n');
 
 test('Should build correct calldata for balance query (opcode 4)', () => {
   const vaultId = '2:123';
@@ -198,12 +189,10 @@ test('Should build correct calldata for balance query (opcode 4)', () => {
   expect(calldata[2]).toBe(BigInt(4));    // GetVeDieselBalance opcode
 });
 
-console.log('');
 
 // ==========================================
 // TEST 4: Opcode Number Verification
 // ==========================================
-console.log('📦 Test Suite 4: Opcode Number Verification Against Contract\n');
 
 test('Purchase opcode should be 1 (from contract #[opcode(1)])', () => {
   // Source: yve-diesel-vault/src/lib.rs line 32-33
@@ -223,12 +212,10 @@ test('GetVeDieselBalance opcode should be 4 (from contract #[opcode(4)])', () =>
   expect(GET_BALANCE_OPCODE).toBe(4);
 });
 
-console.log('');
 
 // ==========================================
 // TEST 5: Contract Behavior Expectations
 // ==========================================
-console.log('📦 Test Suite 5: Expected Contract Behavior\n');
 
 test('Purchase should expect amount as u128 parameter', () => {
   // Source: unit_vault.rs line 75
@@ -286,12 +273,10 @@ test('Redeem response should return input token (not unit)', () => {
   expect(expectedResponseStructure).toBeDefined();
 });
 
-console.log('');
 
 // ==========================================
 // TEST 6: GetVeDieselBalance Response Format
 // ==========================================
-console.log('📦 Test Suite 6: Balance Query Response Format\n');
 
 test('GetVeDieselBalance should return u128 in response.data', () => {
   // Source: yve-diesel-vault/src/lib.rs line 68-73
@@ -315,12 +300,10 @@ test('GetVeDieselBalance should return u128 in response.data', () => {
   expect(parsed).toBe(mockBalance);
 });
 
-console.log('');
 
 // ==========================================
 // TEST 7: Vault Unit Detection Logic
 // ==========================================
-console.log('📦 Test Suite 7: Vault Unit Detection Logic\n');
 
 test('Vault units should share same block as template', () => {
   // Source: unit_vault.rs line 103-104
@@ -362,27 +345,13 @@ test('Each deposit creates unique unit with different tx number', () => {
   expect(deposits[1].unitTx !== deposits[2].unitTx).toBe(true);
 });
 
-console.log('');
 
 // ==========================================
 // SUMMARY
 // ==========================================
-console.log('═══════════════════════════════════════');
-console.log('📊 Calldata Verification Summary');
-console.log('═══════════════════════════════════════');
-console.log(`✅ Passed: ${testsPassed}`);
-console.log(`❌ Failed: ${testsFailed}`);
-console.log(`📈 Total: ${testsPassed + testsFailed}`);
-console.log(`🎯 Success Rate: ${((testsPassed / (testsPassed + testsFailed)) * 100).toFixed(1)}%`);
-console.log('═══════════════════════════════════════\n');
 
 if (testsFailed === 0) {
-  console.log('✅ All calldata structures match contract expectations!');
-  console.log('📋 Verified against source:');
-  console.log('   - /subfrost-alkanes/alkanes/yve-diesel-vault/src/lib.rs');
-  console.log('   - /subfrost-alkanes/crates/polyvault-traits/src/unit_vault.rs\n');
   process.exit(0);
 } else {
-  console.log('⚠️  Some tests failed. Review errors above.\n');
   process.exit(1);
 }

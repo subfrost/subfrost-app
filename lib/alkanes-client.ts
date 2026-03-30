@@ -607,7 +607,6 @@ class AlkanesClient {
         };
       }
 
-      console.warn(`[AlkanesClient] Unexpected pool details response for ${pool.id}:`, JSON.stringify(result));
       return null;
     } catch (error) {
       console.error(`[AlkanesClient] Error fetching pool reserves for ${pool.id}:`, error);
@@ -725,7 +724,6 @@ class AlkanesClient {
       if (typeof price === 'number' && price > 0) {
         return price;
       }
-      console.warn('[AlkanesClient] Unexpected BTC price response:', JSON.stringify(result));
     } catch (error) {
       console.error('[AlkanesClient] getBitcoinPrice failed:', error);
     }

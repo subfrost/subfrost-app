@@ -43,7 +43,6 @@ export default function FireRedemptionPanel() {
 
   const handleRedeem = () => {
     if (isDemoGated) return;
-    console.log('[FireRedemptionPanel] Redeem:', { amount });
   };
 
   return (

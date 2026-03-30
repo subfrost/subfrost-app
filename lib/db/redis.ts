@@ -21,7 +21,6 @@ function createRedisClient(): Redis {
   const password = process.env.REDIS_PASSWORD;
 
   if (!host) {
-    console.warn('[Redis] REDIS_HOST not configured, using mock client');
     // Return a mock client for development without Redis
     return new Redis({
       host: 'localhost',
@@ -54,7 +53,6 @@ function createRedisClient(): Redis {
   });
 
   client.on('connect', () => {
-    console.log('[Redis] Connected to', host);
   });
 
   return client;

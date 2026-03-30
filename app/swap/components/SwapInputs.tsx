@@ -615,30 +615,21 @@ export default function SwapInputs({
         <button
           type="button"
           onClick={() => {
-            console.log('[SwapInputs] Confirm button clicked');
-            console.log('[SwapInputs] isConnected:', isConnected);
-            console.log('[SwapInputs] isDemoGated:', isDemoGated);
-            console.log('[SwapInputs] from:', from?.symbol, 'to:', to?.symbol);
-            console.log('[SwapInputs] fromAmount:', fromAmount, 'toAmount:', toAmount);
 
             if (!isConnected) {
-              console.log('[SwapInputs] Not connected, opening connect modal');
               onConnectModalOpenChange(true);
               return;
             }
             // Bridge tokens: show bridge deposit flow instead of normal swap
             const isBridgeSwap = isFromBridgeToken || isToBridgeToken;
             if (isBridgeSwap && isCrossChainPair && fromAmount) {
-              console.log('[SwapInputs] Cross-chain pair, showing bridge flow');
               setShowBridgeFlow(true);
               return;
             }
             if (!isDemoGated || isBridgeSwap) {
-              console.log('[SwapInputs] NOT demo gated (or bridge swap), calling onSwapClick');
               onSwapClick();
               return;
             }
-            console.log('[SwapInputs] Demo gated, showing coming soon');
             if (!showSwapComingSoon) {
               setShowSwapComingSoon(true);
               setTimeout(() => setShowSwapComingSoon(false), 1000);

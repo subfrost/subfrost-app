@@ -192,7 +192,6 @@ function setupFetchMock(config: FetchMockConfig) {
     }
 
     // Fallback — shouldn't be reached in tests
-    console.warn('[fetchMock] Unhandled URL:', urlStr);
     return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
   });
 

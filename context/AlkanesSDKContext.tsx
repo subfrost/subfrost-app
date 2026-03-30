@@ -149,7 +149,6 @@ const getNetworkConfig = (network: Network): Record<string, string> | undefined 
   // breaking the URL structure.
   if (isBrowserContext() && NETWORKS_NEEDING_PROXY.includes(network)) {
     const proxyUrl = `${getProxyUrl()}/${encodeURIComponent(network)}`;
-    console.log(`[AlkanesSDK] Using proxy URL for ${network}:`, proxyUrl);
     return {
       jsonrpc_url: proxyUrl,
       data_api_url: proxyUrl,
@@ -176,7 +175,6 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     try {
       provider.walletLoadMnemonic(mnemonic, passphrase || null);
       setIsWalletLoaded(true);
-      console.log('[AlkanesSDK] Wallet loaded into provider');
     } catch (error) {
       console.error('[AlkanesSDK] Failed to load wallet:', error);
     }
@@ -201,7 +199,6 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
             if (testResp.ok) {
               const data = await testResp.json();
               if (data?.result !== undefined) {
-                console.log('[AlkanesSDK] Devnet fetch interceptor ready, height:', data.result);
                 break;
               }
             }
@@ -211,7 +208,6 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       }
 
       try {
-        console.log('[AlkanesSDK] Initializing WASM WebProvider for network:', network);
 
         // Get provider preset name and config overrides
         // Uses proxy URL for networks with CORS issues when in browser localhost context
@@ -221,8 +217,6 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         // Create the WASM WebProvider (module loaded eagerly via static import)
         const providerInstance = new alkWasm.WebProvider(providerName, configOverrides);
 
-        console.log('[AlkanesSDK] WASM WebProvider created successfully');
-        console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
 
         // JOURNAL ENTRY (2026-02-20): Dummy wallet is required - SDK throws "Wallet not loaded"
         // without it. However, the dummy wallet causes address resolution issues: the SDK
@@ -246,14 +240,11 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
             // in WalletContext. Passing null causes a different derivation.
             const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
             providerInstance.walletLoadMnemonic(BOOT_MNEMONIC, 'regtest');
-            console.log('[AlkanesSDK] Boot mnemonic loaded for devnet (regtest derivation)');
           } else {
             providerInstance.walletCreate();
-            console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
           }
           setIsWalletLoaded(true);
         } catch (e) {
-          console.warn('[AlkanesSDK] walletCreate failed (non-fatal):', e);
         }
 
         setProvider(providerInstance);

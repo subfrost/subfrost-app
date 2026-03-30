@@ -81,8 +81,6 @@ export function useBridgeZecMutation() {
 
   const bridgeToZec = useMutation({
     mutationFn: async (params: BridgeToZecParams) => {
-      console.log('[useBridgeZec] Starting BurnAndBridge frZEC -> ZEC');
-      console.log('[useBridgeZec] frzecAmount:', params.frzecAmount);
 
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
@@ -114,7 +112,6 @@ export function useBridgeZecMutation() {
             const zecNetwork = toZcashNetwork(network || 'mainnet');
             const derived = deriveZcashAddress(sessionMnemonic, zecNetwork);
             zecRecipient = derived.address;
-            console.log('[useBridgeZec] Derived ZEC address:', zecRecipient, 'path:', derived.hdPath);
           } else {
             throw new Error('No ZEC recipient specified and session mnemonic not available. Please enter a ZEC t-address.');
           }
@@ -128,7 +125,6 @@ export function useBridgeZecMutation() {
       if (validationError) {
         throw new Error(validationError);
       }
-      console.log('[useBridgeZec] zecRecipient:', zecRecipient);
 
       // Convert display units to alkane base units (8 decimals)
       const burnAmount = toAlks(params.frzecAmount);
@@ -138,11 +134,9 @@ export function useBridgeZecMutation() {
 
       // Build the BurnAndBridge protostone with ZEC t-address encoding
       const protostone = buildBurnAndBridgeZecProtostone(frzecTokenId, zecRecipient);
-      console.log('[useBridgeZec] Protostone:', protostone);
 
       // frZEC tokens must be sent as incomingAlkanes via inputRequirements
       const inputRequirements = `${frzecTokenId}:${burnAmount}`;
-      console.log('[useBridgeZec] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
       const useActualAddresses = isBrowserWallet || network === 'devnet';
@@ -179,7 +173,6 @@ export function useBridgeZecMutation() {
       // Auto-completed by SDK
       if (result?.txid || result?.reveal_txid) {
         const txId = result.txid || result.reveal_txid;
-        console.log('[useBridgeZec] Transaction completed:', txId);
         return { success: true as const, transactionId: txId, zecRecipient };
       }
 
@@ -233,7 +226,6 @@ export function useBridgeZecMutation() {
 
         const tx = signedPsbt.extractTransaction();
         const broadcastTxid = await provider.broadcastTransaction(tx.toHex());
-        console.log('[useBridgeZec] Broadcast:', broadcastTxid || tx.getId());
 
         return { success: true as const, transactionId: broadcastTxid || tx.getId(), zecRecipient };
       }

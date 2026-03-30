@@ -106,14 +106,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         const bytes = stateBytes instanceof Uint8Array
           ? stateBytes
           : new Uint8Array(stateBytes);
-        console.log('[DevnetContext] Saving state to IndexedDB (%d KB)...', Math.round(bytes.length / 1024));
         saveDevnetState(bytes).then(() => {
-          console.log('[DevnetContext] State saved successfully');
         }).catch((e: any) => {
-          console.warn('[DevnetContext] Failed to save state:', e?.message || e);
         });
       } catch (e: any) {
-        console.warn('[DevnetContext] Failed to export state:', e?.message || e);
       }
     }, SAVE_DEBOUNCE_MS);
   }, []);
@@ -134,22 +130,17 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       let quspoWasm: Uint8Array | undefined;
 
       try {
-        console.log('[DevnetContext] Fetching alkanes.wasm...');
         const alkanesResp = await fetch('/wasm/alkanes.wasm');
         if (alkanesResp.ok) {
           alkanesWasm = new Uint8Array(await alkanesResp.arrayBuffer());
-          console.log('[DevnetContext] alkanes.wasm loaded:', Math.round(alkanesWasm.length / 1024), 'KB');
         } else {
           throw new Error(`Alkanes WASM not available: HTTP ${alkanesResp.status}`);
         }
 
-        console.log('[DevnetContext] Fetching esplora.wasm...');
         const esploraResp = await fetch('/wasm/esplora.wasm');
         if (esploraResp.ok) {
           esploraWasm = new Uint8Array(await esploraResp.arrayBuffer());
-          console.log('[DevnetContext] esplora.wasm loaded:', Math.round(esploraWasm.length / 1024), 'KB');
         } else {
-          console.warn('[DevnetContext] esplora.wasm not available (optional)');
         }
 
         // JOURNAL (2026-03-22): quspo is loaded here but added AFTER initial
@@ -157,13 +148,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         // creates a new WebAssembly.Instance per block — processing 110 blocks
         // during boot exhausts browser memory. Deferring means quspo only indexes
         // blocks mined after boot (the initial 110 are empty coinbase txs anyway).
-        console.log('[DevnetContext] Fetching quspo.wasm...');
         const quspoResp = await fetch('/wasm/quspo.wasm');
         if (quspoResp.ok) {
           quspoWasm = new Uint8Array(await quspoResp.arrayBuffer());
-          console.log('[DevnetContext] quspo.wasm loaded:', Math.round(quspoWasm.length / 1024), 'KB');
         } else {
-          console.warn('[DevnetContext] quspo.wasm not available (optional)');
         }
       } catch (e: any) {
         console.error('[DevnetContext] WASM fetch failed:', e);
@@ -181,13 +169,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       try {
         const loaded = await loadDevnetState();
         if (loaded) {
-          console.log('[DevnetContext] Found saved state in IndexedDB (%d KB)', Math.round(loaded.length / 1024));
           savedState = loaded;
         } else {
-          console.log('[DevnetContext] No saved state found, will do fresh boot');
         }
       } catch (e: any) {
-        console.warn('[DevnetContext] Failed to load saved state (will do fresh boot):', e?.message || e);
       }
 
       const result = await bootDevnetWithWasms(
@@ -246,15 +231,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
             },
           );
           coordinatorRef.current = coord;
-          console.log('[DevnetContext] Bridge coordinator created');
         } catch (coordErr: any) {
-          console.warn('[DevnetContext] Coordinator init failed (non-fatal):', coordErr?.message || coordErr);
         }
 
-        console.log('[DevnetContext] EVM devnet ready — USDT:', mockTokens.usdtAddress, 'USDC:', mockTokens.usdcAddress);
       } catch (evmErr: any) {
         // EVM is optional — Bitcoin devnet still works without it
-        console.warn('[DevnetContext] EVM devnet init failed (non-fatal):', evmErr?.message || evmErr);
       }
 
       // -----------------------------------------------------------------------
@@ -279,10 +260,8 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
             // Generate test keys (2-of-3 threshold)
             const keysJson = generate_frost_keys(3, 2);
             frostWasm = { keys_json: keysJson, sign_sighash };
-            console.log('[DevnetContext] FROST WASM loaded for threshold signing');
           }
         } catch (frostErr: any) {
-          console.warn('[DevnetContext] FROST WASM not available (non-fatal):', frostErr?.message);
         }
 
         const callbacks = createBridgeAdapterCallbacks(
@@ -306,7 +285,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
             callbacks.sign,
             callbacks.broadcast,
           );
-          console.log('[DevnetContext] WasmBridgeCoordinator created — running coordinator loop');
 
           // Run coordinator on 5-second interval
           const coordInterval = setInterval(async () => {
@@ -315,13 +293,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
               if (roundResult) {
                 const parsed = typeof roundResult === 'string' ? JSON.parse(roundResult) : roundResult;
                 if (parsed.events_processed > 0 || parsed.txs_broadcast > 0) {
-                  console.log('[DevnetContext] Coordinator round:', parsed);
                 }
               }
             } catch (roundErr: any) {
               // Non-fatal — coordinator retries next round
               if (!roundErr?.message?.includes('no events')) {
-                console.debug('[DevnetContext] Coordinator round error:', roundErr?.message);
               }
             }
           }, 5000);
@@ -329,14 +305,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           // Store interval for cleanup on shutdown
           (window as any).__bridgeCoordinatorInterval = coordInterval;
           (window as any).__bridgeCoordinator = wasmCoordinator;
-          console.log('[DevnetContext] Bridge coordinator loop started (5s interval)');
         } catch (wasmErr: any) {
           // WASM coordinator is optional — fall back to JS simulation
-          console.warn('[DevnetContext] WASM coordinator not available, using JS sim:', wasmErr?.message);
           (window as any).__bridgeAdapterCallbacks = callbacks;
         }
       } catch (bridgeErr: any) {
-        console.warn('[DevnetContext] WASM bridge adapter init failed (non-fatal):', bridgeErr?.message);
       }
 
       // Create market simulator
@@ -351,9 +324,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           setState(prev => ({ ...prev, chainHeight: harnessRef.current?.height ?? prev.chainHeight }));
         });
         setSimulationState(sim.getState());
-        console.log('[DevnetContext] Simulator created with 60 agents');
       } catch (simErr: any) {
-        console.warn('[DevnetContext] Simulator init failed (non-fatal):', simErr?.message || simErr);
       }
 
       setState({
@@ -463,9 +434,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           const bitcoin = await import('bitcoinjs-lib');
           const mainnetOutput = bitcoin.address.toOutputScript(address, bitcoin.networks.bitcoin);
           devnetAddr = bitcoin.address.fromOutputScript(mainnetOutput, bitcoin.networks.regtest);
-          console.log('[devnet] Converted', address.slice(0, 10) + '...', '→', devnetAddr.slice(0, 12) + '...');
         } catch (e: any) {
-          console.warn('[devnet] Address conversion failed, using raw:', e?.message);
         }
       }
       // Use generatetoaddress RPC — mines a block with coinbase paying to the user's address
@@ -477,7 +446,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       }));
       const parsed = JSON.parse(result);
       if (parsed.error) {
-        console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
       }
       // CRITICAL: Coinbase outputs require 100 confirmations before they're spendable.
       // Without these extra blocks, the BTC appears in the UTXO set but lua_evalsaved
@@ -488,7 +456,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         await new Promise(r => setTimeout(r, 0));
       }
       await new Promise(r => setTimeout(r, 50));
-      console.log('[devnet] BTC faucet: mined block with coinbase to', devnetAddr, '(+100 maturity blocks)');
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
@@ -516,7 +483,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         }),
       );
       harnessRef.current.mineBlocks(1);
-      console.log('[devnet] DIESEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
@@ -539,7 +505,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         }),
       );
       harnessRef.current.mineBlocks(1);
-      console.log('[devnet] FUEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
@@ -578,12 +543,9 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           const payment = bitcoin.payments.p2tr({ internalPubkey: xOnlyPubkey, network: bitcoin.networks.regtest });
           if (payment.address) signerAddr = payment.address;
         } else {
-          console.warn('[devnet] frBTC signer query returned unexpected hex length:', hex.length);
         }
       } catch (e: any) {
-        console.warn('[devnet] frBTC signer query failed, using stale default:', e?.message);
       }
-      console.log('[devnet] frBTC faucet signer address:', signerAddr);
 
       // Use boot wallet to fund the wrap, frBTC output goes to user's address
       const boot = getBootAddresses();
@@ -600,7 +562,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         }),
       );
       harnessRef.current.mineBlocks(1);
-      console.log('[devnet] frBTC wrapped to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
@@ -610,7 +571,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       }
       const amount = BigInt(10_000) * 10n ** 6n; // 10,000 USDT
       await evmProviderRef.current.seedWallet(address, { usdt: amount }, evmTokensRef.current);
-      console.log('[devnet] USDT faucet: minted 10,000 USDT to', address);
     },
     faucetUsdc: async (address: string) => {
       if (!evmProviderRef.current || !evmTokensRef.current) {
@@ -618,19 +578,15 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       }
       const amount = BigInt(10_000) * 10n ** 6n; // 10,000 USDC
       await evmProviderRef.current.seedWallet(address, { usdc: amount }, evmTokensRef.current);
-      console.log('[devnet] USDC faucet: minted 10,000 USDC to', address);
     },
     getChainHeight: () => {
       return harnessRef.current?.height ?? 0;
     },
     resetDevnet: async () => {
-      console.log('[devnet] Resetting...');
       // Clear saved state from IndexedDB before shutting down
       try {
         await clearDevnetState();
-        console.log('[devnet] Cleared saved state from IndexedDB');
       } catch (e: any) {
-        console.warn('[devnet] Failed to clear saved state:', e?.message || e);
       }
       shutdown();
       bootedRef.current = false;

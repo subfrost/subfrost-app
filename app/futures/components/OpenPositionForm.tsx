@@ -306,13 +306,6 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
 
     if (!canBuy) return;
     // TODO: Implement buy logic
-    console.log('Buy clicked', {
-      investmentAmount,
-      selectedBlocks,
-      payoutMarkers,
-      totalInvestment,
-      totalProfit,
-    });
   };
 
   return (

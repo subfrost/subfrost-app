@@ -59,7 +59,6 @@ export function useWrapEthMutation() {
       if (isNaN(wrapAmountSats) || wrapAmountSats <= 0) {
         throw new Error(`Invalid wrap amount: "${wrapData.amount}"`);
       }
-      console.log('[WRAP-ETH] Starting wrap:', wrapAmountSats, 'sats');
 
       const protostone = buildWrapEthProtostone({ frethId: FRETH_ALKANE_ID });
       const inputRequirements = `B:${wrapAmountSats}:v0`;
@@ -84,7 +83,6 @@ export function useWrapEthMutation() {
         ? [signerAddress, userTaprootAddress]
         : [signerAddress, 'p2tr:0'];
 
-      console.log('[WRAP-ETH] signer:', signerAddress, 'user:', userTaprootAddress);
 
       const result = await provider.alkanesExecuteTyped({
         toAddresses,
@@ -161,7 +159,6 @@ export function useWrapEthMutation() {
         const tx = signedPsbt.extractTransaction();
         const txid = tx.getId();
         const broadcastTxid = await provider.broadcastTransaction(tx.toHex());
-        console.log('[WRAP-ETH] Broadcast:', broadcastTxid || txid);
 
         return { success: true, transactionId: broadcastTxid || txid, wrapAmountSats };
       }
@@ -170,7 +167,6 @@ export function useWrapEthMutation() {
       return { success: true, transactionId: txId, wrapAmountSats };
     },
     onSuccess: (data) => {
-      console.log('[WRAP-ETH] Success:', data.transactionId);
       queryClient.refetchQueries({ queryKey: ['alkane-balances'] });
       queryClient.refetchQueries({ queryKey: ['sellable-currencies'] });
       queryClient.refetchQueries({ queryKey: ['btc-balance'] });

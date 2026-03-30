@@ -53,9 +53,6 @@ export function useLimitOrderMutation() {
 
   return useMutation({
     mutationFn: async (params: LimitOrderParams) => {
-      console.log('[LimitOrder] ═══════════════════════════════════════════');
-      console.log('[LimitOrder] Starting PlaceLimitOrder transaction');
-      console.log('[LimitOrder] Params:', JSON.stringify(params, null, 2));
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
@@ -71,7 +68,6 @@ export function useLimitOrderMutation() {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
       const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[LimitOrder] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Parse IDs
       const [cBlock, cTx] = params.controllerId.split(':');
@@ -98,9 +94,6 @@ export function useLimitOrderMutation() {
         inputRequirements = `${params.quoteTokenId}:${quoteAmount}`;
       }
 
-      console.log('[LimitOrder] Protostone:', protostone);
-      console.log('[LimitOrder] Input requirements:', inputRequirements);
-      console.log('[LimitOrder] Side:', params.side === 0 ? 'BUY' : 'SELL');
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
@@ -123,8 +116,6 @@ export function useLimitOrderMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[LimitOrder] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[LimitOrder] To addresses:', toAddresses);
 
       try {
         const result = await provider.alkanesExecuteTyped({
@@ -139,18 +130,15 @@ export function useLimitOrderMutation() {
           ordinalsStrategy: 'burn',
         });
 
-        console.log('[LimitOrder] Execute result:', JSON.stringify(result, null, 2));
 
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[LimitOrder] Transaction auto-completed, txid:', txId);
           return { success: true as const, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[LimitOrder] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
@@ -166,17 +154,14 @@ export function useLimitOrderMutation() {
             });
             psbtBase64 = patchResult.psbtBase64;
             if (patchResult.inputsPatched > 0) {
-              console.log(`[LimitOrder] Patched ${patchResult.inputsPatched} input(s) for browser wallet compatibility`);
             }
           }
 
           // Sign PSBT -- browser wallets sign all input types in a single call
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[LimitOrder] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           } else {
-            console.log('[LimitOrder] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
@@ -189,11 +174,9 @@ export function useLimitOrderMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[LimitOrder] Transaction built:', txid);
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[LimitOrder] Broadcast successful:', broadcastTxid);
 
           return {
             success: true as const,
@@ -204,13 +187,11 @@ export function useLimitOrderMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[LimitOrder] Complete, txid:', txId);
           return { success: true as const, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[LimitOrder] Transaction ID:', txId);
         return { success: true as const, transactionId: txId };
 
       } catch (error) {
@@ -219,7 +200,6 @@ export function useLimitOrderMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[LimitOrder] Success! txid:', data.transactionId);
 
       // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });

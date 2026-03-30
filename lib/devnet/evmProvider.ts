@@ -131,7 +131,6 @@ export class DevnetEvmProvider {
           coordWasm = new Uint8Array(await coordResp.arrayBuffer());
         }
       } catch {
-        console.warn('[DevnetEvmProvider] coordinator-core WASM not available');
       }
     }
 
@@ -176,7 +175,6 @@ export class DevnetEvmProvider {
           mod.initSync(coordWasm);
           coordModule = mod as unknown as CoordinatorCoreModule;
         } catch {
-          console.warn('[DevnetEvmProvider] coordinator-core not available');
         }
       }
     }
@@ -187,7 +185,6 @@ export class DevnetEvmProvider {
     const provider = new DevnetEvmProvider(evm, coordModule);
     provider.fundAccount(DEFAULT_DEPLOYER, '10000');
 
-    console.log('[DevnetEvmProvider] Initialized (deployer funded with 10,000 ETH)');
     return provider;
   }
 
@@ -244,13 +241,11 @@ export class DevnetEvmProvider {
     const usdtArgs = this.encodeMockERC20Constructor('Tether USD', 'USDT', 6);
     const usdtAddress = this.deployContract(DEFAULT_DEPLOYER, artifact, usdtArgs);
     this.deployedTokens.set(usdtAddress.toLowerCase(), { name: 'Tether USD', symbol: 'USDT', decimals: 6 });
-    console.log('[DevnetEvmProvider] USDT deployed at:', usdtAddress);
 
     // Deploy USDC
     const usdcArgs = this.encodeMockERC20Constructor('USD Coin', 'USDC', 6);
     const usdcAddress = this.deployContract(DEFAULT_DEPLOYER, artifact, usdcArgs);
     this.deployedTokens.set(usdcAddress.toLowerCase(), { name: 'USD Coin', symbol: 'USDC', decimals: 6 });
-    console.log('[DevnetEvmProvider] USDC deployed at:', usdcAddress);
 
     return { usdtAddress, usdcAddress };
   }
@@ -319,19 +314,16 @@ export class DevnetEvmProvider {
     // Seed ETH
     if (tokens.eth && tokens.eth > 0n) {
       this.evm.fund_account(address, '0x' + tokens.eth.toString(16));
-      console.log('[DevnetEvmProvider] Seeded %s with %s wei ETH', address, tokens.eth);
     }
 
     // Seed USDT
     if (tokens.usdt && tokens.usdt > 0n) {
       this.mintERC20(DEFAULT_DEPLOYER, tokenAddresses.usdtAddress, address, tokens.usdt);
-      console.log('[DevnetEvmProvider] Seeded %s with %s USDT (raw)', address, tokens.usdt);
     }
 
     // Seed USDC
     if (tokens.usdc && tokens.usdc > 0n) {
       this.mintERC20(DEFAULT_DEPLOYER, tokenAddresses.usdcAddress, address, tokens.usdc);
-      console.log('[DevnetEvmProvider] Seeded %s with %s USDC (raw)', address, tokens.usdc);
     }
   }
 
@@ -453,12 +445,10 @@ export class DevnetEvmProvider {
     // Deploy Bip340Ecrec helper first (required by USDCVault)
     const bip340Artifact = await this.loadArtifact('Bip340Ecrec');
     const bip340Address = this.deployContract(DEFAULT_DEPLOYER, bip340Artifact);
-    console.log('[DevnetEvmProvider] Bip340Ecrec deployed at:', bip340Address);
 
     // Deploy USDCVault
     const vaultArtifact = await this.loadArtifact('USDCVault');
     const vaultAddress = this.deployContract(DEFAULT_DEPLOYER, vaultArtifact);
-    console.log('[DevnetEvmProvider] USDCVault deployed at:', vaultAddress);
 
     // Initialize vault: initialize(address _asset, address _bip340, bytes32 _defaultPubKey)
     const pubKeyHex = coordinatorPubKey || '00'.repeat(32);
@@ -471,7 +461,6 @@ export class DevnetEvmProvider {
     this.evm.eth_send_transaction(DEFAULT_DEPLOYER, vaultAddress, initCalldata, '0x0');
     this.evm.mine_block();
 
-    console.log('[DevnetEvmProvider] USDCVault initialized with USDC:', usdcAddress);
     return vaultAddress;
   }
 
@@ -490,7 +479,6 @@ export class DevnetEvmProvider {
     );
     this.evm.eth_send_transaction(DEFAULT_DEPLOYER, vaultAddress, depositCalldata, '0x0');
     this.evm.mine_block();
-    console.log('[DevnetEvmProvider] Vault seeded with', amount.toString(), 'USDC');
   }
 
   /**
@@ -633,9 +621,6 @@ export class DevnetEvmProvider {
     this.evm.mine_block();
 
     const txHash = `0xswap-${Date.now().toString(16)}`;
-    console.log(
-      `[DevnetEvmProvider] Swapped ${usdcAmount} USDC → ${ethAmount} ETH (${(Number(ethAmount) / 1e18).toFixed(6)} ETH) to ${recipient}`
-    );
 
     return { ethReceived: ethAmount, txHash };
   }
@@ -691,9 +676,6 @@ export class DevnetEvmProvider {
       ? (Number(usdcForEth) / Number(ethDelivered / 10n ** 12n)).toFixed(2)
       : '0';
 
-    console.log(
-      `[DevnetEvmProvider] Bridge output split: ${usdcRemaining} USDC + ${ethDelivered} ETH to ${recipient}`
-    );
 
     return { usdcDelivered: usdcRemaining, ethDelivered, ethPrice, swapTxHash };
   }

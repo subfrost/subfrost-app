@@ -108,8 +108,6 @@ interface AlkaneOutpoint {
  * - Address has no UTXOs (new wallet)
  */
 async function fetchUtxos(address: string, networkName?: string): Promise<SimpleUtxo[]> {
-  console.log('[fetchUtxos] Fetching UTXOs for address:', address);
-  console.log('[fetchUtxos] Network:', networkName || 'unknown');
 
   // Try JSON-RPC first (works on regtest)
   const rpcBody = {
@@ -118,7 +116,6 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
     params: [address],
     id: 1,
   };
-  console.log('[fetchUtxos] RPC request:', JSON.stringify(rpcBody));
 
   const resp = await fetch('/api/rpc', {
     method: 'POST',
@@ -126,20 +123,15 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
     body: JSON.stringify(rpcBody),
   });
 
-  console.log('[fetchUtxos] RPC response status:', resp.status);
   const json = await resp.json();
-  console.log('[fetchUtxos] RPC response:', JSON.stringify(json).slice(0, 500));
 
   // If JSON-RPC returns empty/null, fall back to REST API
   if (!json.result || !Array.isArray(json.result) || json.result.length === 0) {
-    console.log('[fetchUtxos] JSON-RPC returned empty, trying REST API fallback...');
 
     // Use REST API proxy (works on mainnet where JSON-RPC returns empty)
     const restUrl = `/api/esplora/address/${address}/utxo${networkName ? `?network=${networkName}` : ''}`;
-    console.log('[fetchUtxos] REST URL:', restUrl);
 
     const restResp = await fetch(restUrl);
-    console.log('[fetchUtxos] REST response status:', restResp.status);
 
     if (!restResp.ok) {
       const errorText = await restResp.text();
@@ -148,7 +140,6 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
     }
 
     const restJson = await restResp.json();
-    console.log('[fetchUtxos] REST response:', JSON.stringify(restJson).slice(0, 500));
 
     if (!Array.isArray(restJson)) {
       console.error('[fetchUtxos] REST API returned non-array:', typeof restJson);
@@ -161,7 +152,6 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
       value: u.value,
       confirmed: u.status?.confirmed ?? false,
     }));
-    console.log('[fetchUtxos] Found', utxos.length, 'UTXOs via REST API');
     return utxos;
   }
 
@@ -171,7 +161,6 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
     value: u.value,
     confirmed: u.status?.confirmed ?? false,
   }));
-  console.log('[fetchUtxos] Found', utxos.length, 'UTXOs via JSON-RPC');
   return utxos;
 }
 
@@ -188,7 +177,6 @@ interface OrdOutputsResult {
 }
 
 async function fetchOrdOutputs(address: string, networkName?: string): Promise<OrdOutputsResult> {
-  console.log('[fetchOrdOutputs] Fetching ord outputs for:', address);
 
   // Determine the RPC endpoint based on network
   const RPC_ENDPOINTS: Record<string, string> = {
@@ -221,18 +209,15 @@ async function fetchOrdOutputs(address: string, networkName?: string): Promise<O
     // JOURNAL (2026-03-03): On mainnet, ord_outputs returns "JSON API disabled"
     // This means we can't verify inscription/rune status on mainnet UTXOs
     if (json.error) {
-      console.warn('[fetchOrdOutputs] RPC error (may not be available on this network):', json.error);
       return { data: result, rpcFailed: true };
     }
 
     // Check for "JSON API disabled" response (mainnet returns this as result, not error)
     if (typeof json.result === 'string' && json.result.includes('disabled')) {
-      console.warn('[fetchOrdOutputs] RPC disabled on this network:', json.result);
       return { data: result, rpcFailed: true };
     }
 
     const outputs = json?.result || [];
-    console.log('[fetchOrdOutputs] Raw outputs:', outputs.length);
 
     for (const output of outputs) {
       if (!output.outpoint) continue;
@@ -242,14 +227,11 @@ async function fetchOrdOutputs(address: string, networkName?: string): Promise<O
 
       if (hasInscriptions || hasRunes) {
         result.set(output.outpoint, { hasInscriptions, hasRunes });
-        console.log(`[fetchOrdOutputs] ${output.outpoint} has inscriptions=${hasInscriptions}, runes=${hasRunes}`);
       }
     }
 
-    console.log('[fetchOrdOutputs] UTXOs with inscriptions/runes:', result.size);
     return { data: result, rpcFailed: false };
   } catch (err) {
-    console.warn('[fetchOrdOutputs] Failed to fetch (proceeding without inscription/rune data):', err);
     return { data: result, rpcFailed: true };
   }
 }
@@ -264,7 +246,6 @@ async function fetchOrdOutputs(address: string, networkName?: string): Promise<O
  * causing the wallet to try to spend inscriptions/runes/other alkanes when sending.
  */
 async function fetchAlkaneOutpoints(address: string, networkName?: string): Promise<AlkaneOutpoint[]> {
-  console.log('[fetchAlkaneOutpoints] Fetching alkane outpoints for:', address);
 
   // Determine the RPC endpoint based on network
   const RPC_ENDPOINTS: Record<string, string> = {
@@ -290,7 +271,6 @@ async function fetchAlkaneOutpoints(address: string, networkName?: string): Prom
     }),
   });
 
-  console.log('[fetchAlkaneOutpoints] RPC response status:', resp.status);
   const json = await resp.json();
 
   if (json.error) {
@@ -299,7 +279,6 @@ async function fetchAlkaneOutpoints(address: string, networkName?: string): Prom
   }
 
   const outpoints = json?.result?.outpoints || [];
-  console.log('[fetchAlkaneOutpoints] Raw outpoints:', outpoints.length);
 
   const result: AlkaneOutpoint[] = [];
 
@@ -309,7 +288,6 @@ async function fetchAlkaneOutpoints(address: string, networkName?: string): Prom
     // NOT a "txid:vout" string as originally assumed.
     const outpointData = entry.outpoint;
     if (!outpointData || typeof outpointData !== 'object') {
-      console.warn('[fetchAlkaneOutpoints] Invalid outpoint structure:', entry);
       continue;
     }
 
@@ -317,7 +295,6 @@ async function fetchAlkaneOutpoints(address: string, networkName?: string): Prom
     const vout = outpointData.vout;
 
     if (!txid || typeof vout !== 'number') {
-      console.warn('[fetchAlkaneOutpoints] Missing txid or vout:', outpointData);
       continue;
     }
 
@@ -339,10 +316,6 @@ async function fetchAlkaneOutpoints(address: string, networkName?: string): Prom
     });
   }
 
-  console.log('[fetchAlkaneOutpoints] Parsed outpoints:', result.map(o => ({
-    outpoint: `${o.txid.slice(0, 8)}...:${o.vout}`,
-    alkanes: o.alkanes.map(a => `${a.block}:${a.tx} (${a.amount})`),
-  })));
 
   return result;
 }
@@ -405,16 +378,6 @@ export async function buildAlkaneTransferPsbt(
     recipientAddress, tapInternalKeyHex, feeRate, network, networkName,
   } = params;
 
-  console.log('[buildAlkaneTransferPsbt] Starting PSBT build...');
-  console.log('[buildAlkaneTransferPsbt] Params:', {
-    alkaneId,
-    amount: amount.toString(),
-    senderTaprootAddress,
-    senderPaymentAddress: senderPaymentAddress || '(same as taproot)',
-    recipientAddress,
-    feeRate,
-    networkName,
-  });
 
   const [block, tx] = alkaneId.split(':').map(Number);
 
@@ -454,7 +417,6 @@ export async function buildAlkaneTransferPsbt(
   // 3. UTXOs with other assets - last resort, sorted by fewest other assets
   // -----------------------------------------------------------------------
 
-  console.log('[buildAlkaneTransferPsbt] Fetching alkane outpoints for:', senderTaprootAddress);
 
   // Fetch both alkane data and inscription/rune data in parallel
   const [alkaneOutpoints, ordOutputsResult] = await Promise.all([
@@ -467,13 +429,10 @@ export async function buildAlkaneTransferPsbt(
   const ordOutputs = ordOutputsResult.data;
   const ordRpcFailed = ordOutputsResult.rpcFailed;
   if (ordRpcFailed) {
-    console.warn('[buildAlkaneTransferPsbt] WARNING: ord_outputs RPC failed/disabled. Cannot verify inscription/rune status!');
-    console.warn('[buildAlkaneTransferPsbt] Will show warning to user that UTXOs may contain undetected assets.');
   }
 
   // Find UTXOs that contain the target alkane
   const targetAlkaneId = `${block}:${tx}`;
-  console.log('[buildAlkaneTransferPsbt] Looking for alkane:', targetAlkaneId);
 
   // Enrich alkane outpoints with inscription/rune data
   const enrichedOutpoints = alkaneOutpoints
@@ -493,14 +452,12 @@ export async function buildAlkaneTransferPsbt(
       };
     });
 
-  console.log('[buildAlkaneTransferPsbt] Enriched outpoints:', enrichedOutpoints.length);
   enrichedOutpoints.forEach(o => {
     const collateral = [];
     if (o.hasInscriptions) collateral.push('inscriptions');
     if (o.hasRunes) collateral.push('runes');
     if (o.otherAlkanesCount > 0) collateral.push(`${o.otherAlkanesCount} other alkane(s)`);
     const collateralStr = collateral.length > 0 ? ` [COLLATERAL: ${collateral.join(', ')}]` : ' [CLEAN]';
-    console.log(`  ${o.txid.slice(0, 8)}...:${o.vout} - ${o.targetAmount.toString()} units${collateralStr}`);
   });
 
   if (enrichedOutpoints.length === 0) {
@@ -511,8 +468,6 @@ export async function buildAlkaneTransferPsbt(
 
   // Calculate total available balance
   const totalAvailable = enrichedOutpoints.reduce((sum, o) => sum + o.targetAmount, BigInt(0));
-  console.log('[buildAlkaneTransferPsbt] Total available:', totalAvailable.toString(), 'units');
-  console.log('[buildAlkaneTransferPsbt] Amount to send:', amount.toString(), 'units');
 
   if (totalAvailable < amount) {
     throw new Error(`Insufficient balance: have ${totalAvailable}, need ${amount}`);
@@ -547,7 +502,6 @@ export async function buildAlkaneTransferPsbt(
     selectedAmount += outpoint.targetAmount;
   }
 
-  console.log('[buildAlkaneTransferPsbt] Selected', selectedOutpoints.length, 'of', enrichedOutpoints.length, 'UTXOs');
 
   // Warn if we're spending UTXOs with collateral assets
   const collateralUtxos = selectedOutpoints.filter(o => o.hasInscriptions || o.hasRunes || o.otherAlkanesCount > 0);
@@ -561,21 +515,15 @@ export async function buildAlkaneTransferPsbt(
 
   if (shouldWarn) {
     if (collateralUtxos.length > 0) {
-      console.warn('[buildAlkaneTransferPsbt] WARNING: Some selected UTXOs contain other assets!');
       collateralUtxos.forEach(o => {
         const assets = [];
         if (o.hasInscriptions) assets.push('inscriptions');
         if (o.hasRunes) assets.push('runes');
         if (o.otherAlkanesCount > 0) assets.push(`${o.otherAlkanesCount} other alkane(s)`);
-        console.warn(`  ${o.txid.slice(0, 8)}...:${o.vout} also contains: ${assets.join(', ')}`);
       });
-      console.warn('[buildAlkaneTransferPsbt] The protostone pointer will return unedicted alkanes to sender.');
-      console.warn('[buildAlkaneTransferPsbt] However, inscriptions and runes will be transferred to the recipient!');
     }
 
     if (ordRpcFailed) {
-      console.warn('[buildAlkaneTransferPsbt] WARNING: Could not verify inscription/rune status!');
-      console.warn('[buildAlkaneTransferPsbt] The selected UTXOs MAY contain inscriptions or runes that will be sent to the recipient.');
     }
 
     // Build collateral warning for UI
@@ -595,40 +543,28 @@ export async function buildAlkaneTransferPsbt(
     confirmed: true,
   }));
 
-  console.log('[buildAlkaneTransferPsbt] Final selected alkane UTXOs:', alkaneUtxos.length);
 
   // Fetch all UTXOs for BTC fee funding
-  console.log('[buildAlkaneTransferPsbt] Fetching all UTXOs for fee funding...');
   const taprootUtxos = await fetchUtxos(senderTaprootAddress, networkName);
 
   // BTC UTXOs for fee funding - exclude the alkane UTXOs we're already spending
   const alkaneUtxoKeys = new Set(alkaneUtxos.map(u => `${u.txid}:${u.vout}`));
   const hasSeparatePayment = senderPaymentAddress && senderPaymentAddress !== senderTaprootAddress;
-  console.log('[buildAlkaneTransferPsbt] Has separate payment address:', hasSeparatePayment);
 
   let btcUtxos: SimpleUtxo[];
   if (hasSeparatePayment) {
-    console.log('[buildAlkaneTransferPsbt] Fetching UTXOs for payment address:', senderPaymentAddress);
     btcUtxos = await fetchUtxos(senderPaymentAddress, networkName);
-    console.log('[buildAlkaneTransferPsbt] Payment UTXOs found:', btcUtxos.length);
   } else {
     // Single-address: use non-dust UTXOs from the taproot address
     // Also exclude any UTXOs we're already using as alkane inputs
     btcUtxos = taprootUtxos.filter(u =>
       u.value > 1000 && !alkaneUtxoKeys.has(`${u.txid}:${u.vout}`)
     );
-    console.log('[buildAlkaneTransferPsbt] BTC UTXOs from taproot (>1000 sats, excluding alkane UTXOs):', btcUtxos.length);
   }
   btcUtxos = btcUtxos
     .filter(u => u.confirmed)
     .sort((a, b) => b.value - a.value); // largest first
 
-  console.log('[buildAlkaneTransferPsbt] BTC UTXOs for fee (confirmed, sorted):', btcUtxos.length);
-  console.log('[buildAlkaneTransferPsbt] BTC UTXOs:', btcUtxos.map(u => ({
-    txid: u.txid.slice(0, 8) + '...',
-    vout: u.vout,
-    value: u.value,
-  })));
 
   // -----------------------------------------------------------------------
   // 3. Calculate fee and select BTC UTXOs

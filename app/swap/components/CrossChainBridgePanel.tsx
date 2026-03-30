@@ -139,13 +139,6 @@ export function CrossChainBridgePanel({
     // In a full implementation this would call the appropriate bridge mutation
     // (useBridgeZecMutation or useBridgeEthMutation) depending on the route.
     const ethSplitBps = ethSplitEnabled ? ethSplitPct * 100 : 0; // pct → bps
-    console.log('[CrossChainBridgePanel] Submit:', {
-      fromChain,
-      toChain,
-      amount,
-      destinationAddress,
-      ethSplitBps,
-    });
   }, [canSubmit, fromChain, toChain, amount, destinationAddress]);
 
   const handleReset = useCallback(() => {

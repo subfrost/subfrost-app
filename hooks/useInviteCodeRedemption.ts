@@ -61,10 +61,8 @@ export function useInviteCodeRedemption(addresses: Addresses | null | undefined)
         });
         const data = await response.json();
         if (data.success) {
-          console.log('[InviteCode] Redeemed:', pendingCode, '->', addresses.taproot!.address);
           setPendingCode(null);
         } else {
-          console.warn('[InviteCode] Redemption failed:', data.error);
           // Clear on definitive failures to avoid infinite retries
           setPendingCode(null);
         }

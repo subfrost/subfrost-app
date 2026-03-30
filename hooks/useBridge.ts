@@ -247,7 +247,6 @@ export function useBridgeState() {
           }
         }
       } catch (err) {
-        console.warn('[useBridgeState] Failed to fetch frUSD supply:', err);
       }
 
       // Query pending bridges (opcode 6)
@@ -276,7 +275,6 @@ export function useBridgeState() {
           }
         }
       } catch (err) {
-        console.warn('[useBridgeState] Failed to fetch pending bridges:', err);
       }
 
       // Query synth pool reserves (opcode 97)
@@ -296,7 +294,6 @@ export function useBridgeState() {
           }
         }
       } catch (err) {
-        console.warn('[useBridgeState] Failed to fetch synth pool reserves:', err);
       }
 
       // Query synth pool fee (opcode 20)
@@ -309,7 +306,6 @@ export function useBridgeState() {
           }
         }
       } catch (err) {
-        console.warn('[useBridgeState] Failed to fetch synth pool fee:', err);
       }
 
       return {

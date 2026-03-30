@@ -118,7 +118,6 @@ export default function LimitOrderPanel({
       );
 
       if (result) {
-        console.log('[LimitOrder] Placed:', result);
         showNotification(result.txid || result.reveal_txid || 'order', 'swap' as any);
         // Invalidate orderbook + balance queries so UI updates
         queryClient.invalidateQueries({ queryKey: ['orderbook'] }).catch(() => {});
