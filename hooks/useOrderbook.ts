@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig, getRpcUrl } from '@/utils/getConfig';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { getConfig } from '@/utils/getConfig';
+import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
 export interface OrderLevel {
   price: string;
@@ -110,59 +112,54 @@ function parseOrderbookResponse(data: string | number[]): OrderbookData | null {
   };
 }
 
-export function useOrderbook(baseToken?: string, quoteToken?: string) {
+export function useOrderbook(baseToken?: string, quoteToken?: string, depth: number = 10) {
   const { network } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
 
   return useQuery({
-    queryKey: ['orderbook', baseToken, quoteToken, network],
+    queryKey: ['orderbook', baseToken, quoteToken, network, depth],
     queryFn: async (): Promise<OrderbookData | null> => {
       if (!baseToken || !quoteToken || !network) return null;
 
-      // Try carbine controller opcode 24 (GetOrderbookDepth) via alkanes_simulate
       const config = getConfig(network);
       const controllerId = (config as any).CARBINE_CONTROLLER_ID;
 
-      if (controllerId) {
+      if (controllerId && provider) {
         try {
-          const [ctrlBlock, ctrlTx] = controllerId.split(':');
           // Parse token pair IDs for the controller query
-          const [baseBlock, baseTx] = baseToken.includes(':') ? baseToken.split(':') : ['0', '0'];
-          const [quoteBlock, quoteTx] = quoteToken.includes(':') ? quoteToken.split(':') : ['0', '0'];
+          const [baseBlock, baseTx] = baseToken.includes(':') ? baseToken.split(':').map(Number) : [0, 0];
+          const [quoteBlock, quoteTx] = quoteToken.includes(':') ? quoteToken.split(':').map(Number) : [0, 0];
 
-          const resp = await fetch(getRpcUrl(network), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'alkanes_simulate',
-              params: [{
-                target: { block: ctrlBlock, tx: ctrlTx },
-                inputs: ['24', baseBlock, baseTx, quoteBlock, quoteTx],
-                alkanes: [],
-                transaction: '0x',
-                block: '0x',
-                height: '999999',
-                txindex: 0,
-                vout: 0,
-              }],
-              id: 1,
-            }),
+          // Build calldata: opcode 24 + pair tokens + depth
+          const calldata = encodeSimulateCalldata(controllerId, [24, baseBlock, baseTx, quoteBlock, quoteTx, depth]);
+
+          const context = JSON.stringify({
+            alkanes: [],
+            calldata,
+            height: 1000000,
+            txindex: 0,
+            pointer: 0,
+            refund_pointer: 0,
+            vout: 0,
+            transaction: [],
+            block: [],
           });
-          const data = await resp.json();
-          const exec = data?.result?.execution;
 
-          if (exec?.data && !exec.error) {
-            const parsed = parseOrderbookResponse(exec.data);
+          const result = await provider.alkanesSimulate(controllerId, context, 'latest');
+
+          if (result?.execution?.data && !result?.execution?.error) {
+            const parsed = parseOrderbookResponse(result.execution.data);
             if (parsed) return parsed;
           }
         } catch (err) {
+          // Controller not deployed or query failed — fall through to empty
         }
       }
 
       // Return empty orderbook when controller is not deployed or query fails
       return getEmptyOrderbook();
     },
-    enabled: !!baseToken && !!quoteToken && !!network,
+    enabled: !!baseToken && !!quoteToken && !!network && isInitialized,
     staleTime: 5_000,
     refetchInterval: 5_000,
   });

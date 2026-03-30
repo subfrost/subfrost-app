@@ -38,6 +38,7 @@ import {
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
+import { deployCarbineContracts } from './carbine-deploy';
 import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -231,9 +232,18 @@ describe('Devnet E2E: Carbine CLOB', () => {
       console.log('[clob] Pool creation failed:', e.message?.slice(0, 200));
     }
 
-    // TODO: Deploy carbine controller, template, and universal router WASMs
-    // For now we test the simulation/query opcodes which work without deployment
-    // once the WASMs are built and placed in fixtures/
+    // Deploy Carbine CLOB contracts
+    try {
+      const carbine = await deployCarbineContracts(provider, signer, segwitAddress, taprootAddress, harness);
+      controllerId = carbine.controllerId;
+      routerId = carbine.routerId;
+      console.log('[clob] Carbine controller:', controllerId);
+      console.log('[clob] Universal router:', routerId);
+    } catch (e: any) {
+      console.log('[clob] Carbine deployment failed:', e.message?.slice(0, 300));
+      console.log('[clob] Tests will skip controller-dependent assertions');
+    }
+
     console.log('[clob] Setup complete');
     takeSnapshot('setup');
   }, 600_000);

@@ -122,6 +122,7 @@ export default function TradeForm({
                   quoteToken={quoteToken}
                   selectedPrice={limitSelectedPrice}
                   fromToken={fromToken}
+                  toToken={toToken}
                   fromBalanceText={swapInputsProps.fromBalanceText}
                   fromFiatText={swapInputsProps.fromFiatText}
                   onPercentFrom={swapInputsProps.onPercentFrom}

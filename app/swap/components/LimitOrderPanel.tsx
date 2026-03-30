@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModalStore } from '@/stores/modals';
@@ -10,8 +9,7 @@ import NumberField from '@/app/components/NumberField';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useGlobalStore } from '@/stores/global';
 import { useFeeRate, type FeeSelection } from '@/hooks/useFeeRate';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { useNotification } from '@/context/NotificationContext';
+import { useLimitOrderMutation } from '@/hooks/useLimitOrderMutation';
 import { getConfig } from '@/utils/getConfig';
 import type { TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
@@ -21,6 +19,7 @@ interface Props {
   quoteToken: string;
   selectedPrice?: string;
   fromToken?: TokenMeta;
+  toToken?: TokenMeta;
   fromBalanceText?: string;
   fromFiatText?: string;
   onPercentFrom?: (percent: number) => void;
@@ -33,22 +32,22 @@ export default function LimitOrderPanel({
   quoteToken,
   selectedPrice,
   fromToken,
+  toToken,
   fromBalanceText,
   fromFiatText = '$0.00',
   onPercentFrom,
   onMaxFrom,
   network,
 }: Props) {
-  const { isConnected, account } = useWallet();
+  const { isConnected } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
-  const queryClient = useQueryClient();
+  const limitOrderMutation = useLimitOrderMutation();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [priceFocused, setPriceFocused] = useState(false);
   const [amountFocused, setAmountFocused] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -69,65 +68,41 @@ export default function LimitOrderPanel({
     return (p * a).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [price, amount]);
 
-  const { provider: sdkProvider } = useAlkanesSDK();
-  const { showNotification } = useNotification();
-
   const handleSubmit = async () => {
     if (!price || !amount || !isConnected) return;
-    setIsSubmitting(true);
+
+    const config = getConfig(network || 'devnet');
+    const controllerId = (config as any).CARBINE_CONTROLLER_ID;
+    if (!controllerId) {
+      window.alert?.('Carbine controller not configured for this network');
+      return;
+    }
+
+    const baseTokenId = fromToken?.id || '2:0';
+    const quoteTokenId = toToken?.id || '32:0';
+    const sideNum: 0 | 1 = side === 'buy' ? 0 : 1;
+
+    // Use BigInt to avoid JavaScript Number overflow on large scaled values
+    const priceScaled = BigInt(Math.round(parseFloat(price) * 1e8));
+    const amountScaled = BigInt(Math.round(parseFloat(amount) * 1e8));
+
     try {
-      const config = getConfig(network || 'devnet');
-      const controllerId = (config as any).CARBINE_CONTROLLER_ID;
-      if (!controllerId) throw new Error('Carbine controller not configured for this network');
+      const result = await limitOrderMutation.mutateAsync({
+        controllerId,
+        baseTokenId,
+        quoteTokenId,
+        side: sideNum,
+        price: priceScaled.toString(),
+        amount: amountScaled.toString(),
+        feeRate: Math.round(fee.feeRate),
+      });
 
-      const [cBlock, cTx] = controllerId.split(':');
-      // PlaceLimitOrder: opcode 20, pair tokens, side, price, amount
-      // For now, use DIESEL (2:0) and frBTC (32:0) as the default pair
-      const pairA = fromToken?.id || '2:0';
-      const pairB = '32:0';
-      const [aBlock, aTx] = pairA.split(':');
-      const sideNum = side === 'buy' ? 0 : 1;
-      const priceScaled = Math.floor(parseFloat(price) * 1e8);
-      const amountScaled = Math.floor(parseFloat(amount) * 1e8);
-
-      const protostone = `[${cBlock},${cTx},20,${aBlock},${aTx},32,0,${sideNum},${priceScaled},${amountScaled}]:v0:v0`;
-      const inputReqs = side === 'buy'
-        ? `32:0:${Math.floor(priceScaled * amountScaled / 1e8)}` // pay in quote token
-        : `${pairA}:${amountScaled}`; // pay in base token
-
-      if (!sdkProvider) throw new Error('SDK provider not ready');
-
-      const taproot = account?.taproot?.address || '';
-      const segwit = account?.nativeSegwit?.address || '';
-      if (!taproot && !segwit) throw new Error('No wallet address available');
-
-      const fromAddrs = [segwit, taproot].filter(Boolean);
-
-      const result = await sdkProvider.alkanesExecuteWithStrings(
-        JSON.stringify([taproot || segwit]),
-        inputReqs,
-        protostone,
-        Math.round(fee.feeRate),
-        null,
-        JSON.stringify({
-          from_addresses: fromAddrs,
-          change_address: segwit || taproot,
-          alkanes_change_address: taproot || segwit,
-          mine_enabled: network === 'devnet',
-        }),
-      );
-
-      if (result) {
-        showNotification(result.txid || result.reveal_txid || 'order', 'swap' as any);
-        // Invalidate orderbook + balance queries so UI updates
-        queryClient.invalidateQueries({ queryKey: ['orderbook'] }).catch(() => {});
-        queryClient.invalidateQueries({ queryKey: ['alkane-balances'] }).catch(() => {});
+      if (result?.transactionId) {
+        window.alert?.(`Limit order placed! TX: ${result.transactionId}`);
       }
     } catch (e: any) {
       console.error('[LimitOrder] Failed:', e);
       window.alert?.(`Limit order failed: ${e?.message || 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -166,6 +141,8 @@ export default function LimitOrderPanel({
     if (Math.abs(amt - balance) < tolerance) return 1;
     return null;
   }, [amount, resolvedBalanceText]);
+
+  const isSubmitting = limitOrderMutation.isPending;
 
   return (
     <div className="flex flex-col h-full p-4">

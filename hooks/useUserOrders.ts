@@ -1,16 +1,18 @@
 /**
  * useUserOrders.ts
  *
- * Read-only hook that queries a user's open limit orders from the Carbine controller.
- * Uses alkanes_simulate with opcode 25 (GetUserOrders).
+ * Queries the Carbine controller for open order data via the ts-sdk provider.
  *
- * The controller returns a serialized list of orders as bytes. Each order is
- * encoded as 5 consecutive u128 values (80 bytes per order):
- *   - orderId (u128)
- *   - side (u128): 0 = buy, 1 = sell
- *   - price (u128): scaled price in quote tokens per base token
- *   - amount (u128): total base token amount
- *   - filled (u128): amount already filled
+ * Opcode 25 (GetOpenOrderCount): Returns the total number of open orders
+ * for a given token pair. The response is a single u128 (16 bytes LE).
+ *
+ * NOTE: There is currently no per-user GetUserOrders opcode in the controller.
+ * Simulation context has no sender identity, so the controller can't filter
+ * by user. Once a per-user opcode is added to the WASM, the `orders` array
+ * in the return value will be populated. Until then, only `count` is available.
+ *
+ * Inputs format: [25, baseBlock, baseTx, quoteBlock, quoteTx]
+ * (matches e2e test: __tests__/devnet/e2e-carbine-clob.test.ts line 292-308)
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -27,68 +29,48 @@ export interface UserOrder {
   filled: string;
 }
 
-/** Parse a little-endian u128 from 16 bytes. Returns as string to avoid precision loss. */
-function parseU128LE(bytes: number[], offset: number): string {
-  if (!bytes || bytes.length < offset + 16) return '0';
+export interface UserOrdersResult {
+  count: number;
+  orders: UserOrder[];
+}
+
+/** Parse a little-endian u128 from 16 bytes at offset. */
+function readU128LE(bytes: number[], offset: number): bigint {
   let value = BigInt(0);
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 16 && offset + i < bytes.length; i++) {
     value |= BigInt(bytes[offset + i]) << BigInt(i * 8);
   }
-  return value.toString();
+  return value;
 }
 
-/** Parse the full order list from simulation response data. */
-function parseOrderList(data: number[]): UserOrder[] {
-  if (!data || data.length === 0) return [];
-
-  const BYTES_PER_ORDER = 80; // 5 u128 values = 5 * 16 bytes
-  const orderCount = Math.floor(data.length / BYTES_PER_ORDER);
-  const orders: UserOrder[] = [];
-
-  for (let i = 0; i < orderCount; i++) {
-    const base = i * BYTES_PER_ORDER;
-    const orderIdStr = parseU128LE(data, base);
-    const sideStr = parseU128LE(data, base + 16);
-    const price = parseU128LE(data, base + 32);
-    const amount = parseU128LE(data, base + 48);
-    const filled = parseU128LE(data, base + 64);
-
-    orders.push({
-      orderId: Number(orderIdStr),
-      side: Number(sideStr),
-      price,
-      amount,
-      filled,
-    });
-  }
-
-  return orders;
-}
-
-export function useUserOrders(enabled: boolean = true) {
-  const { network, account } = useWallet();
+export function useUserOrders(
+  baseTokenId?: string,
+  quoteTokenId?: string,
+  enabled: boolean = true,
+) {
+  const { network } = useWallet();
   const { provider, isInitialized } = useAlkanesSDK();
 
   const config = getConfig(network || 'mainnet');
   const controllerId = (config as any).CARBINE_CONTROLLER_ID as string | undefined;
 
-  const taprootAddress = account?.taproot?.address;
-
   return useQuery({
-    queryKey: ['user-orders', controllerId, taprootAddress, network],
-    enabled: enabled && !!controllerId && !!taprootAddress && isInitialized && !!provider,
-    queryFn: async (): Promise<UserOrder[]> => {
-      if (!provider || !controllerId || !taprootAddress) {
-        throw new Error('Provider, config, or address not ready');
+    queryKey: ['user-orders', controllerId, baseTokenId, quoteTokenId, network],
+    enabled: enabled && !!controllerId && !!baseTokenId && !!quoteTokenId && !!network && isInitialized && !!provider,
+    queryFn: async (): Promise<UserOrdersResult> => {
+      if (!provider || !controllerId || !baseTokenId || !quoteTokenId) {
+        return { count: 0, orders: [] };
       }
 
       try {
-        // Opcode 25: GetUserOrders
-        // The user address is implicitly derived from the transaction context.
-        // In simulation, we pass it via the context fields.
+        // Build calldata: opcode 25 + pair token IDs
+        const [baseBlock, baseTx] = baseTokenId.split(':').map(Number);
+        const [quoteBlock, quoteTx] = quoteTokenId.split(':').map(Number);
+        const calldata = encodeSimulateCalldata(controllerId, [25, baseBlock, baseTx, quoteBlock, quoteTx]);
+
         const context = JSON.stringify({
           alkanes: [],
-          calldata: encodeSimulateCalldata(controllerId, [25]),
+          calldata,
           height: 1000000,
           txindex: 0,
           pointer: 0,
@@ -101,15 +83,15 @@ export function useUserOrders(enabled: boolean = true) {
         const result = await provider.alkanesSimulate(controllerId, context, 'latest');
 
         if (result?.execution?.error) {
-          return [];
+          return { count: 0, orders: [] };
         }
 
         if (result?.execution?.data) {
           const data = result.execution.data;
-          // Handle both hex string and byte array response formats
           let bytes: number[];
           if (typeof data === 'string') {
-            const hex = data.replace('0x', '');
+            const hex = data.replace(/^0x/, '');
+            if (hex.length < 32) return { count: 0, orders: [] };
             bytes = [];
             for (let i = 0; i < hex.length; i += 2) {
               bytes.push(parseInt(hex.substring(i, i + 2), 16));
@@ -117,20 +99,21 @@ export function useUserOrders(enabled: boolean = true) {
           } else if (Array.isArray(data)) {
             bytes = data;
           } else {
-            return [];
+            return { count: 0, orders: [] };
           }
 
-          const orders = parseOrderList(bytes);
-          return orders;
+          // Parse as single u128 count (16 bytes LE)
+          const count = bytes.length >= 16 ? Number(readU128LE(bytes, 0)) : 0;
+          return { count, orders: [] };
         }
 
-        return [];
+        return { count: 0, orders: [] };
       } catch (error) {
         console.error('[useUserOrders] Query failed:', error);
-        return [];
+        return { count: 0, orders: [] };
       }
     },
     retry: 2,
-    staleTime: 15_000, // 15s -- orders can change frequently
+    staleTime: 15_000,
   });
 }

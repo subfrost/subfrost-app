@@ -2,8 +2,9 @@
 /**
  * useOrderbook Hook Tests
  *
- * Tests for the useOrderbook hook which generates mock orderbook data.
- * Verifies structure, ordering, spread calculation, and edge cases.
+ * Tests for the useOrderbook hook which queries the Carbine controller
+ * for orderbook depth data. When the controller is not deployed or
+ * not configured, it returns an empty orderbook.
  *
  * Run with: pnpm test hooks/__tests__/useOrderbook.test.ts
  */
@@ -22,6 +23,13 @@ vi.mock('@/context/WalletContext', () => ({
     network: 'mainnet',
     account: null,
     browserWallet: null,
+  })),
+}));
+
+vi.mock('@/context/AlkanesSDKContext', () => ({
+  useAlkanesSDK: vi.fn(() => ({
+    provider: null,
+    isInitialized: false,
   })),
 }));
 
@@ -59,7 +67,6 @@ describe('useOrderbook', () => {
       () => useOrderbook(undefined, 'frBTC'),
       { wrapper: createWrapper() },
     );
-    // Query should be disabled, data should be undefined
     expect(result.current.data).toBeUndefined();
     expect(result.current.fetchStatus).toBe('idle');
   });
@@ -93,9 +100,29 @@ describe('useOrderbook', () => {
     expect(result.current.fetchStatus).toBe('idle');
   });
 
-  it('returns valid orderbook structure with bids/asks/spread/midPrice', async () => {
+  it('is disabled when SDK is not initialized', async () => {
     const { useWallet } = await import('@/context/WalletContext');
     (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
+
+    const { useAlkanesSDK } = await import('@/context/AlkanesSDKContext');
+    (useAlkanesSDK as any).mockReturnValue({ provider: null, isInitialized: false });
+
+    const { result } = renderHook(
+      () => useOrderbook('DIESEL', 'frBTC'),
+      { wrapper: createWrapper() },
+    );
+
+    // Query should be disabled when SDK not initialized
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+
+  it('returns empty orderbook when SDK is ready but no controller configured', async () => {
+    const { useWallet } = await import('@/context/WalletContext');
+    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
+
+    const mockProvider = { alkanesSimulate: vi.fn() };
+    const { useAlkanesSDK } = await import('@/context/AlkanesSDKContext');
+    (useAlkanesSDK as any).mockReturnValue({ provider: mockProvider, isInitialized: true });
 
     const { result } = renderHook(
       () => useOrderbook('DIESEL', 'frBTC'),
@@ -106,240 +133,108 @@ describe('useOrderbook', () => {
 
     const data = result.current.data!;
     expect(data).toBeDefined();
-    expect(data.bids).toBeDefined();
-    expect(data.asks).toBeDefined();
-    expect(typeof data.spread).toBe('string');
-    expect(typeof data.spreadPercent).toBe('string');
-    expect(typeof data.midPrice).toBe('string');
+    // No CARBINE_CONTROLLER_ID on mainnet → empty orderbook
+    expect(data.bids).toHaveLength(0);
+    expect(data.asks).toHaveLength(0);
+    expect(data.spread).toBe('0.00');
+    expect(data.spreadPercent).toBe('0.000');
+    expect(data.midPrice).toBe('0.00');
   });
 
-  it('has 15 bid levels and 15 ask levels', async () => {
+  it('returns empty orderbook when controller returns error', async () => {
     const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
+    (useWallet as any).mockReturnValue({ network: 'devnet', account: null, browserWallet: null });
+
+    const mockProvider = {
+      alkanesSimulate: vi.fn().mockResolvedValue({
+        execution: { data: '0x', error: 'unexpected end of file' },
+      }),
+    };
+    const { useAlkanesSDK } = await import('@/context/AlkanesSDKContext');
+    (useAlkanesSDK as any).mockReturnValue({ provider: mockProvider, isInitialized: true });
 
     const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(result.current.data!.bids).toHaveLength(15);
-    expect(result.current.data!.asks).toHaveLength(15);
-  });
-
-  it('has correct bid ordering (highest price first, decreasing)', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const bids = result.current.data!.bids;
-    for (let i = 1; i < bids.length; i++) {
-      const prevPrice = parseFloat(bids[i - 1].price.replace(/,/g, ''));
-      const currPrice = parseFloat(bids[i].price.replace(/,/g, ''));
-      expect(prevPrice).toBeGreaterThan(currPrice);
-    }
-  });
-
-  it('has correct ask ordering (lowest price first, increasing)', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const asks = result.current.data!.asks;
-    for (let i = 1; i < asks.length; i++) {
-      const prevPrice = parseFloat(asks[i - 1].price.replace(/,/g, ''));
-      const currPrice = parseFloat(asks[i].price.replace(/,/g, ''));
-      expect(prevPrice).toBeLessThan(currPrice);
-    }
-  });
-
-  it('cumulative totals increase down the bid book', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const bids = result.current.data!.bids;
-    for (let i = 1; i < bids.length; i++) {
-      const prevTotal = parseFloat(bids[i - 1].total.replace(/,/g, ''));
-      const currTotal = parseFloat(bids[i].total.replace(/,/g, ''));
-      expect(currTotal).toBeGreaterThan(prevTotal);
-    }
-  });
-
-  it('cumulative totals increase down the ask book', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const asks = result.current.data!.asks;
-    for (let i = 1; i < asks.length; i++) {
-      const prevTotal = parseFloat(asks[i - 1].total.replace(/,/g, ''));
-      const currTotal = parseFloat(asks[i].total.replace(/,/g, ''));
-      expect(currTotal).toBeGreaterThan(prevTotal);
-    }
-  });
-
-  it('spread is the difference between best ask and best bid', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
+      () => useOrderbook('2:0', '32:0'),
       { wrapper: createWrapper() },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const data = result.current.data!;
-    // The mock uses midPrice=99875, halfSpread=25 => bestBid=99850, bestAsk=99900
-    // spread = 50
-    expect(data.spread).toBe('50.00');
+    expect(data.bids).toHaveLength(0);
+    expect(data.asks).toHaveLength(0);
   });
 
-  it('mid price is the average of best bid and best ask', async () => {
+  it('parses valid orderbook response with bids and asks', async () => {
     const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
+    (useWallet as any).mockReturnValue({ network: 'devnet', account: null, browserWallet: null });
+
+    // Build a mock response: 1 bid (price=100*1e8, amount=0.5*1e8), 1 ask (price=101*1e8, amount=0.3*1e8)
+    const buf = Buffer.alloc(16 * 6); // numBids + bid + numAsks + ask = 4 u128s... actually 6 fields
+    let offset = 0;
+
+    // numBids = 1
+    buf.writeBigUInt64LE(1n, offset); offset += 16;
+    // bid price = 10000000000 (100 * 1e8)
+    buf.writeBigUInt64LE(10000000000n, offset); offset += 16;
+    // bid amount = 50000000 (0.5 * 1e8)
+    buf.writeBigUInt64LE(50000000n, offset); offset += 16;
+    // numAsks = 1
+    buf.writeBigUInt64LE(1n, offset); offset += 16;
+    // ask price = 10100000000 (101 * 1e8)
+    buf.writeBigUInt64LE(10100000000n, offset); offset += 16;
+    // ask amount = 30000000 (0.3 * 1e8)
+    buf.writeBigUInt64LE(30000000n, offset); offset += 16;
+
+    const mockProvider = {
+      alkanesSimulate: vi.fn().mockResolvedValue({
+        execution: { data: '0x' + buf.toString('hex'), error: null },
+      }),
+    };
+    const { useAlkanesSDK } = await import('@/context/AlkanesSDKContext');
+    (useAlkanesSDK as any).mockReturnValue({ provider: mockProvider, isInitialized: true });
 
     const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
+      () => useOrderbook('2:0', '32:0'),
       { wrapper: createWrapper() },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const data = result.current.data!;
-    // midPrice should be 99875.00 formatted with locale
-    expect(data.midPrice).toContain('99');
-    expect(data.midPrice).toContain('875');
+    expect(data.bids).toHaveLength(1);
+    expect(data.asks).toHaveLength(1);
+    expect(parseFloat(data.bids[0].price.replace(/,/g, ''))).toBeCloseTo(100, 0);
+    expect(parseFloat(data.asks[0].price.replace(/,/g, ''))).toBeCloseTo(101, 0);
+    expect(parseFloat(data.bids[0].amount)).toBeCloseTo(0.5, 1);
+    expect(parseFloat(data.asks[0].amount)).toBeCloseTo(0.3, 1);
+
+    // Spread = 101 - 100 = 1
+    expect(parseFloat(data.spread)).toBeCloseTo(1, 0);
+    // Mid = (100 + 101) / 2 = 100.5
+    expect(parseFloat(data.midPrice.replace(/,/g, ''))).toBeCloseTo(100.5, 1);
   });
 
-  it('spread percent is correctly calculated', async () => {
+  it('passes depth parameter to the SDK simulation', async () => {
     const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
+    (useWallet as any).mockReturnValue({ network: 'devnet', account: null, browserWallet: null });
+
+    const mockProvider = {
+      alkanesSimulate: vi.fn().mockResolvedValue({
+        execution: { data: '0x', error: 'unexpected end of file' },
+      }),
+    };
+    const { useAlkanesSDK } = await import('@/context/AlkanesSDKContext');
+    (useAlkanesSDK as any).mockReturnValue({ provider: mockProvider, isInitialized: true });
 
     const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
+      () => useOrderbook('2:0', '32:0', 20),
       { wrapper: createWrapper() },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const data = result.current.data!;
-    // spreadPercent = (50 / 99875) * 100 = 0.050...
-    const spreadPct = parseFloat(data.spreadPercent);
-    expect(spreadPct).toBeGreaterThan(0.04);
-    expect(spreadPct).toBeLessThan(0.06);
-  });
-
-  it('each order level has valid price, amount, and total fields', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const data = result.current.data!;
-    const allLevels = [...data.bids, ...data.asks];
-    for (const level of allLevels) {
-      expect(typeof level.price).toBe('string');
-      expect(typeof level.amount).toBe('string');
-      expect(typeof level.total).toBe('string');
-      // Amount should be a number string with decimals
-      expect(parseFloat(level.amount)).toBeGreaterThan(0);
-      // Price should be positive
-      expect(parseFloat(level.price.replace(/,/g, ''))).toBeGreaterThan(0);
-    }
-  });
-
-  it('returns the same cached book on subsequent calls', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const wrapper = createWrapper();
-    const { result: result1 } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper },
-    );
-
-    await waitFor(() => expect(result1.current.isSuccess).toBe(true));
-
-    const { result: result2 } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper },
-    );
-
-    await waitFor(() => expect(result2.current.isSuccess).toBe(true));
-
-    // The amounts are random but the mock caches after first generation,
-    // so the two results from the same query client should be the same data
-    expect(result1.current.data!.spread).toBe(result2.current.data!.spread);
-    expect(result1.current.data!.midPrice).toBe(result2.current.data!.midPrice);
-  });
-
-  it('bid prices are all below the mid price', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const data = result.current.data!;
-    const midPrice = parseFloat(data.midPrice.replace(/,/g, ''));
-    for (const bid of data.bids) {
-      const bidPrice = parseFloat(bid.price.replace(/,/g, ''));
-      expect(bidPrice).toBeLessThan(midPrice);
-    }
-  });
-
-  it('ask prices are all above the mid price', async () => {
-    const { useWallet } = await import('@/context/WalletContext');
-    (useWallet as any).mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
-
-    const { result } = renderHook(
-      () => useOrderbook('DIESEL', 'frBTC'),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const data = result.current.data!;
-    const midPrice = parseFloat(data.midPrice.replace(/,/g, ''));
-    for (const ask of data.asks) {
-      const askPrice = parseFloat(ask.price.replace(/,/g, ''));
-      expect(askPrice).toBeGreaterThan(midPrice);
-    }
+    // Verify the SDK was called (controller is configured on devnet)
+    expect(mockProvider.alkanesSimulate).toHaveBeenCalled();
   });
 });

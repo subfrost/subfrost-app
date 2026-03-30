@@ -2276,6 +2276,8 @@ export default function SwapShell() {
       <BottomPanels
         baseToken={fromToken?.symbol || 'DIESEL'}
         quoteToken={toToken?.symbol || 'frBTC'}
+        baseTokenId={fromToken?.id}
+        quoteTokenId={toToken?.id}
       />
 
       {/* Liquidity Modal */}

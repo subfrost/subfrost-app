@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, lazy, Suspense } from 'react';
-import { BarChart3, Layers, Clock, Activity, ExternalLink } from 'lucide-react';
+import { BarChart3, Layers, Clock, Activity } from 'lucide-react';
 import { useLPPositions } from '@/hooks/useLPPositions';
-import { useOrderbook } from '@/hooks/useOrderbook';
+import { useUserOrders } from '@/hooks/useUserOrders';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 
@@ -15,6 +15,8 @@ type PanelTab = 'orders' | 'positions' | 'trades' | 'activity';
 interface Props {
   baseToken: string;
   quoteToken: string;
+  baseTokenId?: string;
+  quoteTokenId?: string;
 }
 
 function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
@@ -26,7 +28,7 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
-export default function BottomPanels({ baseToken, quoteToken }: Props) {
+export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
@@ -35,8 +37,13 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
   // Real LP positions have token0Id/token1Id set from pool data match.
   const lpPositions = allPositions.filter(pos => pos.token0Id && pos.token1Id);
 
-  // Open orders count: zero until carbine controller is deployed on-chain
-  const openOrderCount = 0;
+  // Live open order count from Carbine controller
+  const { data: userOrdersData, isLoading: isLoadingOrders } = useUserOrders(
+    baseTokenId,
+    quoteTokenId,
+    isConnected,
+  );
+  const openOrderCount = userOrdersData?.count ?? 0;
 
   const tabs: { key: PanelTab; label: string; icon: React.ReactNode; count?: number }[] = [
     { key: 'trades', label: 'Global Trades', icon: <Clock size={12} /> },
@@ -78,11 +85,41 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
           {activeTab === 'orders' && (
             !isConnected ? (
               <EmptyState icon={Layers} message="Connect wallet to view orders" />
+            ) : isLoadingOrders ? (
+              <div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">Loading orders...</div>
             ) : openOrderCount === 0 ? (
               <EmptyState icon={Layers} message="No open orders" />
+            ) : userOrdersData?.orders && userOrdersData.orders.length > 0 ? (
+              <div>
+                <div className="sf-table-header grid grid-cols-[auto_1fr_1fr_1fr] gap-4 px-3 py-2">
+                  <span>Side</span>
+                  <span className="text-right">Price</span>
+                  <span className="text-right">Amount</span>
+                  <span className="text-right">Filled</span>
+                </div>
+                {userOrdersData.orders.map((order) => (
+                  <div key={order.orderId} className="sf-row grid grid-cols-[auto_1fr_1fr_1fr] gap-4 px-3 py-2.5 items-center">
+                    <span className={`text-[11px] font-bold ${order.side === 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {order.side === 0 ? 'BUY' : 'SELL'}
+                    </span>
+                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/80">
+                      {(Number(order.price) / 1e8).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60">
+                      {(Number(order.amount) / 1e8).toFixed(4)}
+                    </span>
+                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/40">
+                      {(Number(order.filled) / 1e8).toFixed(4)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="p-3">
-                {/* TODO: Render carbine orders from useOrderbook */}
+              // Count > 0 but no individual order data yet (GetUserOrders opcode not available)
+              <div className="flex flex-col items-center justify-center py-8 text-[color:var(--sf-text)]/30">
+                <Layers className="h-6 w-6 mb-2" />
+                <span className="text-xs font-semibold">{openOrderCount} open order{openOrderCount !== 1 ? 's' : ''}</span>
+                <span className="text-[10px] text-[color:var(--sf-text)]/15 mt-1">Order details coming soon</span>
               </div>
             )
           )}
