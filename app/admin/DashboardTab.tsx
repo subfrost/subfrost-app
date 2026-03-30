@@ -218,24 +218,33 @@ function computeMedian(nums: number[]): number {
   return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-function CommunityFuelChart({ data, mode, heightScale = 1 }: { data: CommunityFuel[]; mode: FuelAggMode; heightScale?: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
+/** Strip trailing digits to get the parent code (e.g. liujin07 → liujin, liujin01 → liujin, liujin → liujin) */
+function getParentCode(community: string): string {
+  return community.replace(/\d+$/, '') || community;
+}
 
-  const updateWidth = useCallback(() => {
-    if (containerRef.current) {
-      setWidth(containerRef.current.clientWidth);
-    }
-  }, []);
+/** Aggregate child communities into their parent code */
+function aggregateCommunities(data: CommunityFuel[]): CommunityFuel[] {
+  const parentMap: Record<string, { total: number; addressCount: number; amounts: number[] }> = {};
+  for (const item of data) {
+    const parent = getParentCode(item.community);
+    if (!parentMap[parent]) parentMap[parent] = { total: 0, addressCount: 0, amounts: [] };
+    parentMap[parent].total += item.total;
+    parentMap[parent].addressCount += item.addressCount;
+    parentMap[parent].amounts.push(...item.amounts);
+  }
+  return Object.entries(parentMap).map(([community, { total, addressCount, amounts }]) => ({
+    community,
+    total: Math.round(total * 100) / 100,
+    addressCount,
+    amounts,
+  }));
+}
 
-  useEffect(() => {
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [updateWidth]);
+function CommunityFuelChart({ data, mode }: { data: CommunityFuel[]; mode: FuelAggMode }) {
+  const aggregated = aggregateCommunities(data);
 
-  const withValue = data.map((item) => {
+  const withValue = aggregated.map((item) => {
     let value: number;
     if (mode === 'average') {
       value = item.addressCount > 0 ? item.total / item.addressCount : 0;
@@ -250,107 +259,41 @@ function CommunityFuelChart({ data, mode, heightScale = 1 }: { data: CommunityFu
   const sorted = [...withValue].sort((a, b) => b.value - a.value);
   const maxVal = sorted.length > 0 ? sorted[0].value : 1;
 
-  const height = Math.round(220 * heightScale);
-  const padLeft = 50;
-  const padRight = 12;
-  const padTop = 12;
-  const padBottom = 60;
-  const chartW = Math.max(width - padLeft - padRight, 1);
-  const chartH = height - padTop - padBottom;
-
-  const barCount = sorted.length;
-  const gap = Math.max(4, chartW * 0.02);
-  const barWidth = barCount > 0 ? Math.max(8, (chartW - gap * (barCount + 1)) / barCount) : 0;
-
-  // Y-axis ticks
-  const yTicks: number[] = [];
-  if (maxVal <= 5) {
-    for (let i = 0; i <= maxVal; i++) yTicks.push(i);
-  } else {
-    const step = Math.ceil(maxVal / 4);
-    for (let v = 0; v <= maxVal; v += step) yTicks.push(v);
-    if (yTicks[yTicks.length - 1] !== maxVal) yTicks.push(maxVal);
-  }
+  const rowHeight = 28;
+  const gap = 4;
 
   return (
-    <div ref={containerRef} className="w-full">
-      {width > 0 && (
-        <svg width={width} height={height} className="overflow-visible">
-          {/* Grid lines */}
-          {yTicks.map((v) => {
-            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
-            return (
-              <line
-                key={v}
-                x1={padLeft}
-                y1={y}
-                x2={padLeft + chartW}
-                y2={y}
-                stroke="var(--sf-glass-border)"
-                strokeDasharray="3,3"
+    <div className="flex w-full flex-col" style={{ gap }}>
+      {sorted.map((item) => {
+        const pct = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
+        return (
+          <div key={item.community} className="flex items-center" style={{ height: rowHeight, gap: 8 }}>
+            {/* Label */}
+            <div
+              className="shrink-0 truncate text-right text-xs text-[color:var(--sf-muted)]"
+              style={{ width: 100 }}
+              title={`${item.community} (${item.addressCount} addresses)`}
+            >
+              {item.community} ({item.addressCount})
+            </div>
+            {/* Bar */}
+            <div className="relative h-5 flex-1 overflow-hidden rounded" style={{ background: 'var(--sf-glass-border)' }}>
+              <div
+                className="absolute inset-y-0 left-0 rounded"
+                style={{
+                  width: `${Math.max(pct, 1)}%`,
+                  background: 'rgb(59,130,246)',
+                  transition: 'width 400ms cubic-bezier(0,0,0,1)',
+                }}
               />
-            );
-          })}
-          {/* Y-axis labels */}
-          {yTicks.map((v) => {
-            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
-            return (
-              <text
-                key={v}
-                x={padLeft - 6}
-                y={y}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fill="var(--sf-muted)"
-                fontSize={10}
-              >
-                {v.toLocaleString()}
-              </text>
-            );
-          })}
-          {/* Bars */}
-          {sorted.map((item, i) => {
-            const barH = maxVal > 0 ? (item.value / maxVal) * chartH : 0;
-            const x = padLeft + gap + i * (barWidth + gap);
-            const y = padTop + chartH - barH;
-            return (
-              <g key={item.community}>
-                <rect
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={barH}
-                  fill="rgb(59,130,246)"
-                  rx={2}
-                />
-                {/* Value label on top of bar */}
-                <text
-                  x={x + barWidth / 2}
-                  y={y - 4}
-                  textAnchor="middle"
-                  fill="var(--sf-text)"
-                  fontSize={9}
-                  fontWeight="bold"
-                >
-                  {item.value.toLocaleString()}
-                </text>
-                {/* Community label below bar (with address count) */}
-                <text
-                  x={x + barWidth / 2}
-                  y={padTop + chartH + 12}
-                  textAnchor="end"
-                  dominantBaseline="hanging"
-                  fill="var(--sf-muted)"
-                  fontSize={10}
-                  transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 12})`}
-                >
-                  {item.community} ({item.addressCount})
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      )}
+            </div>
+            {/* Value */}
+            <div className="shrink-0 text-right text-xs font-bold text-[color:var(--sf-text)]" style={{ width: 60 }}>
+              {item.value.toLocaleString()}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -707,7 +650,7 @@ export default function DashboardTab() {
               {communityFuel.length === 0 ? (
                 <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
               ) : (
-                <CommunityFuelChart data={communityFuel} mode={fuelAggMode} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
+                <CommunityFuelChart data={communityFuel} mode={fuelAggMode} />
               )}
             </div>
             {/* Pie chart */}

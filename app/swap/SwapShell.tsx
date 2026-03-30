@@ -458,28 +458,6 @@ export default function SwapShell() {
       seen.add('btc');
     }
 
-    // Add native ETH (cross-chain bridge to/from Ethereum)
-    if (shouldShowToken('eth', 'ETH')) {
-      opts.push({
-        id: 'eth',
-        symbol: 'ETH',
-        name: 'Ethereum',
-        isAvailable: true,
-      });
-      seen.add('eth');
-    }
-
-    // Add native ZEC (cross-chain bridge to/from Zcash)
-    if (shouldShowToken('zec', 'ZEC')) {
-      opts.push({
-        id: 'zec',
-        symbol: 'ZEC',
-        name: 'Zcash',
-        isAvailable: true,
-      });
-      seen.add('zec');
-    }
-
     // Always add frBTC (BTC <-> frBTC wrapping is always allowed)
     if (FRBTC_ALKANE_ID && shouldShowToken(FRBTC_ALKANE_ID, 'frBTC')) {
       opts.push({
@@ -640,28 +618,6 @@ export default function SwapShell() {
         isAvailable: true
       });
       seen.add('btc');
-    }
-
-    // Add native ETH as cross-chain destination
-    if (!seen.has('eth') && shouldShowToken('eth', 'ETH')) {
-      opts.push({
-        id: 'eth',
-        symbol: 'ETH',
-        name: 'Ethereum',
-        isAvailable: true,
-      });
-      seen.add('eth');
-    }
-
-    // Add native ZEC as cross-chain destination
-    if (!seen.has('zec') && shouldShowToken('zec', 'ZEC')) {
-      opts.push({
-        id: 'zec',
-        symbol: 'ZEC',
-        name: 'Zcash',
-        isAvailable: true,
-      });
-      seen.add('zec');
     }
 
     // Add frBTC (BTC <-> frBTC wrapping is always allowed)
@@ -2294,7 +2250,7 @@ export default function SwapShell() {
                     quote={quote}
                     isCalculating={!!isCalculating}
                     feeRate={fee.feeRate}
-                    isCrossChainFrom={['USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
+                    isCrossChainFrom={['ETH', 'ZEC', 'USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
                     feeSelection={fee.selection}
                     setFeeSelection={fee.setSelection}
                     customFee={fee.custom}
@@ -2420,7 +2376,7 @@ export default function SwapShell() {
         custom={fee.custom}
         setCustom={fee.setCustom}
         feeRate={fee.feeRate}
-        isCrossChainFrom={['USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
+        isCrossChainFrom={['ETH', 'ZEC', 'USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
       />
 
       <TokenSelectorModal
@@ -2469,15 +2425,17 @@ export default function SwapShell() {
         selectedBridgeTokenFromOther={
           // Check if the opposite selector has a cross-chain bridge token selected
           tokenSelectorMode === 'from'
-            ? (['USDT', 'USDC'].includes(toToken?.symbol ?? '') ? toToken?.symbol : undefined)
+            ? (['ETH', 'ZEC', 'USDT', 'USDC'].includes(toToken?.symbol ?? '') ? toToken?.symbol : undefined)
             : tokenSelectorMode === 'to'
-            ? (['USDT', 'USDC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
+            ? (['ETH', 'ZEC', 'USDT', 'USDC'].includes(fromToken?.symbol ?? '') ? fromToken?.symbol : undefined)
             : undefined
         }
         onPercentFrom={tokenSelectorMode === 'from' && fromToken ? handlePercentFrom : undefined}
         activePercent={tokenSelectorMode === 'from' ? getActivePercentFrom() : null}
         onBridgeTokenSelect={(tokenSymbol) => {
           const bridgeTokenMap: Record<string, { name: string }> = {
+            ETH: { name: 'Ethereum' },
+            ZEC: { name: 'Zcash' },
             USDT: { name: 'USDT' },
             USDC: { name: 'USD Coin' },
           };

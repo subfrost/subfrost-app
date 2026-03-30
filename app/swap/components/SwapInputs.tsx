@@ -89,7 +89,7 @@ export default function SwapInputs({
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
 
   // Bridge tokens don't have on-chain balances
-  const BRIDGE_TOKEN_IDS = ["usdt", "usdc"];
+  const BRIDGE_TOKEN_IDS = ["eth", "zec", "usdt", "usdc"];
   const isFromBridgeToken = from?.id
     ? BRIDGE_TOKEN_IDS.includes(from.id)
     : false;
