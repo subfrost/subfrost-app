@@ -47,7 +47,7 @@ Use the named CSS utility classes in `app/globals.css` instead of composing raw 
 | `.sf-alert-green` / `.sf-alert-blue` / `.sf-alert-yellow` / `.sf-alert-orange` / `.sf-alert-red` / `.sf-alert-gray` | Colour modifiers for `.sf-alert` — theme-aware via `--sf-info-*` tokens |
 | `.sf-alert-title` | Bold heading line inside an `.sf-alert` — colour auto-matches the modifier |
 
-### Rules for New Components
+### Rules for New Componentsd
 
 **Cards & Containers**
 - ✅ Use `.sf-card` for most cards and sections (stronger shadow, lifts on hover)

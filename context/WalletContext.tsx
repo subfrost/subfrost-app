@@ -546,9 +546,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const bootWallet = createWalletFromMnemonic(BOOT_MNEMONIC, toSdkNetwork(network));
         setWallet(bootWallet);
         setWalletType('keystore');
-        loadWallet(BOOT_MNEMONIC);
+        loadWallet(BOOT_MNEMONIC, 'regtest');
         sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, BOOT_MNEMONIC);
-        console.log('[WalletContext] Devnet: auto-connected boot wallet');
+        console.log('[WalletContext] Devnet: auto-connected boot wallet (regtest derivation)');
       } catch (e) {
         console.warn('[WalletContext] Devnet auto-connect failed:', e);
       }

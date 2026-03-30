@@ -241,9 +241,12 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
             // On devnet, load the boot mnemonic so the SDK provider can find
             // UTXOs minted by faucets and boot deploys. A dummy wallet would
             // resolve p2tr:0/p2wpkh:0 to unrelated addresses with no balance.
+            // CRITICAL: Pass 'regtest' as passphrase/network param so the SDK
+            // derives the same addresses as createWalletFromMnemonic('regtest')
+            // in WalletContext. Passing null causes a different derivation.
             const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-            providerInstance.walletLoadMnemonic(BOOT_MNEMONIC, null);
-            console.log('[AlkanesSDK] Boot mnemonic loaded for devnet');
+            providerInstance.walletLoadMnemonic(BOOT_MNEMONIC, 'regtest');
+            console.log('[AlkanesSDK] Boot mnemonic loaded for devnet (regtest derivation)');
           } else {
             providerInstance.walletCreate();
             console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
