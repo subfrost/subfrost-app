@@ -97,9 +97,6 @@ export async function signWithXverse(
     throw new Error('Xverse wallet not available');
   }
 
-  console.log('[browserWalletSigning] Xverse: building signInputs mapping...');
-  console.log('[browserWalletSigning] Xverse: ordinalsAddr:', ordinalsAddress, '| paymentAddr:', paymentAddress);
-
   // Build signInputs: map each input to the correct signing address
   const signInputs: Record<string, number[]> = {};
   const ordIdx: number[] = [];
@@ -141,8 +138,6 @@ export async function signWithXverse(
   if (ordIdx.length > 0) signInputs[ordinalsAddress] = ordIdx;
   if (paymentAddress && payIdx.length > 0) signInputs[paymentAddress] = payIdx;
 
-  console.log('[browserWalletSigning] Xverse: signInputs:', JSON.stringify(signInputs));
-
   const response: any = await withTimeout(
     xverse.request('signPsbt', {
       psbt: psbt.toBase64(),
@@ -152,8 +147,6 @@ export async function signWithXverse(
     SIGNING_TIMEOUT_MS,
     'Xverse'
   );
-
-  console.log('[browserWalletSigning] Xverse: response received');
 
   const signedPsbtBase64 = response.result?.psbt;
   if (!signedPsbtBase64) {
@@ -185,8 +178,6 @@ export async function signWithUnisat(
   }
 
   const psbtHex = psbt.toHex();
-  console.log('[browserWalletSigning] UniSat: PSBT hex length:', psbtHex.length);
-  console.log('[browserWalletSigning] UniSat: connected address:', unisatAddress);
 
   // Build toSignInputs - tell UniSat which inputs to sign
   const toSignInputs = psbt.data.inputs.map((_, index) => ({
@@ -194,16 +185,12 @@ export async function signWithUnisat(
     address: unisatAddress,
   }));
 
-  console.log('[browserWalletSigning] UniSat: toSignInputs:', JSON.stringify(toSignInputs));
-
   const hasSignPsbts = typeof unisat.signPsbts === 'function';
   const hasSignPsbt = typeof unisat.signPsbt === 'function';
-  console.log('[browserWalletSigning] UniSat: hasSignPsbts:', hasSignPsbts, 'hasSignPsbt:', hasSignPsbt);
 
   let signedHex: string | null = null;
 
   if (hasSignPsbts) {
-    console.log('[browserWalletSigning] UniSat: calling signPsbts (autoFinalized: true)...');
     const signedHexArray: string[] = await withTimeout(
       unisat.signPsbts([psbtHex], {
         autoFinalized: true, // Let UniSat finalize taproot inputs
@@ -212,10 +199,8 @@ export async function signWithUnisat(
       SIGNING_TIMEOUT_MS,
       'UniSat'
     );
-    console.log('[browserWalletSigning] UniSat: signPsbts returned:', signedHexArray?.length, 'results');
     signedHex = signedHexArray?.[0] || null;
   } else if (hasSignPsbt) {
-    console.log('[browserWalletSigning] UniSat: calling signPsbt (autoFinalized: true)...');
     signedHex = await withTimeout(
       unisat.signPsbt(psbtHex, {
         autoFinalized: true,
@@ -231,8 +216,6 @@ export async function signWithUnisat(
   if (!signedHex) {
     throw new Error('UniSat signing was cancelled or returned empty result');
   }
-
-  console.log('[browserWalletSigning] UniSat: signed hex length:', signedHex.length);
 
   // Convert hex to base64
   const signedBuffer = Buffer.from(signedHex, 'hex');
@@ -257,23 +240,16 @@ export async function signWithOyl(
   const callId = oylSignPsbtCallCount;
 
   const psbtHex = psbt.toHex();
-  const startTime = Date.now();
-  console.log(`[browserWalletSigning] OYL: ===== SIGN START (call #${callId}) =====`);
-  console.log(`[browserWalletSigning] OYL: PSBT hex length:`, psbtHex.length);
-  console.log(`[browserWalletSigning] OYL: inputs:`, psbt.inputCount);
-  console.log(`[browserWalletSigning] OYL: Total signWithOyl calls this session: ${callId}`);
 
   const oylProvider = (window as any).oyl;
 
   const signWithRetry = async (): Promise<string> => {
     try {
-      console.log('[browserWalletSigning] OYL: calling walletAdapter.signPsbt()...');
       const signedHex: string = await withTimeout(
         walletAdapter.signPsbt(psbtHex, { auto_finalized: false }),
         SIGNING_TIMEOUT_MS,
         'OYL'
       );
-      console.log('[browserWalletSigning] OYL: signPsbt SUCCESS, got', signedHex?.length, 'hex chars');
       return signedHex;
     } catch (e: any) {
       const errorMsg = e?.message || String(e);
@@ -284,12 +260,8 @@ export async function signWithOyl(
         errorMsg.includes('not connected') ||
         errorMsg.includes('disconnected');
 
-      console.log('[browserWalletSigning] OYL signPsbt error:', errorMsg);
-      console.log('[browserWalletSigning] OYL isConnectionError:', isConnectionError);
-
       if (isConnectionError && oylProvider?.getAddresses) {
         oylGetAddressesCallCount++;
-        console.log(`[browserWalletSigning] OYL: connection error, attempting reconnection (call #${oylGetAddressesCallCount})...`);
 
         // Try to reconnect
         if (typeof oylProvider.connect === 'function') {
@@ -301,7 +273,6 @@ export async function signWithOyl(
         }
 
         await oylProvider.getAddresses();
-        console.log(`[browserWalletSigning] OYL: reconnection successful (call #${oylGetAddressesCallCount}), retrying sign...`);
 
         // Retry signing
         return await withTimeout(
@@ -316,10 +287,6 @@ export async function signWithOyl(
   };
 
   const signedHex = await signWithRetry();
-  const elapsed = Date.now() - startTime;
-  console.log(`[browserWalletSigning] OYL: ===== SIGN COMPLETE (call #${callId}) =====`);
-  console.log(`[browserWalletSigning] OYL: signed hex length:`, signedHex?.length);
-  console.log(`[browserWalletSigning] OYL: elapsed time:`, elapsed, 'ms');
 
   const signedBuffer = Buffer.from(signedHex, 'hex');
   return {
@@ -339,15 +306,12 @@ export async function signWithOkx(
   walletAdapter: any
 ): Promise<SigningResult> {
   const psbtHex = psbt.toHex();
-  console.log('[browserWalletSigning] OKX: PSBT hex length:', psbtHex.length);
 
   const signedHex: string = await withTimeout(
     walletAdapter.signPsbt(psbtHex, { auto_finalized: false }),
     SIGNING_TIMEOUT_MS,
     'OKX'
   );
-
-  console.log('[browserWalletSigning] OKX: signed hex length:', signedHex?.length);
 
   const signedBuffer = Buffer.from(signedHex, 'hex');
   return {
@@ -376,10 +340,8 @@ export function finalizeAndExtractTx(
     // Try to extract directly
     try {
       tx = psbt.extractTransaction();
-      console.log('[browserWalletSigning] PSBT was already finalized');
     } catch (extractError: any) {
       // If extraction fails, the wallet lied about finalization - try to finalize
-      console.log('[browserWalletSigning] PSBT claimed finalized but extraction failed, trying to finalize...');
       psbt.finalizeAllInputs();
       tx = psbt.extractTransaction();
     }
@@ -388,12 +350,10 @@ export function finalizeAndExtractTx(
     try {
       psbt.finalizeAllInputs();
       tx = psbt.extractTransaction();
-      console.log('[browserWalletSigning] PSBT finalized successfully');
     } catch (finalizeError: any) {
       // Maybe it was actually finalized despite the flag
       try {
         tx = psbt.extractTransaction();
-        console.log('[browserWalletSigning] PSBT was actually already finalized');
       } catch {
         throw new Error(`Failed to finalize transaction: ${finalizeError.message}`);
       }

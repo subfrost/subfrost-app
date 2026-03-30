@@ -303,7 +303,8 @@ describe('Auto-reconnection patterns', () => {
   it('auto-reconnect from cached addresses avoids re-prompting the extension', () => {
     // The init effect should restore from localStorage without calling connector.connect()
     expect(source).toContain('BROWSER_WALLET_ADDRESSES');
-    expect(source).toContain('Restored browser wallet from cache');
+    // Verified by checking the cache-restore code path sets browser wallet state
+    expect(source).toContain('setBrowserWalletAddresses(cachedParsed)');
     // The comment explicitly says we DON'T call connector.connect() on page load
     expect(source).toContain("don't call connector.connect() on page load");
   });
@@ -311,14 +312,15 @@ describe('Auto-reconnection patterns', () => {
   it('auto-reconnect creates a wallet adapter from cached state', () => {
     // After restoring from cache, adapter should be created
     expect(source).toContain('createWalletAdapter(connected)');
-    // Verify adapter is set in the cache-restore path
-    const cacheRestoreIdx = source.indexOf('Restored browser wallet from cache');
+    // Verify adapter is set in the cache-restore path by finding the code
+    // that sets the adapter near the cached address restoration logic
+    const cacheRestoreIdx = source.indexOf('setBrowserWalletAddresses(cachedParsed)');
     expect(cacheRestoreIdx).toBeGreaterThan(-1);
 
-    // Look backward from the log message for setWalletAdapter
+    // Look forward from the cache-restore for setWalletAdapter
     const cacheSection = source.slice(
-      Math.max(0, cacheRestoreIdx - 500),
-      cacheRestoreIdx
+      cacheRestoreIdx,
+      cacheRestoreIdx + 500
     );
     expect(cacheSection).toContain('setWalletAdapter(adapter)');
   });

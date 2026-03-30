@@ -56,11 +56,13 @@ describe('No blocking render patterns', () => {
     );
 
     // Primary path: reconstruct from cached addresses (no extension prompt)
-    expect(walletContextSrc).toContain('Restored browser wallet from cache');
+    // Verified by checking the cache-restore code path sets browser wallet state
+    expect(walletContextSrc).toContain('setBrowserWalletAddresses(cachedParsed)');
+    expect(walletContextSrc).toContain('BROWSER_WALLET_ADDRESSES');
 
     // Fallback: clear stored wallet instead of calling connector.connect() which
     // would leave dangling requests to the extension and block manual connection
-    expect(walletContextSrc).toContain('No cached addresses for auto-reconnect');
+    expect(walletContextSrc).toContain("don't call connector.connect() on page load");
 
     // Must NOT call connector.connect during auto-reconnect (leaves dangling requests)
     const hasConnectorFallback = /connector\.connect\(walletInfo\).*Wallet reconnect timeout/s.test(walletContextSrc);

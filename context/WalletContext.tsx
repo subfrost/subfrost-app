@@ -98,7 +98,6 @@ function switchNetworkToMatch(detectedNetwork: Network) {
   const currentNetwork = localStorage.getItem(NETWORK_STORAGE_KEY);
   if (currentNetwork === detectedNetwork) return;
 
-  console.log(`[WalletContext] Switching app network from "${currentNetwork}" to "${detectedNetwork}" to match browser wallet`);
   localStorage.setItem(NETWORK_STORAGE_KEY, detectedNetwork);
   window.dispatchEvent(new CustomEvent('network-changed', { detail: detectedNetwork }));
 }
@@ -429,7 +428,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const installed = getInstalledWallets();
         setInstalledBrowserWallets(installed);
       } catch (error) {
-        console.warn('[WalletContext] Failed to detect browser wallets:', error);
       }
 
       // Check for previously stored wallet type
@@ -490,8 +488,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               setWalletType('browser');
               const adapter = createWalletAdapter(connected);
               setWalletAdapter(adapter);
-              console.log('[WalletContext] Restored browser wallet from cache:', walletInfo.name);
-
               // Auto-detect network from cached address
               const detectedNetwork = detectNetworkFromAddress(primaryAddr);
               if (detectedNetwork) {
@@ -504,21 +500,18 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               // the request times out, the extension can be left in a conflicting
               // state that blocks subsequent manual connection attempts.
               // Instead, just clear the stored wallet and let the user reconnect.
-              console.log('[WalletContext] No cached addresses for auto-reconnect, clearing stored wallet');
               localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
               localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
               localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
             }
           } else {
             // Wallet not installed anymore, clear stored state
-            console.log('[WalletContext] Stored browser wallet not installed, clearing');
             localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
             localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
             localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
           }
         } catch (error) {
           // Auto-reconnect failed, clear stored ID
-          console.warn('[WalletContext] Failed to auto-reconnect browser wallet:', error);
           localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ID);
           localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
           localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
@@ -548,9 +541,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         setWalletType('keystore');
         loadWallet(BOOT_MNEMONIC, 'regtest');
         sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, BOOT_MNEMONIC);
-        console.log('[WalletContext] Devnet: auto-connected boot wallet (regtest derivation)');
       } catch (e) {
-        console.warn('[WalletContext] Devnet auto-connect failed:', e);
       }
       return;
     }
@@ -581,7 +572,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const storedWalletType = localStorage.getItem(STORAGE_KEYS.WALLET_TYPE);
 
     if (sessionMnemonic && storedWalletType === 'keystore' && wallet) {
-      console.log('[WalletContext] Network changed to', network, '- recreating wallet with new network');
       try {
         const newWallet = createWalletFromMnemonic(sessionMnemonic, toSdkNetwork(network));
         setWallet(newWallet);
@@ -619,13 +609,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           const taprootAddress = hasExplicitTaproot ? devnetConvert(taprootAddr!.address) : '';
           const segwitAddress = hasExplicitSegwit ? devnetConvert(segwitAddr!.address) : '';
 
-          // Log addresses being used for balance queries
-          console.log('[WalletContext] Using browser wallet addresses for balance queries:');
-          console.log('  Taproot:', taprootAddress || '(none)');
-          console.log('  NativeSegwit:', segwitAddress || '(none)');
-          if (network === 'devnet') {
-            console.log('  (converted from mainnet to regtest format for devnet)');
-          }
           return {
             nativeSegwit: hasExplicitSegwit ? {
               address: segwitAddress,
@@ -652,10 +635,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // bcrt1q.../bcrt1p... = regtest equivalents
       const isTaproot = resolvedAddress.startsWith('bc1p') || resolvedAddress.startsWith('tb1p') || resolvedAddress.startsWith('bcrt1p');
       const isNativeSegwit = resolvedAddress.startsWith('bc1q') || resolvedAddress.startsWith('tb1q') || resolvedAddress.startsWith('bcrt1q');
-
-      if (network === 'devnet' && resolvedAddress !== primaryAddress) {
-        console.log(`[WalletContext] Devnet: converted ${primaryAddress.slice(0, 12)}... → ${resolvedAddress.slice(0, 14)}...`);
-      }
 
       // Only assign the address to the correct type based on address format
       // This prevents the bug where a taproot address was being used for both
@@ -735,12 +714,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {
-    // Debug: check Web Crypto API availability before keystore creation
-    console.log('[Wallet] isSecureContext:', typeof window !== 'undefined' && window.isSecureContext);
-    console.log('[Wallet] window.crypto exists:', typeof window !== 'undefined' && !!window.crypto);
-    console.log('[Wallet] window.crypto.subtle exists:', typeof window !== 'undefined' && !!window.crypto?.subtle);
-    console.log('[Wallet] Current origin:', typeof window !== 'undefined' && window.location.origin);
-
     // createKeystore generates mnemonic and returns both encrypted keystore and mnemonic
     const sdkNetwork = toSdkNetwork(network);
     const { keystore: encrypted, mnemonic } = await createKeystore(password, { network: sdkNetwork });
@@ -885,7 +858,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       try {
         await browserWallet.disconnect();
       } catch (error) {
-        console.warn('[WalletContext] Failed to disconnect browser wallet:', error);
       }
     }
     setBrowserWallet(null);
@@ -983,7 +955,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           break;
       }
     } catch (error) {
-      console.warn('[WalletContext] Failed to fetch additional addresses:', error);
     }
 
     return result;
@@ -995,20 +966,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       throw new Error('Not in browser environment');
     }
 
-    console.log('[WalletContext] connectBrowserWallet called with walletId:', walletId);
-
     const walletInfo = BROWSER_WALLETS.find(w => w.id === walletId);
     if (!walletInfo) {
       throw new Error(`Unknown wallet: ${walletId}`);
     }
 
-    console.log('[WalletContext] Found wallet info:', walletInfo.name, 'injectionKey:', walletInfo.injectionKey);
-
     if (!isWalletInstalled(walletInfo)) {
       throw new Error(`${walletInfo.name} is not installed`);
     }
-
-    console.log('[WalletContext] Wallet is installed, starting connection...');
 
     try {
       let connected: ConnectedWallet;
@@ -1030,38 +995,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         // Try multiple approaches and add timeout to prevent infinite waiting.
         const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
 
-        console.log('[WalletContext] Xverse: ===== CONNECTION START =====');
-        console.log('[WalletContext] Xverse: BitcoinProvider:', typeof xverseProvider);
-        console.log('[WalletContext] Xverse: Provider object:', xverseProvider);
-
         if (!xverseProvider) throw new Error('Xverse wallet not detected. Please install the Xverse extension.');
-
-        // Check if the extension is responsive by checking btc_providers
-        const btcProviders = (window as any).btc_providers;
-        console.log('[WalletContext] Xverse: window.btc_providers:', btcProviders);
-        const xverseFromBtcProviders = btcProviders?.find?.((p: any) => p.id === 'XverseProviders.BitcoinProvider' || p.name?.toLowerCase().includes('xverse'));
-        console.log('[WalletContext] Xverse: Found in btc_providers:', xverseFromBtcProviders);
-
-        // Try to ping the extension first with a simple method
-        console.log('[WalletContext] Xverse: Testing extension responsiveness...');
 
         let accounts: any[] = [];
 
         // Wrap in a timeout to detect hung extension
         const connectionPromise = new Promise<any>(async (resolve, reject) => {
           try {
-            console.log('[WalletContext] Xverse: calling request("getAccounts")...');
-            console.log('[WalletContext] Xverse: Popup should appear NOW.');
-
             const response = await xverseProvider.request('getAccounts', {
               purposes: ['ordinals', 'payment'],
               message: 'Connect to Subfrost',
             });
 
-            console.log('[WalletContext] Xverse: getAccounts response:', response);
             resolve(response);
           } catch (err) {
-            console.log('[WalletContext] Xverse: getAccounts threw error:', err);
             reject(err);
           }
         });
@@ -1107,8 +1054,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             '(3) check that this site is not blocked in Xverse settings.'
           );
         }
-
-        console.log('[WalletContext] Xverse: got', accounts.length, 'accounts:', accounts);
 
         const ordinalsAccount = accounts.find((a: any) =>
           a.purpose === 'ordinals' || a.addressType === 'p2tr'
@@ -1244,13 +1189,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         });
       } else if (walletId === 'oyl') {
         // OYL wallet exposes window.oyl with getAddresses(), signPsbt(), signMessage()
-        console.log('[WalletContext][OYL-CONNECT] ===== OYL CONNECTION FLOW START =====');
         const oylProvider = (window as any).oyl;
         if (!oylProvider) throw new Error('OYL wallet not available');
-
-        // Log all available methods on window.oyl
-        console.log('[WalletContext][OYL-CONNECT] window.oyl available methods:', Object.keys(oylProvider).join(', '));
-        console.log('[WalletContext][OYL-CONNECT] window.oyl prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(oylProvider) || {}).join(', '));
 
         // Check if already connected - if not, getAddresses() will trigger connection prompt
         let isConnectedResult: any = 'N/A';
@@ -1261,13 +1201,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             isConnectedResult = `ERROR: ${e?.message || e}`;
           }
         }
-        console.log('[WalletContext][OYL-CONNECT] isConnected() result:', isConnectedResult);
-
         // getAddresses returns all address types in one call
         // On first call when not connected, this triggers the connection approval popup
         // Add 30s timeout to prevent infinite hang if user dismisses popup or extension is unresponsive
         oylConnectionCallCount++;
-        console.log(`[WalletContext][OYL-CONNECT] Calling getAddresses() with 30s timeout (connection call #${oylConnectionCallCount}, signing calls: ${getOylCallCount()})...`);
         const rawAddresses = await Promise.race([
           oylProvider.getAddresses(),
           new Promise<never>((_, reject) =>
@@ -1277,15 +1214,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             )
           ),
         ]);
-        console.log('[WalletContext] OYL getAddresses RAW response:', rawAddresses);
-        console.log('[WalletContext] OYL getAddresses RAW JSON:', JSON.stringify(rawAddresses, null, 2));
-        console.log('[WalletContext] OYL response type:', typeof rawAddresses);
-        if (rawAddresses) {
-          console.log('[WalletContext] OYL response keys:', Object.keys(rawAddresses));
-          console.log('[WalletContext] OYL nativeSegwit type:', typeof rawAddresses.nativeSegwit);
-          console.log('[WalletContext] OYL taproot type:', typeof rawAddresses.taproot);
-        }
-
         // Handle different possible response formats from OYL
         // Format 1: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey } }
         // Format 2: { nativeSegwit: "address", taproot: "address" }
@@ -1297,7 +1225,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
         if (Array.isArray(rawAddresses)) {
           // Handle array format - find by address type
-          console.log('[WalletContext] OYL returned array format');
           for (const addr of rawAddresses) {
             if (addr.type === 'p2wpkh' || addr.addressType === 'p2wpkh' || addr.purpose === 'payment') {
               addresses.nativeSegwit = { address: addr.address, publicKey: addr.publicKey };
@@ -1309,12 +1236,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           // Handle object format
           if (typeof rawAddresses.nativeSegwit === 'string') {
             // Format: { nativeSegwit: "address", taproot: "address" }
-            console.log('[WalletContext] OYL returned string addresses');
             addresses.nativeSegwit = { address: rawAddresses.nativeSegwit };
             addresses.taproot = { address: rawAddresses.taproot };
           } else {
             // Format: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey } }
-            console.log('[WalletContext] OYL returned object addresses');
             addresses = rawAddresses;
           }
         }
@@ -1323,17 +1248,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           console.error('[WalletContext] OYL missing addresses after parsing:', { nativeSegwit: addresses?.nativeSegwit, taproot: addresses?.taproot });
           throw new Error('No addresses returned from OYL');
         }
-
-        console.log('[WalletContext] OYL addresses (parsed):');
-        console.log('  Taproot:', addresses.taproot?.address || '(none)');
-        console.log('  NativeSegwit:', addresses.nativeSegwit?.address || '(none)');
-
-        // DEBUGGING: Log address comparison for derivation path analysis
-        // Different wallets may derive different addresses from the same seed
-        // due to different BIP derivation paths (BIP44/84/86)
-        console.log('[WalletContext] OYL address comparison - check if these match your Xverse addresses:');
-        console.log('  If addresses differ, your funds are on Xverse addresses, not OYL addresses.');
-        console.log('  This is normal - different wallets use different derivation paths.');
 
         // Store both address types
         if (addresses.taproot?.address) {
@@ -1358,23 +1272,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           throw new Error('No valid address found from OYL wallet');
         }
 
-        // Log final connection state
-        console.log('[WalletContext][OYL-CONNECT] Creating ConnectedWallet with:');
-        console.log('[WalletContext][OYL-CONNECT]   address:', primaryAddress);
-        console.log('[WalletContext][OYL-CONNECT]   publicKey:', primaryPubKey);
-        console.log('[WalletContext][OYL-CONNECT]   addressType:', primaryType);
-
         // Check isConnected again after getAddresses
         if (typeof oylProvider.isConnected === 'function') {
           try {
-            const postConnectStatus = await oylProvider.isConnected();
-            console.log('[WalletContext][OYL-CONNECT] isConnected() AFTER getAddresses:', postConnectStatus);
+            await oylProvider.isConnected();
           } catch (e: any) {
-            console.log('[WalletContext][OYL-CONNECT] isConnected() threw after getAddresses:', e?.message || e);
+            // Ignore isConnected errors
           }
         }
-
-        console.log('[WalletContext][OYL-CONNECT] ===== OYL CONNECTION FLOW END =====');
 
         connected = new (ConnectedWallet as any)(walletInfo, oylProvider, {
           address: primaryAddress,
@@ -1537,8 +1442,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
-        console.log('[WalletContext] OKX: calling connect...');
-
         const result = await Promise.race([
           okxProvider.connect(),
           new Promise<never>((_, reject) =>
@@ -1548,7 +1451,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             )), 10000)
           ),
         ]);
-        console.log('[WalletContext] OKX: connect returned:', result);
         const addr = result?.address;
         const pubKey = result?.publicKey;
         if (!addr) throw new Error('No address returned from OKX');
@@ -1573,27 +1475,19 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const unisatProvider = (window as any).unisat;
         if (!unisatProvider) throw new Error('Unisat wallet not available. Please install the Unisat extension.');
 
-        console.log('[WalletContext] Unisat: provider found, available methods:', Object.keys(unisatProvider));
-        console.log('[WalletContext] Unisat: calling requestAccounts...');
-
         let accounts: string[];
         try {
           // Check if already connected first - getAccounts() returns existing accounts without prompting
           const existingAccounts = await unisatProvider.getAccounts();
-          console.log('[WalletContext] Unisat: getAccounts() returned:', existingAccounts);
 
           if (existingAccounts?.length > 0) {
             accounts = existingAccounts;
-            console.log('[WalletContext] Unisat: using existing connection');
           } else {
             // Not connected - trigger requestAccounts() but don't wait for it directly
             // because Unisat's requestAccounts() often hangs even after user approval.
             // Instead, we poll getAccounts() to detect when connection is established.
-            console.log('[WalletContext] Unisat: triggering requestAccounts (this shows the popup)...');
-
             // Fire and forget - this triggers the popup
             const requestPromise = unisatProvider.requestAccounts().catch((e: any) => {
-              console.log('[WalletContext] Unisat: requestAccounts rejected:', e);
               return null;
             });
 
@@ -1605,7 +1499,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
                 try {
                   const accts = await unisatProvider.getAccounts();
                   if (accts?.length > 0) {
-                    console.log('[WalletContext] Unisat: poll detected connection after', (i + 1) * 0.5, 'seconds');
                     return accts;
                   }
                 } catch (e) {
@@ -1619,7 +1512,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             accounts = await Promise.race([
               requestPromise.then((result: string[] | null) => {
                 if (result && result.length > 0) {
-                  console.log('[WalletContext] Unisat: requestAccounts resolved:', result);
                   return result;
                 }
                 // If requestAccounts returned empty, keep waiting for poll
@@ -1628,7 +1520,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               pollForConnection(),
             ]);
           }
-          console.log('[WalletContext] Unisat: final accounts:', accounts);
         } catch (e: any) {
           console.error('[WalletContext] Unisat: connection error:', e);
           const msg = typeof e === 'string' ? e : e?.message || JSON.stringify(e);
@@ -1679,13 +1570,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         localStorage.setItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES, JSON.stringify(additionalAddresses));
       }
 
-      console.log('[WalletContext] Connected to browser wallet:', walletInfo.name);
-      console.log('[WalletContext] Primary address:', connected.address);
-      console.log('[WalletContext] Additional addresses:', additionalAddresses);
-      console.log('[WalletContext] browserWalletAddresses state will be:', additionalAddresses);
-      console.log('[WalletContext] Additional addresses:', additionalAddresses);
-      console.log('[WalletContext] Created wallet adapter:', adapter.getInfo().name);
-
       // Auto-detect network from the wallet's addresses and switch if needed
       const addrToCheck = additionalAddresses.taproot?.address
         || additionalAddresses.nativeSegwit?.address
@@ -1709,7 +1593,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // redeemScripts, wallet-specific protocols, timeouts, and reconnection internally
     if (walletAdapter && walletType === 'browser') {
       const psbtHex = Buffer.from(psbtBase64, 'base64').toString('hex');
-      console.log('[WalletContext] Signing PSBT with SDK adapter');
       const signedHex = await walletAdapter.signPsbt(psbtHex, { auto_finalized: false });
       return Buffer.from(signedHex, 'hex').toString('base64');
     }
@@ -1771,7 +1654,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // 6. 60-second timeout for all wallets
     if (walletAdapter && walletType === 'browser') {
       const walletId = browserWallet?.info?.id || 'unknown';
-      console.log(`[WalletContext] Signing taproot PSBT (wallet: ${walletId})`);
 
       // Import bitcoinjs-lib dynamically to parse PSBT
       const bitcoin = await import('bitcoinjs-lib');
@@ -1792,21 +1674,13 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       if (taprootPubKey) {
         const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
         const patchedCount = patchTapInternalKeys(psbt, xOnlyHex);
-        if (patchedCount > 0) {
-          console.log(`[WalletContext] Patched tapInternalKey on ${patchedCount} input(s) to user x-only: ${xOnlyHex}`);
-        }
-      } else {
-        console.warn('[WalletContext] No taproot public key available for tapInternalKey patching');
       }
 
       // For OYL wallet, use the robust signWithOyl from browserWalletSigning.ts
       // which has 60s timeout, expanded error detection, and auto-reconnection
       if (detectedWallet === 'oyl') {
         try {
-          console.log(`[WalletContext] OYL: Using signWithOyl (${psbt.inputCount} inputs)`);
-
           const result = await signWithOyl(psbt, walletAdapter);
-          console.log(`[WalletContext] OYL: signing succeeded (finalized: ${result.isFinalized})`);
           return result.signedPsbtBase64;
         } catch (e: any) {
           console.error(`[WalletContext] OYL signing failed:`, e?.message || e);
@@ -1825,11 +1699,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             throw new Error('Xverse ordinals address not found');
           }
 
-          console.log(`[WalletContext] Xverse: Using signWithXverse (${psbt.inputCount} inputs)`);
-          console.log(`[WalletContext] Xverse: ordinalsAddr: ${ordinalsAddress}, paymentAddr: ${paymentAddress}`);
-
           const result = await signWithXverse(psbt, ordinalsAddress, paymentAddress, btcNetwork);
-          console.log(`[WalletContext] Xverse: signing succeeded (finalized: ${result.isFinalized})`);
           return result.signedPsbtBase64;
         } catch (e: any) {
           console.error(`[WalletContext] Xverse signing failed:`, e?.message || e);
@@ -1846,10 +1716,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         if (!signedHex) {
           throw new Error(`${walletId} signing returned empty result`);
         }
-        console.log(`[WalletContext] ${walletId} signing succeeded (${signedHex.length} hex chars)`);
         return Buffer.from(signedHex, 'hex').toString('base64');
       } catch (e: any) {
-        console.error(`[WalletContext] ${walletId} signing failed:`, e?.message || e);
         throw new Error(`${walletId} signing failed: ${e?.message || e}`);
       }
     }
@@ -1923,17 +1791,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Parse and sign the PSBT
     const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
 
-    console.log('[signTaprootPsbt] Signing', psbt.inputCount, 'inputs with taproot key');
-    console.log('[signTaprootPsbt] Taproot path:', taprootPath);
-    console.log('[signTaprootPsbt] X-only pubkey:', Buffer.from(xOnlyPubkey).toString('hex'));
-
     // Sign each input with the tweaked taproot key
     for (let i = 0; i < psbt.inputCount; i++) {
       try {
         psbt.signInput(i, tweakedChild);
-        console.log(`[signTaprootPsbt] Signed input ${i}`);
       } catch (error) {
-        console.warn(`[signTaprootPsbt] Could not sign input ${i}:`, error);
+        // Could not sign input — may not be a taproot input
       }
     }
 
@@ -1946,7 +1809,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // For browser wallets - use the SDK adapter which handles all wallet-specific logic
     if (walletAdapter && walletType === 'browser') {
       const walletId = browserWallet?.info?.id || 'unknown';
-      console.log(`[WalletContext] Signing segwit PSBT (wallet: ${walletId})`);
 
       // For OYL wallet, use the robust signWithOyl from browserWalletSigning.ts
       // which has 60s timeout, expanded error detection, and auto-reconnection
@@ -1959,10 +1821,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             : bitcoin.networks.regtest;
 
           const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          console.log(`[WalletContext] OYL (segwit): Using signWithOyl (${psbt.inputCount} inputs)`);
 
           const result = await signWithOyl(psbt, walletAdapter);
-          console.log(`[WalletContext] OYL (segwit): signing succeeded (finalized: ${result.isFinalized})`);
           return result.signedPsbtBase64;
         } catch (e: any) {
           console.error(`[WalletContext] OYL (segwit) signing failed:`, e?.message || e);
@@ -1979,7 +1839,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         if (!signedHex) {
           throw new Error(`${walletId} signing returned empty result`);
         }
-        console.log(`[WalletContext] ${walletId} (segwit) signing succeeded (${signedHex.length} hex chars)`);
         return Buffer.from(signedHex, 'hex').toString('base64');
       } catch (e: any) {
         console.error(`[WalletContext] ${walletId} (segwit) signing failed:`, e?.message || e);
@@ -2048,17 +1907,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Parse and sign the PSBT
     const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
 
-    console.log('[signSegwitPsbt] Signing', psbt.inputCount, 'inputs with segwit key');
-    console.log('[signSegwitPsbt] Segwit path:', segwitPath);
-    console.log('[signSegwitPsbt] Pubkey:', Buffer.from(segwitChild.publicKey).toString('hex'));
-
     // Sign each input with the segwit key
     for (let i = 0; i < psbt.inputCount; i++) {
       try {
         psbt.signInput(i, segwitChild);
-        console.log(`[signSegwitPsbt] Signed input ${i}`);
       } catch (error) {
-        console.warn(`[signSegwitPsbt] Could not sign input ${i}:`, error);
+        // Could not sign input — may not be a segwit input
       }
     }
 
@@ -2070,7 +1924,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const signPsbts = useCallback(async (params: { psbts: string[] }): Promise<{ signedPsbts: string[] }> => {
     // For browser wallets - use the SDK adapter which handles all wallet-specific logic
     if (walletAdapter && walletType === 'browser') {
-      console.log('[WalletContext] Signing multiple PSBTs with SDK adapter');
       const signedPsbts = await Promise.all(
         params.psbts.map(async (psbtBase64) => {
           const psbtBuffer = Buffer.from(psbtBase64, 'base64');
@@ -2271,18 +2124,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Check for either keystore wallet or browser wallet
     const isConnected = wallet || (browserWallet && walletType === 'browser');
 
-    console.log('[WalletContext] getSpendableTotalBalance called', {
-      hasWallet: !!wallet,
-      hasBrowserWallet: !!browserWallet,
-      walletType,
-      hasSdkProvider: !!sdkProvider,
-      sdkInitialized,
-      nativeSegwit: account.nativeSegwit?.address,
-      taproot: account.taproot?.address,
-    });
-
     if (!isConnected || !sdkProvider || !sdkInitialized) {
-      console.log('[WalletContext] Returning 0 - missing dependencies');
       return 0;
     }
 
@@ -2294,19 +2136,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       if (account.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
       if (account.taproot?.address) addresses.push(account.taproot.address);
 
-      console.log('[WalletContext] Querying addresses:', addresses);
-
       if (addresses.length === 0) return 0;
 
       // Fetch balances for all addresses in parallel
       const results = await Promise.all(
         addresses.map(async (address) => {
           try {
-            console.log('[WalletContext] Fetching enriched balances for:', address);
             const rawResult = await sdkProvider.getEnrichedBalances(address, '1');
-            console.log('[WalletContext] Raw result for', address, ':', rawResult);
             const extracted = extractEnrichedData(rawResult);
-            console.log('[WalletContext] Extracted data for', address, ':', extracted);
             return extracted;
           } catch (err) {
             console.error('[WalletContext] Error fetching for', address, ':', err);
@@ -2321,12 +2158,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           const addressBalance = enriched.spendable.reduce((sum: number, utxo: any) => {
             return sum + (utxo.value || 0);
           }, 0);
-          console.log('[WalletContext] Address balance:', addressBalance);
           totalBalance += addressBalance;
         }
       }
 
-      console.log('[WalletContext] Total balance:', totalBalance);
       return totalBalance;
     } catch (error) {
       console.error('[WalletContext] Error fetching balance:', error);
