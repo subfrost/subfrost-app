@@ -1,54 +1,45 @@
 /**
- * Global console noise filter for devnet.
- * Suppresses high-frequency WASM indexer and SDK debug logs.
- * Add ?verbose to URL to disable filtering.
+ * Global console noise filter for development.
+ * Only allows messages matching an allowlist through.
+ * Add ?verbose to URL to disable filtering entirely.
  */
 (function() {
   if (typeof window === 'undefined') return;
   if (new URLSearchParams(window.location.search).has('verbose')) return;
 
-  var NOISE = [
-    '__get_len', '__flush', '__get]', 'get_count', 'MISS',
-    '[DEBUG]', '[INFO]', 'call:', 'checking for error',
-    'deprecated parameters', 'Sourcemap for',
-    '[enrichedWalletQueryOptions]', '[BALANCE]',
-    '[alkaneBalanceQuery]', '[useAlkanesTokenPairs]',
-    '[fetchPoolsFromSDK]', '[usePools]',
-    '[WalletProvider]', 'JsonRpcProvider::call',
-    'Wallet state:', 'spendable UTXOs',
-    '[ioredis]', 'Unhandled error event',
-    '[tertiary]', '[useLPPositions]', '[useSwapQuotes]',
-    '[useTokenNames]', '[SwapShell]',
-    'Cellpack', 'AlkaneId',
+  // ALLOWLIST: only these prefixes pass through
+  var ALLOW = [
+    '[devnet-boot]',
+    '[DevnetContext]',
+    '[devnet]',
+    '[AlkanesSDK]',
+    '[WalletContext]',
+    '[LimitOrder]',
+    '[useSwapMutation]',
+    '[useWrapMutation]',
+    '[useUnwrapMutation]',
+    'Error',
+    'error',
+    'FATAL',
+    'Carbine',
+    'carbine',
+    'Phase',
+    'deployed',
+    'Deploy',
+    'FAILED',
+    'HMR',
   ];
 
-  // Short tokens from Rust Debug struct printing (each field printed separately)
-  var SHORT_NOISE = ['target', 'inputs', 'block', 'tx', 'false', 'true'];
-
-  function isNoisy(args) {
-    if (args.length === 1) {
-      var a = args[0];
+  function isAllowed(args) {
+    for (var i = 0; i < args.length; i++) {
+      var a = args[i];
       if (typeof a === 'string') {
-        // Filter known noise substrings
-        for (var j = 0; j < NOISE.length; j++) {
-          if (a.indexOf(NOISE[j]) !== -1) return true;
-        }
-        // Filter very short messages (Rust Debug struct field-by-field printing)
-        var trimmed = a.trim();
-        if (trimmed.length <= 5) return true;
-        for (var k = 0; k < SHORT_NOISE.length; k++) {
-          if (trimmed === SHORT_NOISE[k]) return true;
+        for (var j = 0; j < ALLOW.length; j++) {
+          if (a.indexOf(ALLOW[j]) !== -1) return true;
         }
       }
-    } else {
-      for (var i = 0; i < args.length; i++) {
-        var b = args[i];
-        if (typeof b === 'string') {
-          for (var j2 = 0; j2 < NOISE.length; j2++) {
-            if (b.indexOf(NOISE[j2]) !== -1) return true;
-          }
-        }
-      }
+      // Allow Error objects
+      if (a instanceof Error) return true;
     }
     return false;
   }
@@ -56,8 +47,22 @@
   var origLog = console.log;
   var origWarn = console.warn;
   var origError = console.error;
+  var origDebug = console.debug;
 
-  console.log = function() { if (!isNoisy(arguments)) origLog.apply(console, arguments); };
-  console.warn = function() { if (!isNoisy(arguments)) origWarn.apply(console, arguments); };
-  console.error = function() { if (!isNoisy(arguments)) origError.apply(console, arguments); };
+  console.log = function() { if (isAllowed(arguments)) origLog.apply(console, arguments); };
+  console.warn = function() { if (isAllowed(arguments)) origWarn.apply(console, arguments); };
+  console.debug = function() {};
+  // Always allow console.error through (real errors matter)
+  // but filter the WASM noise that uses console.error
+  console.error = function() {
+    if (arguments.length === 0) return;
+    var first = arguments[0];
+    if (typeof first === 'string' && first.length < 10) return;
+    if (typeof first === 'string' && (
+      first.indexOf('__get') !== -1 ||
+      first.indexOf('__flush') !== -1 ||
+      first.indexOf('[ioredis]') !== -1
+    )) return;
+    origError.apply(console, arguments);
+  };
 })();
