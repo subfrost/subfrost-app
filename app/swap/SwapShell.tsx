@@ -2434,10 +2434,10 @@ export default function SwapShell() {
         activePercent={tokenSelectorMode === 'from' ? getActivePercentFrom() : null}
         onBridgeTokenSelect={(tokenSymbol) => {
           const bridgeTokenMap: Record<string, { name: string }> = {
-            ETH: { name: 'Ethereum' },
-            ZEC: { name: 'Zcash' },
+            ETH: { name: 'ETH' },
+            ZEC: { name: 'ZEC' },
             USDT: { name: 'USDT' },
-            USDC: { name: 'USD Coin' },
+            USDC: { name: 'USDC' },
           };
           const tokenInfo = bridgeTokenMap[tokenSymbol];
           if (tokenInfo) {

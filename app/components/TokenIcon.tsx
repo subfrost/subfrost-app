@@ -23,7 +23,7 @@ const sizeMap = {
 
 // Tokens with known local icons in /public/tokens/
 const TOKENS_WITH_LOCAL_ICONS = new Set([
-  'btc', 'frbtc', 'busd', 'eth', 'ordi', 'sol', 'usdt', 'zec', 'frusd', 'freth', 'frzec', 'fire'
+  'btc', 'frbtc', 'busd', 'eth', 'ordi', 'sol', 'usdt', 'usdc', 'zec', 'frusd', 'freth', 'frzec', 'fire'
 ]);
 
 // Alkane IDs with known local icons
