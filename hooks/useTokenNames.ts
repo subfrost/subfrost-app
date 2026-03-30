@@ -29,7 +29,7 @@ async function fetchTokenNames(
       map.set(alkaneId, entry as TokenNameEntry);
     }
 
-  } catch (err) {
+  } catch {
   }
 
   return map;

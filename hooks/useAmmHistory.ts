@@ -238,7 +238,7 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
             poolName: p.poolName ?? d.pool_name ?? '',
           };
         }
-      } catch (e) {
+      } catch {
       }
 
       // Fallback: per-pool ammGetPoolDetails (single simulate each) for any missing
@@ -324,7 +324,6 @@ export function useInfiniteAmmTxHistory({
         const filteredItems = transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap'
           ? rawItems.filter((item: any) => item?.type === transactionType)
           : rawItems;
-
 
         return {
           items: filteredItems,

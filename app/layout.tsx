@@ -58,6 +58,8 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark">
       <head>
+        {/* Console filter — allowlist only. Add ?verbose to URL for full output. */}
+        <script src="/console-filter.js" />
         {/* Prevent zoom on mobile input focus */}
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         {/* Google Analytics */}

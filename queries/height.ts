@@ -132,8 +132,6 @@ export function HeightPoller({ network }: { network: string }) {
     // heights, causing oscillation (e.g. 870001 → 870000 → 870001) that would
     // otherwise trigger spurious invalidations every poll cycle.
     if (height > prevHeight.current) {
-        `[HeightPoller] Height changed ${prevHeight.current} → ${height}, invalidating queries`,
-      );
       prevHeight.current = height;
 
       queryClient.invalidateQueries({

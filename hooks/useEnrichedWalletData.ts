@@ -146,6 +146,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     const wasDisconnected = !prevConnectedRef.current;
 
     if (isReady && wasDisconnected) {
+      console.log('[useEnrichedWalletData] Wallet connected + SDK ready — triggering balance fetch');
       const timer = setTimeout(() => {
         const addresses: string[] = [];
         if (account?.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);

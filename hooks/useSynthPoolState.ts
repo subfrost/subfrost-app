@@ -91,6 +91,7 @@ export function useSynthPoolState() {
           }
         }
       } catch (err) {
+        console.warn('[useSynthPoolState] Failed to fetch reserves (opcode 97):', err);
       }
 
       // Opcode 20: GetTotalFee — returns fee per 1000 as u128
@@ -103,6 +104,7 @@ export function useSynthPoolState() {
           }
         }
       } catch (err) {
+        console.warn('[useSynthPoolState] Failed to fetch fee rate (opcode 20):', err);
       }
 
       // Opcode 101: GetTotalSupply — returns total LP token supply as u128
@@ -115,6 +117,7 @@ export function useSynthPoolState() {
           }
         }
       } catch (err) {
+        console.warn('[useSynthPoolState] Failed to fetch total supply (opcode 101):', err);
       }
 
       // Determine pool type based on fee rate or reserves ratio

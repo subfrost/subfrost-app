@@ -70,6 +70,7 @@ export async function fetchCandles(
       return result.result as CandleResponse;
     }
 
+    console.warn(`[usePoolCandleVolumes] No candle data for pool ${poolId}:`, result);
     return null;
   } catch (error) {
     console.error(`[usePoolCandleVolumes] Error fetching candles for ${poolId}:`, error);

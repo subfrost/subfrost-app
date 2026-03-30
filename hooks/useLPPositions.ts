@@ -37,12 +37,10 @@ export function useLPPositions() {
       }
     }
 
-
     const lpPositions: LPPosition[] = [];
 
     for (const alkane of balances.alkanes) {
       const pool = poolMap.get(alkane.alkaneId);
-
 
       // Use the same filtering logic as AlkanesBalancesCard "Positions" tab:
       // An asset is an LP position if it matches a pool ID, has "LP" in name/symbol, or starts with "POS-"

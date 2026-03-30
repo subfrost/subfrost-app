@@ -22,6 +22,7 @@ export function AlkanesWasmInitializer() {
         if (mounted) {
           setInitialized(true);
           if (process.env.NODE_ENV === 'development') {
+            console.log('✅ Alkanes SDK ready');
           }
         }
       } catch (err) {

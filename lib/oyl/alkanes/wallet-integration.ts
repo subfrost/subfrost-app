@@ -92,6 +92,7 @@ export async function initAlkanesWasm() {
   wasmModule = {};
   
   if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('✅ Alkanes wallet ready (browser-only mode)');
   }
   
   return wasmModule;
@@ -202,6 +203,8 @@ export async function createAlkanesWallet(
     // ✅ Use REAL alkanes-rs SDK to create wallet!
     const alkanesWallet = await createWallet(keystore);
     
+    console.log('Created alkanes wallet:', alkanesWallet);
+    console.log('Wallet methods:', Object.keys(alkanesWallet));
     
     // Check if the wallet has the expected methods
     if (!alkanesWallet || typeof alkanesWallet !== 'object') {

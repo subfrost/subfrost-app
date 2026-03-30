@@ -197,7 +197,6 @@ async function fetchPoolsFromDataApi(
     || parsed?.data?.pools
     || (Array.isArray(parsed?.data) ? parsed.data : []);
 
-
   if (pools.length === 0) {
     throw new Error('dataApiGetAllPoolsDetails returned 0 pools (API may be down)');
   }
@@ -290,7 +289,6 @@ async function fetchPoolsFromPoolsDetailsRest(
   const json = await resp.json();
   const pools: any[] = json?.data?.pools || json?.pools || [];
 
-
   if (pools.length === 0) {
     throw new Error('get-all-pools-details REST returned 0 pools');
   }
@@ -378,7 +376,6 @@ async function fetchPoolsFromTokenPairsRest(
   const json = await resp.json();
   const pools: any[] = json?.data?.pools || (Array.isArray(json?.data) ? json.data : null) || json?.pools || [];
 
-
   const items: PoolsListItem[] = [];
 
   for (const p of pools) {
@@ -457,7 +454,6 @@ async function fetchPoolsFromTokenPairsApi(
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
   // API returns { data: [...] } with pool objects
   const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : []) || (Array.isArray(parsed) ? parsed : []);
-
 
   if (pools.length === 0) {
     throw new Error('dataApiGetAllTokenPairs returned 0 pools');
@@ -542,7 +538,6 @@ async function fetchPoolsFromSDKFallback(
   const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
   const rpcPools = parsed?.pools || [];
 
-
   const items: PoolsListItem[] = [];
 
   for (const p of rpcPools) {
@@ -609,7 +604,6 @@ export function usePools(params: UsePoolsParams = {}) {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!network && !!ALKANE_FACTORY_ID && !!provider,
     queryFn: async () => {
-
       if (!provider) {
         throw new Error('SDK provider not available');
       }
@@ -641,7 +635,7 @@ export function usePools(params: UsePoolsParams = {}) {
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
+        } catch {
         }
       }
 
@@ -649,7 +643,7 @@ export function usePools(params: UsePoolsParams = {}) {
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
+        } catch {
         }
       }
 
@@ -657,7 +651,7 @@ export function usePools(params: UsePoolsParams = {}) {
       if (items.length === 0) {
         try {
           items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
-        } catch (e) {
+        } catch {
         }
       }
 
@@ -711,10 +705,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // (e.g., "DIESEL / frBTC LP") — no need for extra alkanesReflect calls.
 
       // Remove known scam/impersonator pools
-      const beforeCount = items.length;
       items = items.filter(p => !isBlacklistedPool(p));
-      if (items.length < beforeCount) {
-      }
 
       // Remove dust/dead pools with negligible TVL (skip on regtest/devnet where pricing is unavailable)
       if (!network?.includes('regtest') && network !== 'devnet') {

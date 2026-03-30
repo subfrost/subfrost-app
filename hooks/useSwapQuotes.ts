@@ -230,19 +230,6 @@ export function useSwapQuotes(
   const { data: sellPairs, isFetching: fetchingSell, isError: sellError, error: sellErrorObj } = useAlkanesTokenPairs(sellCurrencyId);
   const { data: buyPairs, isFetching: fetchingBuy, isError: buyError, error: buyErrorObj } = useAlkanesTokenPairs(buyCurrencyId);
 
-  // DIAGNOSTIC: Log pool fetching status
-    sellCurrencyId,
-    buyCurrencyId,
-    sellPairs: sellPairs?.length ?? 'undefined',
-    buyPairs: buyPairs?.length ?? 'undefined',
-    fetchingSell,
-    fetchingBuy,
-    sellError,
-    buyError,
-    sellErrorObj: sellErrorObj?.message,
-    buyErrorObj: buyErrorObj?.message,
-  });
-  
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
   const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
@@ -374,6 +361,9 @@ export function useSwapQuotes(
       }
 
       // Log pool discovery for debugging
+      console.log('[useSwapQuotes] Looking for direct pool:', { sellCurrencyId, buyCurrencyId });
+      console.log('[useSwapQuotes] sellPairs count:', sellPairs.length);
+      console.log('[useSwapQuotes] sellPairs tokens:', sellPairs.map((p: any) => ({
         token0: p.token0.id,
         token1: p.token1.id,
         poolId: p.poolId,
@@ -384,6 +374,7 @@ export function useSwapQuotes(
           (p.token0.id === sellCurrencyId && p.token1.id === buyCurrencyId) ||
           (p.token0.id === buyCurrencyId && p.token1.id === sellCurrencyId),
       );
+      console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
       if (direct) {
         return calculateSwapPrice(
           sellCurrencyId,
@@ -453,6 +444,7 @@ export function useSwapQuotes(
             const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
             routes.push({ ...secondHop, sellAmount: overallSellAmount, displaySellAmount: fromAlks(overallSellAmount), exchangeRate: overallExchangeRate, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
+            console.warn('BUSD bridge route failed:', e);
           }
         } else {
           try {
@@ -485,6 +477,7 @@ export function useSwapQuotes(
             const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();
             routes.push({ ...firstHop, buyAmount: overallBuyAmount, displayBuyAmount: fromAlks(overallBuyAmount), exchangeRate: overallExchangeRate, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
+            console.warn('BUSD bridge route failed:', e);
           }
         }
       }
@@ -523,6 +516,7 @@ export function useSwapQuotes(
             const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
             routes.push({ ...secondHop, sellAmount: overallSellAmount, displaySellAmount: fromAlks(overallSellAmount), exchangeRate: overallExchangeRate, direction: 'sell', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
+            console.warn('frBTC bridge route failed:', e);
           }
         } else {
           try {
@@ -555,6 +549,7 @@ export function useSwapQuotes(
             const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();
             routes.push({ ...firstHop, buyAmount: overallBuyAmount, displayBuyAmount: fromAlks(overallBuyAmount), exchangeRate: overallExchangeRate, direction: 'buy', inputAmount: debouncedAmount, route: [sellCurrencyId, mid, buyCurrencyId], hops: 2 } as SwapQuote);
           } catch (e) {
+            console.warn('frBTC bridge route failed:', e);
           }
         }
       }

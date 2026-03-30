@@ -66,6 +66,7 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
               userBalanceFormatted = new BigNumber(userBalance).dividedBy(1e8).toFixed(8);
             }
           } catch (error) {
+            console.warn('Failed to fetch user vault balance:', error);
           }
         }
 
@@ -99,6 +100,7 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
             tvlFormatted = new BigNumber(tvl).dividedBy(1e8).toFixed(8);
           }
         } catch (error) {
+          console.warn('[useVaultStats] Failed to fetch TotalAssets (opcode 11):', error);
         }
 
         // Opcode 101: GetTotalSupply — returns total vault tokens in circulation
@@ -119,6 +121,7 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
             totalSupply = parseU128FromBytes(totalSupplyResult.execution.data);
           }
         } catch (error) {
+          console.warn('[useVaultStats] Failed to fetch GetTotalSupply (opcode 101):', error);
         }
 
         // Calculate share price = totalAssets / totalSupply

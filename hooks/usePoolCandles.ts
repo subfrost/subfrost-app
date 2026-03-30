@@ -71,6 +71,7 @@ export function usePoolCandles({
       const poolConfig = pools[resolvedPoolKey];
 
       if (!poolConfig) {
+        console.warn(`[usePoolCandles] Pool not found: ${resolvedPoolKey}`);
         return [];
       }
 
@@ -95,6 +96,7 @@ export function usePoolCandles({
       );
 
       if (dataPoints.length === 0) {
+        console.warn(`[usePoolCandles] No data points returned for ${resolvedPoolKey}`);
         return [];
       }
 

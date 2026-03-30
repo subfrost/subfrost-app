@@ -364,10 +364,6 @@ export default function SwapShell() {
 
     // First visit: use trending (highest volume) pool — or first pool by TVL if no volume data yet
     if (topVolumePool) {
-        vol24h: topVolumePool.vol24hUsd,
-        vol30d: topVolumePool.vol30dUsd,
-        tvl: topVolumePool.tvlUsd,
-      });
       setFromToken(topVolumePool.token0);
       setToToken(topVolumePool.token1);
       setSelectedPool(topVolumePool);
@@ -385,9 +381,6 @@ export default function SwapShell() {
 
     // Check if trending pool changed now that volume data is available
     if (topVolumePool.id !== selectedPool?.id) {
-        vol24h: topVolumePool.vol24hUsd,
-        vol30d: topVolumePool.vol30dUsd,
-      });
       setFromToken(topVolumePool.token0);
       setToToken(topVolumePool.token1);
       setSelectedPool(topVolumePool);
@@ -1015,16 +1008,6 @@ export default function SwapShell() {
   }, [swapFlowStep, isBtcToTokenSwap, isTokenToBtcSwap, fromToken?.symbol, toToken?.symbol, t]);
 
   const handleSwap = async () => {
-      fromToken: fromToken?.id,
-      toToken: toToken?.id,
-      FRBTC_ALKANE_ID,
-      isWrapPair,
-      isUnwrapPair,
-      fromAmount,
-      toAmount,
-      direction,
-    });
-
     if (!fromToken || !toToken) return;
 
     // Wrap/Unwrap direct pairs
@@ -1205,7 +1188,7 @@ export default function SwapShell() {
                 body: JSON.stringify({ blocks: 1, address }),
               });
             }
-          } catch (mineErr) {
+          } catch {
           }
         }
 
@@ -1265,7 +1248,6 @@ export default function SwapShell() {
         });
 
         if (swapRes?.success && swapRes.transactionId) {
-
           // On devnet, mine a block to confirm the swap tx so balances update
           if (network === 'devnet' && address) {
             try {
@@ -1369,7 +1351,7 @@ export default function SwapShell() {
                 body: JSON.stringify({ blocks: 1, address }),
               });
             }
-          } catch (mineErr) {
+          } catch {
           }
         }
 
@@ -1391,12 +1373,10 @@ export default function SwapShell() {
             });
             const txData = await txResp.json();
             if (txData?.result?.status?.confirmed) {
-              const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
               await new Promise(resolve => setTimeout(resolve, 2000));
               swapConfirmed = true;
               break;
             }
-            const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
           } catch {
             // Polling error — keep retrying
           }
@@ -1447,7 +1427,7 @@ export default function SwapShell() {
               // unwrapMutation.amount expects display units — toAlks(amount) converts back.
               frbtcAmount = (Number(totalFrbtc) / 1e8).toFixed(8);
             }
-          } catch (err) {
+          } catch {
           }
         }
 
@@ -1457,7 +1437,6 @@ export default function SwapShell() {
         });
 
         if (unwrapRes?.success && unwrapRes.transactionId) {
-
           // On devnet, mine a block to confirm the unwrap tx so BTC balance updates
           if (network === 'devnet' && address) {
             try {
@@ -1513,11 +1492,6 @@ export default function SwapShell() {
     // Multi-hop swaps use the factory's opcode 13 with a token path, not a single poolId.
     // The quote.route array indicates multi-hop (e.g., [DIESEL, bUSD, frBTC]).
     const hasValidRoute = quote.route && quote.route.length >= 2;
-      poolId: quote.poolId,
-      route: quote.route,
-      hasValidRoute,
-      error: quote.error,
-    });
     if (!quote.poolId && !hasValidRoute) {
       console.error('[SWAP] No poolId or route in quote - cannot execute swap');
       console.error('[SWAP] Full quote object:', JSON.stringify(quote, null, 2));
@@ -1606,7 +1580,6 @@ export default function SwapShell() {
   };
 
   const handleAddLiquidity = async () => {
-
     if (!poolToken0 || !poolToken1) {
       window.alert('Please select both tokens');
       return;
@@ -1663,7 +1636,6 @@ export default function SwapShell() {
   };
 
   const handleRemoveLiquidity = async () => {
-
     if (!selectedLPPosition) {
       window.alert('Please select an LP position to remove');
       return;
@@ -1784,11 +1756,6 @@ export default function SwapShell() {
 
   // Prepare token options for modal with balances and prices.
   // resolveTokenDisplay is imported from useTokenNames — uses tokenNamesMap as primary source.
-
-  // Diagnostic: log token name data sources (runs once per data change, not every render)
-  useEffect(() => {
-    if (!tokenNamesMap || tokenNamesMap.size === 0) return;
-  }, [tokenNamesMap]);
 
   const fromTokenOptions = useMemo<TokenOption[]>(() => {
     const options = fromOptions.map((token) => {
