@@ -79,7 +79,8 @@ let segwitAddress: string;
 let taprootAddress: string;
 
 // Deployed contract IDs
-let ammPoolId: string = '';
+let ammFactoryId: string = '';   // set from deployAmmContracts().factoryId
+let ammPoolId: string = '';      // set after pool creation — shared by AMM suite
 let dxBtcVaultId: string = '';
 let fujinMasterId: string = '';
 let fujinFactoryId: string = '';
@@ -245,9 +246,11 @@ beforeAll(async () => {
   console.log('[invariants] Chain ready, height:', harness.height);
 
   // --- AMM ---
+  // deployAmmContracts returns { factoryId, beaconId, poolLogicId } — no poolId.
+  // Store factoryId for pool creation/discovery in the AMM suite beforeAll.
   const amm = await deployAmmContracts(provider, signer, segwitAddress, taprootAddress, harness);
-  ammPoolId = amm.poolId || '';
-  console.log('[invariants] AMM deployed, pool:', ammPoolId);
+  ammFactoryId = amm.factoryId;
+  console.log('[invariants] AMM deployed, factory:', ammFactoryId);
 
   // --- Mint DIESEL ---
   for (let i = 0; i < 5; i++) {
@@ -1198,17 +1201,20 @@ describe('frBTC Wrap / Unwrap Invariants', () => {
 
 describe('AMM Swap Invariants', () => {
 
-  // State for this section — pool must be created before swaps
-  let ammPoolId: string = '';
+  // NOTE: Uses file-level `ammPoolId` and `ammFactoryId` — no local shadows.
+  // ammFactoryId is set in the global beforeAll from deployAmmContracts().factoryId.
+  // ammPoolId is set here and shared with all tests in this suite.
 
   beforeAll(async () => {
-    // Create DIESEL/frBTC pool if it doesn't exist
+    // ammFactoryId must be set by global beforeAll — fail fast if not
+    if (!ammFactoryId) {
+      throw new Error('ammFactoryId not set — AMM deployment in global beforeAll failed');
+    }
+
+    // Ensure enough tokens for pool seed + swap tests
     const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
     const frbtcBal = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
-
     if (dieselBal < 2000n || frbtcBal < 2000n) {
-      console.log('[invariants] AMM beforeAll: low balances DIESEL=%s frBTC=%s — minting',
-        dieselBal.toString(), frbtcBal.toString());
       await executeAlkanes('[2,0,77]:v0:v0', 'B:10000:v0');
       mineBlocks(harness, 1);
     }
@@ -1216,13 +1222,11 @@ describe('AMM Swap Invariants', () => {
     const d = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
     const f = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
     if (d === 0n || f === 0n) {
-      console.log('[invariants] AMM beforeAll: cannot create pool, skipping AMM invariants');
-      return;
+      throw new Error('AMM beforeAll: zero token balance after mint — wrap/mint failed');
     }
 
-    // Find or create pool using factory opcode 1 (CreateNewPool)
-    // First check if pool exists (opcode 2 = FindExistingPoolId)
-    const findResult = await simulateAlkane(DEVNET.FACTORY_ID, ['2', '2', '0', '32', '0']);
+    // Check if pool already exists (opcode 2 = FindExistingPoolId on factory)
+    const findResult = await simulateAlkane(ammFactoryId, ['2', '2', '0', '32', '0']);
     if (!findResult?.result?.execution?.error && findResult?.result?.execution?.data) {
       const hex = findResult.result.execution.data.replace('0x', '');
       if (hex.length >= 32) {
@@ -1237,32 +1241,29 @@ describe('AMM Swap Invariants', () => {
       }
     }
 
-    // Pool doesn't exist — create it
+    // Pool doesn't exist — create it with factory opcode 1 (CreateNewPool)
     const seedDiesel = d / 3n;
     const seedFrbtc = f / 3n;
-    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
-    try {
-      await executeAlkanes(
-        `[${fB},${fT},1,2,0,32,0,${seedDiesel},${seedFrbtc}]:v0:v0`,
-        `2:0:${seedDiesel},32:0:${seedFrbtc}`,
-      );
-      mineBlocks(harness, 1);
-    } catch (e: any) {
-      console.log('[invariants] AMM pool creation error:', e?.message?.slice(0, 100));
-      return;
-    }
+    const [fB, fT] = ammFactoryId.split(':');
+    await executeAlkanes(
+      `[${fB},${fT},1,2,0,32,0,${seedDiesel},${seedFrbtc}]:v0:v0`,
+      `2:0:${seedDiesel},32:0:${seedFrbtc}`,
+    );
+    mineBlocks(harness, 1);
 
-    // Discover pool ID
-    const poolResult = await simulateAlkane(DEVNET.FACTORY_ID, ['2', '2', '0', '32', '0']);
-    if (poolResult?.result?.execution?.data) {
-      const hex = poolResult.result.execution.data.replace('0x', '');
-      if (hex.length >= 32) {
-        const buf = Buffer.from(hex, 'hex');
-        const b = Number(buf.readBigUInt64LE(0));
-        const t = Number(buf.readBigUInt64LE(16));
-        if (b > 0) ammPoolId = `${b}:${t}`;
-      }
+    // Discover pool ID — must succeed or throw
+    const poolResult = await simulateAlkane(ammFactoryId, ['2', '2', '0', '32', '0']);
+    const poolHex = poolResult?.result?.execution?.data?.replace('0x', '') || '';
+    if (poolHex.length < 32) {
+      throw new Error('AMM pool creation failed — FindExistingPoolId returned empty after CreateNewPool');
     }
+    const buf = Buffer.from(poolHex, 'hex');
+    const b = Number(buf.readBigUInt64LE(0));
+    const t = Number(buf.readBigUInt64LE(16));
+    if (b === 0) {
+      throw new Error('AMM pool creation failed — pool AlkaneId block is zero');
+    }
+    ammPoolId = `${b}:${t}`;
     console.log('[invariants] AMM pool created:', ammPoolId);
   }, 120_000);
 
@@ -1287,7 +1288,7 @@ describe('AMM Swap Invariants', () => {
     }
 
     const swapAmt = dieselBefore / 10n;
-    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+    const [fB, fT] = ammFactoryId.split(':');
 
     await executeAlkanes(
       `[${fB},${fT},13,2,2,0,32,0,${swapAmt},1,99999]:v0:v0`,
@@ -1328,7 +1329,7 @@ describe('AMM Swap Invariants', () => {
     }
 
     const swapAmt = frbtcBefore / 10n;
-    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+    const [fB, fT] = ammFactoryId.split(':');
 
     await executeAlkanes(
       `[${fB},${fT},13,2,32,0,2,0,${swapAmt},1,99999]:v0:v0`,
@@ -1372,7 +1373,7 @@ describe('AMM Swap Invariants', () => {
     // Sell DIESEL into pool
     const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
     const swapAmt = dieselBal > 100n ? dieselBal / 20n : 10n;
-    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+    const [fB, fT] = ammFactoryId.split(':');
     await executeAlkanes(
       `[${fB},${fT},13,2,2,0,32,0,${swapAmt},1,99999]:v0:v0`,
       `2:0:${swapAmt}`,
@@ -1461,7 +1462,7 @@ describe('AMM Swap Invariants', () => {
 
     const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
     const swapAmt = dieselBal > 100n ? dieselBal / 20n : 1n;
-    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+    const [fB, fT] = ammFactoryId.split(':');
     await executeAlkanes(
       `[${fB},${fT},13,2,2,0,32,0,${swapAmt},1,99999]:v0:v0`,
       `2:0:${swapAmt}`,
@@ -1559,41 +1560,59 @@ describe('Carbine Buy-Side and Order Matching Invariants', () => {
 
   it('Crossing order: placing bid > ask reduces OpenOrderCount (taker fill)', async () => {
     // JOURNAL: The matching engine must execute when a taker order crosses the spread.
-    // If a buy at price 60000 lands on a resting sell at 50000, the sell must fill.
-    // Verification: open order count decreases after crossing order is placed.
-    // If count stays the same, the matcher did not run — passive crossing is a bug.
+    // ISOLATION FIX (2026-03-30): Prior version assumed a resting sell from an earlier
+    // test suite. That creates an implicit ordering dependency — if the earlier cancel
+    // test removed the resting order, or tests ran in isolation, there was nothing to
+    // cross and the assertion failed spuriously.
     //
-    // Note: depending on whether the Carbine CLOB is a pure limit-order book or
-    // hybrid AMM-CLOB, crossing may settle at maker price (50000) or taker price.
-    // We only verify the count change, not the fill price, to remain ABI-agnostic.
+    // This version is self-contained: it explicitly places a known resting sell FIRST,
+    // then crosses it. The count delta is guaranteed to be -1 if the matcher ran.
+    //
+    // Note: crossing may settle at maker price (50000) or taker price depending on
+    // CLOB model. We assert count reduction only, not fill price.
 
-    const countBefore = parseU64(
-      assertSimOk(await simulateAlkane(CARBINE_CONTROLLER, ['25']), 'count before crossing'),
-      0,
-    );
+    const [cB, cT] = CARBINE_CONTROLLER.split(':');
 
-    const frbtcBal = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
-    if (frbtcBal < 100n) {
-      throw new Error('Insufficient frBTC to place crossing order');
+    // Step 1: ensure we have DIESEL to place the sell side
+    const diesel = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    if (diesel < 200n) {
+      throw new Error('Insufficient DIESEL to place resting sell for crossing test');
+    }
+    const frbtc = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (frbtc < 200n) {
+      throw new Error('Insufficient frBTC to place crossing buy');
     }
 
-    // Place a buy at 60000 — above the resting ask at 50000 → should trigger a fill
-    const crossAmount = 100n;
-    const [cB, cT] = CARBINE_CONTROLLER.split(':');
+    // Step 2: place a known resting sell at price 50000
+    const sellAmt = 200n;
     await executeAlkanes(
-      `[${cB},${cT},20,2,0,32,0,0,60000,${crossAmount}]:v0:v0`,
-      `32:0:${crossAmount}`,
+      `[${cB},${cT},20,2,0,32,0,1,50000,${sellAmt}]:v0:v0`,
+      `2:0:${sellAmt}`,
+    );
+
+    // Step 3: snapshot count — we now know there is AT LEAST 1 resting sell
+    const countBefore = parseU64(
+      assertSimOk(await simulateAlkane(CARBINE_CONTROLLER, ['25']), 'count after placing sell'),
+      0,
+    );
+    expect(countBefore).toBeGreaterThan(0n); // sanity: sell was placed
+
+    // Step 4: cross it — buy at 60000 (above the 50000 ask) → fill should execute
+    const crossAmt = 200n;
+    await executeAlkanes(
+      `[${cB},${cT},20,2,0,32,0,0,60000,${crossAmt}]:v0:v0`,
+      `32:0:${crossAmt}`,
     );
 
     const countAfter = parseU64(
-      assertSimOk(await simulateAlkane(CARBINE_CONTROLLER, ['25']), 'count after crossing'),
+      assertSimOk(await simulateAlkane(CARBINE_CONTROLLER, ['25']), 'count after crossing buy'),
       0,
     );
 
-    console.log('[invariants] Crossing fill: order count %s → %s', countBefore.toString(), countAfter.toString());
+    console.log('[invariants] Crossing fill: order count %s → %s (expected decrease)',
+      countBefore.toString(), countAfter.toString());
 
-    // A taker fill removes the maker order from the book.
-    // Count decreases if fill happened (or stays same if no fill — we assert decrease).
+    // The resting sell was filled → removed from book → count decreases
     expect(countAfter).toBeLessThan(countBefore);
   }, 120_000);
 
@@ -1695,42 +1714,56 @@ describe('Fujin MintPair Full Flow Invariants', () => {
     const epoch = epochData.length >= 8 ? Number(parseU64(epochData, 0)) : 0;
     console.log('[invariants] Current epoch:', epoch);
 
-    // Call InitEpoch (opcode 1 on factory) to ensure pool exists for this epoch
+    // Call InitEpoch (opcode 1 on factory) to ensure pool exists for this epoch.
+    // InitEpoch is idempotent — if the pool already exists it returns an error,
+    // which we allow. But if it fails for any other reason we want to know.
     const [ffB, ffT] = fujinFactoryIdFull.split(':');
-    try {
-      await executeAlkanes(`[${ffB},${ffT},1]:v0:v0`, 'B:100000:v0');
-      mineBlocks(harness, 1);
-    } catch (e: any) {
-      console.log('[invariants] InitEpoch error (may already exist):', e?.message?.slice(0, 80));
-    }
+    const initResult = await (provider as any).alkanesExecuteFull(
+      JSON.stringify([taprootAddress]),
+      'B:100000:v0',
+      `[${ffB},${ffT},1]:v0:v0`,
+      1,
+      null,
+      JSON.stringify({
+        from_addresses: [segwitAddress, taprootAddress],
+        change_address: segwitAddress,
+        alkanes_change_address: taprootAddress,
+        ordinals_strategy: 'burn',
+      }),
+    );
+    mineBlocks(harness, 1);
+    console.log('[invariants] InitEpoch result:', initResult?.reveal_txid || initResult?.error || 'unknown');
 
-    // GetEpochPool for current epoch
+    // GetEpochPool — must return a valid pool AlkaneId or throw
     const poolResult = await simulateAlkane(fujinFactoryIdFull, ['2', String(epoch)]);
     const pData = poolResult?.result?.execution?.data?.replace('0x', '') || '';
     if (pData.length < 32) {
-      console.log('[invariants] MintPair beforeAll: no pool for epoch', epoch);
-      return;
+      throw new Error(`Fujin MintPair beforeAll: GetEpochPool returned empty for epoch ${epoch} — InitEpoch may have failed`);
     }
     const pBuf = Buffer.from(pData, 'hex');
     const pBlock = Number(pBuf.readBigUInt64LE(0));
     const pTx = Number(pBuf.readBigUInt64LE(16));
-    if (pBlock === 0) return;
+    if (pBlock === 0) {
+      throw new Error(`Fujin MintPair beforeAll: pool AlkaneId block is 0 for epoch ${epoch}`);
+    }
     fujinPoolIdFull = `${pBlock}:${pTx}`;
     console.log('[invariants] MintPair pool:', fujinPoolIdFull);
 
-    // GetInfo (opcode 40) to extract LONG + SHORT token IDs
-    // Layout: epoch(16 bytes) + token_a_block(8) + token_a_tx(8) + gap(8) + token_b_block(8) + token_b_tx(8) ...
+    // GetInfo (opcode 40) to extract LONG + SHORT token IDs — must succeed or throw
+    // Layout: epoch(16 bytes) + token_a_block(8) + token_a_tx(8) + gap(8) + token_b_block(8) + token_b_tx(8)
     // Source: e2e-full-protocol.test.ts:383-391 — confirmed offset layout
     const infoResult = await simulateAlkane(fujinPoolIdFull, ['40']);
     const iData = infoResult?.result?.execution?.data?.replace('0x', '') || '';
-    if (iData.length >= 160) {
-      const iBuf = Buffer.from(iData, 'hex');
-      // token_a at byte offset 16 (block) and 24 (tx)
-      // token_b at byte offset 48 (block) and 56 (tx) — confirmed from e2e-full-protocol.test.ts:389-390
-      longTokenId = `${Number(iBuf.readBigUInt64LE(16))}:${Number(iBuf.readBigUInt64LE(32))}`;
-      shortTokenId = `${Number(iBuf.readBigUInt64LE(48))}:${Number(iBuf.readBigUInt64LE(64))}`;
-      console.log('[invariants] LONG token:', longTokenId, 'SHORT token:', shortTokenId);
+    if (iData.length < 160) {
+      throw new Error(`Fujin MintPair beforeAll: GetInfo returned ${iData.length / 2} bytes — expected ≥ 80. Pool may not have LONG/SHORT tokens initialized.`);
     }
+    const iBuf = Buffer.from(iData, 'hex');
+    longTokenId = `${Number(iBuf.readBigUInt64LE(16))}:${Number(iBuf.readBigUInt64LE(32))}`;
+    shortTokenId = `${Number(iBuf.readBigUInt64LE(48))}:${Number(iBuf.readBigUInt64LE(64))}`;
+    if (longTokenId.startsWith('0:') || shortTokenId.startsWith('0:')) {
+      throw new Error(`Fujin MintPair beforeAll: LONG=${longTokenId} SHORT=${shortTokenId} — zero token ID, tokens not issued by CreateMarket`);
+    }
+    console.log('[invariants] LONG token:', longTokenId, 'SHORT token:', shortTokenId);
   }, 180_000);
 
   // -------------------------------------------------------------------------
