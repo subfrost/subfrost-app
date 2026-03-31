@@ -7,6 +7,12 @@
 
 ## Pre-Work
 
+### Rule 0a — Verify Before Asserting Impossibility
+NEVER declare something "impossible" based on code comments alone. Check git history first (`git log --all --grep="keyword"`), then run the code. A deployment bug is not an architectural limitation.
+
+### Rule 0b — MANDATORY: useActualAddresses in ALL Mutation Hooks
+Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr). On devnet, symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, NOT the connected wallet's — causing "insufficient balance" errors. Use `isBrowserWallet` ONLY for signing logic and patchInputsOnly. Test enforcement: `address-handling.test.ts` asserts this pattern exists in every hook.
+
 ### Rule 1 — The "Step 0" Rule: Dead Code First
 Dead code accelerates context compaction. Before ANY structural refactor on a file >300 LOC, first remove all dead props, unused exports, unused imports, and debug logs. Commit this cleanup separately before starting the real work.
 
