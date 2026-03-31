@@ -3,22 +3,80 @@
  *
  * Tests the complete hybrid orderbook lifecycle:
  *
- * Setup:
+ * Setup (beforeAll):
  *   - Deploy AMM contracts (factory, pool, beacon)
- *   - Deploy carbine controller + template
- *   - Deploy universal router
- *   - Mint tokens, create AMM pool
+ *   - Deploy Carbine via full proxy/beacon pattern:
+ *       Controller: impl [4:80000] + upgradeable proxy [4:70000]
+ *       Template:   impl [4:80001] + beacon [4:90001] + instance [4:70001]
+ *       Router:     impl [4:80002] + upgradeable proxy [4:70002]
+ *   - Initialize controller with template reference [4:70001]
+ *   - Mint DIESEL, wrap frBTC, create AMM pool
  *
- * Orderbook tests:
- *   1. Place limit buy order (deposit → carbine minted)
- *   2. Place limit sell order
- *   3. Query orderbook depth (best bid, best ask, spread)
- *   4. Cancel order (carbine burned, tokens returned)
- *   5. Market order fills against CLOB orders
- *   6. Partial fill creates remainder carbine
- *   7. FIFO ordering at same price level
- *   8. Query open order count
- *   9. Hybrid routing: CLOB + AMM best execution
+ * AMM Baseline (2 tests):
+ *   - Pool reserves query
+ *   - Baseline swap (DIESEL → frBTC)
+ *
+ * Carbine Controller Simulation (5 tests):
+ *   - GetOpenOrderCount, GetBestBid, GetBestAsk, GetOrderbookDepth
+ *   - PlaceLimitOrder simulation (with token payload)
+ *   - CancelOrder simulation
+ *
+ * Universal Router Simulation (2 tests):
+ *   - Quote (opcode 2), GetController (opcode 5)
+ *
+ * Orderbook Data Structures (6 unit tests):
+ *   - Price encoding (bids direct, asks inverted for trie FIFO ordering)
+ *   - Spread, cumulative totals, bid/ask boundary separation
+ *
+ * Hybrid Routing Logic (5 unit tests):
+ *   - CLOB better than AMM → use CLOB
+ *   - AMM better → use AMM
+ *   - Interleaved CLOB + AMM fills for large orders
+ *   - Empty orderbook / empty AMM fallback
+ *
+ * Carbine Lifecycle (4 unit tests):
+ *   - Balance sheet encoding (carbine IS the order)
+ *   - Partial fill creates remainder carbine
+ *   - FIFO ordinal numbering at same price level
+ *   - Cancel = remap carbine → refund tokens
+ *
+ * On-Chain CLOB Operations (7 tests, require carbineDeployed):
+ *   - Place real limit sell order (DIESEL @ 50000) → verify DIESEL locked
+ *   - Verify open order count >= 0
+ *   - Verify orderbook depth returns bytes
+ *   - Verify empty bid/ask succeed with no error
+ *   - Query depth + best bid/ask with real orders
+ *   - CancelOrder with invalid sequence → "carbine not found" error
+ *
+ * Extended On-Chain CLOB User Stories (5 tests, 2026-03-30):
+ *   - Place limit buy order (frBTC @ 40000) → verify frBTC locked
+ *   - Two-sided spread: verify both bid/ask after buy + sell
+ *   - Multiple price levels (55k, 60k) → build orderbook depth
+ *   - GetOpenOrderCount → >= 1 after all placed orders
+ *   - Cancel order flow via GetNextActiveTokenId discovery
+ *
+ * Edge Cases (4 unit tests):
+ *   - Zero liquidity orderbook → spread = null
+ *   - Crossed orderbook (bid >= ask) → fill at maker price
+ *   - Dust amounts below 546 sats
+ *   - Max price levels trie ordering
+ *
+ * DEPLOYMENT NOTES:
+ * - Production (browser DevnetContext) uses proxy/beacon from lib/devnet/boot.ts
+ * - This test also uses proxy/beacon — same pattern, confirmed working on devnet
+ * - CREATERESERVED atomic rollback applies: init args MUST use valid opcodes
+ *   Controller impl: [0, 0, 0] (Initialize with dummy template [0:0])
+ *   Template impl: [3] (query_metadata — read-only, stateless, safe)
+ *   Router impl: [0] (Initialize with no args)
+ * - See boot.ts deployWasm() and CLAUDE.md for full CREATERESERVED docs
+ *
+ * QA FINDING (2026-03-30):
+ * - PlaceLimitOrder creates a REAL on-chain carbine (DIESEL balance reduces)
+ * - OrderCount returns 1 after first sell order
+ * - BestAsk returns price data after sell
+ * - Orderbook depth: 328 bytes (vs 8 bytes empty)
+ * - Buy side (frBTC locked): verified working, frBTC balance reduces
+ * - Cancel opcode 21 error is semantic ("carbine not found") not binary
  *
  * Run: pnpm vitest run __tests__/devnet/e2e-carbine-clob.test.ts --testTimeout=600000
  */
