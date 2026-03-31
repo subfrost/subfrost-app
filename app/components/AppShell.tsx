@@ -8,6 +8,24 @@ import MobileBottomNav from '@/app/components/MobileBottomNav';
 import DemoBanner from '@/app/components/DemoBanner';
 import SplashScreen from '@/app/components/SplashScreen';
 import ConnectWalletModal from '@/app/components/ConnectWalletModal';
+import { useWallet } from '@/context/WalletContext';
+
+// JOURNAL (2026-03-31): Guard ConnectWalletModal mount at the AppShell level.
+// Previously the modal used `if (!isConnectModalOpen) return null` internally.
+// In React 18 Strict Mode (reactStrictMode: true in next.config.mjs), components
+// mount → unmount → remount during development. When the close handler called
+// onConnectModalOpenChange(false) + resetForm() synchronously, React attempted
+// to removeChild a node that Strict Mode had already unmounted in the first
+// pass, producing:
+//   "Failed to execute 'removeChild' on 'Node': The node to be removed is
+//    not a child of this node."
+// Fix: gate the mount here so the component is never in a partial-unmount state.
+// The modal only enters the React tree when open, and exits cleanly when closed.
+function ConnectWalletModalGate() {
+  const { isConnectModalOpen } = useWallet();
+  if (!isConnectModalOpen) return null;
+  return <ConnectWalletModal />;
+}
 
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -24,7 +42,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <Footer />
       <MobileBottomNav />
       <FloatingActions />
-      <ConnectWalletModal />
+      <ConnectWalletModalGate />
       {/* Spacer for mobile bottom nav (nav height + bottom gap + breathing room) */}
       <div className="h-24 md:hidden" />
     </div>

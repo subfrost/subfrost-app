@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload, RotateCcw, X, Ticket } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
@@ -139,27 +139,29 @@ export default function ConnectWalletModal() {
   };
 
   const handleClose = () => {
-    onConnectModalOpenChange(false);
-    // resetForm is deferred so React can finish unmounting the modal DOM before
-    // any state teardown runs. Calling resetForm() synchronously while the modal
-    // is unmounting causes "removeChild: node is not a child" because React still
-    // holds refs to nodes that state updates would re-render.
-    setTimeout(resetForm, 0);
+    // JOURNAL (2026-03-31): Use startTransition so React treats the modal unmount
+    // as a low-priority transition. This prevents the "removeChild: node is not a
+    // child" error that fires in React 18 Strict Mode when onConnectModalOpenChange(false)
+    // and resetForm() both run synchronously — Strict Mode double-invokes unmounts,
+    // leaving the DOM in a state where React's fiber tree and the real DOM diverge.
+    // The mount guard has also been moved to AppShell (ConnectWalletModalGate) so
+    // this component is never in a partial-unmount state. startTransition provides
+    // a second layer of safety by deferring the state update to a non-blocking pass.
+    startTransition(() => {
+      onConnectModalOpenChange(false);
+      resetForm();
+    });
   };
 
   const handleCloseAndNavigate = () => {
-    // Close the modal first, then defer navigation + reset.
-    // router.push() triggers a re-render/unmount of this component — if called
-    // synchronously inside an async handler the component unmounts mid-event,
-    // causing "Failed to execute 'removeChild' on 'Node': The node to be removed
-    // is not a child of this node."
-    // Deferring with setTimeout(0) lets React flush the current render cycle
-    // (modal unmount) before the navigation side-effect fires.
-    onConnectModalOpenChange(false);
-    setTimeout(() => {
+    // startTransition defers the close + reset to a non-blocking pass so React
+    // finishes the current render cycle before unmounting. router.push is kept
+    // outside the transition because navigation is always urgent.
+    startTransition(() => {
+      onConnectModalOpenChange(false);
       resetForm();
-      router.push('/wallet');
-    }, 0);
+    });
+    router.push('/wallet');
   };
 
   const handleCreateWallet = async () => {
@@ -398,6 +400,10 @@ export default function ConnectWalletModal() {
     }
   };
 
+  // Mount guard moved to ConnectWalletModalGate in AppShell.tsx.
+  // This component is only rendered when isConnectModalOpen === true, so the
+  // guard here is redundant. Keeping it as a safety net in case the component
+  // is ever rendered outside AppShell.
   if (!isConnectModalOpen) return null;
 
   return (

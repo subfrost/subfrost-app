@@ -1025,86 +1025,41 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // The modal component handles its own UI state (loading/connecting overlay).
 
       if (walletId === 'xverse') {
-        // JOURNAL (2026-03-15): Xverse connection debugging.
-        // The provider.request() call hangs if the extension service worker is stale.
-        // Try multiple approaches and add timeout to prevent infinite waiting.
+        // Xverse connection using direct request('getAccounts') - no connect() fallback
+        // 2026-03-17: Removed connect() attempt - it doesn't trigger popups properly.
+        // Direct request() is the working pattern (same as OYL's getAddresses()).
         const xverseProvider = (window as any).XverseProviders?.BitcoinProvider;
 
         console.log('[WalletContext] Xverse: ===== CONNECTION START =====');
-        console.log('[WalletContext] Xverse: BitcoinProvider:', typeof xverseProvider);
-        console.log('[WalletContext] Xverse: Provider object:', xverseProvider);
-
-        if (!xverseProvider) throw new Error('Xverse wallet not detected. Please install the Xverse extension.');
-
-        // Check if the extension is responsive by checking btc_providers
-        const btcProviders = (window as any).btc_providers;
-        console.log('[WalletContext] Xverse: window.btc_providers:', btcProviders);
-        const xverseFromBtcProviders = btcProviders?.find?.((p: any) => p.id === 'XverseProviders.BitcoinProvider' || p.name?.toLowerCase().includes('xverse'));
-        console.log('[WalletContext] Xverse: Found in btc_providers:', xverseFromBtcProviders);
-
-        // Try to ping the extension first with a simple method
-        console.log('[WalletContext] Xverse: Testing extension responsiveness...');
-
-        let accounts: any[] = [];
-
-        // Wrap in a timeout to detect hung extension
-        const connectionPromise = new Promise<any>(async (resolve, reject) => {
-          try {
-            console.log('[WalletContext] Xverse: calling request("getAccounts")...');
-            console.log('[WalletContext] Xverse: Popup should appear NOW.');
-
-            const response = await xverseProvider.request('getAccounts', {
-              purposes: ['ordinals', 'payment'],
-              message: 'Connect to Subfrost',
-            });
-
-            console.log('[WalletContext] Xverse: getAccounts response:', response);
-            resolve(response);
-          } catch (err) {
-            console.log('[WalletContext] Xverse: getAccounts threw error:', err);
-            reject(err);
-          }
-        });
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(
-              'Xverse connection timed out after 30 seconds.\n\n' +
-              'The Xverse extension is not responding. Please try:\n' +
-              '1. Click the Xverse extension icon in your browser toolbar\n' +
-              '2. If prompted, enter your password to unlock\n' +
-              '3. Go to chrome://extensions, find Xverse, and click the refresh icon\n' +
-              '4. Reload this page and try again'
-            ));
-          }, 30000);
-        });
-
-        const response: any = await Promise.race([connectionPromise, timeoutPromise]);
-
-        // Parse the response
-        if (response?.result && Array.isArray(response.result)) {
-          accounts = response.result;
-        } else if (Array.isArray(response)) {
-          accounts = response;
-        } else if (response?.status === 'success' && response?.result) {
-          accounts = Array.isArray(response.result) ? response.result : [];
+        if (!xverseProvider) {
+          throw new Error('Xverse wallet not detected. Please install the Xverse extension.');
         }
 
-        // Check for error
-        if (response?.error || response?.status === 'error') {
-          const errorCode = response?.error?.code;
-          const errorMsg = response?.error?.message || JSON.stringify(response?.error);
-          if (errorCode === 4001 || errorCode === 'USER_REJECTION') {
-            throw new Error('Connection was rejected by the user');
-          }
-          throw new Error(`Xverse error: ${errorMsg}`);
-        }
+        console.log('[WalletContext] Xverse: calling request("getAccounts") directly...');
+
+        // DIRECT CALL - no intermediate connect() method. This triggers the popup.
+        const response: any = await Promise.race([
+          xverseProvider.request('getAccounts', {
+            purposes: ['ordinals', 'payment'],
+            message: 'Connect to Subfrost',
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              'Xverse connection timed out after 30s. ' +
+              'Try: (1) open/unlock your Xverse extension popup, ' +
+              '(2) check chrome://extensions for Xverse errors, ' +
+              '(3) try refreshing the page.'
+            )), 30000)
+          ),
+        ]);
+
+        console.log('[WalletContext] Xverse getAccounts response:', response);
+        const accounts = response?.result || [];
 
         if (accounts.length === 0) {
           throw new Error(
             'Xverse connection failed — no accounts returned. ' +
-            'Try: (1) refresh this page, (2) open/unlock your Xverse extension, ' +
-            '(3) check that this site is not blocked in Xverse settings.'
+            'Try refreshing the page or reconnecting your wallet.'
           );
         }
 

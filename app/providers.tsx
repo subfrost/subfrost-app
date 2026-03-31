@@ -14,9 +14,6 @@ import { LanguageProvider } from '@/context/LanguageContext';
 import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
-import { DevnetProvider } from '@/context/DevnetContext';
-import { DevnetBootModal, DevnetErrorModal } from '@/components/DevnetBootModal';
-import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetControlPanel';
 import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
 
@@ -25,44 +22,25 @@ import type { Network } from '@/utils/constants';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
-// Auto-start devnet on staging (set via deploy-staging.yml)
-const DEVNET_AUTOSTART = process.env.NEXT_PUBLIC_DEVNET_AUTOSTART === '1';
-
 // Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'mainnet';
 
-  const host = window.location.host;
-
-  // Auto-devnet: only when explicitly enabled via env var (NEXT_PUBLIC_DEVNET_AUTOSTART=1).
-  // Staging defaults to mainnet — the in-browser devnet requires ~1GB RAM and is fragile.
-  // Users can still select devnet manually from the network selector.
-  if (DEVNET_AUTOSTART) {
-    return 'devnet';
-  }
-
-  // Staging mirrors production (mainnet) unless user overrides via localStorage
-  if (host.includes('staging-app.subfrost.io')) {
-    const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-    if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
-      return stored as Network;
-    }
-    return 'mainnet';
-  }
-
   // First check localStorage for user selection
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet'].includes(stored)) {
     return stored as Network;
   }
 
   // Then check hostname
+  const host = window.location.host;
   if (!process.env.NEXT_PUBLIC_NETWORK) {
     if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
       return 'signet';
     } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
       return 'subfrost-regtest';
     }
+    // Default to mainnet for all other cases (including localhost)
     return 'mainnet';
   }
   return process.env.NEXT_PUBLIC_NETWORK as Network;
@@ -142,24 +120,18 @@ export default function Providers({ children }: { children: ReactNode }) {
           <ModalStore>
             <ThemeProvider>
               <LanguageProvider>
-                <DevnetProvider network={network}>
-                  <AlkanesSDKProvider network={network}>
-                    <HeightPoller network={network} />
-                    <WalletProvider network={network}>
-                      <TransactionConfirmProvider>
-                        <NotificationProvider>
-                          <DevnetNetworkBanner />
-                          {children}
-                          <DevnetBootModal />
-                          <DevnetErrorModal />
-                          <DevnetControlPanel />
-                          <TransactionConfirmModal />
-                          <GlobalNotificationArea />
-                        </NotificationProvider>
-                      </TransactionConfirmProvider>
-                    </WalletProvider>
-                  </AlkanesSDKProvider>
-                </DevnetProvider>
+                <AlkanesSDKProvider network={network}>
+                  <HeightPoller network={network} />
+                  <WalletProvider network={network}>
+                    <TransactionConfirmProvider>
+                      <NotificationProvider>
+                        {children}
+                        <TransactionConfirmModal />
+                        <GlobalNotificationArea />
+                      </NotificationProvider>
+                    </TransactionConfirmProvider>
+                  </WalletProvider>
+                </AlkanesSDKProvider>
               </LanguageProvider>
             </ThemeProvider>
           </ModalStore>

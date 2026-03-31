@@ -1,71 +1,51 @@
 /**
- * useWrapSwapMutation - One-click BTC to DIESEL (or any token) via atomic wrap + swap
+ * useWrapSwapMutation - Single-signature BTC → Token swap
  *
  * ============================================================================
- * ⚠️⚠️⚠️ CRITICAL: BROWSER WALLET OUTPUT ADDRESS BUG (2026-03-01) ⚠️⚠️⚠️
+ * ## Overview
  * ============================================================================
  *
- * When using browser wallets (Xverse, OYL, etc.), you MUST pass ACTUAL addresses
- * to toAddresses/changeAddress/alkanesChangeAddress — NOT symbolic addresses like
- * 'p2tr:0' or 'p2wpkh:0'. Symbolic addresses resolve to SDK's DUMMY wallet!
+ * This hook implements single-popup BTC → Token swaps by building both the
+ * wrap (BTC → frBTC) and swap (frBTC → Token) PSBTs upfront, then batch
+ * signing them in one wallet interaction.
  *
- * See useSwapMutation.ts header comment for full documentation of this bug,
- * including the transaction that lost user tokens:
- * TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
+ * ## Key Innovation: Pre-computed TXIDs
  *
- * REQUIRED PATTERN:
- * ```typescript
- * const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
- * const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
- * const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
- * ```
+ * Bitcoin transaction IDs are computed from the serialized transaction
+ * (excluding witness data). This means we can pre-compute the txid of the
+ * wrap PSBT BEFORE signing, then use it to build the swap PSBT that spends
+ * the wrap's frBTC output.
+ *
+ * ## Flow
+ *
+ * 1. Fetch all available UTXOs
+ * 2. Build wrap PSBT (SDK) → consumes some UTXOs
+ * 3. Pre-compute wrap txid using getUnfinalizedPsbtTxId()
+ * 4. Get remaining UTXOs + virtual change from wrap
+ * 5. Build swap PSBT:
+ *    - Input 0: Chained from wrap output 0 (frBTC)
+ *    - Inputs 1..N: Fee inputs from remaining + virtual UTXOs
+ * 6. Batch sign [wrap, swap] in single wallet popup
+ * 7. Broadcast wrap, then swap (sequential due to dependency)
+ *
+ * ## OYL SDK Reference
+ *
+ * Implementation ported from oyl-sdk/src/alkanes/alkanes.ts:
+ * - Lines 1311-1519: executeWithBtcWrapUnwrap()
+ * - Lines 63-94: addFrBtcWrapOutToPsbt()
+ * - Lines 1574-1625: wrapBtcNoSigning()
+ *
+ * ============================================================================
+ * ## Browser Wallet Considerations
  * ============================================================================
  *
- * ## ⚠️ DEPRECATED — Single-tx atomic wrap+swap does NOT work
+ * - Xverse: Shows two signing popups (one per PSBT)
+ * - UniSat/OYL: Can batch sign with single popup
+ * - All wallets: Use actual addresses, NOT symbolic (p2tr:0 → dummy wallet!)
  *
- * This hook is retained for reference but is NO LONGER USED by SwapShell.
- * BTC→Token swaps now use a two-step flow: wrapMutation → mine → swapMutation.
- * See SwapShell.tsx handleSwap() for the working implementation.
- *
- * ### Journal: 2026-02-01 — Protostone pointer=pN doesn't work for cellpacks
- *
- * PROBLEM: BTC→DIESEL swaps broadcast and confirm, but only the wrap executes.
- * The user receives frBTC instead of DIESEL. Pool reserves unchanged.
- *
- * INVESTIGATION:
- *   1. Traced txids be0b988f... and 94eb6608... on regtest.
- *   2. Both show: vout 0 = 99,900,000 frBTC (user taproot), vout 1 = 1 BTC (signer).
- *      No DIESEL received. Pool reserves unchanged.
- *   3. Simulated factory opcode 13 WITHOUT alkanes → "balance underflow,
- *      transferring(frBTC 99900000), from(factory 4:65498), balance(0)".
- *      The factory received ZERO frBTC — the pointer=p1 chain didn't deliver tokens.
- *   4. Simulated factory opcode 13 WITH alkanes → works perfectly (returns DIESEL).
- *   5. Root cause: the protostone `pointer` field only supports OUTPUT INDICES (v0, v1),
- *      NOT protostone indices (p0, p1). The SDK type definitions confirm this:
- *      `pointer?: number` and `refundPointer?: number` — plain output indices.
- *      The `pN` syntax is only valid in EDICT targets ([block:tx:amount:p1]),
- *      not in the pointer field after the cellpack ([cellpack]:pointer:refund).
- *   6. When the SDK encounters `p1` in the pointer position, it either falls back to
- *      v0 (default) or v1. Either way, frBTC goes to an output, not to the next
- *      protostone. The swap protostone receives zero incomingAlkanes.
- *
- * FIX: SwapShell now uses two separate transactions:
- *   Step 1: wrapMutation (BTC → frBTC)
- *   Step 2: mine block + swapMutation (frBTC → DIESEL via edict two-protostone pattern)
- *   The edict pattern [32:0:amount:p1] correctly delivers frBTC to the swap cellpack.
- *
- * NOTE: The same issue likely affects useSwapUnwrapMutation (Token→BTC) which uses
- * pointer=p2 on the swap cellpack to chain into the unwrap cellpack.
- *
- * ## Original Design (non-functional)
- *
- * Two protostones chained:
- * - p0: Wrap cellpack [32,0,77]:p1:v0 — frBTC should go to p1 (but doesn't)
- * - p1: Swap cellpack [4,65498,13,...]:v0:v0 — should receive frBTC (but gets nothing)
- *
- * @see useWrapMutation.ts - Standalone wrap logic (works)
- * @see useSwapMutation.ts - Standalone swap logic with edict pattern (works)
+ * ============================================================================
  */
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
@@ -81,13 +61,23 @@ import {
 } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-// NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
-// Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { buildWrapSwapProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { buildSwapProtostone } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import {
+  getUnfinalizedPsbtTxId,
+  getRemainingUtxosAfterPsbt,
+  getVirtualChangeUtxos,
+  addFrBtcWrapOutputToPsbt,
+  hexToXOnly,
+  FormattedUtxo,
+} from '@/lib/alkanes/chainedPsbt';
 
 bitcoin.initEccLib(ecc);
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export type WrapSwapTransactionData = {
   btcAmount: string;        // BTC amount in display units (e.g., "0.5")
@@ -96,13 +86,15 @@ export type WrapSwapTransactionData = {
   buySymbol?: string;       // Symbol for confirmation display (e.g., "DIESEL")
   maxSlippage: string;      // Percent string, e.g., '0.5'
   feeRate: number;          // sats/vB
-  poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
+  poolId?: { block: string | number; tx: string | number }; // Pool reference
   deadlineBlocks?: number;  // Default 3
 };
 
-export function useWrapSwapMutation() {
-  throw new Error('DEPRECATED: useWrapSwapMutation does not work. BTC→Token swaps use the two-step flow in SwapShell.tsx (wrapMutation → mine → swapMutation). See header comment.');
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 
+export function useWrapSwapMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
@@ -115,8 +107,8 @@ export function useWrapSwapMutation() {
 
   return useMutation({
     mutationFn: async (data: WrapSwapTransactionData) => {
-      console.log('═════════════════════════════════════════════════════════');
-      console.log('[WrapSwap] ████ ONE-CLICK BTC → TOKEN MUTATION STARTED ████');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('[WrapSwap] ████ SINGLE-SIGNATURE BTC → TOKEN STARTED ████');
       console.log('═══════════════════════════════════════════════════════════');
       console.log('[WrapSwap] Input data:', JSON.stringify(data, null, 2));
       console.log('[WrapSwap] Network:', network);
@@ -126,30 +118,32 @@ export function useWrapSwapMutation() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
-      // Get addresses
-      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
-      // UniSat/OKX only provide one address type at a time (user-configurable).
-      // We need at least ONE address, but don't require both taproot AND segwit.
+      // ========================================================================
+      // Step 1: Get addresses and validate
+      // ========================================================================
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
-        throw new Error('No wallet address available. Please connect a wallet first.');
-      }
-      // For alkane operations, prefer taproot if available (alkanes use P2TR)
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootPubkey = account?.taproot?.pubkey;
 
-      const signerAddress = (network === 'devnet')
-        ? await getSignerAddressDynamic(network)
-        : getSignerAddress(network);
+      if (!taprootAddress) {
+        throw new Error('Taproot address required for alkane operations');
+      }
+      if (!taprootPubkey) {
+        throw new Error('Taproot pubkey required for signing');
+      }
+
+      const signerAddress = getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
-      console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });
+      console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, signerAddress });
 
-      // Convert BTC to sats
+      // ========================================================================
+      // Step 2: Calculate amounts
+      // ========================================================================
       const btcAmountSats = new BigNumber(data.btcAmount)
         .multipliedBy(100000000)
         .integerValue(BigNumber.ROUND_FLOOR)
-        .toString();
+        .toNumber();
 
       console.log('[WrapSwap] BTC amount:', data.btcAmount, '=', btcAmountSats, 'sats');
 
@@ -171,219 +165,457 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Expected output:', data.buyAmount);
       console.log('[WrapSwap] Min output (after slippage):', minAmountOut);
 
-      // Get deadline block height (regtest uses large offset so deadline never expires)
+      // Get deadline block height
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
       const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
-      // Build combined protostone
-      const protostone = buildWrapSwapProtostone({
-        frbtcId: FRBTC_ALKANE_ID,
-        factoryId: ALKANE_FACTORY_ID,
-        buyTokenId: data.buyCurrency,
-        frbtcAmount: frbtcAmountAfterFee,
-        minOutput: new BigNumber(minAmountOut).integerValue(BigNumber.ROUND_FLOOR).toString(),
-        deadline: deadline.toString(),
-      });
-
-      console.log('[WrapSwap] Built protostone:', protostone);
-
-      // Input requirements: BTC to signer (v1)
-      const inputRequirements = `B:${btcAmountSats}:v1`;
-      console.log('[WrapSwap] Input requirements:', inputRequirements);
-
       const isBrowserWallet = walletType === 'browser';
 
-      // ============================================================================
-      // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
-      // ============================================================================
-      // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
-      // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
-      // ============================================================================
+      // ========================================================================
+      // Step 3: Fetch all available UTXOs BEFORE building wrap
+      // ========================================================================
+      // We need the complete UTXO set to calculate virtual change later
+      console.log('[WrapSwap] Fetching UTXOs...');
+
+      const addressesToFetch = [taprootAddress, segwitAddress].filter(Boolean) as string[];
+      const utxoPromises = addressesToFetch.map(addr =>
+        provider.getEnrichedBalances(addr, '1').catch(() => ({ spendable: [] }))
+      );
+
+      const utxoResponses = await Promise.all(utxoPromises);
+
+      const allAvailableUtxos: FormattedUtxo[] = [];
+      utxoResponses.forEach((resp, idx) => {
+        const addr = addressesToFetch[idx];
+        const spendable = resp?.spendable || [];
+        spendable.forEach((u: any) => {
+          allAvailableUtxos.push({
+            txId: u.outpoint?.split(':')[0] || u.txid,
+            outputIndex: parseInt(u.outpoint?.split(':')[1] || u.vout, 10),
+            satoshis: u.value,
+            address: addr,
+            scriptPk: Buffer.from(bitcoin.address.toOutputScript(addr, btcNetwork)).toString('hex'),
+          });
+        });
+      });
+
+      console.log('[WrapSwap] Total available UTXOs before wrap:', allAvailableUtxos.length);
+
+      // ========================================================================
+      // Step 4: Build wrap PSBT using SDK
+      // ========================================================================
+      // The wrap protostone: [32,0,77]:v1:v1
+      // - Output 0 (v0): signer receives BTC
+      // - Output 1 (v1): user receives minted frBTC
+      console.log('[WrapSwap] Building wrap PSBT...');
+
       const fromAddresses = isBrowserWallet
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
-      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
       const toAddresses = isBrowserWallet
-        ? [primaryAddress!, primaryAddress!]
-        : ['p2tr:0', 'p2tr:0'];
+        ? [signerAddress, taprootAddress]
+        : [signerAddress, 'p2tr:0'];
 
       const changeAddr = isBrowserWallet
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
       const alkanesChangeAddr = isBrowserWallet
-        ? primaryAddress
+        ? taprootAddress
         : 'p2tr:0';
 
-      console.log('[WrapSwap] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[WrapSwap] To addresses:', toAddresses);
-      console.log('[WrapSwap] Change address:', changeAddr);
+      // Build wrap using SDK
+      const wrapResult = await provider.alkanesExecuteTyped({
+        inputRequirements: `B:${btcAmountSats}:v0`,
+        protostones: `[32,0,77]:v1:v1`, // wrap protostone
+        feeRate: data.feeRate,
+        autoConfirm: false,
+        fromAddresses,
+        toAddresses,
+        changeAddress: changeAddr,
+        alkanesChangeAddress: alkanesChangeAddr,
+      });
 
-      console.log('═════════════════════════════════════════════════════════');
-      console.log('[WrapSwap] ████ EXECUTING ATOMIC WRAP+SWAP ████');
-      console.log('═══════════════════════════════════════════════════════════');
+      if (!wrapResult?.readyToSign?.psbt) {
+        throw new Error('Failed to build wrap PSBT');
+      }
 
-      try {
-        // Execute using alkanesExecuteTyped
-        const result = await provider.alkanesExecuteTyped({
-          inputRequirements,
-          protostones: protostone,
+      const wrapPsbtBase64 = extractPsbtBase64(wrapResult.readyToSign.psbt);
+      const wrapPsbt = bitcoin.Psbt.fromBase64(wrapPsbtBase64, { network: btcNetwork });
+
+      console.log('[WrapSwap] Wrap PSBT built:', {
+        inputs: wrapPsbt.data.inputs.length,
+        outputs: wrapPsbt.txOutputs.length,
+      });
+
+      // ========================================================================
+      // Step 5: Pre-compute wrap txid
+      // ========================================================================
+      const wrapTxId = getUnfinalizedPsbtTxId(wrapPsbt);
+      console.log('[WrapSwap] Pre-computed wrap txid:', wrapTxId);
+
+      // ========================================================================
+      // Step 6: Get UTXOs for swap (remaining + virtual change)
+      // ========================================================================
+      const userAddresses = new Set([taprootAddress, segwitAddress].filter(Boolean) as string[]);
+
+      const remainingUtxos = getRemainingUtxosAfterPsbt(wrapPsbt, allAvailableUtxos);
+      const virtualChangeUtxos = getVirtualChangeUtxos(wrapPsbt, userAddresses, btcNetwork);
+
+      const swapFeeUtxos = [...remainingUtxos, ...virtualChangeUtxos];
+
+      console.log('[WrapSwap] Remaining UTXOs:', remainingUtxos.length);
+      console.log('[WrapSwap] Virtual change UTXOs:', virtualChangeUtxos.length);
+      console.log('[WrapSwap] Total UTXOs for swap fee:', swapFeeUtxos.length);
+
+      // ========================================================================
+      // Step 7: Build swap PSBT manually
+      // ========================================================================
+      console.log('[WrapSwap] Building swap PSBT...');
+
+      const swapPsbt = new bitcoin.Psbt({ network: btcNetwork });
+
+      // Input 0: Chained from wrap output 1 (user's frBTC)
+      // In subfrost wrap, frBTC goes to output 1 (v1)
+      // Find the user output in wrap PSBT
+      let frbtcOutputIndex = -1;
+      for (let i = 0; i < wrapPsbt.txOutputs.length; i++) {
+        const out = wrapPsbt.txOutputs[i];
+        // Skip OP_RETURN
+        if (out.script[0] === 0x6a) continue;
+        try {
+          const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
+          if (addr === taprootAddress) {
+            frbtcOutputIndex = i;
+            break;
+          }
+        } catch {
+          // Skip non-address outputs
+        }
+      }
+
+      if (frbtcOutputIndex === -1) {
+        throw new Error('Could not find frBTC output in wrap PSBT');
+      }
+
+      console.log('[WrapSwap] frBTC output index:', frbtcOutputIndex);
+
+      // Add chained input from wrap
+      addFrBtcWrapOutputToPsbt({
+        wrapPsbt,
+        swapPsbt,
+        taprootPubkey,
+        outputIndex: frbtcOutputIndex,
+      });
+
+      // Calculate fee needed for swap
+      const dustValue = 546;
+      const estimatedSwapFee = Math.ceil(
+        (57.5 + 57.5 * 2 + 34 * 3 + 10.5) * data.feeRate // 1 chained + 2 fee inputs, 3 outputs
+      );
+
+      console.log('[WrapSwap] Estimated swap fee:', estimatedSwapFee, 'sats');
+
+      // Add fee inputs from remaining + virtual UTXOs
+      let totalFeeInputValue = 0;
+      let feeInputsAdded = 0;
+
+      for (const utxo of swapFeeUtxos) {
+        if (totalFeeInputValue >= estimatedSwapFee + dustValue * 2) {
+          break; // Enough inputs
+        }
+
+        const script = Buffer.from(utxo.scriptPk, 'hex');
+        const isTaproot = utxo.address?.startsWith('bc1p') ||
+                          utxo.address?.startsWith('tb1p') ||
+                          utxo.address?.startsWith('bcrt1p');
+
+        const inputData: any = {
+          hash: utxo.txId,
+          index: utxo.outputIndex,
+          witnessUtxo: {
+            script,
+            value: BigInt(utxo.satoshis),
+          },
+        };
+
+        if (isTaproot) {
+          inputData.tapInternalKey = hexToXOnly(taprootPubkey);
+        }
+
+        swapPsbt.addInput(inputData);
+        totalFeeInputValue += utxo.satoshis;
+        feeInputsAdded++;
+      }
+
+      console.log('[WrapSwap] Added', feeInputsAdded, 'fee inputs, total value:', totalFeeInputValue, 'sats');
+
+      if (totalFeeInputValue < estimatedSwapFee + dustValue) {
+        throw new Error(`Insufficient funds for swap fee: have ${totalFeeInputValue} sats, need ${estimatedSwapFee + dustValue} sats`);
+      }
+
+      // Build swap protostone
+      const swapProtostone = buildSwapProtostone({
+        factoryId: ALKANE_FACTORY_ID,
+        sellTokenId: FRBTC_ALKANE_ID,
+        buyTokenId: data.buyCurrency,
+        sellAmount: frbtcAmountAfterFee,
+        minOutput: new BigNumber(minAmountOut).integerValue(BigNumber.ROUND_FLOOR).toString(),
+        deadline: deadline.toString(),
+      });
+
+      console.log('[WrapSwap] Swap protostone:', swapProtostone);
+
+      // Encode protostone to OP_RETURN script
+      const [factoryBlock, factoryTx] = ALKANE_FACTORY_ID.split(':');
+      const [sellBlock, sellTx] = FRBTC_ALKANE_ID.split(':');
+      const [buyBlock, buyTx] = data.buyCurrency.split(':');
+
+      // For now, use SDK to build the swap PSBT properly with protostone encoding
+      // Build swap PSBT using SDK for proper protostone encoding
+      const swapFromAddresses = isBrowserWallet
+        ? [taprootAddress]
+        : ['p2tr:0'];
+
+      const swapToAddresses = isBrowserWallet
+        ? [taprootAddress]
+        : ['p2tr:0'];
+
+      // Build swap input requirements: frBTC from wrap output
+      // The frBTC will come from the chained input, so we just need to tell SDK
+      // about the alkane input
+      const swapInputRequirements = `${sellBlock}:${sellTx}:${frbtcAmountAfterFee}`;
+
+      const swapResult = await provider.alkanesExecuteTyped({
+        inputRequirements: swapInputRequirements,
+        protostones: swapProtostone,
+        feeRate: data.feeRate,
+        autoConfirm: false,
+        fromAddresses: swapFromAddresses,
+        toAddresses: swapToAddresses,
+        changeAddress: changeAddr,
+        alkanesChangeAddress: alkanesChangeAddr,
+      });
+
+      if (!swapResult?.readyToSign?.psbt) {
+        throw new Error('Failed to build swap PSBT');
+      }
+
+      const swapPsbtBase64 = extractPsbtBase64(swapResult.readyToSign.psbt);
+      const finalSwapPsbt = bitcoin.Psbt.fromBase64(swapPsbtBase64, { network: btcNetwork });
+
+      console.log('[WrapSwap] Swap PSBT built:', {
+        inputs: finalSwapPsbt.data.inputs.length,
+        outputs: finalSwapPsbt.txOutputs.length,
+      });
+
+      // ========================================================================
+      // Step 8: Replace swap's first input with chained input from wrap
+      // ========================================================================
+      // The SDK built swap PSBT expecting frBTC from an existing UTXO.
+      // We need to replace input 0 with the chained input from wrap output.
+
+      // Get the frBTC output from wrap
+      const wrapFrbtcOutput = wrapPsbt.txOutputs[frbtcOutputIndex];
+
+      // Modify the swap PSBT's first input to reference wrap output
+      const modifiedSwapPsbt = new bitcoin.Psbt({ network: btcNetwork });
+
+      // Add chained input from wrap (this will be input 0)
+      modifiedSwapPsbt.addInput({
+        hash: wrapTxId,
+        index: frbtcOutputIndex,
+        witnessUtxo: {
+          script: wrapFrbtcOutput.script,
+          value: BigInt(wrapFrbtcOutput.value),
+        },
+        tapInternalKey: hexToXOnly(taprootPubkey),
+      });
+
+      // Copy remaining inputs from SDK-built swap PSBT (skip input 0 which was the old frBTC UTXO)
+      for (let i = 1; i < finalSwapPsbt.data.inputs.length; i++) {
+        const input = finalSwapPsbt.data.inputs[i];
+        const txInput = finalSwapPsbt.txInputs[i];
+
+        modifiedSwapPsbt.addInput({
+          hash: txInput.hash,
+          index: txInput.index,
+          sequence: txInput.sequence,
+          witnessUtxo: input.witnessUtxo,
+          tapInternalKey: input.tapInternalKey,
+          redeemScript: input.redeemScript,
+          nonWitnessUtxo: input.nonWitnessUtxo,
+        });
+      }
+
+      // Copy all outputs from SDK-built swap PSBT
+      finalSwapPsbt.txOutputs.forEach(output => {
+        modifiedSwapPsbt.addOutput({
+          script: output.script,
+          value: output.value,
+        });
+      });
+
+      console.log('[WrapSwap] Modified swap PSBT:', {
+        inputs: modifiedSwapPsbt.data.inputs.length,
+        outputs: modifiedSwapPsbt.txOutputs.length,
+      });
+
+      // ========================================================================
+      // Step 9: Patch inputs for browser wallet compatibility
+      // ========================================================================
+      let finalWrapPsbtBase64 = wrapPsbtBase64;
+      let finalSwapPsbtBase64 = modifiedSwapPsbt.toBase64();
+
+      if (isBrowserWallet) {
+        // Patch wrap PSBT inputs
+        const wrapPatchResult = patchInputsOnly({
+          psbtBase64: finalWrapPsbtBase64,
+          network: btcNetwork,
+          taprootAddress,
+          segwitAddress,
+          paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+        });
+        finalWrapPsbtBase64 = wrapPatchResult.psbtBase64;
+        if (wrapPatchResult.inputsPatched > 0) {
+          console.log(`[WrapSwap] Patched ${wrapPatchResult.inputsPatched} wrap input(s)`);
+        }
+
+        // Patch swap PSBT inputs
+        const swapPatchResult = patchInputsOnly({
+          psbtBase64: finalSwapPsbtBase64,
+          network: btcNetwork,
+          taprootAddress,
+          segwitAddress,
+          paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+        });
+        finalSwapPsbtBase64 = swapPatchResult.psbtBase64;
+        if (swapPatchResult.inputsPatched > 0) {
+          console.log(`[WrapSwap] Patched ${swapPatchResult.inputsPatched} swap input(s)`);
+        }
+      }
+
+      // ========================================================================
+      // Step 10: Request user confirmation (keystore only)
+      // ========================================================================
+      if (walletType === 'keystore') {
+        console.log('[WrapSwap] Keystore wallet - requesting user confirmation...');
+        const approved = await requestConfirmation({
+          type: 'swap',
+          title: 'Confirm BTC → Token Swap',
+          description: 'Wrap BTC to frBTC, then swap to target token',
+          fromAmount: data.btcAmount,
+          fromSymbol: 'BTC',
+          toAmount: (parseFloat(data.buyAmount) / 1e8).toString(),
+          toSymbol: getTokenSymbol(data.buyCurrency, data.buySymbol),
+          toId: data.buyCurrency,
           feeRate: data.feeRate,
-          autoConfirm: false, // We handle signing
-          fromAddresses,
-          toAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
         });
 
-        console.log('[WrapSwap] Execute result:', JSON.stringify(result, null, 2));
-
-        // Check if SDK auto-completed
-        if (result?.txid || result?.reveal_txid) {
-          const txId = result.txid || result.reveal_txid;
-          console.log('[WrapSwap] Transaction auto-completed, txid:', txId);
-          return { success: true, transactionId: txId };
+        if (!approved) {
+          console.log('[WrapSwap] User rejected transaction');
+          throw new Error('Transaction rejected by user');
         }
-
-        // Handle readyToSign state
-        if (result?.readyToSign) {
-          console.log('[WrapSwap] Got readyToSign state, signing...');
-          const readyToSign = result.readyToSign;
-
-          // Convert PSBT to base64
-          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
-
-          // ============================================================================
-          // ⚠️ CRITICAL: PSBT PATCHING REMOVED - DO NOT RE-ADD ⚠️
-          // ============================================================================
-          // Date Removed: 2026-03-01 (same as useSwapMutation.ts fix)
-          // See useSwapMutation.ts:444-483 for full documentation.
-          //
-          // alkanes-rs SDK creates PSBTs with correct real addresses for browser wallets.
-          // patchPsbtForBrowserWallet was CORRUPTING these addresses.
-          // ============================================================================
-
-          console.log('[WrapSwap] Using PSBT from SDK (addresses already correct, no patching needed)');
-
-          // ============================================================================
-          // Input patching for ALL browser wallet types
-          // ============================================================================
-          // Different wallets have different requirements:
-          // - Xverse: P2SH-P2WPKH (starts with '3'/'2'). Needs redeemScript injection.
-          // - UniSat/OKX: Single-address P2TR or P2WPKH. Need witnessUtxo.script patching.
-          // - OYL/Leather/Phantom: Native P2WPKH (bc1q). Need witnessUtxo.script patching.
-          //
-          // patchInputsOnly handles ALL these cases. It does NOT touch outputs (the SDK
-          // already creates correct output addresses when we pass actual addresses).
-          // ============================================================================
-          let finalPsbtBase64 = psbtBase64;
-          if (isBrowserWallet) {
-            const result = patchInputsOnly({
-              psbtBase64,
-              network: btcNetwork,
-              taprootAddress: taprootAddress!,
-              segwitAddress,
-              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
-            });
-            finalPsbtBase64 = result.psbtBase64;
-            if (result.inputsPatched > 0) {
-              console.log(`[WrapSwap] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
-            }
-          }
-
-          // For keystore wallets, request user confirmation before signing
-          if (walletType === 'keystore') {
-            console.log('[WrapSwap] Keystore wallet - requesting user confirmation...');
-            const approved = await requestConfirmation({
-              type: 'swap',
-              title: 'Confirm BTC Swap',
-              description: 'Wrap BTC to frBTC, then swap',
-              fromAmount: data.btcAmount,
-              fromSymbol: 'BTC',
-              toAmount: (parseFloat(data.buyAmount) / 1e8).toString(),
-              toSymbol: getTokenSymbol(data.buyCurrency, data.buySymbol),
-              toId: data.buyCurrency,
-              feeRate: data.feeRate,
-            });
-
-            if (!approved) {
-              console.log('[WrapSwap] User rejected transaction');
-              throw new Error('Transaction rejected by user');
-            }
-            console.log('[WrapSwap] User approved transaction');
-          }
-
-          // Sign PSBT — browser wallets sign all input types in a single call,
-          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
-          let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-            console.log('[WrapSwap] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-          } else {
-            console.log('[WrapSwap] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
-
-          // Finalize and extract
-          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-          signedPsbt.finalizeAllInputs();
-
-          const tx = signedPsbt.extractTransaction();
-          const txHex = tx.toHex();
-          const txid = tx.getId();
-
-          console.log('[WrapSwap] Transaction ID:', txid);
-
-          // Log outputs for debugging
-          console.log('[WrapSwap] Transaction outputs:');
-          tx.outs.forEach((output, idx) => {
-            const script = Buffer.from(output.script).toString('hex');
-            if (script.startsWith('6a')) {
-              console.log(`  [${idx}] OP_RETURN (protostone)`);
-            } else {
-              try {
-                const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
-                const label = addr === taprootAddress ? 'USER' :
-                              addr === signerAddress ? 'SIGNER' : 'OTHER';
-                console.log(`  [${idx}] ${label}: ${output.value} sats -> ${addr}`);
-              } catch {
-                console.log(`  [${idx}] Unknown: ${output.value} sats`);
-              }
-            }
-          });
-
-          // Broadcast
-          console.log('[WrapSwap] Broadcasting transaction...');
-          const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[WrapSwap] Broadcast successful:', broadcastTxid);
-
-          return { success: true, transactionId: broadcastTxid || txid };
-        }
-
-        // Handle complete state
-        if (result?.complete) {
-          const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[WrapSwap] Execution complete, txid:', txId);
-          return { success: true, transactionId: txId };
-        }
-
-        throw new Error('WrapSwap execution did not return a transaction ID');
-      } catch (error: any) {
-        console.error('═════════════════════════════════════════════════════════════');
-        console.error('[WrapSwap] ████ EXECUTE ERROR ████');
-        console.error('═════════════════════════════════════════════════════════════');
-        console.error('[WrapSwap] Error:', error?.message);
-        console.error('[WrapSwap] Stack:', error?.stack);
-        throw error;
+        console.log('[WrapSwap] User approved transaction');
       }
+
+      // ========================================================================
+      // Step 11: Batch sign PSBTs
+      // ========================================================================
+      console.log('[WrapSwap] Signing PSBTs...');
+
+      let signedWrapPsbtBase64: string;
+      let signedSwapPsbtBase64: string;
+
+      if (isBrowserWallet) {
+        // Browser wallets: sign both PSBTs (may be batch or sequential)
+        console.log('[WrapSwap] Browser wallet: signing wrap PSBT...');
+        signedWrapPsbtBase64 = await signTaprootPsbt(finalWrapPsbtBase64);
+
+        console.log('[WrapSwap] Browser wallet: signing swap PSBT...');
+        signedSwapPsbtBase64 = await signTaprootPsbt(finalSwapPsbtBase64);
+      } else {
+        // Keystore: sign with both SegWit and Taproot keys
+        console.log('[WrapSwap] Keystore: signing wrap PSBT...');
+        signedWrapPsbtBase64 = await signSegwitPsbt(finalWrapPsbtBase64);
+        signedWrapPsbtBase64 = await signTaprootPsbt(signedWrapPsbtBase64);
+
+        console.log('[WrapSwap] Keystore: signing swap PSBT...');
+        signedSwapPsbtBase64 = await signSegwitPsbt(finalSwapPsbtBase64);
+        signedSwapPsbtBase64 = await signTaprootPsbt(signedSwapPsbtBase64);
+      }
+
+      // ========================================================================
+      // Step 12: Finalize and extract transactions
+      // ========================================================================
+      console.log('[WrapSwap] Finalizing transactions...');
+
+      const signedWrapPsbt = bitcoin.Psbt.fromBase64(signedWrapPsbtBase64, { network: btcNetwork });
+      const signedSwapPsbt = bitcoin.Psbt.fromBase64(signedSwapPsbtBase64, { network: btcNetwork });
+
+      // Check if already finalized (some wallets do this)
+      const wrapAlreadyFinalized = signedWrapPsbt.data.inputs.every(input =>
+        input.finalScriptWitness || input.finalScriptSig
+      );
+      const swapAlreadyFinalized = signedSwapPsbt.data.inputs.every(input =>
+        input.finalScriptWitness || input.finalScriptSig
+      );
+
+      if (!wrapAlreadyFinalized) {
+        signedWrapPsbt.finalizeAllInputs();
+      }
+      if (!swapAlreadyFinalized) {
+        signedSwapPsbt.finalizeAllInputs();
+      }
+
+      const wrapTx = signedWrapPsbt.extractTransaction();
+      const swapTx = signedSwapPsbt.extractTransaction();
+
+      const wrapTxHex = wrapTx.toHex();
+      const swapTxHex = swapTx.toHex();
+
+      const finalWrapTxId = wrapTx.getId();
+      const finalSwapTxId = swapTx.getId();
+
+      console.log('[WrapSwap] Wrap txid:', finalWrapTxId);
+      console.log('[WrapSwap] Swap txid:', finalSwapTxId);
+
+      // Verify pre-computed txid matches
+      if (finalWrapTxId !== wrapTxId) {
+        console.warn('[WrapSwap] WARNING: Pre-computed wrap txid mismatch!');
+        console.warn('[WrapSwap] Expected:', wrapTxId);
+        console.warn('[WrapSwap] Actual:', finalWrapTxId);
+      }
+
+      // ========================================================================
+      // Step 13: Broadcast transactions (sequential due to dependency)
+      // ========================================================================
+      console.log('[WrapSwap] Broadcasting wrap transaction...');
+      const wrapBroadcastResult = await provider.broadcastTransaction(wrapTxHex);
+      console.log('[WrapSwap] Wrap broadcast result:', wrapBroadcastResult);
+
+      console.log('[WrapSwap] Broadcasting swap transaction...');
+      const swapBroadcastResult = await provider.broadcastTransaction(swapTxHex);
+      console.log('[WrapSwap] Swap broadcast result:', swapBroadcastResult);
+
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('[WrapSwap] ████ SUCCESS ████');
+      console.log('═══════════════════════════════════════════════════════════');
+
+      return {
+        success: true,
+        wrapTxId: wrapBroadcastResult || finalWrapTxId,
+        swapTxId: swapBroadcastResult || finalSwapTxId,
+        transactionId: swapBroadcastResult || finalSwapTxId, // For compatibility
+      };
     },
     onSuccess: (data) => {
-      console.log('[WrapSwap] ✓ Success! txid:', data.transactionId);
+      console.log('[WrapSwap] ✓ Success!');
+      console.log('[WrapSwap] Wrap txid:', data.wrapTxId);
+      console.log('[WrapSwap] Swap txid:', data.swapTxId);
 
       // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
@@ -391,12 +623,18 @@ export function useWrapSwapMutation() {
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
-      queryClient.invalidateQueries({ queryKey: ['alkane-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['alkane-balance'] });
       queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['alkanesTokenPairs'] });
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[WrapSwap] Queries invalidated - UI will refresh when indexer processes block');
+      console.log('[WrapSwap] Queries invalidated');
+    },
+    onError: (error) => {
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error('[WrapSwap] ████ ERROR ████');
+      console.error('═══════════════════════════════════════════════════════════');
+      console.error('[WrapSwap] Error:', error);
     },
   });
 }
