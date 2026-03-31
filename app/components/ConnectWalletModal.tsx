@@ -140,13 +140,26 @@ export default function ConnectWalletModal() {
 
   const handleClose = () => {
     onConnectModalOpenChange(false);
-    resetForm();
+    // resetForm is deferred so React can finish unmounting the modal DOM before
+    // any state teardown runs. Calling resetForm() synchronously while the modal
+    // is unmounting causes "removeChild: node is not a child" because React still
+    // holds refs to nodes that state updates would re-render.
+    setTimeout(resetForm, 0);
   };
 
   const handleCloseAndNavigate = () => {
+    // Close the modal first, then defer navigation + reset.
+    // router.push() triggers a re-render/unmount of this component — if called
+    // synchronously inside an async handler the component unmounts mid-event,
+    // causing "Failed to execute 'removeChild' on 'Node': The node to be removed
+    // is not a child of this node."
+    // Deferring with setTimeout(0) lets React flush the current render cycle
+    // (modal unmount) before the navigation side-effect fires.
     onConnectModalOpenChange(false);
-    resetForm();
-    router.push('/wallet');
+    setTimeout(() => {
+      resetForm();
+      router.push('/wallet');
+    }, 0);
   };
 
   const handleCreateWallet = async () => {
