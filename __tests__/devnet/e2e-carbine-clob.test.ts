@@ -117,6 +117,8 @@ import {
 } from './devnet-helpers';
 import { signAndBroadcast } from '../shared/sign-and-broadcast';
 import { deployAmmContracts } from './amm-deploy';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { parseOrderbookResponse } from '../../hooks/useOrderbook';
 import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -1696,5 +1698,62 @@ describe('Devnet E2E: Carbine CLOB', () => {
         expect(encoded[i]).toBeGreaterThan(encoded[i - 1]);
       }
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // parseOrderbookResponse integration — contract binary → UI parser
+  //
+  // Verifies the parser can decode real contract output without crashing.
+  // NOTE: Full price/amount verification requires Carbine source to
+  // understand the exact price encoding (trie key format, scaling).
+  // The u32 count fix (2026-03-31) was discovered here.
+  // -------------------------------------------------------------------------
+
+  describe('parseOrderbookResponse integration', () => {
+    it('reads correct u32 bid and ask counts from real contract data', async () => {
+      if (!carbineDeployed) return;
+
+      const result = await simulateAlkane(controllerId, [
+        String(CONTROLLER_OPS.GetOrderbookDepth),
+        '2', '0', '32', '0', '10',
+      ]);
+      expect(result?.result?.execution?.error).toBeNull();
+
+      const hex = result.result.execution.data.replace('0x', '');
+      const bytes = Array.from(Buffer.from(hex, 'hex'));
+
+      // Verify u32 counts are sane (not garbage from reading u128)
+      const numBids = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
+      expect(numBids).toBeGreaterThanOrEqual(0);
+      expect(numBids).toBeLessThanOrEqual(100);
+
+      const askOffset = 4 + numBids * 32;
+      if (askOffset + 4 <= bytes.length) {
+        const numAsks = bytes[askOffset] | (bytes[askOffset + 1] << 8) | (bytes[askOffset + 2] << 16) | (bytes[askOffset + 3] << 24);
+        expect(numAsks).toBeGreaterThanOrEqual(0);
+        expect(numAsks).toBeLessThanOrEqual(100);
+      }
+
+      // Verify total byte count matches: 4 + numBids*32 + 4 + numAsks*32
+      const expectedAsks = (hex.length / 2 - 4 - numBids * 32 - 4) / 32;
+      expect(Number.isInteger(expectedAsks)).toBe(true);
+      expect(expectedAsks).toBeGreaterThanOrEqual(0);
+    }, 30_000);
+
+    it('parseOrderbookResponse does not crash on real contract data', async () => {
+      if (!carbineDeployed) return;
+
+      const result = await simulateAlkane(controllerId, [
+        String(CONTROLLER_OPS.GetOrderbookDepth),
+        '2', '0', '32', '0', '10',
+      ]);
+      expect(result?.result?.execution?.error).toBeNull();
+
+      const hex = result.result.execution.data.replace('0x', '');
+
+      // Should not throw — may return null if encoding differs from
+      // expected format, but must not crash
+      expect(() => parseOrderbookResponse(hex)).not.toThrow();
+    }, 30_000);
   });
 });

@@ -43,7 +43,7 @@ function createWrapper() {
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { useOrderbook, parseOrderbookResponse, readU128LE, type OrderbookData, type OrderLevel } from '../useOrderbook';
+import { useOrderbook, parseOrderbookResponse, readU128LE, readU32LE, type OrderbookData, type OrderLevel } from '../useOrderbook';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -342,6 +342,13 @@ describe('useOrderbook', () => {
 // Binary parsing tests — exercises the contract↔UI bridge directly
 // ===========================================================================
 
+/** Encode a number as 4-byte little-endian u32 */
+function encodeU32LE(n: number): Buffer {
+  const buf = Buffer.alloc(4);
+  buf.writeUInt32LE(n, 0);
+  return buf;
+}
+
 /** Encode a bigint as 16-byte little-endian u128 */
 function encodeU128LE(n: bigint): Buffer {
   const buf = Buffer.alloc(16);
@@ -351,23 +358,49 @@ function encodeU128LE(n: bigint): Buffer {
   return buf;
 }
 
-/** Build a hex-encoded orderbook response matching the Carbine contract format */
+const MAX_U128 = (1n << 128n) - 1n;
+
+/**
+ * Build a hex-encoded orderbook response matching the Carbine contract format.
+ * Format: u32 numBids + bids*(u128 price, u128 amount) + u32 numAsks + asks*(u128 price, u128 amount)
+ * Ask prices are stored INVERTED (MAX_U128 - price) matching the contract's trie encoding.
+ */
 function buildOrderbookHex(
   bids: [bigint, bigint][],
   asks: [bigint, bigint][],
 ): string {
-  const parts: Buffer[] = [encodeU128LE(BigInt(bids.length))];
+  const parts: Buffer[] = [encodeU32LE(bids.length)];
   for (const [price, amount] of bids) {
     parts.push(encodeU128LE(price), encodeU128LE(amount));
   }
-  parts.push(encodeU128LE(BigInt(asks.length)));
+  parts.push(encodeU32LE(asks.length));
   for (const [price, amount] of asks) {
-    parts.push(encodeU128LE(price), encodeU128LE(amount));
+    parts.push(encodeU128LE(MAX_U128 - price), encodeU128LE(amount));
   }
   return Buffer.concat(parts).toString('hex');
 }
 
-const SCALE = BigInt(1e8); // contract prices/amounts are scaled by 1e8
+const SCALE = BigInt(1e8);
+
+describe('readU32LE', () => {
+  it('decodes zero', () => {
+    expect(readU32LE(Array.from(encodeU32LE(0)), 0)).toBe(0);
+  });
+
+  it('decodes 10', () => {
+    expect(readU32LE(Array.from(encodeU32LE(10)), 0)).toBe(10);
+  });
+
+  it('decodes max u32', () => {
+    expect(readU32LE(Array.from(encodeU32LE(0xFFFFFFFF)), 0)).toBe(4294967295);
+  });
+
+  it('reads at a non-zero offset', () => {
+    const padding = Array.from(Buffer.alloc(4, 0xff));
+    const encoded = Array.from(encodeU32LE(42));
+    expect(readU32LE([...padding, ...encoded], 4)).toBe(42);
+  });
+});
 
 describe('readU128LE', () => {
   it('decodes zero', () => {
@@ -405,8 +438,8 @@ describe('parseOrderbookResponse', () => {
     expect(parseOrderbookResponse('')).toBeNull();
   });
 
-  it('returns null for truncated data (< 16 bytes)', () => {
-    expect(parseOrderbookResponse('00000000000000')).toBeNull();
+  it('returns null for truncated data (< 8 bytes)', () => {
+    expect(parseOrderbookResponse('000000')).toBeNull();
   });
 
   it('returns null when both bids and asks are zero', () => {
@@ -548,7 +581,7 @@ describe('parseOrderbookResponse', () => {
   });
 
   it('returns null for numBids > 100 (overflow protection)', () => {
-    const hex = encodeU128LE(101n).toString('hex'); // numBids = 101
+    const hex = encodeU32LE(101).toString('hex') + encodeU32LE(0).toString('hex');
     expect(parseOrderbookResponse(hex)).toBeNull();
   });
 
