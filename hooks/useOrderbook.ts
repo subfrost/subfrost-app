@@ -54,22 +54,20 @@ export function readU128LE(bytes: number[], offset: number): bigint {
   return value;
 }
 
-// Maximum u128 value — used to un-invert ask prices from trie encoding
-const MAX_U128 = (1n << 128n) - 1n;
-
 /**
  * Parse orderbook response from carbine controller opcode 24 (GetOrderbookDepth).
  *
- * Binary format (verified against devnet contract 2026-03-31):
+ * Binary format (from subfrost-alkanes/alkanes/carbine-controller/src/lib.rs:730-774):
  *   u32 numBids (4 bytes LE)
  *   [u128 price, u128 amount] x numBids (32 bytes each)
  *   u32 numAsks (4 bytes LE)
  *   [u128 price, u128 amount] x numAsks (32 bytes each)
  *
  * Price encoding:
- *   - Bid prices are stored directly (raw value)
- *   - Ask prices are stored INVERTED as (MAX_U128 - price) for trie FIFO ordering
- *   - Both are scaled by 1e8 (divide to get decimal values)
+ *   - Both bid and ask prices in the response are REAL prices (raw u128, no scaling)
+ *   - The contract already un-inverts ask prices before writing the response
+ *     (line 760: real_price = u128::MAX - token_id)
+ *   - Prices are in the token's native denomination (e.g., sats)
  *   - Empty/padding slots have price=0 or amount=0 and are skipped
  */
 export function parseOrderbookResponse(data: string | number[]): OrderbookData | null {
@@ -88,14 +86,14 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
   const bids: OrderLevel[] = [];
   let bidCumTotal = 0;
   for (let i = 0; i < numBids; i++) {
-    const priceRaw = Number(readU128LE(bytes, offset)) / 1e8;
-    const amountRaw = Number(readU128LE(bytes, offset + 16)) / 1e8;
+    const price = Number(readU128LE(bytes, offset));
+    const amount = Number(readU128LE(bytes, offset + 16));
     offset += 32;
-    if (priceRaw <= 0 || amountRaw <= 0) continue;
-    bidCumTotal += priceRaw * amountRaw;
+    if (price <= 0 || amount <= 0) continue;
+    bidCumTotal += price * amount;
     bids.push({
-      price: priceRaw.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      amount: amountRaw.toFixed(4),
+      price: price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      amount: amount.toFixed(4),
       total: bidCumTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     });
   }
@@ -109,15 +107,15 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
   const asks: OrderLevel[] = [];
   let askCumTotal = 0;
   for (let i = 0; i < numAsks; i++) {
-    const storedPrice = readU128LE(bytes, offset);
-    const priceRaw = Number(MAX_U128 - storedPrice) / 1e8;
-    const amountRaw = Number(readU128LE(bytes, offset + 16)) / 1e8;
+    // Prices in response are already un-inverted by the contract (lib.rs:760)
+    const price = Number(readU128LE(bytes, offset));
+    const amount = Number(readU128LE(bytes, offset + 16));
     offset += 32;
-    if (priceRaw <= 0 || amountRaw <= 0) continue;
-    askCumTotal += priceRaw * amountRaw;
+    if (price <= 0 || amount <= 0) continue;
+    askCumTotal += price * amount;
     asks.push({
-      price: priceRaw.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      amount: amountRaw.toFixed(4),
+      price: price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      amount: amount.toFixed(4),
       total: askCumTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     });
   }

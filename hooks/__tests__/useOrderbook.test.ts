@@ -358,12 +358,10 @@ function encodeU128LE(n: bigint): Buffer {
   return buf;
 }
 
-const MAX_U128 = (1n << 128n) - 1n;
-
 /**
  * Build a hex-encoded orderbook response matching the Carbine contract format.
  * Format: u32 numBids + bids*(u128 price, u128 amount) + u32 numAsks + asks*(u128 price, u128 amount)
- * Ask prices are stored INVERTED (MAX_U128 - price) matching the contract's trie encoding.
+ * Both bid and ask prices are stored as real prices (contract already un-inverts asks).
  */
 function buildOrderbookHex(
   bids: [bigint, bigint][],
@@ -375,12 +373,10 @@ function buildOrderbookHex(
   }
   parts.push(encodeU32LE(asks.length));
   for (const [price, amount] of asks) {
-    parts.push(encodeU128LE(MAX_U128 - price), encodeU128LE(amount));
+    parts.push(encodeU128LE(price), encodeU128LE(amount));
   }
   return Buffer.concat(parts).toString('hex');
 }
-
-const SCALE = BigInt(1e8);
 
 describe('readU32LE', () => {
   it('decodes zero', () => {
@@ -449,10 +445,11 @@ describe('parseOrderbookResponse', () => {
   });
 
   it('parses single bid + single ask with correct spread', () => {
-    const bidPrice = 50000n * SCALE;   // 50,000.00
-    const bidAmount = 1n * SCALE;      // 1.0000
-    const askPrice = 51000n * SCALE;   // 51,000.00
-    const askAmount = 2n * SCALE;      // 2.0000
+    // Prices are raw u128 values (no 1e8 scaling — contract uses native denomination)
+    const bidPrice = 50000n;
+    const bidAmount = 1000n;
+    const askPrice = 51000n;
+    const askAmount = 2000n;
 
     const hex = buildOrderbookHex(
       [[bidPrice, bidAmount]],
@@ -464,32 +461,24 @@ describe('parseOrderbookResponse', () => {
     expect(result!.bids).toHaveLength(1);
     expect(result!.asks).toHaveLength(1);
 
-    // Verify prices
     expect(parseFloat(result!.bids[0].price.replace(/,/g, ''))).toBe(50000);
     expect(parseFloat(result!.asks[0].price.replace(/,/g, ''))).toBe(51000);
+    expect(parseFloat(result!.bids[0].amount)).toBe(1000);
+    expect(parseFloat(result!.asks[0].amount)).toBe(2000);
 
-    // Verify amounts
-    expect(parseFloat(result!.bids[0].amount)).toBe(1);
-    expect(parseFloat(result!.asks[0].amount)).toBe(2);
-
-    // Spread = 51000 - 50000 = 1000
     expect(result!.spread).toBe('1000.00');
-
-    // MidPrice = (50000 + 51000) / 2 = 50500
     expect(parseFloat(result!.midPrice.replace(/,/g, ''))).toBe(50500);
-
-    // SpreadPercent = (1000 / 50500) * 100 ≈ 1.980
     expect(parseFloat(result!.spreadPercent)).toBeCloseTo(1.98, 1);
   });
 
   it('parses multiple bid levels with descending prices and cumulative totals', () => {
     const bids: [bigint, bigint][] = [
-      [50000n * SCALE, 1n * SCALE],    // price=50000, amount=1
-      [49000n * SCALE, 2n * SCALE],    // price=49000, amount=2
-      [48000n * SCALE, 3n * SCALE],    // price=48000, amount=3
+      [50000n, 100n],
+      [49000n, 200n],
+      [48000n, 300n],
     ];
     const asks: [bigint, bigint][] = [
-      [51000n * SCALE, 1n * SCALE],
+      [51000n, 100n],
     ];
 
     const hex = buildOrderbookHex(bids, asks);
@@ -498,17 +487,15 @@ describe('parseOrderbookResponse', () => {
     expect(result).not.toBeNull();
     expect(result!.bids).toHaveLength(3);
 
-    // Verify descending prices
     const prices = result!.bids.map(b => parseFloat(b.price.replace(/,/g, '')));
     expect(prices[0]).toBe(50000);
     expect(prices[1]).toBe(49000);
     expect(prices[2]).toBe(48000);
 
-    // Verify cumulative totals increase
     const totals = result!.bids.map(b => parseFloat(b.total.replace(/,/g, '')));
-    expect(totals[0]).toBe(50000 * 1);                          // 50000
-    expect(totals[1]).toBe(50000 * 1 + 49000 * 2);             // 148000
-    expect(totals[2]).toBe(50000 * 1 + 49000 * 2 + 48000 * 3); // 292000
+    expect(totals[0]).toBe(50000 * 100);
+    expect(totals[1]).toBe(50000 * 100 + 49000 * 200);
+    expect(totals[2]).toBe(50000 * 100 + 49000 * 200 + 48000 * 300);
     for (let i = 1; i < totals.length; i++) {
       expect(totals[i]).toBeGreaterThan(totals[i - 1]);
     }
@@ -516,12 +503,12 @@ describe('parseOrderbookResponse', () => {
 
   it('parses multiple ask levels with ascending prices', () => {
     const bids: [bigint, bigint][] = [
-      [50000n * SCALE, 1n * SCALE],
+      [50000n, 100n],
     ];
     const asks: [bigint, bigint][] = [
-      [51000n * SCALE, 1n * SCALE],
-      [52000n * SCALE, 2n * SCALE],
-      [53000n * SCALE, 3n * SCALE],
+      [51000n, 100n],
+      [52000n, 200n],
+      [53000n, 300n],
     ];
 
     const hex = buildOrderbookHex(bids, asks);
@@ -544,36 +531,33 @@ describe('parseOrderbookResponse', () => {
 
   it('handles bids-only (no asks)', () => {
     const hex = buildOrderbookHex(
-      [[50000n * SCALE, 1n * SCALE]],
+      [[50000n, 1000n]],
       [],
     );
     const result = parseOrderbookResponse(hex);
     expect(result).not.toBeNull();
     expect(result!.bids).toHaveLength(1);
     expect(result!.asks).toHaveLength(0);
-    // spread = bestAsk(0) - bestBid(50000) = -50000
     expect(result!.spread).toBe('-50000.00');
-    // midPrice = (50000 + 0) / 2 = 25000 (formula applies even one-sided)
     expect(parseFloat(result!.midPrice.replace(/,/g, ''))).toBe(25000);
   });
 
   it('handles asks-only (no bids)', () => {
     const hex = buildOrderbookHex(
       [],
-      [[51000n * SCALE, 1n * SCALE]],
+      [[51000n, 1000n]],
     );
     const result = parseOrderbookResponse(hex);
     expect(result).not.toBeNull();
     expect(result!.bids).toHaveLength(0);
     expect(result!.asks).toHaveLength(1);
-    // midPrice = (0 + 51000) / 2 = 25500
     expect(parseFloat(result!.midPrice.replace(/,/g, ''))).toBe(25500);
   });
 
   it('handles 0x prefix in hex data', () => {
     const hex = '0x' + buildOrderbookHex(
-      [[50000n * SCALE, 1n * SCALE]],
-      [[51000n * SCALE, 1n * SCALE]],
+      [[50000n, 1000n]],
+      [[51000n, 1000n]],
     );
     const result = parseOrderbookResponse(hex);
     expect(result).not.toBeNull();
@@ -585,27 +569,25 @@ describe('parseOrderbookResponse', () => {
     expect(parseOrderbookResponse(hex)).toBeNull();
   });
 
-  it('correctly scales prices by 1e8', () => {
-    // Raw value: 5000000000000 (50000 * 1e8) → 50000.00 after /1e8
-    const rawPrice = 5000000000000n;
-    const rawAmount = 100000000n; // 1.0 after scaling
-
+  it('prices are raw values (no 1e8 scaling)', () => {
+    // Contract stores raw prices — no scaling applied
     const hex = buildOrderbookHex(
-      [[rawPrice, rawAmount]],
-      [[rawPrice * 2n, rawAmount]],
+      [[50000n, 1000n]],
+      [[51000n, 2000n]],
     );
     const result = parseOrderbookResponse(hex);
 
     expect(result).not.toBeNull();
     expect(parseFloat(result!.bids[0].price.replace(/,/g, ''))).toBe(50000);
-    expect(parseFloat(result!.asks[0].price.replace(/,/g, ''))).toBe(100000);
-    expect(parseFloat(result!.bids[0].amount)).toBe(1);
+    expect(parseFloat(result!.asks[0].price.replace(/,/g, ''))).toBe(51000);
+    expect(parseFloat(result!.bids[0].amount)).toBe(1000);
+    expect(parseFloat(result!.asks[0].amount)).toBe(2000);
   });
 
   it('accepts number[] input (not just hex string)', () => {
     const hex = buildOrderbookHex(
-      [[50000n * SCALE, 1n * SCALE]],
-      [[51000n * SCALE, 1n * SCALE]],
+      [[50000n, 1000n]],
+      [[51000n, 1000n]],
     );
     const bytes = Array.from(Buffer.from(hex, 'hex'));
     const result = parseOrderbookResponse(bytes);
