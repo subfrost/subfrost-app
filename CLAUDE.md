@@ -7,17 +7,53 @@
 
 ## Pre-Work
 
-### Rule 0a — Verify Before Asserting Impossibility
-NEVER declare something "impossible" based on code comments alone. Check git history first (`git log --all --grep="keyword"`), then run the code. A deployment bug is not an architectural limitation.
+### Rule 0 — Verify Before Asserting Impossibility
+NEVER declare something "impossible" based on code comments alone. Check git history first (`git log --all --grep="keyword"`), then run the code. A deployment bug is not an architectural limitation. Never add environment-specific workarounds — if an SDK method fails, debug WHY and fix the root cause.
 
-### Rule 0b — MANDATORY: useActualAddresses in ALL Mutation Hooks
-Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr). On devnet, symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, NOT the connected wallet's — causing "insufficient balance" errors. Use `isBrowserWallet` ONLY for signing logic and patchInputsOnly. Test enforcement: `address-handling.test.ts` asserts this pattern exists in every hook.
+---
 
-### Rule 0c — Extend Existing Patterns, Never Monkey-Patch
-Never add one-off workarounds, environment-specific code paths, or raw RPC calls when an SDK method exists. If an SDK method fails, debug WHY it fails and fix the root cause in the SDK or server — don't bypass it with inline hacks. Code paths that diverge from how other environments work will break eventually and hide real bugs.
+## Devnet Architecture (CRITICAL — Read Before Touching Devnet Code)
 
-### Rule 0d — Devnet Data Queries Use Espo (Not Raw alkanes_simulate)
-**ALL data queries on devnet** (pool discovery, balance queries, token lists) go through the **espo tertiary indexer** via REST endpoints (`/get-all-token-pairs`, `/get-all-pools-details`, `/get-alkanes-by-address`). The devnet fetch interceptor routes these to espo's `metashrew_view` calls. **NEVER skip REST methods on devnet or add raw `alkanes_simulate` fallbacks** — espo IS the data layer. The file `public/wasm/quspo.wasm` is actually the espo WASM (renamed for compatibility). If pool data is missing on devnet, the issue is espo not being loaded (check boot.ts line 228) or the pool not being created during boot.
+All rules below were established 2026-03-31 after 16+ hours debugging. Each one prevented a bug from being re-introduced. Test enforcement exists for all of them.
+
+### Address Handling — useActualAddresses is MANDATORY
+Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr).
+
+**Why:** On devnet, the SDK provider loads the boot mnemonic via `walletLoadMnemonic()`, but `createWalletFromMnemonic()` in WalletContext derives DIFFERENT addresses from the same mnemonic. Symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, not the connected wallet's — tokens land at wrong addresses → "insufficient balance" errors despite having assets.
+
+**Use `isBrowserWallet` ONLY for:** signing logic (`signTaprootPsbt` vs `signSegwitPsbt`), `patchInputsOnly`, and confirmation flows.
+
+**Test enforcement:** `address-handling.test.ts` asserts `useActualAddresses = isBrowserWallet || network === 'devnet'` exists in every hook.
+
+**After fixing address bugs:** Hard reset the devnet. Old state has tokens at the wrong derivation addresses and cannot be recovered.
+
+### Data Layer — Espo Serves ALL Data Queries
+ALL data queries on devnet (pool discovery, balance queries, token lists) go through the **espo tertiary indexer** via REST endpoints:
+- `/get-all-token-pairs` → espo `get_pools`
+- `/get-all-pools-details` → espo `get_pools`
+- `/get-alkanes-by-address` → espo `get_alkanes_by_address`
+
+The devnet fetch interceptor routes these to espo's `metashrew_view` calls. The file `public/wasm/quspo.wasm` IS the espo WASM (renamed for compatibility).
+
+**NEVER:** Skip REST methods on devnet, add raw `alkanes_simulate` fallbacks, or add `isDevnet` guards to data fetching code. If pool data is missing, check: (1) espo loaded in boot.ts, (2) pool created during boot, (3) fetch interceptor active.
+
+### Orderbook Binary Format (Carbine CLOB)
+GetOrderbookDepth (opcode 24) returns:
+```
+u32 numBids (4 bytes LE)  ← NOT u128
+[u128 price, u128 amount] × numBids
+u32 numAsks (4 bytes LE)  ← NOT u128
+[u128 price, u128 amount] × numAsks
+```
+- Prices are **raw u128** — NO 1e8 scaling
+- Ask prices are **already un-inverted** by the contract (lib.rs:760)
+- Empty padding slots (price=0 or amount=0) must be filtered
+- Source: `subfrost-alkanes/alkanes/carbine-controller/src/lib.rs:730-774`
+
+### PSBT Patching — Input-Only
+`patchPsbtForBrowserWallet()` was permanently removed (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `useActualAddresses`.
+
+---
 
 ### Rule 1 — The "Step 0" Rule: Dead Code First
 Dead code accelerates context compaction. Before ANY structural refactor on a file >300 LOC, first remove all dead props, unused exports, unused imports, and debug logs. Commit this cleanup separately before starting the real work.

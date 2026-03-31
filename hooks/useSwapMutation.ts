@@ -65,6 +65,12 @@
  *   : 'p2tr:0';
  * ```
  *
+ * ### DEVNET NOTE
+ *
+ * Symbolic addresses resolve to the SDK wallet's derivation, not the connected
+ * wallet's. The `useActualAddresses` pattern (isBrowserWallet || network === 'devnet')
+ * ensures actual addresses are always used on devnet.
+ *
  * ### FILES AFFECTED (ALL MUST USE THIS PATTERN)
  *
  * - hooks/useSwapMutation.ts ✅ Fixed 2026-03-01

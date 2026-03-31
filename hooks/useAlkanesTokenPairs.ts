@@ -4,8 +4,12 @@
  * Priority order for pool data:
  * 1. Direct REST call to /api/rpc/{network}/get-all-token-pairs (most reliable)
  * 2. dataApiGetAllTokenPairs — SDK wrapper for the above (may return empty {})
- * 3. dataApiGetAllPoolsDetails — single REST call for all pools
- * 4. alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (slowest, always works)
+ * 2b. dataApiGetAllPoolsDetails — single REST call for all pools
+ * 3. alkanesGetAllPoolsWithDetails — N+1 alkanes_simulate RPC calls (slowest, always works)
+ *
+ * Methods 1-2b use espo on devnet via the fetch interceptor.
+ * Method 3 (alkanesGetAllPoolsWithDetails) has a metashrew_view response format
+ * mismatch on devnet -- prefer Methods 1-2b.
  *
  * ## Troubleshooting: No Pools Returned
  *

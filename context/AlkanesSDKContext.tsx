@@ -224,18 +224,8 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
         console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
 
-        // JOURNAL ENTRY (2026-02-20): Dummy wallet is required - SDK throws "Wallet not loaded"
-        // without it. However, the dummy wallet causes address resolution issues: the SDK
-        // resolves ALL addresses (including explicit Bitcoin addresses in toAddresses) to
-        // the dummy wallet's addresses, causing funds to be sent to the wrong addresses.
-        //
-        // The root issue is that the SDK's alkanesExecuteWithStrings internally resolves
-        // addresses based on the loaded wallet, even when actual Bitcoin addresses are provided.
-        //
-        // Next steps to investigate:
-        // 1. Check if there's an SDK option to disable address resolution
-        // 2. Check if we can load a wallet from the browser wallet's public keys only
-        // 3. Consider using raw PSBT building instead of the SDK's execution methods
+        // RESOLVED (2026-03-31): Passing actual addresses via useActualAddresses pattern
+        // in all mutation hooks fixes the address resolution issue. See CLAUDE.md Rule 0b.
         try {
           if (network === 'devnet') {
             // On devnet, load the boot mnemonic so the SDK provider can find

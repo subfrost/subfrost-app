@@ -27,6 +27,9 @@
  * instead of symbolic addresses. For keystore wallets, symbolic addresses work correctly since
  * the actual user's mnemonic is loaded into the provider.
  *
+ * On devnet, symbolic addresses do NOT work — useActualAddresses ensures actual addresses
+ * are used regardless of wallet type.
+ *
  * Transaction ce185f7... showed both outputs going to bcrt1pvu3q2... (dummy wallet taproot
  * address from 'p2tr:0') instead of the signer and user addresses.
  *
@@ -80,7 +83,6 @@ import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
 import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
 

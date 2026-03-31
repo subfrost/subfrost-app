@@ -58,16 +58,11 @@
  * - General output address replacement (use actual addresses in SDK call instead)
  * - "Fixing" dummy wallet addresses (use actual addresses in SDK call instead)
  *
- * ## FILES THAT WERE FIXED (2026-03-01)
+ * ## CURRENT USAGE (2026-03-31)
  *
- * All these files now use actual addresses for browser wallets:
- * - hooks/useSwapMutation.ts
- * - hooks/useSwapUnwrapMutation.ts
- * - hooks/useRemoveLiquidityMutation.ts
- * - hooks/useAddLiquidityMutation.ts
- * - hooks/useWrapSwapMutation.ts
- * - hooks/useUnwrapMutation.ts
- * - hooks/useWrapMutation.ts (special case: uses fixedOutputs for signer)
+ * All mutation hooks now use useActualAddresses for address resolution.
+ * PSBT patching is only used for input-level fixes (witnessUtxo scripts,
+ * redeemScript injection for P2SH-P2WPKH).
  *
  * ============================================================================
  *

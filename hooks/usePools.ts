@@ -191,7 +191,7 @@ async function fetchPoolsFromDataApi(
   ]);
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
   // SDK may return raw API response wrapped in { data: ... } or already unwrapped.
-  // On devnet, quspo transform returns { statusCode, data: [pools] } where data is
+  // On devnet, espo (served from public/wasm/quspo.wasm for compatibility) transform returns { statusCode, data: [pools] } where data is
   // the pool array directly (not data.pools).
   const pools = parsed?.pools
     || parsed?.data?.pools
