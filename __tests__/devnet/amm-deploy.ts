@@ -24,7 +24,7 @@ type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 // All WASMs from ~/alkanes-rs (develop branch) prod_wasms/.
 // The indexer is prod_indexer/alkanes_v2.1.6_regtest.wasm and these WASMs match it.
 // Deployment pattern must exactly match scripts/deploy-subfrost-regtest.sh.
-const PROD_WASMS = resolve(process.env.HOME || '~', 'alkanes-rs/prod_wasms');
+const PROD_WASMS = resolve(__dirname, '../../prod_wasms');
 const STD_WASMS = PROD_WASMS;
 
 // Slot assignments — match scripts/deploy-subfrost-regtest.sh exactly
