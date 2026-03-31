@@ -31,8 +31,12 @@ export default function RegtestControls() {
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Only show for regtest networks (local regtest, subfrost-regtest, oylnet, regtest-local)
-  if (network !== 'regtest' && network !== 'subfrost-regtest' && network !== 'oylnet' && network !== 'regtest-local') {
+  // Only show for regtest/devnet networks
+  // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — devnet is an in-process
+  // qubitcoin node accessible via the fetch interceptor at localhost:18888. It was
+  // missing from this guard so the controls never rendered when devnet was selected.
+  const REGTEST_NETWORKS = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'] as const;
+  if (!REGTEST_NETWORKS.includes(network as typeof REGTEST_NETWORKS[number])) {
     return null;
   }
 
@@ -110,12 +114,14 @@ export default function RegtestControls() {
       // Dynamic import WASM to avoid SSR issues
       const wasm = await import('@alkanes/ts-sdk/wasm');
 
-      // Create WebProvider with network preset and subfrost URL overrides
+      // Create WebProvider with network preset and appropriate URL overrides.
+      // JOURNAL (2026-03-31): devnet uses localhost:18888 (in-process qubitcoin).
+      // The browser fetch interceptor routes calls to the in-process node for devnet.
       const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
-      const configOverrides = {
-        jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
-        data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
-      };
+      const isLocalNetwork = network === 'regtest-local' || network === 'devnet';
+      const configOverrides = isLocalNetwork
+        ? { jsonrpc_url: 'http://localhost:18888', data_api_url: 'http://localhost:18888' }
+        : { jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost', data_api_url: 'https://regtest.subfrost.io/v4/subfrost' };
       const provider = new wasm.WebProvider(providerName, configOverrides);
 
       // Call bitcoindGenerateFuture (automatically computes Subfrost address from frBTC signer)
@@ -240,7 +246,8 @@ export default function RegtestControls() {
 
   const networkLabel = network === 'subfrost-regtest' ? 'Subfrost Regtest' :
                        network === 'regtest' ? 'Local Regtest' :
-                       network === 'regtest-local' ? 'Local Docker' : 'Oylnet';
+                       network === 'regtest-local' ? 'Local Docker' :
+                       network === 'devnet' ? 'Devnet' : 'Oylnet';
 
   return (
     <div className="mt-8 rounded-xl bg-[color:var(--sf-primary)]/5 p-6">

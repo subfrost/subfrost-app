@@ -22,9 +22,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use local Docker endpoint for regtest-local, otherwise use hosted
+    // Use local endpoint for local networks, hosted regtest otherwise.
+    // JOURNAL (2026-03-31): Added 'devnet' alongside 'regtest-local' — both use
+    // localhost:18888 (qubitcoin in-process node). The fetch interceptor that routes
+    // devnet calls only runs in the browser; server-side routes hit localhost directly.
     const network = process.env.NEXT_PUBLIC_NETWORK;
-    const rpcUrl = network === 'regtest-local'
+    const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
+    const rpcUrl = LOCAL_NETWORKS.includes(network ?? '')
       ? 'http://localhost:18888'
       : 'https://regtest.subfrost.io/v4/subfrost';
 
