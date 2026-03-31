@@ -35,6 +35,17 @@
  *
  * On mainnet/regtest (non-devnet), the original alkanesExecuteWithStrings path is
  * used, returning a PSBT for the wallet to sign externally.
+ *
+ * CREATERESERVED DEPLOYMENT NOTE (2026-03-30):
+ * When using alkanesExecuteFull for contract deployment (CREATERESERVED [3,slot,...args]),
+ * the `args` are executed as cellpack inputs by the WASM during deployment. If the WASM
+ * execution REVERTS (e.g., unrecognized opcode), the binary storage is atomically rolled
+ * back — the deploy silently fails and the contract at [4:slot] has no binary.
+ * Ensure init args contain a valid opcode the contract accepts. For custom contracts
+ * without a no-op opcode, use opcode 0 (Initialize) with safe defaults or a stateless
+ * read-only query opcode. This affects ALL proxy/beacon deployments in boot.ts.
+ * Source: alkanes-rs/src/message.rs — run_special_cellpacks stores binary, but
+ * handle_message() returns Err on revert → atomic.commit() never called → rollback.
  */
 
 import { parseMaxVoutFromProtostones } from './helpers';

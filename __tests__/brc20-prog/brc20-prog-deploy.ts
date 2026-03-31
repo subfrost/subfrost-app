@@ -3,6 +3,10 @@
  *
  * Deploys FrBTC.sol (via BRC20-Prog commit-reveal) and fr-brc20-vault
  * (via alkane protostone deploy) on the devnet.
+ *
+ * NOTE: Alkane deploys via CREATERESERVED [3, slot, ...args] will atomically
+ * rollback binary storage if the WASM execution reverts. Ensure init args
+ * contain valid opcodes. See lib/devnet/boot.ts deployWasm() for details.
  */
 
 import { readFileSync, existsSync } from 'fs';

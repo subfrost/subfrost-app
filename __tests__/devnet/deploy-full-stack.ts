@@ -12,6 +12,12 @@
  *   8. Fujin difficulty futures (factory + pool + zap + LP + token template)
  *
  * Uses the same deploy+init pattern as amm-deploy.ts.
+ *
+ * CREATERESERVED ATOMIC ROLLBACK WARNING:
+ * During [3, slot, ...args] deployment, if the WASM execution with `args` reverts
+ * (e.g., unrecognized opcode), the binary storage is rolled back and the deploy
+ * silently fails. Always pass valid opcodes as init args. See boot.ts deployWasm()
+ * for full documentation of this behavior.
  */
 
 import { readFileSync, existsSync } from 'fs';

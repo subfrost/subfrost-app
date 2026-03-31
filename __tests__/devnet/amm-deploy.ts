@@ -58,9 +58,23 @@ function loadWasm(name: string, useStd = false): string {
  * Deploy a single contract via envelope (commit/reveal).
  *
  * The protostone format for deployment is:
- *   [3, slot, deployMarker, ...args]:v0:v0
+ *   [3, slot, initOpcode, ...args]:v0:v0
  *
  * The envelope contains the WASM binary.
+ *
+ * CRITICAL: CREATERESERVED ATOMIC ROLLBACK
+ * The `initOpcode` and `args` are passed as cellpack inputs and executed
+ * by the WASM during deployment. If the opcode dispatch REVERTS (e.g.,
+ * "Unrecognized opcode"), the entire atomic transaction rolls back,
+ * INCLUDING the binary storage at [4:slot]. The deploy silently fails.
+ *
+ * For std alkanes contracts (auth_token, upgradeable, beacon), the init
+ * args like [100] or [0x7fff, 4, implSlot, 1] map to recognized opcodes.
+ * For custom contracts, ensure the opcode is valid and succeeds:
+ *   - Use opcode 0 (Initialize) with safe defaults
+ *   - Or a stateless read-only query opcode
+ *
+ * Source: alkanes-rs/src/message.rs handle_message() → atomic rollback on Err
  */
 async function deployContract(
   provider: WebProvider,

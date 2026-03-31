@@ -11,6 +11,11 @@
  *   FIRE Bonding    [3:259]  → [4:259]
  *   FIRE Redemption [3:260]  → [4:260]
  *   FIRE Distributor[3:261]  → [4:261]
+ *
+ * CREATERESERVED ATOMIC ROLLBACK WARNING:
+ * During [3, slot, ...args] deployment, if WASM execution reverts, the binary
+ * is NOT stored (atomic rollback). Ensure init args contain valid opcodes.
+ * See boot.ts deployWasm() for details.
  */
 
 import { readFileSync, existsSync } from 'fs';

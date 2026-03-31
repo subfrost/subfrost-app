@@ -456,6 +456,25 @@ async function fetchWasmHex(name: string): Promise<string> {
 /**
  * Deploy a WASM contract via alkanesExecuteFull (handles commit/reveal internally).
  * Mines 1 block after deploy and yields to GC.
+ *
+ * CRITICAL: CREATERESERVED ATOMIC ROLLBACK BEHAVIOR
+ * During CREATERESERVED [3, slot, ...args], the alkanes indexer:
+ *   1. Stores the WASM binary at [4:slot] in the atomic transaction
+ *   2. Executes the WASM with `args` as the cellpack inputs
+ *   3. If execution REVERTS (e.g., unrecognized opcode), the entire
+ *      atomic transaction is rolled back — INCLUDING the binary storage
+ *
+ * This means `initArgs` MUST contain a valid opcode that the contract
+ * accepts. Common patterns:
+ *   - Std contracts (upgradeable, beacon): [0x7fff, 4, implSlot, authUnits]
+ *     These have dedicated proxy init handlers for 0x7fff/0x8fff opcodes
+ *   - Custom impl contracts: Use opcode 0 (Initialize) with safe defaults,
+ *     OR a read-only opcode (e.g., query) that succeeds without state deps
+ *   - NEVER use an unrecognized opcode (e.g., [50]) — it will revert and
+ *     the binary will NOT be stored, silently failing the deployment
+ *
+ * Source: alkanes-rs/src/message.rs — handle_message() returns Err on revert,
+ * which prevents atomic.commit(), rolling back ptr.set() from run_special_cellpacks()
  */
 async function deployWasm(
   provider: any,
@@ -621,7 +640,15 @@ async function deployWithProxy(
   wasmName: string, implSlot: number, proxySlot: number,
   label: string, onProgress: ProgressCallback, pct: number,
 ): Promise<string> {
-  // Step 1: Deploy implementation with marker init (opcode 50 = forward/no-op)
+  // Step 1: Deploy implementation WASM to [4:implSlot]
+  // WARNING: The init arg [50] is passed as cellpack input during CREATERESERVED.
+  // If the contract's opcode dispatcher doesn't handle opcode 50, the deploy
+  // reverts and the binary is NOT stored (atomic rollback). Contracts that
+  // support opcode 50 as a no-op/forward marker will deploy successfully.
+  // For contracts without opcode 50 support, use a valid opcode instead:
+  //   - opcode 0 (Initialize) with safe defaults
+  //   - a read-only query opcode that succeeds without state deps
+  // See: CREATERESERVED ATOMIC ROLLBACK BEHAVIOR docs on deployWasm()
   await fetchAndDeploy(provider, harness, segwit, taproot,
     wasmName, implSlot, [50],
     `${label} Impl`, onProgress, pct);
