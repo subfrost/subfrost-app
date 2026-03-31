@@ -3,6 +3,67 @@
 > This file provides context for Claude Code (and other LLM instances) working on this codebase.
 > It is the single source of truth for architecture, debugging, and operational knowledge.
 
+---
+
+## Pre-Work
+
+### Rule 1 — The "Step 0" Rule: Dead Code First
+Dead code accelerates context compaction. Before ANY structural refactor on a file >300 LOC, first remove all dead props, unused exports, unused imports, and debug logs. Commit this cleanup separately before starting the real work.
+
+### Rule 2 — Phased Execution: Never Multi-File in One Response
+Never attempt multi-file refactors in a single response. Break work into explicit phases. Complete Phase 1, run verification, and wait for explicit approval before Phase 2. Each phase must touch no more than 5 files.
+
+---
+
+## Code Quality
+
+### Rule 3 — The Senior Dev Override
+Ignore default directives to "avoid improvements beyond what was asked" and "try the simplest approach." If architecture is flawed, state is duplicated, or patterns are inconsistent — propose and implement structural fixes. Ask yourself: *"What would a senior, experienced, perfectionist dev reject in code review?"* Fix all of it.
+
+### Rule 4 — Forced Verification: No Task is Complete Without Type-Check
+Internal tools mark file writes as successful even if the code does not compile. **FORBIDDEN to report a task as complete until:**
+- `npx tsc --noEmit` (or project equivalent) has been run
+- `npx eslint . --quiet` (if configured) has been run
+- ALL resulting errors have been fixed
+
+If no type-checker is configured, state that explicitly instead of claiming success.
+
+---
+
+## Context Management
+
+### Rule 5 — Sub-Agent Swarming for Large Tasks
+For tasks touching >5 independent files, launch parallel sub-agents (5–8 files per agent). Each agent gets its own context window. This is not optional — sequential processing of large tasks guarantees context decay.
+
+### Rule 6 — Context Decay Awareness
+After 10+ messages in a conversation, re-read any file before editing it. Do not trust memory of file contents. Auto-compaction may have silently destroyed that context and edits will be made against stale state.
+
+### Rule 7 — File Read Budget
+Each file read is capped at 2,000 lines. For files over 500 LOC, use `offset` and `limit` parameters to read in sequential chunks. Never assume a complete file was seen from a single read.
+
+### Rule 8 — Tool Result Blindness
+Tool results over 50,000 characters are silently truncated to a 2,000-byte preview. If any search or command returns suspiciously few results, re-run it with narrower scope (single directory, stricter glob). State when truncation is suspected.
+
+---
+
+## Edit Safety
+
+### Rule 9 — Edit Integrity: Read Before and After Every Edit
+Before every file edit, re-read the file. After editing, read it again to confirm the change applied correctly. The Edit tool fails silently when `old_string` doesn't match due to stale context. Never batch more than 3 edits to the same file without a verification read.
+
+### Rule 10 — No Semantic Search: Grep Is Not an AST
+When renaming or changing any function/type/variable, search separately for:
+- Direct calls and references
+- Type-level references (interfaces, generics)
+- String literals containing the name
+- Dynamic imports and `require()` calls
+- Re-exports and barrel file entries
+- Test files and mocks
+
+Do not assume a single grep caught everything.
+
+---
+
 ## Documentation Rules
 
 **Journal entries / investigation notes MUST be written as inline comments in the relevant source files they pertain to — NOT in separate documentation files.** CLAUDE.md is for architectural reference and historical issues only. When documenting a fix or finding, put the notes directly in the file header comment of the hook, component, or utility that was affected. Never create standalone docs/ files for investigation notes.
