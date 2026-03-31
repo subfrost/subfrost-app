@@ -40,15 +40,15 @@ describe('FIRE mutation hooks browser wallet address handling', () => {
       });
 
       it('should use conditional toAddresses', () => {
-        expect(source).toContain('isBrowserWallet ? [taprootAddress]');
+        expect(source).toMatch(/(?:isBrowserWallet|useActualAddresses) \? \[taprootAddress\]/);
       });
 
       it('should use conditional changeAddress', () => {
-        expect(source).toContain('isBrowserWallet ? (segwitAddress || taprootAddress)');
+        expect(source).toMatch(/(?:isBrowserWallet|useActualAddresses) \? \(segwitAddress \|\| taprootAddress\)/);
       });
 
       it('should use conditional alkanesChangeAddress', () => {
-        expect(source).toContain('isBrowserWallet ? taprootAddress');
+        expect(source).toMatch(/(?:isBrowserWallet|useActualAddresses) \? taprootAddress/);
       });
 
       it('should NOT use bare p2tr:0 without conditional', () => {

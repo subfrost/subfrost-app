@@ -61,6 +61,7 @@ export function useVaultDeposit() {
   const { isConnected, walletType, account, signTaprootPsbt, signSegwitPsbt, network } = useWallet();
   const provider = useSandshrewProvider();
   const isBrowserWallet = walletType === 'browser';
+  const useActualAddresses = isBrowserWallet || network === 'devnet';
 
   return useMutation({
     mutationFn: async (depositData: VaultDepositData) => {
@@ -87,9 +88,9 @@ export function useVaultDeposit() {
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
 
-      const toAddresses = isBrowserWallet ? [taprootAddress || ''] : ['p2tr:0'];
-      const changeAddr = isBrowserWallet ? (segwitAddress || taprootAddress || '') : 'p2tr:0';
-      const alkanesChangeAddr = isBrowserWallet ? (taprootAddress || '') : 'p2tr:0';
+      const toAddresses = useActualAddresses ? [taprootAddress || ''] : ['p2tr:0'];
+      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress || '') : 'p2tr:0';
+      const alkanesChangeAddr = useActualAddresses ? (taprootAddress || '') : 'p2tr:0';
 
       const result = await provider.alkanesExecuteTyped({
         inputRequirements,

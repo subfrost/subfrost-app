@@ -75,11 +75,12 @@ export function useWrapZecMutation() {
       }
 
       const isBrowserWallet = walletType === 'browser';
-      const fromAddresses = isBrowserWallet
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const fromAddresses = useActualAddresses
         ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [signerAddress, userTaprootAddress]
         : [signerAddress, 'p2tr:0'];
 
@@ -91,8 +92,8 @@ export function useWrapZecMutation() {
         protostones: protostone,
         feeRate: wrapData.feeRate,
         fromAddresses,
-        changeAddress: isBrowserWallet ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
-        alkanesChangeAddress: isBrowserWallet ? userTaprootAddress : 'p2tr:0',
+        changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
+        alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
         autoConfirm: false,
         mineEnabled: false,
       });

@@ -141,11 +141,12 @@ export function useWrapMutation() {
         : getSignerAddress(network);
 
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
 
       // For browser wallets, use actual addresses for UTXO discovery (passed as
       // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
       // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      const fromAddresses = isBrowserWallet
+      const fromAddresses = useActualAddresses
         ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
@@ -164,7 +165,7 @@ export function useWrapMutation() {
       // Verified via 15+ tests on regtest. PR #251 fix at execute.rs:1348 did not resolve.
       // Diagnostic logs confirm correct addresses here. Bug is downstream in SDK execution.
       // See provider.rs:654 (WASM) and execute.rs:1278 (Rust) for diagnostic logging.
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [signerAddress, userTaprootAddress]
         : [signerAddress, 'p2tr:0'];
 
@@ -194,8 +195,8 @@ export function useWrapMutation() {
           // CRITICAL (2026-02-23): Fall back to taproot when no segwit address
           // (UniSat taproot-only). Previously fell back to 'p2wpkh:0' which resolves
           // to the dummy wallet — BTC change permanently lost.
-          changeAddress: isBrowserWallet ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
-          alkanesChangeAddress: isBrowserWallet ? userTaprootAddress : 'p2tr:0',
+          changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
+          alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
           autoConfirm: false,
           traceEnabled: true, // DIAGNOSTIC: Enable to trace address resolution flow
           mineEnabled: false,

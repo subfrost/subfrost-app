@@ -173,6 +173,7 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
 
       // ========================================================================
       // Step 3: Fetch all available UTXOs BEFORE building wrap
@@ -212,19 +213,19 @@ export function useWrapSwapMutation() {
       // - Output 1 (v1): user receives minted frBTC
       console.log('[WrapSwap] Building wrap PSBT...');
 
-      const fromAddresses = isBrowserWallet
+      const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [signerAddress, taprootAddress!]
         : [signerAddress, 'p2tr:0'];
 
-      const changeAddr = isBrowserWallet
+      const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
-      const alkanesChangeAddr = isBrowserWallet
+      const alkanesChangeAddr = useActualAddresses
         ? taprootAddress
         : 'p2tr:0';
 

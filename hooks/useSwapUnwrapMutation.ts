@@ -180,6 +180,7 @@ export function useSwapUnwrapMutation() {
       console.log('[SwapUnwrap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
 
       // ========================================================================
       // Step 3: Fetch all available UTXOs BEFORE building swap
@@ -215,19 +216,19 @@ export function useSwapUnwrapMutation() {
       // ========================================================================
       console.log('[SwapUnwrap] Building swap PSBT (Token → frBTC)...');
 
-      const fromAddresses = isBrowserWallet
+      const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [taprootAddress!]
         : ['p2tr:0'];
 
-      const changeAddr = isBrowserWallet
+      const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
-      const alkanesChangeAddr = isBrowserWallet
+      const alkanesChangeAddr = useActualAddresses
         ? taprootAddress
         : 'p2tr:0';
 

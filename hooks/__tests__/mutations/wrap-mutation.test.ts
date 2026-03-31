@@ -163,7 +163,7 @@ describe('Wrap output ordering', () => {
     // toAddresses = [signerAddress, userTaprootAddress or 'p2tr:0']
     expect(src).toContain('signerAddress');
     // Verify the array ordering in toAddresses
-    const match = src.match(/toAddresses\s*=\s*isBrowserWallet\s*\n\s*\?\s*\[(.*?)\]\s*\n/);
+    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*\[(.*?)\]\s*\n/);
     expect(match).toBeTruthy();
     // Browser wallet: [signerAddress, userTaprootAddress]
     expect(match![1]).toMatch(/signerAddress.*userTaprootAddress/);
@@ -190,20 +190,20 @@ describe('Browser wallet address handling in useWrapMutation', () => {
   });
 
   it('should use actual userTaprootAddress for browser wallet in toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*isBrowserWallet\s*\n\s*\?\s*\[(.*?)\]/);
+    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*\[(.*?)\]/);
     expect(match).toBeTruthy();
     expect(match![1]).toContain('userTaprootAddress');
     expect(match![1]).not.toContain("'p2tr:0'");
   });
 
   it('should use symbolic p2tr:0 for keystore wallet in toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*isBrowserWallet\s*\n\s*\?.+\n\s*:\s*\[(.*?)\]/);
+    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?.+\n\s*:\s*\[(.*?)\]/);
     expect(match).toBeTruthy();
     expect(match![1]).toContain("'p2tr:0'");
   });
 
   it('should use actual changeAddress for browser wallet', () => {
-    expect(src).toMatch(/changeAddress:\s*isBrowserWallet\s*\?\s*\(userSegwitAddress\s*\|\|\s*userTaprootAddress\)/);
+    expect(src).toMatch(/changeAddress:\s*(?:isBrowserWallet|useActualAddresses)\s*\?\s*\(userSegwitAddress\s*\|\|\s*userTaprootAddress\)/);
   });
 
   it('should throw when taproot address is missing', () => {

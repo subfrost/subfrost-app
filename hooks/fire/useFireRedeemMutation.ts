@@ -40,6 +40,7 @@ export function useFireRedeemMutation() {
       }
 
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
 
@@ -51,9 +52,9 @@ export function useFireRedeemMutation() {
       // FIRE token input via inputRequirements
       const inputReqStr = `A:${fireTokenId}:${fireAmount}`;
 
-      const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
-      const changeAddr = isBrowserWallet ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
-      const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+      const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
+      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
+      const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
       const result = await (provider as any).alkanesExecuteTyped({
         inputRequirements: inputReqStr,

@@ -126,21 +126,22 @@ export function useBridgeToEvm() {
       console.log('[useBridgeToEvm] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
       const btcNetwork = getBitcoinNetwork(network);
 
-      const fromAddresses = isBrowserWallet
+      const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [primaryAddress!]
         : ['p2tr:0'];
 
-      const changeAddr = isBrowserWallet
+      const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
-      const alkanesChangeAddr = isBrowserWallet
+      const alkanesChangeAddr = useActualAddresses
         ? primaryAddress
         : 'p2tr:0';
 
@@ -243,21 +244,22 @@ export function useBridgeFromEvm() {
       // This mutation is primarily for testing — in production the mint is coordinator-mediated.
       const inputRequirements = 'B:10000:v0'; // Minimal BTC for tx fee
       const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet';
       const btcNetwork = getBitcoinNetwork(network);
 
-      const fromAddresses = isBrowserWallet
+      const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      const toAddresses = isBrowserWallet
+      const toAddresses = useActualAddresses
         ? [primaryAddress!]
         : ['p2tr:0'];
 
-      const changeAddr = isBrowserWallet
+      const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
         : 'p2wpkh:0';
 
-      const alkanesChangeAddr = isBrowserWallet
+      const alkanesChangeAddr = useActualAddresses
         ? primaryAddress
         : 'p2tr:0';
 
