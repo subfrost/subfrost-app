@@ -40,7 +40,9 @@ export default function WalletDashboardPage() {
   const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [txRefreshing, setTxRefreshing] = useState(false);
-  const { showNotification } = useNotification();
+  const { showNotification, notifications } = useNotification();
+  // Count of active (unconfirmed) notifications — shown as badge on History tab
+  const pendingCount = notifications.length;
   const txHistoryRef = useRef<TransactionHistoryHandle>(null);
 
   const handleUtxoClick = useCallback(() => {
@@ -182,6 +184,11 @@ export default function WalletDashboardPage() {
                             </>
                           ) : (
                             <span className="whitespace-nowrap">{tab.shortLabel}</span>
+                          )}
+                          {tab.id === 'transactions' && pendingCount > 0 && (
+                            <span className="ml-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-orange-500/90 px-1 text-[10px] font-bold text-white leading-none">
+                              {pendingCount}
+                            </span>
                           )}
                         </button>
                         {tab.disabled && showComingSoon && (

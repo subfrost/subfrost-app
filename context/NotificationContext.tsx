@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type { OperationType } from '@/app/components/SwapSuccessNotification';
+import { storePendingTx, clearPendingTx } from '@/hooks/usePendingTransactions';
 
 export interface Notification {
   id: string;
@@ -25,11 +26,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const showNotification = useCallback((txId: string, operationType: OperationType, stepContext?: string) => {
     const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    setNotifications((prev) => [...prev, { id, txId, operationType, createdAt: Date.now(), stepContext }]);
+    // JOURNAL (2026-03-31): Persist to localStorage so useSyncPendingTransactions
+    // can re-surface the toast after navigation or page reload.
+    storePendingTx(txId, operationType, stepContext);
+    setNotifications((prev) => {
+      // Deduplicate: don't re-add if txId already has an active notification
+      // (handles the useSyncPendingTransactions re-fire on mount)
+      if (prev.some((n) => n.txId === txId)) return prev;
+      return [...prev, { id, txId, operationType, createdAt: Date.now(), stepContext }];
+    });
   }, []);
 
   const dismissNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setNotifications((prev) => {
+      const notif = prev.find((n) => n.id === id);
+      // Clear from localStorage when the user explicitly dismisses
+      if (notif) clearPendingTx(notif.txId);
+      return prev.filter((n) => n.id !== id);
+    });
   }, []);
 
   return (
