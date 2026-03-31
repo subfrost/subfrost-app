@@ -134,8 +134,8 @@ export function useSwapUnwrapMutation() {
       const segwitAddress = account?.nativeSegwit?.address;
       const taprootPubkey = account?.taproot?.pubkey;
 
-      if (!taprootAddress) {
-        throw new Error('Taproot address required for alkane operations');
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('At least one address (taproot or segwit) is required');
       }
       if (!taprootPubkey) {
         throw new Error('Taproot pubkey required for signing');

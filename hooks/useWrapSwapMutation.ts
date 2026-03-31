@@ -125,9 +125,10 @@ export function useWrapSwapMutation() {
       const segwitAddress = account?.nativeSegwit?.address;
       const taprootPubkey = account?.taproot?.pubkey;
 
-      if (!taprootAddress) {
-        throw new Error('Taproot address required for alkane operations');
+      if (!taprootAddress && !segwitAddress) {
+        throw new Error('At least one address (taproot or segwit) is required');
       }
+      const primaryAddress = taprootAddress || segwitAddress;
       if (!taprootPubkey) {
         throw new Error('Taproot pubkey required for signing');
       }
@@ -135,7 +136,7 @@ export function useWrapSwapMutation() {
       const signerAddress = getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
-      console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, signerAddress });
+      console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });
 
       // ========================================================================
       // Step 2: Calculate amounts
