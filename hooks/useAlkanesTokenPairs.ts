@@ -142,9 +142,12 @@ async function fetchPoolsFromSDK(
 
   let poolsArray: any[] = [];
 
-  // Method 1: Direct REST call to get-all-token-pairs
-  // On devnet, the fetch interceptor routes this through quspo.
-  if (poolsArray.length === 0) {
+  // On devnet, skip REST/dataApi methods (quspo is deprecated) — go straight
+  // to SDK alkanes_simulate which queries the factory contract directly.
+  const isDevnet = network === 'devnet';
+
+  // Method 1: Direct REST call to get-all-token-pairs (skip on devnet)
+  if (poolsArray.length === 0 && !isDevnet) {
     try {
       const [block, tx] = factoryId.split(':');
       const response = await withTimeout(
@@ -169,8 +172,8 @@ async function fetchPoolsFromSDK(
     }
   }
 
-  // Method 2: SDK dataApiGetAllTokenPairs
-  if (poolsArray.length === 0) {
+  // Method 2: SDK dataApiGetAllTokenPairs (skip on devnet)
+  if (poolsArray.length === 0 && !isDevnet) {
     try {
       const result = await withTimeout(provider.dataApiGetAllTokenPairs(factoryId), 15000, 'dataApiGetAllTokenPairs');
       // DIAGNOSTIC: Log raw SDK return value to debug pool fetching issues
@@ -188,8 +191,8 @@ async function fetchPoolsFromSDK(
     }
   }
 
-  // Method 2b: dataApiGetAllPoolsDetails — single REST call
-  if (poolsArray.length === 0) {
+  // Method 2b: dataApiGetAllPoolsDetails — single REST call (skip on devnet)
+  if (poolsArray.length === 0 && !isDevnet) {
     try {
       const result = await withTimeout(provider.dataApiGetAllPoolsDetails(factoryId), 15000, 'dataApiGetAllPoolsDetails');
       // DIAGNOSTIC: Log raw SDK return value
