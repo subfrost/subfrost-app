@@ -220,7 +220,7 @@ export function useSwapUnwrapMutation() {
         : ['p2wpkh:0', 'p2tr:0'];
 
       const toAddresses = isBrowserWallet
-        ? [taprootAddress]
+        ? [taprootAddress!]
         : ['p2tr:0'];
 
       const changeAddr = isBrowserWallet
@@ -351,7 +351,7 @@ export function useSwapUnwrapMutation() {
         protostones: unwrapProtostone,
         feeRate: data.feeRate,
         autoConfirm: false,
-        fromAddresses: isBrowserWallet ? [taprootAddress] : ['p2tr:0'],
+        fromAddresses: isBrowserWallet ? [taprootAddress!] : ['p2tr:0'],
         toAddresses: unwrapToAddresses,
         changeAddress: changeAddr,
         alkanesChangeAddress: alkanesChangeAddr,
@@ -430,7 +430,7 @@ export function useSwapUnwrapMutation() {
         const swapPatchResult = patchInputsOnly({
           psbtBase64: finalSwapPsbtBase64,
           network: btcNetwork,
-          taprootAddress,
+          taprootAddress: taprootAddress!,
           segwitAddress,
           paymentPubkeyHex: account?.nativeSegwit?.pubkey,
         });
@@ -443,7 +443,7 @@ export function useSwapUnwrapMutation() {
         const unwrapPatchResult = patchInputsOnly({
           psbtBase64: finalUnwrapPsbtBase64,
           network: btcNetwork,
-          taprootAddress,
+          taprootAddress: taprootAddress!,
           segwitAddress,
           paymentPubkeyHex: account?.nativeSegwit?.pubkey,
         });

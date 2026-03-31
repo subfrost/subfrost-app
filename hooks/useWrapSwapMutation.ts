@@ -217,7 +217,7 @@ export function useWrapSwapMutation() {
         : ['p2wpkh:0', 'p2tr:0'];
 
       const toAddresses = isBrowserWallet
-        ? [signerAddress, taprootAddress]
+        ? [signerAddress, taprootAddress!]
         : [signerAddress, 'p2tr:0'];
 
       const changeAddr = isBrowserWallet
@@ -378,11 +378,11 @@ export function useWrapSwapMutation() {
       // For now, use SDK to build the swap PSBT properly with protostone encoding
       // Build swap PSBT using SDK for proper protostone encoding
       const swapFromAddresses = isBrowserWallet
-        ? [taprootAddress]
+        ? [taprootAddress!]
         : ['p2tr:0'];
 
       const swapToAddresses = isBrowserWallet
-        ? [taprootAddress]
+        ? [taprootAddress!]
         : ['p2tr:0'];
 
       // Build swap input requirements: frBTC from wrap output
@@ -476,7 +476,7 @@ export function useWrapSwapMutation() {
         const wrapPatchResult = patchInputsOnly({
           psbtBase64: finalWrapPsbtBase64,
           network: btcNetwork,
-          taprootAddress,
+          taprootAddress: taprootAddress!,
           segwitAddress,
           paymentPubkeyHex: account?.nativeSegwit?.pubkey,
         });
@@ -489,7 +489,7 @@ export function useWrapSwapMutation() {
         const swapPatchResult = patchInputsOnly({
           psbtBase64: finalSwapPsbtBase64,
           network: btcNetwork,
-          taprootAddress,
+          taprootAddress: taprootAddress!,
           segwitAddress,
           paymentPubkeyHex: account?.nativeSegwit?.pubkey,
         });
