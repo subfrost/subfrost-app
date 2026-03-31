@@ -1074,3 +1074,811 @@ describe('Fujin Difficulty Futures Invariants', () => {
   }, 30_000);
 
 });
+
+// ===========================================================================
+// 4. FRBTC WRAP / UNWRAP INVARIANTS
+// ===========================================================================
+
+describe('frBTC Wrap / Unwrap Invariants', () => {
+
+  // -------------------------------------------------------------------------
+  // Invariant 1: Wrap BTC → frBTC: frBTC received > 0, BTC spent
+  // -------------------------------------------------------------------------
+
+  it('Wrap(opcode 77): frBTC balance increases after wrap', async () => {
+    // JOURNAL: The wrap operation is the entry point for all capital into the
+    // protocol. If wrap is broken, the entire ecosystem has no input liquidity.
+    // frBTC is a 1:1 representation of BTC locked in the signer UTXO.
+    // Source: e2e-all-trades.test.ts:200 — confirmed working pattern.
+
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    // Resolve frBTC signer address via opcode 103 (GetSignerPubkey)
+    const signerResult = await simulateAlkane('32:0', ['103']);
+    let signerAddr = 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz';
+    if (signerResult?.result?.execution?.data) {
+      const hex = signerResult.result.execution.data.replace('0x', '');
+      if (hex.length === 64) {
+        try {
+          const xPub = Buffer.from(hex, 'hex');
+          const p = bitcoin.payments.p2tr({ internalPubkey: xPub, network: bitcoin.networks.regtest });
+          if (p.address) signerAddr = p.address;
+        } catch { /* use default */ }
+      }
+    }
+
+    const wrapAmount = 500_000n; // 0.005 BTC
+    await executeAlkanes('[32,0,77]:v1:v1', `B:${wrapAmount}:v0`, {
+      toAddresses: [signerAddr, taprootAddress],
+    });
+
+    const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    console.log('[invariants] Wrap: frBTC before=%s after=%s', frbtcBefore.toString(), frbtcAfter.toString());
+
+    // frBTC must increase
+    expect(frbtcAfter).toBeGreaterThan(frbtcBefore);
+    // Must receive at least 1 sat of frBTC per wrap
+    expect(frbtcAfter - frbtcBefore).toBeGreaterThan(0n);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 2: Unwrap frBTC → BTC: frBTC decreases by exact burn amount
+  // -------------------------------------------------------------------------
+
+  it('Unwrap(opcode 78): frBTC decreases by exact unwrap amount', async () => {
+    // JOURNAL: Unwrap must burn exactly the amount specified — no more, no less.
+    // Over-burning = user loses funds silently. Under-burning = protocol is insolvent.
+    // Source: e2e-all-trades.test.ts:227 for pattern. We promote it to exact assertion.
+
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (frbtcBefore < 10n) {
+      throw new Error('Insufficient frBTC for unwrap invariant — wrap invariant must pass first');
+    }
+
+    const unwrapAmount = frbtcBefore / 4n;
+    await executeAlkanes('[32,0,78]:v0:v0', `32:0:${unwrapAmount}`);
+
+    const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    const burned = frbtcBefore - frbtcAfter;
+
+    console.log('[invariants] Unwrap: burned=%s (expected=%s)', burned.toString(), unwrapAmount.toString());
+    expect(burned).toBe(unwrapAmount);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 3: Wrap then Unwrap — round-trip conserves value
+  // -------------------------------------------------------------------------
+
+  it('Wrap→Unwrap round-trip: frBTC recovered == amount wrapped', async () => {
+    // JOURNAL: A user who wraps X sats and immediately unwraps X sats must get
+    // exactly X sats of frBTC credit and lose exactly X sats of frBTC.
+    // Net delta of frBTC from the pair of operations should be 0.
+
+    const frbtcStart = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    // Wrap
+    const signerResult = await simulateAlkane('32:0', ['103']);
+    let signerAddr = 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz';
+    if (signerResult?.result?.execution?.data) {
+      const hex = signerResult.result.execution.data.replace('0x', '');
+      if (hex.length === 64) {
+        try {
+          const xPub = Buffer.from(hex, 'hex');
+          const p = bitcoin.payments.p2tr({ internalPubkey: xPub, network: bitcoin.networks.regtest });
+          if (p.address) signerAddr = p.address;
+        } catch { /* use default */ }
+      }
+    }
+
+    const wrapAmt = 200_000n;
+    await executeAlkanes('[32,0,77]:v1:v1', `B:${wrapAmt}:v0`, {
+      toAddresses: [signerAddr, taprootAddress],
+    });
+    const frbtcAfterWrap = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    const received = frbtcAfterWrap - frbtcStart;
+    expect(received).toBeGreaterThan(0n);
+
+    // Unwrap the same amount we just received
+    await executeAlkanes('[32,0,78]:v0:v0', `32:0:${received}`);
+    const frbtcFinal = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    const netDelta = frbtcFinal - frbtcStart; // Should be 0
+    console.log('[invariants] Wrap→Unwrap round-trip: start=%s wrapped=%s final=%s netDelta=%s',
+      frbtcStart.toString(), received.toString(), frbtcFinal.toString(), netDelta.toString());
+
+    // Net change is zero — wrapping and immediately unwrapping is value-neutral
+    expect(frbtcFinal).toBe(frbtcStart);
+  }, 120_000);
+
+});
+
+// ===========================================================================
+// 5. AMM SWAP INVARIANTS
+// ===========================================================================
+
+describe('AMM Swap Invariants', () => {
+
+  // State for this section — pool must be created before swaps
+  let ammPoolId: string = '';
+
+  beforeAll(async () => {
+    // Create DIESEL/frBTC pool if it doesn't exist
+    const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const frbtcBal = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    if (dieselBal < 2000n || frbtcBal < 2000n) {
+      console.log('[invariants] AMM beforeAll: low balances DIESEL=%s frBTC=%s — minting',
+        dieselBal.toString(), frbtcBal.toString());
+      await executeAlkanes('[2,0,77]:v0:v0', 'B:10000:v0');
+      mineBlocks(harness, 1);
+    }
+
+    const d = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const f = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (d === 0n || f === 0n) {
+      console.log('[invariants] AMM beforeAll: cannot create pool, skipping AMM invariants');
+      return;
+    }
+
+    // Find or create pool using factory opcode 1 (CreateNewPool)
+    // First check if pool exists (opcode 2 = FindExistingPoolId)
+    const findResult = await simulateAlkane(DEVNET.FACTORY_ID, ['2', '2', '0', '32', '0']);
+    if (!findResult?.result?.execution?.error && findResult?.result?.execution?.data) {
+      const hex = findResult.result.execution.data.replace('0x', '');
+      if (hex.length >= 32) {
+        const buf = Buffer.from(hex, 'hex');
+        const b = Number(buf.readBigUInt64LE(0));
+        const t = Number(buf.readBigUInt64LE(16));
+        if (b > 0) {
+          ammPoolId = `${b}:${t}`;
+          console.log('[invariants] AMM existing pool found:', ammPoolId);
+          return;
+        }
+      }
+    }
+
+    // Pool doesn't exist — create it
+    const seedDiesel = d / 3n;
+    const seedFrbtc = f / 3n;
+    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+    try {
+      await executeAlkanes(
+        `[${fB},${fT},1,2,0,32,0,${seedDiesel},${seedFrbtc}]:v0:v0`,
+        `2:0:${seedDiesel},32:0:${seedFrbtc}`,
+      );
+      mineBlocks(harness, 1);
+    } catch (e: any) {
+      console.log('[invariants] AMM pool creation error:', e?.message?.slice(0, 100));
+      return;
+    }
+
+    // Discover pool ID
+    const poolResult = await simulateAlkane(DEVNET.FACTORY_ID, ['2', '2', '0', '32', '0']);
+    if (poolResult?.result?.execution?.data) {
+      const hex = poolResult.result.execution.data.replace('0x', '');
+      if (hex.length >= 32) {
+        const buf = Buffer.from(hex, 'hex');
+        const b = Number(buf.readBigUInt64LE(0));
+        const t = Number(buf.readBigUInt64LE(16));
+        if (b > 0) ammPoolId = `${b}:${t}`;
+      }
+    }
+    console.log('[invariants] AMM pool created:', ammPoolId);
+  }, 120_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 1: SwapExactTokensForTokens DIESEL→frBTC
+  // -------------------------------------------------------------------------
+
+  it('Swap DIESEL→frBTC: DIESEL decreases, frBTC increases', async () => {
+    // JOURNAL: The core AMM swap invariant. When you sell X tokens you must receive
+    // Y tokens where Y > 0. Any failure here means the AMM is not routing correctly.
+    // Source: e2e-all-trades.test.ts:301 for exact factory opcode 13 format.
+    // Protostone: [fB, fT, 13, pathLen=2, sell_block, sell_tx, buy_block, buy_tx, amountIn, minOut, deadline]
+
+    if (!ammPoolId) {
+      throw new Error('AMM pool not created in beforeAll — pool is required for swap invariant');
+    }
+
+    const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (dieselBefore < 100n) {
+      throw new Error('Insufficient DIESEL for swap invariant');
+    }
+
+    const swapAmt = dieselBefore / 10n;
+    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+
+    await executeAlkanes(
+      `[${fB},${fT},13,2,2,0,32,0,${swapAmt},1,99999]:v0:v0`,
+      `2:0:${swapAmt}`,
+    );
+
+    const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    console.log('[invariants] Swap DIESEL→frBTC: DIESEL %s→%s frBTC %s→%s',
+      dieselBefore.toString(), dieselAfter.toString(),
+      frbtcBefore.toString(), frbtcAfter.toString());
+
+    // DIESEL went out
+    expect(dieselAfter).toBeLessThan(dieselBefore);
+    expect(dieselBefore - dieselAfter).toBe(swapAmt);
+    // frBTC came in
+    expect(frbtcAfter).toBeGreaterThan(frbtcBefore);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 2: Reverse swap frBTC→DIESEL
+  // -------------------------------------------------------------------------
+
+  it('Swap frBTC→DIESEL: frBTC decreases, DIESEL increases', async () => {
+    // JOURNAL: Bidirectional swap symmetry. Both directions must work.
+    // If one direction is broken, the AMM can only be used to sell, creating
+    // one-way flow and eventual pool imbalance.
+
+    if (!ammPoolId) {
+      throw new Error('AMM pool not created in beforeAll');
+    }
+
+    const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (frbtcBefore < 100n) {
+      throw new Error('Insufficient frBTC for reverse swap invariant');
+    }
+
+    const swapAmt = frbtcBefore / 10n;
+    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+
+    await executeAlkanes(
+      `[${fB},${fT},13,2,32,0,2,0,${swapAmt},1,99999]:v0:v0`,
+      `32:0:${swapAmt}`,
+    );
+
+    const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    console.log('[invariants] Swap frBTC→DIESEL: frBTC %s→%s DIESEL %s→%s',
+      frbtcBefore.toString(), frbtcAfter.toString(),
+      dieselBefore.toString(), dieselAfter.toString());
+
+    // frBTC went out by exactly swapAmt
+    expect(frbtcAfter).toBeLessThan(frbtcBefore);
+    expect(frbtcBefore - frbtcAfter).toBe(swapAmt);
+    // DIESEL came in
+    expect(dieselAfter).toBeGreaterThan(dieselBefore);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 3: Pool reserves update after swap
+  // -------------------------------------------------------------------------
+
+  it('Pool GetReserves: reserve_a decreases after selling token_a', async () => {
+    // JOURNAL: The constant-product invariant (x*y=k) must hold across swaps.
+    // After selling DIESEL (token_a), reserve_a increases (pool received DIESEL)
+    // and reserve_b decreases (pool paid out frBTC).
+    // If reserves don't change, the swap was accepted but not recorded — pool accounting is broken.
+
+    if (!ammPoolId) {
+      throw new Error('AMM pool not created in beforeAll');
+    }
+
+    // Read reserves before
+    const resBefore = assertSimOk(await simulateAlkane(ammPoolId, ['97']), 'GetReserves before');
+    const buf0 = Buffer.from(resBefore, 'hex');
+    const rA0 = buf0.length >= 16 ? buf0.readBigUInt64LE(0) : 0n;
+    const rB0 = buf0.length >= 32 ? buf0.readBigUInt64LE(16) : 0n;
+
+    // Sell DIESEL into pool
+    const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const swapAmt = dieselBal > 100n ? dieselBal / 20n : 10n;
+    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+    await executeAlkanes(
+      `[${fB},${fT},13,2,2,0,32,0,${swapAmt},1,99999]:v0:v0`,
+      `2:0:${swapAmt}`,
+    );
+
+    // Read reserves after
+    const resAfter = assertSimOk(await simulateAlkane(ammPoolId, ['97']), 'GetReserves after');
+    const buf1 = Buffer.from(resAfter, 'hex');
+    const rA1 = buf1.length >= 16 ? buf1.readBigUInt64LE(0) : 0n;
+    const rB1 = buf1.length >= 32 ? buf1.readBigUInt64LE(16) : 0n;
+
+    console.log('[invariants] Pool reserves: rA %s→%s rB %s→%s',
+      rA0.toString(), rA1.toString(), rB0.toString(), rB1.toString());
+
+    // DIESEL added → reserve_a increased
+    expect(rA1).toBeGreaterThan(rA0);
+    // frBTC paid out → reserve_b decreased
+    expect(rB1).toBeLessThan(rB0);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 4: Add liquidity increases pool reserves proportionally
+  // -------------------------------------------------------------------------
+
+  it('AddLiquidity(opcode 1): pool reserves both increase after liquidity add', async () => {
+    // JOURNAL: Adding liquidity must increase both reserves by the deposited amounts.
+    // If only one reserve changes, the pool minted LP tokens without recording both sides —
+    // the LP token is backed by less than its face value.
+
+    if (!ammPoolId) {
+      throw new Error('AMM pool not created in beforeAll');
+    }
+
+    const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const frbtcBal = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (dieselBal < 50n || frbtcBal < 50n) {
+      throw new Error('Insufficient tokens for AddLiquidity invariant');
+    }
+
+    const resBefore = assertSimOk(await simulateAlkane(ammPoolId, ['97']), 'GetReserves before LP');
+    const buf0 = Buffer.from(resBefore, 'hex');
+    const rA0 = buf0.length >= 16 ? buf0.readBigUInt64LE(0) : 0n;
+    const rB0 = buf0.length >= 32 ? buf0.readBigUInt64LE(16) : 0n;
+
+    const addDiesel = dieselBal / 10n;
+    const addFrbtc = frbtcBal / 10n;
+    const [pB, pT] = ammPoolId.split(':');
+
+    await executeAlkanes(
+      `[${pB},${pT},1]:v0:v0`,
+      `2:0:${addDiesel},32:0:${addFrbtc}`,
+    );
+
+    const resAfter = assertSimOk(await simulateAlkane(ammPoolId, ['97']), 'GetReserves after LP');
+    const buf1 = Buffer.from(resAfter, 'hex');
+    const rA1 = buf1.length >= 16 ? buf1.readBigUInt64LE(0) : 0n;
+    const rB1 = buf1.length >= 32 ? buf1.readBigUInt64LE(16) : 0n;
+
+    console.log('[invariants] AddLiquidity: rA %s→%s (+%s) rB %s→%s (+%s)',
+      rA0.toString(), rA1.toString(), (rA1 - rA0).toString(),
+      rB0.toString(), rB1.toString(), (rB1 - rB0).toString());
+
+    // Both reserves must increase
+    expect(rA1).toBeGreaterThan(rA0);
+    expect(rB1).toBeGreaterThan(rB0);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 5: Constant-product k must not decrease after swap
+  // -------------------------------------------------------------------------
+
+  it('Constant-product k = rA*rB does not decrease after swap (fees only increase k)', async () => {
+    // JOURNAL: The x*y=k AMM invariant. Swap fees are collected inside the pool,
+    // meaning k can only stay constant or increase (fees add to the pool).
+    // If k decreases, tokens were extracted without a corresponding deposit — theft vector.
+
+    if (!ammPoolId) {
+      throw new Error('AMM pool not created in beforeAll');
+    }
+
+    const resBefore = assertSimOk(await simulateAlkane(ammPoolId, ['97']), 'GetReserves k-before');
+    const b0 = Buffer.from(resBefore, 'hex');
+    const rA0 = b0.length >= 16 ? b0.readBigUInt64LE(0) : 0n;
+    const rB0 = b0.length >= 32 ? b0.readBigUInt64LE(16) : 0n;
+    const k0 = rA0 * rB0;
+
+    const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const swapAmt = dieselBal > 100n ? dieselBal / 20n : 1n;
+    const [fB, fT] = DEVNET.FACTORY_ID.split(':');
+    await executeAlkanes(
+      `[${fB},${fT},13,2,2,0,32,0,${swapAmt},1,99999]:v0:v0`,
+      `2:0:${swapAmt}`,
+    );
+
+    const resAfter = assertSimOk(await simulateAlkane(ammPoolId, ['97']), 'GetReserves k-after');
+    const b1 = Buffer.from(resAfter, 'hex');
+    const rA1 = b1.length >= 16 ? b1.readBigUInt64LE(0) : 0n;
+    const rB1 = b1.length >= 32 ? b1.readBigUInt64LE(16) : 0n;
+    const k1 = rA1 * rB1;
+
+    console.log('[invariants] AMM k-invariant: k0=%s k1=%s (delta=%s)',
+      k0.toString(), k1.toString(), (k1 - k0).toString());
+
+    // k must not decrease (fees only increase k)
+    expect(k1).toBeGreaterThanOrEqual(k0);
+  }, 60_000);
+
+});
+
+// ===========================================================================
+// 6. CARBINE BUY-SIDE + ORDERBOOK MATCHING INVARIANTS
+// ===========================================================================
+
+describe('Carbine Buy-Side and Order Matching Invariants', () => {
+
+  // -------------------------------------------------------------------------
+  // Invariant 1: Buy-side PlaceLimitOrder locks exact frBTC
+  // -------------------------------------------------------------------------
+
+  it('PlaceLimitOrder(buy): frBTC locked == order amount', async () => {
+    // JOURNAL: Mirror of the sell-side invariant. The buy side locks frBTC (the quote
+    // token) to represent a resting bid. Exact lock amount is critical — any slippage
+    // on lock means the orderbook is mispriced from the start.
+    // Source: e2e-all-protocols.test.ts:942 for buy-side protostone format.
+
+    const frbtcBal = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (frbtcBal < 1000n) {
+      throw new Error('Insufficient frBTC for buy-side invariant');
+    }
+
+    const buyAmount = 800n;
+    const [cB, cT] = CARBINE_CONTROLLER.split(':');
+
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    // PlaceLimitOrder buy: side=0, pair=(DIESEL base, frBTC quote), price=45000, amount=buyAmount
+    await executeAlkanes(
+      `[${cB},${cT},20,2,0,32,0,0,45000,${buyAmount}]:v0:v0`,
+      `32:0:${buyAmount}`,
+    );
+
+    const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    const locked = frbtcBefore - frbtcAfter;
+
+    console.log('[invariants] Buy order: locked %s frBTC (expected %s)', locked.toString(), buyAmount.toString());
+    expect(locked).toBe(buyAmount);
+  }, 120_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 2: Opposing buy + sell creates a visible spread
+  // -------------------------------------------------------------------------
+
+  it('Opposing orders: GetBestBid < price < GetBestAsk (valid spread)', async () => {
+    // JOURNAL: After placing a buy at 45000 and a sell at 50000, both BestBid and
+    // BestAsk must return data AND the spread must be positive (bid < ask).
+    // A crossed book (bid >= ask) means orders should have matched — if they didn't,
+    // the matching engine is broken and there are phantom resting orders.
+
+    const bidResult = await simulateAlkane(CARBINE_CONTROLLER, ['22', '2', '0', '32', '0']);
+    const askResult = await simulateAlkane(CARBINE_CONTROLLER, ['23', '2', '0', '32', '0']);
+
+    const bidData = assertSimOk(bidResult, 'GetBestBid');
+    const askData = assertSimOk(askResult, 'GetBestAsk');
+
+    // Both sides must have orders
+    expect(bidData.length).toBeGreaterThan(0);
+    expect(askData.length).toBeGreaterThan(0);
+
+    // Parse bid and ask prices (u64 LE at offset 0)
+    const bidPrice = parseU64(bidData, 0);
+    const askPrice = parseU64(askData, 0);
+
+    console.log('[invariants] Spread: bid=%s ask=%s', bidPrice.toString(), askPrice.toString());
+
+    // Spread must be positive — bid strictly less than ask
+    expect(bidPrice).toBeGreaterThan(0n);
+    expect(askPrice).toBeGreaterThan(0n);
+    expect(bidPrice).toBeLessThan(askPrice);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 3: Crossing orders — place a buy ABOVE the best ask to force a fill
+  // -------------------------------------------------------------------------
+
+  it('Crossing order: placing bid > ask reduces OpenOrderCount (taker fill)', async () => {
+    // JOURNAL: The matching engine must execute when a taker order crosses the spread.
+    // If a buy at price 60000 lands on a resting sell at 50000, the sell must fill.
+    // Verification: open order count decreases after crossing order is placed.
+    // If count stays the same, the matcher did not run — passive crossing is a bug.
+    //
+    // Note: depending on whether the Carbine CLOB is a pure limit-order book or
+    // hybrid AMM-CLOB, crossing may settle at maker price (50000) or taker price.
+    // We only verify the count change, not the fill price, to remain ABI-agnostic.
+
+    const countBefore = parseU64(
+      assertSimOk(await simulateAlkane(CARBINE_CONTROLLER, ['25']), 'count before crossing'),
+      0,
+    );
+
+    const frbtcBal = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (frbtcBal < 100n) {
+      throw new Error('Insufficient frBTC to place crossing order');
+    }
+
+    // Place a buy at 60000 — above the resting ask at 50000 → should trigger a fill
+    const crossAmount = 100n;
+    const [cB, cT] = CARBINE_CONTROLLER.split(':');
+    await executeAlkanes(
+      `[${cB},${cT},20,2,0,32,0,0,60000,${crossAmount}]:v0:v0`,
+      `32:0:${crossAmount}`,
+    );
+
+    const countAfter = parseU64(
+      assertSimOk(await simulateAlkane(CARBINE_CONTROLLER, ['25']), 'count after crossing'),
+      0,
+    );
+
+    console.log('[invariants] Crossing fill: order count %s → %s', countBefore.toString(), countAfter.toString());
+
+    // A taker fill removes the maker order from the book.
+    // Count decreases if fill happened (or stays same if no fill — we assert decrease).
+    expect(countAfter).toBeLessThan(countBefore);
+  }, 120_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 4: After fill — seller received frBTC, buyer received DIESEL
+  // -------------------------------------------------------------------------
+
+  it('After taker fill: taker receives base token (DIESEL)', async () => {
+    // JOURNAL: The fill must deliver the purchased token to the taker.
+    // We place a crossing buy after establishing a sell order and check that
+    // DIESEL balance increased for the taker (the crossing buyer).
+    //
+    // Setup: there are still resting sell orders from earlier tests.
+    // Place a new crossing buy at a price above the best ask.
+
+    const [cB, cT] = CARBINE_CONTROLLER.split(':');
+    const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+
+    // First place a fresh sell order we know about
+    const sellAmount = 500n;
+    const diesel = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    if (diesel < sellAmount) {
+      throw new Error('Insufficient DIESEL for fill invariant — mint DIESEL first');
+    }
+    await executeAlkanes(
+      `[${cB},${cT},20,2,0,32,0,1,50000,${sellAmount}]:v0:v0`,
+      `2:0:${sellAmount}`,
+    );
+
+    // Now cross it with a buy above ask — the buy price must >= sell price to fill
+    // Use frBTC as the quote token in the buy order
+    const frbtc = await getAlkaneBalance(provider, taprootAddress, FRBTC_ID);
+    if (frbtc < 100n) {
+      throw new Error('Insufficient frBTC for crossing buy');
+    }
+    const crossAmt = 100n;
+    const dieselMidpoint = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+
+    await executeAlkanes(
+      `[${cB},${cT},20,2,0,32,0,0,55000,${crossAmt}]:v0:v0`,
+      `32:0:${crossAmt}`,
+    );
+
+    const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    console.log('[invariants] Taker fill: DIESEL before_sell=%s mid=%s after_cross=%s',
+      dieselBefore.toString(), dieselMidpoint.toString(), dieselAfter.toString());
+
+    // After the crossing buy is filled, taker (us) received DIESEL back
+    // dieselAfter should be greater than dieselMidpoint (post-sell but pre-buy)
+    expect(dieselAfter).toBeGreaterThan(dieselMidpoint);
+  }, 180_000);
+
+});
+
+// ===========================================================================
+// 7. FUJIN MINTPAIR FULL FLOW INVARIANTS
+// ===========================================================================
+
+describe('Fujin MintPair Full Flow Invariants', () => {
+
+  let fujinFactoryIdFull: string = '';
+  let fujinPoolIdFull: string = '';
+  let longTokenId: string = '';
+  let shortTokenId: string = '';
+
+  // -------------------------------------------------------------------------
+  // Setup: InitEpoch then GetEpochPool
+  // -------------------------------------------------------------------------
+
+  beforeAll(async () => {
+    // CreateMarket was already called in Fujin invariants section 3 above.
+    // Discover the factory from GetMarket, then call InitEpoch on it.
+    const marketResult = await simulateAlkane(fujinMasterId, ['90', '2', '0', '52']);
+    if (marketResult?.result?.execution?.error) {
+      console.log('[invariants] MintPair beforeAll: GetMarket error —', marketResult.result.execution.error.slice(0, 80));
+      return;
+    }
+
+    const mData = marketResult?.result?.execution?.data?.replace('0x', '') || '';
+    if (mData.length < 64) {
+      console.log('[invariants] MintPair beforeAll: no market data yet');
+      return;
+    }
+
+    const mBuf = Buffer.from(mData, 'hex');
+    const fBlock = Number(mBuf.readBigUInt64LE(0));
+    const fTx = Number(mBuf.readBigUInt64LE(16));
+    if (fBlock === 0) {
+      console.log('[invariants] MintPair beforeAll: factory AlkaneId is zero — CreateMarket may have failed');
+      return;
+    }
+    fujinFactoryIdFull = `${fBlock}:${fTx}`;
+    console.log('[invariants] MintPair factory:', fujinFactoryIdFull);
+
+    // Get current epoch
+    const epochResult = await simulateAlkane(fujinFactoryIdFull, ['3']);
+    const epochData = epochResult?.result?.execution?.data?.replace('0x', '') || '';
+    const epoch = epochData.length >= 8 ? Number(parseU64(epochData, 0)) : 0;
+    console.log('[invariants] Current epoch:', epoch);
+
+    // Call InitEpoch (opcode 1 on factory) to ensure pool exists for this epoch
+    const [ffB, ffT] = fujinFactoryIdFull.split(':');
+    try {
+      await executeAlkanes(`[${ffB},${ffT},1]:v0:v0`, 'B:100000:v0');
+      mineBlocks(harness, 1);
+    } catch (e: any) {
+      console.log('[invariants] InitEpoch error (may already exist):', e?.message?.slice(0, 80));
+    }
+
+    // GetEpochPool for current epoch
+    const poolResult = await simulateAlkane(fujinFactoryIdFull, ['2', String(epoch)]);
+    const pData = poolResult?.result?.execution?.data?.replace('0x', '') || '';
+    if (pData.length < 32) {
+      console.log('[invariants] MintPair beforeAll: no pool for epoch', epoch);
+      return;
+    }
+    const pBuf = Buffer.from(pData, 'hex');
+    const pBlock = Number(pBuf.readBigUInt64LE(0));
+    const pTx = Number(pBuf.readBigUInt64LE(16));
+    if (pBlock === 0) return;
+    fujinPoolIdFull = `${pBlock}:${pTx}`;
+    console.log('[invariants] MintPair pool:', fujinPoolIdFull);
+
+    // GetInfo (opcode 40) to extract LONG + SHORT token IDs
+    // Layout: epoch(16 bytes) + token_a_block(8) + token_a_tx(8) + gap(8) + token_b_block(8) + token_b_tx(8) ...
+    // Source: e2e-full-protocol.test.ts:383-391 — confirmed offset layout
+    const infoResult = await simulateAlkane(fujinPoolIdFull, ['40']);
+    const iData = infoResult?.result?.execution?.data?.replace('0x', '') || '';
+    if (iData.length >= 160) {
+      const iBuf = Buffer.from(iData, 'hex');
+      // token_a at byte offset 16 (block) and 24 (tx)
+      // token_b at byte offset 48 (block) and 56 (tx) — confirmed from e2e-full-protocol.test.ts:389-390
+      longTokenId = `${Number(iBuf.readBigUInt64LE(16))}:${Number(iBuf.readBigUInt64LE(32))}`;
+      shortTokenId = `${Number(iBuf.readBigUInt64LE(48))}:${Number(iBuf.readBigUInt64LE(64))}`;
+      console.log('[invariants] LONG token:', longTokenId, 'SHORT token:', shortTokenId);
+    }
+  }, 180_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 1: MintPair — DIESEL in, LONG+SHORT out (balances increase)
+  // -------------------------------------------------------------------------
+
+  it('MintPair(opcode 11): DIESEL decreases, LONG+SHORT balances increase', async () => {
+    // JOURNAL: This is the core Fujin user action — buying exposure to difficulty.
+    // A user deposits DIESEL and receives equal LONG and SHORT tokens (1:1:1 ratio).
+    // If LONG or SHORT balance doesn't increase, the pair was not minted — the pool
+    // took the capital without issuing the position. This is the most critical
+    // invariant in the Fujin system.
+    // Source: e2e-full-protocol.test.ts:411-419 for MintPair protostone format.
+
+    if (!fujinPoolIdFull) {
+      throw new Error('Fujin pool not initialized in beforeAll');
+    }
+    if (!longTokenId || longTokenId.startsWith('0:')) {
+      throw new Error('LONG token ID not discovered from GetInfo');
+    }
+    if (!shortTokenId || shortTokenId.startsWith('0:')) {
+      throw new Error('SHORT token ID not discovered from GetInfo');
+    }
+
+    const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    if (dieselBefore < 1000n) {
+      throw new Error('Insufficient DIESEL for MintPair');
+    }
+
+    const longBefore = await getAlkaneBalance(provider, taprootAddress, longTokenId);
+    const shortBefore = await getAlkaneBalance(provider, taprootAddress, shortTokenId);
+
+    const mintAmount = dieselBefore / 4n;
+    const [pB, pT] = fujinPoolIdFull.split(':');
+
+    await executeAlkanes(`[${pB},${pT},11]:v0:v0`, `2:0:${mintAmount}`);
+    mineBlocks(harness, 1);
+
+    const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    const longAfter = await getAlkaneBalance(provider, taprootAddress, longTokenId);
+    const shortAfter = await getAlkaneBalance(provider, taprootAddress, shortTokenId);
+
+    console.log('[invariants] MintPair: DIESEL %s→%s LONG %s→%s SHORT %s→%s',
+      dieselBefore.toString(), dieselAfter.toString(),
+      longBefore.toString(), longAfter.toString(),
+      shortBefore.toString(), shortAfter.toString());
+
+    // DIESEL was consumed
+    expect(dieselAfter).toBeLessThan(dieselBefore);
+    expect(dieselBefore - dieselAfter).toBe(mintAmount);
+
+    // LONG tokens were issued
+    expect(longAfter).toBeGreaterThan(longBefore);
+
+    // SHORT tokens were issued
+    expect(shortAfter).toBeGreaterThan(shortBefore);
+
+    // Symmetry: equal LONG and SHORT issued (pair ratio is 1:1)
+    expect(longAfter - longBefore).toBe(shortAfter - shortBefore);
+  }, 180_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 2: Pool reserves increase by exact DIESEL deposited
+  // -------------------------------------------------------------------------
+
+  it('MintPair: pool GetReserves increases by mintAmount after pair mint', async () => {
+    // JOURNAL: Every DIESEL deposited via MintPair must be accounted for in the pool's
+    // reserve. If GetReserves doesn't reflect the deposit, the pool is over-issuing
+    // tokens relative to its backing — the LONG/SHORT tokens are undercollateralized.
+
+    if (!fujinPoolIdFull) {
+      throw new Error('Fujin pool not initialized in beforeAll');
+    }
+
+    const resBefore = assertSimOk(await simulateAlkane(fujinPoolIdFull, ['97']), 'GetReserves before MintPair');
+    const rb = Buffer.from(resBefore, 'hex');
+    const totalResBefore = rb.length >= 16 ? rb.readBigUInt64LE(0) : 0n;
+
+    const dieselBal = await getAlkaneBalance(provider, taprootAddress, DIESEL_ID);
+    if (dieselBal < 100n) {
+      throw new Error('Insufficient DIESEL for reserve invariant');
+    }
+
+    const mintAmt = dieselBal / 5n;
+    const [pB, pT] = fujinPoolIdFull.split(':');
+    await executeAlkanes(`[${pB},${pT},11]:v0:v0`, `2:0:${mintAmt}`);
+    mineBlocks(harness, 1);
+
+    const resAfter = assertSimOk(await simulateAlkane(fujinPoolIdFull, ['97']), 'GetReserves after MintPair');
+    const ra = Buffer.from(resAfter, 'hex');
+    const totalResAfter = ra.length >= 16 ? ra.readBigUInt64LE(0) : 0n;
+
+    const delta = totalResAfter - totalResBefore;
+    console.log('[invariants] Pool reserves: before=%s after=%s delta=%s (minted=%s)',
+      totalResBefore.toString(), totalResAfter.toString(), delta.toString(), mintAmt.toString());
+
+    // Reserve must increase by the deposited amount
+    expect(totalResAfter).toBeGreaterThan(totalResBefore);
+    expect(delta).toBe(mintAmt);
+  }, 120_000);
+
+  // -------------------------------------------------------------------------
+  // Invariant 3: AddLiquidity to Fujin pool issues LP tokens
+  // -------------------------------------------------------------------------
+
+  it('AddLiquidity(opcode 1): LONG+SHORT deposited, LP balance increases', async () => {
+    // JOURNAL: After minting a pair, users can provide LONG+SHORT liquidity to the pool
+    // to earn fees. AddLiquidity must issue LP tokens proportional to the deposit.
+    // No LP tokens issued = deposit was accepted but unacknowledged — loss of funds.
+    // Source: e2e-full-protocol.test.ts:438-443 for AddLiquidity protostone format.
+
+    if (!fujinPoolIdFull || !longTokenId || !shortTokenId) {
+      throw new Error('Pool or token IDs not initialized — MintPair invariant must pass first');
+    }
+
+    const longBal = await getAlkaneBalance(provider, taprootAddress, longTokenId);
+    const shortBal = await getAlkaneBalance(provider, taprootAddress, shortTokenId);
+
+    if (longBal === 0n || shortBal === 0n) {
+      throw new Error('No LONG/SHORT tokens to add as liquidity — MintPair must succeed first');
+    }
+
+    const lpBefore = await getAlkaneBalance(provider, taprootAddress, fujinPoolIdFull);
+
+    const addAmt = longBal < shortBal ? longBal / 3n : shortBal / 3n;
+    const [pB, pT] = fujinPoolIdFull.split(':');
+
+    await executeAlkanes(
+      `[${pB},${pT},1]:v0:v0`,
+      `${longTokenId}:${addAmt},${shortTokenId}:${addAmt}`,
+    );
+    mineBlocks(harness, 1);
+
+    const longAfter = await getAlkaneBalance(provider, taprootAddress, longTokenId);
+    const shortAfter = await getAlkaneBalance(provider, taprootAddress, shortTokenId);
+    const lpAfter = await getAlkaneBalance(provider, taprootAddress, fujinPoolIdFull);
+
+    console.log('[invariants] AddLiquidity: LONG %s→%s SHORT %s→%s LP %s→%s',
+      longBal.toString(), longAfter.toString(),
+      shortBal.toString(), shortAfter.toString(),
+      lpBefore.toString(), lpAfter.toString());
+
+    // LONG and SHORT were deposited
+    expect(longAfter).toBeLessThan(longBal);
+    expect(shortAfter).toBeLessThan(shortBal);
+
+    // LP tokens were issued
+    expect(lpAfter).toBeGreaterThan(lpBefore);
+  }, 120_000);
+
+});
