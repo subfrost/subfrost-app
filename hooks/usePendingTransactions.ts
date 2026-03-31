@@ -1,98 +1,29 @@
 /**
- * usePendingTransactions — persistent mempool tracking.
+ * usePendingTransactions — mempool sync hook.
  *
  * JOURNAL (2026-03-31): Implements the oyl.io pattern (useSyncAllTransactions)
  * adapted to subfrost's TanStack Query + HeightPoller invalidation architecture.
  *
- * Problem: showNotification() creates an in-memory Notification. Navigating away
- * clears React state — the pending tx toast vanishes and there's no way to know
- * it's still unconfirmed. On page reload, all pending context is lost.
+ * Storage helpers live in lib/pendingTxStorage.ts (no React imports) to avoid
+ * a circular dependency:
+ *   NotificationContext → storePendingTx → usePendingTransactions → useNotification
+ *                                              → NotificationContext  ← CIRCULAR
  *
- * Solution:
- * 1. storePendingTx()  — called inside showNotification, persists txid+type to
- *    localStorage under key `sf-pending-tx-<txid>`.
- * 2. clearPendingTx()  — called when a tx confirms, removes the entry.
- * 3. useSyncPendingTransactions() — mounted in AppShell once. On mount it reads
- *    all `sf-pending-tx-*` keys from localStorage, checks each via esplora_tx
- *    RPC, re-fires showNotification for still-pending ones, and silently clears
- *    already-confirmed ones (they don't need a toast).
- *
- * HeightPoller integration: useTxConfirmed (used inside SwapSuccessNotification)
- * already re-checks on every block. storePendingTx / clearPendingTx only need to
- * handle the cross-session persistence gap.
- *
- * Storage format:
- *   key:   "sf-pending-tx-<txid>"
- *   value: JSON { txid, operationType, stepContext?, storedAt }
+ * useSyncPendingTransactions(): mounted in AppShell once per app load.
+ * On mount it reads all sf-pending-tx-* localStorage keys, checks each via
+ * esplora_tx RPC, re-fires showNotification for still-pending ones, and
+ * silently prunes already-confirmed ones.
  */
 
 'use client';
 
 import { useEffect } from 'react';
 import { useNotification } from '@/context/NotificationContext';
-import type { OperationType } from '@/app/components/SwapSuccessNotification';
+import { loadAllPendingRecords, clearPendingTx } from '@/lib/pendingTxStorage';
 
-const PREFIX = 'sf-pending-tx-';
-// Max age: 72 hours. Txs older than this are assumed dropped/replaced.
-const MAX_AGE_MS = 72 * 60 * 60 * 1000;
-
-export interface PendingTxRecord {
-  txid: string;
-  operationType: OperationType;
-  stepContext?: string;
-  storedAt: number;
-}
-
-// ---------------------------------------------------------------------------
-// Storage helpers (called outside React — safe to import anywhere)
-// ---------------------------------------------------------------------------
-
-export function storePendingTx(
-  txid: string,
-  operationType: OperationType,
-  stepContext?: string,
-): void {
-  if (typeof window === 'undefined') return;
-  const record: PendingTxRecord = {
-    txid,
-    operationType,
-    stepContext,
-    storedAt: Date.now(),
-  };
-  try {
-    localStorage.setItem(`${PREFIX}${txid}`, JSON.stringify(record));
-  } catch {
-    // localStorage quota exceeded — non-fatal
-  }
-}
-
-export function clearPendingTx(txid: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(`${PREFIX}${txid}`);
-}
-
-export function loadAllPendingRecords(): PendingTxRecord[] {
-  if (typeof window === 'undefined') return [];
-  const records: PendingTxRecord[] = [];
-  const now = Date.now();
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key?.startsWith(PREFIX)) continue;
-    try {
-      const record: PendingTxRecord = JSON.parse(localStorage.getItem(key) ?? '{}');
-      if (!record.txid) continue;
-      // Prune stale records
-      if (now - (record.storedAt ?? 0) > MAX_AGE_MS) {
-        localStorage.removeItem(key);
-        continue;
-      }
-      records.push(record);
-    } catch {
-      localStorage.removeItem(key);
-    }
-  }
-  return records;
-}
+// Re-export storage helpers so callers only need one import
+export { storePendingTx, clearPendingTx, loadAllPendingRecords } from '@/lib/pendingTxStorage';
+export type { PendingTxRecord } from '@/lib/pendingTxStorage';
 
 async function isTxConfirmed(txid: string): Promise<boolean> {
   try {
@@ -113,17 +44,12 @@ async function isTxConfirmed(txid: string): Promise<boolean> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Sync hook — mount in AppShell once
-// ---------------------------------------------------------------------------
-
 /**
  * On mount, reads all persisted pending txids from localStorage.
- * For each:
- *   - Already confirmed → clear from localStorage (no toast needed)
- *   - Still pending     → re-fire showNotification so the toast reappears
+ * - Already confirmed → prune silently (no toast needed)
+ * - Still pending     → re-fire showNotification so the toast reappears
  *
- * This hook is a no-op if localStorage is empty (typical case after confirmation).
+ * No-op if localStorage has no sf-pending-tx-* entries (the common case).
  */
 export function useSyncPendingTransactions(): void {
   const { showNotification } = useNotification();
@@ -132,16 +58,18 @@ export function useSyncPendingTransactions(): void {
     const records = loadAllPendingRecords();
     if (records.length === 0) return;
 
-    // Check each in parallel — don't block render
-    records.forEach(async (record) => {
-      const confirmed = await isTxConfirmed(record.txid);
-      if (confirmed) {
-        clearPendingTx(record.txid);
-      } else {
-        // Re-surface as a notification — SwapSuccessNotification will poll
-        // via useTxConfirmed and auto-clear on confirmation
-        showNotification(record.txid, record.operationType, record.stepContext);
-      }
+    records.forEach((record) => {
+      isTxConfirmed(record.txid).then((confirmed) => {
+        if (confirmed) {
+          clearPendingTx(record.txid);
+        } else {
+          // Re-surface — SwapSuccessNotification polls via useTxConfirmed
+          // and auto-clears (via onAutoClose → dismissNotification → clearPendingTx)
+          showNotification(record.txid, record.operationType, record.stepContext);
+        }
+      }).catch(() => {
+        // RPC unavailable — leave the record in localStorage for next mount
+      });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run once on mount

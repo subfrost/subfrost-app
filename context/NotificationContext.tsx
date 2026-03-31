@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type { OperationType } from '@/app/components/SwapSuccessNotification';
-import { storePendingTx, clearPendingTx } from '@/hooks/usePendingTransactions';
+import { storePendingTx, clearPendingTx } from '@/lib/pendingTxStorage';
 
 export interface Notification {
   id: string;

@@ -41,7 +41,9 @@ export default function WalletDashboardPage() {
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [txRefreshing, setTxRefreshing] = useState(false);
   const { showNotification, notifications } = useNotification();
-  // Count of active (unconfirmed) notifications — shown as badge on History tab
+  // Active notification count for History tab badge.
+  // NOTE: includes confirmed txs still in their 60s auto-close window.
+  // Acceptable: the toast is still visible, badge reflects "active tx activity".
   const pendingCount = notifications.length;
   const txHistoryRef = useRef<TransactionHistoryHandle>(null);
 
