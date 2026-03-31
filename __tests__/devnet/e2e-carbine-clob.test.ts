@@ -246,14 +246,27 @@ describe('Devnet E2E: Carbine CLOB', () => {
       console.log('[clob] Pool creation failed:', e.message?.slice(0, 200));
     }
 
-    // Deploy Carbine contracts via CREATERESERVED [3, slot] — no extra args
-    // This places the WASM at [4, slot] which is the correct pattern for
-    // factory-style contracts that need predictable IDs.
-    console.log('[clob] Deploying Carbine controller via CREATERESERVED...');
+    // Deploy Carbine contracts directly via CREATERESERVED [3, slot].
+    //
+    // NOTE on deployment patterns:
+    // Production uses proxy/beacon pattern (impl→proxy→delegatecall) from lib/devnet/boot.ts:
+    //   Controller: impl [4:80000] + proxy [4:70000]
+    //   Template:   impl [4:80001] + beacon [4:90001] + instance [4:70001]
+    //   Router:     impl [4:80002] + proxy [4:70002]
+    //
+    // However, the devnet harness extcall resolution fails for proxy→impl delegatecalls
+    // (Error: "Extcall failed: unexpected end of file"). This is a known devnet SDK
+    // limitation — the full proxy pattern requires the browser-side DevnetContext boot
+    // which handles WASM loading differently.
+    //
+    // For testing, we deploy raw WASMs directly. Query opcodes work; PlaceLimitOrder
+    // fails because the controller→template factory call [6,70001] can't resolve in
+    // the devnet simulation context.
+    console.log('[clob] Deploying Carbine via CREATERESERVED (raw)...');
     try {
-      const deployReserved = async (name: string, wasmFile: string, slot: number) => {
+      const deployReserved = async (wasmFile: string, slot: number, label: string) => {
         const wasmHex = loadProdWasm(wasmFile);
-        const result = await (provider as any).alkanesExecuteFull(
+        await (provider as any).alkanesExecuteFull(
           JSON.stringify([taprootAddress]),
           'B:100000:v0',
           `[3,${slot}]:v0:v0`,
@@ -267,67 +280,44 @@ describe('Devnet E2E: Carbine CLOB', () => {
           }),
         );
         mineBlocks(harness, 1);
-        const txid = result?.reveal_txid || result?.revealTxid || result?.txid || 'unknown';
-        console.log(`[clob] ${name} deployed to [4:${slot}] txid: ${txid}`);
-        return txid;
+        console.log(`[clob] ${label} → [4:${slot}]`);
       };
 
-      await deployReserved('Controller', 'carbine_controller.wasm', 70000);
-      await deployReserved('Template', 'carbine_template.wasm', 70001);
-      await deployReserved('Router', 'universal_router.wasm', 70002);
+      await deployReserved('carbine_controller.wasm', 70000, 'Controller');
+      await deployReserved('carbine_template.wasm', 70001, 'Template');
+      await deployReserved('universal_router.wasm', 70002, 'Router');
 
-      // Verify controller responds at [4:70000]
       controllerId = '4:70000';
       routerId = '4:70002';
-      const verifyResult = await simulateAlkane(controllerId, ['25']);
-      if (!verifyResult?.result?.execution?.error) {
-        console.log('[clob] Controller verified at 4:70000');
-      } else {
-        console.log('[clob] Controller verify at 4:70000:', verifyResult?.result?.execution?.error);
-        // Fallback: scan 2:N in case CREATERESERVED actually used CREATE
-        for (let n = 0; n <= 30; n++) {
-          try {
-            const r = await simulateAlkane(`2:${n}`, ['25']);
-            if (!r?.result?.execution?.error) {
-              controllerId = `2:${n}`;
-              console.log('[clob] Controller found at fallback ' + controllerId);
-              break;
-            }
-          } catch {}
-        }
-      }
 
-      // Initialize controller with template at [4:70001]
+      // Initialize controller with template reference
       console.log('[clob] Initializing controller with template [4:70001]...');
-      await executeAlkanes(
-        `[${controllerId.split(':')[0]},${controllerId.split(':')[1]},0,4,70001]:v0:v0`,
-        'B:10000:v0',
-      );
+      await executeAlkanes('[4,70000,0,4,70001]:v0:v0', 'B:10000:v0');
       mineBlocks(harness, 1);
 
-      // Final verify: controller responds after init
-      const postInitResult = await simulateAlkane(controllerId, ['25']);
-      if (!postInitResult?.result?.execution?.error) {
+      // Verify controller responds to GetOpenOrderCount
+      const verifyResult = await simulateAlkane(controllerId, ['25']);
+      if (!verifyResult?.result?.execution?.error) {
         carbineDeployed = true;
-        console.log('[clob] Carbine fully deployed and initialized!');
+        console.log('[clob] Carbine deployed and initialized!');
       } else {
-        console.log('[clob] Post-init verify:', postInitResult?.result?.execution?.error);
+        console.log('[clob] Verify:', verifyResult?.result?.execution?.error);
       }
 
-      // Test PlaceLimitOrder simulation to check controller→template extcall
-      const placeTest = await simulateAlkane(controllerId, [
-        '20', '2', '0', '32', '0', '1', '50000', '1000',
-      ], [
-        { id: { block: '2', tx: '0' }, value: '1000' },
-      ]);
-      if (placeTest?.result?.execution?.error) {
-        console.log('[clob] PlaceLimitOrder pre-check:', placeTest.result.execution.error.slice(0, 120));
-      } else {
-        console.log('[clob] PlaceLimitOrder pre-check: SUCCESS — orders can be placed!');
+      // Pre-check PlaceLimitOrder
+      if (carbineDeployed) {
+        const placeTest = await simulateAlkane(controllerId, [
+          '20', '2', '0', '32', '0', '1', '50000', '1000',
+        ], [{ id: { block: '2', tx: '0' }, value: '1000' }]);
+        const placeErr = placeTest?.result?.execution?.error;
+        if (!placeErr) {
+          console.log('[clob] PlaceLimitOrder: WORKS — orders can be placed!');
+        } else {
+          console.log('[clob] PlaceLimitOrder:', placeErr.slice(0, 120));
+        }
       }
     } catch (e: any) {
-      console.log('[clob] Carbine deployment failed:', e.message?.slice(0, 300));
-      console.log('[clob] Tests will run in simulation-only mode');
+      console.log('[clob] Deployment failed:', e.message?.slice(0, 300));
     }
 
     console.log('[clob] Setup complete (carbine deployed: %s)', carbineDeployed);
