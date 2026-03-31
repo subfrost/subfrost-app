@@ -13,6 +13,9 @@ NEVER declare something "impossible" based on code comments alone. Check git his
 ### Rule 0b — MANDATORY: useActualAddresses in ALL Mutation Hooks
 Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr). On devnet, symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, NOT the connected wallet's — causing "insufficient balance" errors. Use `isBrowserWallet` ONLY for signing logic and patchInputsOnly. Test enforcement: `address-handling.test.ts` asserts this pattern exists in every hook.
 
+### Rule 0c — Extend Existing Patterns, Never Monkey-Patch
+Never add one-off workarounds, environment-specific code paths, or raw RPC calls when an SDK method exists. If an SDK method fails, debug WHY it fails and fix the root cause in the SDK or server — don't bypass it with inline hacks. Code smell one-liners that diverge from how other environments work will break eventually and hide real bugs.
+
 ### Rule 1 — The "Step 0" Rule: Dead Code First
 Dead code accelerates context compaction. Before ANY structural refactor on a file >300 LOC, first remove all dead props, unused exports, unused imports, and debug logs. Commit this cleanup separately before starting the real work.
 
