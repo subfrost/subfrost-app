@@ -264,36 +264,56 @@ describe('Devnet E2E: Carbine CLOB', () => {
     // the devnet simulation context.
     console.log('[clob] Deploying Carbine via CREATERESERVED (raw)...');
     try {
-      const deployReserved = async (wasmFile: string, slot: number, label: string) => {
+      const deployReserved = async (wasmFile: string, slot: number, args: number[], label: string) => {
         const wasmHex = loadProdWasm(wasmFile);
+        const argsStr = args.length > 0 ? `,${args.join(',')}` : '';
         await (provider as any).alkanesExecuteFull(
           JSON.stringify([taprootAddress]),
           'B:100000:v0',
-          `[3,${slot}]:v0:v0`,
+          `[3,${slot}${argsStr}]:v0:v0`,
           '1',
           wasmHex,
           JSON.stringify({
-            from: [segwitAddress, taprootAddress],
+            from_addresses: [segwitAddress, taprootAddress],
             change_address: segwitAddress,
             alkanes_change_address: taprootAddress,
             mine_enabled: true,
           }),
         );
         mineBlocks(harness, 1);
+        await new Promise(r => setTimeout(r, 200)); // indexer catch-up
         console.log(`[clob] ${label} → [4:${slot}]`);
       };
 
-      await deployReserved('carbine_controller.wasm', 70000, 'Controller');
-      await deployReserved('carbine_template.wasm', 70001, 'Template');
-      await deployReserved('universal_router.wasm', 70002, 'Router');
+      const upgradeableWasm = loadProdWasm('alkanes_std_upgradeable.wasm');
+      const beaconWasm = loadProdWasm('alkanes_std_upgradeable_beacon.wasm');
+      const beaconProxyWasm = loadProdWasm('alkanes_std_beacon_proxy.wasm');
+
+      // Full proxy/beacon pattern matching lib/devnet/boot.ts:
+      // Note: boot.ts passes [50] as init arg for impls, but that's a no-op marker
+      // that may fail if the contract doesn't have opcode 50. Deploy impls with no args.
+
+      // 1. Controller impl [4:80000], proxy [4:70000]
+      await deployReserved('carbine_controller.wasm', 80000, [], 'Controller Impl');
+      await deployReserved('alkanes_std_upgradeable.wasm', 70000, [0x7fff, 4, 80000, 1], 'Controller Proxy');
+
+      // 2. Template impl [4:80001], beacon [4:90001], instance [4:70001]
+      await deployReserved('carbine_template.wasm', 80001, [], 'Template Impl');
+      await deployReserved('alkanes_std_upgradeable_beacon.wasm', 90001, [0x7fff, 4, 80001, 1], 'Template Beacon');
+      await deployReserved('alkanes_std_beacon_proxy.wasm', 70001, [0x7fff, 4, 90001], 'Template Instance');
+
+      // 3. Router impl [4:80002], proxy [4:70002]
+      await deployReserved('universal_router.wasm', 80002, [], 'Router Impl');
+      await deployReserved('alkanes_std_upgradeable.wasm', 70002, [0x7fff, 4, 80002, 1], 'Router Proxy');
 
       controllerId = '4:70000';
       routerId = '4:70002';
 
-      // Initialize controller with template reference
+      // Initialize controller through proxy: opcode 0, template at [4:70001]
       console.log('[clob] Initializing controller with template [4:70001]...');
       await executeAlkanes('[4,70000,0,4,70001]:v0:v0', 'B:10000:v0');
       mineBlocks(harness, 1);
+      await new Promise(r => setTimeout(r, 200));
 
       // Verify controller responds to GetOpenOrderCount
       const verifyResult = await simulateAlkane(controllerId, ['25']);
@@ -317,7 +337,8 @@ describe('Devnet E2E: Carbine CLOB', () => {
         }
       }
     } catch (e: any) {
-      console.log('[clob] Deployment failed:', e.message?.slice(0, 300));
+      console.error('[clob] Deployment failed:', e?.message?.slice(0, 500) || e);
+      console.error('[clob] Stack:', e?.stack?.slice(0, 300));
     }
 
     console.log('[clob] Setup complete (carbine deployed: %s)', carbineDeployed);
