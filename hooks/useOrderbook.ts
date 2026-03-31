@@ -33,7 +33,7 @@ function getEmptyOrderbook(): OrderbookData {
 /**
  * Parse a u128 from 16 little-endian bytes at offset
  */
-function readU128LE(bytes: number[], offset: number): bigint {
+export function readU128LE(bytes: number[], offset: number): bigint {
   let value = BigInt(0);
   for (let i = 0; i < 16 && offset + i < bytes.length; i++) {
     value |= BigInt(bytes[offset + i]) << BigInt(i * 8);
@@ -46,7 +46,7 @@ function readU128LE(bytes: number[], offset: number): bigint {
  * Expected format: u128 numLevels, then for each level: u128 price, u128 amount (bids), then asks.
  * Falls back to null if format is unrecognized.
  */
-function parseOrderbookResponse(data: string | number[]): OrderbookData | null {
+export function parseOrderbookResponse(data: string | number[]): OrderbookData | null {
   const bytes = typeof data === 'string'
     ? Array.from(Buffer.from(data.replace(/^0x/, ''), 'hex'))
     : data;
