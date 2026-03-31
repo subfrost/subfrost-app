@@ -114,7 +114,11 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
       }
 
       return {
-        id: item.txid || item.transactionId || item.id || String(idx),
+        // JOURNAL (2026-03-31): Append idx to guarantee key uniqueness.
+        // A single txid can produce multiple trade rows (e.g., multi-hop swaps
+        // or both sides of a trade returned as separate API items). Using txid
+        // alone caused React "duplicate key" warnings in production.
+        id: `${item.txid || item.transactionId || item.id || 'trade'}-${idx}`,
         soldFormatted,
         boughtFormatted,
         fromSymbol,
