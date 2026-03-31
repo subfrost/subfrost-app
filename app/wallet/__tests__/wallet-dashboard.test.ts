@@ -547,8 +547,8 @@ describe('BalancesPanel', () => {
     expect(src).toMatch(/useState<['"]brc20['"] \| ['"]runes['"] \| ['"]ordinals['"]>/);
   });
 
-  it('shows coming soon messages for inscription tabs', () => {
-    expect(src).toMatch(/brc20ComingSoon/);
+  it('shows coming soon messages for runes and ordinals inscription tabs', () => {
+    // BRC20 tab renders Brc20BalancesCard, only runes and ordinals show coming soon
     expect(src).toMatch(/runesComingSoon/);
     expect(src).toMatch(/ordinalsComingSoon/);
   });

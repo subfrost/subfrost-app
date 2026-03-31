@@ -49,6 +49,7 @@ vi.mock('@/utils/getConfig', () => ({
     ALKANE_FACTORY_ID: '4:65498',
     RPC_URL: 'https://mainnet.subfrost.io/v4/subfrost',
   })),
+  getRpcUrl: vi.fn(() => 'https://mainnet.subfrost.io/v4/subfrost'),
 }));
 
 vi.mock('@/queries/keys', () => ({

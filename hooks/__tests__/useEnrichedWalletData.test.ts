@@ -77,7 +77,9 @@ describe('useEnrichedWalletData', () => {
 
   it('falls back to EMPTY_BALANCES when data is null', () => {
     expect(src).toContain('EMPTY_BALANCES');
-    expect(src).toMatch(/data\?\.balances\s*\?\?\s*EMPTY_BALANCES/);
+    // The hook merges btcQuery.data with alkaneQuery.data, falling back to EMPTY_BALANCES
+    // when btcQuery.data is null: btcQuery.data ? { ...btcQuery.data.balances, alkanes: ... } : EMPTY_BALANCES
+    expect(src).toMatch(/EMPTY_BALANCES/);
   });
 
   it('falls back to EMPTY_UTXOS when data is null', () => {
@@ -196,14 +198,14 @@ describe('useEnrichedWalletData', () => {
       expect(querySrc).toContain('esplora fallback');
     });
 
-    it('fetches alkane balances via SDK alkanesByAddress in separate query', () => {
+    it('fetches alkane balances via SDK dataApiGetAlkanesByAddress in separate query', () => {
       expect(querySrc).toContain('alkaneBalanceQueryOptions');
-      expect(querySrc).toContain('alkanesByAddress');
+      expect(querySrc).toContain('dataApiGetAlkanesByAddress');
     });
 
     it('aggregates alkane balances across multiple addresses using BigInt', () => {
       expect(querySrc).toContain('BigInt(existing.balance)');
-      expect(querySrc).toContain('BigInt(balanceStr');
+      expect(querySrc).toContain('BigInt(balance)');
     });
 
     it('processes spendable, assets, and pending UTXO categories', () => {

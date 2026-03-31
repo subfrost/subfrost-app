@@ -112,12 +112,14 @@ describe('useFireChartData', () => {
     expect(dist.some(d => d.address === 'Emission Pool')).toBe(true);
   });
 
-  it('shows 100% emission pool when no staking', () => {
+  it('shows demo staker distribution when no on-chain staking data', () => {
     const { result } = renderHook(() => useFireChartData(), { wrapper: createWrapper() });
     const dist = result.current.stakerDistribution;
-    expect(dist.length).toBe(1);
-    expect(dist[0].address).toBe('Emission Pool');
-    expect(dist[0].percentage).toBe(100);
+    // Fallback: 10 demo staker addresses with percentages summing to 40%
+    expect(dist.length).toBe(10);
+    expect(dist[0].address).toContain('demo');
+    // Top staker should have ~8%
+    expect(dist[0].percentage).toBeCloseTo(8.0, 1);
   });
 
   it('price history dates are in YYYY-MM-DD format', () => {

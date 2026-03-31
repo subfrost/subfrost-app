@@ -12,7 +12,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['**/node_modules/**', '.next', 'ts-sdk/**'],
+    exclude: ['**/node_modules/**', '.next', 'ts-sdk/**', 'reference/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
     // Setup file to polyfill fetch for Node.js

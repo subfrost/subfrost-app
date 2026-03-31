@@ -382,9 +382,10 @@ describe('Address handling in wallet context', () => {
 
   it('supports single-address wallets (UniSat/OKX provide only one address type)', () => {
     // When a wallet provides only one address, the other should be empty
-    // The address detection falls back to format detection
-    expect(source).toContain("isTaproot = primaryAddress.startsWith('bc1p')");
-    expect(source).toContain("isNativeSegwit = primaryAddress.startsWith('bc1q')");
+    // The address detection falls back to format detection via resolvedAddress
+    // (resolvedAddress is primaryAddress converted to regtest on devnet)
+    expect(source).toContain("isTaproot = resolvedAddress.startsWith('bc1p')");
+    expect(source).toContain("isNativeSegwit = resolvedAddress.startsWith('bc1q')");
 
     // Empty address entries for unavailable type
     expect(source).toContain("address: '', pubkey: '', hdPath: ''");
