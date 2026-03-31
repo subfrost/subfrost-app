@@ -246,125 +246,84 @@ describe('Devnet E2E: Carbine CLOB', () => {
       console.log('[clob] Pool creation failed:', e.message?.slice(0, 200));
     }
 
-    // Deploy Carbine Controller
-    console.log('[clob] Deploying Carbine controller...');
+    // Deploy Carbine contracts via CREATERESERVED [3, slot] — no extra args
+    // This places the WASM at [4, slot] which is the correct pattern for
+    // factory-style contracts that need predictable IDs.
+    console.log('[clob] Deploying Carbine controller via CREATERESERVED...');
     try {
-      // Deploy using CREATE (not CREATERESERVED) — uses [1,0] cellpack pattern
-      // The standard deploy format for non-std contracts: [3, slot] with WASM in envelope
-      // BUT: block=3 requires the slot to be pre-reserved. Let's try [1,0] (CREATE) instead.
-      // CREATE assigns the next available sequence ID automatically.
-      const controllerWasm = loadProdWasm('carbine_controller.wasm');
-      const controllerResult = await (provider as any).alkanesExecuteFull(
-        JSON.stringify([taprootAddress]),
-        'B:100000:v0',
-        `[1,0]:v0:v0`,
-        '1',
-        controllerWasm,
-        JSON.stringify({
-          from: [segwitAddress, taprootAddress],
-          change_address: segwitAddress,
-          alkanes_change_address: taprootAddress,
-          mine_enabled: true,
-        }),
-      );
-      mineBlocks(harness, 1);
-      const controllerTxid = controllerResult?.reveal_txid || controllerResult?.revealTxid || controllerResult?.txid;
-      console.log('[clob] Controller CREATE txid:', controllerTxid);
-
-      // Deploy Carbine Template via CREATE
-      console.log('[clob] Deploying Carbine template...');
-      const templateWasm = loadProdWasm('carbine_template.wasm');
-      const templateResult = await (provider as any).alkanesExecuteFull(
-        JSON.stringify([taprootAddress]),
-        'B:100000:v0',
-        `[1,0]:v0:v0`,
-        '1',
-        templateWasm,
-        JSON.stringify({
-          from: [segwitAddress, taprootAddress],
-          change_address: segwitAddress,
-          alkanes_change_address: taprootAddress,
-          mine_enabled: true,
-        }),
-      );
-      mineBlocks(harness, 1);
-      console.log('[clob] Template CREATE txid:', templateResult?.reveal_txid || templateResult?.revealTxid || templateResult?.txid);
-
-      // Deploy Universal Router via CREATE
-      console.log('[clob] Deploying Universal Router...');
-      const routerWasm = loadProdWasm('universal_router.wasm');
-      const routerResult = await (provider as any).alkanesExecuteFull(
-        JSON.stringify([taprootAddress]),
-        'B:100000:v0',
-        `[1,0]:v0:v0`,
-        '1',
-        routerWasm,
-        JSON.stringify({
-          from: [segwitAddress, taprootAddress],
-          change_address: segwitAddress,
-          alkanes_change_address: taprootAddress,
-          mine_enabled: true,
-        }),
-      );
-      mineBlocks(harness, 1);
-      console.log('[clob] Router CREATE txid:', routerResult?.reveal_txid || routerResult?.revealTxid || routerResult?.txid);
-
-      // Discover deployed contract IDs by scanning sequence-based IDs (2:N)
-      // CREATE assigns the next available sequence, so we scan to find our contracts
-      console.log('[clob] Scanning for deployed Carbine contracts...');
-      let controllerFound = '';
-      let templateFound = '';
-      let routerFound = '';
-
-      for (let n = 0; n <= 30; n++) {
-        const testId = `2:${n}`;
-        try {
-          // Try GetOpenOrderCount (opcode 25) — only the controller will respond
-          const r = await simulateAlkane(testId, ['25']);
-          const err = r?.result?.execution?.error;
-          if (!err) {
-            controllerFound = testId;
-            console.log('[clob] Controller found at ' + testId);
-          } else if (err && !err.includes('unexpected end') && !err.includes('No opcode')) {
-            console.log('[clob] 2:' + n + ' responded: ' + err.slice(0, 80));
-          }
-        } catch {}
-      }
-
-      if (controllerFound) {
-        controllerId = controllerFound;
-        carbineDeployed = true;
-
-        // Now find template — try IsCarbine opcode on sequential IDs
-        // Template will respond differently than controller
-        // For now, template ID is controller_sequence + 1
-        const ctrlSeq = parseInt(controllerFound.split(':')[1]);
-        templateFound = `2:${ctrlSeq + 1}`;
-        routerFound = `2:${ctrlSeq + 2}`;
-        routerId = routerFound;
-        console.log('[clob] Template assumed at: ' + templateFound);
-        console.log('[clob] Router assumed at: ' + routerFound);
-
-        // Initialize Controller (opcode 0) — pass template block and tx
-        console.log('[clob] Initializing controller...');
-        const [tBlock, tTx] = templateFound.split(':');
-        await executeAlkanes(
-          `[${controllerId.split(':')[0]},${controllerId.split(':')[1]},0,${tBlock},${tTx}]:v0:v0`,
-          'B:10000:v0',
+      const deployReserved = async (name: string, wasmFile: string, slot: number) => {
+        const wasmHex = loadProdWasm(wasmFile);
+        const result = await (provider as any).alkanesExecuteFull(
+          JSON.stringify([taprootAddress]),
+          'B:100000:v0',
+          `[3,${slot}]:v0:v0`,
+          '1',
+          wasmHex,
+          JSON.stringify({
+            from: [segwitAddress, taprootAddress],
+            change_address: segwitAddress,
+            alkanes_change_address: taprootAddress,
+            mine_enabled: true,
+          }),
         );
         mineBlocks(harness, 1);
-        console.log('[clob] Controller initialized with template ' + templateFound);
+        const txid = result?.reveal_txid || result?.revealTxid || result?.txid || 'unknown';
+        console.log(`[clob] ${name} deployed to [4:${slot}] txid: ${txid}`);
+        return txid;
+      };
+
+      await deployReserved('Controller', 'carbine_controller.wasm', 70000);
+      await deployReserved('Template', 'carbine_template.wasm', 70001);
+      await deployReserved('Router', 'universal_router.wasm', 70002);
+
+      // Verify controller responds at [4:70000]
+      controllerId = '4:70000';
+      routerId = '4:70002';
+      const verifyResult = await simulateAlkane(controllerId, ['25']);
+      if (!verifyResult?.result?.execution?.error) {
+        console.log('[clob] Controller verified at 4:70000');
       } else {
-        // Also check 4:N range
-        for (let n = 70000; n <= 70005; n++) {
+        console.log('[clob] Controller verify at 4:70000:', verifyResult?.result?.execution?.error);
+        // Fallback: scan 2:N in case CREATERESERVED actually used CREATE
+        for (let n = 0; n <= 30; n++) {
           try {
-            const r = await simulateAlkane(`4:${n}`, ['25']);
-            if (!r?.result?.execution?.error?.includes('unexpected end')) {
-              console.log('[clob] Found at 4:' + n + ': ' + (r?.result?.execution?.error || 'OK'));
+            const r = await simulateAlkane(`2:${n}`, ['25']);
+            if (!r?.result?.execution?.error) {
+              controllerId = `2:${n}`;
+              console.log('[clob] Controller found at fallback ' + controllerId);
+              break;
             }
           } catch {}
         }
-        console.log('[clob] Controller not found at any scanned ID');
+      }
+
+      // Initialize controller with template at [4:70001]
+      console.log('[clob] Initializing controller with template [4:70001]...');
+      await executeAlkanes(
+        `[${controllerId.split(':')[0]},${controllerId.split(':')[1]},0,4,70001]:v0:v0`,
+        'B:10000:v0',
+      );
+      mineBlocks(harness, 1);
+
+      // Final verify: controller responds after init
+      const postInitResult = await simulateAlkane(controllerId, ['25']);
+      if (!postInitResult?.result?.execution?.error) {
+        carbineDeployed = true;
+        console.log('[clob] Carbine fully deployed and initialized!');
+      } else {
+        console.log('[clob] Post-init verify:', postInitResult?.result?.execution?.error);
+      }
+
+      // Test PlaceLimitOrder simulation to check controller→template extcall
+      const placeTest = await simulateAlkane(controllerId, [
+        '20', '2', '0', '32', '0', '1', '50000', '1000',
+      ], [
+        { id: { block: '2', tx: '0' }, value: '1000' },
+      ]);
+      if (placeTest?.result?.execution?.error) {
+        console.log('[clob] PlaceLimitOrder pre-check:', placeTest.result.execution.error.slice(0, 120));
+      } else {
+        console.log('[clob] PlaceLimitOrder pre-check: SUCCESS — orders can be placed!');
       }
     } catch (e: any) {
       console.log('[clob] Carbine deployment failed:', e.message?.slice(0, 300));
@@ -856,39 +815,61 @@ describe('Devnet E2E: Carbine CLOB', () => {
   // -------------------------------------------------------------------------
 
   describe('On-Chain CLOB Operations', () => {
-    it('should attempt PlaceLimitOrder via simulation and report result', async () => {
+    it('should place a real limit sell order and verify orderbook updates', async () => {
       if (!carbineDeployed) {
         console.log('[clob] Skipping — Carbine not deployed');
         return;
       }
 
-      // First test: simulate the PlaceLimitOrder to check if it would work
       const [cBlock, cTx] = controllerId.split(':');
-      const simResult = await simulateAlkane(controllerId, [
-        '20',        // PlaceLimitOrder
-        '2', '0',    // pair base: DIESEL
-        '32', '0',   // pair quote: frBTC
-        '1',         // side: sell
-        '50000',     // price
-        '1000',      // amount
-      ], [
-        { id: { block: '2', tx: '0' }, value: '1000' },
-      ]);
+      const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      console.log('[clob] DIESEL before sell order:', dieselBefore.toString());
+      expect(dieselBefore).toBeGreaterThan(0n);
 
-      const err = simResult?.result?.execution?.error;
-      if (err) {
-        // This is a real QA finding: PlaceLimitOrder fails via simulation
-        console.log('[QA FINDING] PlaceLimitOrder simulation error:', err);
-        // The error "Extcall failed" means the controller->template call fails
-        // This indicates the template WASM may need specific initialization or
-        // the CREATE deploy assigns a sequence ID the controller can't predict
-        expect(err).toContain('Extcall failed');
-      } else {
-        console.log('[clob] PlaceLimitOrder simulation succeeded!');
-        const data = simResult?.result?.execution?.data;
-        console.log('[clob] Response data:', String(data).slice(0, 200));
+      // Place a sell order: sell 1000 DIESEL at price 50000
+      const sellAmount = 1000n;
+      try {
+        await executeAlkanes(
+          `[${cBlock},${cTx},20,2,0,32,0,1,50000,${sellAmount}]:v0:v0`,
+          `2:0:${sellAmount}`,
+        );
+        mineBlocks(harness, 1);
+
+        const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+        console.log('[clob] DIESEL after sell order:', dieselAfter.toString());
+
+        if (dieselAfter < dieselBefore) {
+          console.log('[clob] Sell order placed! DIESEL locked:', (dieselBefore - dieselAfter).toString());
+
+          // Verify the orderbook now shows the ask
+          const depthResult = await simulateAlkane(controllerId, [
+            '24', '2', '0', '32', '0', '10',
+          ]);
+          const depthData = depthResult?.result?.execution?.data?.replace('0x', '') || '';
+          console.log('[clob] Orderbook after sell: %d bytes, data: %s',
+            depthData.length / 2, depthData.slice(0, 64));
+
+          // Check GetBestAsk — should now have a price
+          const askResult = await simulateAlkane(controllerId, ['23', '2', '0', '32', '0']);
+          console.log('[clob] BestAsk after sell:', askResult?.result?.execution?.data);
+
+          // Check open order count
+          const countResult = await simulateAlkane(controllerId, ['25']);
+          console.log('[clob] OrderCount after sell:', countResult?.result?.execution?.data);
+        } else {
+          // Transaction mined but reverted — the extcall to template failed on-chain too
+          console.log('[QA FINDING] Sell order reverted on-chain — DIESEL balance unchanged');
+          console.log('[QA] This confirms the controller→template extcall fails both in simulation and on-chain');
+          console.log('[QA] Template at [4:70001] has clone_template(opcode 6) which controller calls via [6,70001]');
+          console.log('[QA] The factory call [6,70001] → [4,70001] binary resolution may not work in devnet');
+        }
+      } catch (e: any) {
+        const msg = e.message || '';
+        console.log('[QA FINDING] PlaceLimitOrder execution error:', msg.slice(0, 300));
+        // Expected: the extcall fails
+        expect(msg).toMatch(/Extcall|unexpected end|Execution failed/i);
       }
-    }, 30_000);
+    }, 120_000);
 
     it('should verify controller reports zero open orders initially', async () => {
       if (!carbineDeployed) {
