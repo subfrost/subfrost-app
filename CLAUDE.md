@@ -14,7 +14,10 @@ NEVER declare something "impossible" based on code comments alone. Check git his
 Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr). On devnet, symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, NOT the connected wallet's — causing "insufficient balance" errors. Use `isBrowserWallet` ONLY for signing logic and patchInputsOnly. Test enforcement: `address-handling.test.ts` asserts this pattern exists in every hook.
 
 ### Rule 0c — Extend Existing Patterns, Never Monkey-Patch
-Never add one-off workarounds, environment-specific code paths, or raw RPC calls when an SDK method exists. If an SDK method fails, debug WHY it fails and fix the root cause in the SDK or server — don't bypass it with inline hacks. Code smell one-liners that diverge from how other environments work will break eventually and hide real bugs.
+Never add one-off workarounds, environment-specific code paths, or raw RPC calls when an SDK method exists. If an SDK method fails, debug WHY it fails and fix the root cause in the SDK or server — don't bypass it with inline hacks. Code paths that diverge from how other environments work will break eventually and hide real bugs.
+
+### Rule 0d — Devnet Data Queries Use Espo (Not Raw alkanes_simulate)
+**ALL data queries on devnet** (pool discovery, balance queries, token lists) go through the **espo tertiary indexer** via REST endpoints (`/get-all-token-pairs`, `/get-all-pools-details`, `/get-alkanes-by-address`). The devnet fetch interceptor routes these to espo's `metashrew_view` calls. **NEVER skip REST methods on devnet or add raw `alkanes_simulate` fallbacks** — espo IS the data layer. The file `public/wasm/quspo.wasm` is actually the espo WASM (renamed for compatibility). If pool data is missing on devnet, the issue is espo not being loaded (check boot.ts line 228) or the pool not being created during boot.
 
 ### Rule 1 — The "Step 0" Rule: Dead Code First
 Dead code accelerates context compaction. Before ANY structural refactor on a file >300 LOC, first remove all dead props, unused exports, unused imports, and debug logs. Commit this cleanup separately before starting the real work.
