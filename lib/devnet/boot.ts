@@ -626,6 +626,14 @@ async function discoverAuthTokens(address: string): Promise<string[]> {
   return tokens;
 }
 
+/** Shorthand: discover the most recently minted auth token. */
+async function discoverLastAuthToken(address: string): Promise<string> {
+  const tokens = await discoverAuthTokens(address);
+  const t = tokens.length > 0 ? tokens[tokens.length - 1] : '';
+  if (t) console.log(`[devnet-boot]   Auth token: ${t}`);
+  return t;
+}
+
 // ===========================================================================
 // Full Protocol Deployment
 // ===========================================================================
@@ -1081,33 +1089,60 @@ async function deployFullProtocol(
   // -----------------------------------------------------------------------
   // Phase 6: Carbine CLOB — controller proxy + template beacon
   // -----------------------------------------------------------------------
+  // CRITICAL: Carbine contracts do NOT support opcode 50 (the default init
+  // arg in deployWithProxy/deployWithBeacon). Using [50] causes CREATERESERVED
+  // to revert atomically — the WASM binary is never stored, and the proxy
+  // points at an empty slot. Every extcall then fails with "unexpected end
+  // of file". The fix: deploy impls with contract-specific safe opcodes.
+  //
+  // Verified init args from e2e-carbine-clob.test.ts (PlaceLimitOrder works):
+  //   Controller impl: [0, 0, 0]  — opcode 0 (Initialize) with dummy template [0:0]
+  //   Template impl:   [3]        — opcode 3 (query_metadata), read-only
+  //   Router impl:     [0]        — opcode 0 (Initialize)
+  // -----------------------------------------------------------------------
   onProgress('Deploying Carbine CLOB...', 88);
   console.log('[devnet-boot] Phase 6: Carbine CLOB (proxied)...');
   try {
-    contracts.carbineController.authTokenId = await deployWithProxy(
-      provider, harness, segwit, taproot, upgradeableWasm,
-      'carbine_controller', S.CARBINE_CTRL_IMPL, S.CARBINE_CTRL_PROXY,
-      'Carbine Controller', onProgress, 88);
+    // 1. Controller impl [4:80000] — opcode 0 = Initialize(template_block=0, template_tx=0)
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'carbine_controller', S.CARBINE_CTRL_IMPL, [0, 0, 0],
+      'Carbine Controller Impl', onProgress, 88);
+    // 2. Controller proxy [4:70000]
+    await deployWasm(provider, harness, segwit, taproot,
+      upgradeableWasm, S.CARBINE_CTRL_PROXY,
+      [0x7fff, 4, S.CARBINE_CTRL_IMPL, 1],
+      'Carbine Controller Proxy', onProgress, 88);
+    contracts.carbineController.authTokenId = await discoverLastAuthToken(taproot);
 
-    contracts.carbineTemplate.authTokenId = await deployWithBeacon(
-      provider, harness, segwit, taproot, upgradeableBeaconWasm,
-      'carbine_template', S.CARBINE_TMPL_IMPL, S.CARBINE_TMPL_BEACON,
-      'Carbine Template', onProgress, 89);
+    // 3. Template impl [4:80001] — opcode 3 = query_metadata (read-only, safe)
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'carbine_template', S.CARBINE_TMPL_IMPL, [3],
+      'Carbine Template Impl', onProgress, 89);
+    // 4. Template beacon [4:90001]
+    await deployWasm(provider, harness, segwit, taproot,
+      upgradeableBeaconWasm, S.CARBINE_TMPL_BEACON,
+      [0x7fff, 4, S.CARBINE_TMPL_IMPL, 1],
+      'Carbine Template Beacon', onProgress, 89);
+    contracts.carbineTemplate.authTokenId = await discoverLastAuthToken(taproot);
 
-    // Deploy one beacon-proxy instance for the default carbine
+    // 5. Template beacon-proxy instance [4:70001]
     await deployBeaconInstance(provider, harness, segwit, taproot,
       beaconProxyWasm, S.CARBINE_TEMPLATE, S.CARBINE_TMPL_BEACON,
       'Carbine Default', onProgress, 89);
 
-    contracts.universalRouter.authTokenId = await deployWithProxy(
-      provider, harness, segwit, taproot, upgradeableWasm,
-      'universal_router', S.UNIVERSAL_ROUTER_IMPL, S.UNIVERSAL_ROUTER_PROXY,
-      'Universal Router', onProgress, 90);
+    // 6. Router impl [4:80002] — opcode 0 = Initialize
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'universal_router', S.UNIVERSAL_ROUTER_IMPL, [0],
+      'Universal Router Impl', onProgress, 90);
+    // 7. Router proxy [4:70002]
+    await deployWasm(provider, harness, segwit, taproot,
+      upgradeableWasm, S.UNIVERSAL_ROUTER_PROXY,
+      [0x7fff, 4, S.UNIVERSAL_ROUTER_IMPL, 1],
+      'Universal Router Proxy', onProgress, 90);
+    contracts.universalRouter.authTokenId = await discoverLastAuthToken(taproot);
 
-    // Initialize controller through proxy with template reference.
-    // Without this, PlaceLimitOrder fails because the controller doesn't know
-    // where the template contract is for spawning carbine NFTs.
-    // Opcode 0 = Initialize, args = [4, 70001] = template at [4:CARBINE_TEMPLATE]
+    // Initialize controller through proxy with real template reference.
+    // Opcode 0 = Initialize, args = [4, CARBINE_TEMPLATE] = template at [4:70001]
     await initThroughProxy(provider, harness, segwit, taproot,
       S.CARBINE_CTRL_PROXY, [0, 4, S.CARBINE_TEMPLATE],
       'Carbine Controller');
