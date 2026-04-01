@@ -76,8 +76,12 @@ export default function LimitOrderPanel({
     if (!price || !amount || !isConnected) return;
     setIsSubmitting(true);
     try {
-      const config = getConfig(network || 'devnet');
+      const effectiveNetwork = network || 'devnet';
+      console.log('[LimitOrder] Network:', network, '→ effective:', effectiveNetwork);
+      const config = getConfig(effectiveNetwork);
       const controllerId = (config as any).CARBINE_CONTROLLER_ID;
+      console.log('[LimitOrder] Config keys:', Object.keys(config));
+      console.log('[LimitOrder] CARBINE_CONTROLLER_ID:', controllerId);
       if (!controllerId) throw new Error('Carbine controller not configured for this network');
 
       const [cBlock, cTx] = controllerId.split(':');
