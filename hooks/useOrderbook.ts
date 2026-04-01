@@ -1,3 +1,90 @@
+/**
+ * useOrderbook.ts
+ *
+ * Fetches live orderbook depth from the Carbine CLOB controller (opcode 24:
+ * GetOrderbookDepth) and returns parsed bid/ask levels for display.
+ *
+ * =============================================================================
+ * JOURNAL — Carbine CLOB orderbook debugging (2026-04-01)
+ * =============================================================================
+ *
+ * ## Contract IDs (devnet)
+ *   Controller Proxy:  [4:70000]  ← ALL calls go here, never to impl
+ *   Controller Impl:   [4:80000]  ← actual logic, never called directly
+ *   Template Impl:     [4:80001]  ← per-order-pair template logic
+ *   Template Beacon:   [4:90001]  ← beacon for template upgrades
+ *   Default instance:  [4:70001]  ← beacon-proxy instance (default pair)
+ *   Universal Router:  [4:70002]  ← proxy, [4:80002] impl
+ *
+ * ## GetOrderbookDepth (opcode 24) — input format
+ *   inputs: ['24', base_block, base_tx, quote_block, quote_tx, depth]
+ *   Example for frBTC(32:0)/DIESEL(2:0): ['24','32','0','2','0','10']
+ *
+ * ## CRITICAL: Pair ordering
+ *   The controller keys orders by the pair (base, quote) as provided to
+ *   PlaceLimitOrder. If you query with the WRONG pair order you get 8 bytes
+ *   of zeros (empty). The hook tries both orderings and uses the one with data.
+ *
+ *   Verified on devnet (2026-04-01): orders placed via LimitOrderPanel with
+ *   DIESEL as base and frBTC as quote are stored under (frBTC=32:0, DIESEL=2:0)
+ *   — i.e., the *second* token (quote) becomes the first key component.
+ *   If the first query returns ≤8 zero bytes, the hook retries with reversed pair.
+ *
+ * ## Response binary format (source: carbine-controller/src/lib.rs:730-774)
+ *   [0..3]   numBids (u32 LE)  — NOT u128
+ *   [4..N]   bid[i]: [u128 price LE (16 bytes), u128 amount LE (16 bytes)]
+ *   [N..N+3] numAsks (u32 LE)
+ *   [N+4..M] ask[i]: [u128 price LE (16 bytes), u128 amount LE (16 bytes)]
+ *
+ * ## Ask price inversion (VERIFIED 2026-04-01 — do not remove un-inversion)
+ *   Ask prices in the response are INVERTED trie keys: stored = u128::MAX - real.
+ *   The contract source (lib.rs:760) suggests it un-inverts before returning, but
+ *   live devnet data proves it does NOT — stored value came back as
+ *   340282366920938463463374607431768211355 and real price was 100.
+ *   The parser MUST un-invert: real = U128_MAX - stored.
+ *   Formula check: stored > U128_MAX/2 → it's an inverted ask.
+ *
+ * ## Price/amount scaling
+ *   All raw values are in 1e8 (satoshi) units. Divide by 1e8 for display.
+ *   PlaceLimitOrder sends: price_scaled = human_price * 1e8,
+ *                          amount_scaled = human_amount * 1e8
+ *
+ * ## Deduplication
+ *   A single order appears in BOTH bids and asks within the trie traversal when
+ *   depth crosses the bid/ask boundary. The hook filters out ask entries that
+ *   have identical price+amount to a bid entry — those are the same order echoed.
+ *
+ * ## Verification script (run in browser console on devnet)
+ *   // Check open order count:
+ *   (async () => {
+ *     const r = await fetch('http://localhost:18888', { method: 'POST',
+ *       headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+ *       jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target:
+ *       { block: '4', tx: '70000' }, inputs: ['25'], block_tag: 'latest' }],
+ *       id: 1 }) });
+ *     const j = await r.json();
+ *     console.log('Open orders:', j?.result?.execution?.data, '| err:', j?.result?.execution?.error);
+ *   })();
+ *
+ *   // Query orderbook depth (frBTC base, DIESEL quote — the working pair order):
+ *   (async () => {
+ *     const r = await fetch('http://localhost:18888', { method: 'POST',
+ *       headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+ *       jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target:
+ *       { block: '4', tx: '70000' }, inputs: ['24','32','0','2','0','10'],
+ *       block_tag: 'latest' }], id: 1 }) });
+ *     const j = await r.json();
+ *     console.log('Hex:', j?.result?.execution?.data, '| err:', j?.result?.execution?.error);
+ *   })();
+ *
+ * ## Console noise
+ *   The browser console fills with "[__get_len] MISS #N" spam from the qubitcoin
+ *   WASM indexer. Filter: use "-__get_len" in Chrome DevTools console filter.
+ *   This is why Carbine was moved to boot.ts Phase 3a — its deploy logs appear
+ *   before the __get_len spam overwhelms the console.
+ * =============================================================================
+ */
+
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';

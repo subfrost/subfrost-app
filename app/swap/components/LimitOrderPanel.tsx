@@ -1,3 +1,57 @@
+/**
+ * LimitOrderPanel.tsx
+ *
+ * UI panel for placing limit orders on the Carbine CLOB. Handles the buy/sell
+ * toggle, price/amount inputs, fee selection, and transaction submission.
+ *
+ * =============================================================================
+ * CRITICAL: Use useLimitOrderMutation — do NOT call sdkProvider directly
+ * =============================================================================
+ *
+ * The handleSubmit function currently calls sdkProvider.alkanesExecuteTyped()
+ * directly from useAlkanesSDK(). This BYPASSES devnet auto-routing in execute.ts
+ * and causes "Insufficient alkanes: have 0, need N" on sell orders even when
+ * the wallet has DIESEL balance.
+ *
+ * WHY IT FAILS:
+ *   useAlkanesSDK() returns the raw SDK provider. The raw provider uses quspo
+ *   data APIs for UTXO discovery. On devnet, quspo data can be stale/incomplete.
+ *   execute.ts has devnet detection that switches to alkanesExecuteFull (primary
+ *   alkanes indexer, always complete). That detection only fires when going
+ *   through useSandshrewProvider(), which wraps execute.ts.
+ *
+ * CORRECT PATTERN (already implemented in hooks/useLimitOrderMutation.ts):
+ *   const provider = useSandshrewProvider();       // ← routes through execute.ts
+ *   await provider.alkanesExecuteTyped({ ... });   // ← devnet-aware
+ *
+ * MIGRATION TODO:
+ *   Replace the inline handleSubmit execution logic with:
+ *     const limitOrderMutation = useLimitOrderMutation();
+ *     limitOrderMutation.mutate({ controllerId, baseTokenId, quoteTokenId,
+ *       side, price, amount, feeRate });
+ *   This also picks up correct useActualAddresses logic and browser wallet
+ *   input patching (patchInputsOnly) from useLimitOrderMutation.
+ *
+ * useActualAddresses is applied in this file via:
+ *   const useActualAddresses = network === 'devnet' || !segwit;
+ * This is correct. Do NOT remove it.
+ *
+ * =============================================================================
+ * CARBINE CLOB — PlaceLimitOrder (opcode 20) call format
+ * =============================================================================
+ *   protostone: [cBlock, cTx, 20, aBlock, aTx, 32, 0, sideNum, priceScaled, amountScaled]
+ *   side: 0=buy, 1=sell
+ *   priceScaled  = Math.floor(parseFloat(price)  * 1e8)
+ *   amountScaled = Math.floor(parseFloat(amount) * 1e8)
+ *
+ *   For sell: inputReqs = '2:0:{amountScaled}'  (send DIESEL, the base token)
+ *   For buy:  inputReqs = '32:0:{priceScaled * amountScaled / 1e8}'  (send frBTC)
+ *
+ *   After broadcast, mine a block on devnet or the order never executes:
+ *     generatetoaddress 1 <segwit_addr>  (via localhost:18888 JSON-RPC)
+ * =============================================================================
+ */
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';

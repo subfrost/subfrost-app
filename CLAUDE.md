@@ -47,10 +47,12 @@ u32 numBids (4 bytes LE)  ← NOT u128
 u32 numAsks (4 bytes LE)  ← NOT u128
 [u128 price, u128 amount] × numAsks
 ```
-- Prices are **raw u128** — NO 1e8 scaling
-- Ask prices are **already un-inverted** by the contract (lib.rs:760)
-- Empty padding slots (price=0 or amount=0) must be filtered
+- Prices are **raw u128** in 1e8 units — divide by 1e8 for display
+- Ask prices are **INVERTED trie keys** (u128::MAX - real_price) — the parser MUST un-invert. The contract source (lib.rs:760) implies it un-inverts before returning, but live devnet data (2026-04-01) proves the raw inverted value is what actually comes back. Parser check: if `stored > U128_MAX/2` → un-invert.
+- Bid prices are real (no transformation needed)
+- Empty padding slots (amount=0) must be filtered; price=0 is a valid real order
 - Source: `subfrost-alkanes/alkanes/carbine-controller/src/lib.rs:730-774`
+- See full Carbine CLOB section at bottom of this file for deployment, pair ordering, and verification scripts
 
 ### PSBT Patching — Input-Only
 `patchPsbtForBrowserWallet()` was permanently removed (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `useActualAddresses`.
@@ -1553,3 +1555,204 @@ try {
 - The SDK prefers `signPsbts` (plural) but both work
 - Add 60-second timeout to detect stuck popups
 - Always include `address` in each toSignInputs entry
+
+---
+
+## Carbine CLOB
+
+Central limit order book built on the Carbine alkane protocol. All frontend
+interaction is through the controller PROXY — never call the impl directly.
+
+Established 2026-04-01 after debugging session. Do not re-discover this
+information.
+
+### Contract IDs (devnet, boot.ts PROTOCOL_SLOTS)
+
+| Component | AlkaneId | Slot constant | Notes |
+|-----------|----------|---------------|-------|
+| Controller Proxy | [4:70000] | CARBINE_CTRL_PROXY | **ALL calls go here** |
+| Controller Impl | [4:80000] | CARBINE_CTRL_IMPL | Logic, never called directly |
+| Template Impl | [4:80001] | CARBINE_TMPL_IMPL | Per-order-pair logic |
+| Template Beacon | [4:90001] | CARBINE_TMPL_BEACON | Beacon for template upgrades |
+| Default instance | [4:70001] | CARBINE_TEMPLATE | Beacon-proxy, default pair |
+| Universal Router Impl | [4:80002] | UNIVERSAL_ROUTER_IMPL | |
+| Universal Router Proxy | [4:70002] | UNIVERSAL_ROUTER_PROXY | |
+
+Config accessor: `getConfig(network).CARBINE_CONTROLLER_ID` → `"4:70000"` on devnet.
+
+### Deployment (boot.ts Phase 3a)
+
+Carbine deploys in **Phase 3a** — before FIRE protocol — so that its console
+output is visible before `[__get_len] MISS` spam from the qubitcoin WASM indexer
+fills the console and pushes earlier logs off-screen.
+
+**Why CRITICAL init args (do not change without testing):**
+
+The default `deployWithProxy` / `deployWithBeacon` helpers call opcode 50 as the
+init arg. Carbine contracts do NOT support opcode 50 — CREATERESERVED reverts
+atomically, the WASM binary is never stored, and every future call fails with
+"unexpected end of file". The fix is contract-specific safe opcodes:
+
+| Contract | Init args | Opcode meaning |
+|----------|-----------|----------------|
+| Controller impl [4:80000] | `[0, 0, 0]` | Initialize(template_block=0, template_tx=0) — dummy template |
+| Controller proxy [4:70000] | `[0x7fff, 4, 80000, 1]` | upgradeable proxy setup |
+| Template impl [4:80001] | `[3]` | query_metadata (read-only, safe) |
+| Template beacon [4:90001] | `[0x7fff, 4, 80001, 1]` | upgradeable beacon setup |
+| Router impl [4:80002] | `[0]` | Initialize |
+
+After all contracts are deployed, the controller is initialized through the proxy:
+```
+initThroughProxy(proxy=70000, args=[0, 4, CARBINE_TEMPLATE])
+  → opcode 0 = Initialize, args = real template address [4:70001]
+```
+
+### Opcodes (call controller proxy [4:70000])
+
+| Opcode | Name | Inputs |
+|--------|------|--------|
+| 20 | PlaceLimitOrder | `[20, base_block, base_tx, quote_block, quote_tx, side, price_scaled, amount_scaled]` |
+| 24 | GetOrderbookDepth | `[24, base_block, base_tx, quote_block, quote_tx, depth]` |
+| 25 | GetOpenOrderCount | `[25]` |
+
+### PlaceLimitOrder (opcode 20)
+
+```
+inputs: [20, base_block, base_tx, quote_block, quote_tx, side, price_scaled, amount_scaled]
+side: 0=buy, 1=sell
+price_scaled  = human_price  × 1e8   (e.g., 0.000001 frBTC/DIESEL → 100 raw)
+amount_scaled = human_amount × 1e8   (e.g., 1 DIESEL → 100000000 raw)
+
+For sell (side=1): incomingAlkanes MUST include base token (amount_scaled)
+  inputRequirements = "base_token_id:amount_scaled"
+For buy  (side=0): incomingAlkanes MUST include quote token (price×amount)
+  inputRequirements = "quote_token_id:(price_scaled * amount_scaled / 1e8)"
+```
+
+After broadcasting on devnet, **mine a block** or the order never executes:
+```javascript
+await fetch('http://localhost:18888', { method: 'POST',
+  headers: {'Content-Type':'application/json'},
+  body: JSON.stringify({ jsonrpc:'2.0', method:'generatetoaddress',
+    params:[1, segwitAddress], id:1 }) });
+```
+
+### GetOrderbookDepth (opcode 24) — binary response format
+
+```
+Bytes [0..3]   — u32 LE: numBids
+Bytes [4..N]   — per bid: [u128 LE price (16 bytes), u128 LE amount (16 bytes)]
+Bytes [N..N+3] — u32 LE: numAsks
+Bytes [N+4..M] — per ask: [u128 LE price (16 bytes), u128 LE amount (16 bytes)]
+```
+
+**Price encoding (VERIFIED on devnet 2026-04-01):**
+- Bid prices: real value, no transformation needed
+- Ask prices: INVERTED trie keys — stored as `u128::MAX - real_price`
+  - The Rust source (lib.rs:760) implies un-inversion before return, but live data
+    shows it does NOT un-invert. Parser MUST do: `real = U128_MAX - stored`
+  - Detection heuristic: `stored > U128_MAX / 2` → it's an inverted ask price
+  - Verified: stored=340282366920938463463374607431768211355, real=100 ✓
+- All raw values are in 1e8 units — divide by 1e8 for human display
+- Filter out slots where `amount === 0` (empty padding). Price=0 is a VALID order.
+
+**Deduplication:** A single order may appear in BOTH bid and ask lists within the
+same depth traversal. When a bid and ask entry have identical price+amount, they
+are the same order echoed — remove the ask duplicate.
+
+### CRITICAL: Pair ordering for GetOrderbookDepth
+
+The controller hashes the pair (base, quote) in the ORDER they were provided to
+PlaceLimitOrder. Querying with the wrong order returns 8 bytes of zeros (empty).
+
+**Verified devnet behavior (2026-04-01):**
+Orders placed with DIESEL(2:0) as base, frBTC(32:0) as quote are stored under
+the key `(frBTC=32:0, DIESEL=2:0)` — the quote becomes the first key component.
+
+`useOrderbook.ts` handles this by trying BOTH pair orderings and using whichever
+returns non-empty data (hex length > 16 AND not all zeros).
+
+### "Insufficient alkanes" on sell orders — root cause and fix
+
+**Root cause:**
+`alkanesExecuteWithStrings` and the raw SDK `alkanesExecuteTyped` use quspo/espo
+UTXO data APIs for UTXO discovery. On devnet, quspo data can be stale or
+incomplete, returning "have 0 DIESEL" even when the wallet has balance.
+
+**Fix — always route through `useSandshrewProvider`:**
+`execute.ts` detects devnet (`sandshrew_rpc_url().includes('localhost:18888')`)
+and auto-switches to `alkanesExecuteFull` (primary alkanes indexer, always
+complete). This only fires when calls go through `useSandshrewProvider()`.
+
+```typescript
+// CORRECT — routes through execute.ts devnet detection
+const provider = useSandshrewProvider();
+await provider.alkanesExecuteTyped({ ... });
+
+// WRONG — bypasses devnet detection, may fail with "have 0"
+const { provider: sdkProvider } = useAlkanesSDK();
+await sdkProvider.alkanesExecuteTyped({ ... });  // ← do not do this
+```
+
+**LimitOrderPanel.tsx legacy warning:** The inline `handleSubmit` in
+`LimitOrderPanel.tsx` still calls `sdkProvider` directly (not migrated). The
+`useLimitOrderMutation` hook is the correct pattern. Migrate LimitOrderPanel to
+use that hook when refactoring.
+
+### useActualAddresses pattern (MANDATORY)
+
+Every Carbine mutation hook must use:
+```typescript
+const useActualAddresses = isBrowserWallet || network === 'devnet';
+```
+
+On devnet, symbolic addresses (`p2tr:0`) resolve to the SDK's dummy wallet
+derivation, not the connected wallet. Tokens end up at wrong addresses →
+"insufficient balance" even with real balance.
+
+### Console noise — filter __get_len MISS spam
+
+The browser console fills with `[__get_len] MISS #N` from the qubitcoin WASM
+indexer. Filter: enter `-__get_len` in Chrome DevTools console filter field.
+
+### Verification scripts (run in browser console on devnet)
+
+```javascript
+// Check open order count (should be 0 on fresh devnet):
+(async () => {
+  const r = await fetch('http://localhost:18888', { method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+    jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target:
+    { block: '4', tx: '70000' }, inputs: ['25'], block_tag: 'latest' }],
+    id: 1 }) });
+  const j = await r.json();
+  console.log('Open order count:', j?.result?.execution?.data,
+    '| Error:', j?.result?.execution?.error);
+})();
+
+// Query orderbook depth — CORRECT pair order: frBTC(32:0) base, DIESEL(2:0) quote
+(async () => {
+  const r = await fetch('http://localhost:18888', { method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+    jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target:
+    { block: '4', tx: '70000' }, inputs: ['24','32','0','2','0','10'],
+    block_tag: 'latest' }], id: 1 }) });
+  const j = await r.json();
+  console.log('Orderbook hex:', j?.result?.execution?.data,
+    '| Error:', j?.result?.execution?.error);
+})();
+
+// WRONG pair order — returns 8 zero bytes (empty):
+// inputs: ['24','2','0','32','0','10']  ← DO NOT USE
+```
+
+### Relevant source files
+
+| File | Purpose |
+|------|---------|
+| `hooks/useOrderbook.ts` | orderbook data fetching, binary parsing, pair-order retry |
+| `hooks/useLimitOrderMutation.ts` | correct PlaceLimitOrder mutation (use this, not LimitOrderPanel's inline code) |
+| `app/swap/components/LimitOrderPanel.tsx` | UI panel — has legacy direct sdkProvider call (migration TODO) |
+| `app/swap/components/OrderbookPanel.tsx` | orderbook display component |
+| `lib/devnet/boot.ts` Phase 3a | Carbine deployment + initialization (lines ~896-960) |
+| `utils/getConfig.ts` | `CARBINE_CONTROLLER_ID` config key |

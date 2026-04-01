@@ -1,27 +1,80 @@
 /**
  * useLimitOrderMutation.ts
  *
- * Places a limit order on the Carbine order book. Extracted and improved from
- * the inline logic in app/swap/components/LimitOrderPanel.tsx (lines 75-133).
+ * Places a limit order on the Carbine CLOB. Wraps execution through
+ * useSandshrewProvider → execute.ts so devnet auto-routing is applied.
  *
- * Contract: Carbine controller (e.g. 4:70000).
- * Opcode 20 (PlaceLimitOrder): Send base or quote token as incomingAlkanes.
+ * Contract: Carbine controller proxy [4:70000].
+ * Opcode 20 (PlaceLimitOrder): caller sends base (sell) or quote (buy) token
+ * as incomingAlkanes alongside the protostone.
  *
  * Calldata format:
- *   [controller_block, controller_tx, 20, baseA_block, baseA_tx, quoteB_block, quoteB_tx,
- *    side, priceScaled, amountScaled]
+ *   [controller_block, controller_tx, 20,
+ *    base_block, base_tx, quote_block, quote_tx,
+ *    side, price_scaled, amount_scaled]
  *
- * For sell orders: inputRequirements sends base token (amount)
- * For buy orders: inputRequirements sends quote token (price * amount)
+ * side: 0 = buy, 1 = sell
+ * price_scaled  = human_price  * 1e8  (e.g. 0.000001 frBTC/DIESEL = 100 raw)
+ * amount_scaled = human_amount * 1e8  (e.g. 1 DIESEL = 100000000 raw)
  *
- * ============================================================================
+ * For sell (side=1): inputRequirements = base_token:amount_scaled
+ * For buy  (side=0): inputRequirements = quote_token:(price_scaled * amount_scaled / 1e8)
+ *
+ * =============================================================================
+ * JOURNAL — "Insufficient alkanes" on sell orders debugging (2026-04-01)
+ * =============================================================================
+ *
+ * ## Root Cause
+ *   alkanesExecuteWithStrings and alkanesExecuteFull both use the quspo/espo
+ *   UTXO data API to discover unspent alkane outpoints. On devnet, quspo can
+ *   return stale or incomplete data — "have 0 DIESEL" even when the wallet
+ *   clearly has a balance. This manifests as:
+ *     Error: "Insufficient alkanes: have 0, need N"
+ *
+ *   The CORRECT approach: use alkanesExecuteTyped (same method useSwapMutation
+ *   uses for successful DIESEL swaps). It uses a different UTXO selection path
+ *   that resolves correctly on devnet.
+ *
+ * ## Fix: Route through execute.ts via useSandshrewProvider
+ *   execute.ts detects devnet via sandshrew_rpc_url().includes('localhost:18888')
+ *   and auto-switches to alkanesExecuteFull (the primary alkanes indexer, always
+ *   complete data) when on devnet.
+ *
+ *   MANDATORY pattern:
+ *     const provider = useSandshrewProvider();
+ *     await provider.alkanesExecuteTyped({ ... });
+ *
+ *   FORBIDDEN pattern (bypasses devnet detection):
+ *     const { provider: sdkProvider } = useAlkanesSDK();
+ *     await sdkProvider.alkanesExecuteTyped({ ... });  // ← WRONG
+ *
+ *   LimitOrderPanel.tsx currently calls sdkProvider directly — this is legacy
+ *   code that was not yet migrated. The useLimitOrderMutation hook (this file)
+ *   is the correct pattern to use going forward.
+ *
+ * ## useActualAddresses is MANDATORY (devnet + browser wallets)
+ *   On devnet, symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's
+ *   dummy wallet derivation, NOT the connected wallet. Tokens land at the wrong
+ *   address → "insufficient balance" even with real balance.
+ *   Pattern enforced here:
+ *     const useActualAddresses = isBrowserWallet || network === 'devnet';
+ *   See CLAUDE.md "Address Handling" section for full explanation.
+ *
+ * ## "Insufficient alkanes" vs stale devnet state
+ *   If you still see "insufficient alkanes" after routing through useSandshrewProvider:
+ *   1. First, hard reset the devnet — stale state from wrong-address tokens is the
+ *      most common cause.
+ *   2. Verify the wallet actually has the token via alkanes_simulate opcode query.
+ *   3. Only then investigate the UTXO selection path further.
+ *
+ * =============================================================================
  * CRITICAL: BROWSER WALLET OUTPUT ADDRESS BUG (2026-03-01)
- * ============================================================================
+ * =============================================================================
  * When using browser wallets, you MUST pass ACTUAL addresses to
  * toAddresses/changeAddress/alkanesChangeAddress -- NOT symbolic addresses like
  * 'p2tr:0' or 'p2wpkh:0'. Symbolic addresses resolve to SDK's DUMMY wallet!
  * See useSwapMutation.ts header comment for full documentation.
- * ============================================================================
+ * =============================================================================
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
